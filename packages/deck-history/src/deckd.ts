@@ -17,6 +17,8 @@ import {
 //                    workspaceName}                    → {}
 //   /discard        {dir}                               → {}
 //   /seal           {dir, message, actor?}             → {changeId: string | null}
+//   /merge          {dir, targetRevisionId, sourceRevisionId,
+//                    message, actor?}                  → {changeId: string}
 //   /list           {dir}                              → HistoryEntry[]
 //   /file-at        {dir, revisionId, path}            → {found, contentBase64?}
 //   /file-list-at   {dir, revisionId}                  → {paths}   (deckd; optional)
@@ -119,6 +121,38 @@ export class DeckdHistory implements HistoryBackend {
         body,
       );
       return changeId ?? undefined;
+    });
+  }
+
+  async merge(
+    dir: string,
+    targetRevisionId: string,
+    sourceRevisionId: string,
+    message: string,
+    actor?: HistoryActor,
+  ): Promise<string> {
+    if (
+      !isValidRevisionId(targetRevisionId) ||
+      !isValidRevisionId(sourceRevisionId)
+    ) {
+      throw new Error('invalid revision id');
+    }
+    return this.#queue.run(dir, async () => {
+      await this.#ensure(dir);
+      let body: Record<string, unknown> = {
+        dir,
+        targetRevisionId,
+        sourceRevisionId,
+        message,
+      };
+      if (actor?.name) {
+        body.actor = {
+          name: actor.name,
+          ...(actor.email ? { email: actor.email } : {}),
+        };
+      }
+      let { changeId } = await this.#post<{ changeId: string }>('/merge', body);
+      return changeId;
     });
   }
 

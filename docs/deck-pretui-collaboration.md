@@ -69,6 +69,7 @@ boxel realm review open \
 
 boxel realm review list https://localhost:4201/pretui/
 boxel realm review show https://localhost:4201/pretui/ 1
+boxel realm review merge https://localhost:4201/pretui/ 1
 ```
 
 The checkout's `.boxel-sync.json` records the Realm RRI, branch identity,
@@ -99,6 +100,14 @@ bytes, stale branch state, or a source/target without an exact Checkpoint.
 Later saves remain recoverable in History but cannot silently change what a
 reviewer sees.
 
+Review merge is a conditional Realm Server operation, not a local Git merge.
+The CLI observes the current Review generation and target Checkpoint; the
+server rejects either moving underneath it. A clean three-way result is
+materialized into the target workspace, sealed in deckd as one History change
+with exact target and source parents, indexed, and only then published by one
+target-ref advance to a two-parent Checkpoint. A content conflict returns 409
+without changing target bytes, History, index, or ref.
+
 ## What the fixture proves
 
 The replay contains 28 design-system units across foundations, layout,
@@ -114,5 +123,6 @@ branch-qualified index, waits for the exact preview to be ready, and only then
 publishes the branch ref. Each accepted push appends one History Step and moves
 that branch ref once.
 
-Review open/list/show commands are layered on this same branch state. Merge and
-exact-Version syndication follow the rollout order in the backport plan.
+Review open/list/show/merge commands are layered on this same branch state.
+Exact candidate Browse/Run presentation and exact-Version syndication follow
+the rollout order in the backport plan.

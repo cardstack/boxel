@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import {
   listDeckRealmReviews,
+  mergeDeckRealmReview,
   openDeckWorkspaceReview,
   readDeckRealmReview,
 } from '../../lib/deck-realm-reviews.ts';
@@ -105,5 +106,31 @@ export function registerReviewCommand(realm: Command): void {
       options.json
         ? console.log(JSON.stringify(result, null, 2))
         : printReview(result);
+    });
+
+  review
+    .command('merge')
+    .argument('<realm-url>', 'Realm URL or configured Realm name')
+    .argument('<number>', 'Review number', (value) => Number(value))
+    .option('--message <message>', 'History and Checkpoint merge message')
+    .option('--json', 'Print structured JSON')
+    .option('--realm-secret-seed', 'Authenticate with the Realm secret seed')
+    .action(async (realmURL: string, number: number, options) => {
+      if (!Number.isSafeInteger(number) || number < 1) {
+        throw new Error('Review number must be a positive integer');
+      }
+      let client = await realmClient(
+        realmURL,
+        options.realmSecretSeed === true,
+      );
+      let result = await mergeDeckRealmReview({
+        ...client,
+        number,
+        message: options.message,
+      });
+      if (options.json) return console.log(JSON.stringify(result, null, 2));
+      console.log(
+        `Merged Review #${number} into ${result.targetBranch} at Checkpoint ${result.mergeCheckpointHash}`,
+      );
     });
 }

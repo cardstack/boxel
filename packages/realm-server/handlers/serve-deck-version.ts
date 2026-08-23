@@ -70,8 +70,10 @@ import {
 import {
   DeckReviewConflictError,
   listDeckReviews,
+  mergeDeckReview,
   openDeckReview,
   readDeckReview,
+  type DeckReviewMergeRequest,
   type DeckReviewOpenRequest,
 } from '../lib/deck-review-workflow.ts';
 import {
@@ -732,10 +734,14 @@ async function handleDeckReviewRequest(
 ): Promise<Response | null> {
   let requestURL = new URL(request.url);
   if (!requestURL.pathname.endsWith(REVIEW_PATH)) return null;
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Deck Reviews are read with GET', {
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.method !== 'POST'
+  ) {
+    return new Response('Unsupported Deck Review method', {
       status: 405,
-      headers: { allow: 'GET, HEAD' },
+      headers: { allow: 'GET, HEAD, POST' },
     });
   }
   let number = Number(requestURL.searchParams.get('number'));
@@ -760,8 +766,75 @@ async function handleDeckReviewRequest(
   ) {
     return new Response('Not found', { status: 404 });
   }
-  let authorization = await authorizeRead(request, realm);
+  let authorization =
+    request.method === 'POST'
+      ? await authorizeWrite(request, realm)
+      : await authorizeRead(request, realm);
   if (authorization.response) return authorization.response;
+  if (request.method === 'POST') {
+    let body: DeckReviewMergeRequest;
+    try {
+      body = (await request.json()) as DeckReviewMergeRequest;
+    } catch {
+      return new Response('Review merge is not valid JSON', { status: 400 });
+    }
+    let history = historyActor(request, deps);
+    try {
+      let result = await mergeDeckReview({
+        realmDir: realm.dir,
+        realmRRI,
+        policy: deps.deckCollaboration!,
+        history: deps.deckHistory,
+        historyActor: history,
+        actor: {
+          id: history?.name ?? '@realm-server:internal',
+          ...(history?.name ? { name: history.name } : {}),
+        },
+        number,
+        request: body,
+        prepareView: prepareDeckRealmView(realm, deps),
+      });
+      if (result.state === 'conflicted') {
+        return Response.json(
+          {
+            schema: 'boxel-deck-review-merge-conflict-v1',
+            number,
+            conflicts: result.conflicts,
+          },
+          { status: 409 },
+        );
+      }
+      await broadcastBranchMovement(realm, {
+        branch: result.targetBranch,
+        previousRealmView: result.previousIndexGenerationHash,
+        realmView: result.indexGenerationHash,
+        refGeneration: result.refGeneration,
+        repositoryHash: result.repositoryHash,
+        treeHash: result.treeHash,
+        historyHead: result.historyHead,
+        message: `Merged Review #${number}: ${result.review.title}`,
+        ...(history ? { actor: history.name } : {}),
+      });
+      return Response.json(
+        { schema: 'boxel-deck-review-merge-result-v1', ...result },
+        { status: 201 },
+      );
+    } catch (error) {
+      if (
+        error instanceof DeckReviewConflictError ||
+        error instanceof RefConflictError ||
+        error instanceof RefBusyError
+      ) {
+        return new Response('Review or target branch moved during merge', {
+          status: 409,
+        });
+      }
+      if (error instanceof Error) {
+        return new Response(error.message, { status: 400 });
+      }
+      throw error;
+    }
+  }
   let review = await readDeckReview({
     realmDir: realm.dir,
     realmRRI,

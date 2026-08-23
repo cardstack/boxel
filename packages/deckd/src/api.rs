@@ -29,6 +29,7 @@ pub fn router(state: AppState) -> Router {
         .route("/note", post(note))
         .route("/flush", post(flush))
         .route("/seal", post(seal))
+        .route("/merge", post(merge))
         .route("/list", post(list))
         .route("/file-at", post(file_at))
         .route("/file-list-at", post(file_list_at))
@@ -75,6 +76,23 @@ struct SealBody {
 struct SealResponse {
     #[serde(rename = "changeId")]
     change_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MergeBody {
+    dir: String,
+    target_revision_id: String,
+    source_revision_id: String,
+    message: String,
+    #[serde(default)]
+    actor: Option<Actor>,
+}
+
+#[derive(Debug, Serialize)]
+struct MergeResponse {
+    #[serde(rename = "changeId")]
+    change_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -177,6 +195,23 @@ async fn seal(
         .seal(&body.dir, &body.message, body.actor.as_ref())
         .await?;
     Ok(Json(SealResponse { change_id }))
+}
+
+async fn merge(
+    State(st): State<AppState>,
+    Json(body): Json<MergeBody>,
+) -> Result<Json<MergeResponse>, ApiError> {
+    let change_id = st
+        .history
+        .merge(
+            &body.dir,
+            &body.target_revision_id,
+            &body.source_revision_id,
+            &body.message,
+            body.actor.as_ref(),
+        )
+        .await?;
+    Ok(Json(MergeResponse { change_id }))
 }
 
 async fn list(

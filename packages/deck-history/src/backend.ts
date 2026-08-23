@@ -71,6 +71,15 @@ export interface HistoryBackend {
     message: string,
     actor?: HistoryActor,
   ): Promise<string | undefined>;
+  // Seals a tree already materialized by the Repository three-way merge as
+  // one History change with exact target and source parents.
+  merge(
+    dir: string,
+    targetRevisionId: string,
+    sourceRevisionId: string,
+    message: string,
+    actor?: HistoryActor,
+  ): Promise<string>;
   // The newest sealed changeId (not the working copy). Undefined before the
   // first seal.
   head(dir: string): Promise<string | undefined>;

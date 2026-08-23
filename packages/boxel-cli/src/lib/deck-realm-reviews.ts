@@ -39,6 +39,19 @@ export interface DeckReviewList {
   reviews: DeckReviewDocument[];
 }
 
+export interface DeckReviewMergeResult {
+  schema: 'boxel-deck-review-merge-result-v1';
+  state: 'ready';
+  review: DeckReviewDocument;
+  mergeCheckpointHash: string;
+  repositoryHash: string;
+  treeHash: string;
+  historyHead: string;
+  indexGenerationHash: string;
+  targetBranch: string;
+  refGeneration: number;
+}
+
 function reviewsURL(realmURL: string): URL {
   let url = new URL(realmURL);
   url.pathname = `${url.pathname.replace(/\/+$/, '')}/.deck/reviews`;
@@ -93,6 +106,30 @@ function isReview(value: unknown): value is DeckReviewDocument {
     isSnapshot(review.target) &&
     isSnapshot(review.source) &&
     Array.isArray(review.events)
+  );
+}
+
+function isMergeResult(value: unknown): value is DeckReviewMergeResult {
+  let result = value as Record<string, unknown>;
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    result.schema === 'boxel-deck-review-merge-result-v1' &&
+    result.state === 'ready' &&
+    isReview(result.review) &&
+    typeof result.mergeCheckpointHash === 'string' &&
+    HASH.test(result.mergeCheckpointHash) &&
+    typeof result.repositoryHash === 'string' &&
+    HASH.test(result.repositoryHash) &&
+    typeof result.treeHash === 'string' &&
+    HASH.test(result.treeHash) &&
+    typeof result.historyHead === 'string' &&
+    result.historyHead !== '' &&
+    typeof result.indexGenerationHash === 'string' &&
+    HASH.test(result.indexGenerationHash) &&
+    typeof result.targetBranch === 'string' &&
+    result.targetBranch !== '' &&
+    Number.isSafeInteger(result.refGeneration)
   );
 }
 
@@ -224,5 +261,58 @@ export async function openDeckWorkspaceReview(options: {
   }
   let value: unknown = await response.json();
   if (!isReview(value)) throw new Error('Realm returned an invalid Review');
+  return value;
+}
+
+export async function mergeDeckRealmReview(options: {
+  realmURL: string;
+  number: number;
+  message?: string;
+  authenticator: RealmAuthenticator;
+}): Promise<DeckReviewMergeResult> {
+  let review = await readDeckRealmReview(options);
+  if (review.state !== 'open') {
+    throw new Error(`Review #${options.number} is ${review.state}`);
+  }
+  let target = await readDeckBranchSnapshot(
+    options.realmURL,
+    review.target.branch,
+    options.authenticator,
+  );
+  if (!target.checkpointHash) {
+    throw new Error(
+      `Target branch ${review.target.branch} has changes after its latest Checkpoint`,
+    );
+  }
+  let response = await options.authenticator.authedRealmFetch(
+    reviewURL(options.realmURL, options.number),
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schema: 'boxel-deck-review-merge-v1',
+        expected: {
+          reviewGeneration: review.generation,
+          targetCheckpointHash: target.checkpointHash,
+        },
+        ...(options.message?.trim() ? { message: options.message.trim() } : {}),
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw await responseError(
+      response,
+      response.status === 409
+        ? 'Review is conflicted or moved; inspect it and try again'
+        : `Could not merge Review #${options.number}`,
+    );
+  }
+  let value: unknown = await response.json();
+  if (!isMergeResult(value)) {
+    throw new Error('Realm returned an invalid Review merge result');
+  }
   return value;
 }

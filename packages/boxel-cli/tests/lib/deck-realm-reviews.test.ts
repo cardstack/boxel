@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   listDeckRealmReviews,
+  mergeDeckRealmReview,
   openDeckWorkspaceReview,
   readDeckRealmReview,
 } from '../../src/lib/deck-realm-reviews.ts';
@@ -176,6 +177,69 @@ describe('Deck Realm Reviews', () => {
     ).resolves.toMatchObject({
       number: 7,
       source: { branch: 'mina/focus-ring' },
+    });
+  });
+
+  it('conditionally merges the observed Review into the exact target Checkpoint', async () => {
+    let files = { 'focus-ring.gts': hash('focus') };
+    let source = branch('mina/focus-ring', {
+      files,
+      treeHash: inventoryTreeHash(files),
+      checkpoint: hash('source'),
+    });
+    let target = branch('main', {
+      files,
+      treeHash: inventoryTreeHash(files),
+      checkpoint: hash('target'),
+    });
+    let value = review(source, target);
+    let requests: Request[] = [];
+    let authenticator: RealmAuthenticator = {
+      async authedRealmFetch(input, init) {
+        let request = new Request(input, init);
+        requests.push(request);
+        if (request.method === 'POST') {
+          return Response.json(
+            {
+              schema: 'boxel-deck-review-merge-result-v1',
+              state: 'ready',
+              review: { ...value, state: 'merged', generation: 3 },
+              mergeCheckpointHash: hash('merge-checkpoint'),
+              repositoryHash: hash('merge-repository'),
+              treeHash: hash('merge-tree'),
+              historyHead: 'jj:merge',
+              indexGenerationHash: hash('merge-index'),
+              targetBranch: 'main',
+              refGeneration: 4,
+            },
+            { status: 201 },
+          );
+        }
+        return new URL(request.url).pathname.endsWith('/.deck/branch')
+          ? Response.json(target)
+          : Response.json(value);
+      },
+    };
+
+    await expect(
+      mergeDeckRealmReview({
+        realmURL: 'https://realm.example/pretui/',
+        number: 7,
+        message: 'Merge visible focus',
+        authenticator,
+      }),
+    ).resolves.toMatchObject({
+      state: 'ready',
+      targetBranch: 'main',
+      review: { state: 'merged' },
+    });
+    expect(await requests[2].json()).toEqual({
+      schema: 'boxel-deck-review-merge-v1',
+      expected: {
+        reviewGeneration: 1,
+        targetCheckpointHash: target.checkpointHash,
+      },
+      message: 'Merge visible focus',
     });
   });
 });

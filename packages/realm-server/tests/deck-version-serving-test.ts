@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,6 +8,7 @@ import {
   hashBytes,
   pack,
   publishToStore,
+  readCheckpoint,
   readTreeFromDir,
   repositoryManifest,
 } from '@cardstack/deck/node';
@@ -63,6 +64,22 @@ class TestHistory implements HistoryBackend {
     }
     let id = `step${this.entries.length + 1}`;
     this.entries.push({ id, message, files, actor });
+    return id;
+  }
+  async merge(
+    dir: string,
+    _targetRevisionId: string,
+    _sourceRevisionId: string,
+    message: string,
+    actor?: HistoryActor,
+  ): Promise<string> {
+    let id = `step${this.entries.length + 1}`;
+    this.entries.push({
+      id,
+      message,
+      files: await readTreeFromDir(dir),
+      actor,
+    });
     return id;
   }
   async head(): Promise<string | undefined> {
@@ -491,6 +508,7 @@ module('exact Deck Version serving', function (hooks) {
       schema: string;
       number: number;
       state: string;
+      generation: number;
       base: { checkpointHash: string };
       target: { checkpointHash: string };
       source: { checkpointHash: string; treeHash: string };
@@ -525,6 +543,61 @@ module('exact Deck Version serving', function (hooks) {
         ({ number }) => number,
       ),
       [opened.number],
+    );
+
+    let mergedResponse = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/review?number=${opened.number}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            schema: 'boxel-deck-review-merge-v1',
+            expected: {
+              reviewGeneration: opened.generation,
+              targetCheckpointHash: main.checkpointHash,
+            },
+          }),
+        },
+      ),
+    );
+    let merged = (await mergedResponse?.json()) as {
+      schema: string;
+      state: string;
+      treeHash: string;
+      mergeCheckpointHash: string;
+      review: { state: string; events: Array<{ type: string }> };
+    };
+    assert.strictEqual(mergedResponse?.status, 201);
+    assert.strictEqual(merged.schema, 'boxel-deck-review-merge-result-v1');
+    assert.strictEqual(merged.state, 'ready');
+    assert.strictEqual(merged.review.state, 'merged');
+    assert.deepEqual(
+      merged.review.events.map(({ type }) => type),
+      ['merge-started', 'merged'],
+    );
+    assert.strictEqual(
+      await readFile(join(realmDir, 'index.js'), 'utf8'),
+      nextBytes,
+      'the target workspace now contains the reviewed bytes',
+    );
+    let mergedMainResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let mergedMain = (await mergedMainResponse?.json()) as {
+      treeHash: string;
+      checkpointHash: string;
+    };
+    assert.strictEqual(mergedMain.treeHash, merged.treeHash);
+    assert.strictEqual(
+      mergedMain.checkpointHash,
+      merged.mergeCheckpointHash,
+      'the mutable main ref advances once to the two-parent Checkpoint',
+    );
+    assert.deepEqual(
+      (await readCheckpoint(realmDir, merged.mergeCheckpointHash))?.parents,
+      [main.checkpointHash, checkpointed.checkpointHash],
+      'the merge Checkpoint preserves exact target and source ancestry',
     );
   });
 

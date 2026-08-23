@@ -53,6 +53,9 @@ class BranchHistory implements HistoryBackend {
   ): Promise<string | undefined> {
     return undefined;
   }
+  async merge(): Promise<string> {
+    return 'merge-step';
+  }
   async head(): Promise<string | undefined> {
     return 'step1';
   }

@@ -251,6 +251,23 @@ impl HistoryService {
         seal_inner(dir, message, actor).await
     }
 
+    pub async fn merge(
+        &self,
+        dir: &Path,
+        target_revision_id: &str,
+        source_revision_id: &str,
+        message: &str,
+        actor: Option<&Actor>,
+    ) -> HistoryResult<String> {
+        if !is_valid_revision_id(target_revision_id) || !is_valid_revision_id(source_revision_id) {
+            return Err(HistoryError::msg("invalid revision id"));
+        }
+        let gate = self.gate_for(dir).await;
+        let _guard = gate.write().await;
+        ensure_repo_inner(dir).await?;
+        merge_inner(dir, target_revision_id, source_revision_id, message, actor).await
+    }
+
     pub async fn list(&self, dir: &Path) -> HistoryResult<Vec<HistoryEntry>> {
         // Ensure under write (rare after first), then list under read so Hub
         // `_history` fans-out across demos without queuing behind seals.
@@ -432,6 +449,33 @@ impl HistoryBackend for JjLibHistory {
         Box::pin(async move {
             self.run(move |h| pollster::block_on(h.seal(&dir, &message, actor.as_ref())))
                 .await
+        })
+    }
+
+    fn merge<'a>(
+        &'a self,
+        dir: &'a str,
+        target_revision_id: &'a str,
+        source_revision_id: &'a str,
+        message: &'a str,
+        actor: Option<&'a Actor>,
+    ) -> BoxFuture<'a, std::result::Result<String, HistoryBackendError>> {
+        let dir = PathBuf::from(dir);
+        let target_revision_id = target_revision_id.to_owned();
+        let source_revision_id = source_revision_id.to_owned();
+        let message = message.to_owned();
+        let actor = actor.cloned();
+        Box::pin(async move {
+            self.run(move |h| {
+                pollster::block_on(h.merge(
+                    &dir,
+                    &target_revision_id,
+                    &source_revision_id,
+                    &message,
+                    actor.as_ref(),
+                ))
+            })
+            .await
         })
     }
 
@@ -954,6 +998,92 @@ async fn seal_inner(
     Ok(Some(sealed.change_id().to_string()))
 }
 
+/// Seal the already-materialized merge result as one jj change with the
+/// target and source sealed changes as its exact parents, then leave the
+/// workspace on a fresh editable child (the same daily-save shape as seal).
+async fn merge_inner(
+    dir: &Path,
+    target_revision_id: &str,
+    source_revision_id: &str,
+    message: &str,
+    actor: Option<&Actor>,
+) -> HistoryResult<String> {
+    let (mut workspace, repo) = load_workspace(dir).await?;
+    let target = resolve_revision(repo.as_ref(), target_revision_id)?
+        .ok_or_else(|| HistoryError::msg("target revision not found"))?;
+    let source = resolve_revision(repo.as_ref(), source_revision_id)?
+        .ok_or_else(|| HistoryError::msg("source revision not found"))?;
+    let (repo, wc_commit) = snapshot_wc(&mut workspace, repo).await?;
+
+    // A failed view preparation can safely retry after putting the exact
+    // merged bytes back in the workspace. In that state the fresh editable
+    // child is empty and its parent is the already-created merge change.
+    if wc_commit
+        .is_empty(repo.as_ref())
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?
+        && wc_commit.parent_ids().len() == 1
+    {
+        let prior = repo
+            .store()
+            .get_commit(&wc_commit.parent_ids()[0])
+            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        if prior.parent_ids() == [target.id().clone(), source.id().clone()] {
+            return Ok(prior.change_id().to_string());
+        }
+    }
+
+    if wc_commit.parent_ids() != [target.id().clone()] {
+        return Err(HistoryError::msg(
+            "target History changed before merge materialization",
+        ));
+    }
+
+    let workspace_name = workspace.workspace_name().to_owned();
+    let mut tx = repo.start_transaction();
+    let mut rewrite = tx
+        .repo_mut()
+        .rewrite_commit(&wc_commit)
+        .set_parents(vec![target.id().clone(), source.id().clone()])
+        .set_description(message);
+    if let Some(actor) = actor {
+        let settings = user_settings(Some(actor))?;
+        let signature = settings.signature();
+        rewrite = rewrite
+            .set_author(signature.clone())
+            .set_committer(signature);
+    }
+    let merged = rewrite
+        .write()
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    let _ = tx
+        .repo_mut()
+        .rebase_descendants()
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    let new_wc = tx
+        .repo_mut()
+        .new_commit(vec![merged.id().clone()], merged.tree())
+        .write()
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    tx.repo_mut()
+        .edit(workspace_name, &new_wc)
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    let _ = tx
+        .repo_mut()
+        .rebase_descendants()
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    tx.commit(format!("merge {}", merged.id().hex()))
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+
+    Ok(merged.change_id().to_string())
+}
+
 fn message_for_paths(paths: &HashSet<String>) -> String {
     let mut sorted: Vec<&str> = paths.iter().map(String::as_str).collect();
     sorted.sort_unstable();
@@ -983,14 +1113,17 @@ async fn list_inner(dir: &Path) -> HistoryResult<Vec<HistoryEntry>> {
         .ok_or_else(|| HistoryError::msg("no working-copy commit"))?
         .clone();
 
-    // ::@ ~ root() ∩ file(all()) — non-empty ancestors of the working copy,
-    // evaluated by the index (newest-first).
+    // ::@ ~ root() ∩ (file(all()) | merges()) — content-bearing saves and
+    // durable merge events from the working copy, evaluated by the index
+    // (newest-first).
+    let content_or_merge =
+        RevsetExpression::filter(RevsetFilterPredicate::File(FilesetExpression::all())).union(
+            &RevsetExpression::filter(RevsetFilterPredicate::ParentCount(2..u32::MAX)),
+        );
     let expr = RevsetExpression::commit(wc_id)
         .ancestors()
         .minus(&RevsetExpression::root())
-        .intersection(&RevsetExpression::filter(RevsetFilterPredicate::File(
-            FilesetExpression::all(),
-        )));
+        .intersection(&content_or_merge);
     let revset = expr
         .evaluate(repo.as_ref())
         .map_err(|e| HistoryError::msg(e.to_string()))?;
@@ -1004,10 +1137,13 @@ async fn list_inner(dir: &Path) -> HistoryResult<Vec<HistoryEntry>> {
             .map_err(|e| HistoryError::msg(e.to_string()))?;
 
         let files_summary = files_summary_from_index(repo.as_ref(), &commit).await?;
+        let is_merge = commit.parent_ids().len() > 1;
         // Seals that only touched `.jj` / `.jj.main-orphan` / `.deck` / …
         // are History noise from workspace moves — never content. Hide them
-        // from `/list` so Hub /track and `/_history` stay readable.
-        if files_summary.is_empty() {
+        // from `/list` so Hub /track and `/_history` stay readable. A merge is
+        // still durable work even when its materialized tree has no useful
+        // single-parent path summary, so it must remain visible.
+        if files_summary.is_empty() && !is_merge {
             continue;
         }
         let author_name = commit.author().name.clone();
@@ -1017,7 +1153,7 @@ async fn list_inner(dir: &Path) -> HistoryResult<Vec<HistoryEntry>> {
             .iter()
             .filter_map(|line| line.split_once(' ').map(|(_, p)| p.to_owned()))
             .collect();
-        let description = if paths.is_empty() {
+        let description = if is_merge || paths.is_empty() {
             first_line(commit.description()).to_owned()
         } else {
             message_for_paths(&paths)
@@ -1353,6 +1489,90 @@ mod tests {
             pollster::block_on(list_inner(&depot)).unwrap().len(),
             1,
             "discarding a workspace preserves the shared main History"
+        );
+
+        std::fs::remove_dir_all(depot).unwrap();
+    }
+
+    #[test]
+    fn seals_a_materialized_merge_with_two_exact_parents() {
+        let depot = temporary_depot("merge-history");
+        pollster::block_on(ensure_repo_inner(&depot)).unwrap();
+        std::fs::write(depot.join("button.gts"), "export const tone = 'blue';\n").unwrap();
+        let base = pollster::block_on(seal_inner(&depot, "baseline", None))
+            .unwrap()
+            .unwrap();
+
+        let branch = depot.join(".deck/branches/ana%2Ffocus-ring");
+        pollster::block_on(fork_workspace_inner(
+            &depot,
+            &branch,
+            &base,
+            "deck:ana/focus-ring",
+        ))
+        .unwrap();
+        std::fs::write(
+            branch.join("focus-ring.gts"),
+            "export const width = '3px';\n",
+        )
+        .unwrap();
+        let source = pollster::block_on(seal_inner(&branch, "visible focus", None))
+            .unwrap()
+            .unwrap();
+
+        std::fs::write(depot.join("button.gts"), "export const tone = 'navy';\n").unwrap();
+        let target = pollster::block_on(seal_inner(&depot, "navy button", None))
+            .unwrap()
+            .unwrap();
+        std::fs::write(
+            depot.join("focus-ring.gts"),
+            "export const width = '3px';\n",
+        )
+        .unwrap();
+
+        let merged = pollster::block_on(merge_inner(
+            &depot,
+            &target,
+            &source,
+            "merge visible focus",
+            None,
+        ))
+        .unwrap();
+        let (_, repo) = pollster::block_on(load_workspace(&depot)).unwrap();
+        let target_commit = resolve_revision(repo.as_ref(), &target).unwrap().unwrap();
+        let source_commit = resolve_revision(repo.as_ref(), &source).unwrap().unwrap();
+        let merged_commit = resolve_revision(repo.as_ref(), &merged).unwrap().unwrap();
+
+        assert_eq!(
+            merged_commit.parent_ids(),
+            [target_commit.id().clone(), source_commit.id().clone()],
+            "History preserves the same target/source ancestry as the Checkpoint"
+        );
+        assert_eq!(
+            std::fs::read_to_string(depot.join("button.gts")).unwrap(),
+            "export const tone = 'navy';\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(depot.join("focus-ring.gts")).unwrap(),
+            "export const width = '3px';\n"
+        );
+        let history = pollster::block_on(list_inner(&depot)).unwrap();
+        let merge_entry = history
+            .iter()
+            .find(|entry| entry.change_id == merged)
+            .expect("merge should be visible in History");
+        assert_eq!(merge_entry.description, "merge visible focus");
+        assert_eq!(
+            pollster::block_on(merge_inner(
+                &depot,
+                &target,
+                &source,
+                "retry merge visible focus",
+                None,
+            ))
+            .unwrap(),
+            merged,
+            "retrying exact materialization reuses the durable merge change"
         );
 
         std::fs::remove_dir_all(depot).unwrap();

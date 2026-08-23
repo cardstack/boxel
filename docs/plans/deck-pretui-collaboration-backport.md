@@ -1,7 +1,7 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6, B0–B5a, and the fixed-Review portion of B5b are implemented
-as a local stack on 2026-08-23.
+**Status:** A0–A6, B0–B5a, the fixed-Review portion of B5b, and B6's
+server-side merge path are implemented as a local stack on 2026-08-23.
 B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
 prerender/Loader/search isolation, Host-owned exact view selection, and the
 ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
@@ -12,7 +12,10 @@ branch chooser remains the final B4 product surface. B5b now exposes
 authenticated Review open/list/show routes and CLI commands. Review opening
 requires clean, current source and target Checkpoints and derives the immutable
 three-way base from Checkpoint ancestry; exact candidate Browse/Run/catalog
-presentation remains before B5b is complete. B1b is an optional
+presentation remains before B5b is complete. B6 now conditionally merges an
+exact Review through Realm Server and Boxel CLI, records a two-parent deckd
+History change and Checkpoint, builds the target index, and advances the target
+ref once. B1b is an optional
 hosted-infrastructure slice. No B-series pull request or remote branch has been
 created from this stack.
 
@@ -469,6 +472,7 @@ boxel realm checkpoint <local-dir> --message <description> [--json]
 boxel realm review open <local-dir> --target <branch> --title <title> [--body <body>] [--json]
 boxel realm review list <realm-url> [--json]
 boxel realm review show <realm-url> <number> [--json]
+boxel realm review merge <realm-url> <number> [--message <message>] [--json]
 ```
 
 `realm sync` follows the branch already recorded in `.boxel-sync.json`.
@@ -488,6 +492,13 @@ moved head, derives the common ancestor from the Checkpoint DAG, and writes one
 immutable Review object plus its numbered ref. Listing or showing a Review
 returns exact base, target, and source Repository/tree/lock/History/index
 identities; moving either branch afterward cannot rewrite those snapshots.
+
+B6's merge command reads the Review and current target branch, then submits
+their exact generations as one conditional request. Realm Server performs the
+three-way merge from CAS, seals the materialized tree as a jj History change
+with target and source parents, builds and settles the target index, creates a
+two-parent Checkpoint, and advances the target ref exactly once. Conflicts and
+stale observations return 409 without a partial target mutation.
 
 Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only

@@ -57,6 +57,9 @@ function startStub(): Promise<{
           }
           reply({ changeId: body.message === 'clean' ? null : 'wwwwwwww' });
           return;
+        case '/merge':
+          reply({ changeId: 'xxxxxxxx' });
+          return;
         case '/list':
           reply([
             {
@@ -202,6 +205,26 @@ module('history: deckd client', function (hooks) {
   test('a no-op seal reports nothing sealed', async function (assert) {
     assert.strictEqual(await history.seal(DIR, 'clean'), undefined);
     assert.strictEqual(await history.seal(DIR, 'dirty'), 'wwwwwwww');
+  });
+
+  test('merge sends both exact History parents', async function (assert) {
+    assert.strictEqual(
+      await history.merge(DIR, 'vvvvvvvv', 'wwwwwwww', 'Merge Review #7', {
+        name: 'Mina',
+        email: 'mina@example.com',
+      }),
+      'xxxxxxxx',
+    );
+    assert.deepEqual(stub.calls.at(-1), {
+      path: '/merge',
+      body: {
+        dir: DIR,
+        targetRevisionId: 'vvvvvvvv',
+        sourceRevisionId: 'wwwwwwww',
+        message: 'Merge Review #7',
+        actor: { name: 'Mina', email: 'mina@example.com' },
+      },
+    });
   });
 
   test('head is the newest log entry — there is no /head endpoint', async function (assert) {

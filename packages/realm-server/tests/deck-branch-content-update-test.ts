@@ -60,6 +60,11 @@ class RecordingHistory implements HistoryBackend {
     this.entries.push({ id, files });
     return id;
   }
+  async merge(dir: string): Promise<string> {
+    let id = `step${this.entries.length + 1}`;
+    this.entries.push({ id, files: await readTreeFromDir(dir) });
+    return id;
+  }
   async head(): Promise<string | undefined> {
     return this.entries.at(-1)?.id;
   }

@@ -97,6 +97,18 @@ pub trait HistoryBackend: Send + Sync {
         actor: Option<&'a Actor>,
     ) -> BoxFuture<'a, Result<Option<String>, HistoryBackendError>>;
 
+    /// Seal the materialized working tree as a two-parent History change.
+    /// Both ids are exact sealed changes in this Realm's shared repository;
+    /// the target id must be the current working-copy parent.
+    fn merge<'a>(
+        &'a self,
+        dir: &'a str,
+        target_revision_id: &'a str,
+        source_revision_id: &'a str,
+        message: &'a str,
+        actor: Option<&'a Actor>,
+    ) -> BoxFuture<'a, Result<String, HistoryBackendError>>;
+
     fn list<'a>(
         &'a self,
         dir: &'a str,
