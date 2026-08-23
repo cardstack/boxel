@@ -8,7 +8,10 @@ import {
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 
-import { realmViewHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
+import {
+  realmEventMatchesSelectedView,
+  realmViewHeaders,
+} from '@cardstack/host/lib/prerender-fetch-headers';
 
 module('Unit | Realm view context', function (hooks) {
   hooks.afterEach(function () {
@@ -93,6 +96,60 @@ module('Unit | Realm view context', function (hooks) {
       realmViewHeaders('https://realms.example/cardstack/base/card-api'),
       {},
       "an imported Realm never receives another Realm's view hash",
+    );
+  });
+
+  test('delivers only execution events for the selected view while preserving branch activity', function (assert) {
+    let realmURL = 'https://realms.example/cardstack/pretui/';
+    let view = 'a'.repeat(64);
+    (
+      globalThis as unknown as {
+        __boxelRealmView?: { realmURL: string; view: string };
+      }
+    ).__boxelRealmView = { realmURL, view };
+
+    let renderEvent = (realmView?: string) => ({
+      eventName: 'prerender_html' as const,
+      realmURL,
+      ...(realmView ? { realmView } : {}),
+      generation: 2,
+      invalidations: [`${realmURL}button`],
+    });
+    assert.true(
+      realmEventMatchesSelectedView(renderEvent(view)),
+      'the selected exact view refreshes its Host graph',
+    );
+    assert.false(
+      realmEventMatchesSelectedView(renderEvent()),
+      'a live render cannot refresh an exact Host graph',
+    );
+    assert.false(
+      realmEventMatchesSelectedView(renderEvent('b'.repeat(64))),
+      'a sibling branch cannot refresh the selected Host graph',
+    );
+    assert.true(
+      realmEventMatchesSelectedView({
+        eventName: 'index',
+        indexType: 'incremental',
+        realmURL: 'https://realms.example/cardstack/base/',
+        invalidations: ['https://realms.example/cardstack/base/card-api'],
+      }),
+      'ordinary live dependencies still refresh normally',
+    );
+    assert.true(
+      realmEventMatchesSelectedView({
+        eventName: 'branch',
+        realmURL,
+        branch: 'ana/compact-status',
+        previousRealmView: 'b'.repeat(64),
+        realmView: view,
+        refGeneration: 3,
+        repositoryHash: 'c'.repeat(64),
+        treeHash: 'd'.repeat(64),
+        historyHead: 'jj-step-3',
+        message: 'Tighten compact status spacing',
+      }),
+      'branch movement remains visible as collaboration activity',
     );
   });
 });

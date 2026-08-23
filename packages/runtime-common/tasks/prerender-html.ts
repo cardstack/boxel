@@ -295,6 +295,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     reportRealmEvent?.({
       eventName: 'prerender_html',
       realmURL,
+      ...(realmView ? { realmView } : {}),
       generation,
       invalidations,
     });

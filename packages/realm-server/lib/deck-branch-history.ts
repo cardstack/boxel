@@ -137,7 +137,18 @@ export async function restoreDeckBranchHistory(options: {
   history: HistoryBackend;
   actor?: HistoryActor;
   request: DeckHistoryRestoreRequest;
-}): Promise<{ restored: string; head: BranchHead; treeHash: string }> {
+  prepareView?: (view: {
+    indexGenerationHash: string;
+    repositoryHash: string;
+    treeHash: string;
+    historyHead: string;
+  }) => Promise<void>;
+}): Promise<{
+  restored: string;
+  head: BranchHead;
+  previousIndexGenerationHash: string;
+  treeHash: string;
+}> {
   if (options.request.schema !== DECK_HISTORY_RESTORE_SPEC) {
     throw new Error('unsupported Deck History restore schema');
   }
@@ -194,6 +205,7 @@ export async function restoreDeckBranchHistory(options: {
     policy: options.policy,
     history: options.history,
     actor: options.actor,
+    prepareView: options.prepareView,
     request: {
       schema: DECK_BRANCH_UPDATE_SPEC,
       message: `restore: ${target.changeId}`,
@@ -204,6 +216,7 @@ export async function restoreDeckBranchHistory(options: {
   return {
     restored: target.changeId,
     head: updated.head,
+    previousIndexGenerationHash: updated.previousIndexGenerationHash,
     treeHash: updated.treeHash,
   };
 }

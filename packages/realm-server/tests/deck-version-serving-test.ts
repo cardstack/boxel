@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import {
   captureRepositoryCheckpoint,
   hashBytes,
@@ -142,6 +143,7 @@ module('exact Deck Version serving', function (hooks) {
   let authorized = true;
   let publicReadable = true;
   let deckHistory: TestHistory;
+  let realmEvents: RealmEventContent[];
 
   test('normalizes the operator allowlist as canonical realm RRIs', function (assert) {
     let policy = deckCollaborationPolicyFromEnvironment({
@@ -170,6 +172,7 @@ module('exact Deck Version serving', function (hooks) {
     authorized = true;
     publicReadable = true;
     deckHistory = new TestHistory();
+    realmEvents = [];
     realmDir = await mkdtemp(join(tmpdir(), 'deck-version-serving-'));
     virtualNetwork = new VirtualNetwork();
     virtualNetwork.addRealmMapping(
@@ -188,6 +191,9 @@ module('exact Deck Version serving', function (hooks) {
                 : undefined,
             })
           : new Response('unauthorized', { status: 401 }),
+      async broadcastEvent(event: RealmEventContent) {
+        realmEvents.push(event);
+      },
     } as unknown as Realm;
     await publishToStore(
       join(realmDir, '.deck', 'store'),
@@ -616,6 +622,9 @@ module('exact Deck Version serving', function (hooks) {
     );
     let next = (await published?.json()) as {
       treeHash: string;
+      repositoryHash: string;
+      historyHead: string;
+      indexGenerationHash: string;
       refGeneration: number;
     };
 
@@ -646,6 +655,25 @@ module('exact Deck Version serving', function (hooks) {
       (await deckHistory.list())[0].author,
       '@mina:boxel.test',
       'the accepted writer is attributed from the verified realm token',
+    );
+    assert.deepEqual(
+      realmEvents,
+      [
+        {
+          eventName: 'branch',
+          realmURL: 'https://realms.example/acme/theme/',
+          branch: 'main',
+          previousRealmView: hashBytes('index:main'),
+          realmView: next.indexGenerationHash,
+          refGeneration: 2,
+          repositoryHash: next.repositoryHash,
+          treeHash: next.treeHash,
+          historyHead: next.historyHead,
+          message: 'save: index.js',
+          actor: '@mina:boxel.test',
+        },
+      ],
+      'one accepted ref movement becomes one attributed activity event',
     );
   });
 
@@ -743,6 +771,32 @@ module('exact Deck Version serving', function (hooks) {
         { changeId: 'step1', description: 'History baseline' },
       ],
       'History grows; restore does not rewind it',
+    );
+    let branchEvents = realmEvents.filter(
+      (event) => event.eventName === 'branch',
+    );
+    assert.deepEqual(
+      branchEvents.map((event) => ({
+        message: event.message,
+        previousRealmView: event.previousRealmView,
+        realmView: event.realmView,
+        refGeneration: event.refGeneration,
+      })),
+      [
+        {
+          message: 'save: index.js',
+          previousRealmView: hashBytes('index:main'),
+          realmView: branchEvents[0].realmView,
+          refGeneration: 2,
+        },
+        {
+          message: 'restore: step1',
+          previousRealmView: branchEvents[0].realmView,
+          realmView: restored.indexGenerationHash,
+          refGeneration: 3,
+        },
+      ],
+      'restore is a second ref movement instead of synthetic file activity',
     );
   });
 

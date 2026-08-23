@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import type Koa from 'koa';
+import type { BranchRealmEventContent } from '@cardstack/base/matrix-event';
 import { isExactVersionRRI, parseRRI } from '@cardstack/deck';
 import {
   hashBytes,
@@ -111,6 +112,53 @@ function historyActor(
     // rather than trusting unverified client-authored identity.
     return undefined;
   }
+}
+
+function prepareDeckRealmView(
+  realm: Realm,
+  deps: DeckVersionServingDeps,
+): ((view: { indexGenerationHash: string }) => Promise<void>) | undefined {
+  if (!deps.queue) {
+    return undefined;
+  }
+  return async ({ indexGenerationHash }) => {
+    try {
+      let job = await enqueueReindexRealmJob(
+        realm.url,
+        await realm.getRealmOwnerUsername(),
+        deps.queue!,
+        deps.dbAdapter,
+        userInitiatedPriority,
+        {
+          realmView: indexGenerationHash,
+          awaitedByPublish: true,
+        },
+      );
+      await job.done;
+      let htmlReady = await awaitPublishedHtmlReady(deps.dbAdapter, realm.url, {
+        realmView: indexGenerationHash,
+        timeoutMs: FROM_SCRATCH_JOB_TIMEOUT_SEC * 1000,
+      });
+      if (!htmlReady) {
+        throw new Error(
+          `Realm view ${indexGenerationHash} prerender timed out`,
+        );
+      }
+    } catch (error) {
+      throw new DeckBranchViewPreparationError(error);
+    }
+  };
+}
+
+async function broadcastBranchMovement(
+  realm: Realm,
+  event: Omit<BranchRealmEventContent, 'eventName' | 'realmURL'>,
+): Promise<void> {
+  // The ref is already durable. Matrix activity delivery is best effort and
+  // must not turn a successful conditional write into an ambiguous retry.
+  await realm
+    .broadcastEvent({ eventName: 'branch', realmURL: realm.url, ...event })
+    .catch(() => undefined);
 }
 
 function mutableRealmURLForCapabilities(url: URL): URL | undefined {
@@ -238,48 +286,29 @@ async function handleDeckBranchRequest(
         status: 400,
       });
     }
+    let actor = historyActor(request, deps);
+    let prepareView = prepareDeckRealmView(realm, deps);
     try {
-      await updateDeckBranchContent({
+      let updated = await updateDeckBranchContent({
         realmDir: realm.dir,
         realmRRI,
         branch,
         policy: deps.deckCollaboration!,
         history: deps.deckHistory,
-        actor: historyActor(request, deps),
+        actor,
         request: update,
-        prepareView: deps.queue
-          ? async ({ indexGenerationHash }) => {
-              try {
-                let job = await enqueueReindexRealmJob(
-                  realm.url,
-                  await realm.getRealmOwnerUsername(),
-                  deps.queue!,
-                  deps.dbAdapter,
-                  userInitiatedPriority,
-                  {
-                    realmView: indexGenerationHash,
-                    awaitedByPublish: true,
-                  },
-                );
-                await job.done;
-                let htmlReady = await awaitPublishedHtmlReady(
-                  deps.dbAdapter,
-                  realm.url,
-                  {
-                    realmView: indexGenerationHash,
-                    timeoutMs: FROM_SCRATCH_JOB_TIMEOUT_SEC * 1000,
-                  },
-                );
-                if (!htmlReady) {
-                  throw new Error(
-                    `Realm view ${indexGenerationHash} prerender timed out`,
-                  );
-                }
-              } catch (error) {
-                throw new DeckBranchViewPreparationError(error);
-              }
-            }
-          : undefined,
+        ...(prepareView ? { prepareView } : {}),
+      });
+      await broadcastBranchMovement(realm, {
+        branch,
+        previousRealmView: updated.previousIndexGenerationHash,
+        realmView: updated.indexGenerationHash,
+        refGeneration: updated.head.generation,
+        repositoryHash: updated.repositoryHash,
+        treeHash: updated.treeHash,
+        historyHead: updated.head.historyHead,
+        message: update.message.trim(),
+        ...(actor ? { actor: actor.name } : {}),
       });
     } catch (error) {
       if (
@@ -691,20 +720,35 @@ async function handleDeckHistoryRequest(
         status: 400,
       });
     }
+    let actor = historyActor(request, deps);
+    let prepareView = prepareDeckRealmView(realm, deps);
     let restored = await restoreDeckBranchHistory({
       realmDir: realm.dir,
       realmRRI,
       branch,
       policy: deps.deckCollaboration!,
       history: deps.deckHistory,
-      actor: historyActor(request, deps),
+      actor,
       request: body,
+      ...(prepareView ? { prepareView } : {}),
+    });
+    await broadcastBranchMovement(realm, {
+      branch,
+      previousRealmView: restored.previousIndexGenerationHash,
+      realmView: restored.head.indexGenerationHash,
+      refGeneration: restored.head.generation,
+      repositoryHash: restored.head.repositoryHash,
+      treeHash: restored.treeHash,
+      historyHead: restored.head.historyHead,
+      message: `restore: ${restored.restored}`,
+      ...(actor ? { actor: actor.name } : {}),
     });
     return Response.json({
       schema: 'boxel-deck-history-restore-result-v1',
       restored: restored.restored,
       repositoryHash: restored.head.repositoryHash,
       historyHead: restored.head.historyHead,
+      indexGenerationHash: restored.head.indexGenerationHash,
       refGeneration: restored.head.generation,
       treeHash: restored.treeHash,
     });
@@ -715,6 +759,12 @@ async function handleDeckHistoryRequest(
       error instanceof RefBusyError
     ) {
       return new Response('Branch moved since it was read', { status: 409 });
+    }
+    if (error instanceof DeckBranchViewPreparationError) {
+      return new Response(error.message, {
+        status: 503,
+        headers: { 'retry-after': '5' },
+      });
     }
     if (error instanceof Error && !error.message.startsWith('missing ')) {
       return new Response(error.message, { status: 400 });

@@ -3,10 +3,11 @@
 **Status:** A0–A6, B0, B1a, B2a, B2b, and B3a are implemented as a local stack
 on 2026-08-23. B3b exact source, SQL namespaces, view-qualified jobs,
 definition/transpile cache keys, prerender page/Loader/search isolation, and
-the ref-after-ready publication gate are local checkpoints. B3b event,
-activity, full Host selection, and test-selection isolation remain. B1b is an
-optional hosted-infrastructure slice. No B-series pull request or remote
-branch has been created from this stack.
+the ref-after-ready publication gate are local checkpoints. B3b view-qualified
+events and branch-movement activity are also implemented locally. Full Host
+selection and test-selection isolation remain. B1b is an optional
+hosted-infrastructure slice. No B-series pull request or remote branch has been
+created from this stack.
 
 ## Target outcome
 

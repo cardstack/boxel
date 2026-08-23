@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { realmEventMatchesSelectedView } from '../lib/prerender-fetch-headers';
+
 import type NetworkService from './network';
 import type SessionService from './session';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -74,7 +76,7 @@ export default class MessageService extends Service {
 
   relayRealmEvent(event: RealmEventContent) {
     const realmURL = event.realmURL;
-    if (!realmURL) {
+    if (!realmURL || !realmEventMatchesSelectedView(event)) {
       return;
     }
     let callbacks = this.listenerCallbacks.get(realmURL);

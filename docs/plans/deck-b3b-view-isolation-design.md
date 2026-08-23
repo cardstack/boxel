@@ -154,10 +154,22 @@ before its exact view is browseable and runnable.
 
 ### B3b.4 — events and activity
 
-Realm file/index events gain an optional exact view identity. `live` events
-retain today's shape for non-Deck realms; Deck branch events require the view
-hash and branch display name. Subscribers invalidate only stores, Loader
-graphs, and activity streams whose selected exact view matches.
+Implemented in the fourth B3b checkpoint:
+
+1. Realm index, update, and prerender events can carry an optional exact view
+   identity; `live` events retain today's shape for non-Deck realms.
+2. Exact prerender completion carries the originating view hash through the
+   worker-to-Realm event bridge.
+3. The Host's central Realm event relay admits execution invalidations only
+   when they match the selected Realm view. A selected branch ignores live and
+   sibling-branch invalidations while its ordinary live dependencies continue
+   to update.
+4. An accepted branch ref movement emits one `branch` activity containing the
+   branch display name, old and new exact views, ref generation, repository,
+   tree, History head, message, and verified actor when available.
+5. History restore uses the same prepare-exact-view-before-ref-advance gate and
+   emits its own branch activity. It never simulates restoration as a burst of
+   live file events.
 
 Branch movement is a separate event: it announces that a mutable branch ref
 now selects a new exact view. It does not masquerade as N file events in

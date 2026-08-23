@@ -140,6 +140,7 @@ export async function updateDeckBranchContent(options: {
   }) => Promise<void>;
 }): Promise<{
   head: BranchHead;
+  previousIndexGenerationHash: string;
   repositoryHash: string;
   treeHash: string;
   indexGenerationHash: string;
@@ -293,6 +294,7 @@ export async function updateDeckBranchContent(options: {
       });
       return {
         head,
+        previousIndexGenerationHash: current.head.indexGenerationHash,
         repositoryHash,
         treeHash: stored.treeHash,
         indexGenerationHash: index.indexGenerationHash,

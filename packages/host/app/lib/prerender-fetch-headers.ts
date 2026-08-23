@@ -1,19 +1,31 @@
 import {
   DURING_PRERENDER_HEADER,
+  REALM_LIVE_VIEW,
   REALM_VIEW_HEADER,
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_JOB_ID_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 
+import type { RealmEventContent } from '@cardstack/base/matrix-event';
+
+interface SelectedRealmView {
+  realmURL: string;
+  view: string;
+}
+
+function selectedRealmView(): SelectedRealmView | undefined {
+  return (
+    globalThis as unknown as {
+      __boxelRealmView?: SelectedRealmView;
+    }
+  ).__boxelRealmView;
+}
+
 export function realmViewHeaders(
   targets: string | URL | string[],
 ): Record<string, string> {
-  let selected = (
-    globalThis as unknown as {
-      __boxelRealmView?: { realmURL: string; view: string };
-    }
-  ).__boxelRealmView;
+  let selected = selectedRealmView();
   if (!selected) {
     return {};
   }
@@ -24,6 +36,29 @@ export function realmViewHeaders(
     return targetURL.href.startsWith(selectedURL.href);
   });
   return matches ? { [REALM_VIEW_HEADER]: selected.view } : {};
+}
+
+// Branch movement is collaboration activity and is visible from every view.
+// File/index/render invalidations are execution events: deliver them only to
+// a Host graph whose selected immutable view matches. An omitted view is the
+// intentional live lane used by ordinary non-Deck Realms.
+export function realmEventMatchesSelectedView(
+  event: RealmEventContent,
+): boolean {
+  if (event.eventName === 'branch') {
+    return true;
+  }
+  let eventView = event.realmView ?? REALM_LIVE_VIEW;
+  let selected = selectedRealmView();
+  if (!selected) {
+    return eventView === REALM_LIVE_VIEW;
+  }
+  let selectedRealmURL = new URL(selected.realmURL).href;
+  let eventRealmURL = new URL(event.realmURL).href;
+  if (selectedRealmURL !== eventRealmURL) {
+    return eventView === REALM_LIVE_VIEW;
+  }
+  return eventView === selected.view;
 }
 
 // Set by the prerender server's `evaluateOnNewDocument` before the

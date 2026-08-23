@@ -456,7 +456,15 @@ export interface RealmEvent extends BaseMatrixEvent {
 export type RealmEventContent =
   | IndexRealmEventContent
   | PrerenderHtmlEventContent
-  | UpdateRealmEventContent;
+  | UpdateRealmEventContent
+  | BranchRealmEventContent;
+
+// Exact Deck work keeps the public Realm URL stable and carries its immutable
+// view as separate event provenance. Live Realm events deliberately omit this
+// field so non-Deck realms retain their existing wire shape.
+interface RealmViewEventContent {
+  realmView?: string;
+}
 
 export type IndexRealmEventContent =
   | IncrementalIndexEventContent
@@ -464,7 +472,7 @@ export type IndexRealmEventContent =
   | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
 
-export interface IncrementalIndexEventContent {
+export interface IncrementalIndexEventContent extends RealmViewEventContent {
   eventName: 'index';
   indexType: 'incremental';
   invalidations: string[];
@@ -475,14 +483,14 @@ export interface IncrementalIndexEventContent {
   realmURL: string;
 }
 
-interface FullIndexEventContent {
+interface FullIndexEventContent extends RealmViewEventContent {
   eventName: 'index';
   indexType: 'full';
   generation?: number;
   realmURL: string;
 }
 
-interface CopiedIndexEventContent {
+interface CopiedIndexEventContent extends RealmViewEventContent {
   eventName: 'index';
   indexType: 'copy';
   sourceRealmURL: string;
@@ -494,25 +502,42 @@ interface CopiedIndexEventContent {
 // channel after (or concurrently with) the indexing pass. Emitted by the
 // `prerender_html` worker job through the worker-event bridge so open live
 // searches re-run and pick up the fresh HTML / corrected full-text membership.
-export interface PrerenderHtmlEventContent {
+export interface PrerenderHtmlEventContent extends RealmViewEventContent {
   eventName: 'prerender_html';
   invalidations: string[];
   generation: number;
   realmURL: string;
 }
 
-export interface IncrementalIndexInitiationContent {
+export interface IncrementalIndexInitiationContent extends RealmViewEventContent {
   eventName: 'index';
   indexType: 'incremental-index-initiation';
   updatedFile: string;
   realmURL: string;
 }
 
-export interface UpdateRealmEventContent {
+export interface UpdateRealmEventContent extends RealmViewEventContent {
   eventName: 'update';
   added?: string[];
   updated?: string[];
   removed?: string[];
+  realmURL: string;
+}
+
+// One branch ref movement is one collaboration activity. It is not represented
+// as a burst of file invalidations: those files belong to `realmView`, while
+// ordinary live subscribers may still be observing `previousRealmView`.
+export interface BranchRealmEventContent {
+  eventName: 'branch';
+  branch: string;
+  previousRealmView: string;
+  realmView: string;
+  refGeneration: number;
+  repositoryHash: string;
+  treeHash: string;
+  historyHead: string;
+  message: string;
+  actor?: string;
   realmURL: string;
 }
 
