@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { registerArchiveCommand } from './archive.ts';
 import { registerBranchCommand } from './branch.ts';
 import { registerCancelIndexingCommand } from './cancel-indexing.ts';
+import { registerCheckpointCommand } from './checkpoint.ts';
 import { registerCreateCommand } from './create.ts';
 import { registerHistoryCommand } from './history.ts';
 import { registerIndexingErrorsCommand } from './indexing-errors.ts';
@@ -27,6 +28,7 @@ export function registerRealmCommand(program: Command): void {
   registerArchiveCommand(realm);
   registerBranchCommand(realm);
   registerCancelIndexingCommand(realm);
+  registerCheckpointCommand(realm);
   registerCreateCommand(realm);
   registerHistoryCommand(realm);
   registerIndexingErrorsCommand(realm);

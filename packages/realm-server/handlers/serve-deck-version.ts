@@ -63,6 +63,11 @@ import {
   type DeckBranchCreateRequest,
 } from '../lib/deck-branch-creation.ts';
 import {
+  createDeckBranchCheckpoint,
+  DeckCheckpointConflictError,
+  type DeckCheckpointCreateRequest,
+} from '../lib/deck-branch-checkpoint.ts';
+import {
   DeckIndexPendingError,
   queryDeckBranchIndex,
   readDeckBranchIndex,
@@ -95,6 +100,7 @@ const BRANCHES_PATH = '.deck/branches';
 const TREE_FILE_PATH = '.deck/tree-file';
 const HISTORY_PATH = '.deck/history';
 const BRANCH_INDEX_PATH = '.deck/branch-index';
+const CHECKPOINT_PATH = '.deck/checkpoint';
 
 class DeckBranchViewPreparationError extends Error {
   constructor(cause: unknown) {
@@ -506,6 +512,104 @@ async function handleDeckBranchesRequest(
         ? 409
         : 400;
       return new Response(error.message, { status });
+    }
+    throw error;
+  }
+}
+
+async function handleDeckCheckpointRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(CHECKPOINT_PATH)) return null;
+  if (request.method !== 'POST') {
+    return new Response('Deck Checkpoint creation requires POST', {
+      status: 405,
+    });
+  }
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -CHECKPOINT_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeWrite(request, realm);
+  if (authorization.response) return authorization.response;
+  let branch = requestURL.searchParams.get('branch');
+  if (!branch)
+    return new Response('Checkpoint requires branch', { status: 400 });
+  let body: DeckCheckpointCreateRequest;
+  try {
+    body = (await request.json()) as DeckCheckpointCreateRequest;
+  } catch {
+    return new Response('Checkpoint creation is not valid JSON', {
+      status: 400,
+    });
+  }
+  let history = historyActor(request, deps);
+  let actor = {
+    id: history?.name ?? '@realm-server:internal',
+    ...(history?.name ? { name: history.name } : {}),
+  };
+  try {
+    let created = await createDeckBranchCheckpoint({
+      realmDir: realm.dir,
+      realmRRI,
+      branch,
+      policy: deps.deckCollaboration!,
+      actor,
+      request: body,
+    });
+    await broadcastBranchMovement(realm, {
+      branch,
+      previousRealmView: created.head.indexGenerationHash,
+      realmView: created.head.indexGenerationHash,
+      refGeneration: created.head.generation,
+      repositoryHash: created.head.repositoryHash,
+      treeHash: created.treeHash,
+      historyHead: created.head.historyHead,
+      message: `Checkpoint: ${body.message.trim()}`,
+      ...(history ? { actor: history.name } : {}),
+    });
+    return Response.json(
+      {
+        schema: 'boxel-deck-checkpoint-create-result-v1',
+        realmRRI,
+        branchName: branch,
+        checkpointHash: created.checkpointHash,
+        parentCheckpointHash: created.parentCheckpointHash,
+        repositoryHash: created.head.repositoryHash,
+        treeHash: created.treeHash,
+        lockHash: created.lockHash,
+        historyHead: created.head.historyHead,
+        indexGenerationHash: created.head.indexGenerationHash,
+        refGeneration: created.head.generation,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (
+      error instanceof DeckCheckpointConflictError ||
+      error instanceof RefConflictError ||
+      error instanceof RefBusyError
+    ) {
+      return new Response('Branch moved while creating Checkpoint', {
+        status: 409,
+      });
+    }
+    if (error instanceof Error) {
+      return new Response(error.message, { status: 400 });
     }
     throw error;
   }
@@ -1110,6 +1214,10 @@ export async function handleDeckVersionRequest(
   let branches = await handleDeckBranchesRequest(request, deps);
   if (branches) {
     return branches;
+  }
+  let checkpoint = await handleDeckCheckpointRequest(request, deps);
+  if (checkpoint) {
+    return checkpoint;
   }
   let branchIndex = await handleDeckBranchIndexRequest(request, deps);
   if (branchIndex) {

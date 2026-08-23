@@ -58,6 +58,9 @@ boxel realm sync status ~/Projects/pretui-mina
 boxel parse --workspace ~/Projects/pretui-mina
 boxel test ~/Projects/pretui-mina
 boxel realm push ~/Projects/pretui-mina https://localhost:4201/pretui/
+boxel realm checkpoint \
+  ~/Projects/pretui-mina \
+  --message "Focus ring 1.1 review candidate"
 ```
 
 The checkout's `.boxel-sync.json` records the Realm RRI, branch identity,
@@ -76,6 +79,11 @@ boxel realm branch switch ~/Projects/pretui-mina main
 existing workspace retains its recorded branch and directs the author to the
 explicit switch command.
 
+A Checkpoint freezes the exact Repository, tree, import-map lock, History head,
+and completed index generation for Review. It does not create a Git commit or
+stop later saves. The CLI refuses to Checkpoint unpushed bytes or a branch that
+moved since the workspace observed it.
+
 ## What the fixture proves
 
 The replay contains 28 design-system units across foundations, layout,
@@ -91,5 +99,5 @@ branch-qualified index, waits for the exact preview to be ready, and only then
 publishes the branch ref. Each accepted push appends one History Step and moves
 that branch ref once.
 
-Checkpoint, Review, merge, and exact-Version syndication commands are layered
-on this same branch state; see the backport plan for their rollout order.
+Review, merge, and exact-Version syndication commands are layered on this same
+branch state; see the backport plan for their rollout order.

@@ -1,6 +1,6 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6 and B0–B4 are implemented as a local stack on 2026-08-23.
+**Status:** A0–A6 and B0–B5a are implemented as a local stack on 2026-08-23.
 B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
 prerender/Loader/search isolation, Host-owned exact view selection, and the
 ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
@@ -460,11 +460,18 @@ boxel realm branch list <realm-url> [--json]
 boxel realm branch create <realm-url> <name> [--from <branch>] [--json]
 boxel realm branch switch <local-dir> <name> [--json]
 boxel realm sync <local-dir> <realm-url> [--branch <name>]
+boxel realm checkpoint <local-dir> --message <description> [--json]
 ```
 
 `realm sync` follows the branch already recorded in `.boxel-sync.json`.
 `--branch` selects the initial branch for a new workspace and fails with a
 pointer to `realm branch switch` if it contradicts an existing workspace.
+
+B5a's Checkpoint command accepts only a clean materialized workspace. It sends
+the exact Repository, tree, lock, and observed ref generation to Realm Server;
+a stale request writes nothing. Realm Server stores the immutable Checkpoint,
+advances only the branch ref, and returns the new generation so the same local
+workspace can continue authoring without a pull.
 
 Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only
