@@ -4,7 +4,12 @@ import { Readable } from 'node:stream';
 
 import type Koa from 'koa';
 import { isExactVersionRRI, parseRRI, realmRRI } from '@cardstack/deck';
-import { hashBytes, readStoredFile } from '@cardstack/deck/node';
+import {
+  hashBytes,
+  readStoredFile,
+  readStoreMeta,
+  resolveVersionSpec,
+} from '@cardstack/deck/node';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   SupportedMimeType,
@@ -18,6 +23,10 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
+import {
+  buildDeckVersionIndex,
+  queryDeckVersionIndex,
+} from '../lib/deck-version-index.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -124,6 +133,112 @@ async function handleDeckCapabilitiesRequest(
   });
 }
 
+const VERSIONS_PATH = '.deck/versions';
+
+function mutableRealmURLForVersions(url: URL): URL | undefined {
+  if (!url.pathname.endsWith(VERSIONS_PATH)) {
+    return undefined;
+  }
+  let mutableURL = new URL(url);
+  mutableURL.pathname = url.pathname.slice(0, -VERSIONS_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  return mutableURL;
+}
+
+async function realmPackageName(realm: Realm): Promise<string | undefined> {
+  if (!realm.dir) {
+    return undefined;
+  }
+  try {
+    let value = JSON.parse(
+      await readFile(join(realm.dir, 'package.json'), 'utf8'),
+    ).name;
+    return typeof value === 'string' && value.startsWith('@')
+      ? value.slice(1)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function handleDeckVersionIndexQuery(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  let mutableURL = mutableRealmURLForVersions(requestURL);
+  if (!mutableURL) {
+    return null;
+  }
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck Version queries are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  if (
+    !realm?.dir ||
+    !packageName ||
+    !hasDeckCollaboration(deps, `@${packageName}/`)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) {
+    return authorization.response;
+  }
+  let spec = requestURL.searchParams.get('spec');
+  if (!spec) {
+    return new Response('A Version, dist-tag, or semver range is required', {
+      status: 400,
+    });
+  }
+  let meta = await readStoreMeta(
+    join(realm.dir, '.deck', 'store'),
+    packageName,
+  );
+  if (!meta) {
+    return new Response('Not found', { status: 404 });
+  }
+  let resolution = resolveVersionSpec(spec, meta);
+  if (resolution.kind === 'invalid') {
+    return new Response(resolution.detail, { status: 400 });
+  }
+  if (resolution.kind === 'not-found') {
+    return new Response(resolution.detail, { status: 404 });
+  }
+  let version = resolution.version;
+  let snapshot = await buildDeckVersionIndex({
+    realmDir: realm.dir,
+    packageName,
+    version,
+  });
+  let cards = queryDeckVersionIndex(
+    snapshot,
+    requestURL.searchParams.get('q') ?? undefined,
+  );
+  let body = JSON.stringify({
+    requested: spec,
+    resolved: version,
+    versionRRI: snapshot.packageRRI,
+    treeHash: snapshot.treeHash,
+    indexHash: snapshot.indexHash,
+    cards,
+  });
+  return new Response(request.method === 'HEAD' ? null : body, {
+    headers: {
+      'cache-control': 'private, no-store',
+      'content-type': 'application/json',
+      'content-location': `${mutableURL.href.slice(0, -1)}@${version}/.deck/index`,
+    },
+  });
+}
+
 function notFound(rri: string): Response {
   return new Response(`${rri} not found`, {
     status: 404,
@@ -201,6 +316,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let versionQuery = await handleDeckVersionIndexQuery(request, deps);
+  if (versionQuery) {
+    return versionQuery;
+  }
   let capabilities = await handleDeckCapabilitiesRequest(request, deps);
   if (capabilities) {
     return capabilities;
@@ -244,6 +363,33 @@ export async function handleDeckVersionRequest(
     return authorization.response;
   }
 
+  if (path === '.deck/index') {
+    let snapshot = await buildDeckVersionIndex({
+      realmDir: realm.dir,
+      packageName: `${scope}/${name}`,
+      version,
+    });
+    let body = JSON.stringify({
+      requested: version,
+      resolved: version,
+      versionRRI: snapshot.packageRRI,
+      treeHash: snapshot.treeHash,
+      indexHash: snapshot.indexHash,
+      cards: queryDeckVersionIndex(
+        snapshot,
+        new URL(request.url).searchParams.get('q') ?? undefined,
+      ),
+    });
+    return new Response(request.method === 'HEAD' ? null : body, {
+      headers: {
+        'cache-control': `${authorization.publicReadable ? 'public' : 'private'}, max-age=31536000, immutable`,
+        'content-type': 'application/json',
+        'x-boxel-version-rri': identifier,
+        'x-boxel-deck-collaboration': 'true',
+      },
+    });
+  }
+
   let storeDir = join(realm.dir, '.deck', 'store');
   let readVersionFile = deps.readVersionFile ?? readStoredFile;
   let cardProjection = projectsCardDocument(request, path);
@@ -280,8 +426,9 @@ export async function handleDeckVersionRequest(
     'x-boxel-realm-url': mutableURL.href,
     'x-boxel-realm-public-readable': String(authorization.publicReadable),
     'x-boxel-version-rri': identifier,
+    'x-boxel-deck-collaboration': 'true',
     'access-control-expose-headers':
-      'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Version-RRI,Cache-Control,ETag,Content-Length',
+      'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,X-Boxel-Version-RRI,X-Boxel-Deck-Collaboration,Cache-Control,ETag,Content-Length',
   });
   if (request.headers.get('if-none-match') === etag) {
     return new Response(null, { status: 304, headers });

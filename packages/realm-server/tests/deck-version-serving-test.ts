@@ -201,6 +201,61 @@ module('exact Deck Version serving', function (hooks) {
     assert.strictEqual(privateResponse?.status, 401);
   });
 
+  test('resolves semver intent to one immutable Version index', async function (assert) {
+    let ranged = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/versions?spec=%5E1.0.0&q=immutable',
+      ),
+    );
+    let result = await ranged?.json();
+    let exact = await serve(
+      new Request(
+        'https://realms.example/acme/theme@1.1.0/.deck/index?q=immutable',
+      ),
+    );
+    let exactResult = await exact?.json();
+    let exactNoMatch = await serve(
+      new Request(
+        'https://realms.example/acme/theme@1.1.0/.deck/index?q=route-map',
+      ),
+    );
+
+    assert.strictEqual(ranged?.status, 200);
+    assert.strictEqual(
+      ranged?.headers.get('cache-control'),
+      'private, no-store',
+    );
+    assert.strictEqual(result.requested, '^1.0.0');
+    assert.strictEqual(result.resolved, '1.1.0');
+    assert.strictEqual(result.versionRRI, '@acme/theme@1.1.0/');
+    assert.strictEqual(result.cards.length, 1);
+    assert.strictEqual(result.cards[0].sourcePath, 'card.json');
+    assert.strictEqual(exact?.status, 200);
+    assert.deepEqual(exactResult.cards, result.cards);
+    assert.strictEqual(exactNoMatch?.status, 200);
+    assert.strictEqual((await exactNoMatch!.json()).cards.length, 0);
+    assert.strictEqual(exactResult.indexHash, result.indexHash);
+    assert.strictEqual(
+      exact?.headers.get('cache-control'),
+      'public, max-age=31536000, immutable',
+    );
+  });
+
+  test('keeps Version indexes behind realm authorization', async function (assert) {
+    authorized = false;
+    let ranged = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/versions?spec=%5E1.0.0',
+      ),
+    );
+    let exact = await serve(
+      new Request('https://realms.example/acme/theme@1.1.0/.deck/index'),
+    );
+
+    assert.strictEqual(ranged?.status, 401);
+    assert.strictEqual(exact?.status, 401);
+  });
+
   test('serves executable exact Versions while preserving CardSource reads', async function (assert) {
     let url = 'https://realms.example/acme/theme@1.1.0/status.gts';
     let moduleResponse = await serve(new Request(url));

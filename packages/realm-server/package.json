@@ -98,6 +98,7 @@
   },
   "scripts": {
     "fixture:relay": "node scripts/seed-relay-fixture.ts",
+    "fixture:pretui-known-date": "node scripts/seed-pretui-known-date.ts",
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",
     "bench:realm": "LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_REALM_LOG_LEVELS='*=warn,prerenderer-chrome=none' TEST_HARNESS_PRERENDER_LOG_LEVELS='*=warn,prerenderer-chrome=none' NODE_NO_WARNINGS=1 node scripts/bench-realm/bench.ts",

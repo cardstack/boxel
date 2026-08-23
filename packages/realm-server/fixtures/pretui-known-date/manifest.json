@@ -1,0 +1,30 @@
+{
+  "format": "boxel-pretui-slice-v1",
+  "packageName": "@cardstack/pretui",
+  "version": "0.4.0",
+  "sourceRevision": "cc76dac479c1fc6e2fbfb07db7187eb38e00b378",
+  "maxFiles": 32,
+  "sourceRoots": [
+    "controls-known-date.gts",
+    "controls-known-date.test.gts",
+    "demo-controls-known-date.gts",
+    "PretuiComponent/knowndate.json",
+    "pretui-component.gts",
+    "Theme/ss26-hosts-cloth.json"
+  ],
+  "runtimeRoots": [
+    "controls-known-date.gts",
+    "PretuiComponent/knowndate.json",
+    "Theme/ss26-hosts-cloth.json"
+  ],
+  "dependencies": {
+    "@cardstack/base": "^1.0.0",
+    "@cardstack/boxel-ui": ">=0.0.0",
+    "@cardstack/runtime-common": "^1.0.0"
+  },
+  "locks": {
+    "@cardstack/base": "@cardstack/base@1.0.0/",
+    "@cardstack/boxel-ui": "@cardstack/boxel-ui@0.0.0/",
+    "@cardstack/runtime-common": "@cardstack/runtime-common@1.0.0/"
+  }
+}
