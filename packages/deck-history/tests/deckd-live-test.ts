@@ -138,6 +138,13 @@ if (!baseUrl) {
         2,
         'the branch sees its save plus inherited ancestry',
       );
+      await history.discard(branchDir);
+      await assert.rejects(readFile(join(branchDir, 'button.gts')), /ENOENT/);
+      assert.strictEqual(
+        (await history.list(dir, { flush: false })).length,
+        1,
+        'discard removes only the branch workspace',
+      );
     });
   });
 }

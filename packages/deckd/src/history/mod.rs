@@ -66,6 +66,10 @@ pub trait HistoryBackend: Send + Sync {
         workspace_name: &'a str,
     ) -> BoxFuture<'a, Result<(), HistoryBackendError>>;
 
+    /// Remove a prepared named workspace. The owning Realm's shared History
+    /// repository and all immutable ancestor commits remain intact.
+    fn discard<'a>(&'a self, dir: &'a str) -> BoxFuture<'a, Result<(), HistoryBackendError>>;
+
     /// Fire-and-forget remember: schedule an async collapsed seal. Returns
     /// immediately; many notes across many depots must not block the caller.
     fn note<'a>(

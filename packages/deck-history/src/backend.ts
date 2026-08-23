@@ -56,6 +56,9 @@ export interface HistoryBackend {
     revisionId: string,
     workspaceName: string,
   ): Promise<void>;
+  // Removes a prepared named branch workspace without deleting shared
+  // History ancestry. Used when later index/ref preparation fails.
+  discard(dir: string): Promise<void>;
   // Notes a file mutation for the debounced sealer. Fire-and-forget: a
   // burst of saves becomes ONE seal.
   noteMutation(dir: string, path: string): void;

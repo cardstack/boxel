@@ -3,10 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  createRepositoryBranch,
   ensureRepositoryMain,
   hashBytes,
   repositoryManifest,
   readTreeFromDir,
+  writeTreeToDir,
 } from '@cardstack/deck/node';
 import type {
   HistoryActor,
@@ -24,6 +26,7 @@ import {
 } from '../lib/deck-branch-content-update.ts';
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import { readDeckBranchIndex } from '../lib/deck-branch-index.ts';
+import { deckBranchWorkspaceDir } from '../lib/deck-branch-workspace.ts';
 
 const { module, test } = QUnit;
 const realmRRI = '@cardstack/pretui/';
@@ -35,6 +38,7 @@ class RecordingHistory implements HistoryBackend {
 
   noteMutation(): void {}
   async fork(): Promise<void> {}
+  async discard(): Promise<void> {}
   async flush(): Promise<string | undefined> {
     return undefined;
   }
@@ -106,12 +110,15 @@ module('Deck branch content updates', function (hooks) {
     await rm(realmDir, { recursive: true, force: true });
   });
 
-  async function request(content: string): Promise<DeckBranchUpdateRequest> {
+  async function request(
+    content: string,
+    branchName = 'main',
+  ): Promise<DeckBranchUpdateRequest> {
     let branch = await openDeckRepositoryProtocol({
       realmDir,
       realmRRI,
       policy,
-    }).readBranch('main');
+    }).readBranch(branchName);
     if (!branch) throw new Error('missing main');
     let treeHash = branch.repository.members[realmRRI];
     return {
@@ -223,6 +230,47 @@ module('Deck branch content updates', function (hooks) {
       history.entries[0].files.get('index.js')?.toString(),
       'export const version = 1;\n',
       'the first write adopts the state being left as a History baseline',
+    );
+  });
+
+  test('a named branch save advances only its workspace and ref', async function (assert) {
+    let branchName = 'ana/button-tone';
+    let branchDir = deckBranchWorkspaceDir(realmDir, branchName);
+    await writeTreeToDir(branchDir, await readTreeFromDir(realmDir));
+    await createRepositoryBranch({ realmDir, branch: branchName });
+
+    let result = await updateDeckBranchContent({
+      realmDir,
+      realmRRI,
+      branch: branchName,
+      policy,
+      history,
+      request: await request('export const version = 2;\n', branchName),
+    });
+
+    assert.strictEqual(result.head.generation, 2);
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(branchDir, 'index.js'), 'utf8'),
+      ),
+      'export const version = 2;\n',
+    );
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(realmDir, 'index.js'), 'utf8'),
+      ),
+      'export const version = 1;\n',
+      'main is untouched',
+    );
+    assert.strictEqual(
+      (
+        await openDeckRepositoryProtocol({
+          realmDir,
+          realmRRI,
+          policy,
+        }).readBranch('main')
+      )?.head.generation,
+      1,
     );
   });
 

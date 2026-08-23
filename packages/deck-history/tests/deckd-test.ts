@@ -46,6 +46,9 @@ function startStub(): Promise<{
         case '/fork':
           reply({});
           return;
+        case '/discard':
+          reply({});
+          return;
         case '/seal':
           if (body.message === 'boom') {
             res.writeHead(500, { 'content-type': 'application/json' });
@@ -188,6 +191,12 @@ module('history: deckd client', function (hooks) {
       0,
       'the successful fork response is the target ensure boundary',
     );
+
+    await history.discard('/tmp/some-live-tree/.deck/branches/ana%2Fbutton');
+    assert.deepEqual(stub.calls.at(-1), {
+      path: '/discard',
+      body: { dir: '/tmp/some-live-tree/.deck/branches/ana%2Fbutton' },
+    });
   });
 
   test('a no-op seal reports nothing sealed', async function (assert) {

@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { registerArchiveCommand } from './archive.ts';
+import { registerBranchCommand } from './branch.ts';
 import { registerCancelIndexingCommand } from './cancel-indexing.ts';
 import { registerCreateCommand } from './create.ts';
 import { registerHistoryCommand } from './history.ts';
@@ -24,6 +25,7 @@ export function registerRealmCommand(program: Command): void {
     .description('Manage realms on the realm server');
 
   registerArchiveCommand(realm);
+  registerBranchCommand(realm);
   registerCancelIndexingCommand(realm);
   registerCreateCommand(realm);
   registerHistoryCommand(realm);

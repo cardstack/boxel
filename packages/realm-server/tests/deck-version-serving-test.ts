@@ -43,6 +43,7 @@ class TestHistory implements HistoryBackend {
 
   noteMutation(): void {}
   async fork(): Promise<void> {}
+  async discard(): Promise<void> {}
   async flush(): Promise<string | undefined> {
     return undefined;
   }
@@ -346,6 +347,52 @@ module('exact Deck Version serving', function (hooks) {
       hashBytes('export const accent = "tomato";\n'),
     );
     assert.notOk('remoteMtimes' in observation);
+  });
+
+  test('creates and lists a branch through the authenticated Realm surface', async function (assert) {
+    let created = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branches', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-create-v1',
+          branchName: 'ana/button-tone',
+          fromBranch: 'main',
+        }),
+      }),
+    );
+    let result = (await created?.json()) as {
+      schema: string;
+      branchName: string;
+      fromBranch: string;
+      refGeneration: number;
+      indexGenerationHash: string;
+    };
+    assert.strictEqual(created?.status, 201);
+    assert.strictEqual(result.schema, 'boxel-deck-branch-create-result-v1');
+    assert.strictEqual(result.branchName, 'ana/button-tone');
+    assert.strictEqual(result.fromBranch, 'main');
+    assert.strictEqual(result.refGeneration, 1);
+    assert.ok(result.indexGenerationHash);
+
+    let listed = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branches'),
+    );
+    let list = (await listed?.json()) as {
+      schema: string;
+      branches: { branchName: string }[];
+    };
+    assert.strictEqual(listed?.status, 200);
+    assert.strictEqual(list.schema, 'boxel-deck-branch-list-v1');
+    assert.deepEqual(
+      list.branches.map(({ branchName }) => branchName),
+      ['ana/button-tone', 'main'],
+    );
+    assert.strictEqual(realmEvents.at(-1)?.eventName, 'branch');
+    assert.strictEqual(
+      (realmEvents.at(-1) as { branch?: string }).branch,
+      'ana/button-tone',
+    );
   });
 
   test('serves branch bytes from the observed immutable tree', async function (assert) {

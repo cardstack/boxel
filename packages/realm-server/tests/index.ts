@@ -368,6 +368,8 @@ const ALL_TEST_FILES: string[] = [
   './client-telemetry-test',
   './realm-identifiers-test',
   './deck-version-serving-test',
+  './deck-branch-content-update-test',
+  './deck-branch-creation-test',
   './decklist-adopt-test',
   './bfm-card-references-test',
   './package-shim-handler-test',

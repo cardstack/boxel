@@ -78,6 +78,29 @@ The copies are generated output, rewritten on every run: edit a skill in the rea
 
 Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
 
+### Deck Realm branches
+
+For a Realm that advertises the feature-flagged Deck capability, Boxel CLI
+uses the Realm as the collaboration authority and records an exact branch base
+in `.boxel-sync.json`:
+
+```bash
+boxel realm branch list https://realms.example/pretui/
+boxel realm branch create https://realms.example/pretui/ ana/button-tone --from main
+boxel realm pull https://realms.example/pretui/ ./pretui-ana --branch ana/button-tone
+boxel realm branch switch ./pretui-ana main
+```
+
+`branch create` becomes visible only after Realm Server has prepared its
+History workspace and exact index/view. `branch switch` operates only on a
+clean Deck workspace and refuses to overwrite unpushed changes. `realm sync`
+continues on the branch recorded by the workspace; `--branch` selects a branch
+only when initializing a new workspace.
+
+Realms that do not advertise Deck continue to use the existing mtime sync
+implementation. Branch commands fail explicitly for those legacy Realms; they
+never emulate branches with local Git.
+
 ## Development
 
 ### Building

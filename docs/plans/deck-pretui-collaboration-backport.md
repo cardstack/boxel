@@ -1,11 +1,12 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6, B0, B1a, B2a, B2b, and B3a are implemented as a local stack
-on 2026-08-23. B3b exact source, SQL namespaces, view-qualified jobs,
-definition/transpile cache keys, prerender page/Loader/search isolation, and
-the ref-after-ready publication gate are local checkpoints. B3b view-qualified
-events and branch-movement activity are also implemented locally. Full Host
-selection and test-selection isolation remain. B1b is an optional
+**Status:** A0–A6 and B0–B4 are implemented as a local stack on 2026-08-23.
+B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
+prerender/Loader/search isolation, Host-owned exact view selection, and the
+ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
+atomic Realm Server branch preparation/listing, named-branch writes and
+History, and Boxel CLI list/create/switch support. The visible Host branch
+chooser remains the final B4 product surface. B1b is an optional
 hosted-infrastructure slice. No B-series pull request or remote branch has been
 created from this stack.
 
@@ -302,13 +303,14 @@ is the selected branch's server-side deckd History.
 
 Keep the familiar local transport verbs, but give them exact semantics:
 
-| Command        | New contract                                                                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `realm pull`   | Materialize the selected remote branch head and record its exact Repository/tree/lock/ref generation as the local base. A dirty local tree requires three-way reconciliation or an explicit discard.    |
-| `realm push`   | Compare local content to the recorded base and conditionally apply that change set only if the selected remote branch still has the expected head. Remote movement fails; it never silently overwrites. |
-| `realm sync`   | Three-way reconcile recorded base, current local tree, and current remote branch. Publish one remote write batch on success; write nothing remotely on conflict.                                        |
-| `realm watch`  | Repeatedly run the same conditional content-addressed write protocol and coalesce local saves into small batches. B2b makes each accepted batch a server History Step.                                  |
-| `realm status` | Report local/base/remote divergence by hashes and branch head, never by newest timestamp.                                                                                                               |
+| Command                           | New contract                                                                                                                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `realm pull`                      | Materialize the selected remote branch head and record its exact Repository/tree/lock/ref generation as the local base. A dirty local tree requires three-way reconciliation or an explicit discard.    |
+| `realm push`                      | Compare local content to the recorded base and conditionally apply that change set only if the selected remote branch still has the expected head. Remote movement fails; it never silently overwrites. |
+| `realm sync`                      | Three-way reconcile recorded base, current local tree, and current remote branch. Publish one remote write batch on success; write nothing remotely on conflict.                                        |
+| `realm watch`                     | Repeatedly run the same conditional content-addressed write protocol and coalesce local saves into small batches. B2b makes each accepted batch a server History Step.                                  |
+| `realm status`                    | Report local/base/remote divergence by hashes and branch head, never by newest timestamp.                                                                                                               |
+| `realm branch list/create/switch` | List published refs, prepare a new branch from an exact source, or replace a clean local workspace with another branch's exact tree. Switching refuses unpushed work.                                   |
 
 `--prefer-newest` is removed. Explicit `--prefer-local` or `--prefer-remote`
 may exist only as deliberate conflict-resolution inputs after showing the
@@ -449,6 +451,19 @@ Named branch saves operate on that branch workspace. They append to its History
 ancestry and advance its conditional branch ref without changing `main`'s live
 tree. A later merge is the operation that materializes one accepted candidate
 into `main` and advances its History/ref/index boundary once.
+
+The current Boxel CLI surface is:
+
+```text
+boxel realm branch list <realm-url> [--json]
+boxel realm branch create <realm-url> <name> [--from <branch>] [--json]
+boxel realm branch switch <local-dir> <name> [--json]
+boxel realm sync <local-dir> <realm-url> [--branch <name>]
+```
+
+`realm sync` follows the branch already recorded in `.boxel-sync.json`.
+`--branch` selects the initial branch for a new workspace and fails with a
+pointer to `realm branch switch` if it contradicts an existing workspace.
 
 Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only

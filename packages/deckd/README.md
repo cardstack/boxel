@@ -61,10 +61,12 @@ owns those conditional operations.
 3. `POST /fork` creates a named jj workspace whose editable change has the
    requested exact Checkpoint as its parent. The operation materializes only
    branch source bytes; Repository, lock, and index objects stay shared by hash.
-4. File changes under `dir` (non-machinery) → in-process note → **one** debounce
+4. `POST /discard` removes a prepared named workspace when later index/preview
+   or conditional-ref publication fails; shared History ancestry remains.
+5. File changes under `dir` (non-machinery) → in-process note → **one** debounce
    worker per depot/branch workspace → seal.
-5. HTTP `/note` / `/flush` / `/seal` are the explicit mutation surface.
-6. `POST /list` is read-only and uses a **read** lock (does not share the seal
+6. HTTP `/note` / `/flush` / `/seal` are the explicit mutation surface.
+7. `POST /list` is read-only and uses a **read** lock (does not share the seal
    write mutex).
 
 When Hub uses `DECKD_URL`, Node watchers publish + HMR only — they do not

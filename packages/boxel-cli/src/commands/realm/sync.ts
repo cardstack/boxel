@@ -10,6 +10,7 @@ import {
 } from '../../lib/checkpoint-manager.ts';
 import type { ProfileManager } from '../../lib/profile-manager.ts';
 import type { RealmAuthenticator } from '../../lib/realm-authenticator.ts';
+import { loadDeckWorkspaceState } from '../../lib/deck-workspace-state.ts';
 import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
@@ -533,6 +534,7 @@ class RealmSyncer extends RealmSyncBase {
 }
 
 export interface SyncCommandOptions {
+  branch?: string;
   preferLocal?: boolean;
   preferRemote?: boolean;
   preferNewest?: boolean;
@@ -593,6 +595,10 @@ export function registerSyncCommand(realm: Command): Command {
     .option('--delete', 'Sync deletions both ways')
     .option('--dry-run', 'Preview without making changes')
     .option(
+      '--branch <name>',
+      'Deck branch for a new workspace (existing workspaces retain their branch)',
+    )
+    .option(
       '--no-claude-skills',
       "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
     )
@@ -610,6 +616,7 @@ export function registerSyncCommand(realm: Command): Command {
           preferNewest?: boolean;
           delete?: boolean;
           dryRun?: boolean;
+          branch?: string;
           claudeSkills?: boolean;
           realmSecretSeed?: boolean;
         },
@@ -623,6 +630,7 @@ export function registerSyncCommand(realm: Command): Command {
           preferNewest: options.preferNewest,
           delete: options.delete,
           dryRun: options.dryRun,
+          branch: options.branch,
           claudeSkills: options.claudeSkills,
           realmSecretSeed,
         });
@@ -689,9 +697,19 @@ export async function sync(
       });
     }
     try {
+      let workspace = await loadDeckWorkspaceState(localDir);
+      if (
+        workspace &&
+        options.branch &&
+        workspace.branchName !== options.branch
+      ) {
+        return emptyResult({
+          error: `Workspace tracks branch ${workspace.branchName}, not ${options.branch}; use realm branch switch`,
+        });
+      }
       let result = await syncDeckBranch({
         realmURL: realmUrl,
-        branchName: 'main',
+        branchName: options.branch ?? workspace?.branchName ?? 'main',
         localDir,
         authenticator,
         dryRun: options.dryRun,

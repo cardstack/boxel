@@ -37,6 +37,7 @@ use jj_lib::workspace::{
     default_working_copy_factories, default_working_copy_factory, Workspace, WorkspaceInitError,
     WorkspaceLoadError,
 };
+use jj_lib::workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _};
 use tokio::sync::Mutex;
 
 /// Per-depot async note debounce. Realm servers fire `/note` and return;
@@ -150,6 +151,13 @@ impl HistoryService {
         let gate = self.gate_for(source_dir).await;
         let _guard = gate.write().await;
         fork_workspace_inner(source_dir, target_dir, revision_id, workspace_name).await
+    }
+
+    pub async fn discard_workspace(&self, dir: &Path) -> HistoryResult<()> {
+        let _fork_guard = self.forks.lock().await;
+        let gate = self.gate_for(dir).await;
+        let _guard = gate.write().await;
+        discard_workspace_inner(dir).await
     }
 
     /// Remember `path` under `dir` and schedule a collapsed seal. Returns
@@ -359,6 +367,17 @@ impl HistoryBackend for JjLibHistory {
                 ))
             })
             .await
+        })
+    }
+
+    fn discard<'a>(
+        &'a self,
+        dir: &'a str,
+    ) -> BoxFuture<'a, std::result::Result<(), HistoryBackendError>> {
+        let dir = PathBuf::from(dir);
+        Box::pin(async move {
+            self.run(move |h| pollster::block_on(h.discard_workspace(&dir)))
+                .await
         })
     }
 
@@ -738,6 +757,47 @@ async fn fork_workspace_inner(
         let _ = std::fs::remove_dir_all(target_dir);
     }
     result
+}
+
+async fn discard_workspace_inner(dir: &Path) -> HistoryResult<()> {
+    let (workspace, repo) = load_workspace(dir).await?;
+    let workspace_name = workspace.workspace_name().to_owned();
+    if workspace_name == WorkspaceName::DEFAULT {
+        return Err(HistoryError::msg(
+            "the default Realm History workspace cannot be discarded",
+        ));
+    }
+    let repo_path = workspace.repo_path().to_path_buf();
+    let owning_realm = owning_realm_for_repo(&repo_path)?;
+    let canonical_dir = std::fs::canonicalize(dir)
+        .map_err(|e| HistoryError::msg(format!("cannot resolve {}: {e}", dir.display())))?;
+    let branch_root = owning_realm.join(".deck").join(BRANCH_WORKSPACES_DIR);
+    if canonical_dir.parent() != Some(branch_root.as_path()) {
+        return Err(HistoryError::msg(format!(
+            "refusing to discard non-branch workspace {}",
+            canonical_dir.display()
+        )));
+    }
+
+    let mut tx = repo.start_transaction();
+    tx.repo_mut()
+        .remove_wc_commit(&workspace_name)
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    let _ = tx
+        .repo_mut()
+        .rebase_descendants()
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    tx.commit(format!("discard workspace {}", workspace_name.as_symbol()))
+        .await
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    SimpleWorkspaceStore::load(&repo_path)
+        .map_err(|e| HistoryError::msg(e.to_string()))?
+        .forget(&[&workspace_name])
+        .map_err(|e| HistoryError::msg(e.to_string()))?;
+    std::fs::remove_dir_all(&canonical_dir).map_err(|e| HistoryError::msg(e.to_string()))?;
+    Ok(())
 }
 
 async fn load_workspace(dir: &Path) -> HistoryResult<(Workspace, Arc<ReadonlyRepo>)> {
@@ -1285,6 +1345,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![branch_change.as_str(), source.as_str()],
             "the branch inherits source ancestry and then diverges"
+        );
+
+        pollster::block_on(discard_workspace_inner(&branch)).unwrap();
+        assert!(!branch.exists(), "failed preparation can be removed");
+        assert_eq!(
+            pollster::block_on(list_inner(&depot)).unwrap().len(),
+            1,
+            "discarding a workspace preserves the shared main History"
         );
 
         std::fs::remove_dir_all(depot).unwrap();

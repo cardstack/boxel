@@ -18,6 +18,7 @@ import {
   openDeckRepositoryProtocol,
 } from './deck-repository-protocol.ts';
 import type { DeckCollaborationPolicy } from './deck-collaboration-policy.ts';
+import { deckBranchWorkspaceDir } from './deck-branch-workspace.ts';
 
 export const DECK_HISTORY_RESTORE_SPEC = 'boxel-deck-history-restore-v1';
 
@@ -81,15 +82,15 @@ export async function readDeckBranchHistory(options: {
   history: HistoryBackend;
   limit?: number;
 }): Promise<DeckBranchHistorySnapshot> {
-  if (options.branch !== 'main') {
-    throw new Error('B2b History currently supports only the implicit main');
-  }
   let current = await openDeckRepositoryProtocol(options).readBranch(
     options.branch,
   );
   if (!current) throw new Error(`branch not found: ${options.branch}`);
   let entries = entriesAtBranchHead(
-    await options.history.list(options.realmDir, { flush: false }),
+    await options.history.list(
+      deckBranchWorkspaceDir(options.realmDir, options.branch),
+      { flush: false },
+    ),
     current.head.historyHead,
   );
   return {
@@ -154,14 +155,12 @@ export async function restoreDeckBranchHistory(options: {
   }
   let history = await readDeckBranchHistory(options);
   let target = resolveHistoryEntry(history.entries, options.request.revisionId);
-  let paths = await options.history.fileListAt(
-    options.realmDir,
-    target.changeId,
-  );
+  let workspaceDir = deckBranchWorkspaceDir(options.realmDir, options.branch);
+  let paths = await options.history.fileListAt(workspaceDir, target.changeId);
   let targetFiles = new Map<string, Buffer>();
   for (let path of paths) {
     let bytes = await options.history.fileAt(
-      options.realmDir,
+      workspaceDir,
       target.changeId,
       path,
     );

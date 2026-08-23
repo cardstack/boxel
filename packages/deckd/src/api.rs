@@ -25,6 +25,7 @@ pub fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/ensure", post(ensure))
         .route("/fork", post(fork))
+        .route("/discard", post(discard))
         .route("/note", post(note))
         .route("/flush", post(flush))
         .route("/seal", post(seal))
@@ -140,6 +141,14 @@ async fn fork(
             &body.workspace_name,
         )
         .await?;
+    Ok(Json(serde_json::json!({})))
+}
+
+async fn discard(
+    State(st): State<AppState>,
+    Json(body): Json<DirBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    st.history.discard(&body.dir).await?;
     Ok(Json(serde_json::json!({})))
 }
 

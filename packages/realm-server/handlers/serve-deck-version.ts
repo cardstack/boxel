@@ -58,6 +58,11 @@ import {
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
 import {
+  createDeckBranch,
+  listDeckBranches,
+  type DeckBranchCreateRequest,
+} from '../lib/deck-branch-creation.ts';
+import {
   DeckIndexPendingError,
   queryDeckBranchIndex,
   readDeckBranchIndex,
@@ -86,6 +91,7 @@ type DeckVersionServingDeps = ServeFromRealmDeps & {
 
 const CAPABILITIES_PATH = '.deck/capabilities';
 const BRANCH_PATH = '.deck/branch';
+const BRANCHES_PATH = '.deck/branches';
 const TREE_FILE_PATH = '.deck/tree-file';
 const HISTORY_PATH = '.deck/history';
 const BRANCH_INDEX_PATH = '.deck/branch-index';
@@ -375,6 +381,134 @@ async function handleDeckBranchRequest(
       'x-boxel-realm-rri': realmRRI,
     },
   });
+}
+
+async function handleDeckBranchesRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(BRANCHES_PATH)) return null;
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -BRANCHES_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.method !== 'POST'
+  ) {
+    return new Response('Unsupported Deck branches method', {
+      status: 405,
+      headers: { allow: 'GET, HEAD, POST' },
+    });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization =
+    request.method === 'POST'
+      ? await authorizeWrite(request, realm)
+      : await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    let branches = await listDeckBranches({
+      realmDir: realm.dir,
+      realmRRI,
+      policy: deps.deckCollaboration!,
+    });
+    return new Response(
+      request.method === 'HEAD'
+        ? null
+        : JSON.stringify({
+            schema: 'boxel-deck-branch-list-v1',
+            realmRRI,
+            branches,
+          }),
+      {
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': 'application/json',
+        },
+      },
+    );
+  }
+
+  let body: DeckBranchCreateRequest;
+  try {
+    body = (await request.json()) as DeckBranchCreateRequest;
+  } catch {
+    return new Response('Deck branch creation is not valid JSON', {
+      status: 400,
+    });
+  }
+  let prepareView = prepareDeckRealmView(realm, deps);
+  try {
+    let created = await createDeckBranch({
+      realmDir: realm.dir,
+      realmRRI,
+      policy: deps.deckCollaboration!,
+      history: deps.deckHistory,
+      request: body,
+      ...(prepareView ? { prepareView } : {}),
+    });
+    let treeHash = created.branch.repository.members[realmRRI];
+    let actor = historyActor(request, deps);
+    await broadcastBranchMovement(realm, {
+      branch: created.branch.branch,
+      previousRealmView: created.source.head.indexGenerationHash,
+      realmView: created.branch.head.indexGenerationHash,
+      refGeneration: created.branch.head.generation,
+      repositoryHash: created.branch.head.repositoryHash,
+      treeHash,
+      historyHead: created.branch.head.historyHead,
+      message: `branch from ${created.source.branch}`,
+      ...(actor ? { actor: actor.name } : {}),
+    });
+    return Response.json(
+      {
+        schema: 'boxel-deck-branch-create-result-v1',
+        realmRRI,
+        branchName: created.branch.branch,
+        fromBranch: created.source.branch,
+        repositoryHash: created.branch.head.repositoryHash,
+        treeHash,
+        historyHead: created.branch.head.historyHead,
+        indexGenerationHash: created.branch.head.indexGenerationHash,
+        refGeneration: created.branch.head.generation,
+      },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (error instanceof RefConflictError || error instanceof RefBusyError) {
+      return new Response('Branch changed while it was being created', {
+        status: 409,
+      });
+    }
+    if (error instanceof DeckBranchViewPreparationError) {
+      return new Response(error.message, {
+        status: 503,
+        headers: { 'retry-after': '5' },
+      });
+    }
+    if (error instanceof Error) {
+      let status = error.message.startsWith('branch already exists')
+        ? 409
+        : 400;
+      return new Response(error.message, { status });
+    }
+    throw error;
+  }
 }
 
 async function handleDeckBranchIndexRequest(
@@ -973,6 +1107,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let branches = await handleDeckBranchesRequest(request, deps);
+  if (branches) {
+    return branches;
+  }
   let branchIndex = await handleDeckBranchIndexRequest(request, deps);
   if (branchIndex) {
     return branchIndex;

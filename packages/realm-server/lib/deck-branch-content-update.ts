@@ -7,7 +7,6 @@ import {
   updateBranchHead,
   readTreeFromDir,
   writeTreeToDir,
-  RefBusyError,
   type BranchHead,
   type JsonValue,
   type Repository,
@@ -18,8 +17,7 @@ import type {
 } from '@cardstack/deck-history/backend';
 import { readObject, readTree, storePack } from '@cardstack/deck/object-store';
 import { canonicalRRIImportMap } from '@cardstack/deck/rri';
-import { mkdir, rm } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import {
   DeckProtocolIntegrityError,
@@ -27,6 +25,10 @@ import {
 } from './deck-repository-protocol.ts';
 import type { DeckCollaborationPolicy } from './deck-collaboration-policy.ts';
 import { buildDeckBranchIndex } from './deck-branch-index.ts';
+import {
+  deckBranchWorkspaceDir,
+  withDeckBranchWriter,
+} from './deck-branch-workspace.ts';
 
 export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v2';
 
@@ -97,33 +99,6 @@ function validateOperations(operations: DeckBranchUpdateOperation[]): void {
   }
 }
 
-async function withBranchWriter<T>(
-  realmDir: string,
-  branch: string,
-  callback: () => Promise<T>,
-): Promise<T> {
-  let lock = join(
-    realmDir,
-    '.deck',
-    '_writer-locks',
-    `${hashBytes(branch)}.lock`,
-  );
-  await mkdir(dirname(lock), { recursive: true });
-  try {
-    await mkdir(lock);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      throw new RefBusyError(`branch writer is busy: ${branch}`);
-    }
-    throw error;
-  }
-  try {
-    return await callback();
-  } finally {
-    await rm(lock, { recursive: true, force: true });
-  }
-}
-
 export async function updateDeckBranchContent(options: {
   realmDir: string;
   realmRRI: string;
@@ -152,10 +127,7 @@ export async function updateDeckBranchContent(options: {
     throw new Error('Deck branch update message must not be empty');
   }
   validateOperations(options.request.operations);
-  if (options.branch !== 'main') {
-    throw new Error('B2b History currently supports only the implicit main');
-  }
-  return withBranchWriter(options.realmDir, options.branch, async () => {
+  return withDeckBranchWriter(options.realmDir, options.branch, async () => {
     let protocol = openDeckRepositoryProtocol(options);
     let current = await protocol.readBranch(options.branch);
     if (!current) throw new Error(`branch not found: ${options.branch}`);
@@ -233,18 +205,19 @@ export async function updateDeckBranchContent(options: {
       options.realmDir,
       nextRepository,
     );
-    let priorLive = await readTreeFromDir(options.realmDir);
+    let workspaceDir = deckBranchWorkspaceDir(options.realmDir, options.branch);
+    let priorLive = await readTreeFromDir(workspaceDir);
     let liveChanged = false;
     try {
       // The first B2b write adopts an existing main branch whose B0/B2a head
       // may predate deckd. Seal the state being left before changing bytes;
       // later calls are no-ops because that tree is already History HEAD.
-      await options.history.seal(options.realmDir, 'History baseline');
-      let materialized = await writeTreeToDir(options.realmDir, files);
+      await options.history.seal(workspaceDir, 'History baseline');
+      let materialized = await writeTreeToDir(workspaceDir, files);
       liveChanged =
         materialized.written.length > 0 || materialized.deleted.length > 0;
       let historyHead = await options.history.seal(
-        options.realmDir,
+        workspaceDir,
         options.request.message.trim(),
         options.actor,
       );
@@ -265,7 +238,7 @@ export async function updateDeckBranchContent(options: {
       // read the candidate from CAS; ordinary live readers keep seeing the
       // branch state that the still-current ref describes.
       if (liveChanged) {
-        await writeTreeToDir(options.realmDir, priorLive);
+        await writeTreeToDir(workspaceDir, priorLive);
         liveChanged = false;
       }
       // The immutable tree and its static Deck index can be addressed before
@@ -278,7 +251,7 @@ export async function updateDeckBranchContent(options: {
         treeHash: stored.treeHash,
         historyHead,
       });
-      let acceptedLive = await writeTreeToDir(options.realmDir, files);
+      let acceptedLive = await writeTreeToDir(workspaceDir, files);
       liveChanged =
         acceptedLive.written.length > 0 || acceptedLive.deleted.length > 0;
       let head = await updateBranchHead({
@@ -301,7 +274,7 @@ export async function updateDeckBranchContent(options: {
       };
     } catch (error) {
       if (liveChanged) {
-        await writeTreeToDir(options.realmDir, priorLive);
+        await writeTreeToDir(workspaceDir, priorLive);
       }
       throw error;
     }

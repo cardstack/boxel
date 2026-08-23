@@ -15,6 +15,7 @@ import {
 //   /ensure         {dir}                              → {}
 //   /fork           {sourceDir, targetDir, revisionId,
 //                    workspaceName}                    → {}
+//   /discard        {dir}                               → {}
 //   /seal           {dir, message, actor?}             → {changeId: string | null}
 //   /list           {dir}                              → HistoryEntry[]
 //   /file-at        {dir, revisionId, path}            → {found, contentBase64?}
@@ -83,6 +84,12 @@ export class DeckdHistory implements HistoryBackend {
       });
       this.#ensured.add(targetDir);
     });
+  }
+
+  async discard(dir: string): Promise<void> {
+    this.#debouncer.take(dir);
+    await this.#queue.run(dir, () => this.#post('/discard', { dir }));
+    this.#ensured.delete(dir);
   }
 
   noteMutation(dir: string, path: string): void {
