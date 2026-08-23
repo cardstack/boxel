@@ -78,6 +78,7 @@ import {
 import type { FileMetaResource } from './resource-types.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RequestTimings } from './request-timings.ts';
+import { realmViewName, type RealmView } from './realm-view-context.ts';
 
 // A filter path resolves in the schema but crosses a `linksTo`/`linksToMany`
 // hop whose target is not in the search doc, so the query would silently match
@@ -309,15 +310,18 @@ export class IndexQueryEngine {
   #dbAdapter: DBAdapter;
   #definitionLookup: DefinitionLookup;
   #virtualNetwork: VirtualNetwork;
+  #realmView: RealmView;
 
   constructor(
     dbAdapter: DBAdapter,
     definitionLookup: DefinitionLookup,
     virtualNetwork: VirtualNetwork,
+    realmView?: string,
   ) {
     this.#dbAdapter = dbAdapter;
     this.#definitionLookup = definitionLookup;
     this.#virtualNetwork = virtualNetwork;
+    this.#realmView = realmViewName(realmView);
   }
 
   async #query(expression: Expression) {
@@ -349,6 +353,7 @@ export class IndexQueryEngine {
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
+        ['i.realm_view =', param(this.#realmView)],
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
@@ -386,6 +391,7 @@ export class IndexQueryEngine {
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
+          ['i.realm_view =', param(this.#realmView)],
           any([
             ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
             [
@@ -504,6 +510,7 @@ export class IndexQueryEngine {
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
+        ['i.realm_view =', param(this.#realmView)],
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
@@ -539,6 +546,7 @@ export class IndexQueryEngine {
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
          WHERE`,
         ...every([
+          ['i.realm_view =', param(this.#realmView)],
           any([
             ['i.url IN', ...addExplicitParens(separatedByCommas(chunkParams))],
             [
@@ -637,6 +645,7 @@ export class IndexQueryEngine {
       'WHERE',
       ...every([
         ['i.realm_url =', param(realmURL.href)],
+        ['i.realm_view =', param(this.#realmView)],
         ['i.type =', param('file')],
         any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
       ]),
@@ -660,6 +669,7 @@ export class IndexQueryEngine {
       'WHERE',
       ...every([
         ['i.realm_url =', param(realmURL.href)],
+        ['i.realm_view =', param(this.#realmView)],
         ['i.type =', param('instance')],
         any(typeKeys.map((typeKey) => [typesContains(typeKey)])),
       ]),
@@ -700,6 +710,7 @@ export class IndexQueryEngine {
     try {
       let conditions: CardExpression[] = [
         ['i.realm_url = ', param(realmURL.href)],
+        ['i.realm_view = ', param(this.#realmView)],
         ['i.is_deleted = FALSE OR i.is_deleted IS NULL'],
       ];
 
@@ -1064,9 +1075,13 @@ export class IndexQueryEngine {
        FROM realm_meta rm
        JOIN realm_generations rg
          ON rg.realm_url = rm.realm_url
+        AND rg.realm_view = rm.realm_view
         AND rg.current_generation = rm.generation
        WHERE`,
-      ...every([['rm.realm_url =', param(realmURL.href)]]),
+      ...every([
+        ['rm.realm_url =', param(realmURL.href)],
+        ['rm.realm_view =', param(this.#realmView)],
+      ]),
       `LIMIT 1`,
     ] as Expression)) as { value: unknown }[];
 
@@ -2095,7 +2110,8 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
 }
 
 // HTML-channel LEFT JOIN: attaches the prerendered_html row (aliased `ph`) for
-// each boxel_index row (aliased `i`) on their shared (url, realm_url, type)
+// each boxel_index row (aliased `i`) on their shared
+// (url, realm_url, realm_view, type)
 // primary key. prerendered_html is the sole home of rendered output (the HTML
 // formats, markdown, the deps carrying scoped-CSS URLs, the rendering
 // generation, render errors); a boxel_index row without a matching
@@ -2106,7 +2122,7 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
 function prerenderedJoin(opts: WIPOptions | undefined) {
   return `LEFT JOIN ${prerenderedTableFromOpts(
     opts,
-  )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type`;
+  )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.realm_view = i.realm_view AND ph.type = i.type`;
 }
 
 // Effective error state spans both channels: the index pass records

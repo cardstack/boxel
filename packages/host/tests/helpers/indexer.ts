@@ -31,6 +31,7 @@ import type { CardDef } from '@cardstack/base/card-api';
 const defaultIndexEntry = {
   generation: 1,
   realm_url: testRealmURL,
+  realm_view: 'live',
   has_error: false,
 };
 
@@ -103,8 +104,8 @@ type RelaxedBoxelIndexTable = Omit<BoxelIndexTable, 'pristine_doc'> & {
 // setupIndex fills in the no-epoch-yet sentinel at insert time.
 export type TestRealmGenerationsRow = Omit<
   RealmGenerationsTable,
-  'loader_epoch'
-> & { loader_epoch?: string };
+  'loader_epoch' | 'realm_view'
+> & { loader_epoch?: string; realm_view?: string };
 
 export type TestIndexRow =
   | (Pick<RelaxedBoxelIndexTable, 'url'> &
@@ -220,6 +221,7 @@ export async function setupIndex(
   let versionExpressions = versionRows.map((r) =>
     asExpressions({
       loader_epoch: '0',
+      realm_view: 'live',
       ...r,
     } satisfies RealmGenerationsTable),
   );

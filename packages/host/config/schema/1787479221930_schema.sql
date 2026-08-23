@@ -7,14 +7,14 @@
    command TEXT NOT NULL,
    command_filter BLOB NOT NULL,
    created_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS bot_registrations (
    id NOT NULL,
    username TEXT NOT NULL,
    created_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS boxel_index (
@@ -37,7 +37,8 @@
    has_error BOOLEAN DEFAULT false NOT NULL,
    last_known_good_deps BLOB,
    diagnostics BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( url, realm_url, realm_view, type )
 );
 
  CREATE TABLE IF NOT EXISTS boxel_index_working (
@@ -61,7 +62,8 @@
    last_known_good_deps BLOB,
    diagnostics BLOB,
    job_id INTEGER,
-   PRIMARY KEY ( url, realm_url, type ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( url, realm_url, realm_view, type )
 );
 
  CREATE TABLE IF NOT EXISTS incoming_webhooks (
@@ -73,7 +75,7 @@
    signing_secret TEXT NOT NULL,
    created_at NOT NULL,
    updated_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS media_cache_ledger (
@@ -88,7 +90,7 @@
    size_bytes NOT NULL,
    created_at NOT NULL,
    last_accessed_at NOT NULL,
-   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation ) 
+   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation )
 );
 
  CREATE TABLE IF NOT EXISTS module_transpile_cache (
@@ -99,7 +101,7 @@
    dependency_keys BLOB,
    generation DEFAULT 0 NOT NULL,
    created_at,
-   PRIMARY KEY ( realm_url, canonical_path ) 
+   PRIMARY KEY ( realm_url, canonical_path )
 );
 
  CREATE TABLE IF NOT EXISTS modules (
@@ -114,7 +116,7 @@
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    diagnostics BLOB,
-   PRIMARY KEY ( url, cache_scope, auth_user_id ) 
+   PRIMARY KEY ( url, cache_scope, auth_user_id )
 );
 
  CREATE TABLE IF NOT EXISTS prerendered_html (
@@ -135,7 +137,8 @@
    error_doc BLOB,
    rendered_at,
    diagnostics BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( url, realm_url, realm_view, type )
 );
 
  CREATE TABLE IF NOT EXISTS prerendered_html_working (
@@ -157,7 +160,8 @@
    rendered_at,
    job_id INTEGER,
    diagnostics BLOB,
-   PRIMARY KEY ( url, realm_url, type ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( url, realm_url, realm_view, type )
 );
 
  CREATE TABLE IF NOT EXISTS realm_file_meta (
@@ -166,14 +170,16 @@
    created_at INTEGER NOT NULL,
    content_hash TEXT,
    content_size INTEGER,
-   PRIMARY KEY ( realm_url, file_path ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( realm_url, realm_view, file_path )
 );
 
  CREATE TABLE IF NOT EXISTS realm_generations (
    realm_url TEXT NOT NULL,
    current_generation INTEGER NOT NULL,
    loader_epoch TEXT DEFAULT '0' NOT NULL,
-   PRIMARY KEY ( realm_url ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( realm_url, realm_view )
 );
 
  CREATE TABLE IF NOT EXISTS realm_meta (
@@ -181,7 +187,8 @@
    generation INTEGER NOT NULL,
    value BLOB NOT NULL,
    indexed_at,
-   PRIMARY KEY ( realm_url, generation ) 
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( realm_url, realm_view, generation )
 );
 
  CREATE TABLE IF NOT EXISTS realm_metadata (
@@ -191,7 +198,7 @@
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    archived_at,
-   PRIMARY KEY ( url ) 
+   PRIMARY KEY ( url )
 );
 
  CREATE TABLE IF NOT EXISTS realm_registry (
@@ -205,7 +212,7 @@
    pinned BOOLEAN DEFAULT false NOT NULL,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS realm_user_permissions (
@@ -214,7 +221,7 @@
    read BOOLEAN NOT NULL,
    write BOOLEAN NOT NULL,
    realm_owner BOOLEAN DEFAULT false NOT NULL,
-   PRIMARY KEY ( realm_url, username ) 
+   PRIMARY KEY ( realm_url, username )
 );
 
  CREATE TABLE IF NOT EXISTS unlisted_realm_paths (
@@ -224,7 +231,7 @@
    owner_user_id TEXT NOT NULL,
    created_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
    updated_at DEFAULT CURRENT_TIMESTAMP NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );
 
  CREATE TABLE IF NOT EXISTS webhook_commands (
@@ -234,5 +241,5 @@
    command_filter BLOB,
    created_at NOT NULL,
    updated_at NOT NULL,
-   PRIMARY KEY ( id ) 
+   PRIMARY KEY ( id )
 );

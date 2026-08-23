@@ -1,9 +1,10 @@
 # PretUI-first Deck collaboration backport
 
 **Status:** A0–A6, B0, B1a, B2a, B2b, and B3a are implemented as a local stack
-on 2026-08-23. B1b is an optional hosted-infrastructure slice; B3b–B8 remain
-the execution plan for PretUI team collaboration. No B-series pull request or
-remote branch has been created from this stack.
+on 2026-08-23. B3b source/cache isolation and SQL view namespaces are local
+checkpoints; job, event, Host, and test-selection isolation remain. B1b is an
+optional hosted-infrastructure slice. No B-series pull request or remote branch
+has been created from this stack.
 
 ## Target outcome
 

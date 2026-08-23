@@ -229,11 +229,13 @@ export class RealmIndexQueryEngine {
     dbAdapter,
     fetch,
     definitionLookup,
+    realmView,
   }: {
     realm: Realm;
     dbAdapter: DBAdapter;
     fetch: typeof globalThis.fetch;
     definitionLookup: DefinitionLookup;
+    realmView?: string;
   }) {
     if (!dbAdapter) {
       throw new Error(
@@ -244,6 +246,7 @@ export class RealmIndexQueryEngine {
       dbAdapter,
       definitionLookup,
       realm.virtualNetwork,
+      realmView,
     );
     this.#definitionLookup = definitionLookup;
     this.#realm = realm;

@@ -35,7 +35,7 @@ Do not encode a view into `realm_url`. The URL is a public resource identity,
 and code throughout Boxel parses and displays it as such. Instead, add an
 explicit `realm_view` column whose values are:
 
-- `live` for a non-Deck realm and the ordinary live compatibility lane;
+- `live` for a non-Deck realm and the ordinary live lane;
 - one 64-character `indexGenerationHash` for an exact Deck view.
 
 The default is not support for an older Deck dialect. It is the intentional
@@ -76,13 +76,28 @@ the live bytes.
 
 ### B3b.2 — SQL index generations
 
-1. Add `realm_view` to the schema and composite keys.
-2. Make `IndexWriter.createBatch`, `Batch`, `IndexQueryEngine`, and
-   `RealmIndexQueryEngine` require an explicit view namespace internally.
-3. Keep public card/module URLs unchanged in documents and dependency edges.
-4. Make the final SQL swap conditional on the exact view and generation.
-5. Attach the completed SQL generation to the existing immutable manifest;
-   never let a branch ref name a partially indexed view.
+The storage half is implemented in the second B3b checkpoint:
+
+1. `realm_view` is part of the Postgres and generated SQLite composite keys
+   for index rows, rendered rows, generations, realm summaries, and file
+   metadata.
+2. `IndexWriter.createBatch`, `Batch`, `IndexQueryEngine`, and
+   `RealmIndexQueryEngine` accept one normalized view namespace internally.
+3. Every write, resume, invalidation walk, working-table promotion, summary,
+   generation counter, and read predicate in those layers is view-qualified.
+4. Public card/module URLs remain unchanged in documents and dependency
+   edges.
+5. Copying can name a source view independently from its destination view, so
+   cloning an index never silently copies `live` when an exact source was
+   intended.
+
+The focused proof writes different documents for the same URL into `live` and
+one 64-character view, reads each through a separately qualified query engine,
+and verifies that they own independent generation counters.
+
+The job-connected half remains in B3b.3: attach a completed SQL generation to
+the immutable manifest and never let a branch ref name a partially indexed
+view.
 
 Proof: index `main` and one hidden PretUI view with the same RRIs but different
 Status/DatePicker implementations, then query them concurrently and compare

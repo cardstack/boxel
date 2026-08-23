@@ -2,6 +2,9 @@ import { isHash } from '@cardstack/deck/repository';
 
 export const REALM_VIEW_CONTEXT_SPEC = 'boxel-realm-view-context-v1';
 export const REALM_VIEW_HEADER = 'X-Boxel-Realm-View';
+export const REALM_LIVE_VIEW = 'live';
+
+export type RealmView = typeof REALM_LIVE_VIEW | string;
 
 export interface RealmViewContext {
   schema: typeof REALM_VIEW_CONTEXT_SPEC;
@@ -52,6 +55,17 @@ export function isExactRealmView(value: unknown): value is ExactRealmView {
 export function realmViewHash(headers: Headers): string | undefined {
   let value = headers.get(REALM_VIEW_HEADER)?.trim().toLowerCase();
   return value && isHash(value) ? value : undefined;
+}
+
+export function realmViewName(value?: string): RealmView {
+  let normalized = value?.trim().toLowerCase();
+  if (!normalized || normalized === REALM_LIVE_VIEW) {
+    return REALM_LIVE_VIEW;
+  }
+  if (!isHash(normalized)) {
+    throw new Error(`invalid Realm view ${value}`);
+  }
+  return normalized;
 }
 
 export function withRealmView(

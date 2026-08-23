@@ -106,6 +106,7 @@ module('Unit | index-writer', function (hooks) {
   let adapter: SQLiteAdapter;
   let indexWriter: IndexWriter;
   let indexQueryEngine: IndexQueryEngine;
+  let definitionLookup: CachingDefinitionLookup;
   let virtualNetwork: VirtualNetwork;
   setupTest(hooks);
 
@@ -121,7 +122,7 @@ module('Unit | index-writer', function (hooks) {
     let localIndexer = owner.lookup('service:local-indexer') as LocalIndexer;
     virtualNetwork = new VirtualNetwork();
 
-    let definitionLookup = new CachingDefinitionLookup(
+    definitionLookup = new CachingDefinitionLookup(
       adapter,
       localIndexer.prerenderer,
       virtualNetwork,
@@ -383,6 +384,83 @@ module('Unit | index-writer', function (hooks) {
       afterFlush,
       [{ url: depURL.href }, { url: dependentURL.href }],
       'the flush coalesced all buffered rows into the working table',
+    );
+  });
+
+  test('live and exact Realm views isolate the same URL', async function (assert) {
+    let exactView = 'a'.repeat(64);
+    let fileURL = new URL(`${testRealmURL}shared.json`);
+    let fileEntry = (name: string): FileEntry => ({
+      type: 'file',
+      lastModified: 1,
+      resourceCreatedAt: 1,
+      deps: new Set<string>(),
+      searchData: { name },
+    });
+
+    await persistFileMeta(adapter, testRealmURL, [
+      { path: 'shared.json', contentHash: 'live-hash', contentSize: 10 },
+    ]);
+    await persistFileMeta(
+      adapter,
+      testRealmURL,
+      [{ path: 'shared.json', contentHash: 'branch-hash', contentSize: 20 }],
+      exactView,
+    );
+
+    let liveBatch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+    );
+    await liveBatch.updateEntry(fileURL, fileEntry('live'));
+    await liveBatch.done();
+
+    let exactBatch = await indexWriter.createBatch(
+      new URL(testRealmURL),
+      virtualNetwork,
+      undefined,
+      { realmView: exactView },
+    );
+    await exactBatch.updateEntry(fileURL, fileEntry('branch'));
+    await exactBatch.done();
+
+    assert.deepEqual(await liveBatch.getContentMeta('shared.json'), {
+      contentHash: 'live-hash',
+      contentSize: 10,
+    });
+    assert.deepEqual(await exactBatch.getContentMeta('shared.json'), {
+      contentHash: 'branch-hash',
+      contentSize: 20,
+    });
+
+    let exactQueryEngine = new IndexQueryEngine(
+      adapter,
+      definitionLookup,
+      virtualNetwork,
+      exactView,
+    );
+    assert.strictEqual(
+      (await indexQueryEngine.getFile(fileURL))?.searchDoc?.['name'],
+      'live',
+      'the ordinary query engine reads only the live namespace',
+    );
+    assert.strictEqual(
+      (await exactQueryEngine.getFile(fileURL))?.searchDoc?.['name'],
+      'branch',
+      'an exact query engine reads only its immutable view namespace',
+    );
+
+    assert.deepEqual(
+      await adapter.execute(
+        `SELECT realm_view, current_generation FROM realm_generations
+         WHERE realm_url = $1 ORDER BY realm_view COLLATE "POSIX"`,
+        { bind: [testRealmURL] },
+      ),
+      [
+        { realm_view: exactView, current_generation: 1 },
+        { realm_view: 'live', current_generation: 1 },
+      ],
+      'each view owns an independent generation counter',
     );
   });
 
@@ -1532,6 +1610,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL2}1`,
         generation: 2,
         realm_url: testRealmURL2,
+        realm_view: 'live',
         type: 'instance',
         has_error: false,
         pristine_doc: {
@@ -1681,6 +1760,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         generation: 2,
         realm_url: testRealmURL,
+        realm_view: 'live',
         type: 'instance',
         has_error: true,
         pristine_doc: resource,
@@ -1874,6 +1954,7 @@ module('Unit | index-writer', function (hooks) {
         file_alias: `${testRealmURL}1`,
         generation: 2,
         realm_url: testRealmURL,
+        realm_view: 'live',
         type: 'instance',
         has_error: true,
         pristine_doc: null,

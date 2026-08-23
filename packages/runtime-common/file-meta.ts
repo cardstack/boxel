@@ -1,14 +1,18 @@
 import { query, param, type DBAdapter, type Expression } from './index.ts';
+import { realmViewName } from './realm-view-context.ts';
 
 // Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(
   db: DBAdapter,
   realmURL: string,
   localPath: string,
+  realmView?: string,
 ): Promise<number | undefined> {
   let rows = await query(db, [
     'SELECT created_at FROM realm_file_meta WHERE realm_url =',
     param(realmURL),
+    'AND realm_view =',
+    param(realmViewName(realmView)),
     'AND file_path =',
     param(localPath),
     'LIMIT 1',
@@ -25,6 +29,7 @@ export async function getContentMeta(
   db: DBAdapter,
   realmURL: string,
   localPath: string,
+  realmView?: string,
 ): Promise<{
   contentHash: string | undefined;
   contentSize: number | undefined;
@@ -32,6 +37,8 @@ export async function getContentMeta(
   let rows = await query(db, [
     'SELECT content_hash, content_size FROM realm_file_meta WHERE realm_url =',
     param(realmURL),
+    'AND realm_view =',
+    param(realmViewName(realmView)),
     'AND file_path =',
     param(localPath),
     'LIMIT 1',
@@ -62,6 +69,7 @@ export async function getFileMetaForPaths(
   db: DBAdapter,
   realmURL: string,
   localPaths: string[],
+  realmView?: string,
 ): Promise<
   Map<
     string,
@@ -95,6 +103,8 @@ export async function getFileMetaForPaths(
     let expr: Expression = [
       'SELECT file_path, created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
       param(realmURL),
+      'AND realm_view =',
+      param(realmViewName(realmView)),
       'AND file_path IN',
       '(',
     ];
@@ -130,26 +140,29 @@ export async function ensureFileCreatedAt(
   db: DBAdapter,
   realmURL: string,
   localPath: string,
+  realmView?: string,
 ): Promise<number> {
   // Try existing first
-  let existing = await getCreatedTime(db, realmURL, localPath);
+  let existing = await getCreatedTime(db, realmURL, localPath, realmView);
   if (existing !== undefined) return existing;
 
   // Insert and re-read
   let now = Math.floor(Date.now() / 1000);
   await query(db, [
-    'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
+    'INSERT INTO realm_file_meta (realm_url, realm_view, file_path, created_at) VALUES',
     '(',
     param(realmURL),
+    ',',
+    param(realmViewName(realmView)),
     ',',
     param(localPath),
     ',',
     param(now),
     ')',
-    'ON CONFLICT (realm_url, file_path) DO NOTHING',
+    'ON CONFLICT (realm_url, realm_view, file_path) DO NOTHING',
   ]);
 
-  let created = await getCreatedTime(db, realmURL, localPath);
+  let created = await getCreatedTime(db, realmURL, localPath, realmView);
   return created ?? now;
 }
 
@@ -158,6 +171,7 @@ export async function persistFileMeta(
   db: DBAdapter,
   realmURL: string,
   rows: { path: string; contentHash?: string; contentSize?: number }[],
+  realmView?: string,
 ): Promise<
   Map<string, { createdAt: number; contentHash?: string; contentSize?: number }>
 > {
@@ -169,7 +183,7 @@ export async function persistFileMeta(
 
   // Insert rows for all paths; do not overwrite existing ones
   let expr: Expression = [
-    'INSERT INTO realm_file_meta (realm_url, file_path, created_at, content_hash, content_size) VALUES',
+    'INSERT INTO realm_file_meta (realm_url, realm_view, file_path, created_at, content_hash, content_size) VALUES',
   ];
   let now = Math.floor(Date.now() / 1000);
   rows.forEach((row, idx) => {
@@ -177,6 +191,8 @@ export async function persistFileMeta(
     expr.push(
       '(',
       param(realmURL),
+      ',',
+      param(realmViewName(realmView)),
       ',',
       param(row.path),
       ',',
@@ -191,7 +207,7 @@ export async function persistFileMeta(
   // The ON CONFLICT clause uses COALESCE to preserve existing values when the new value is null.
   // This is correct behavior for the case where file content hasn't changed.
   expr.push(
-    'ON CONFLICT (realm_url, file_path) DO UPDATE SET content_hash =',
+    'ON CONFLICT (realm_url, realm_view, file_path) DO UPDATE SET content_hash =',
     'COALESCE(EXCLUDED.content_hash, realm_file_meta.content_hash)',
     ', content_size =',
     'COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',
@@ -204,6 +220,8 @@ export async function persistFileMeta(
     let selectExpr: Expression = [
       'SELECT file_path, created_at, content_hash, content_size FROM realm_file_meta WHERE realm_url =',
       param(realmURL),
+      'AND realm_view =',
+      param(realmViewName(realmView)),
       'AND file_path IN',
       '(',
     ];
@@ -238,11 +256,14 @@ export async function removeFileMeta(
   db: DBAdapter,
   realmURL: string,
   paths: string[],
+  realmView?: string,
 ): Promise<void> {
   if (!db || paths.length === 0) return;
   let expr: Expression = [
     'DELETE FROM realm_file_meta WHERE realm_url =',
     param(realmURL),
+    'AND realm_view =',
+    param(realmViewName(realmView)),
     'AND file_path IN',
     '(',
   ];

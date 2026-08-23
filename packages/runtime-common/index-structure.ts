@@ -7,6 +7,7 @@ export interface BoxelIndexTable {
   file_alias: string;
   generation: number;
   realm_url: string;
+  realm_view: string;
   type: 'instance' | 'file';
   has_error: boolean | null;
   // TODO in followup PR update this to be a document not a resource
@@ -58,6 +59,7 @@ export interface PrerenderedHtmlTable {
   url: string;
   file_alias: string;
   realm_url: string;
+  realm_view: string;
   type: 'instance' | 'file';
   fitted_html: Record<string, string> | null;
   embedded_html: Record<string, string> | null;
@@ -90,6 +92,7 @@ export interface PrerenderedHtmlTable {
 
 export interface RealmGenerationsTable {
   realm_url: string;
+  realm_view: string;
   current_generation: number;
   // Opaque token identifying the realm's loader epoch: re-minted by any
   // index pass whose invalidation set includes executable modules. The
@@ -124,6 +127,7 @@ export interface RealmMetaValue {
 export interface RealmMetaTable {
   generation: number;
   realm_url: string;
+  realm_view: string;
   value: RealmMetaValue;
   indexed_at: string | null;
 }

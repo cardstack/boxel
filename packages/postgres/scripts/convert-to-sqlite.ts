@@ -70,7 +70,10 @@ for (let statement of cst.statements) {
   sql.push('\n);\n\n');
 }
 
-let result = sql.join(' ').trim();
+let result = sql
+  .join(' ')
+  .trim()
+  .replace(/[ \t]+$/gm, '');
 let filename = getSchemaFilename();
 let schemaFile = join(sqliteSchemaDir, filename);
 writeFileSync(schemaFile, result);
@@ -287,6 +290,15 @@ function primaryKeyColumnForSQLite(
 // experimental phase for postgresql)
 function prepareDump(sql: string): string {
   let result = sql
+    // PostgreSQL emits per-column compression settings as ALTER statements.
+    // SQLite has no equivalent, and removing only the nested `SET ...` clause
+    // leaves an invalid `ALTER TABLE ... ALTER COLUMN ...` fragment behind.
+    .replace(
+      /\s*ALTER\s+TABLE\s+ONLY\s+[^;]+\s+ALTER\s+COLUMN\s+[^;]+\s+SET\s+COMPRESSION\s+[^;]+;/gim,
+      '',
+    )
+    // Extended planner statistics are PostgreSQL-only metadata.
+    .replace(/\s*CREATE\s+STATISTICS\s+[^;]+;/gim, '')
     .replace(/\s*SET\s[^;].*;/gm, '')
     .replace(/\s*CREATE\sTYPE\s[^;]*;/gm, '');
   return result;

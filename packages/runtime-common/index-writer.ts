@@ -52,6 +52,14 @@ import {
   type RealmGenerationsTable,
 } from './index-structure.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
+import { realmViewName, type RealmView } from './realm-view-context.ts';
+
+interface BatchOptions {
+  splitPrerenderHtml?: boolean;
+  prerenderHtmlOnly?: boolean;
+  generation?: number;
+  realmView?: string;
+}
 
 export class IndexWriter {
   #dbAdapter: DBAdapter;
@@ -63,11 +71,7 @@ export class IndexWriter {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
-    opts?: {
-      splitPrerenderHtml?: boolean;
-      prerenderHtmlOnly?: boolean;
-      generation?: number;
-    },
+    opts?: BatchOptions,
   ) {
     let batch = new Batch(
       this.#dbAdapter,
@@ -84,10 +88,12 @@ export class IndexWriter {
     return query(this.#dbAdapter, expression, coerceTypes);
   }
 
-  async isNewIndex(realm: URL): Promise<boolean> {
+  async isNewIndex(realm: URL, realmView?: string): Promise<boolean> {
     let [row] = (await this.#query([
       'SELECT current_generation FROM realm_generations WHERE realm_url =',
       param(realm.href),
+      'AND realm_view =',
+      param(realmViewName(realmView)),
     ])) as Pick<RealmGenerationsTable, 'current_generation'>[];
     return !row;
   }
@@ -302,6 +308,7 @@ export class Batch {
   // uses it to fill the destination's prerendered_html channel from the
   // source realm's `prerendered_html` rows.
   #copyFromSourceRealm: URL | undefined;
+  #copyFromSourceRealmView: RealmView | undefined;
   // When true (the server/Postgres path), HTML prerendering runs as a separate
   // `prerender_html` job, so this index batch writes only `boxel_index` and
   // leaves the `prerendered_html` channel to that job. When false (the fused
@@ -341,6 +348,7 @@ export class Batch {
   >();
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
+  private realmView: RealmView;
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
 
@@ -349,13 +357,10 @@ export class Batch {
     realmURL: URL,
     virtualNetwork: VirtualNetwork,
     jobInfo?: JobInfo,
-    opts?: {
-      splitPrerenderHtml?: boolean;
-      prerenderHtmlOnly?: boolean;
-      generation?: number;
-    },
+    opts?: BatchOptions,
   ) {
     this.realmURL = realmURL;
+    this.realmView = realmViewName(opts?.realmView);
     this.virtualNetwork = virtualNetwork;
     this.jobInfo = jobInfo;
     this.#dbAdapter = dbAdapter;
@@ -462,6 +467,7 @@ export class Batch {
       `SELECT url, last_modified FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         ['job_id =', param(this.jobInfo.jobId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         any([['has_error = false'], ['has_error IS NULL']]),
@@ -501,6 +507,7 @@ export class Batch {
       `SELECT url FROM prerendered_html_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         ['job_id =', param(this.jobInfo.jobId)],
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         ['error_doc IS NULL'],
@@ -608,7 +615,12 @@ export class Batch {
   // Look up created_at for a given file path from realm_file_meta
   async getCreatedTime(localPath: string): Promise<number | undefined> {
     // delegate to shared helper
-    return getCreatedTime(this.#dbAdapter, this.realmURL.href, localPath);
+    return getCreatedTime(
+      this.#dbAdapter,
+      this.realmURL.href,
+      localPath,
+      this.realmView,
+    );
   }
 
   // Load created_at + content hash/size for a set of files in one query so the
@@ -627,6 +639,7 @@ export class Batch {
       this.#dbAdapter,
       this.realmURL.href,
       localPaths,
+      this.realmView,
     );
     for (let [path, meta] of fetched) {
       this.#fileMetaCache.set(path, meta);
@@ -642,7 +655,12 @@ export class Batch {
     if (cached) {
       return cached.createdAt;
     }
-    return ensureFileCreatedAt(this.#dbAdapter, this.realmURL.href, localPath);
+    return ensureFileCreatedAt(
+      this.#dbAdapter,
+      this.realmURL.href,
+      localPath,
+      this.realmView,
+    );
   }
 
   // Look up the content hash and size persisted at write time for a given file
@@ -661,7 +679,12 @@ export class Batch {
         contentSize: cached.contentSize,
       };
     }
-    return getContentMeta(this.#dbAdapter, this.realmURL.href, localPath);
+    return getContentMeta(
+      this.#dbAdapter,
+      this.realmURL.href,
+      localPath,
+      this.realmView,
+    );
   }
 
   private get nodeResolvedInvalidations() {
@@ -675,7 +698,10 @@ export class Batch {
       `SELECT i.url, i.type, i.last_modified, i.has_error
        FROM boxel_index as i
           WHERE`,
-      ...every([[`i.realm_url =`, param(this.realmURL.href)]]),
+      ...every([
+        [`i.realm_url =`, param(this.realmURL.href)],
+        [`i.realm_view =`, param(this.realmView)],
+      ]),
     ] as Expression)) as Pick<
       BoxelIndexTable,
       'url' | 'type' | 'last_modified' | 'has_error'
@@ -692,7 +718,8 @@ export class Batch {
     return result;
   }
 
-  async copyFrom(sourceRealmURL: URL): Promise<void> {
+  async copyFrom(sourceRealmURL: URL, sourceRealmView?: string): Promise<void> {
+    let sourceView = realmViewName(sourceRealmView);
     let columns: string[][] | undefined;
     let sources = (await this.#query([
       `SELECT * FROM boxel_index WHERE`,
@@ -701,6 +728,7 @@ export class Batch {
       ...every([
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         [`realm_url =`, param(sourceRealmURL.href)],
+        [`realm_view =`, param(sourceView)],
       ]),
     ] as Expression)) as unknown as BoxelIndexTable[];
     let now = String(Date.now());
@@ -713,6 +741,7 @@ export class Batch {
       this.#invalidations.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
+      entry.realm_view = this.realmView;
       entry.generation = this.generation;
       entry.job_id = this.jobInfo?.jobId ?? null;
       entry.file_alias = copyURL(entry.file_alias);
@@ -765,6 +794,7 @@ export class Batch {
     // `applyBatchUpdates` fills the destination's prerendered_html channel
     // from the source realm's `prerendered_html` rows.
     this.#copyFromSourceRealm = sourceRealmURL;
+    this.#copyFromSourceRealmView = sourceView;
   }
 
   // Copy the source realm's `prerendered_html` rows onto the destination's
@@ -779,13 +809,17 @@ export class Batch {
   // generation so the copied instances read as fresh
   // (`prerendered_html.generation == boxel_index.generation`). Tombstoned
   // source rows are skipped, matching the `boxel_index` copy.
-  private async copyPrerenderedHtmlFrom(sourceRealmURL: URL): Promise<void> {
+  private async copyPrerenderedHtmlFrom(
+    sourceRealmURL: URL,
+    sourceRealmView: RealmView,
+  ): Promise<void> {
     let now = String(Date.now());
     let sources = (await this.#query([
       `SELECT * FROM prerendered_html WHERE`,
       ...every([
         any([['is_deleted = false'], ['is_deleted IS NULL']]),
         [`realm_url =`, param(sourceRealmURL.href)],
+        [`realm_view =`, param(sourceRealmView)],
       ]),
     ] as Expression)) as unknown as PrerenderedHtmlTable[];
     let copyURL = (value: string) =>
@@ -801,6 +835,7 @@ export class Batch {
       this.#invalidations.add(destURL);
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
+      entry.realm_view = this.realmView;
       entry.file_alias = copyURL(entry.file_alias);
       entry.generation = this.generation;
       entry.rendered_at = now;
@@ -1195,6 +1230,7 @@ export class Batch {
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       generation: this.generation,
       realm_url: this.realmURL.href,
+      realm_view: this.realmView,
       is_deleted: false,
       indexed_at: Date.now(),
       job_id: this.jobInfo?.jobId ?? null,
@@ -1413,6 +1449,7 @@ export class Batch {
       url: url.href,
       file_alias: trimExecutableExtension(rri(url.href)).replace(/\.json$/, ''),
       realm_url: this.realmURL.href,
+      realm_view: this.realmView,
       generation: this.generation,
       is_deleted: false,
       rendered_at: Date.now(),
@@ -1447,6 +1484,7 @@ export class Batch {
       `SELECT * FROM prerendered_html WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         any([
           [`url =`, param(url.href)],
           [`file_alias =`, param(url.href)],
@@ -1467,11 +1505,12 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
+    // (url, realm_url, realm_view, type) and the view is pinned below.
     let rows = (await this.#query([
       'SELECT url, type, is_deleted FROM prerendered_html WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url IN',
           ...addExplicitParens(
@@ -1550,9 +1589,13 @@ export class Batch {
        FROM realm_meta rm
        JOIN realm_generations rg
          ON rg.realm_url = rm.realm_url
+        AND rg.realm_view = rm.realm_view
         AND rg.current_generation = rm.generation
        WHERE`,
-      ...every([['rm.realm_url =', param(this.realmURL.href)]]),
+      ...every([
+        ['rm.realm_url =', param(this.realmURL.href)],
+        ['rm.realm_view =', param(this.realmView)],
+      ]),
       `LIMIT 1`,
     ] as Expression)) as unknown as { value: RealmMetaTable['value'] }[];
     if (!row) {
@@ -1562,6 +1605,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
+        realm_view: this.realmView,
         generation: this.generation,
         value: row.value,
         indexed_at: unixTime(new Date().getTime()),
@@ -1595,6 +1639,8 @@ export class Batch {
       `FROM boxel_index as i
        WHERE`,
       ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.realm_view =', param(this.realmView)],
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
@@ -1631,6 +1677,8 @@ export class Batch {
     let [entry] = (await this.#query([
       `SELECT i.last_known_good_deps FROM boxel_index as i WHERE`,
       ...every([
+        ['i.realm_url =', param(this.realmURL.href)],
+        ['i.realm_view =', param(this.realmView)],
         any([
           [`i.url =`, param(url.href)],
           [`i.file_alias =`, param(url.href)],
@@ -1649,6 +1697,7 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
+        ['i.realm_view =', param(this.realmView)],
         any([['i.has_error = FALSE'], ['i.has_error IS NULL']]),
         ['i.is_deleted != true'],
       ]),
@@ -1665,6 +1714,7 @@ export class Batch {
     let { nameExpressions, valueExpressions } = asExpressions(
       {
         realm_url: this.realmURL.href,
+        realm_view: this.realmView,
         generation: this.generation,
         value,
         indexed_at: unixTime(new Date().getTime()),
@@ -1710,6 +1760,7 @@ export class Batch {
           WHERE`,
       ...every([
         ['i.realm_url =', param(this.realmURL.href)],
+        ['i.realm_view =', param(this.realmView)],
         ['i.type = ', param(indexType)],
         ['i.types IS NOT NULL'],
         [
@@ -1729,6 +1780,7 @@ export class Batch {
   private async applyBatchUpdates() {
     let { nameExpressions, valueExpressions } = asExpressions({
       realm_url: this.realmURL.href,
+      realm_view: this.realmView,
       current_generation: this.generation,
       loader_epoch: this.loaderEpoch,
     } as RealmGenerationsTable);
@@ -1755,6 +1807,7 @@ export class Batch {
         'WHERE',
         ...every([
           ['realm_url =', param(this.realmURL.href)],
+          ['realm_view =', param(this.realmView)],
           [
             'url in',
             ...addExplicitParens(
@@ -1781,7 +1834,10 @@ export class Batch {
         // no `prerendered_html` row gets none either — it reads as unrendered
         // and the catch-up sweep enqueues its render.
         if (this.#copyFromSourceRealm) {
-          await this.copyPrerenderedHtmlFrom(this.#copyFromSourceRealm);
+          await this.copyPrerenderedHtmlFrom(
+            this.#copyFromSourceRealm,
+            this.#copyFromSourceRealmView!,
+          );
         }
 
         // Swap the working HTML rows into production in the same
@@ -1822,6 +1878,7 @@ export class Batch {
       'WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url in',
           ...addExplicitParens(
@@ -1847,7 +1904,7 @@ export class Batch {
     // leaving older high-generation rows orphaned forever — those legacy rows
     // then poisoned `_types` reads when the SELECT picked the wrong one.
     // Cleaning by `!=` covers both directions safely; the unique key on
-    // (realm_url, generation) guarantees we never accidentally keep
+    // (realm_url, realm_view, generation) guarantees we never accidentally keep
     // two current rows.
     await this.#query([
       `DELETE FROM realm_meta`,
@@ -1855,19 +1912,27 @@ export class Batch {
       ...every([
         ['generation !=', param(this.generation)],
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
       ]),
     ] as Expression);
   }
 
   private async setNextGeneration() {
     let [row] = (await this.#query([
-      'SELECT current_generation, loader_epoch FROM realm_generations WHERE realm_url =',
-      param(this.realmURL.href),
-    ])) as Pick<RealmGenerationsTable, 'current_generation' | 'loader_epoch'>[];
+      'SELECT current_generation, loader_epoch FROM realm_generations WHERE',
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
+      ]),
+    ] as Expression)) as Pick<
+      RealmGenerationsTable,
+      'current_generation' | 'loader_epoch'
+    >[];
     this.#priorLoaderEpoch = row?.loader_epoch ?? '0';
     if (!row) {
       let { nameExpressions, valueExpressions } = asExpressions({
         realm_url: this.realmURL.href,
+        realm_view: this.realmView,
         current_generation: 0,
         loader_epoch: '0',
       } as RealmGenerationsTable);
@@ -1915,7 +1980,7 @@ export class Batch {
     }
     // `has_error` and `error_doc` are listed (with explicit false / null
     // values per row) so the upsert's ON CONFLICT SET clause clears them.
-    // The primary key is `(url, realm_url, type)` — no `generation` —
+    // The primary key is `(url, realm_url, realm_view, type)` — no `generation` —
     // so a tombstone always collides with the prior row, and any column
     // NOT in this list keeps its previous value. Without these two,
     // a row that ever held `has_error = true` would carry that flag
@@ -1928,6 +1993,7 @@ export class Batch {
       'type',
       'generation',
       'realm_url',
+      'realm_view',
       'is_deleted',
       'has_error',
       'error_doc',
@@ -1960,6 +2026,7 @@ export class Batch {
           type,
           this.generation,
           this.realmURL.href,
+          this.realmView,
           true, // is_deleted
           false, // has_error — explicit clear so stale error state from
           // a prior pass does not survive the deletion
@@ -2016,6 +2083,7 @@ export class Batch {
       'type',
       'generation',
       'realm_url',
+      'realm_view',
       'is_deleted',
       'error_doc',
       'diagnostics',
@@ -2039,6 +2107,7 @@ export class Batch {
           type,
           this.generation,
           this.realmURL.href,
+          this.realmView,
           true, // is_deleted
           null, // error_doc — a tombstone clears any prior render error
           null, // diagnostics — likewise cleared; they described the render this tombstone hides
@@ -2070,11 +2139,12 @@ export class Batch {
     }
     let uniqueInvalidations = [...new Set(invalidations)];
     // One row per (url, type) — the table's primary key is
-    // (url, realm_url, type) and the realm is pinned below.
+    // (url, realm_url, realm_view, type) and the view is pinned below.
     let rows = (await this.#query([
       'SELECT url, type, is_deleted FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url IN',
           ...addExplicitParens(
@@ -2106,6 +2176,7 @@ export class Batch {
       `SELECT DISTINCT url FROM boxel_index_working WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         ['generation =', param(this.generation)],
         any([
           ['url =', param(seedURL.href)],
@@ -2124,6 +2195,7 @@ export class Batch {
       `SELECT DISTINCT url FROM boxel_index WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         any([
           ['url =', param(seedURL.href)],
           ['file_alias =', param(seedURL.href)],
@@ -2249,6 +2321,7 @@ export class Batch {
       'FROM boxel_index_working WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url IN',
           ...addExplicitParens(
@@ -2265,6 +2338,7 @@ export class Batch {
       'FROM boxel_index WHERE',
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url IN',
           ...addExplicitParens(
@@ -2378,6 +2452,7 @@ export class Batch {
       `SELECT url, type, deps, has_error, is_deleted, error_doc FROM ${tableName} WHERE`,
       ...every([
         ['realm_url =', param(this.realmURL.href)],
+        ['realm_view =', param(this.realmView)],
         [
           'url IN',
           ...addExplicitParens(
@@ -2476,6 +2551,7 @@ export class Batch {
             // probably need to reevaluate this condition when we get to cross
             // realm invalidation
             [`i.realm_url =`, param(this.realmURL.href)],
+            [`i.realm_view =`, param(this.realmView)],
             // A promoted tombstone is a deleted file — it has nothing to
             // re-render, and pulling it into the fan-out would visit a path
             // with no backing file. The working/prerendered scans carry
@@ -2697,7 +2773,7 @@ function baseTypeFromError(entry: {
 }
 
 // The `boxel_index` row type an entry lands under — the pkey is
-// (url, realm_url, type), so this keys the flush dedup that keeps a single
+// (url, realm_url, realm_view, type), so this keys the flush dedup that keeps a single
 // multi-row upsert from touching one conflict target twice.
 function rowType(entry: SearchIndexEntry): BoxelIndexTable['type'] {
   return isErrorEntry(entry) ? baseTypeFromError(entry) : entry.type;
