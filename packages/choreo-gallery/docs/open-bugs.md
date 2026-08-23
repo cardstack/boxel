@@ -18,7 +18,7 @@ The parent documents are [choreography.md](choreography.md),
 - [5. Package work not done](#5-package-work-not-done)
 - [6. Recently fixed — do not re-investigate](#6-recently-fixed--do-not-re-investigate)
 
-Current state: **476 tests, 474 pass, 2 skip, 0 fail.** Lint and types clean.
+Current state: **477 tests, 475 pass, 2 skip, 0 fail.** Lint and types clean.
 Nothing committed or pushed — all in the `wip` commit.
 
 ---
@@ -71,7 +71,29 @@ happen — they only check what is left afterwards.
 
 ## 1. Reported, not yet fixed
 
-### 1a. A counterpart is only released when a step names `c.removed`
+### 1a. Two copies of one `layoutId` leave a leaver waiting on a stranger
+
+Found while reducing the lone-stack bug above, by building the repro wrong:
+two sibling cards each rendering `<Lightbox>`, so both carry `layoutId`
+`atlas-card`, `atlas-name` and so on. Each stack then has two members that
+have nothing to do with each other — the same demo, twice.
+
+Drop one card and its leaver is never removed. The exit-complete guard sees
+another member in the stack and defers to it ("the crossfade owns when this
+goes"), but the other member is a different instance of the demo, not a
+counterpart: it never crossfades and never reports. Same symptom as the fixed
+bug — the card stays in the DOM at `opacity: 0`.
+
+Reproduce by rendering `<Lightbox />` in BOTH cards of
+`tests/integration/motion/lone-stack-test.gts`; it fails with the fix in place,
+because the fix only covers a stack whose single member is the leaver itself.
+
+Whether this is a library bug or a "don't do that" is a real question: two live
+copies of one `layoutId` is ambiguous by definition. But hanging forever is the
+wrong answer to it, and a leaver should probably not defer to a member that is
+not itself present-and-leading.
+
+### 1b. A counterpart is only released when a step names `c.removed`
 
 Found while building the interruption demo. A timeline with a single
 `<c.Move @of={{c.kept 'x'}}>` and nothing naming `c.removed` leaves the old copy
@@ -86,7 +108,7 @@ Somewhere between those two it does not. **Reproduce with**: two slots, one
 element moving between them by `id`, and a timeline containing only a `kept`
 Move.
 
-### 1b. Variant orchestration on a `<Presence>` child — UNRESOLVED
+### 1c. Variant orchestration on a `<Presence>` child — UNRESOLVED
 
 Two demos were attempted on `when` / `staggerChildren` / `staggerDirection` and
 both were cut. A panel that drives its subtree by variant label
@@ -106,7 +128,7 @@ not on transform strings, and start from the case the gallery already proves
 (Stagger's `variants` + `staggerChildren`) so a green baseline exists before the
 `<Presence>` variable is added.
 
-### 1c. Drag "stopped working" — NOT REPRODUCED
+### 1d. Drag "stopped working" — NOT REPRODUCED
 
 Reported, but could not be reproduced. Verified working two ways on `/drag`:
 
@@ -234,13 +256,24 @@ Traced by instrumenting the exit path and tallying it over a real filter:
 **`exitComplete? members=1: 9`** — nine nodes reaching the guard with a stack of
 one and falling through it.
 
-Pinned by `tests/integration/motion/gallery-filter-test.gts`, which fails
-without the fix and passes with it, deterministically. Note that the reductions
-in `presence-roundtrip-test.gts` do NOT pin it: a three-item round trip, one
-interrupted mid-exit, a leaver with a motion descendant, and a leaver holding a
-lone `layoutId` all pass either way. Whatever else the gallery brings — depth,
-twenty leavers at once, nested `<Presence>` and `<Choreo>` regions — is part of
-the trigger and is not yet isolated.
+**Isolated.** Instrumenting the guard to name the elements reaching it with a
+stack of one gave the culprits directly:
+
+```
+shot-card#atlas-card  shot-name#atlas-name   (×4 photos, from <Lightbox>)
+tab-line#tab-pill                            (from <SharedTabs>)
+```
+
+So the trigger is a leaver whose SUBTREE holds `layoutId`s of its own — a demo
+with its own `<LayoutGroup>` inside the card. `tests/integration/motion/lone-stack-test.gts`
+is that and nothing else: two cards under `popLayout`, one holding `<Lightbox>`,
+drop the one holding it. Two cards remain without the fix, one with it, checked
+both ways.
+
+Reductions that do NOT reproduce, and are kept in `presence-roundtrip-test.gts`
+so nobody retries them: a three-item round trip, one interrupted mid-exit, a
+leaver with a plain motion descendant, and a leaver holding a bare `layoutId`
+with no `<LayoutGroup>` of its own.
 
 Listed so the next session does not re-derive them.
 

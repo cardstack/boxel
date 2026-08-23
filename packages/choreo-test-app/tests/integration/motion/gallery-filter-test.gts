@@ -40,13 +40,6 @@ module('Integration | motion | gallery filter', function (hooks) {
     await afterTheSwitch();
     assert.strictEqual(visible().length, catalog.length, 'all of them at rest');
 
-    // stamp them, so we can tell a card that never left from a fresh mount
-    for (const [i, card] of [
-      ...document.querySelectorAll<HTMLElement>('.card'),
-    ].entries()) {
-      card.dataset['stamp'] = String(i);
-    }
-
     await click(chip('Drag'));
     await afterTheSwitch();
     const drag = catalog.filter((demo) => demo.group === 'Drag').length;
@@ -54,18 +47,10 @@ module('Integration | motion | gallery filter', function (hooks) {
 
     await click(chip('All'));
     await afterTheSwitch();
-    const all = [...document.querySelectorAll<HTMLElement>('.card')];
-    const stamped = all.filter((c) => c.dataset['stamp'] !== undefined).length;
-    const tally: Record<string, number> = { stamped };
-    for (const card of all) {
-      const style = getComputedStyle(card);
-      const key = `o=${style.opacity} pos=${style.position} tf=${(card.style.transform || '-').slice(0, 20)}`;
-      tally[key] = (tally[key] ?? 0) + 1;
-    }
     assert.strictEqual(
       visible().length,
       catalog.length,
-      `dom=${all.length} stamped=${stamped} ${JSON.stringify(tally)}`
+      `and back to all of them (dom=${document.querySelectorAll('.card').length})`
     );
   });
 });

@@ -10,15 +10,28 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
 const keyOf = (demo: DemoEntry) => demo.id;
 const gone = { opacity: 0, scale: 0.96 };
 const here = { opacity: 1, scale: 1 };
-const quick = { duration: 0.1 } as const;
+const leaves = { opacity: 0, scale: 0.96 };
+const quick = {
+  bounce: 0.12,
+  type: 'spring',
+  visualDuration: 0.42,
+} as const;
 
 class Shown {
-  @tracked demos: DemoEntry[] = catalog;
+  @tracked group: string | undefined;
+
+  /** the gallery's shape: a getter, so every read is a NEW array and
+   *  <Presence> re-diffs on every render rather than only when items change */
+  get demos(): DemoEntry[] {
+    return this.group
+      ? catalog.filter((demo) => demo.group === this.group)
+      : catalog.slice();
+  }
 
   /** the gallery changes the filter from inside a click handler, not from a
    *  bare assignment: the runloop flush is not the same shape */
   narrow = () => {
-    this.demos = catalog.filter((demo) => demo.group === 'Drag');
+    this.group = 'Drag';
   };
 }
 
@@ -39,7 +52,7 @@ module('Integration | motion | popLayout subtree', function (hooks) {
           Drag
         </button>
         <LayoutGroup>
-          <div class="probe" style="position:relative">
+          <div class="grid" style="position:relative">
             <Presence
               @items={{state.demos}}
               @key={{keyOf}}
@@ -54,7 +67,7 @@ module('Integration | motion | popLayout subtree', function (hooks) {
                   layout=true
                   initial=gone
                   animate=here
-                  exit=gone
+                  exit=leaves
                   transition=quick
                 }}
               >
