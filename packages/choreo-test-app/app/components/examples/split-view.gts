@@ -22,12 +22,23 @@ export class SplitView extends Component {
     this.split = !this.split;
   };
 
-  /** where the content starts: the bar's width before this pass */
+  /*
+   * Where the content starts and ends: the bar's width, before and after — or
+   * nothing at all.
+   *
+   * A property function runs against whatever changeset the region hands it,
+   * and the bar is not always in it. Unmount this card (the gallery filter
+   * does) and the region reconciles a changeset the bar has already left.
+   * `cs.sprite()` returns null by contract, so asserting it away with `!` made
+   * a torn-down region throw a TypeError inside the measure pass — which took
+   * every other region on the page with it, and read as the whole gallery
+   * disappearing. Nothing is on screen to animate in that case, so 0 is right.
+   */
   leftFrom = (_s: Sprite, cs: Changeset) =>
-    cs.sprite({ id: 'split-bar' })!.initial!.parent.width;
-  /** where it ends: the bar's width after */
+    cs.sprite({ id: 'split-bar' })?.initial?.parent.width ?? 0;
+
   leftTo = (_s: Sprite, cs: Changeset) =>
-    cs.sprite({ id: 'split-bar' })!.final!.parent.width;
+    cs.sprite({ id: 'split-bar' })?.final?.parent.width ?? 0;
 
   <template>
     <div class="ex">
