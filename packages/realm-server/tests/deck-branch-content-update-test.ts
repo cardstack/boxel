@@ -34,6 +34,7 @@ class RecordingHistory implements HistoryBackend {
   entries: Array<{ id: string; files: Map<string, Buffer> }> = [];
 
   noteMutation(): void {}
+  async fork(): Promise<void> {}
   async flush(): Promise<string | undefined> {
     return undefined;
   }

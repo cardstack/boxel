@@ -54,6 +54,18 @@ pub enum HistoryBackendError {
 pub trait HistoryBackend: Send + Sync {
     fn ensure<'a>(&'a self, dir: &'a str) -> BoxFuture<'a, Result<(), HistoryBackendError>>;
 
+    /// Create a lightweight named workspace in the source Realm's shared
+    /// History repository, with an empty working-copy change whose parent is
+    /// `revision_id`. The destination does not become a separate History
+    /// repository: all branch workspaces share `<realm>/.deck/history/repo`.
+    fn fork<'a>(
+        &'a self,
+        source_dir: &'a str,
+        target_dir: &'a str,
+        revision_id: &'a str,
+        workspace_name: &'a str,
+    ) -> BoxFuture<'a, Result<(), HistoryBackendError>>;
+
     /// Fire-and-forget remember: schedule an async collapsed seal. Returns
     /// immediately; many notes across many depots must not block the caller.
     fn note<'a>(

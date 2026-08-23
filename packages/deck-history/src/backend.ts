@@ -48,6 +48,14 @@ export interface HistoryBackend {
   // Which implementation is live — reported by the server's capability
   // block. Production is deckd.
   readonly kind: 'deckd';
+  // Creates a named branch workspace backed by the source Realm's one shared
+  // `.deck/history/repo`. `revisionId` is the exact source Checkpoint parent.
+  fork(
+    sourceDir: string,
+    targetDir: string,
+    revisionId: string,
+    workspaceName: string,
+  ): Promise<void>;
   // Notes a file mutation for the debounced sealer. Fire-and-forget: a
   // burst of saves becomes ONE seal.
   noteMutation(dir: string, path: string): void;

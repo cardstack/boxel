@@ -43,6 +43,9 @@ function startStub(): Promise<{
           ensured.push(body.dir);
           reply({});
           return;
+        case '/fork':
+          reply({});
+          return;
         case '/seal':
           if (body.message === 'boom') {
             res.writeHead(500, { 'content-type': 'application/json' });
@@ -151,6 +154,40 @@ module('history: deckd client', function (hooks) {
       body: { dir: '/tmp/writer-managed-tree', watch: false },
     });
     managed.close();
+  });
+
+  test('fork creates one exact named workspace and marks it ensured', async function (assert) {
+    await history.fork(
+      DIR,
+      '/tmp/some-live-tree/.deck/branches/ana%2Fbutton',
+      'vvvvvvvv',
+      'deck:ana/button',
+    );
+    assert.deepEqual(stub.calls.slice(-1), [
+      {
+        path: '/fork',
+        body: {
+          sourceDir: DIR,
+          targetDir: '/tmp/some-live-tree/.deck/branches/ana%2Fbutton',
+          revisionId: 'vvvvvvvv',
+          workspaceName: 'deck:ana/button',
+        },
+      },
+    ]);
+
+    await history.seal(
+      '/tmp/some-live-tree/.deck/branches/ana%2Fbutton',
+      'branch save',
+    );
+    assert.strictEqual(
+      stub.calls.filter(
+        (call) =>
+          call.path === '/ensure' &&
+          call.body.dir === '/tmp/some-live-tree/.deck/branches/ana%2Fbutton',
+      ).length,
+      0,
+      'the successful fork response is the target ensure boundary',
+    );
   });
 
   test('a no-op seal reports nothing sealed', async function (assert) {

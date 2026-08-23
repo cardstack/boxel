@@ -13,6 +13,8 @@ import {
 //
 // Wire surface (POST, JSON in/out):
 //   /ensure         {dir}                              → {}
+//   /fork           {sourceDir, targetDir, revisionId,
+//                    workspaceName}                    → {}
 //   /seal           {dir, message, actor?}             → {changeId: string | null}
 //   /list           {dir}                              → HistoryEntry[]
 //   /file-at        {dir, revisionId, path}            → {found, contentBase64?}
@@ -57,6 +59,30 @@ export class DeckdHistory implements HistoryBackend {
 
   get baseUrl(): string {
     return this.#base;
+  }
+
+  async fork(
+    sourceDir: string,
+    targetDir: string,
+    revisionId: string,
+    workspaceName: string,
+  ): Promise<void> {
+    if (!isValidRevisionId(revisionId)) {
+      throw new Error('invalid revision id');
+    }
+    if (!workspaceName || workspaceName === 'default') {
+      throw new Error('invalid branch workspace name');
+    }
+    await this.#queue.run(sourceDir, async () => {
+      await this.#ensure(sourceDir);
+      await this.#post('/fork', {
+        sourceDir,
+        targetDir,
+        revisionId,
+        workspaceName,
+      });
+      this.#ensured.add(targetDir);
+    });
   }
 
   noteMutation(dir: string, path: string): void {

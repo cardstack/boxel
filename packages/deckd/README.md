@@ -26,23 +26,31 @@ cargo run
 | Store layout                         | `.deck/history/repo` + thin `.jj/repo` file pointer                       |
 | `/file-list-at`, seal `actor`        | Deck D1 additions historyd lacked                                         |
 
-## Layout after `/ensure`
+## Layout after `/ensure` and `/fork`
 
 ```text
 <depot>/
   …live content…
-  .deck/history/repo/      # durable jj store
+  .deck/
+    history/repo/          # one durable jj store for the Realm
+    branches/
+      ana%2Fbutton-tone/   # named branch working tree (URL-component name)
+        .jj/
+          repo             # points back to ../../../history/repo
+          working_copy/
   .jj/
     repo                   # file: "../.deck/history/repo"
     working_copy/
 ```
 
 In standalone Deck, `dir` is a depot. In the Boxel backport, `dir` is the
-selected branch workspace projected as a realm root. Its durable History still
-appears at `/.deck/history/repo`; the host may physically keep non-default
-branches under the owning realm's `.deck/branches/<id>/`. Hosted Boxel places
-that realm tree on S3 Files. deckd never writes collaboration refs or
-Checkpoints through direct S3; realm-server owns those conditional operations.
+selected branch workspace projected as a Realm root. The default workspace is
+the Realm root; every named branch is a real jj workspace directly beneath the
+owning Realm's `.deck/branches/<encoded-name>/`. All of them point to the one
+durable `.deck/history/repo`, so a fork preserves History ancestry without
+copying a repository. Hosted Boxel places that Realm tree on S3 Files. deckd
+never writes collaboration refs or Checkpoints through direct S3; Realm Server
+owns those conditional operations.
 
 ## Write path (watchexec shape)
 
@@ -50,10 +58,13 @@ Checkpoints through direct S3; realm-server owns those conditional operations.
    recursive FS capture (`true`) or writer-managed sealing (`false`).
 2. Deck mode accepts only the canonical `.deck/history/` layout; it does not
    migrate earlier Deck experiments.
-3. File changes under `dir` (non-machinery) → in-process note → **one** debounce
+3. `POST /fork` creates a named jj workspace whose editable change has the
+   requested exact Checkpoint as its parent. The operation materializes only
+   branch source bytes; Repository, lock, and index objects stay shared by hash.
+4. File changes under `dir` (non-machinery) → in-process note → **one** debounce
    worker per depot/branch workspace → seal.
-4. HTTP `/note` / `/flush` / `/seal` are the explicit mutation surface.
-5. `POST /list` is read-only and uses a **read** lock (does not share the seal
+5. HTTP `/note` / `/flush` / `/seal` are the explicit mutation surface.
+6. `POST /list` is read-only and uses a **read** lock (does not share the seal
    write mutex).
 
 When Hub uses `DECKD_URL`, Node watchers publish + HMR only — they do not
@@ -63,10 +74,15 @@ materializes an accepted tree and seals it as one indivisible History batch.
 
 ## Concurrency
 
-| Op                            | Gate                                     |
-| ----------------------------- | ---------------------------------------- |
-| ensure / seal / restore       | per-workspace **write** lock             |
-| list / file-at / file-list-at | per-workspace **read** lock (concurrent) |
+| Op                            | Gate                                              |
+| ----------------------------- | ------------------------------------------------- |
+| fork                          | global fork gate + owning Realm **write** lock    |
+| ensure / seal / restore       | shared-History-repository **write** lock          |
+| list / file-at / file-list-at | shared-History-repository **read** lock per Realm |
+
+Different Realms remain concurrent. Branches inside one Realm serialize jj
+repository operations while retaining separate working copies and History
+heads.
 
 ## Run
 

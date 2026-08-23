@@ -27,14 +27,15 @@ use jj_lib::matchers::{EverythingMatcher, NothingMatcher};
 use jj_lib::merge::Diff;
 use jj_lib::merged_tree::MergedTree;
 use jj_lib::object_id::{HexPrefix, ObjectId, PrefixResolution};
-use jj_lib::ref_name::WorkspaceName;
+use jj_lib::ref_name::{WorkspaceName, WorkspaceNameBuf};
 use jj_lib::repo::{ReadonlyRepo, Repo as _, StoreFactories};
 use jj_lib::repo_path::{RepoPath, RepoPathBuf};
 use jj_lib::revset::{RevsetExpression, RevsetFilterPredicate};
 use jj_lib::settings::UserSettings;
 use jj_lib::working_copy::SnapshotOptions;
 use jj_lib::workspace::{
-    default_working_copy_factories, Workspace, WorkspaceInitError, WorkspaceLoadError,
+    default_working_copy_factories, default_working_copy_factory, Workspace, WorkspaceInitError,
+    WorkspaceLoadError,
 };
 use tokio::sync::Mutex;
 
@@ -43,11 +44,12 @@ use tokio::sync::Mutex;
 const NOTE_DEBOUNCE_MS: u64 = 400;
 
 use super::{
-    history_dir, is_machinery_path, Actor, BoxFuture, HistoryBackend,
-    HistoryBackendError, HistoryEntry, RestorePlan,
+    history_dir, is_machinery_path, Actor, BoxFuture, HistoryBackend, HistoryBackendError,
+    HistoryEntry, RestorePlan,
 };
 
 const REPO_POINTER: &str = "../.deck/history/repo";
+const BRANCH_WORKSPACES_DIR: &str = "branches";
 
 #[derive(Debug, thiserror::Error)]
 pub enum HistoryError {
@@ -91,6 +93,7 @@ struct PendingNotes {
 pub struct HistoryService {
     gates: Mutex<HashMap<PathBuf, Arc<tokio::sync::RwLock<()>>>>,
     notes: Mutex<HashMap<PathBuf, PendingNotes>>,
+    forks: Mutex<()>,
 }
 
 impl Default for HistoryService {
@@ -105,11 +108,15 @@ impl HistoryService {
         Self {
             gates: Mutex::new(HashMap::new()),
             notes: Mutex::new(HashMap::new()),
+            forks: Mutex::new(()),
         }
     }
 
     async fn gate_for(&self, dir: &Path) -> Arc<tokio::sync::RwLock<()>> {
-        let key = dir.to_path_buf();
+        // Branch workspaces share one jj repository. Keying the gate by that
+        // repository serializes operations across all branches of a Realm,
+        // while unrelated Realms remain concurrent.
+        let key = existing_workspace_repo(dir).unwrap_or_else(|| dir.to_path_buf());
         let mut map = self.gates.lock().await;
         map.entry(key)
             .or_insert_with(|| Arc::new(tokio::sync::RwLock::new(())))
@@ -120,6 +127,29 @@ impl HistoryService {
         let gate = self.gate_for(dir).await;
         let _guard = gate.write().await;
         ensure_repo_inner(dir).await
+    }
+
+    pub async fn fork_workspace(
+        &self,
+        source_dir: &Path,
+        target_dir: &Path,
+        revision_id: &str,
+        workspace_name: &str,
+    ) -> HistoryResult<()> {
+        if !is_valid_revision_id(revision_id) {
+            return Err(HistoryError::msg("invalid revision id"));
+        }
+        if workspace_name.is_empty() || workspace_name == WorkspaceName::DEFAULT.as_str() {
+            return Err(HistoryError::msg("invalid branch workspace name"));
+        }
+
+        // Workspace creation mutates the Realm's shared jj repository, so it
+        // is deliberately serialized with other forks and History writes.
+        let _fork_guard = self.forks.lock().await;
+        self.ensure_repo(source_dir).await?;
+        let gate = self.gate_for(source_dir).await;
+        let _guard = gate.write().await;
+        fork_workspace_inner(source_dir, target_dir, revision_id, workspace_name).await
     }
 
     /// Remember `path` under `dir` and schedule a collapsed seal. Returns
@@ -308,6 +338,30 @@ impl HistoryBackend for JjLibHistory {
         })
     }
 
+    fn fork<'a>(
+        &'a self,
+        source_dir: &'a str,
+        target_dir: &'a str,
+        revision_id: &'a str,
+        workspace_name: &'a str,
+    ) -> BoxFuture<'a, std::result::Result<(), HistoryBackendError>> {
+        let source_dir = PathBuf::from(source_dir);
+        let target_dir = PathBuf::from(target_dir);
+        let revision_id = revision_id.to_owned();
+        let workspace_name = workspace_name.to_owned();
+        Box::pin(async move {
+            self.run(move |h| {
+                pollster::block_on(h.fork_workspace(
+                    &source_dir,
+                    &target_dir,
+                    &revision_id,
+                    &workspace_name,
+                ))
+            })
+            .await
+        })
+    }
+
     fn note<'a>(
         &'a self,
         dir: &'a str,
@@ -357,10 +411,8 @@ impl HistoryBackend for JjLibHistory {
         let message = message.to_owned();
         let actor = actor.cloned();
         Box::pin(async move {
-            self.run(move |h| {
-                pollster::block_on(h.seal(&dir, &message, actor.as_ref()))
-            })
-            .await
+            self.run(move |h| pollster::block_on(h.seal(&dir, &message, actor.as_ref())))
+                .await
         })
     }
 
@@ -487,22 +539,42 @@ fn snapshot_options() -> HistoryResult<SnapshotOptions<'static>> {
 
 async fn ensure_repo_inner(dir: &Path) -> HistoryResult<()> {
     std::fs::create_dir_all(dir).map_err(|e| HistoryError::msg(e.to_string()))?;
-    std::fs::create_dir_all(dir.join(".deck")).map_err(|e| HistoryError::msg(e.to_string()))?;
-    if dir.join(".deck").join("timeline").exists() {
-        return Err(HistoryError::msg(
-            "unsupported Deck History layout: .deck/timeline exists; Deck mode requires .deck/history",
-        ));
-    }
-
     let jj = dir.join(".jj");
     let history = history_dir(dir);
     let history_repo = history.join("repo");
     let jj_repo = jj.join("repo");
 
-    if jj_repo.is_file() && history_repo.is_dir() && jj.join("working_copy").is_dir() {
-        std::fs::write(&jj_repo, REPO_POINTER).map_err(|e| HistoryError::msg(e.to_string()))?;
-        let _ = std::fs::remove_file(history.join(".jj"));
-        return Ok(());
+    if jj_repo.is_file() && jj.join("working_copy").is_dir() {
+        let repo_path = canonical_workspace_repo(dir)?;
+        let owning_realm = owning_realm_for_repo(&repo_path)?;
+        let canonical_dir = std::fs::canonicalize(dir)
+            .map_err(|e| HistoryError::msg(format!("cannot resolve {}: {e}", dir.display())))?;
+
+        if canonical_dir == owning_realm {
+            // Normalize the default workspace pointer after old directory
+            // moves; named workspaces need their longer relative pointer.
+            std::fs::write(&jj_repo, REPO_POINTER).map_err(|e| HistoryError::msg(e.to_string()))?;
+            let _ = std::fs::remove_file(history.join(".jj"));
+            return Ok(());
+        }
+
+        let branch_root = owning_realm.join(".deck").join(BRANCH_WORKSPACES_DIR);
+        if canonical_dir.parent() == Some(branch_root.as_path()) {
+            return Ok(());
+        }
+
+        return Err(HistoryError::msg(format!(
+            "branch History workspace {} must be directly inside {}",
+            canonical_dir.display(),
+            branch_root.display()
+        )));
+    }
+
+    std::fs::create_dir_all(dir.join(".deck")).map_err(|e| HistoryError::msg(e.to_string()))?;
+    if dir.join(".deck").join("timeline").exists() {
+        return Err(HistoryError::msg(
+            "unsupported Deck History layout: .deck/timeline exists; Deck mode requires .deck/history",
+        ));
     }
 
     if jj.exists() || history.exists() {
@@ -534,6 +606,140 @@ async fn ensure_repo_inner(dir: &Path) -> HistoryResult<()> {
     Ok(())
 }
 
+fn existing_workspace_repo(dir: &Path) -> Option<PathBuf> {
+    canonical_workspace_repo(dir).ok()
+}
+
+fn canonical_workspace_repo(dir: &Path) -> HistoryResult<PathBuf> {
+    let pointer_path = dir.join(".jj/repo");
+    let pointer = std::fs::read_to_string(&pointer_path)
+        .map_err(|e| HistoryError::msg(format!("cannot read {}: {e}", pointer_path.display())))?;
+    let target = pointer_path
+        .parent()
+        .expect(".jj/repo has a parent")
+        .join(pointer.trim());
+    let target = std::fs::canonicalize(&target)
+        .map_err(|e| HistoryError::msg(format!("cannot resolve {}: {e}", target.display())))?;
+    let _ = owning_realm_for_repo(&target)?;
+    Ok(target)
+}
+
+fn owning_realm_for_repo(repo_path: &Path) -> HistoryResult<PathBuf> {
+    let history = repo_path.parent();
+    let deck = history.and_then(Path::parent);
+    let realm = deck.and_then(Path::parent);
+    let canonical = history
+        .and_then(Path::file_name)
+        .is_some_and(|name| name == "history")
+        && deck
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == ".deck")
+        && repo_path.file_name().is_some_and(|name| name == "repo");
+    if !canonical {
+        return Err(HistoryError::msg(format!(
+            "noncanonical Deck History repository {}; expected <realm>/.deck/history/repo",
+            repo_path.display()
+        )));
+    }
+    realm
+        .map(Path::to_path_buf)
+        .ok_or_else(|| HistoryError::msg("History repository has no owning Realm"))
+}
+
+async fn fork_workspace_inner(
+    source_dir: &Path,
+    target_dir: &Path,
+    revision_id: &str,
+    workspace_name: &str,
+) -> HistoryResult<()> {
+    let (source_workspace, repo) = load_workspace(source_dir).await?;
+    let source_commit = resolve_revision(repo.as_ref(), revision_id)?
+        .ok_or_else(|| HistoryError::msg("source revision not found"))?;
+    let repo_path = source_workspace.repo_path().to_path_buf();
+    let owning_realm = owning_realm_for_repo(&repo_path)?;
+    let branch_root = owning_realm.join(".deck").join(BRANCH_WORKSPACES_DIR);
+    std::fs::create_dir_all(&branch_root).map_err(|e| HistoryError::msg(e.to_string()))?;
+    let canonical_branch_root =
+        std::fs::canonicalize(&branch_root).map_err(|e| HistoryError::msg(e.to_string()))?;
+    let canonical_target_parent = target_dir
+        .parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok());
+    if canonical_target_parent.as_deref() != Some(canonical_branch_root.as_path())
+        || target_dir.file_name().is_none()
+    {
+        return Err(HistoryError::msg(format!(
+            "branch workspace must be directly inside {}",
+            branch_root.display()
+        )));
+    }
+    if target_dir.exists() {
+        return Err(HistoryError::msg(format!(
+            "branch workspace already exists: {}",
+            target_dir.display()
+        )));
+    }
+    // Refuse a symlinked branch root or an escaping destination before jj
+    // writes either its shared repo view or working-copy files.
+    if target_dir
+        .parent()
+        .and_then(|parent| std::fs::canonicalize(parent).ok())
+        .as_deref()
+        != Some(canonical_branch_root.as_path())
+    {
+        return Err(HistoryError::msg(
+            "branch workspace root changed during fork",
+        ));
+    }
+
+    std::fs::create_dir(target_dir).map_err(|e| HistoryError::msg(e.to_string()))?;
+    let result = async {
+        let workspace_name = WorkspaceNameBuf::from(workspace_name);
+        let working_copy_factory = default_working_copy_factory();
+        let (mut target_workspace, repo) = Workspace::init_workspace_with_existing_repo(
+            target_dir,
+            &repo_path,
+            &repo,
+            working_copy_factory.as_ref(),
+            workspace_name.clone(),
+        )
+        .await?;
+
+        // A branch starts with a fresh editable child whose exact parent is
+        // the source Checkpoint. The source tree is materialized only into
+        // this branch workspace; immutable Repository/index objects remain
+        // shared by hash at the Realm level.
+        let mut tx = repo.start_transaction();
+        let wc_commit = tx
+            .repo_mut()
+            .check_out(workspace_name, &source_commit)
+            .await
+            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        let _ = tx
+            .repo_mut()
+            .rebase_descendants()
+            .await
+            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        let repo = tx
+            .commit(format!("fork workspace from {}", source_commit.id().hex()))
+            .await
+            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        target_workspace
+            .check_out(repo.op_id().clone(), None, &wc_commit)
+            .await
+            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        Ok(())
+    }
+    .await;
+
+    if result.is_err() {
+        // The branch ref has not been published yet, so a failed preparation
+        // is invisible and safe to retry. jj's stale workspace record is
+        // harmless; a later successful init with this name replaces it.
+        let _ = std::fs::remove_dir_all(target_dir);
+    }
+    result
+}
+
 async fn load_workspace(dir: &Path) -> HistoryResult<(Workspace, Arc<ReadonlyRepo>)> {
     let settings = user_settings(None)?;
     let workspace = Workspace::load(
@@ -556,7 +762,7 @@ async fn snapshot_wc(
     workspace: &mut Workspace,
     repo: Arc<ReadonlyRepo>,
 ) -> HistoryResult<(Arc<ReadonlyRepo>, Commit)> {
-    let workspace_name = WorkspaceName::DEFAULT.to_owned();
+    let workspace_name = workspace.workspace_name().to_owned();
     let options = snapshot_options()?;
     let mut locked_ws = workspace
         .start_working_copy_mutation()
@@ -590,7 +796,7 @@ async fn snapshot_wc(
             .await
             .map_err(|e| HistoryError::msg(e.to_string()))?;
         tx.repo_mut()
-            .set_wc_commit(workspace_name, new_wc.id().clone())
+            .set_wc_commit(workspace_name.clone(), new_wc.id().clone())
             .map_err(|e| HistoryError::msg(e.to_string()))?;
         let _ = tx
             .repo_mut()
@@ -611,7 +817,7 @@ async fn snapshot_wc(
 
     let wc_commit_id = repo
         .view()
-        .get_wc_commit_id(WorkspaceName::DEFAULT)
+        .get_wc_commit_id(&workspace_name)
         .ok_or_else(|| HistoryError::msg("no working-copy commit after snapshot"))?
         .clone();
     let wc_commit = repo
@@ -624,7 +830,11 @@ async fn snapshot_wc(
 /// Seal dirty WC as one change: describe + new empty child (jj commit).
 /// Copied from historyd `seal_inner`, plus optional author via UserSettings
 /// rewrite (description path unchanged).
-async fn seal_inner(dir: &Path, message: &str, actor: Option<&Actor>) -> HistoryResult<Option<String>> {
+async fn seal_inner(
+    dir: &Path,
+    message: &str,
+    actor: Option<&Actor>,
+) -> HistoryResult<Option<String>> {
     let (mut workspace, repo) = load_workspace(dir).await?;
     let (repo, wc_commit) = snapshot_wc(&mut workspace, repo).await?;
 
@@ -636,14 +846,19 @@ async fn seal_inner(dir: &Path, message: &str, actor: Option<&Actor>) -> History
         return Ok(None);
     }
 
-    let workspace_name = WorkspaceName::DEFAULT.to_owned();
+    let workspace_name = workspace.workspace_name().to_owned();
     let mut tx = repo.start_transaction();
-    let mut rewrite = tx.repo_mut().rewrite_commit(&wc_commit).set_description(message);
+    let mut rewrite = tx
+        .repo_mut()
+        .rewrite_commit(&wc_commit)
+        .set_description(message);
     if let Some(actor) = actor {
         // Closest to historyd (no actor) + Deck D1: stamp author on seal.
         let settings = user_settings(Some(actor))?;
         let signature = settings.signature();
-        rewrite = rewrite.set_author(signature.clone()).set_committer(signature);
+        rewrite = rewrite
+            .set_author(signature.clone())
+            .set_committer(signature);
     }
     let sealed = rewrite
         .write()
@@ -682,7 +897,12 @@ async fn seal_inner(dir: &Path, message: &str, actor: Option<&Actor>) -> History
 fn message_for_paths(paths: &HashSet<String>) -> String {
     let mut sorted: Vec<&str> = paths.iter().map(String::as_str).collect();
     sorted.sort_unstable();
-    let summary = sorted.iter().take(3).copied().collect::<Vec<_>>().join(", ");
+    let summary = sorted
+        .iter()
+        .take(3)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
     let extra = if sorted.len() > 3 {
         format!(" (+{} more)", sorted.len() - 3)
     } else {
@@ -695,11 +915,11 @@ fn message_for_paths(paths: &HashSet<String>) -> String {
 /// **changed-path index** — not a hand-rolled DAG walk with per-commit tree
 /// diffs (that was the concurrency cliff under `_history`).
 async fn list_inner(dir: &Path) -> HistoryResult<Vec<HistoryEntry>> {
-    let (_workspace, repo) = load_workspace(dir).await?;
+    let (workspace, repo) = load_workspace(dir).await?;
     let store = repo.store();
     let wc_id = repo
         .view()
-        .get_wc_commit_id(WorkspaceName::DEFAULT)
+        .get_wc_commit_id(workspace.workspace_name())
         .ok_or_else(|| HistoryError::msg("no working-copy commit"))?
         .clone();
 
@@ -793,7 +1013,11 @@ async fn files_summary_from_index(
     }
 }
 
-async fn file_at_inner(dir: &Path, revision_id: &str, path: &str) -> HistoryResult<Option<Vec<u8>>> {
+async fn file_at_inner(
+    dir: &Path,
+    revision_id: &str,
+    path: &str,
+) -> HistoryResult<Option<Vec<u8>>> {
     let (_workspace, repo) = load_workspace(dir).await?;
     let commit = match resolve_revision(repo.as_ref(), revision_id)? {
         Some(c) => c,
@@ -822,9 +1046,7 @@ async fn file_list_at_inner(dir: &Path, revision_id: &str) -> HistoryResult<Vec<
     let mut paths = Vec::new();
     let mut stream = root.tree().diff_stream(&commit.tree(), &EverythingMatcher);
     while let Some(entry) = stream.next().await {
-        let values = entry
-            .values
-            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        let values = entry.values.map_err(|e| HistoryError::msg(e.to_string()))?;
         let Diff { before: _, after } = values;
         let path = entry.path.as_internal_file_string().to_owned();
         if is_machinery_path(&path) {
@@ -839,12 +1061,12 @@ async fn file_list_at_inner(dir: &Path, revision_id: &str) -> HistoryResult<Vec<
 }
 
 async fn restore_plan_inner(dir: &Path, revision_id: &str) -> HistoryResult<RestorePlan> {
-    let (_workspace, repo) = load_workspace(dir).await?;
+    let (workspace, repo) = load_workspace(dir).await?;
     let target = resolve_revision(repo.as_ref(), revision_id)?
         .ok_or_else(|| HistoryError::msg("revision not found"))?;
     let wc_id = repo
         .view()
-        .get_wc_commit_id(WorkspaceName::DEFAULT)
+        .get_wc_commit_id(workspace.workspace_name())
         .ok_or_else(|| HistoryError::msg("no working-copy commit"))?
         .clone();
     let wc = repo
@@ -856,9 +1078,7 @@ async fn restore_plan_inner(dir: &Path, revision_id: &str) -> HistoryResult<Rest
     let mut deletes = Vec::new();
     let mut stream = wc.tree().diff_stream(&target.tree(), &EverythingMatcher);
     while let Some(entry) = stream.next().await {
-        let values = entry
-            .values
-            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        let values = entry.values.map_err(|e| HistoryError::msg(e.to_string()))?;
         let Diff { before, after } = values;
         let path = entry.path.as_internal_file_string().to_owned();
         if is_machinery_path(&path) {
@@ -941,9 +1161,7 @@ async fn diff_summary(before: &MergedTree, after: &MergedTree) -> HistoryResult<
     let mut out = Vec::new();
     let mut stream = before.diff_stream(after, &EverythingMatcher);
     while let Some(entry) = stream.next().await {
-        let values = entry
-            .values
-            .map_err(|e| HistoryError::msg(e.to_string()))?;
+        let values = entry.values.map_err(|e| HistoryError::msg(e.to_string()))?;
         let Diff { before, after } = values;
         let path = entry.path.as_internal_file_string();
         let had = before.as_resolved().and_then(|v| v.as_ref()).is_some();
@@ -1011,6 +1229,64 @@ mod tests {
 
         assert!(error.to_string().contains("requires .deck/history"));
         assert!(!depot.join(".deck/history").exists());
+        std::fs::remove_dir_all(depot).unwrap();
+    }
+
+    #[test]
+    fn forks_a_named_workspace_with_shared_history_and_isolated_working_copy() {
+        let depot = temporary_depot("branch-workspace");
+        pollster::block_on(ensure_repo_inner(&depot)).unwrap();
+        std::fs::write(depot.join("button.gts"), "export const tone = 'blue';\n").unwrap();
+        let source = pollster::block_on(seal_inner(&depot, "baseline", None))
+            .unwrap()
+            .unwrap();
+
+        let branch = depot.join(".deck/branches/ana%2Fbutton-tone");
+        pollster::block_on(fork_workspace_inner(
+            &depot,
+            &branch,
+            &source,
+            "deck:ana/button-tone",
+        ))
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(branch.join("button.gts")).unwrap(),
+            "export const tone = 'blue';\n"
+        );
+        assert!(!branch.join(".deck").exists());
+        assert_eq!(
+            canonical_workspace_repo(&branch).unwrap(),
+            canonical_workspace_repo(&depot).unwrap(),
+            "the branch reuses the Realm's one durable History repository"
+        );
+        pollster::block_on(ensure_repo_inner(&branch)).unwrap();
+
+        std::fs::write(branch.join("button.gts"), "export const tone = 'violet';\n").unwrap();
+        let branch_change = pollster::block_on(seal_inner(&branch, "violet tone", None))
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(depot.join("button.gts")).unwrap(),
+            "export const tone = 'blue';\n",
+            "a branch save never mutates main's live tree"
+        );
+        assert_eq!(
+            pollster::block_on(list_inner(&depot)).unwrap().len(),
+            1,
+            "main's History follows only its own workspace"
+        );
+        assert_eq!(
+            pollster::block_on(list_inner(&branch))
+                .unwrap()
+                .iter()
+                .map(|entry| entry.change_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![branch_change.as_str(), source.as_str()],
+            "the branch inherits source ancestry and then diverges"
+        );
+
         std::fs::remove_dir_all(depot).unwrap();
     }
 }

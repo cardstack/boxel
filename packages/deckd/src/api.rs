@@ -24,6 +24,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/health", get(|| async { "ok" }))
         .route("/ensure", post(ensure))
+        .route("/fork", post(fork))
         .route("/note", post(note))
         .route("/flush", post(flush))
         .route("/seal", post(seal))
@@ -44,6 +45,15 @@ struct EnsureBody {
 #[derive(Debug, Deserialize)]
 struct DirBody {
     dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ForkBody {
+    source_dir: String,
+    target_dir: String,
+    revision_id: String,
+    workspace_name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,6 +125,21 @@ async fn ensure(
             tracing::warn!(dir = %body.dir, %error, "watch register failed");
         }
     }
+    Ok(Json(serde_json::json!({})))
+}
+
+async fn fork(
+    State(st): State<AppState>,
+    Json(body): Json<ForkBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    st.history
+        .fork(
+            &body.source_dir,
+            &body.target_dir,
+            &body.revision_id,
+            &body.workspace_name,
+        )
+        .await?;
     Ok(Json(serde_json::json!({})))
 }
 

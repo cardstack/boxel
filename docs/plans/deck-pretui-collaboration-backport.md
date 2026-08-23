@@ -428,6 +428,28 @@ CLI support is not deferred until B7. Each B slice lands its corresponding
 public command and integration test. B7 consolidates the full agent workflow,
 stable JSON output, documentation, and end-to-end replay.
 
+### B4 physical branch model
+
+“Clone” is logical, not a bulk copy. A new branch initially reuses the source
+branch's exact immutable Repository hash, import-map lock, and completed index
+generation. Realm Server asks deckd to create one lightweight named jj
+workspace at `.deck/branches/<encoded-name>/`; its editable working-copy change
+has the source History Checkpoint as its exact parent and its `.jj/repo` pointer
+targets the owning Realm's one `.deck/history/repo`.
+
+Branch preparation is therefore copy-on-write:
+
+1. resolve the exact source branch head and Checkpoint;
+2. create and materialize the named History workspace;
+3. reuse the already complete immutable Repository/lock/index hashes;
+4. publish the new branch ref with compare-and-create only after preparation;
+5. expose the branch in CLI/Host listings only after the ref exists.
+
+Named branch saves operate on that branch workspace. They append to its History
+ancestry and advance its conditional branch ref without changing `main`'s live
+tree. A later merge is the operation that materializes one accepted candidate
+into `main` and advances its History/ref/index boundary once.
+
 Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only
 when directly invoked while its endpoint, worker, CLI command, or Host surface

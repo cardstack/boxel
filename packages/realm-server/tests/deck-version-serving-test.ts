@@ -42,6 +42,7 @@ class TestHistory implements HistoryBackend {
   }> = [];
 
   noteMutation(): void {}
+  async fork(): Promise<void> {}
   async flush(): Promise<string | undefined> {
     return undefined;
   }

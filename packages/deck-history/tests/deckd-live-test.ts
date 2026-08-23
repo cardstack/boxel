@@ -1,6 +1,6 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { applyRestore } from '../src/backend.ts';
@@ -106,6 +106,38 @@ if (!baseUrl) {
       );
       assert.ok(await history.seal(dir, 'accepted batch'));
       assert.strictEqual((await history.list(dir, { flush: false })).length, 2);
+    });
+
+    test('a named branch shares ancestry but isolates its working tree', async function (assert) {
+      await writeFile(join(dir, 'button.gts'), "export const tone = 'blue';\n");
+      let baseline = await history.seal(dir, 'baseline');
+      assert.ok(baseline);
+
+      let branchRoot = join(dir, '.deck', 'branches');
+      let branchDir = join(branchRoot, 'ana%2Fbutton-tone');
+      await mkdir(branchRoot, { recursive: true });
+      await history.fork(dir, branchDir, baseline!, 'deck:ana/button-tone');
+      assert.strictEqual(
+        (await readFile(join(branchDir, 'button.gts'))).toString(),
+        "export const tone = 'blue';\n",
+      );
+
+      await writeFile(
+        join(branchDir, 'button.gts'),
+        "export const tone = 'violet';\n",
+      );
+      await history.seal(branchDir, 'violet tone');
+      assert.strictEqual(
+        (await readFile(join(dir, 'button.gts'))).toString(),
+        "export const tone = 'blue';\n",
+        'the branch does not mutate main',
+      );
+      assert.strictEqual((await history.list(dir, { flush: false })).length, 1);
+      assert.strictEqual(
+        (await history.list(branchDir, { flush: false })).length,
+        2,
+        'the branch sees its save plus inherited ancestry',
+      );
     });
   });
 }
