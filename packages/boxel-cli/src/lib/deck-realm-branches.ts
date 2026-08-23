@@ -20,6 +20,7 @@ export interface DeckRealmBranchSummary {
   historyHead: string;
   indexGenerationHash: string;
   refGeneration: number;
+  checkpointHash: string;
 }
 
 export interface DeckRealmBranchList {
@@ -103,6 +104,8 @@ function isBranchCreateResult(
     result.historyHead !== '' &&
     typeof result.indexGenerationHash === 'string' &&
     HASH.test(result.indexGenerationHash) &&
+    typeof result.checkpointHash === 'string' &&
+    HASH.test(result.checkpointHash) &&
     Number.isSafeInteger(result.refGeneration) &&
     (result.refGeneration as number) >= 1
   );

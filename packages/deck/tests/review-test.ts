@@ -8,6 +8,7 @@ import { review, reviewEvent, reviewHash } from '../src/review.ts';
 import {
   allocateConditionalReviewNumber,
   appendReviewEvent,
+  createBranchReview,
   createConditionalReview,
   createReview,
   mergeReview,
@@ -125,6 +126,71 @@ module('Repository Reviews', function (hooks) {
         }),
       /Checkpoint hash/,
     );
+  });
+
+  test('a branch Review derives its base from Checkpoint ancestry', async function (assert) {
+    let lockHash = await storeRepositoryLock(realmDir, { imports: {} });
+    let repositoryHash = await storeRepository(
+      realmDir,
+      repository({
+        roots: ['@acme/dashboard/'],
+        members: { '@acme/dashboard/': A },
+        lockHash,
+      }),
+    );
+    let point = (label: string, parents: string[] = []) =>
+      storeCheckpoint(
+        realmDir,
+        checkpoint({
+          repositoryHash,
+          parents,
+          historyHead: `history-${label}`,
+          indexGenerationHash: B,
+          author: { id: '@test:deck.test' },
+          message: label,
+          createdAt: '2026-08-20T00:00:00.000Z',
+        }),
+      );
+    let forkBase = await point('fork-base');
+    let target = await point('target-moved', [forkBase]);
+    let sourceFork = await point('source-fork', [forkBase]);
+    let source = await point('source-work', [sourceFork]);
+    await updateBranchHead({
+      realmDir,
+      branch: 'main',
+      expectedGeneration: null,
+      next: {
+        repositoryHash,
+        historyHead: 'history-target-moved',
+        indexGenerationHash: B,
+        latestCheckpointHash: target,
+      },
+    });
+    await updateBranchHead({
+      realmDir,
+      branch: 'mina/focus-ring',
+      expectedGeneration: null,
+      next: {
+        repositoryHash,
+        historyHead: 'history-source-work',
+        indexGenerationHash: B,
+        latestCheckpointHash: source,
+      },
+    });
+
+    let opened = await createBranchReview({
+      realmDir,
+      repository: '@acme/dashboard/',
+      sourceBranch: 'mina/focus-ring',
+      targetBranch: 'main',
+      title: 'Visible focus',
+      author: { id: '@mina:deck.test' },
+      createdAt: '2026-08-20T00:01:00.000Z',
+    });
+
+    assert.strictEqual(opened.review.base.checkpointHash, forkBase);
+    assert.strictEqual(opened.review.target.checkpointHash, target);
+    assert.strictEqual(opened.review.source.checkpointHash, source);
   });
 
   test('conditional Review creation uses immutable objects and conditional refs', async function (assert) {

@@ -5,6 +5,7 @@ import { isExactVersionRRI, parseRRI, realmRRI } from '@cardstack/deck';
 import {
   canonicalJson,
   isHash,
+  listReviews,
   previewReview,
   readBranchHead,
   readCheckpoint,
@@ -68,6 +69,7 @@ export interface DeckRepositoryProtocol {
   readonly realmRRI: string;
   readBranch(branch: string): Promise<CanonicalBranchSnapshot | undefined>;
   readReview(number: number): Promise<CanonicalReview | undefined>;
+  listReviews(): Promise<CanonicalReview[]>;
   previewReview(number: number): Promise<RepositoryMergeResult>;
   readVersionOrigin(versionRRI: string): Promise<VersionOrigin | undefined>;
   recordVersionOrigin(options: {
@@ -205,19 +207,18 @@ export function openDeckRepositoryProtocol(options: {
       if (head.latestCheckpointHash && !checkpoint) {
         integrity(`missing Checkpoint ${head.latestCheckpointHash}`);
       }
-      if (
+      let exactCheckpoint =
         checkpoint &&
-        (checkpoint.repositoryHash !== head.repositoryHash ||
-          checkpoint.historyHead !== head.historyHead ||
-          checkpoint.indexGenerationHash !== head.indexGenerationHash)
-      ) {
-        integrity(`branch ${branch} does not match its latest Checkpoint`);
-      }
+        checkpoint.repositoryHash === head.repositoryHash &&
+        checkpoint.historyHead === head.historyHead &&
+        checkpoint.indexGenerationHash === head.indexGenerationHash
+          ? checkpoint
+          : undefined;
       return {
         realmRRI: canonicalRealmRRI,
         branch,
         head,
-        ...(checkpoint ? { checkpoint } : {}),
+        ...(exactCheckpoint ? { checkpoint: exactCheckpoint } : {}),
         repository,
         lock,
       };
@@ -244,6 +245,16 @@ export function openDeckRepositoryProtocol(options: {
         ),
       ]);
       return { stored, base, target, source };
+    },
+
+    async listReviews() {
+      let stored = await listReviews(options.realmDir);
+      let values = await Promise.all(
+        stored.map(({ ref }) => this.readReview(ref.number)),
+      );
+      return values.filter(
+        (value): value is CanonicalReview => value !== undefined,
+      );
     },
 
     async previewReview(number) {

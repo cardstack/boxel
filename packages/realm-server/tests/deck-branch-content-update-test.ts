@@ -205,7 +205,16 @@ module('Deck branch content updates', function (hooks) {
     );
     assert.strictEqual(after?.repository.members[realmRRI], result.treeHash);
     assert.strictEqual(after?.head.historyHead, 'step2');
-    assert.strictEqual(after?.head.latestCheckpointHash, null);
+    assert.strictEqual(
+      after?.head.latestCheckpointHash,
+      before!.head.latestCheckpointHash,
+      'daily saves retain Checkpoint ancestry without claiming to be exact',
+    );
+    assert.strictEqual(
+      after?.checkpoint,
+      undefined,
+      'the moved branch has no exact current Checkpoint',
+    );
     let index = await readDeckBranchIndex({
       realmDir,
       realmRRI,

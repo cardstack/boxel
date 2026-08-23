@@ -262,7 +262,10 @@ export async function updateDeckBranchContent(options: {
           repositoryHash,
           historyHead,
           indexGenerationHash: index.indexGenerationHash,
-          latestCheckpointHash: null,
+          // A save moves beyond the exact Checkpoint but does not erase its
+          // ancestry. The observation layer reports null until a new exact
+          // Checkpoint is created.
+          latestCheckpointHash: current.head.latestCheckpointHash,
         },
       });
       return {

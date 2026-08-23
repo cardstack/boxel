@@ -113,6 +113,7 @@ describe('Deck Realm branches', () => {
       historyHead: branch.historyHead,
       indexGenerationHash: branch.indexGenerationHash,
       refGeneration: branch.refGeneration,
+      checkpointHash: hashWorkspaceBytes('branch-checkpoint'),
     } as const;
     let requests: { url: string; init?: RequestInit }[] = [];
     let authenticator = remote({ branches: list, create: created, requests });

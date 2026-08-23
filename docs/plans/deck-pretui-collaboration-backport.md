@@ -1,13 +1,18 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6 and B0–B5a are implemented as a local stack on 2026-08-23.
+**Status:** A0–A6, B0–B5a, and the fixed-Review portion of B5b are implemented
+as a local stack on 2026-08-23.
 B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
 prerender/Loader/search isolation, Host-owned exact view selection, and the
 ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
 atomic Realm Server branch preparation/listing, named-branch writes and
 History, Boxel CLI list/create/switch support, the mounted PretUI development
 task, and a real two-checkout CLI replay against Realm Server. The visible Host
-branch chooser remains the final B4 product surface. B1b is an optional
+branch chooser remains the final B4 product surface. B5b now exposes
+authenticated Review open/list/show routes and CLI commands. Review opening
+requires clean, current source and target Checkpoints and derives the immutable
+three-way base from Checkpoint ancestry; exact candidate Browse/Run/catalog
+presentation remains before B5b is complete. B1b is an optional
 hosted-infrastructure slice. No B-series pull request or remote branch has been
 created from this stack.
 
@@ -461,6 +466,9 @@ boxel realm branch create <realm-url> <name> [--from <branch>] [--json]
 boxel realm branch switch <local-dir> <name> [--json]
 boxel realm sync <local-dir> <realm-url> [--branch <name>]
 boxel realm checkpoint <local-dir> --message <description> [--json]
+boxel realm review open <local-dir> --target <branch> --title <title> [--body <body>] [--json]
+boxel realm review list <realm-url> [--json]
+boxel realm review show <realm-url> <number> [--json]
 ```
 
 `realm sync` follows the branch already recorded in `.boxel-sync.json`.
@@ -472,6 +480,14 @@ the exact Repository, tree, lock, and observed ref generation to Realm Server;
 a stale request writes nothing. Realm Server stores the immutable Checkpoint,
 advances only the branch ref, and returns the new generation so the same local
 workspace can continue authoring without a pull.
+
+B5b's Review-open command observes the source and target branches immediately
+before POSTing and supplies both exact Checkpoint hashes as preconditions.
+Realm Server holds the two branch writer locks in lexical order, rejects a
+moved head, derives the common ancestor from the Checkpoint DAG, and writes one
+immutable Review object plus its numbered ref. Listing or showing a Review
+returns exact base, target, and source Repository/tree/lock/History/index
+identities; moving either branch afterward cannot rewrite those snapshots.
 
 Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only

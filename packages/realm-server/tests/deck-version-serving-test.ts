@@ -395,6 +395,139 @@ module('exact Deck Version serving', function (hooks) {
     );
   });
 
+  test('opens and reads a Review pinned to exact branch Checkpoints', async function (assert) {
+    let createdBranch = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branches', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-create-v1',
+          branchName: 'mina/focus-ring',
+          fromBranch: 'main',
+        }),
+      }),
+    );
+    assert.strictEqual(createdBranch?.status, 201);
+
+    let sourceResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/branch?name=mina%2Ffocus-ring',
+      ),
+    );
+    let source = (await sourceResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+      checkpointHash: string;
+    };
+    let nextBytes = 'export const accent = "visible-focus";\n';
+    let updatedResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/branch?name=mina%2Ffocus-ring',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            schema: 'boxel-deck-branch-update-v2',
+            message: 'save: visible focus ring',
+            expected: source,
+            operations: [
+              {
+                path: 'index.js',
+                sha256: hashBytes(nextBytes),
+                contentBase64: Buffer.from(nextBytes).toString('base64'),
+              },
+            ],
+          }),
+        },
+      ),
+    );
+    let updated = (await updatedResponse?.json()) as typeof source;
+    assert.strictEqual(updatedResponse?.status, 200);
+    let checkpointResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/checkpoint?branch=mina%2Ffocus-ring',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            schema: 'boxel-deck-checkpoint-create-v1',
+            message: 'Visible focus candidate',
+            expected: updated,
+          }),
+        },
+      ),
+    );
+    let checkpointed = (await checkpointResponse?.json()) as {
+      checkpointHash: string;
+    };
+    assert.strictEqual(checkpointResponse?.status, 201);
+    let mainResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let main = (await mainResponse?.json()) as {
+      checkpointHash: string;
+    };
+
+    let openedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/reviews', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-review-open-v1',
+          sourceBranch: 'mina/focus-ring',
+          targetBranch: 'main',
+          expected: {
+            sourceCheckpointHash: checkpointed.checkpointHash,
+            targetCheckpointHash: main.checkpointHash,
+          },
+          title: 'Make keyboard focus unmistakable',
+          body: 'A visible design-system change for PretUI consumers.',
+        }),
+      }),
+    );
+    let opened = (await openedResponse?.json()) as {
+      schema: string;
+      number: number;
+      state: string;
+      base: { checkpointHash: string };
+      target: { checkpointHash: string };
+      source: { checkpointHash: string; treeHash: string };
+    };
+    assert.strictEqual(openedResponse?.status, 201);
+    assert.strictEqual(opened.schema, 'boxel-deck-review-v1');
+    assert.strictEqual(opened.state, 'open');
+    assert.strictEqual(opened.base.checkpointHash, main.checkpointHash);
+    assert.strictEqual(opened.target.checkpointHash, main.checkpointHash);
+    assert.strictEqual(
+      opened.source.checkpointHash,
+      checkpointed.checkpointHash,
+    );
+    assert.strictEqual(opened.source.treeHash, updated.treeHash);
+
+    let shown = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/review?number=${opened.number}`,
+      ),
+    );
+    let listed = await serve(
+      new Request('https://realms.example/acme/theme/.deck/reviews'),
+    );
+    assert.strictEqual(shown?.status, 200);
+    assert.strictEqual(
+      ((await shown?.json()) as { source: { checkpointHash: string } }).source
+        .checkpointHash,
+      checkpointed.checkpointHash,
+    );
+    assert.deepEqual(
+      ((await listed?.json()) as { reviews: { number: number }[] }).reviews.map(
+        ({ number }) => number,
+      ),
+      [opened.number],
+    );
+  });
+
   test('serves branch bytes from the observed immutable tree', async function (assert) {
     let branch = await serve(
       new Request('https://realms.example/acme/theme/.deck/branch?name=main'),

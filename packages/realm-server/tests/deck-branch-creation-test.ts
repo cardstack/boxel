@@ -6,6 +6,7 @@ import {
   ensureRepositoryMain,
   hashBytes,
   readBranchHead,
+  readCheckpoint,
   readTreeFromDir,
   repositoryManifest,
   writeTreeToDir,
@@ -114,6 +115,7 @@ module('Deck branch creation', function (hooks) {
       realmRRI,
       policy,
       history,
+      actor: { id: '@ana:boxel.test', name: 'Ana' },
       request: {
         schema: DECK_BRANCH_CREATE_SPEC,
         branchName,
@@ -146,6 +148,19 @@ module('Deck branch creation', function (hooks) {
     );
     assert.strictEqual(result.branch.head.historyHead, 'step1');
     assert.strictEqual(result.branch.head.indexGenerationHash, preparedHash);
+    let branchCheckpoint = await readCheckpoint(
+      realmDir,
+      result.branch.head.latestCheckpointHash!,
+    );
+    assert.deepEqual(
+      branchCheckpoint?.parents,
+      [result.source.head.latestCheckpointHash],
+      'the branch Checkpoint preserves the exact fork base',
+    );
+    assert.strictEqual(
+      branchCheckpoint?.indexGenerationHash,
+      result.branch.head.indexGenerationHash,
+    );
     assert.notStrictEqual(
       result.branch.head.indexGenerationHash,
       result.source.head.indexGenerationHash,
@@ -168,6 +183,7 @@ module('Deck branch creation', function (hooks) {
         realmRRI,
         policy,
         history,
+        actor: { id: '@kim:boxel.test', name: 'Kim' },
         request: {
           schema: DECK_BRANCH_CREATE_SPEC,
           branchName,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
   canonicalJson,
@@ -54,6 +54,26 @@ export interface StoredReview {
   ref: ReviewRef;
   review: Review;
   events: ReviewEvent[];
+}
+
+async function exactBranchCheckpoint(
+  realmDir: string,
+  branch: string,
+  head: Awaited<ReturnType<typeof readBranchHead>>,
+): Promise<string> {
+  if (!head?.latestCheckpointHash) {
+    throw new Error(`${branch} has no Checkpoint`);
+  }
+  let value = await readCheckpoint(realmDir, head.latestCheckpointHash);
+  if (!value) throw new Error(`missing Checkpoint ${head.latestCheckpointHash}`);
+  if (
+    value.repositoryHash !== head.repositoryHash ||
+    value.historyHead !== head.historyHead ||
+    value.indexGenerationHash !== head.indexGenerationHash
+  ) {
+    throw new Error(`${branch} has changes after its latest Checkpoint`);
+  }
+  return head.latestCheckpointHash;
 }
 
 function objectPath(realmDir: string, kind: 'objects' | 'events', hash: string): string {
@@ -211,32 +231,89 @@ export async function createBranchReview(options: {
     readBranchHead(options.realmDir, options.sourceBranch),
     readBranchHead(options.realmDir, options.targetBranch),
   ]);
-  if (!source?.latestCheckpointHash) {
-    throw new Error(`source branch ${options.sourceBranch} has no Checkpoint`);
-  }
-  if (!target?.latestCheckpointHash) {
-    throw new Error(`target branch ${options.targetBranch} has no Checkpoint`);
-  }
+  let [sourceCheckpointHash, targetCheckpointHash] = await Promise.all([
+    exactBranchCheckpoint(options.realmDir, options.sourceBranch, source),
+    exactBranchCheckpoint(options.realmDir, options.targetBranch, target),
+  ]);
   let repository = realmRRI(options.repository);
-  let baseCheckpointHash = options.baseCheckpointHash ?? target.latestCheckpointHash;
+  let baseCheckpointHash =
+    options.baseCheckpointHash ??
+    (await findCommonCheckpoint(options.realmDir, sourceCheckpointHash, targetCheckpointHash));
+  if (!baseCheckpointHash) {
+    throw new Error(
+      `branches ${options.sourceBranch} and ${options.targetBranch} have no common Checkpoint`,
+    );
+  }
   return createReview({
     realmDir: options.realmDir,
     base: { repository, branch: options.targetBranch, checkpointHash: baseCheckpointHash },
     target: {
       repository,
       branch: options.targetBranch,
-      checkpointHash: target.latestCheckpointHash,
+      checkpointHash: targetCheckpointHash,
     },
     source: {
       repository,
       branch: options.sourceBranch,
-      checkpointHash: source.latestCheckpointHash,
+      checkpointHash: sourceCheckpointHash,
     },
     title: options.title,
     body: options.body,
     author: options.author,
     createdAt: options.createdAt,
   });
+}
+
+async function checkpointDistances(
+  realmDir: string,
+  head: string,
+): Promise<Map<string, number>> {
+  let distances = new Map<string, number>();
+  let pending: Array<{ hash: string; distance: number }> = [{ hash: head, distance: 0 }];
+  while (pending.length > 0) {
+    let { hash, distance } = pending.shift()!;
+    let prior = distances.get(hash);
+    if (prior !== undefined && prior <= distance) continue;
+    distances.set(hash, distance);
+    let value = await readCheckpoint(realmDir, hash);
+    if (!value) throw new Error(`missing Checkpoint ${hash}`);
+    pending.push(...value.parents.map((parent) => ({ hash: parent, distance: distance + 1 })));
+  }
+  return distances;
+}
+
+export async function findCommonCheckpoint(
+  realmDir: string,
+  leftHead: string,
+  rightHead: string,
+): Promise<string | undefined> {
+  let [left, right] = await Promise.all([
+    checkpointDistances(realmDir, leftHead),
+    checkpointDistances(realmDir, rightHead),
+  ]);
+  return [...left]
+    .filter(([hash]) => right.has(hash))
+    .sort(
+      ([leftHash, leftDistance], [rightHash, rightDistance]) =>
+        leftDistance + right.get(leftHash)! - (rightDistance + right.get(rightHash)!) ||
+        leftHash.localeCompare(rightHash),
+    )[0]?.[0];
+}
+
+export async function listReviews(realmDir: string): Promise<StoredReview[]> {
+  let names: string[];
+  try {
+    names = await readdir(realmDeckPath(realmDir, REVIEWS_DIR, 'numbers'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  let numbers = names
+    .filter((name) => /^[1-9][0-9]*\.json$/.test(name))
+    .map((name) => Number(name.slice(0, -'.json'.length)))
+    .sort((a, b) => a - b);
+  let values = await Promise.all(numbers.map((number) => readReview(realmDir, number)));
+  return values.filter((value): value is StoredReview => value !== undefined);
 }
 
 export async function readReview(realmDir: string, number: number): Promise<StoredReview | undefined> {
@@ -312,11 +389,15 @@ export async function previewReview(realmDir: string, number: number) {
   let value = await readReview(realmDir, number);
   if (!value) throw new Error(`no Review #${number}`);
   let target = await readBranchHead(realmDir, value.review.target.branch);
-  if (!target?.latestCheckpointHash) throw new Error('Review target branch has no Checkpoint');
+  let targetCheckpointHash = await exactBranchCheckpoint(
+    realmDir,
+    value.review.target.branch,
+    target,
+  );
   return mergeRepositoryCheckpoints({
     realmDir,
     baseCheckpointHash: value.review.base.checkpointHash,
-    targetCheckpointHash: target.latestCheckpointHash,
+    targetCheckpointHash,
     sourceCheckpointHash: effectiveSource(value),
   });
 }
@@ -343,6 +424,7 @@ export async function mergeReview(options: {
     let head = await readBranchHead(options.realmDir, value.review.target.branch);
     if (!head) throw new Error('Review target branch disappeared');
     if (head.latestCheckpointHash === prepared.parents[0]) {
+      await exactBranchCheckpoint(options.realmDir, value.review.target.branch, head);
       await updateBranchHead({
         realmDir: options.realmDir,
         branch: value.review.target.branch,
@@ -378,18 +460,23 @@ export async function mergeReview(options: {
   }
 
   let target = await readBranchHead(options.realmDir, value.review.target.branch);
-  if (!target?.latestCheckpointHash) throw new Error('Review target branch has no Checkpoint');
+  if (!target) throw new Error('Review target branch disappeared');
+  let targetCheckpointHash = await exactBranchCheckpoint(
+    options.realmDir,
+    value.review.target.branch,
+    target,
+  );
   let sourceCheckpointHash = effectiveSource(value);
   let result = await mergeRepositoryCheckpoints({
     realmDir: options.realmDir,
     baseCheckpointHash: value.review.base.checkpointHash,
-    targetCheckpointHash: target.latestCheckpointHash,
+    targetCheckpointHash,
     sourceCheckpointHash,
   });
   if (result.state === 'conflicted') return result;
   let prepared = checkpoint({
     repositoryHash: result.repositoryHash,
-    parents: [target.latestCheckpointHash, sourceCheckpointHash],
+    parents: [targetCheckpointHash, sourceCheckpointHash],
     historyHead: options.historyHead,
     indexGenerationHash: options.indexGenerationHash,
     author: options.actor,

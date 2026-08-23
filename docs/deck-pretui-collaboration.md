@@ -61,6 +61,14 @@ boxel realm push ~/Projects/pretui-mina https://localhost:4201/pretui/
 boxel realm checkpoint \
   ~/Projects/pretui-mina \
   --message "Focus ring 1.1 review candidate"
+boxel realm review open \
+  ~/Projects/pretui-mina \
+  --target main \
+  --title "Make keyboard focus unmistakable" \
+  --body "Updates the focus token and the field that consumes it."
+
+boxel realm review list https://localhost:4201/pretui/
+boxel realm review show https://localhost:4201/pretui/ 1
 ```
 
 The checkout's `.boxel-sync.json` records the Realm RRI, branch identity,
@@ -84,6 +92,13 @@ and completed index generation for Review. It does not create a Git commit or
 stop later saves. The CLI refuses to Checkpoint unpushed bytes or a branch that
 moved since the workspace observed it.
 
+A Review is not a mutable alias for its source branch. Opening one pins three
+exact Checkpoints: the source candidate, the target as observed, and their
+common ancestor as the three-way merge base. The CLI refuses dirty source
+bytes, stale branch state, or a source/target without an exact Checkpoint.
+Later saves remain recoverable in History but cannot silently change what a
+reviewer sees.
+
 ## What the fixture proves
 
 The replay contains 28 design-system units across foundations, layout,
@@ -99,5 +114,5 @@ branch-qualified index, waits for the exact preview to be ready, and only then
 publishes the branch ref. Each accepted push appends one History Step and moves
 that branch ref once.
 
-Review, merge, and exact-Version syndication commands are layered on this same
-branch state; see the backport plan for their rollout order.
+Review open/list/show commands are layered on this same branch state. Merge and
+exact-Version syndication follow the rollout order in the backport plan.

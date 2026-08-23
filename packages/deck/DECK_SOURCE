@@ -9,10 +9,10 @@
 # tree-hash below and fails if this tree was edited in place.
 
 source: https://github.com/cardstack/deck
-deck-commit: 1ba3a0719f9696a15680b1ee1f8b3df6615076c5
-deck-subject: Establish the current-only Deck R0 protocol
-deck-date: 2026-08-23T08:56:20+08:00
+deck-commit: e9a33e60c4141b4f41783c937153041596989242
+deck-subject: Pin Reviews to common Checkpoint ancestry
+deck-date: 2026-08-23T22:27:25+08:00
 vendored: src tests
 file-count: 59
 tree-hash-spec: tree-hash-v1
-tree-hash: 3956c528dd6a124c010693bc569a526911ba8718f1bc9a7b43a30e7619eaae32
+tree-hash: a61ccd816f496d40c1a29d703accc14696809d6f3afd940b990d4a0e5a5e7f06

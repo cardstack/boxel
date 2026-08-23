@@ -68,6 +68,13 @@ import {
   type DeckCheckpointCreateRequest,
 } from '../lib/deck-branch-checkpoint.ts';
 import {
+  DeckReviewConflictError,
+  listDeckReviews,
+  openDeckReview,
+  readDeckReview,
+  type DeckReviewOpenRequest,
+} from '../lib/deck-review-workflow.ts';
+import {
   DeckIndexPendingError,
   queryDeckBranchIndex,
   readDeckBranchIndex,
@@ -101,6 +108,8 @@ const TREE_FILE_PATH = '.deck/tree-file';
 const HISTORY_PATH = '.deck/history';
 const BRANCH_INDEX_PATH = '.deck/branch-index';
 const CHECKPOINT_PATH = '.deck/checkpoint';
+const REVIEW_PATH = '.deck/review';
+const REVIEWS_PATH = '.deck/reviews';
 
 class DeckBranchViewPreparationError extends Error {
   constructor(cause: unknown) {
@@ -375,7 +384,9 @@ async function handleDeckBranchRequest(
     refGeneration: snapshot.head.generation,
     historyHead: snapshot.head.historyHead,
     indexGenerationHash: snapshot.head.indexGenerationHash,
-    checkpointHash: snapshot.head.latestCheckpointHash,
+    checkpointHash: snapshot.checkpoint
+      ? snapshot.head.latestCheckpointHash
+      : null,
     files,
   });
   return new Response(request.method === 'HEAD' ? null : body, {
@@ -465,6 +476,9 @@ async function handleDeckBranchesRequest(
       realmRRI,
       policy: deps.deckCollaboration!,
       history: deps.deckHistory,
+      actor: {
+        id: historyActor(request, deps)?.name ?? '@realm-server:internal',
+      },
       request: body,
       ...(prepareView ? { prepareView } : {}),
     });
@@ -492,6 +506,7 @@ async function handleDeckBranchesRequest(
         historyHead: created.branch.head.historyHead,
         indexGenerationHash: created.branch.head.indexGenerationHash,
         refGeneration: created.branch.head.generation,
+        checkpointHash: created.branch.head.latestCheckpointHash,
       },
       { status: 201 },
     );
@@ -613,6 +628,156 @@ async function handleDeckCheckpointRequest(
     }
     throw error;
   }
+}
+
+async function handleDeckReviewsRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(REVIEWS_PATH)) return null;
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.method !== 'POST'
+  ) {
+    return new Response('Unsupported Deck Reviews method', {
+      status: 405,
+      headers: { allow: 'GET, HEAD, POST' },
+    });
+  }
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -REVIEWS_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization =
+    request.method === 'POST'
+      ? await authorizeWrite(request, realm)
+      : await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    let reviews = await listDeckReviews({
+      realmDir: realm.dir,
+      realmRRI,
+      policy: deps.deckCollaboration!,
+    });
+    return new Response(
+      request.method === 'HEAD'
+        ? null
+        : JSON.stringify({
+            schema: 'boxel-deck-review-list-v1',
+            realmRRI,
+            reviews,
+          }),
+      {
+        headers: {
+          'cache-control': 'private, no-store',
+          'content-type': 'application/json',
+        },
+      },
+    );
+  }
+
+  let body: DeckReviewOpenRequest;
+  try {
+    body = (await request.json()) as DeckReviewOpenRequest;
+  } catch {
+    return new Response('Review creation is not valid JSON', { status: 400 });
+  }
+  let history = historyActor(request, deps);
+  try {
+    let review = await openDeckReview({
+      realmDir: realm.dir,
+      realmRRI,
+      policy: deps.deckCollaboration!,
+      actor: {
+        id: history?.name ?? '@realm-server:internal',
+        ...(history?.name ? { name: history.name } : {}),
+      },
+      request: body,
+    });
+    return Response.json(review, { status: 201 });
+  } catch (error) {
+    if (
+      error instanceof DeckReviewConflictError ||
+      error instanceof RefBusyError
+    ) {
+      return new Response('A Review branch moved while opening the Review', {
+        status: 409,
+      });
+    }
+    if (error instanceof Error) {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
+}
+
+async function handleDeckReviewRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(REVIEW_PATH)) return null;
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck Reviews are read with GET', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let number = Number(requestURL.searchParams.get('number'));
+  if (!Number.isSafeInteger(number) || number < 1) {
+    return new Response('Review requires a positive integer number', {
+      status: 400,
+    });
+  }
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -REVIEW_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  let review = await readDeckReview({
+    realmDir: realm.dir,
+    realmRRI,
+    policy: deps.deckCollaboration!,
+    number,
+  });
+  if (!review) return new Response('Review not found', { status: 404 });
+  return new Response(
+    request.method === 'HEAD' ? null : JSON.stringify(review),
+    {
+      headers: {
+        'cache-control': 'private, no-store',
+        'content-type': 'application/json',
+      },
+    },
+  );
 }
 
 async function handleDeckBranchIndexRequest(
@@ -1218,6 +1383,14 @@ export async function handleDeckVersionRequest(
   let checkpoint = await handleDeckCheckpointRequest(request, deps);
   if (checkpoint) {
     return checkpoint;
+  }
+  let reviews = await handleDeckReviewsRequest(request, deps);
+  if (reviews) {
+    return reviews;
+  }
+  let review = await handleDeckReviewRequest(request, deps);
+  if (review) {
+    return review;
   }
   let branchIndex = await handleDeckBranchIndexRequest(request, deps);
   if (branchIndex) {

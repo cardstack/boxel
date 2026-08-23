@@ -13,6 +13,7 @@ import { registerPublishCommand } from './publish.ts';
 import { registerPullCommand } from './pull.ts';
 import { registerPushCommand } from './push.ts';
 import { registerRemoveCommand } from './remove.ts';
+import { registerReviewCommand } from './review.ts';
 import { registerRestoreCommand } from './restore.ts';
 import { registerStatusCommand } from './status.ts';
 import { registerSyncCommand } from './sync.ts';
@@ -39,6 +40,7 @@ export function registerRealmCommand(program: Command): void {
   registerPullCommand(realm);
   registerPushCommand(realm);
   registerRemoveCommand(realm);
+  registerReviewCommand(realm);
   registerRestoreCommand(realm);
   const sync = registerSyncCommand(realm);
   registerStatusCommand(sync);

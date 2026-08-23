@@ -1,6 +1,9 @@
 import {
+  checkpoint,
   readBranchHead,
+  storeCheckpoint,
   updateBranchHead,
+  type Actor,
   type BranchHead,
 } from '@cardstack/deck/node';
 import type { HistoryBackend } from '@cardstack/deck-history/backend';
@@ -80,6 +83,8 @@ export async function createDeckBranch(options: {
   realmRRI: string;
   policy: DeckCollaborationPolicy;
   history: HistoryBackend;
+  actor: Actor;
+  createdAt?: string;
   request: DeckBranchCreateRequest;
   prepareView?: (view: {
     indexGenerationHash: string;
@@ -143,6 +148,22 @@ export async function createDeckBranch(options: {
         historyHead: source.head.historyHead,
       });
 
+      let branchCheckpoint = checkpoint({
+        repositoryHash: source.head.repositoryHash,
+        parents: source.head.latestCheckpointHash
+          ? [source.head.latestCheckpointHash]
+          : [],
+        historyHead: source.head.historyHead,
+        indexGenerationHash: index.indexGenerationHash,
+        author: options.actor,
+        message: `Branch ${branchName} from ${fromBranch}`,
+        createdAt: options.createdAt ?? new Date().toISOString(),
+      });
+      let branchCheckpointHash = await storeCheckpoint(
+        options.realmDir,
+        branchCheckpoint,
+      );
+
       let head = await updateBranchHead({
         realmDir: options.realmDir,
         branch: branchName,
@@ -151,9 +172,9 @@ export async function createDeckBranch(options: {
           repositoryHash: source.head.repositoryHash,
           historyHead: source.head.historyHead,
           indexGenerationHash: index.indexGenerationHash,
-          // A Checkpoint includes the source branch's index generation. The
-          // fork has exact ancestry but gets its own Checkpoint only on demand.
-          latestCheckpointHash: null,
+          // The branch gets a distinct index generation, so it also needs a
+          // distinct Checkpoint. Its parent preserves the exact fork base.
+          latestCheckpointHash: branchCheckpointHash,
         },
       });
       let branch: CanonicalBranchSnapshot = {
