@@ -22,6 +22,9 @@ First create the canonical package described in
 [the Known Date fixture](./deck-pretui-known-date-fixture.md). Then run:
 
 ```sh
+export BOXEL_DECK_COLLABORATION_ENABLED=true
+export BOXEL_DECK_COLLABORATION_REALM_RRIS=@cardstack/pretui/
+
 cd packages/realm-server
 mise exec -- pnpm syndicate:pretui -- \
   "$REALM_DIR" 0.4.0 ../../packages/pretui

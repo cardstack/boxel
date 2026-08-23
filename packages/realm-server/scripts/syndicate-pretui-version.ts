@@ -11,6 +11,7 @@ import {
 } from '@cardstack/deck/node';
 import { format, type Plugin } from 'prettier';
 
+import { deckCollaborationPolicyFromEnvironment } from '../handlers/serve-deck-version.ts';
 import { buildDeckVersionIndex } from '../lib/deck-version-index.ts';
 
 const MAPPING_VERSION = 'pretui-boxel-workspace-v1';
@@ -102,6 +103,13 @@ if (!realmDirArg || !targetDirArg) {
 let realmDir = resolve(realmDirArg);
 let targetDir = resolve(targetDirArg);
 let packageName = 'cardstack/pretui';
+let packageRRI = `@${packageName}/`;
+let policy = deckCollaborationPolicyFromEnvironment();
+if (!policy.enabled || !policy.realmRRIs.has(packageRRI)) {
+  throw new Error(
+    `Deck collaboration is not enabled for ${packageRRI}; set the operator flag and exact realm-RRI allowlist`,
+  );
+}
 let storeDir = join(realmDir, '.deck', 'store');
 let meta = await readStoreMeta(storeDir, packageName);
 let record = meta?.versions[version];
