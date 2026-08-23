@@ -108,6 +108,28 @@ with exact target and source parents, indexed, and only then published by one
 target-ref advance to a two-parent Checkpoint. A content conflict returns 409
 without changing target bytes, History, index, or ref.
 
+## Headless collaboration replay
+
+The B7 acceptance replay drives the same public commands as two teammate
+checkouts. It creates separate branches from the current `main`, pulls them,
+changes controls plus their field/card consumers, pushes and syncs, creates
+Checkpoints, opens and merges fixed Reviews, advances each source branch to a
+`^1.1.0-0` range with an exact `1.1.0-dev.1` import-map lock, then switches to
+`main` and back to prove the exact branch state is recoverable.
+
+With the PretUI stack running, a local operator can replay it with:
+
+```sh
+BOXEL_REALM_SECRET_SEED="<local development seed>" \
+  pnpm --dir packages/boxel-cli replay:pretui-collaboration -- \
+  https://localhost:4201/pretui/
+```
+
+The secret seed is only for this headless local acceptance run. Teammates use
+their normal Boxel CLI profiles for the interactive commands above. The replay
+ends with structured JSON containing both branch names and the source, merge,
+and next-work Checkpoint identities.
+
 ## What the fixture proves
 
 The replay contains 28 design-system units across foundations, layout,

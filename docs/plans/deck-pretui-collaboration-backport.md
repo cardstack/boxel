@@ -1,7 +1,8 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6, B0–B5a, the fixed-Review portion of B5b, and B6's
-server-side merge path are implemented as a local stack on 2026-08-23.
+**Status:** A0–A6, B0–B5a, the fixed-Review portion of B5b, B6's server-side
+merge path, and B7's public-CLI collaboration replay are implemented as a
+local stack on 2026-08-23.
 B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
 prerender/Loader/search isolation, Host-owned exact view selection, and the
 ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
@@ -18,6 +19,12 @@ History change and Checkpoint, builds the target index, and advances the target
 ref once. B1b is an optional
 hosted-infrastructure slice. No B-series pull request or remote branch has been
 created from this stack.
+
+B7 is live-validated with two independent PretUI checkouts. The replay creates
+branches, pulls, pushes and syncs component/field/card changes, Checkpoints
+fixed Review candidates, merges them through Realm Server, advances the source
+branches to their next semver/import-map locks, and round-trips each checkout
+through `main` without losing its exact branch state.
 
 ## Target outcome
 
