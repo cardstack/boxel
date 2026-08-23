@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { pack, publishToStore } from '@cardstack/deck/node';
+import {
+  captureRepositoryCheckpoint,
+  hashBytes,
+  pack,
+  publishToStore,
+  repositoryManifest,
+} from '@cardstack/deck/node';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import { VirtualNetwork } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
@@ -116,6 +122,27 @@ module('exact Deck Version serving', function (hooks) {
       join(realmDir, 'package.json'),
       JSON.stringify({ name: '@acme/theme', version: '1.1.0' }),
     );
+    await writeFile(
+      join(realmDir, 'importmap.json'),
+      JSON.stringify({ imports: {} }),
+    );
+    await writeFile(
+      join(realmDir, 'index.js'),
+      'export const accent = "tomato";\n',
+    );
+    await captureRepositoryCheckpoint({
+      realmDir,
+      config: repositoryManifest({
+        roots: ['@acme/theme/'],
+        members: { '@acme/theme/': '.' },
+      }),
+      branch: 'main',
+      historyHead: 'jj:main',
+      indexGenerationHash: hashBytes('index:main'),
+      author: { id: '@mina:boxel.test', name: 'Mina' },
+      message: 'Initialize theme',
+      createdAt: '2026-08-23T06:00:00.000Z',
+    });
   });
 
   hooks.afterEach(async function () {
@@ -189,6 +216,9 @@ module('exact Deck Version serving', function (hooks) {
     assert.deepEqual(await allowed?.json(), {
       deckCollaboration: true,
       realmRRI: '@acme/theme/',
+      protocol: 'deck-r0',
+      sync: 'content-addressed',
+      history: 'jj',
     });
     assert.strictEqual(wrongRealm?.status, 404);
 
@@ -197,6 +227,38 @@ module('exact Deck Version serving', function (hooks) {
       new Request('https://realms.example/acme/theme/.deck/capabilities'),
     );
     assert.strictEqual(privateResponse?.status, 401);
+  });
+
+  test('observes one exact branch and its content hashes without mtimes', async function (assert) {
+    let response = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observation = (await response?.json()) as {
+      schema: string;
+      realmRRI: string;
+      branchName: string;
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+      checkpointHash: string;
+      files: Record<string, string>;
+    };
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(observation.schema, 'boxel-deck-branch-observation-v1');
+    assert.strictEqual(observation.realmRRI, '@acme/theme/');
+    assert.strictEqual(observation.branchName, 'main');
+    assert.strictEqual(observation.refGeneration, 1);
+    assert.ok(observation.repositoryHash);
+    assert.ok(observation.treeHash);
+    assert.ok(observation.lockHash);
+    assert.ok(observation.checkpointHash);
+    assert.strictEqual(
+      observation.files['index.js'],
+      hashBytes('export const accent = "tomato";\n'),
+    );
+    assert.notOk('remoteMtimes' in observation);
   });
 
   test('resolves semver intent to one immutable Version index', async function (assert) {

@@ -129,6 +129,15 @@ selected realm before it renders or calls anything. Boxel CLI discovers the
 server capability; it has no local environment variable that bypasses the
 server.
 
+Capability discovery selects a whole realm protocol, not individual helper
+methods. A legacy realm returns no Deck capability and continues using its
+existing mutable-file/mtime workflow; it has neither `.deck` collaboration
+resources nor jj History. An enabled realm advertises `protocol: deck-r0`,
+`sync: content-addressed`, and `history: jj` together. Authentication, server,
+or malformed-capability failures fail closed and must never be mistaken for a
+legacy realm. This lets one Boxel CLI installation work across a mixed
+deployment without mixing consistency models inside one local workspace.
+
 | Surface                   | Disabled or wrong realm                                                                                                   | Enabled PretUI realm                                                                             |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Realm Server              | Deck Version, branch, History, Checkpoint, Review, merge, and syndication endpoints are absent/404; no Deck writer starts | Advertises capability and mounts the authenticated Deck routes and services                      |
@@ -244,7 +253,7 @@ replacement of the existing EFS or unrelated ECS resources. They gate enabling
 the S3 backend in Cardstack hosting; they do not gate B1a, filesystem-backed
 Deck services, or subsequent protocol/CLI development.
 
-## Replace the current Boxel CLI sync model
+## Replace the Boxel CLI sync model for Deck realms
 
 Current Boxel CLI behavior is not safe enough for team branches:
 
@@ -255,7 +264,10 @@ Current Boxel CLI behavior is not safe enough for team branches:
 - local checkpoints are commits in a hidden `.boxel-history/.git` repository;
 - the manifest identifies only a realm URL, not a branch view and exact base.
 
-Replace that model rather than wrapping it.
+Replace that model for a Deck-enabled realm rather than wrapping it. Preserve
+the existing mtime implementation as the selected transport for legacy realms
+that do not advertise Deck or jj. The capability router is the compatibility
+boundary; the Deck workspace schema itself has no legacy fields or fallback.
 
 ### Local workspace record
 

@@ -10,6 +10,7 @@ import {
   readStoreMeta,
   resolveVersionSpec,
 } from '@cardstack/deck/node';
+import { readTree } from '@cardstack/deck/object-store';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   SupportedMimeType,
@@ -31,6 +32,7 @@ import {
   hasDeckCollaboration,
   type DeckCollaborationPolicy,
 } from '../lib/deck-collaboration-policy.ts';
+import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -45,6 +47,7 @@ type DeckVersionServingDeps = ServeFromRealmDeps & {
 };
 
 const CAPABILITIES_PATH = '.deck/capabilities';
+const BRANCH_PATH = '.deck/branch';
 
 function mutableRealmURLForCapabilities(url: URL): URL | undefined {
   if (!url.pathname.endsWith(CAPABILITIES_PATH)) {
@@ -94,7 +97,13 @@ async function handleDeckCapabilitiesRequest(
   if (authorization.response) {
     return authorization.response;
   }
-  let body = JSON.stringify({ deckCollaboration: true, realmRRI });
+  let body = JSON.stringify({
+    deckCollaboration: true,
+    realmRRI,
+    protocol: 'deck-r0',
+    sync: 'content-addressed',
+    history: 'jj',
+  });
   return new Response(request.method === 'HEAD' ? null : body, {
     headers: {
       'cache-control': 'private, no-store',
@@ -103,6 +112,93 @@ async function handleDeckCapabilitiesRequest(
       'x-boxel-realm-rri': realmRRI,
       'access-control-expose-headers':
         'X-Boxel-Deck-Collaboration,X-Boxel-Realm-RRI',
+    },
+  });
+}
+
+function mutableRealmURLForBranch(url: URL): URL | undefined {
+  if (!url.pathname.endsWith(BRANCH_PATH)) {
+    return undefined;
+  }
+  let mutableURL = new URL(url);
+  mutableURL.pathname = url.pathname.slice(0, -BRANCH_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  return mutableURL;
+}
+
+async function handleDeckBranchRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  let mutableURL = mutableRealmURLForBranch(requestURL);
+  if (!mutableURL) return null;
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck branch observations are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let branch = requestURL.searchParams.get('name');
+  if (!branch) {
+    return new Response('A branch name is required', { status: 400 });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  let snapshot;
+  try {
+    snapshot = await openDeckRepositoryProtocol({
+      realmDir: realm.dir,
+      realmRRI,
+      policy: deps.deckCollaboration,
+    }).readBranch(branch);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'invalid branch name') {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
+  if (!snapshot) return new Response('Branch not found', { status: 404 });
+  let treeHash = snapshot.repository.members[realmRRI];
+  let packlist = await readTree(join(realm.dir, '.deck', 'store'), treeHash);
+  if (!packlist) {
+    throw new Error(`missing Repository member tree ${treeHash}`);
+  }
+  let files = Object.fromEntries(
+    packlist.entries.map(({ path, sha256 }) => [path, sha256]),
+  );
+  let body = JSON.stringify({
+    schema: 'boxel-deck-branch-observation-v1',
+    realmRRI,
+    branchId: `${realmRRI}:${branch}`,
+    branchName: branch,
+    repositoryHash: snapshot.head.repositoryHash,
+    treeHash,
+    lockHash: snapshot.repository.lockHash,
+    refGeneration: snapshot.head.generation,
+    checkpointHash: snapshot.head.latestCheckpointHash,
+    files,
+  });
+  return new Response(request.method === 'HEAD' ? null : body, {
+    headers: {
+      'cache-control': 'private, no-store',
+      'content-type': 'application/json',
+      etag: `"${snapshot.head.repositoryHash}:${snapshot.head.generation}"`,
+      'x-boxel-deck-collaboration': 'true',
+      'x-boxel-realm-rri': realmRRI,
     },
   });
 }
@@ -290,6 +386,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let branch = await handleDeckBranchRequest(request, deps);
+  if (branch) {
+    return branch;
+  }
   let versionQuery = await handleDeckVersionIndexQuery(request, deps);
   if (versionQuery) {
     return versionQuery;

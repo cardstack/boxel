@@ -1029,6 +1029,9 @@ importers:
       '@aws-crypto/sha256-js':
         specifier: 'catalog:'
         version: 5.2.0
+      '@cardstack/deck':
+        specifier: workspace:*
+        version: link:../deck
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1
