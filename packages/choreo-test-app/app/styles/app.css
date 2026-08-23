@@ -3655,3 +3655,92 @@ html[data-gm-dragging] * {
 .footer a:hover {
   color: var(--copper);
 }
+
+/* ---- the filter row is itself a View Transition demo ---- */
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* the tell waits until the row is under the pointer, then says what this is */
+.filter-tell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: 0;
+  translate: -6px 0;
+  transition:
+    opacity 160ms ease,
+    translate 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.filter-row:hover .filter-tell,
+.filter-row:focus-within .filter-tell,
+.filter-tell.is-on {
+  opacity: 1;
+  translate: 0 0;
+}
+
+.filter-tell:hover,
+.filter-tell.is-on {
+  color: var(--copper);
+  border-color: var(--line-strong);
+}
+
+.filter-tell-mark {
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--ember-hot);
+}
+
+.filter-code {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #0e0c0b;
+  overflow: hidden;
+}
+
+.filter-code pre {
+  margin: 0;
+  padding: 4px 18px 18px;
+  overflow-x: auto;
+}
+
+.filter-code .sample-label {
+  margin: 0;
+  padding: 14px 18px 0;
+}
+
+/* Motion assigns (and cleans up) the view-transition-names itself; the class
+   is how you reach the generated layers from CSS without knowing them. */
+::view-transition-group(.demo-card) {
+  z-index: 1;
+}
+
+/* A filter is not a page change, and two things have to stand down for it:
+   the body's root layer (its snapshots are hidden, so capturing it blanks the
+   page) and the backdrop the overlay paints for route changes (opaque, so it
+   covers the live page while the cards move over it). Both are right when the
+   page is being REPLACED and wrong when a list is being filtered. */
+html.is-switching body {
+  view-transition-name: none;
+}
+
+html.is-switching::view-transition {
+  background: none;
+}
