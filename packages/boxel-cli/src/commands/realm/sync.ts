@@ -30,6 +30,8 @@ import {
   DIM,
   RESET,
 } from '../../lib/colors.ts';
+import { syncDeckBranch } from '../../lib/deck-realm-sync.ts';
+import { detectRealmSyncMode } from '../../lib/realm-sync-mode.ts';
 import {
   classifyLocal,
   classifyRemote,
@@ -669,6 +671,54 @@ export async function sync(
     return emptyResult({ error: resolution.error });
   }
   const authenticator = resolution.authenticator;
+
+  let mode;
+  try {
+    mode = await detectRealmSyncMode(realmUrl, authenticator);
+  } catch (error) {
+    return emptyResult({
+      error: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
+
+  if (mode.mode === 'deck') {
+    if (options.preferNewest || options.preferLocal || options.preferRemote) {
+      return emptyResult({
+        error:
+          'Deck sync does not use mtime or implicit preference flags; resolve the reported content conflict explicitly',
+      });
+    }
+    try {
+      let result = await syncDeckBranch({
+        realmURL: realmUrl,
+        branchName: 'main',
+        localDir,
+        authenticator,
+        dryRun: options.dryRun,
+      });
+      if (!result.error) {
+        await reconcileSkillsMirror({
+          realmUrl: new URL(realmUrl).href.replace(/\/+$/, '') + '/',
+          localDir,
+          dryRun: options.dryRun,
+          enabled: options.claudeSkills,
+        });
+      }
+      return {
+        pushed: result.pushed,
+        pulled: result.pulled,
+        remoteDeleted: result.remoteDeleted,
+        localDeleted: result.localDeleted,
+        skippedConflicts: result.conflicts,
+        hasError: Boolean(result.error),
+        error: result.error,
+      };
+    } catch (error) {
+      return emptyResult({
+        error: `Sync failed: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
 
   const strategies = [
     options.preferLocal,
