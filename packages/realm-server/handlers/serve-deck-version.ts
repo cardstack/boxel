@@ -10,7 +10,7 @@ import {
   readStoreMeta,
   resolveVersionSpec,
 } from '@cardstack/deck/node';
-import { readTree } from '@cardstack/deck/object-store';
+import { readTree, readTreeFile } from '@cardstack/deck/object-store';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   SupportedMimeType,
@@ -48,6 +48,7 @@ type DeckVersionServingDeps = ServeFromRealmDeps & {
 
 const CAPABILITIES_PATH = '.deck/capabilities';
 const BRANCH_PATH = '.deck/branch';
+const TREE_FILE_PATH = '.deck/tree-file';
 
 function mutableRealmURLForCapabilities(url: URL): URL | undefined {
   if (!url.pathname.endsWith(CAPABILITIES_PATH)) {
@@ -201,6 +202,68 @@ async function handleDeckBranchRequest(
       'x-boxel-realm-rri': realmRRI,
     },
   });
+}
+
+async function handleDeckTreeFileRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(TREE_FILE_PATH)) return null;
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -TREE_FILE_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck tree files are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let treeHash = requestURL.searchParams.get('tree');
+  let filePath = requestURL.searchParams.get('path');
+  if (!treeHash || !filePath) {
+    return new Response('A tree hash and file path are required', {
+      status: 400,
+    });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  let bytes = await readTreeFile(
+    join(realm.dir, '.deck', 'store'),
+    treeHash,
+    filePath,
+  );
+  if (!bytes) return new Response('Not found', { status: 404 });
+  let etag = `"${hashBytes(bytes)}"`;
+  let headers = new Headers({
+    'cache-control': 'private, max-age=31536000, immutable',
+    'content-length': String(bytes.byteLength),
+    'content-type': inferContentType(filePath),
+    etag,
+    'x-boxel-deck-tree-hash': treeHash,
+  });
+  if (request.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  let response = new Response(
+    request.method === 'HEAD' ? null : new Uint8Array(bytes),
+    { headers },
+  ) as ResponseWithNodeStream;
+  if (request.method === 'GET') response.nodeStream = Readable.from(bytes);
+  return response;
 }
 
 const VERSIONS_PATH = '.deck/versions';
@@ -386,6 +449,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let treeFile = await handleDeckTreeFileRequest(request, deps);
+  if (treeFile) {
+    return treeFile;
+  }
   let branch = await handleDeckBranchRequest(request, deps);
   if (branch) {
     return branch;

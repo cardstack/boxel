@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, sep } from 'node:path';
 
 import { treeHashFromEntries } from '@cardstack/deck/node';
 
@@ -168,6 +168,47 @@ export function hashWorkspaceBytes(bytes: Uint8Array | string): string {
 
 export async function hashWorkspaceFile(filePath: string): Promise<string> {
   return hashWorkspaceBytes(await readFile(filePath));
+}
+
+const LOCAL_METADATA = new Set([
+  '.boxel-sync.json',
+  '.boxel-history',
+  '.deck',
+  '.git',
+  '.jj',
+  '.DS_Store',
+  'node_modules',
+]);
+
+export async function hashDeckWorkspaceDirectory(
+  localDir: string,
+): Promise<Record<string, string>> {
+  let files: Record<string, string> = {};
+  async function visit(dir: string): Promise<void> {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+      throw error;
+    }
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (LOCAL_METADATA.has(entry.name)) return;
+        let absolutePath = join(dir, entry.name);
+        if (entry.isDirectory()) return visit(absolutePath);
+        if (!entry.isFile()) return;
+        let path = relative(localDir, absolutePath).split(sep).join('/');
+        files[path] = await hashWorkspaceFile(absolutePath);
+      }),
+    );
+  }
+  await visit(localDir);
+  return Object.fromEntries(
+    Object.entries(files).sort(([a], [b]) =>
+      Buffer.compare(Buffer.from(a), Buffer.from(b)),
+    ),
+  );
 }
 
 export function inventoryTreeHash(files: Record<string, string>): string {

@@ -261,6 +261,32 @@ module('exact Deck Version serving', function (hooks) {
     assert.notOk('remoteMtimes' in observation);
   });
 
+  test('serves branch bytes from the observed immutable tree', async function (assert) {
+    let branch = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let { treeHash, files } = (await branch?.json()) as {
+      treeHash: string;
+      files: Record<string, string>;
+    };
+    let response = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/tree-file?tree=${treeHash}&path=index.js`,
+      ),
+    );
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(
+      await response?.text(),
+      'export const accent = "tomato";\n',
+    );
+    assert.strictEqual(response?.headers.get('etag'), `"${files['index.js']}"`);
+    assert.strictEqual(
+      response?.headers.get('cache-control'),
+      'private, max-age=31536000, immutable',
+    );
+  });
+
   test('resolves semver intent to one immutable Version index', async function (assert) {
     let ranged = await serve(
       new Request(

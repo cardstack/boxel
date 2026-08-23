@@ -1,5 +1,6 @@
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 import {
+  hashWorkspaceBytes,
   isDeckBranchSnapshot,
   type DeckBranchSnapshot,
 } from './deck-workspace-state.ts';
@@ -114,4 +115,30 @@ export async function readDeckBranchSnapshot(
     throw new Error('Realm returned an invalid Deck branch observation');
   }
   return snapshot;
+}
+
+export async function readDeckTreeFile(options: {
+  realmURL: string;
+  treeHash: string;
+  path: string;
+  expectedHash: string;
+  authenticator: RealmAuthenticator;
+}): Promise<Uint8Array> {
+  let url = capabilityURL(options.realmURL);
+  url.pathname = url.pathname.replace(/capabilities$/, 'tree-file');
+  url.searchParams.set('tree', options.treeHash);
+  url.searchParams.set('path', options.path);
+  let response = await options.authenticator.authedRealmFetch(url, {
+    headers: { Accept: 'application/octet-stream' },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Could not read ${options.path} from Deck tree ${options.treeHash}: ${response.status} ${response.statusText}`,
+    );
+  }
+  let bytes = new Uint8Array(await response.arrayBuffer());
+  if (hashWorkspaceBytes(bytes) !== options.expectedHash) {
+    throw new Error(`Deck tree file hash mismatch: ${options.path}`);
+  }
+  return bytes;
 }

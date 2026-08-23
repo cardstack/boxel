@@ -31,6 +31,19 @@ import {
   DIM,
   RESET,
 } from '../../lib/colors.ts';
+import {
+  hashDeckWorkspaceDirectory,
+  isDeckWorkspaceState,
+  loadDeckWorkspaceState,
+  planContentAddressedSync,
+  type ContentSyncEntry,
+  type DeckWorkspaceState,
+} from '../../lib/deck-workspace-state.ts';
+import { pullDeckBranch } from '../../lib/deck-realm-pull.ts';
+import {
+  detectRealmSyncMode,
+  readDeckBranchSnapshot,
+} from '../../lib/realm-sync-mode.ts';
 
 export type StatusFileState =
   | 'new-remote'
@@ -55,6 +68,106 @@ export interface StatusResult {
   inSync: boolean;
   hasError: boolean;
   error?: string;
+  branch?: {
+    name: string;
+    baseGeneration: number;
+    remoteGeneration: number;
+  };
+}
+
+function deckEntryStatus(entry: ContentSyncEntry): StatusFileState | null {
+  if (entry.action === 'noop') return null;
+  if (entry.action === 'conflict') return 'conflict';
+  if (entry.action === 'push') {
+    if (entry.localStatus === 'added') return 'new-local';
+    if (entry.localStatus === 'deleted') return 'deleted-local';
+    return 'modified-local';
+  }
+  if (entry.remoteStatus === 'added') return 'new-remote';
+  if (entry.remoteStatus === 'deleted') return 'deleted-remote';
+  return 'modified-remote';
+}
+
+async function deckStatus(
+  localDir: string,
+  workspace: DeckWorkspaceState,
+  options: StatusCommandOptions,
+  authenticator: RealmAuthenticator,
+  manifestMtime?: number,
+): Promise<StatusResult> {
+  let mode = await detectRealmSyncMode(workspace.realmURL, authenticator);
+  if (mode.mode !== 'deck' || mode.realmRRI !== workspace.realmRRI) {
+    return {
+      localDir,
+      realmUrl: workspace.realmURL,
+      manifestMtime,
+      changes: [],
+      pulled: [],
+      inSync: false,
+      hasError: true,
+      error: `Realm no longer advertises Deck collaboration for ${workspace.realmRRI}`,
+    };
+  }
+  let pulled: string[] = [];
+  if (options.pull) {
+    let result = await pullDeckBranch({
+      realmURL: workspace.realmURL,
+      branchName: workspace.branchName,
+      localDir,
+      authenticator,
+    });
+    if (result.error) {
+      return {
+        localDir,
+        realmUrl: workspace.realmURL,
+        manifestMtime,
+        changes: result.conflicts.map((file) => ({
+          file,
+          status: 'conflict',
+        })),
+        pulled: [],
+        inSync: false,
+        hasError: true,
+        error: result.error,
+      };
+    }
+    pulled = [...result.files, ...result.deleted].sort();
+    workspace = (await loadDeckWorkspaceState(localDir))!;
+  }
+  let [snapshot, local] = await Promise.all([
+    readDeckBranchSnapshot(
+      workspace.realmURL,
+      workspace.branchName,
+      authenticator,
+    ),
+    hashDeckWorkspaceDirectory(localDir),
+  ]);
+  let plan = planContentAddressedSync({
+    base: workspace.files,
+    local,
+    remote: snapshot.files,
+  });
+  let changes = plan.entries.flatMap((entry) => {
+    let status = deckEntryStatus(entry);
+    return status ? [{ file: entry.path, status }] : [];
+  });
+  let branchMoved =
+    workspace.observedRefGeneration !== snapshot.refGeneration ||
+    workspace.baseRepositoryHash !== snapshot.repositoryHash;
+  return {
+    localDir,
+    realmUrl: workspace.realmURL,
+    manifestMtime,
+    changes,
+    pulled,
+    inSync: changes.length === 0 && !branchMoved,
+    hasError: false,
+    branch: {
+      name: workspace.branchName,
+      baseGeneration: workspace.observedRefGeneration,
+      remoteGeneration: snapshot.refGeneration,
+    },
+  };
 }
 
 export interface StatusAllEntry extends StatusResult {
@@ -287,8 +400,17 @@ export async function status(
     };
   }
 
-  const manifest = await loadManifest(localDir);
-  if (!manifest) {
+  let rawManifest: unknown;
+  try {
+    rawManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  } catch {
+    rawManifest = undefined;
+  }
+  const deckWorkspace = isDeckWorkspaceState(rawManifest)
+    ? rawManifest
+    : undefined;
+  const manifest = deckWorkspace ? null : await loadManifest(localDir);
+  if (!manifest && !deckWorkspace) {
     return {
       ...baseResult,
       hasError: true,
@@ -303,8 +425,9 @@ export async function status(
     // best-effort only
   }
 
+  const realmUrl = deckWorkspace?.realmURL ?? manifest!.realmUrl;
   const resolution = resolveRealmAuthenticator({
-    realmUrl: manifest.realmUrl,
+    realmUrl,
     realmSecretSeed: options.realmSecretSeed,
     profileManager: options.profileManager,
     authenticator: options.authenticator,
@@ -312,7 +435,7 @@ export async function status(
   if (!resolution.ok) {
     return {
       ...baseResult,
-      realmUrl: manifest.realmUrl,
+      realmUrl,
       manifestMtime,
       hasError: true,
       error: resolution.error,
@@ -320,20 +443,30 @@ export async function status(
   }
   const authenticator = resolution.authenticator;
 
+  if (deckWorkspace) {
+    return deckStatus(
+      localDir,
+      deckWorkspace,
+      options,
+      authenticator,
+      manifestMtime,
+    );
+  }
+
   const inspector = new RealmStatusInspector(
     {
-      realmUrl: manifest.realmUrl,
+      realmUrl: manifest!.realmUrl,
       localDir,
       pull: options.pull,
     },
-    manifest,
+    manifest!,
     authenticator,
   );
   await inspector.sync();
 
   return {
     localDir,
-    realmUrl: manifest.realmUrl,
+    realmUrl: manifest!.realmUrl,
     manifestMtime,
     changes: inspector.changes,
     pulled: inspector.pulled.slice().sort(),
@@ -426,7 +559,7 @@ export async function statusAll(
     } catch {
       parsed = undefined;
     }
-    if (!isValidManifest(parsed)) {
+    if (!isValidManifest(parsed) && !isDeckWorkspaceState(parsed)) {
       workspaces.push({
         localDir: dir,
         realmUrl: '',
@@ -463,6 +596,13 @@ function renderStatus(result: StatusResult): void {
   }
 
   console.log(`Realm: ${result.realmUrl}`);
+  if (result.branch) {
+    let movement =
+      result.branch.baseGeneration === result.branch.remoteGeneration
+        ? `generation ${result.branch.remoteGeneration}`
+        : `generation ${result.branch.baseGeneration} → ${result.branch.remoteGeneration}`;
+    console.log(`Branch: ${result.branch.name} (${movement})`);
+  }
   console.log(`Local: ${result.localDir}`);
   if (result.manifestMtime) {
     console.log(
