@@ -73,6 +73,24 @@ function sameRRIImportMap(left: RRIImportMap, right: RRIImportMap): boolean {
   );
 }
 
+function containsRRIImportMap(next: RRIImportMap, previous: RRIImportMap) {
+  return (
+    Object.entries(previous.imports).every(
+      ([key, value]) => next.imports[key] === value,
+    ) &&
+    Object.entries(previous.scopes).every(([scope, table]) =>
+      Object.entries(table).every(
+        ([key, value]) => next.scopes[scope]?.[key] === value,
+      ),
+    ) &&
+    Object.entries(previous.integrity ?? {}).every(
+      ([key, value]) => next.integrity?.[key] === value,
+    )
+  );
+}
+
+export type VirtualNetworkMappingChange = 'additive' | 'destructive';
+
 export type Handler = (req: Request) => Promise<Response | null>;
 
 export class VirtualNetwork {
@@ -127,7 +145,9 @@ export class VirtualNetwork {
   // form a mapping produces (e.g. the Loader's module cache) subscribe here to
   // discard those entries when the mapping set changes — the RRI→URL
   // relationship is only stable between changes.
-  private mappingChangeListeners = new Set<() => void>();
+  private mappingChangeListeners = new Set<
+    (change: VirtualNetworkMappingChange) => void
+  >();
 
   constructor(
     nativeFetch = createEnvironmentAwareFetch(),
@@ -151,14 +171,18 @@ export class VirtualNetwork {
   private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
 
   // Subscribe to realm-mapping changes; returns an unsubscribe function.
-  onMappingChange(listener: () => void): () => void {
+  onMappingChange(
+    listener: (change: VirtualNetworkMappingChange) => void,
+  ): () => void {
     this.mappingChangeListeners.add(listener);
     return () => this.mappingChangeListeners.delete(listener);
   }
 
-  private notifyMappingChange() {
+  private notifyMappingChange(
+    change: VirtualNetworkMappingChange = 'destructive',
+  ) {
     for (let listener of this.mappingChangeListeners) {
-      listener();
+      listener(change);
     }
   }
 
@@ -210,8 +234,14 @@ export class VirtualNetwork {
     if (sameRRIImportMap(this.rriImportMap, canonical)) {
       return;
     }
+    let change: VirtualNetworkMappingChange = containsRRIImportMap(
+      canonical,
+      this.rriImportMap,
+    )
+      ? 'additive'
+      : 'destructive';
     this.rriImportMap = canonical;
-    this.notifyMappingChange();
+    this.notifyMappingChange(change);
   }
 
   clearRRIImportMap(): void {
@@ -282,6 +312,10 @@ export class VirtualNetwork {
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(realmIdentifier);
     let normalizedTarget = ensureTrailingSlash(targetURL);
+    let previousTarget = this.realmMappings.get(normalizedId);
+    if (previousTarget === normalizedTarget) {
+      return;
+    }
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
@@ -290,7 +324,7 @@ export class VirtualNetwork {
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    this.notifyMappingChange();
+    this.notifyMappingChange(previousTarget ? 'destructive' : 'additive');
   }
 
   /**
@@ -561,8 +595,12 @@ export class VirtualNetwork {
     if (resolved !== undefined) {
       return new URL(resolved);
     }
-    // Not a registered prefix; parse as a plain URL.
-    return new URL(rri);
+    // Not a registered prefix; parse as a plain URL with a useful failure.
+    try {
+      return new URL(rri);
+    } catch {
+      throw new Error(`Unable to resolve RRI or URL "${rri}"`);
+    }
   }
 
   /**

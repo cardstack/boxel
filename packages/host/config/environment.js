@@ -202,7 +202,10 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      DECK_COLLABORATION:
+        process.env.BOXEL_DECK_COLLABORATION_ENABLED === 'true',
+    },
   };
 
   if (environment === 'test') {
@@ -223,7 +226,10 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {};
+    ENV.featureFlags = {
+      DECK_COLLABORATION:
+        process.env.BOXEL_DECK_COLLABORATION_ENABLED === 'true',
+    };
 
     // Catalog realms are not available in test environment
     ENV.resolvedCatalogRealmURL = undefined;

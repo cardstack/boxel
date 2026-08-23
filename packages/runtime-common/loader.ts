@@ -229,11 +229,18 @@ export class Loader {
   // host injects a sleep that goes through the native (unblocked)
   // setTimeout so the retry actually fires.
   private retrySleep: ((ms: number) => Promise<void>) | undefined;
+  private prepareModuleResolution:
+    | ((moduleURL: URL, response: Response) => Promise<void>)
+    | undefined;
 
   constructor(
     fetch: Fetch,
     resolveImport?: (moduleIdentifier: string, relativeTo?: string) => string,
     options?: {
+      prepareModuleResolution?: (
+        moduleURL: URL,
+        response: Response,
+      ) => Promise<void>;
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
     },
@@ -242,17 +249,25 @@ export class Loader {
     this.resolveImport =
       resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
     this.retrySleep = options?.retrySleep;
+    this.prepareModuleResolution = options?.prepareModuleResolution;
     this.virtualNetwork = options?.virtualNetwork;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
     // entry can't outlive the spelling it was keyed under.
-    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
-      this.modules.clear();
-      this.moduleCanonicalURLs.clear();
-      this.knownDepsCache.clear();
-      this.trackingKeyCache.clear();
-    });
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(
+      (change) => {
+        // A newly discovered package or scope cannot alter modules already
+        // registered. Replacement/removal can and remains destructive.
+        if (change === 'additive') {
+          return;
+        }
+        this.modules.clear();
+        this.moduleCanonicalURLs.clear();
+        this.knownDepsCache.clear();
+        this.trackingKeyCache.clear();
+      },
+    );
   }
 
   // Release the realm-mapping-change subscription so this loader can be
@@ -270,6 +285,7 @@ export class Loader {
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
+      prepareModuleResolution: loader.prepareModuleResolution,
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
     });
@@ -1302,6 +1318,10 @@ export class Loader {
       }
       throw error;
     }
+
+    // Package identity and its exact lock must exist before transpilation:
+    // AMD registration resolves this module's dependencies synchronously.
+    await this.prepareModuleResolution?.(moduleURL, response);
 
     let canonicalPath = response.headers.get('X-Boxel-Canonical-Path');
     let canonicalURL = canonicalPath

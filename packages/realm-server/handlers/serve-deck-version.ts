@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
@@ -58,6 +59,69 @@ function hasDeckCollaboration(
     deps.deckCollaboration?.enabled === true &&
     deps.deckCollaboration.realmRRIs.has(realmRRI)
   );
+}
+
+const CAPABILITIES_PATH = '.deck/capabilities';
+
+function mutableRealmURLForCapabilities(url: URL): URL | undefined {
+  if (!url.pathname.endsWith(CAPABILITIES_PATH)) {
+    return undefined;
+  }
+  let mutableURL = new URL(url);
+  mutableURL.pathname = url.pathname.slice(0, -CAPABILITIES_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  return mutableURL;
+}
+
+async function handleDeckCapabilitiesRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let mutableURL = mutableRealmURLForCapabilities(new URL(request.url));
+  if (!mutableURL) {
+    return null;
+  }
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck capabilities are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  if (!realm?.dir) {
+    return new Response('Not found', { status: 404 });
+  }
+  let packageName: unknown;
+  try {
+    packageName = JSON.parse(
+      await readFile(join(realm.dir, 'package.json'), 'utf8'),
+    ).name;
+  } catch {
+    return new Response('Not found', { status: 404 });
+  }
+  let realmRRI =
+    typeof packageName === 'string' ? `${packageName.replace(/\/$/, '')}/` : '';
+  if (!hasDeckCollaboration(deps, realmRRI)) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) {
+    return authorization.response;
+  }
+  let body = JSON.stringify({ deckCollaboration: true, realmRRI });
+  return new Response(request.method === 'HEAD' ? null : body, {
+    headers: {
+      'cache-control': 'private, no-store',
+      'content-type': 'application/json',
+      'x-boxel-deck-collaboration': 'true',
+      'x-boxel-realm-rri': realmRRI,
+      'access-control-expose-headers':
+        'X-Boxel-Deck-Collaboration,X-Boxel-Realm-RRI',
+    },
+  });
 }
 
 function notFound(rri: string): Response {
@@ -137,6 +201,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let capabilities = await handleDeckCapabilitiesRequest(request, deps);
+  if (capabilities) {
+    return capabilities;
+  }
   let transportURL = new URL(request.url);
   transportURL.search = '';
   transportURL.hash = '';

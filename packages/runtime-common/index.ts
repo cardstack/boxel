@@ -1143,6 +1143,7 @@ export {
   parseExactVersionTransportURL,
   type ExactVersionTransport,
 } from './deck-version-url.ts';
+export { DynamicRRIResolution } from './dynamic-rri-resolution.ts';
 export {
   DECKLIST_PATH,
   deckLibSpecFromPackage,

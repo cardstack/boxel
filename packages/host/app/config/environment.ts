@@ -56,6 +56,7 @@ export default config as {
   stripePaymentLink: string;
   featureFlags?: {
     AI_PATCHING_CORRECTNESS_CHECKS?: boolean;
+    DECK_COLLABORATION?: boolean;
   };
   publishedRealmDomainOverrides: string;
   publishedRealmBoxelSpaceDomain: string;

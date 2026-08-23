@@ -6,6 +6,7 @@ import { isTesting } from '@embroider/macros';
 
 import {
   VirtualNetwork,
+  DynamicRRIResolution,
   authorizationMiddleware,
   baseRealm,
   fetcher,
@@ -29,6 +30,11 @@ export default class NetworkService extends Service {
   @service declare session: SessionService;
 
   virtualNetwork = this.makeVirtualNetwork();
+  dynamicRRIResolution = new DynamicRRIResolution(
+    this.virtualNetwork,
+    this.authedFetch,
+    { enabled: config.featureFlags?.DECK_COLLABORATION === true },
+  );
 
   constructor(owner: Owner) {
     super(owner);
@@ -128,7 +134,16 @@ export default class NetworkService extends Service {
 
   resetState = () => {
     this.virtualNetwork = this.makeVirtualNetwork();
+    this.dynamicRRIResolution = new DynamicRRIResolution(
+      this.virtualNetwork,
+      this.authedFetch,
+      { enabled: config.featureFlags?.DECK_COLLABORATION === true },
+    );
   };
+
+  invalidateDynamicRRIResolution() {
+    this.dynamicRRIResolution.invalidate();
+  }
 }
 
 declare module '@ember/service' {
