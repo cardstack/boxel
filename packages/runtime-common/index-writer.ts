@@ -348,7 +348,7 @@ export class Batch {
   >();
   declare private generation: number;
   private realmURL: URL; // this assumes that we only index cards in our own realm...
-  private realmView: RealmView;
+  readonly realmView: RealmView;
   private virtualNetwork: VirtualNetwork;
   private jobInfo?: JobInfo;
 

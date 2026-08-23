@@ -788,6 +788,8 @@ export type ModulePrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
+  // Immutable Deck source view for `realm`. Omitted for the live lane.
+  realmView?: string;
   renderOptions?: RenderRouteOptions;
   // Worker-job priority threaded through from the producer side.
   // Higher priority requests dequeue ahead of lower-priority pending
@@ -832,6 +834,8 @@ export type PrerenderVisitArgs = {
   realm: string;
   url: string;
   auth: string;
+  // Immutable Deck source view for `realm`. Omitted for the live lane.
+  realmView?: string;
   // Selects which half of the bifurcated visit to run — see
   // PrerenderVisitType. Absent runs the fused union of both halves.
   visitType?: PrerenderVisitType;

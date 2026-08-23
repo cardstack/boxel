@@ -106,6 +106,10 @@ export function resolveSearchRequestMethod(request: Request): string {
 // dropping a field here (e.g. priority) silently breaks the threading from
 // the realm-server handler down to searchCards.
 export type SearchOpts = {
+  // Select one immutable Realm index inside a federated search. Other realms
+  // in the same request keep their ordinary view (normally immutable package
+  // Versions reached through the selected Realm's import map).
+  realmView?: { realmURL: string; view: string };
   cacheOnlyDefinitions?: boolean;
   // Prerender searches set this so `searchCardsUncoalesced` skips the
   // `loadLinks` relationship-assembly pass entirely (the host re-resolves

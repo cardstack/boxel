@@ -186,6 +186,19 @@ export default class LoaderService extends Service {
       this.network.virtualNetwork,
     );
     let loader = new Loader(fetch, this.network.resolveImport, {
+      realmViewForURL: (url) => {
+        let selected = (
+          globalThis as unknown as {
+            __boxelRealmView?: { realmURL: string; view: string };
+          }
+        ).__boxelRealmView;
+        if (!selected) {
+          return undefined;
+        }
+        let realmURL = new URL(selected.realmURL);
+        realmURL.protocol = url.protocol;
+        return url.href.startsWith(realmURL.href) ? selected.view : undefined;
+      },
       prepareModuleResolution: (moduleURL, response) =>
         this.network.dynamicRRIResolution.prepare(moduleURL, response),
       // Route the loader's transient-5xx retry backoff sleep through

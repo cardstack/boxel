@@ -132,6 +132,12 @@ export async function updateDeckBranchContent(options: {
   history: HistoryBackend;
   actor?: HistoryActor;
   request: DeckBranchUpdateRequest;
+  prepareView?: (view: {
+    indexGenerationHash: string;
+    repositoryHash: string;
+    treeHash: string;
+    historyHead: string;
+  }) => Promise<void>;
 }): Promise<{
   head: BranchHead;
   repositoryHash: string;
@@ -252,6 +258,28 @@ export async function updateDeckBranchContent(options: {
         treeHash: stored.treeHash,
         lockHash,
       });
+      // History currently seals the Realm working tree, so creating the Step
+      // briefly required materializing the candidate. Put the old bytes back
+      // during the potentially long index/prerender wait. Exact-view workers
+      // read the candidate from CAS; ordinary live readers keep seeing the
+      // branch state that the still-current ref describes.
+      if (liveChanged) {
+        await writeTreeToDir(options.realmDir, priorLive);
+        liveChanged = false;
+      }
+      // The immutable tree and its static Deck index can be addressed before
+      // the mutable ref points at them. Give Realm Server the same window to
+      // build its view-qualified SQL index and prerendered HTML. A reader that
+      // observes the next ref must never race those derived artifacts.
+      await options.prepareView?.({
+        indexGenerationHash: index.indexGenerationHash,
+        repositoryHash,
+        treeHash: stored.treeHash,
+        historyHead,
+      });
+      let acceptedLive = await writeTreeToDir(options.realmDir, files);
+      liveChanged =
+        acceptedLive.written.length > 0 || acceptedLive.deleted.length > 0;
       let head = await updateBranchHead({
         realmDir: options.realmDir,
         branch: options.branch,

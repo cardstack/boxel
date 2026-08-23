@@ -17,7 +17,11 @@ import type {
   HistoryActor,
   HistoryBackend,
 } from '@cardstack/deck-history/backend';
-import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
+import type {
+  QueuePublisher,
+  Realm,
+  ResponseWithNodeStream,
+} from '@cardstack/runtime-common';
 import {
   REALM_VIEW_HEADER,
   RealmPaths,
@@ -26,6 +30,10 @@ import {
   parseExactVersionTransportURL,
   realmViewHash,
 } from '@cardstack/runtime-common';
+import { awaitPublishedHtmlReady } from '@cardstack/runtime-common/jobs/prerender-html';
+import { enqueueReindexRealmJob } from '@cardstack/runtime-common/jobs/reindex-realm';
+import { userInitiatedPriority } from '@cardstack/runtime-common/queue';
+import { FROM_SCRATCH_JOB_TIMEOUT_SEC } from '@cardstack/runtime-common/tasks/indexer';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 import {
@@ -64,6 +72,7 @@ import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 type DeckVersionServingDeps = ServeFromRealmDeps & {
   deckCollaboration?: DeckCollaborationPolicy;
   deckHistory: HistoryBackend;
+  queue?: QueuePublisher;
   realmSecretSeed?: string;
   resolveRealm?: (url: URL) => Promise<Realm | undefined>;
   readVersionFile?: (
@@ -79,6 +88,12 @@ const BRANCH_PATH = '.deck/branch';
 const TREE_FILE_PATH = '.deck/tree-file';
 const HISTORY_PATH = '.deck/history';
 const BRANCH_INDEX_PATH = '.deck/branch-index';
+
+class DeckBranchViewPreparationError extends Error {
+  constructor(cause: unknown) {
+    super('Branch view preparation failed', { cause });
+  }
+}
 
 function historyActor(
   request: Request,
@@ -232,6 +247,39 @@ async function handleDeckBranchRequest(
         history: deps.deckHistory,
         actor: historyActor(request, deps),
         request: update,
+        prepareView: deps.queue
+          ? async ({ indexGenerationHash }) => {
+              try {
+                let job = await enqueueReindexRealmJob(
+                  realm.url,
+                  await realm.getRealmOwnerUsername(),
+                  deps.queue!,
+                  deps.dbAdapter,
+                  userInitiatedPriority,
+                  {
+                    realmView: indexGenerationHash,
+                    awaitedByPublish: true,
+                  },
+                );
+                await job.done;
+                let htmlReady = await awaitPublishedHtmlReady(
+                  deps.dbAdapter,
+                  realm.url,
+                  {
+                    realmView: indexGenerationHash,
+                    timeoutMs: FROM_SCRATCH_JOB_TIMEOUT_SEC * 1000,
+                  },
+                );
+                if (!htmlReady) {
+                  throw new Error(
+                    `Realm view ${indexGenerationHash} prerender timed out`,
+                  );
+                }
+              } catch (error) {
+                throw new DeckBranchViewPreparationError(error);
+              }
+            }
+          : undefined,
       });
     } catch (error) {
       if (
@@ -240,6 +288,12 @@ async function handleDeckBranchRequest(
         error instanceof RefBusyError
       ) {
         return new Response('Branch moved since it was read', { status: 409 });
+      }
+      if (error instanceof DeckBranchViewPreparationError) {
+        return new Response(error.message, {
+          status: 503,
+          headers: { 'retry-after': '5' },
+        });
       }
       if (error instanceof Error && !error.message.startsWith('missing ')) {
         return new Response(error.message, { status: 400 });

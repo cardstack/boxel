@@ -109,6 +109,8 @@ async function fetchRealmInfo(
 
 export interface PreWarmModulesTableArgs {
   realmURL: URL;
+  // Immutable checkpoint hash. Undefined means the mutable live view.
+  realmView?: string;
   // Instances/modules this pass will render. Drives the per-row deps layer
   // (existing `boxel_index.deps` + novel-`.json` `adoptsFrom.module`).
   invalidations: URL[];
@@ -197,6 +199,7 @@ export interface PreWarmModulesTableArgs {
 // unresolvable), which the caller folds into the job's `totalFiles`.
 export async function preWarmModulesTable({
   realmURL,
+  realmView,
   invalidations,
   allRealmCardModules,
   definitionLookup,
@@ -372,6 +375,7 @@ export async function preWarmModulesTable({
           cacheUserId: authUserId,
           prerenderUserId,
           priority: jobPriority,
+          ...(realmView ? { realmView } : {}),
         });
       } catch {
         failed += 1;

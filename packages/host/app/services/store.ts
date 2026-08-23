@@ -102,6 +102,7 @@ import {
   duringPrerenderHeaders,
   jobIdHeader,
   loggingCorrelationIdHeader,
+  realmViewHeaders,
 } from '../lib/prerender-fetch-headers';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
@@ -1538,6 +1539,7 @@ export default class StoreService extends Service implements StoreInterface {
           Accept: SupportedMimeType.CardJson,
           'Content-Type': 'application/json',
           ...duringPrerenderHeaders(),
+          ...realmViewHeaders(realms),
           ...consumingRealmHeader(),
           ...jobIdHeader(),
           ...jobPriorityHeader(),
@@ -1607,6 +1609,7 @@ export default class StoreService extends Service implements StoreInterface {
           ? SupportedMimeType.FileMetaHtml
           : SupportedMimeType.CardHtml,
       ...duringPrerenderHeaders(),
+      ...realmViewHeaders(requestURL),
       ...consumingRealmHeader(),
       ...jobIdHeader(),
       ...jobPriorityHeader(),

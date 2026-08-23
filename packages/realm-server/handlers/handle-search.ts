@@ -17,6 +17,8 @@ import {
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   RequestTimings,
+  REALM_VIEW_HEADER,
+  realmViewHash,
   emitSearchTiming,
   type Query,
 } from '@cardstack/runtime-common';
@@ -106,10 +108,40 @@ export default function handleSearch(opts: {
       cacheOnlyDefinitions?: true;
       omitIncluded?: true;
       priority?: number;
+      realmView?: { realmURL: string; view: string };
     } = {};
     if (cacheOnlyDefinitions) searchOpts.cacheOnlyDefinitions = true;
     if (omitIncluded) searchOpts.omitIncluded = true;
     if (jobPriority !== null) searchOpts.priority = jobPriority;
+
+    let consumingRealm = sanitizeConsumingRealmHeader(
+      ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
+    );
+    let requestedRealmView = realmViewHash(request.headers);
+    if (request.headers.has(REALM_VIEW_HEADER) && !requestedRealmView) {
+      await sendResponseForBadRequest(ctxt, 'Invalid Realm view hash');
+      return;
+    }
+    if (requestedRealmView && !consumingRealm) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'An exact Realm search requires a consuming Realm',
+      );
+      return;
+    }
+    if (requestedRealmView && !realmList.includes(consumingRealm!)) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'The exact Realm view is not part of this search',
+      );
+      return;
+    }
+    if (requestedRealmView) {
+      searchOpts.realmView = {
+        realmURL: consumingRealm!,
+        view: requestedRealmView,
+      };
+    }
 
     // Two bounds are enforced server-side on the live item leg (never during
     // prerender, never on the prerendered-HTML leg): a hard page-size ceiling
@@ -179,9 +211,6 @@ export default function handleSearch(opts: {
       ...(timings ? { timings } : {}),
     };
 
-    let consumingRealm = sanitizeConsumingRealmHeader(
-      ctxt.get(X_BOXEL_CONSUMING_REALM_HEADER),
-    );
     // Lazy-mount inside runSearch so cache hits (304 / cached body) skip the
     // lazy-mount work entirely.
     let runSearch = async () => {

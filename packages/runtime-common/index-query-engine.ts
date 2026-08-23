@@ -684,7 +684,9 @@ export class IndexQueryEngine {
         `Your filter refers to a nonexistent type: ${stringify(codeRef)}`,
       );
     }
-    return await this.#definitionLookup.lookupDefinition(codeRef);
+    return await this.#definitionLookup.lookupDefinition(codeRef, {
+      ...(this.#realmView !== 'live' ? { realmView: this.#realmView } : {}),
+    });
   }
 
   // we pass the loader in so there is no ambiguity which loader to use as this
@@ -1174,7 +1176,9 @@ export class IndexQueryEngine {
     let keys = internalKeysFor(ref, undefined, this.#virtualNetwork);
     if (isResolvedCodeRef(ref)) {
       try {
-        let definition = await this.#definitionLookup.lookupDefinition(ref);
+        let definition = await this.#definitionLookup.lookupDefinition(ref, {
+          ...(this.#realmView !== 'live' ? { realmView: this.#realmView } : {}),
+        });
         if (isResolvedCodeRef(definition.codeRef)) {
           for (let key of internalKeysFor(
             definition.codeRef,

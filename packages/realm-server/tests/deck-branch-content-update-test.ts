@@ -138,6 +138,14 @@ module('Deck branch content updates', function (hooks) {
       realmRRI,
       policy,
     }).readBranch('main');
+    let preparedView:
+      | {
+          indexGenerationHash: string;
+          repositoryHash: string;
+          treeHash: string;
+          historyHead: string;
+        }
+      | undefined;
     let result = await updateDeckBranchContent({
       realmDir,
       realmRRI,
@@ -145,6 +153,26 @@ module('Deck branch content updates', function (hooks) {
       policy,
       history,
       request: await request('export const version = 2;\n'),
+      prepareView: async (view) => {
+        preparedView = view;
+        let duringPreparation = await openDeckRepositoryProtocol({
+          realmDir,
+          realmRRI,
+          policy,
+        }).readBranch('main');
+        assert.strictEqual(
+          duringPreparation?.head.generation,
+          1,
+          'the old branch stays visible while its next exact view is prepared',
+        );
+        assert.strictEqual(
+          await import('node:fs/promises').then(({ readFile }) =>
+            readFile(join(realmDir, 'index.js'), 'utf8'),
+          ),
+          'export const version = 1;\n',
+          'ordinary live readers retain the old bytes during preparation',
+        );
+      },
     });
     let after = await openDeckRepositoryProtocol({
       realmDir,
@@ -153,6 +181,16 @@ module('Deck branch content updates', function (hooks) {
     }).readBranch('main');
 
     assert.strictEqual(result.head.generation, 2);
+    assert.deepEqual(
+      preparedView,
+      {
+        indexGenerationHash: result.indexGenerationHash,
+        repositoryHash: result.repositoryHash,
+        treeHash: result.treeHash,
+        historyHead: 'step2',
+      },
+      'the exact immutable identity is available before the ref advances',
+    );
     assert.notStrictEqual(
       result.treeHash,
       before?.repository.members[realmRRI],
@@ -184,6 +222,44 @@ module('Deck branch content updates', function (hooks) {
       history.entries[0].files.get('index.js')?.toString(),
       'export const version = 1;\n',
       'the first write adopts the state being left as a History baseline',
+    );
+  });
+
+  test('a failed exact-view preparation leaves the branch ref and live tree unchanged', async function (assert) {
+    let before = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI,
+      policy,
+    }).readBranch('main');
+
+    await assert.rejects(
+      updateDeckBranchContent({
+        realmDir,
+        realmRRI,
+        branch: 'main',
+        policy,
+        history,
+        request: await request('export const version = 2;\n'),
+        prepareView: async () => {
+          throw new Error('exact view could not be prepared');
+        },
+      }),
+      /exact view could not be prepared/,
+    );
+
+    let after = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI,
+      policy,
+    }).readBranch('main');
+    assert.strictEqual(after?.head.generation, before?.head.generation);
+    assert.strictEqual(after?.head.repositoryHash, before?.head.repositoryHash);
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(realmDir, 'index.js'), 'utf8'),
+      ),
+      'export const version = 1;\n',
+      'the materialized realm is restored when preparation fails',
     );
   });
 

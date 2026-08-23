@@ -29,6 +29,7 @@ import {
   type Diagnostics,
   type SearchIndexEntry,
 } from './index.ts';
+import { realmViewAffinityValue } from './realm-view-context.ts';
 import { moduleFrom } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { CacheScope, DefinitionLookup } from './definition-lookup.ts';
@@ -362,7 +363,10 @@ export class IndexRunner {
         await current.#prerenderer.releaseBatch?.({
           batchId: current.#batchId,
           affinityType: 'realm',
-          affinityValue: current.realmURL.href,
+          affinityValue: realmViewAffinityValue(
+            current.realmURL.href,
+            current.#realmView,
+          ),
         });
       } catch (e) {
         current.#log.warn(
@@ -581,7 +585,10 @@ export class IndexRunner {
         await current.#prerenderer.releaseBatch?.({
           batchId: current.#batchId,
           affinityType: 'realm',
-          affinityValue: current.realmURL.href,
+          affinityValue: realmViewAffinityValue(
+            current.realmURL.href,
+            current.#realmView,
+          ),
         });
       } catch (e) {
         current.#log.warn(

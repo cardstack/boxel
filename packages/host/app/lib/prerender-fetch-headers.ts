@@ -1,9 +1,30 @@
 import {
   DURING_PRERENDER_HEADER,
+  REALM_VIEW_HEADER,
   X_BOXEL_CONSUMING_REALM_HEADER,
   X_BOXEL_JOB_ID_HEADER,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
+
+export function realmViewHeaders(
+  targets: string | URL | string[],
+): Record<string, string> {
+  let selected = (
+    globalThis as unknown as {
+      __boxelRealmView?: { realmURL: string; view: string };
+    }
+  ).__boxelRealmView;
+  if (!selected) {
+    return {};
+  }
+  let selectedURL = new URL(selected.realmURL);
+  let matches = [targets].flat().some((target) => {
+    let targetURL = new URL(String(target));
+    selectedURL.protocol = targetURL.protocol;
+    return targetURL.href.startsWith(selectedURL.href);
+  });
+  return matches ? { [REALM_VIEW_HEADER]: selected.view } : {};
+}
 
 // Set by the prerender server's `evaluateOnNewDocument` before the
 // SPA boots, and also by the host's prerender-shaped routes

@@ -101,7 +101,8 @@
    dependency_keys BLOB,
    generation DEFAULT 0 NOT NULL,
    created_at,
-   PRIMARY KEY ( realm_url, canonical_path )
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( realm_url, realm_view, canonical_path )
 );
 
  CREATE TABLE IF NOT EXISTS modules (
@@ -116,7 +117,8 @@
    file_alias TEXT,
    url_hash TEXT GENERATED ALWAYS AS (url) STORED NOT NULL,
    diagnostics BLOB,
-   PRIMARY KEY ( url, cache_scope, auth_user_id )
+   realm_view TEXT DEFAULT 'live' NOT NULL,
+   PRIMARY KEY ( url, realm_view, cache_scope, auth_user_id )
 );
 
  CREATE TABLE IF NOT EXISTS prerendered_html (

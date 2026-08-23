@@ -23,6 +23,7 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
+import { realmViewAffinityValue } from '../realm-view-context.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface RenderFileForIndexingOptions {
@@ -235,10 +236,14 @@ export async function renderFileForIndexing({
 
   let visitArgs = {
     affinityType: 'realm' as const,
-    affinityValue: realmURL.href,
+    affinityValue: realmViewAffinityValue(
+      realmURL.href,
+      batch.realmView !== 'live' ? batch.realmView : undefined,
+    ),
     realm: realmURL.href,
     url: fileURL,
     auth,
+    ...(batch.realmView !== 'live' ? { realmView: batch.realmView } : {}),
     batchId,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),

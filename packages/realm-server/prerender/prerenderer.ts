@@ -366,6 +366,7 @@ export class Prerenderer {
     realm,
     url,
     auth,
+    realmView,
     opts,
     renderOptions,
     priority,
@@ -376,6 +377,7 @@ export class Prerenderer {
     realm: string;
     url: string;
     auth: string;
+    realmView?: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     renderOptions?: RenderRouteOptions;
     // Priority threaded from the producer side. Stamped into
@@ -437,6 +439,7 @@ export class Prerenderer {
             realm,
             url,
             auth,
+            realmView,
             opts,
             renderOptions: attemptOptions,
             priority,
@@ -467,6 +470,7 @@ export class Prerenderer {
               realm,
               url,
               auth,
+              realmView,
               opts,
               renderOptions: attemptOptions,
               priority,
@@ -709,6 +713,7 @@ export class Prerenderer {
       realm,
       url,
       auth,
+      realmView,
       visitType,
       renderOptions,
       fileData,
@@ -769,6 +774,7 @@ export class Prerenderer {
             realm,
             url,
             auth,
+            realmView,
             visitType,
             opts,
             renderOptions: attemptOptions,
@@ -804,6 +810,7 @@ export class Prerenderer {
               realm,
               url,
               auth,
+              realmView,
               visitType,
               opts,
               renderOptions: attemptOptions,

@@ -92,6 +92,7 @@ module(basename(import.meta.filename), function (hooks) {
           realm: 'realm-1',
           url: 'https://example.com/module',
           auth: '{"token":"x"}',
+          realmView: 'a'.repeat(64),
         });
 
         assert.strictEqual(
@@ -112,6 +113,7 @@ module(basename(import.meta.filename), function (hooks) {
             realm: 'realm-1',
             url: 'https://example.com/module',
             auth: '{"token":"x"}',
+            realmView: 'a'.repeat(64),
             renderOptions: {},
           },
           'sends expected attributes',
@@ -244,6 +246,7 @@ module(basename(import.meta.filename), function (hooks) {
           url: 'https://example.com/card.json',
           auth: '{}',
           jobId: '20678.26619',
+          realmView: 'b'.repeat(64),
         });
 
         assert.strictEqual(
@@ -254,6 +257,11 @@ module(basename(import.meta.filename), function (hooks) {
         assert.notOk(
           'jobId' in (receivedBody?.data?.attributes ?? {}),
           'jobId is not present in data.attributes (request metadata, not payload)',
+        );
+        assert.strictEqual(
+          receivedBody?.data?.attributes?.realmView,
+          'b'.repeat(64),
+          'the selected Realm view stays in the visit payload',
         );
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));

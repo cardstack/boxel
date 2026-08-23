@@ -22,6 +22,7 @@ import {
   type RenderVisitResponse,
   type Stats,
 } from '../index.ts';
+import { realmViewAffinityValue } from '../realm-view-context.ts';
 import type { IndexingProgressEvent } from '../worker.ts';
 import type { VirtualNetwork } from '../virtual-network.ts';
 import {
@@ -214,6 +215,7 @@ export async function runPrerenderHtmlPass({
         .map(([url]) => new URL(url));
       let preWarmedCount = await preWarmModulesTable({
         realmURL,
+        realmView,
         invalidations: updateURLs,
         allRealmCardModules,
         definitionLookup,
@@ -288,6 +290,7 @@ export async function runPrerenderHtmlPass({
           await visitForPrerenderedHtml({
             url: new URL(href),
             realmURL,
+            realmView,
             realmPaths,
             reader,
             batch,
@@ -347,7 +350,7 @@ export async function runPrerenderHtmlPass({
       await prerenderer.releaseBatch?.({
         batchId,
         affinityType: 'realm',
-        affinityValue: realmURL.href,
+        affinityValue: realmViewAffinityValue(realmURL.href, realmView),
       });
     } catch (e) {
       log.warn(
@@ -372,6 +375,7 @@ export async function runPrerenderHtmlPass({
 async function visitForPrerenderedHtml({
   url,
   realmURL,
+  realmView,
   realmPaths,
   reader,
   batch,
@@ -387,6 +391,7 @@ async function visitForPrerenderedHtml({
 }: {
   url: URL;
   realmURL: URL;
+  realmView?: string;
   realmPaths: RealmPaths;
   reader: Reader;
   batch: Batch;
@@ -463,10 +468,11 @@ async function visitForPrerenderedHtml({
 
   let response: RenderVisitResponse = await prerenderer.prerenderVisit({
     affinityType: 'realm',
-    affinityValue: realmURL.href,
+    affinityValue: realmViewAffinityValue(realmURL.href, realmView),
     realm: realmURL.href,
     url: fileURL,
     auth,
+    ...(realmView ? { realmView } : {}),
     batchId,
     visitType: 'prerender-html',
     renderOptions,

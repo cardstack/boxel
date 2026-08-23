@@ -222,6 +222,7 @@ export class RealmIndexQueryEngine {
   #fetch: typeof globalThis.fetch;
   #indexQueryEngine: IndexQueryEngine;
   #definitionLookup: DefinitionLookup;
+  #realmView: string | undefined;
   #log = logger('realm:index-query-engine');
 
   constructor({
@@ -249,6 +250,7 @@ export class RealmIndexQueryEngine {
       realmView,
     );
     this.#definitionLookup = definitionLookup;
+    this.#realmView = realmView;
     this.#realm = realm;
     this.#fetch = fetch;
   }
@@ -917,10 +919,13 @@ export class RealmIndexQueryEngine {
     opts: Options | undefined,
   ): Promise<import('./definitions.ts').Definition | undefined> {
     if (opts?.cacheOnlyDefinitions) {
-      return await this.#definitionLookup.lookupCachedDefinition(codeRef);
+      return await this.#definitionLookup.lookupCachedDefinition(codeRef, {
+        ...(this.#realmView ? { realmView: this.#realmView } : {}),
+      });
     }
     return await this.#definitionLookup.lookupDefinition(codeRef, {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(this.#realmView ? { realmView: this.#realmView } : {}),
     });
   }
 

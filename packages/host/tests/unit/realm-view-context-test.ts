@@ -8,7 +8,17 @@ import {
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
 import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 
-module('Unit | Realm view context', function () {
+import { realmViewHeaders } from '@cardstack/host/lib/prerender-fetch-headers';
+
+module('Unit | Realm view context', function (hooks) {
+  hooks.afterEach(function () {
+    delete (
+      globalThis as unknown as {
+        __boxelRealmView?: { realmURL: string; view: string };
+      }
+    ).__boxelRealmView;
+  });
+
   test('validates one exact immutable view identity', function (assert) {
     let hash = 'a'.repeat(64);
     let context = {
@@ -52,6 +62,37 @@ module('Unit | Realm view context', function () {
     assert.notStrictEqual(
       prerenderHtmlConcurrencyGroup(realmURL, viewA),
       prerenderHtmlConcurrencyGroup(realmURL, viewB),
+    );
+  });
+
+  test('stamps only requests for the selected Realm', function (assert) {
+    let view = 'a'.repeat(64);
+    (
+      globalThis as unknown as {
+        __boxelRealmView?: { realmURL: string; view: string };
+      }
+    ).__boxelRealmView = {
+      realmURL: 'https://realms.example/cardstack/pretui/',
+      view,
+    };
+
+    assert.deepEqual(
+      realmViewHeaders('https://realms.example/cardstack/pretui/button.gts'),
+      { 'X-Boxel-Realm-View': view },
+      'an exact Realm resource carries the selected view',
+    );
+    assert.deepEqual(
+      realmViewHeaders([
+        'https://realms.example/cardstack/base/',
+        'https://realms.example/cardstack/pretui/',
+      ]),
+      { 'X-Boxel-Realm-View': view },
+      'a federated search including the exact Realm carries the view',
+    );
+    assert.deepEqual(
+      realmViewHeaders('https://realms.example/cardstack/base/card-api'),
+      {},
+      "an imported Realm never receives another Realm's view hash",
     );
   });
 });

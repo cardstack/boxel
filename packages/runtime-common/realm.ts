@@ -3622,6 +3622,8 @@ export class Realm {
       MODULE_TRANSPILE_CACHE_TABLE,
       'WHERE realm_url =',
       param(this.url),
+      'AND realm_view =',
+      param('live'),
       'AND canonical_path =',
       param(canonicalPath),
     ])) as {
@@ -3724,9 +3726,11 @@ export class Realm {
       await runQuery([
         'INSERT INTO',
         MODULE_TRANSPILE_CACHE_TABLE,
-        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        '(realm_url, realm_view, canonical_path, body, headers, dependency_keys, generation, created_at)',
         'VALUES (',
         param(this.url),
+        ',',
+        param('live'),
         ',',
         param(canonicalPath),
         ',',
@@ -3745,7 +3749,7 @@ export class Realm {
         param(capturedGeneration),
         ',',
         param(Date.now()),
-        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        ') ON CONFLICT (realm_url, realm_view, canonical_path) DO UPDATE SET',
         'body = EXCLUDED.body,',
         'headers = EXCLUDED.headers,',
         'dependency_keys = EXCLUDED.dependency_keys,',
@@ -3818,15 +3822,17 @@ export class Realm {
       await query(this.#dbAdapter, [
         'INSERT INTO',
         MODULE_TRANSPILE_CACHE_TABLE,
-        '(realm_url, canonical_path, body, headers, dependency_keys, generation, created_at)',
+        '(realm_url, realm_view, canonical_path, body, headers, dependency_keys, generation, created_at)',
         'VALUES (',
         param(this.url),
+        ',',
+        param('live'),
         ',',
         param(canonicalPath),
         ',',
         'NULL, NULL, NULL, 1,',
         param(Date.now()),
-        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        ') ON CONFLICT (realm_url, realm_view, canonical_path) DO UPDATE SET',
         'body = NULL,',
         'headers = NULL,',
         'dependency_keys = NULL,',
@@ -3869,6 +3875,8 @@ export class Realm {
         param(Date.now()),
         'WHERE realm_url =',
         param(this.url),
+        'AND realm_view =',
+        param('live'),
         'RETURNING canonical_path',
       ])) as { canonical_path: string }[];
       if (updated.length === 0) {
@@ -6032,10 +6040,21 @@ export class Realm {
       ...(opts?.timings ? { timings: opts.timings } : {}),
       ...(opts?.signal ? { signal: opts.signal } : {}),
     };
-    return await this.#realmIndexQueryEngine.searchEntries(
-      searchEntryQuery,
-      engineOpts,
-    );
+    let selectedView = opts?.realmView;
+    let selectedRealmURL = selectedView
+      ? ensureTrailingSlash(selectedView.realmURL)
+      : undefined;
+    let queryEngine =
+      selectedView && selectedRealmURL === ensureTrailingSlash(this.url)
+        ? new RealmIndexQueryEngine({
+            realm: this,
+            dbAdapter: this.#dbAdapter,
+            fetch: this.__fetchForTesting,
+            definitionLookup: this.#definitionLookup,
+            realmView: selectedView.view,
+          })
+        : this.#realmIndexQueryEngine;
+    return await queryEngine.searchEntries(searchEntryQuery, engineOpts);
   }
 
   private async searchEntriesResponse(

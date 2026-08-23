@@ -1106,6 +1106,7 @@ export class RealmServer {
       reconciler: this.reconciler,
       dbAdapter: this.dbAdapter,
       virtualNetwork: this.virtualNetwork,
+      queue: this.queue,
       deckCollaboration: deckCollaborationPolicyFromEnvironment(),
       realmSecretSeed: this.realmSecretSeed,
       // Realm Server owns accepted write batches and seals them explicitly.
@@ -1132,7 +1133,7 @@ export class RealmServer {
           // this list the preflight fails and the player errors before any
           // bytes flow.
           allowHeaders:
-            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
+            'Authorization, Content-Type, If-Match, If-None-Match, If-Range, Range, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Assume-User, X-HTTP-Method-Override, X-Boxel-Disable-Module-Cache, X-Filename, X-Boxel-During-Prerender, X-Boxel-Consuming-Realm, X-Boxel-Realm-View, X-Boxel-Job-Id, X-Boxel-Job-Priority, X-Boxel-Logging-Correlation-Id, X-Grafana-Device-Id, X-Grafana-Action',
           // Without an explicit expose list, @koa/cors only emits the
           // CORS-safelisted response headers (cache-control, content-*,
           // expires, last-modified, pragma). ETag is not on that list,

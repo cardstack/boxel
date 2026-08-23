@@ -95,9 +95,8 @@ The focused proof writes different documents for the same URL into `live` and
 one 64-character view, reads each through a separately qualified query engine,
 and verifies that they own independent generation counters.
 
-The job-connected half remains in B3b.3: attach a completed SQL generation to
-the immutable manifest and never let a branch ref name a partially indexed
-view.
+The job-connected half lands in B3b.3: prepare the manifest's exact SQL and
+rendered generations before allowing a branch ref to name the view.
 
 Proof: index `main` and one hidden PretUI view with the same RRIs but different
 Status/DatePicker implementations, then query them concurrently and compare
@@ -123,18 +122,35 @@ half:
 5. the legacy background HTML reconciler is deliberately live-only, so it
    cannot rebuild an exact row from mutable source.
 
-The next B3b.3 checkpoint must qualify the shared definition and transpilation
-caches, give each exact render a view-specific Loader/page affinity lifetime,
-and attach the completed SQL generation to its immutable Deck generation
-manifest before a branch ref can select it.
+The second B3b.3 checkpoint completes the cache and publication boundary:
+
+1. shared definition rows, in-flight keys, and invalidation generations are
+   view-qualified; live invalidation cannot delete or cancel an exact entry;
+2. the durable transpilation-cache key includes `realm_view`, while today's
+   mutable Realm execution path explicitly reads, writes, and tombstones only
+   `live` (exact Deck source is transpiled by the immutable source handler);
+3. remote prerender payloads, browser-page affinity, Loader module fetches,
+   direct entry fetches, and federated searches carry the same exact view;
+4. view headers are scoped to the selected Realm, so an imported package
+   cannot receive another Realm's hash; and
+5. a branch update builds its immutable source/static index, awaits its
+   view-qualified SQL index and rendered HTML, and only then conditionally
+   advances the branch ref. Failure restores the materialized live tree and
+   leaves the old ref visible.
+
+The generated SQLite schema and Postgres migration use the same composite
+keys. Postgres retains the bounded `modules.url_hash` key introduced for large
+URLs; the SQLite converter intentionally maps that generated column back to
+`url` in its primary key.
 
 The worker adds the exact-view header only to reads within the source realm.
 Imports locked to exact package Versions keep using their Version URLs and
 ordinary immutable caching.
 
 Proof: simultaneous main/hidden-branch indexing cannot join one queue job,
-resume one another's working rows, share a warm prerender Loader, or swap one
-another's production rows.
+resume one another's working rows, share a warm prerender Loader, search one
+another's rows, swap one another's production rows, or expose a branch ref
+before its exact view is browseable and runnable.
 
 ### B3b.4 — events and activity
 

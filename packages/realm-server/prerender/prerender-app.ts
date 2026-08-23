@@ -215,6 +215,7 @@ export function buildPrerenderApp(options: {
     let rawUrl = attrs.url;
     let rawAuth = attrs.auth;
     let rawRealm = attrs.realm;
+    let rawRealmView = attrs.realmView;
     let rawAffinityType = attrs.affinityType;
     let rawAffinityValue = attrs.affinityValue;
     let renderOptions = parseRenderOptions(attrs);
@@ -239,6 +240,9 @@ export function buildPrerenderApp(options: {
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
+              ...(typeof rawRealmView === 'string'
+                ? { realmView: rawRealmView }
+                : {}),
               renderOptions,
               ...(priority !== undefined ? { priority } : {}),
             },

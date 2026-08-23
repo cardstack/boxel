@@ -68,6 +68,16 @@ export function realmViewName(value?: string): RealmView {
   return normalized;
 }
 
+// Prerender affinity is an opaque scheduler key, not a resource URL. Include
+// the exact view so live and branch renders never reuse one browser page,
+// Loader graph, batch owner, or icon memo.
+export function realmViewAffinityValue(
+  realmURL: string,
+  realmView?: string,
+): string {
+  return realmView ? `${realmURL}|realm-view:${realmView}` : realmURL;
+}
+
 export function withRealmView(
   request: Request,
   indexGenerationHash: string,

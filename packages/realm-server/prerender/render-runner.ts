@@ -647,6 +647,7 @@ export class RenderRunner {
     affinityType,
     affinityValue,
     realm,
+    realmView,
     url,
     auth,
     opts,
@@ -658,6 +659,7 @@ export class RenderRunner {
     affinityType: AffinityType;
     affinityValue: string;
     realm: string;
+    realmView?: string;
     url: string;
     auth: string;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
@@ -716,9 +718,21 @@ export class RenderRunner {
       // if the caller aborted during the getPage handoff.
       throwIfAborted(signal, 'queued');
       await abortable(signal, () =>
-        page.evaluate((sessionAuth) => {
-          localStorage.setItem('boxel-session', sessionAuth);
-        }, auth),
+        page.evaluate(
+          (sessionAuth, selectedRealm, selectedView) => {
+            localStorage.setItem('boxel-session', sessionAuth);
+            (
+              globalThis as unknown as {
+                __boxelRealmView?: { realmURL: string; view: string };
+              }
+            ).__boxelRealmView = selectedView
+              ? { realmURL: selectedRealm, view: selectedView }
+              : undefined;
+          },
+          auth,
+          realm,
+          realmView,
+        ),
       );
 
       let renderStart = Date.now();
@@ -849,6 +863,7 @@ export class RenderRunner {
     affinityType,
     affinityValue,
     realm,
+    realmView,
     url,
     auth,
     visitType,
@@ -1001,6 +1016,8 @@ export class RenderRunner {
             sessionAuth: string,
             id: string | undefined,
             jobPriority: number | undefined,
+            selectedRealm: string,
+            selectedView: string | undefined,
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
             (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
@@ -1008,6 +1025,13 @@ export class RenderRunner {
             (
               globalThis as unknown as { __boxelJobPriority?: number }
             ).__boxelJobPriority = jobPriority;
+            (
+              globalThis as unknown as {
+                __boxelRealmView?: { realmURL: string; view: string };
+              }
+            ).__boxelRealmView = selectedView
+              ? { realmURL: selectedRealm, view: selectedView }
+              : undefined;
             return (
               (
                 globalThis as unknown as {
@@ -1019,6 +1043,8 @@ export class RenderRunner {
           auth,
           jobId,
           priority,
+          realm,
+          realmView,
         ),
       );
       // A card-instance index visit fuses the file extract into the

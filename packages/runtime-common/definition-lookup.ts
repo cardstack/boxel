@@ -12,6 +12,7 @@ import {
 } from './expression.ts';
 import { clampSerializedError, type SerializedError } from './error.ts';
 import { logger } from './log.ts';
+import { realmViewAffinityValue, realmViewName } from './realm-view-context.ts';
 
 // Debug instrumentation for diagnosing pre-warm vs visit-phase cache-key
 // mismatches: every cache read logs its exact key + HIT/MISS, every write
@@ -24,8 +25,9 @@ function fmtKey(
   cacheScope: string,
   authUserId: string,
   resolvedRealmURL: string,
+  realmView?: string,
 ): string {
-  return `module=${moduleUrl} scope=${cacheScope} user=${authUserId || '(empty)'} realm=${resolvedRealmURL}`;
+  return `module=${moduleUrl} scope=${cacheScope} user=${authUserId || '(empty)'} realm=${resolvedRealmURL} view=${realmViewName(realmView)}`;
 }
 import {
   fetchUserPermissions,
@@ -153,8 +155,9 @@ function inFlightKey(args: {
   moduleURL: string;
   cacheScope: CacheScope;
   cacheUserId: string;
+  realmView?: string;
 }): string {
-  return `${args.resolvedRealmURL}|${args.moduleURL}|${args.cacheScope}|${args.cacheUserId}`;
+  return `${args.resolvedRealmURL}|${realmViewName(args.realmView)}|${args.moduleURL}|${args.cacheScope}|${args.cacheUserId}`;
 }
 
 // Module-generation key. Intentionally keyed on (realm, moduleURL) — not
@@ -165,8 +168,16 @@ function inFlightKey(args: {
 function moduleGenerationKey(
   resolvedRealmURL: string,
   moduleURL: string,
+  realmView?: string,
 ): string {
-  return `${resolvedRealmURL}|${moduleURL}`;
+  return `${resolvedRealmURL}|${realmViewName(realmView)}|${moduleURL}`;
+}
+
+function realmGenerationKey(
+  resolvedRealmURL: string,
+  realmView?: string,
+): string {
+  return `${resolvedRealmURL}|${realmViewName(realmView)}`;
 }
 
 function parseJsonValue<T>(value: T | string | null): T | null {
@@ -193,6 +204,7 @@ export interface DefinitionCacheEntry {
   cacheScope: CacheScope;
   authUserId?: string;
   resolvedRealmURL: string;
+  realmView: string;
   createdAt?: number;
 }
 
@@ -201,6 +213,7 @@ export interface DefinitionCacheEntryQuery {
   cacheScope: CacheScope;
   authUserId: string;
   resolvedRealmURL: string;
+  realmView?: string;
 }
 
 export type DefinitionCacheEntries = Record<string, DefinitionCacheEntry>;
@@ -214,6 +227,7 @@ interface WriteToDatabaseCacheParams {
   resolvedRealmURL: string;
   cacheScope: CacheScope;
   authUserId: string;
+  realmView?: string;
   // Server-observed render timings + host-side breadcrumbs flattened from
   // the prerender response's `meta` block (same shape as
   // `boxel_index.diagnostics`). Lets operators query slow / hung
@@ -303,6 +317,7 @@ export interface PopulateCoordinator {
 // downgrade to background priority for its module sub-renders.
 export interface DefinitionLookupOptions {
   priority?: number;
+  realmView?: string;
 }
 
 // Explicit cache context for a read-through populate. Callers that
@@ -318,6 +333,7 @@ export interface PopulateDefinitionCacheEntryArgs {
   cacheUserId: string;
   prerenderUserId: string;
   priority?: number;
+  realmView?: string;
 }
 
 export interface DefinitionLookup {
@@ -331,6 +347,7 @@ export interface DefinitionLookup {
   // database cache. Returns undefined when the definition is not yet cached.
   lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
   ): Promise<Definition | undefined>;
   invalidate(moduleURL: string): Promise<string[]>;
   clearRealmDefinitions(resolvedRealmURL: string): Promise<void>;
@@ -363,6 +380,7 @@ interface LookupContext {
   // `RealmIndexQueryEngine`'s search opts; the search engine threads
   // it here when it calls `lookupDefinition`.
   priority?: number;
+  realmView?: string;
 }
 
 export class CachingDefinitionLookup implements DefinitionLookup {
@@ -390,9 +408,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   //     bumped by invalidate() for each URL in its fan-out. Scoping to the
   //     specific URLs avoids spuriously discarding an in-flight prerender
   //     for an unrelated module in the same realm.
-  //   - #realmGenerations: keyed by `resolvedRealmURL`; bumped by
-  //     clearRealmDefinitions() so every in-flight prerender for that realm is
-  //     invalidated, including modules not yet in #moduleGenerations.
+  //   - #realmGenerations: keyed by Realm URL + view; ordinary
+  //     clearRealmDefinitions() bumps only live, preserving in-flight exact
+  //     views just as its SQL deletion preserves their immutable rows.
   //   - #globalGeneration: bumped by clearAllDefinitions() so every in-flight
   //     prerender is invalidated regardless of realm or module URL.
   #moduleGenerations = new Map<string, number>();
@@ -428,6 +446,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   ): Promise<Definition> {
     return await this.lookupDefinitionWithContext(codeRef, {
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.realmView ? { realmView: opts.realmView } : {}),
     });
   }
 
@@ -448,6 +467,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return undefined;
     }
     let { cacheUserId, cacheScope, resolvedRealmURL } = context;
+    let realmView = contextOpts?.realmView;
 
     for (let candidateURL of this.populationCandidates(canonicalModuleURL)) {
       let cached = await this.readFromDatabaseCache(
@@ -455,6 +475,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         cacheScope,
         cacheUserId,
         resolvedRealmURL,
+        realmView,
       );
       if (cached) {
         let entry = this.definitionEntryFor(
@@ -480,7 +501,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       undefined,
       this.#virtualNetwork,
     );
-    let context = await this.buildLookupContext(canonicalModuleURL);
+    let context = await this.buildLookupContext(canonicalModuleURL, {
+      ...(opts?.realmView ? { realmView: opts.realmView } : {}),
+    });
     if (!context) {
       return undefined;
     }
@@ -499,6 +522,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId,
       prerenderUserId,
       priority: opts?.priority,
+      realmView: opts?.realmView,
     });
   }
 
@@ -532,6 +556,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    realmView?: string;
     skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
     let key = inFlightKey(args);
@@ -607,6 +632,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId: string;
       prerenderUserId: string;
       priority?: number;
+      realmView?: string;
       skipErrorPersist?: boolean;
     },
     coordinator: PopulateCoordinator,
@@ -623,6 +649,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         args.cacheScope,
         args.cacheUserId,
         args.resolvedRealmURL,
+        args.realmView,
       );
       if (cached && !this.isExpiredErrorEntry(cached)) {
         return cached;
@@ -657,6 +684,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId,
     prerenderUserId,
     priority,
+    realmView,
     skipErrorPersist,
   }: {
     moduleURL: string;
@@ -666,6 +694,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheUserId: string;
     prerenderUserId: string;
     priority?: number;
+    realmView?: string;
     skipErrorPersist?: boolean;
   }): Promise<DefinitionCacheEntry | undefined> {
     // Real cache-effectiveness signal: a MISS is logged exactly once below,
@@ -682,13 +711,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     // we want both paths to be caught uniformly, so the safe place is entry.
     // If the cache-hit short-circuits below, we never use this snapshot,
     // which is fine — capturing it is a few Map.get calls + struct alloc.
-    let startSnapshot = this.snapshotGeneration(resolvedRealmURL, moduleURL);
+    let startSnapshot = this.snapshotGeneration(
+      resolvedRealmURL,
+      moduleURL,
+      realmView,
+    );
 
     let cached = await this.readFromDatabaseCache(
       moduleURL,
       cacheScope,
       cacheUserId,
       resolvedRealmURL,
+      realmView,
     );
     if (cached && !this.isExpiredErrorEntry(cached)) {
       return cached;
@@ -701,6 +735,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           cacheScope,
           cacheUserId,
           resolvedRealmURL,
+          realmView,
         );
         if (candidateCached && !this.isExpiredErrorEntry(candidateCached)) {
           return candidateCached;
@@ -708,7 +743,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       }
       if (!prerenderMissLogged) {
         keyLog.debug(
-          `MISS source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL)}`,
+          `MISS source=${skipErrorPersist ? 'pre-warm' : 'on-demand'} ${fmtKey(moduleURL, cacheScope, cacheUserId, resolvedRealmURL, realmView)}`,
         );
         prerenderMissLogged = true;
       }
@@ -717,6 +752,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         realmURL,
         prerenderUserId,
         priority,
+        realmView,
       );
       if (
         response.status === 'error' &&
@@ -732,7 +768,14 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         // is genuinely needed.
         return undefined;
       }
-      if (this.generationChanged(resolvedRealmURL, moduleURL, startSnapshot)) {
+      if (
+        this.generationChanged(
+          resolvedRealmURL,
+          moduleURL,
+          realmView,
+          startSnapshot,
+        )
+      ) {
         // Invalidate (or a wider cache wipe) ran while we were prerendering.
         // Discard our now-stale result rather than re-inserting it. Fall
         // back to whatever the DB currently has — undefined if the wipe
@@ -743,6 +786,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           cacheScope,
           cacheUserId,
           resolvedRealmURL,
+          realmView,
         );
       }
       return await this.persistDefinitionCacheEntry(
@@ -751,6 +795,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
         cacheScope,
         prerenderUserId,
+        realmView,
       );
     }
     return undefined;
@@ -759,13 +804,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   private snapshotGeneration(
     resolvedRealmURL: string,
     moduleURL: string,
+    realmView?: string,
   ): { module: number; realm: number; global: number } {
     return {
       module:
         this.#moduleGenerations.get(
-          moduleGenerationKey(resolvedRealmURL, moduleURL),
+          moduleGenerationKey(resolvedRealmURL, moduleURL, realmView),
         ) ?? 0,
-      realm: this.#realmGenerations.get(resolvedRealmURL) ?? 0,
+      realm:
+        this.#realmGenerations.get(
+          realmGenerationKey(resolvedRealmURL, realmView),
+        ) ?? 0,
       global: this.#globalGeneration,
     };
   }
@@ -773,13 +822,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   private generationChanged(
     resolvedRealmURL: string,
     moduleURL: string,
+    realmView: string | undefined,
     snapshot: { module: number; realm: number; global: number },
   ): boolean {
     return (
       (this.#moduleGenerations.get(
-        moduleGenerationKey(resolvedRealmURL, moduleURL),
+        moduleGenerationKey(resolvedRealmURL, moduleURL, realmView),
       ) ?? 0) !== snapshot.module ||
-      (this.#realmGenerations.get(resolvedRealmURL) ?? 0) !== snapshot.realm ||
+      (this.#realmGenerations.get(
+        realmGenerationKey(resolvedRealmURL, realmView),
+      ) ?? 0) !== snapshot.realm ||
       this.#globalGeneration !== snapshot.global
     );
   }
@@ -799,11 +851,9 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     );
   }
 
-  bumpRealmGeneration(resolvedRealmURL: string): void {
-    this.#realmGenerations.set(
-      resolvedRealmURL,
-      (this.#realmGenerations.get(resolvedRealmURL) ?? 0) + 1,
-    );
+  bumpRealmGeneration(resolvedRealmURL: string, realmView?: string): void {
+    let key = realmGenerationKey(resolvedRealmURL, realmView);
+    this.#realmGenerations.set(key, (this.#realmGenerations.get(key) ?? 0) + 1);
   }
 
   bumpGlobalGeneration(): void {
@@ -921,6 +971,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheUserId,
       prerenderUserId,
       priority: contextOpts?.priority,
+      realmView: contextOpts?.realmView,
     });
 
     if (!moduleEntry) {
@@ -1009,6 +1060,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([
         ['resolved_realm_url =', param(resolvedRealmURL)],
+        ['realm_view =', param(realmViewName())],
       ]) as Expression),
     ]);
     await this.notifyRealmDefinitionCacheInvalidation(resolvedRealmURL);
@@ -1133,7 +1185,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return;
     }
     if (!moduleURLs) {
-      let prefix = `${resolvedRealmURL}|`;
+      let prefix = `${resolvedRealmURL}|${realmViewName()}|`;
       for (let key of [...this.#inFlight.keys()]) {
         if (key.startsWith(prefix)) {
           this.#inFlight.delete(key);
@@ -1142,7 +1194,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       return;
     }
     let prefixes = moduleURLs.map(
-      (moduleURL) => `${resolvedRealmURL}|${moduleURL}|`,
+      (moduleURL) => `${resolvedRealmURL}|${realmViewName()}|${moduleURL}|`,
     );
     for (let key of [...this.#inFlight.keys()]) {
       if (prefixes.some((prefix) => key.startsWith(prefix))) {
@@ -1168,6 +1220,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     return await this.lookupDefinitionWithContext(codeRef, {
       requestingRealm: realm,
       ...(opts?.priority !== undefined ? { priority: opts.priority } : {}),
+      ...(opts?.realmView ? { realmView: opts.realmView } : {}),
     });
   }
 
@@ -1281,15 +1334,17 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     realmURL: string,
     userId: string,
     priority?: number,
+    realmView?: string,
   ): Promise<ModuleRenderResponse> {
     let permissions = await fetchUserPermissions(this.#dbAdapter, { userId });
     let auth = this.#createPrerenderAuth(userId, permissions);
     return await this.#prerenderer.prerenderModule({
       affinityType: 'realm',
-      affinityValue: realmURL,
+      affinityValue: realmViewAffinityValue(realmURL, realmView),
       realm: realmURL,
       url: moduleUrl,
       auth,
+      ...(realmView ? { realmView } : {}),
       priority,
     });
   }
@@ -1299,16 +1354,18 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     cacheScope: CacheScope,
     authUserId: string,
     resolvedRealmURL: string,
+    realmView?: string,
   ): Promise<DefinitionCacheEntry | undefined> {
     let moduleAlias = normalizeExecutableURL(moduleUrl);
     let rows = (await this.query(
       [
-        'SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, created_at',
+        'SELECT definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, realm_view, created_at',
         'FROM',
         MODULES_TABLE,
         'WHERE',
         ...(every([
           ['resolved_realm_url =', param(resolvedRealmURL)],
+          ['realm_view =', param(realmViewName(realmView))],
           ['cache_scope =', param(cacheScope)],
           ['auth_user_id =', param(authUserId)],
           any([
@@ -1325,6 +1382,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cache_scope: CacheScope;
       auth_user_id: string | null;
       resolved_realm_url: string | null;
+      realm_view: string;
       created_at: string | null;
     }[];
 
@@ -1337,7 +1395,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     }
 
     keyLog.debug(
-      `HIT ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL)} alias=${moduleAlias}`,
+      `HIT ${fmtKey(moduleUrl, cacheScope, authUserId, resolvedRealmURL, realmView)} alias=${moduleAlias}`,
     );
 
     let row = rows[0];
@@ -1358,6 +1416,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope: row.cache_scope,
       authUserId: row.auth_user_id || undefined,
       resolvedRealmURL: row.resolved_realm_url || '',
+      realmView: row.realm_view,
       createdAt,
     };
   }
@@ -1382,12 +1441,13 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     let moduleList = addExplicitParens(separatedByCommas(params)) as Expression;
     let rows = (await this.query(
       [
-        'SELECT url, definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, file_alias',
+        'SELECT url, definitions, deps, error_doc, cache_scope, auth_user_id, resolved_realm_url, realm_view, file_alias',
         'FROM',
         MODULES_TABLE,
         'WHERE',
         ...(every([
           ['resolved_realm_url =', param(query.resolvedRealmURL)],
+          ['realm_view =', param(realmViewName(query.realmView))],
           ['cache_scope =', param(query.cacheScope)],
           ['auth_user_id =', param(query.authUserId)],
           any([
@@ -1406,6 +1466,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cache_scope: CacheScope;
       auth_user_id: string | null;
       resolved_realm_url: string | null;
+      realm_view: string;
     }[];
 
     let entries: DefinitionCacheEntries = {};
@@ -1430,6 +1491,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         cacheScope: row.cache_scope,
         authUserId: row.auth_user_id || undefined,
         resolvedRealmURL: row.resolved_realm_url || '',
+        realmView: row.realm_view,
       };
     };
     for (let row of rows) {
@@ -1451,6 +1513,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL,
     cacheScope,
     authUserId,
+    realmView,
     diagnostics,
   }: WriteToDatabaseCacheParams): Promise<void> {
     await this.query([
@@ -1467,6 +1530,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           ['resolved_realm_url'],
           ['cache_scope'],
           ['auth_user_id'],
+          ['realm_view'],
           ['diagnostics'],
         ]),
       ) as Expression),
@@ -1491,6 +1555,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
           [param(resolvedRealmURL)],
           [param(cacheScope)],
           [param(authUserId)],
+          [param(realmViewName(realmView))],
           [param(diagnostics ? JSON.stringify(diagnostics) : null)],
         ]),
       ) as Expression),
@@ -1513,9 +1578,10 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
     cacheScope: CacheScope,
     userId: string,
+    realmView?: string,
   ): Promise<DefinitionCacheEntry> {
     keyLog.debug(
-      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, cacheScope === 'public' ? '' : userId, resolvedRealmURL)}`,
+      `WRITE ${response.status === 'error' ? '(error) ' : ''}${fmtKey(moduleUrl, cacheScope, cacheScope === 'public' ? '' : userId, resolvedRealmURL, realmView)}`,
     );
     let entryURL = new URL(moduleUrl);
     let normalizedDeps = this.normalizeDependencies(
@@ -1538,6 +1604,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
         cacheScope,
         cacheScope === 'public' ? '' : userId,
+        realmView,
       );
     }
     let deps = normalizedDeps;
@@ -1551,6 +1618,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       cacheScope,
       authUserId: cacheScope === 'public' ? undefined : userId,
       resolvedRealmURL,
+      realmView: realmViewName(realmView),
     };
     await this.writeToDatabaseCache({
       moduleUrl,
@@ -1561,6 +1629,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId: cacheScope === 'public' ? '' : userId,
+      realmView,
       diagnostics: flattenPrerenderMeta(response.meta),
     });
     return cacheEntry;
@@ -1610,6 +1679,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
     cacheScope: CacheScope,
     authUserId: string,
+    realmView?: string,
   ): Promise<SerializedError[]> {
     if (deps.length === 0) {
       return [];
@@ -1625,6 +1695,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         'WHERE',
         ...(every([
           ['resolved_realm_url =', param(resolvedRealmURL)],
+          ['realm_view =', param(realmViewName(realmView))],
           ['cache_scope =', param(cacheScope)],
           ['auth_user_id =', param(authUserId)],
           any([
@@ -1656,6 +1727,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
     cacheScope: CacheScope,
     authUserId: string,
+    realmView?: string,
   ): Promise<SerializedError[]> {
     let pending = new Set<string>();
     let visited = new Set<string>();
@@ -1686,6 +1758,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
         cacheScope,
         authUserId,
+        realmView,
       );
       for (let error of errors) {
         let key = this.errorKey(error);
@@ -1716,6 +1789,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     resolvedRealmURL: string,
     cacheScope: CacheScope,
     authUserId: string,
+    realmView?: string,
   ): Promise<ErrorEntry> {
     let deps = entry.error.deps ?? [];
     if (deps.length === 0) {
@@ -1727,6 +1801,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       resolvedRealmURL,
       cacheScope,
       authUserId,
+      realmView,
     );
     if (dependencyErrors.length === 0) {
       return entry;
@@ -1804,6 +1879,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([
         ['resolved_realm_url =', param(resolvedRealmURL)],
+        ['realm_view =', param(realmViewName())],
         ['dep.value IN', ...moduleAliasList],
       ]) as Expression),
     ])) as { url: string; file_alias: string | null }[];
@@ -1892,6 +1968,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       'WHERE',
       ...(every([
         ['resolved_realm_url =', param(resolvedRealmURL)],
+        ['realm_view =', param(realmViewName())],
         any([
           ['url IN', ...aliasList],
           ['file_alias IN', ...aliasList],
@@ -1929,9 +2006,11 @@ class RealmScopedDefinitionLookup implements DefinitionLookup {
 
   async lookupCachedDefinition(
     codeRef: ResolvedCodeRef,
+    opts?: DefinitionLookupOptions,
   ): Promise<Definition | undefined> {
     return await this.#inner.lookupCachedDefinition(codeRef, {
       requestingRealm: this.#realm,
+      ...(opts?.realmView ? { realmView: opts.realmView } : {}),
     });
   }
 
