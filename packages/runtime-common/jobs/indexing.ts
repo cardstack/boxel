@@ -70,7 +70,11 @@ export function indexingConcurrencyGroup(
 export async function awaitRealmIndexSettled(
   dbAdapter: DBAdapter,
   realmURL: string,
-  opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  opts?: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    realmView?: string;
+  },
 ): Promise<boolean> {
   if (dbAdapter.kind !== 'pg') {
     return true;
@@ -82,7 +86,7 @@ export async function awaitRealmIndexSettled(
   let hasSettled = async () => {
     let rows = await query(dbAdapter, [
       `SELECT 1 FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
-      param(indexingConcurrencyGroup(realmURL)),
+      param(indexingConcurrencyGroup(realmURL, opts?.realmView)),
       'LIMIT 1',
     ]);
     return rows.length === 0;
@@ -198,7 +202,7 @@ export function makeIncrementalArgsWithCallerMetadata(
   return {
     realmURL: args.realmURL,
     realmUsername: args.realmUsername,
-    ...(args.realmView ? { realmView: args.realmView } : {}),
+    realmView: args.realmView ?? null,
     changes: args.changes,
     ignoreData: args.ignoreData,
     coalescedCallers,

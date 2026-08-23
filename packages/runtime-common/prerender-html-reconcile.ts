@@ -76,8 +76,12 @@ export async function findStalePrerenderedHtmlRows(
     `SELECT i.realm_url, i.url, i.generation
      FROM boxel_index i
      LEFT JOIN prerendered_html ph
-       ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
-     WHERE i.is_deleted IS NOT TRUE
+       ON ph.url = i.url
+      AND ph.realm_url = i.realm_url
+      AND ph.realm_view = i.realm_view
+      AND ph.type = i.type
+     WHERE i.realm_view = 'live'
+       AND i.is_deleted IS NOT TRUE
        AND i.has_error IS NOT TRUE
        AND i.error_doc IS NULL
        AND (ph.url IS NULL
@@ -134,7 +138,7 @@ export async function findActivePrerenderHtmlJobCoverage(
   let byRealm = new Map<string, Map<string, number>>();
   for (let row of rows) {
     let parsed = parseCoverageArgs(row.args);
-    if (!parsed) {
+    if (!parsed || parsed.realmView !== null) {
       continue;
     }
     let { realmURL, generation, changes } = parsed;
@@ -156,10 +160,13 @@ export async function findActivePrerenderHtmlJobCoverage(
   return byRealm;
 }
 
-function parseCoverageArgs(
-  args: unknown,
-):
-  | { realmURL: string; generation: number; changes: IncrementalChange[] }
+function parseCoverageArgs(args: unknown):
+  | {
+      realmURL: string;
+      realmView: string | null;
+      generation: number;
+      changes: IncrementalChange[];
+    }
   | undefined {
   let obj: unknown = args;
   if (typeof args === 'string') {
@@ -172,7 +179,7 @@ function parseCoverageArgs(
   if (!isObjectLike(obj)) {
     return undefined;
   }
-  let { realmURL, generation, changes } = obj;
+  let { realmURL, realmView, generation, changes } = obj;
   if (
     typeof realmURL !== 'string' ||
     typeof generation !== 'number' ||
@@ -189,7 +196,12 @@ function parseCoverageArgs(
       });
     }
   }
-  return { realmURL, generation, changes: normalized };
+  return {
+    realmURL,
+    realmView: typeof realmView === 'string' ? realmView : null,
+    generation,
+    changes: normalized,
+  };
 }
 
 // The realm-level target for a repair: HTML is (re)rendered from current source
@@ -198,7 +210,9 @@ export async function fetchRealmGenerations(
   dbAdapter: DBAdapter,
 ): Promise<Map<string, RealmGenerationInfo>> {
   let rows = (await query(dbAdapter, [
-    `SELECT realm_url, current_generation, loader_epoch FROM realm_generations`,
+    `SELECT realm_url, current_generation, loader_epoch
+       FROM realm_generations
+      WHERE realm_view = 'live'`,
   ] as Expression)) as {
     realm_url: string;
     current_generation: number | string;

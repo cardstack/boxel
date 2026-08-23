@@ -73,6 +73,7 @@ function parsePrerenderHtmlArgsForCoalesce(
   let {
     realmURL,
     realmUsername,
+    realmView,
     changes,
     generation,
     loaderEpoch,
@@ -92,6 +93,7 @@ function parsePrerenderHtmlArgsForCoalesce(
   return {
     realmURL,
     realmUsername,
+    realmView: typeof realmView === 'string' ? realmView : null,
     changes: changes as IncrementalChange[],
     generation,
     loaderEpoch,
@@ -244,6 +246,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       jobInfo,
       realmUsername,
       realmURL,
+      realmView,
       changes,
       generation,
       loaderEpoch,
@@ -268,6 +271,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     let reader = getReader(_fetch, realmURL);
     let { invalidations, stats, preWarmMs } = await runPrerenderHtmlPass({
       realmURL: new URL(realmURL),
+      realmView: realmView ?? undefined,
       changes,
       generation,
       loaderEpoch,

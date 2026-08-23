@@ -39,7 +39,7 @@ export interface TaskArgs {
   // configured still registers media-cache jobs, whose tasks then no-op.
   mediaCacheAdapter?: MediaCacheAdapter;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
-  getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
+  getAuthedFetch(args: AuthedFetchArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;
   reportStatus(jobInfo: JobInfo | undefined, status: 'start' | 'finish'): void;
   reportProgress?(event: IndexingProgressEvent): void;
@@ -52,6 +52,12 @@ export interface TaskArgs {
   reportRealmEvent?(event: RealmEventContent): void;
 }
 
+export interface AuthedFetchArgs {
+  realmURL: string;
+  realmUsername: string;
+  realmView?: string | null;
+}
+
 export type Task<T, K> = (
   args: TaskArgs,
 ) => (args: T & { jobInfo?: JobInfo }) => Promise<K>;
@@ -59,4 +65,6 @@ export type Task<T, K> = (
 export interface WorkerArgs extends JSONTypes.Object {
   realmURL: string;
   realmUsername: string;
+  // Immutable Deck index-generation hash. Null selects the ordinary live lane.
+  realmView: string | null;
 }

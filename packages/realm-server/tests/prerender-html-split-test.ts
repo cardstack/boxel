@@ -57,6 +57,7 @@ function prerenderHtmlArgs(
   return {
     realmURL: testRealm,
     realmUsername: 'test_realm',
+    realmView: null,
     changes: [{ url: `${testRealm}1.json`, operation: 'update' }],
     generation: 1,
     loaderEpoch: 'epoch-a',

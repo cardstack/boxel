@@ -110,6 +110,24 @@ coalescing, concurrency groups, resumable working rows, Loader epochs, page
 affinity, cancellation, and artifact keys all include it. A job must reject if
 its manifest disappears or does not match the requested realm RRI.
 
+The first B3b.3 checkpoint implements the orchestration and rendered-index
+half:
+
+1. from-scratch, incremental, copy, and prerender payloads carry an explicit
+   exact hash or `null` for live;
+2. index and prerender concurrency groups, readiness gates, and copy
+   coalescing are view-qualified;
+3. `IndexRunner` and the split prerender pass open their SQL batches in that
+   same view namespace;
+4. an index copy names its source and destination views independently; and
+5. the legacy background HTML reconciler is deliberately live-only, so it
+   cannot rebuild an exact row from mutable source.
+
+The next B3b.3 checkpoint must qualify the shared definition and transpilation
+caches, give each exact render a view-specific Loader/page affinity lifetime,
+and attach the completed SQL generation to its immutable Deck generation
+manifest before a branch ref can select it.
+
 The worker adds the exact-view header only to reads within the source realm.
 Imports locked to exact package Versions keep using their Version URLs and
 ordinary immutable caching.

@@ -178,7 +178,7 @@ function parseIncrementalArgsForCoalesce(
   return {
     realmURL,
     realmUsername,
-    ...(typeof realmView === 'string' ? { realmView } : {}),
+    realmView: typeof realmView === 'string' ? realmView : null,
     ignoreData: ignoreData as Record<string, string>,
     changes: changes as IncrementalChange[],
     coalescedCallers: Array.isArray(coalescedCallers)
@@ -378,6 +378,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
       realmURL: new URL(realmURL),
+      realmView: args.realmView ?? undefined,
       reader,
       indexWriter,
       definitionLookup,
@@ -393,6 +394,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
+          realmView: args.realmView ?? undefined,
           changes: changes.map(({ url, operation }) => ({ url, operation })),
           generation,
           loaderEpoch,
@@ -438,7 +440,9 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // Doing it here covers them all uniformly. Best-effort: failures
     // fall back to a bounded staleness window because the next
     // reader's transpile path re-tombstones the L2 row.
-    await notifyAllFileChanges(dbAdapter, args.realmURL);
+    if (!args.realmView) {
+      await notifyAllFileChanges(dbAdapter, args.realmURL);
+    }
     // Same chokepoint, index-derived caches: emit realm_index_updated so
     // every mounted Realm drops `#inFlightSearch`, `#cachedRealmInfo`, and
     // `#cachedHostRoutingMap`. The from-scratch swap may have changed
@@ -447,7 +451,9 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
     // and the from-scratch reindex paths (`/_reindex`, `/_full-reindex`, the
     // Grafana variants, direct `enqueueReindexRealmJob`) don't otherwise run
     // `clearRealmIndexCachesAndBroadcast()`. Best-effort, same as above.
-    await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
+    if (!args.realmView) {
+      await notifyRealmIndexUpdated(dbAdapter, args.realmURL);
+    }
     reportStatus(args.jobInfo, 'finish');
     return {
       invalidations,
@@ -492,6 +498,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
     let reader = getReader(_fetch, realmURL);
     let currentRun = new IndexRunner({
       realmURL: new URL(realmURL),
+      realmView: args.realmView ?? undefined,
       reader,
       indexWriter,
       definitionLookup,
@@ -509,6 +516,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
         enqueuePrerenderHtmlJob(queuePublisher, {
           realmURL,
           realmUsername,
+          realmView: args.realmView ?? undefined,
           changes: htmlChanges.map(({ url, operation }) => ({
             url,
             operation,

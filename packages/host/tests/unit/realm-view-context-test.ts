@@ -6,6 +6,7 @@ import {
   REALM_VIEW_CONTEXT_SPEC,
 } from '@cardstack/runtime-common';
 import { indexingConcurrencyGroup } from '@cardstack/runtime-common/jobs/indexing';
+import { prerenderHtmlConcurrencyGroup } from '@cardstack/runtime-common/jobs/prerender-html';
 
 module('Unit | Realm view context', function () {
   test('validates one exact immutable view identity', function (assert) {
@@ -43,6 +44,14 @@ module('Unit | Realm view context', function () {
     assert.strictEqual(
       indexingConcurrencyGroup(realmURL, viewA),
       indexingConcurrencyGroup(realmURL, viewA),
+    );
+    assert.notStrictEqual(
+      prerenderHtmlConcurrencyGroup(realmURL),
+      prerenderHtmlConcurrencyGroup(realmURL, viewA),
+    );
+    assert.notStrictEqual(
+      prerenderHtmlConcurrencyGroup(realmURL, viewA),
+      prerenderHtmlConcurrencyGroup(realmURL, viewB),
     );
   });
 });

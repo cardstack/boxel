@@ -77,6 +77,7 @@ export class IndexRunner {
   #prerenderer: Prerenderer;
   #auth: string;
   #realmURL: URL;
+  #realmView: string | undefined;
   #virtualNetwork: VirtualNetwork;
   #moduleCacheContext?: {
     resolvedRealmURL: string;
@@ -126,6 +127,7 @@ export class IndexRunner {
 
   constructor({
     realmURL,
+    realmView,
     reader,
     indexWriter,
     definitionLookup,
@@ -142,6 +144,7 @@ export class IndexRunner {
     realmOwnerUserId,
   }: {
     realmURL: URL;
+    realmView?: string;
     reader: Reader;
     indexWriter: IndexWriter;
     definitionLookup: DefinitionLookup;
@@ -172,6 +175,7 @@ export class IndexRunner {
     this.#realmPaths = new RealmPaths(realmURL, virtualNetwork);
     this.#reader = reader;
     this.#realmURL = realmURL;
+    this.#realmView = realmView;
     this.#virtualNetwork = virtualNetwork;
     this.#ignoreData = ignoreData;
     this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
@@ -227,6 +231,7 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
+      { realmView: current.#realmView },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation discovery and
@@ -423,6 +428,7 @@ export class IndexRunner {
       current.realmURL,
       current.#virtualNetwork,
       current.#jobInfo,
+      { realmView: current.#realmView },
     );
     let setupMs = Date.now() - setupStart;
     // Announce the job at kickoff — before invalidation — so the
@@ -897,6 +903,7 @@ export class IndexRunner {
         this.realmURL,
         this.#virtualNetwork,
         this.#jobInfo,
+        { realmView: this.#realmView },
       );
       // Seed the live-card oracle from the production index so an existing
       // card is written as an instance-error — overwriting the `instance`

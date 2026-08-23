@@ -12,6 +12,7 @@ export { copy };
 
 export interface CopyArgs extends WorkerArgs {
   sourceRealmURL: string;
+  sourceRealmView: string | null;
 }
 
 export interface CopyResult {
@@ -35,7 +36,9 @@ function copySourceMatches(
   }
   return (
     candidate.args.realmURL === incoming.args.realmURL &&
-    candidate.args.sourceRealmURL === incoming.args.sourceRealmURL
+    candidate.args.realmView === incoming.args.realmView &&
+    candidate.args.sourceRealmURL === incoming.args.sourceRealmURL &&
+    candidate.args.sourceRealmView === incoming.args.sourceRealmView
   );
 }
 
@@ -76,7 +79,8 @@ const copy: Task<CopyArgs, CopyResult> = ({
   virtualNetwork,
 }) =>
   async function (args) {
-    let { jobInfo, realmURL, sourceRealmURL } = args;
+    let { jobInfo, realmURL, realmView, sourceRealmURL, sourceRealmView } =
+      args;
     log.debug(
       `${jobIdentity(jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
     );
@@ -84,8 +88,10 @@ const copy: Task<CopyArgs, CopyResult> = ({
     let batch = await indexWriter.createBatch(
       new URL(realmURL),
       virtualNetwork,
+      jobInfo,
+      { realmView: realmView ?? undefined },
     );
-    await batch.copyFrom(new URL(sourceRealmURL));
+    await batch.copyFrom(new URL(sourceRealmURL), sourceRealmView ?? undefined);
     let result = await batch.done();
     let invalidations = batch.invalidations;
     log.debug(

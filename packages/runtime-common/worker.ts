@@ -29,7 +29,7 @@ import {
 import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
-import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
+import type { TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 export interface Stats extends JSONTypes.Object {
@@ -292,7 +292,11 @@ export class Worker {
     await this.#queue.start();
   }
 
-  private async makeAuthedFetch(args: WorkerArgs) {
+  private async makeAuthedFetch(args: {
+    realmURL: string;
+    realmUsername: string;
+    realmView?: string | null;
+  }) {
     // WorkerArgs is a JSON object shared by many job families. Deck indexing
     // jobs add this string only when they select an exact immutable view;
     // legacy/live jobs omit it.

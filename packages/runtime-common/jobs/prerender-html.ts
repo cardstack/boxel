@@ -10,6 +10,7 @@ import type { DBAdapter } from '../db.ts';
 import { Deferred } from '../deferred.ts';
 import type { IncrementalChange } from '../tasks/indexer.ts';
 import type { PrerenderHtmlArgs } from '../tasks/prerender-html.ts';
+import { realmViewName } from '../realm-view-context.ts';
 
 // A prerender-html job normally floors one tier below the index pass that
 // spawned it — a user-initiated index (userInitiatedPriority) yields
@@ -41,6 +42,7 @@ export function prerenderHtmlPriority(
 export interface PrerenderHtmlEnqueueArgs {
   realmURL: string;
   realmUsername: string;
+  realmView?: string;
   changes: IncrementalChange[];
   generation: number;
   loaderEpoch: string;
@@ -62,8 +64,11 @@ export interface PrerenderHtmlEnqueueArgs {
 // serialize — which is what makes pending-join coalescing and tombstone
 // ordering safe. Anything that reasons about a realm's HTML jobs as a set
 // (enqueue, teardown) must use this same name.
-export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
-  return `prerender-html:${realmURL}`;
+export function prerenderHtmlConcurrencyGroup(
+  realmURL: string,
+  realmView?: string,
+): string {
+  return `prerender-html:${realmURL}${realmView ? `:view:${realmView}` : ''}`;
 }
 
 // Await the prerender-html channel having caught up to a realm's index. The
@@ -98,11 +103,16 @@ export function prerenderHtmlConcurrencyGroup(realmURL: string): string {
 export async function awaitPublishedHtmlReady(
   dbAdapter: DBAdapter,
   realmURL: string,
-  opts?: { timeoutMs?: number; pollIntervalMs?: number },
+  opts?: {
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+    realmView?: string;
+  },
 ): Promise<boolean> {
   let timeoutMs = opts?.timeoutMs ?? 60_000;
   let pollIntervalMs = opts?.pollIntervalMs ?? 1000;
-  let hasCaughtUp = () => publishedHtmlHasCaughtUp(dbAdapter, realmURL);
+  let hasCaughtUp = () =>
+    publishedHtmlHasCaughtUp(dbAdapter, realmURL, opts?.realmView);
 
   if (await hasCaughtUp()) {
     return true;
@@ -187,14 +197,20 @@ export async function awaitPublishedHtmlReady(
 export async function publishedHtmlHasCaughtUp(
   dbAdapter: DBAdapter,
   realmURL: string,
+  realmView?: string,
 ): Promise<boolean> {
   let rows = await query(dbAdapter, [
     `SELECT 1
        FROM boxel_index i
        LEFT JOIN prerendered_html ph
-         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
+         ON ph.url = i.url
+        AND ph.realm_url = i.realm_url
+        AND ph.realm_view = i.realm_view
+        AND ph.type = i.type
       WHERE i.realm_url =`,
     param(realmURL),
+    `  AND i.realm_view =`,
+    param(realmViewName(realmView)),
     `  AND (i.is_deleted = false OR i.is_deleted IS NULL)
         AND i.has_error = false
         AND i.error_doc IS NULL
@@ -217,6 +233,7 @@ export async function enqueuePrerenderHtmlJob(
   {
     realmURL,
     realmUsername,
+    realmView,
     changes,
     generation,
     loaderEpoch,
@@ -230,6 +247,7 @@ export async function enqueuePrerenderHtmlJob(
   let args: PrerenderHtmlArgs = {
     realmURL,
     realmUsername,
+    realmView: realmView ?? null,
     changes,
     generation,
     loaderEpoch,
@@ -241,7 +259,7 @@ export async function enqueuePrerenderHtmlJob(
     jobType: 'prerender_html',
     // Separate from `indexing:${realmURL}` so HTML work never blocks
     // indexing.
-    concurrencyGroup: prerenderHtmlConcurrencyGroup(realmURL),
+    concurrencyGroup: prerenderHtmlConcurrencyGroup(realmURL, realmView),
     priority: prerenderHtmlPriority(spawningPriority, { awaitedByPublish }),
     timeout: timeoutSec,
     args,

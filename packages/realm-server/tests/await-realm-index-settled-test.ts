@@ -21,6 +21,7 @@ async function enqueueIndexJob(
   dbAdapter: PgAdapter,
   url: string,
   status: 'unfulfilled' | 'resolved' | 'rejected' = 'unfulfilled',
+  realmView?: string,
 ): Promise<number> {
   let [{ id }] = (await dbAdapter.execute(
     `INSERT INTO jobs (job_type, concurrency_group, timeout, priority, args, status)
@@ -28,8 +29,8 @@ async function enqueueIndexJob(
        RETURNING id`,
     {
       bind: [
-        indexingConcurrencyGroup(url),
-        JSON.stringify({ realmURL: url }),
+        indexingConcurrencyGroup(url, realmView),
+        JSON.stringify({ realmURL: url, realmView: realmView ?? null }),
         status,
       ],
     },
@@ -44,17 +45,18 @@ async function insertIndexRow(
   realm: string,
   name: string,
   generation: number,
-  opts?: { isDeleted?: boolean; hasError?: boolean },
+  opts?: { isDeleted?: boolean; hasError?: boolean; realmView?: string },
 ): Promise<void> {
   await dbAdapter.execute(
     `INSERT INTO boxel_index
-       (url, file_alias, realm_url, type, generation, is_deleted, has_error, error_doc)
-     VALUES ($1, $2, $3, 'instance', $4, $5, $6, $7)`,
+       (url, file_alias, realm_url, realm_view, type, generation, is_deleted, has_error, error_doc)
+     VALUES ($1, $2, $3, $4, 'instance', $5, $6, $7, $8)`,
     {
       bind: [
         `${realm}${name}`,
         `${realm}${name}`,
         realm,
+        opts?.realmView ?? 'live',
         generation,
         opts?.isDeleted ?? false,
         opts?.hasError ?? false,
@@ -72,17 +74,18 @@ async function insertHtmlRow(
   realm: string,
   name: string,
   generation: number,
-  opts?: { isDeleted?: boolean },
+  opts?: { isDeleted?: boolean; realmView?: string },
 ): Promise<void> {
   await dbAdapter.execute(
     `INSERT INTO prerendered_html
-       (url, file_alias, realm_url, type, generation, is_deleted, isolated_html)
-     VALUES ($1, $2, $3, 'instance', $4, $5, $6)`,
+       (url, file_alias, realm_url, realm_view, type, generation, is_deleted, isolated_html)
+     VALUES ($1, $2, $3, $4, 'instance', $5, $6, $7)`,
     {
       bind: [
         `${realm}${name}`,
         `${realm}${name}`,
         realm,
+        opts?.realmView ?? 'live',
         generation,
         opts?.isDeleted ?? false,
         opts?.isDeleted ? null : '<div>rendered</div>',
@@ -144,6 +147,24 @@ module(basename(import.meta.filename), function (hooks) {
           pollIntervalMs: 50,
         }),
         'that realm holds its own gate',
+      );
+    });
+
+    test('live and exact views have independent index lanes', async function (assert) {
+      let exactView = 'a'.repeat(64);
+      await enqueueIndexJob(dbAdapter, realmURL, 'unfulfilled', exactView);
+
+      assert.true(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'exact work does not hold the live lane',
+      );
+      assert.false(
+        await awaitRealmIndexSettled(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+          realmView: exactView,
+        }),
+        'the exact view observes its own queued work',
       );
     });
 
@@ -337,6 +358,37 @@ module(basename(import.meta.filename), function (hooks) {
           pollIntervalMs: 50,
         }),
         'that realm holds its own gate',
+      );
+    });
+
+    test('live and exact views have independent HTML readiness', async function (assert) {
+      let exactView = 'b'.repeat(64);
+      await insertIndexRow(dbAdapter, realmURL, 'card-1', 3, {
+        realmView: exactView,
+      });
+
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, { timeoutMs: 200 }),
+        'an exact row does not hold live HTML readiness',
+      );
+      assert.false(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          pollIntervalMs: 50,
+          realmView: exactView,
+        }),
+        'the exact view waits for its own HTML',
+      );
+
+      await insertHtmlRow(dbAdapter, realmURL, 'card-1', 3, {
+        realmView: exactView,
+      });
+      assert.true(
+        await awaitPublishedHtmlReady(dbAdapter, realmURL, {
+          timeoutMs: 200,
+          realmView: exactView,
+        }),
+        'matching exact HTML satisfies only that view',
       );
     });
 

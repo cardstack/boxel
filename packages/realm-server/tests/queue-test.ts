@@ -1105,14 +1105,26 @@ module(basename(import.meta.filename), function () {
               concurrencyGroup: `indexing:${realmURL}`,
               timeout: 4 * 60,
               priority: userInitiatedPriority,
-              args: { realmURL, realmUsername: 'owner', sourceRealmURL },
+              args: {
+                realmURL,
+                realmUsername: 'owner',
+                realmView: null,
+                sourceRealmURL,
+                sourceRealmView: null,
+              },
             }),
             publisher2.publish({
               jobType: 'copy-index',
               concurrencyGroup: `indexing:${realmURL}`,
               timeout: 4 * 60,
               priority: userInitiatedPriority,
-              args: { realmURL, realmUsername: 'owner', sourceRealmURL },
+              args: {
+                realmURL,
+                realmUsername: 'owner',
+                realmView: null,
+                sourceRealmURL,
+                sourceRealmView: null,
+              },
             }),
           ]);
 
@@ -1145,7 +1157,9 @@ module(basename(import.meta.filename), function () {
             args: {
               realmURL,
               realmUsername: 'owner',
+              realmView: null,
               sourceRealmURL: 'http://example.com/src-a/',
+              sourceRealmView: null,
             },
           });
           let second = await publisher2.publish({
@@ -1156,7 +1170,9 @@ module(basename(import.meta.filename), function () {
             args: {
               realmURL,
               realmUsername: 'owner',
+              realmView: null,
               sourceRealmURL: 'http://example.com/src-b/',
+              sourceRealmView: null,
             },
           });
 
@@ -1175,6 +1191,43 @@ module(basename(import.meta.filename), function () {
             rows.length,
             2,
             'both pending copy-index rows are retained when sources differ',
+          );
+        });
+
+        test('copy-index: different exact source views stay as separate jobs', async function (assert) {
+          let realmURL = 'http://example.com/copy-dest/';
+          let sourceRealmURL = 'http://example.com/copy-src/';
+          let first = await publisher.publish({
+            jobType: 'copy-index',
+            concurrencyGroup: `indexing:${realmURL}`,
+            timeout: 4 * 60,
+            priority: userInitiatedPriority,
+            args: {
+              realmURL,
+              realmUsername: 'owner',
+              realmView: null,
+              sourceRealmURL,
+              sourceRealmView: 'a'.repeat(64),
+            },
+          });
+          let second = await publisher2.publish({
+            jobType: 'copy-index',
+            concurrencyGroup: `indexing:${realmURL}`,
+            timeout: 4 * 60,
+            priority: userInitiatedPriority,
+            args: {
+              realmURL,
+              realmUsername: 'owner',
+              realmView: null,
+              sourceRealmURL,
+              sourceRealmView: 'b'.repeat(64),
+            },
+          });
+
+          assert.notStrictEqual(
+            first.id,
+            second.id,
+            'source views are distinct immutable copy inputs',
           );
         });
       },

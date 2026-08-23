@@ -8,6 +8,8 @@ import { indexingConcurrencyGroup } from './indexing.ts';
 
 interface EnqueueReindexRealmJobOptions {
   clearLastModified?: boolean;
+  // Immutable Deck view selected for this index pass. Omitted for live.
+  realmView?: string;
   // Set only by the publish flow. A publish blocks on the published realm's
   // HTML before reporting it ready, so the prerender-html job this index pass
   // spawns must run co-equal with indexing rather than one tier below it (see
@@ -31,6 +33,7 @@ export async function enqueueReindexRealmJob(
   let args = {
     realmURL: realmUrl,
     realmUsername,
+    realmView: opts?.realmView ?? null,
     clearLastModified,
     ...(opts?.awaitedByPublish ? { awaitedByPublish: true } : {}),
   };
@@ -38,11 +41,13 @@ export async function enqueueReindexRealmJob(
     await query(dbAdapter, [
       `UPDATE boxel_index SET last_modified = NULL WHERE realm_url =`,
       param(realmUrl),
+      `AND realm_view =`,
+      param(opts?.realmView ?? 'live'),
     ]);
   }
   let job = await queue.publish<FromScratchResult>({
     jobType: 'from-scratch-index',
-    concurrencyGroup: indexingConcurrencyGroup(realmUrl),
+    concurrencyGroup: indexingConcurrencyGroup(realmUrl, opts?.realmView),
     timeout: FROM_SCRATCH_JOB_TIMEOUT_SEC,
     priority,
     args,

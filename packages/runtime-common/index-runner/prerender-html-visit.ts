@@ -40,6 +40,7 @@ import {
 
 export interface PrerenderHtmlPassArgs {
   realmURL: URL;
+  realmView?: string;
   // The invalidation set the spawning index pass computed, tagged per URL:
   // dependents/re-renders as 'update', genuine deletions as 'delete'. The
   // fan-out is never recomputed here.
@@ -97,6 +98,7 @@ export interface PrerenderHtmlPassResult {
 // the monotonic generation guard.
 export async function runPrerenderHtmlPass({
   realmURL,
+  realmView,
   changes,
   generation,
   loaderEpoch,
@@ -149,6 +151,7 @@ export async function runPrerenderHtmlPass({
   let batch = await indexWriter.createBatch(realmURL, virtualNetwork, jobInfo, {
     prerenderHtmlOnly: true,
     generation,
+    realmView,
   });
 
   // The job's URL set arrives fully computed in its args, so the progress row

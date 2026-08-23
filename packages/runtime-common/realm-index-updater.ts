@@ -337,6 +337,7 @@ export class RealmIndexUpdater {
   async copy(
     sourceRealmURL: URL,
     onInvalidation?: (invalidatedURLs: URL[]) => Promise<void>,
+    opts?: { realmView?: string; sourceRealmView?: string },
   ): Promise<{ generation?: number }> {
     let indexingDeferred = new Deferred<void>();
     this.#incrementalIndexingDeferreds.add(indexingDeferred);
@@ -344,11 +345,16 @@ export class RealmIndexUpdater {
       let args: CopyArgs = {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
+        realmView: opts?.realmView ?? null,
         sourceRealmURL: sourceRealmURL.href,
+        sourceRealmView: opts?.sourceRealmView ?? null,
       };
       let job = await this.#queue.publish<CopyResult>({
         jobType: 'copy-index',
-        concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
+        concurrencyGroup: indexingConcurrencyGroup(
+          this.#realm.url,
+          opts?.realmView,
+        ),
         timeout: 4 * 60,
         priority: userInitiatedPriority,
         args,

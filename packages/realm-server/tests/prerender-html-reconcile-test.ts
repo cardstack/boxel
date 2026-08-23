@@ -100,6 +100,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL,
     type = 'instance',
     generation,
+    realmView,
     isDeleted = false,
     hasError = false,
     errorDoc = null,
@@ -108,6 +109,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL: string;
     type?: string;
     generation: number;
+    realmView?: string;
     isDeleted?: boolean;
     hasError?: boolean;
     errorDoc?: Record<string, unknown> | null;
@@ -117,6 +119,7 @@ module(basename(import.meta.filename), function (hooks) {
         url,
         file_alias: url,
         realm_url: realmURL,
+        ...(realmView ? { realm_view: realmView } : {}),
         type,
         generation,
         is_deleted: isDeleted,
@@ -136,6 +139,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL,
     type = 'instance',
     generation,
+    realmView,
     isDeleted = false,
     errorDoc = null,
     renderedMinutesAgo,
@@ -144,6 +148,7 @@ module(basename(import.meta.filename), function (hooks) {
     realmURL: string;
     type?: string;
     generation: number;
+    realmView?: string;
     isDeleted?: boolean;
     errorDoc?: Record<string, unknown> | null;
     renderedMinutesAgo?: number;
@@ -153,6 +158,7 @@ module(basename(import.meta.filename), function (hooks) {
         url,
         file_alias: url,
         realm_url: realmURL,
+        ...(realmView ? { realm_view: realmView } : {}),
         type,
         generation,
         is_deleted: isDeleted,
@@ -176,6 +182,7 @@ module(basename(import.meta.filename), function (hooks) {
     status = 'unfulfilled',
     operation = 'update',
     finishedMinutesAgo,
+    realmView,
   }: {
     realmURL: string;
     generation: number;
@@ -183,14 +190,16 @@ module(basename(import.meta.filename), function (hooks) {
     status?: string;
     operation?: string;
     finishedMinutesAgo?: number;
+    realmView?: string;
   }) {
     let job = await insertJob(dbAdapter, {
       job_type: 'prerender_html',
-      concurrency_group: prerenderHtmlConcurrencyGroup(realmURL),
+      concurrency_group: prerenderHtmlConcurrencyGroup(realmURL, realmView),
       status,
       args: {
         realmURL,
         realmUsername: 'owner',
+        realmView: realmView ?? null,
         generation,
         loaderEpoch: '0',
         spawningJobId: null,
@@ -319,6 +328,38 @@ module(basename(import.meta.filename), function (hooks) {
       job.args.changes.map((change) => change.url).sort(),
       [`${realmURL}absent.json`, `${realmURL}stale.json`],
       'only the stale and absent URLs are in the repair set',
+    );
+  });
+
+  test('the live repair sweep ignores exact-view rows and jobs', async function (assert) {
+    const realmURL = 'http://example.com/view-isolation/';
+    const exactView = 'c'.repeat(64);
+    await seedOwner(realmURL);
+    await seedRealmGeneration(realmURL, 5, 'live-epoch');
+    await seedIndexRow({
+      url: `${realmURL}exact-only.json`,
+      realmURL,
+      realmView: exactView,
+      generation: 7,
+    });
+    await seedPrerenderHtmlJob({
+      realmURL,
+      realmView: exactView,
+      generation: 7,
+      urls: [`${realmURL}exact-only.json`],
+    });
+
+    let result = await runReconcile();
+
+    assert.deepEqual(result, {
+      realmsRepaired: 0,
+      urlsEnqueued: 0,
+      realmsInBackoff: 0,
+    });
+    assert.strictEqual(
+      (await prerenderHtmlJobs()).length,
+      1,
+      'the exact job remains separate and no live repair is enqueued',
     );
   });
 
