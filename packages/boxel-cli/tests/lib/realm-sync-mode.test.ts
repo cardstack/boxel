@@ -100,13 +100,15 @@ describe('realm synchronization mode', () => {
         );
         return new Response(
           JSON.stringify({
-            schema: 'boxel-deck-branch-observation-v1',
+            schema: 'boxel-deck-branch-observation-v2',
             realmRRI: '@cardstack/pretui/',
             branchId: '@cardstack/pretui/:mina/known-date',
             branchName: 'mina/known-date',
             repositoryHash: hashWorkspaceBytes('repository'),
             treeHash: inventoryTreeHash(files),
             lockHash: hashWorkspaceBytes('lock'),
+            historyHead: 'step4',
+            indexGenerationHash: hashWorkspaceBytes('index:4'),
             refGeneration: 4,
             checkpointHash: hashWorkspaceBytes('checkpoint'),
             files,
@@ -128,13 +130,15 @@ describe('realm synchronization mode', () => {
           () =>
             new Response(
               JSON.stringify({
-                schema: 'boxel-deck-branch-observation-v1',
+                schema: 'boxel-deck-branch-observation-v2',
                 realmRRI: '@cardstack/pretui/',
                 branchId: '@cardstack/pretui/:main',
                 branchName: 'main',
                 repositoryHash: hashWorkspaceBytes('repository'),
                 treeHash: hashWorkspaceBytes('wrong tree'),
                 lockHash: hashWorkspaceBytes('lock'),
+                historyHead: 'step1',
+                indexGenerationHash: hashWorkspaceBytes('index:1'),
                 refGeneration: 1,
                 checkpointHash: null,
                 files: { 'index.js': hashWorkspaceBytes('v1') },

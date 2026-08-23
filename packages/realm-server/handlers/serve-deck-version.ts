@@ -46,6 +46,11 @@ import {
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
 import {
+  DeckIndexPendingError,
+  queryDeckBranchIndex,
+  readDeckBranchIndex,
+} from '../lib/deck-branch-index.ts';
+import {
   readDeckBranchHistory,
   restoreDeckBranchHistory,
   type DeckHistoryRestoreRequest,
@@ -69,6 +74,7 @@ const CAPABILITIES_PATH = '.deck/capabilities';
 const BRANCH_PATH = '.deck/branch';
 const TREE_FILE_PATH = '.deck/tree-file';
 const HISTORY_PATH = '.deck/history';
+const BRANCH_INDEX_PATH = '.deck/branch-index';
 
 function historyActor(
   request: Request,
@@ -260,7 +266,7 @@ async function handleDeckBranchRequest(
     packlist.entries.map(({ path, sha256 }) => [path, sha256]),
   );
   let body = JSON.stringify({
-    schema: 'boxel-deck-branch-observation-v1',
+    schema: 'boxel-deck-branch-observation-v2',
     realmRRI,
     branchId: `${realmRRI}:${branch}`,
     branchName: branch,
@@ -269,6 +275,7 @@ async function handleDeckBranchRequest(
     lockHash: snapshot.repository.lockHash,
     refGeneration: snapshot.head.generation,
     historyHead: snapshot.head.historyHead,
+    indexGenerationHash: snapshot.head.indexGenerationHash,
     checkpointHash: snapshot.head.latestCheckpointHash,
     files,
   });
@@ -281,6 +288,74 @@ async function handleDeckBranchRequest(
       'x-boxel-realm-rri': realmRRI,
     },
   });
+}
+
+async function handleDeckBranchIndexRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(BRANCH_INDEX_PATH)) return null;
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -BRANCH_INDEX_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Deck branch indexes are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  let branch = requestURL.searchParams.get('branch') ?? 'main';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  try {
+    let snapshot = await readDeckBranchIndex({
+      realmDir: realm.dir,
+      realmRRI,
+      branch,
+      policy: deps.deckCollaboration!,
+    });
+    let body = JSON.stringify({
+      schema: 'boxel-deck-branch-index-query-v1',
+      view: snapshot.view,
+      indexGenerationHash: snapshot.indexGenerationHash,
+      cards: queryDeckBranchIndex(
+        snapshot,
+        requestURL.searchParams.get('q') ?? undefined,
+      ),
+    });
+    return new Response(request.method === 'HEAD' ? null : body, {
+      headers: {
+        'cache-control': 'private, no-store',
+        'content-type': 'application/json',
+        'x-boxel-deck-index-generation': snapshot.indexGenerationHash,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DeckIndexPendingError) {
+      return new Response(error.message, { status: 409 });
+    }
+    if (
+      error instanceof Error &&
+      error.message.startsWith('branch not found')
+    ) {
+      return new Response(error.message, { status: 404 });
+    }
+    throw error;
+  }
 }
 
 async function handleDeckTreeFileRequest(
@@ -638,6 +713,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let branchIndex = await handleDeckBranchIndexRequest(request, deps);
+  if (branchIndex) {
+    return branchIndex;
+  }
   let history = await handleDeckHistoryRequest(request, deps);
   if (history) {
     return history;

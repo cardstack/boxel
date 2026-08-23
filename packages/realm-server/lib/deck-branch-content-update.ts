@@ -1,6 +1,5 @@
 import {
   hashBytes,
-  hashProtocolObject,
   pack,
   repository,
   storeRepository,
@@ -27,6 +26,7 @@ import {
   openDeckRepositoryProtocol,
 } from './deck-repository-protocol.ts';
 import type { DeckCollaborationPolicy } from './deck-collaboration-policy.ts';
+import { buildDeckBranchIndex } from './deck-branch-index.ts';
 
 export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v2';
 
@@ -132,7 +132,12 @@ export async function updateDeckBranchContent(options: {
   history: HistoryBackend;
   actor?: HistoryActor;
   request: DeckBranchUpdateRequest;
-}): Promise<{ head: BranchHead; repositoryHash: string; treeHash: string }> {
+}): Promise<{
+  head: BranchHead;
+  repositoryHash: string;
+  treeHash: string;
+  indexGenerationHash: string;
+}> {
   if (options.request.schema !== DECK_BRANCH_UPDATE_SPEC) {
     throw new Error('unsupported Deck branch update schema');
   }
@@ -239,6 +244,14 @@ export async function updateDeckBranchContent(options: {
       if (!historyHead) {
         throw new Error('deckd did not create a History Step');
       }
+      let index = await buildDeckBranchIndex({
+        realmDir: options.realmDir,
+        branch: current,
+        historyHead,
+        repositoryHash,
+        treeHash: stored.treeHash,
+        lockHash,
+      });
       let head = await updateBranchHead({
         realmDir: options.realmDir,
         branch: options.branch,
@@ -246,14 +259,16 @@ export async function updateDeckBranchContent(options: {
         next: {
           repositoryHash,
           historyHead,
-          indexGenerationHash: hashProtocolObject({
-            schema: 'boxel-deck-index-pending-v1',
-            treeHash: stored.treeHash,
-          }),
+          indexGenerationHash: index.indexGenerationHash,
           latestCheckpointHash: null,
         },
       });
-      return { head, repositoryHash, treeHash: stored.treeHash };
+      return {
+        head,
+        repositoryHash,
+        treeHash: stored.treeHash,
+        indexGenerationHash: index.indexGenerationHash,
+      };
     } catch (error) {
       if (liveChanged) {
         await writeTreeToDir(options.realmDir, priorLive);

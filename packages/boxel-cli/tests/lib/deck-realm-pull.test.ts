@@ -57,6 +57,8 @@ function snapshot(
     repositoryHash: hashWorkspaceBytes(`repository:${generation}`),
     treeHash: inventoryTreeHash(files),
     lockHash: hashWorkspaceBytes('lock'),
+    historyHead: `step${generation}`,
+    indexGenerationHash: hashWorkspaceBytes(`index:${generation}`),
     refGeneration: generation,
     checkpointHash: hashWorkspaceBytes(`checkpoint:${generation}`),
     files,
@@ -91,6 +93,8 @@ describe('pulling an exact Deck branch', () => {
       branchName: 'main',
       baseRepositoryHash: branch.repositoryHash,
       baseTreeHash: branch.treeHash,
+      baseHistoryHead: branch.historyHead,
+      baseIndexGenerationHash: branch.indexGenerationHash,
       observedRefGeneration: 1,
     });
   });

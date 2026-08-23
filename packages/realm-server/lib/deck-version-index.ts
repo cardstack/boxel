@@ -5,7 +5,7 @@ import { hashBytes, readStoredPack, unpack } from '@cardstack/deck/node';
 
 export const DECK_VERSION_INDEX_FORMAT = 'boxel-deck-version-index-v1';
 
-export interface DeckVersionIndexCard {
+export interface DeckIndexCard {
   rri: string;
   sourcePath: string;
   document: Record<string, unknown>;
@@ -17,7 +17,7 @@ export interface DeckVersionIndexSnapshot {
   packageRRI: string;
   treeHash: string;
   indexHash: string;
-  cards: DeckVersionIndexCard[];
+  cards: DeckIndexCard[];
 }
 
 function collectStrings(value: unknown, output: string[]): void {
@@ -84,36 +84,7 @@ export async function buildDeckVersionIndex(options: {
   }
   let { files, treeHash } = unpack(packBytes);
   let packageRRI = `@${options.packageName}@${options.version}/`;
-  let cards: DeckVersionIndexCard[] = [];
-  for (let [sourcePath, bytes] of [...files.entries()].sort(([a], [b]) =>
-    a.localeCompare(b),
-  )) {
-    if (sourcePath.startsWith('_source/') || !sourcePath.endsWith('.json')) {
-      continue;
-    }
-    let document: Record<string, unknown>;
-    try {
-      document = JSON.parse(bytes.toString()) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    let data = document.data;
-    if (
-      !data ||
-      typeof data !== 'object' ||
-      (data as { type?: unknown }).type !== 'card'
-    ) {
-      continue;
-    }
-    let strings: string[] = [];
-    collectStrings(document, strings);
-    cards.push({
-      rri: `${packageRRI}${cardPath(sourcePath)}`,
-      sourcePath,
-      document,
-      searchText: strings.join(' ').toLocaleLowerCase(),
-    });
-  }
+  let cards = indexDeckCards(files, packageRRI);
   let withoutHash: Omit<DeckVersionIndexSnapshot, 'indexHash'> = {
     format: DECK_VERSION_INDEX_FORMAT,
     packageRRI,
@@ -146,10 +117,47 @@ export async function buildDeckVersionIndex(options: {
   return snapshot;
 }
 
+export function indexDeckCards(
+  files: Map<string, Buffer>,
+  packageRRI: string,
+): DeckIndexCard[] {
+  let cards: DeckIndexCard[] = [];
+  for (let [sourcePath, bytes] of [...files.entries()].sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    if (sourcePath.startsWith('_source/') || !sourcePath.endsWith('.json')) {
+      continue;
+    }
+    let document: Record<string, unknown>;
+    try {
+      document = JSON.parse(bytes.toString()) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    let data = document.data;
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      (data as { type?: unknown }).type !== 'card'
+    ) {
+      continue;
+    }
+    let strings: string[] = [];
+    collectStrings(document, strings);
+    cards.push({
+      rri: `${packageRRI}${cardPath(sourcePath)}`,
+      sourcePath,
+      document,
+      searchText: strings.join(' ').toLocaleLowerCase(),
+    });
+  }
+  return cards;
+}
+
 export function queryDeckVersionIndex(
   snapshot: DeckVersionIndexSnapshot,
   query: string | undefined,
-): DeckVersionIndexCard[] {
+): DeckIndexCard[] {
   let needle = query?.trim().toLocaleLowerCase();
   return needle
     ? snapshot.cards.filter((card) => card.searchText.includes(needle))

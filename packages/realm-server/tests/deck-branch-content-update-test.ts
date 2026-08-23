@@ -23,6 +23,7 @@ import {
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
+import { readDeckBranchIndex } from '../lib/deck-branch-index.ts';
 
 const { module, test } = QUnit;
 const realmRRI = '@cardstack/pretui/';
@@ -159,6 +160,18 @@ module('Deck branch content updates', function (hooks) {
     assert.strictEqual(after?.repository.members[realmRRI], result.treeHash);
     assert.strictEqual(after?.head.historyHead, 'step2');
     assert.strictEqual(after?.head.latestCheckpointHash, null);
+    let index = await readDeckBranchIndex({
+      realmDir,
+      realmRRI,
+      branch: 'main',
+      policy,
+    });
+    assert.strictEqual(
+      index.indexGenerationHash,
+      after?.head.indexGenerationHash,
+      'the ref exposes only the completed immutable index generation',
+    );
+    assert.strictEqual(index.view.historyHead, 'step2');
     assert.strictEqual(
       await import('node:fs/promises').then(({ readFile }) =>
         readFile(join(realmDir, 'index.js'), 'utf8'),

@@ -27,9 +27,10 @@ remote branch observation ┘                              │
                                             conditional branch CAS
 ```
 
-- `.boxel-sync.json` is a `boxel-deck-workspace-v1` record containing the
+- `.boxel-sync.json` is a `boxel-deck-workspace-v2` record containing the
   realm RRI, branch identity, exact Repository/tree/lock hashes, observed ref
-  generation, and SHA-256 inventory. It contains no mtime compatibility data.
+  generation, History/index-generation heads, and SHA-256 inventory. It
+  contains no mtime compatibility data.
 - authenticated `GET /.deck/branch?name=…` returns the exact branch inventory;
   `GET /.deck/tree-file?tree=…&path=…` returns immutable bytes and the client
   verifies their expected hash.

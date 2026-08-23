@@ -22,3 +22,6 @@ contracts and are intentionally not featured on the main documentation page.
 - [B2b reviewer guide](./deck-b2b-reviewers-guide.md) — canonical every-save
   deckd History for accepted writes, branch-scoped listing, and forward-only
   restore through the same conditional mutation path.
+- [B3a reviewer guide](./deck-b3a-reviewers-guide.md) — immutable branch index
+  generations, exact `RealmViewContext`, and current-only v2 workspace/view
+  observations before the broader Boxel runtime is view-qualified in B3b.

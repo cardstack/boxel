@@ -322,7 +322,7 @@ module('exact Deck Version serving', function (hooks) {
     };
 
     assert.strictEqual(response?.status, 200);
-    assert.strictEqual(observation.schema, 'boxel-deck-branch-observation-v1');
+    assert.strictEqual(observation.schema, 'boxel-deck-branch-observation-v2');
     assert.strictEqual(observation.realmRRI, '@acme/theme/');
     assert.strictEqual(observation.branchName, 'main');
     assert.strictEqual(observation.refGeneration, 1);
@@ -360,6 +360,97 @@ module('exact Deck Version serving', function (hooks) {
     assert.strictEqual(
       response?.headers.get('cache-control'),
       'private, max-age=31536000, immutable',
+    );
+  });
+
+  test('does not expose a branch until its immutable index generation exists', async function (assert) {
+    let response = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/branch-index?branch=main',
+      ),
+    );
+
+    assert.strictEqual(response?.status, 409);
+    assert.true((await response?.text())?.includes('not available'));
+  });
+
+  test('queries the exact RRI-bearing view installed by an accepted write', async function (assert) {
+    let observedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observed = (await observedResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+    };
+    let sourcePath = 'catalog/compact-status.json';
+    let bytes = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { title: 'Compact Status preview' },
+      },
+    });
+    let published = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-update-v2',
+          message: `save: ${sourcePath}`,
+          expected: observed,
+          operations: [
+            {
+              path: sourcePath,
+              sha256: hashBytes(bytes),
+              contentBase64: Buffer.from(bytes).toString('base64'),
+            },
+          ],
+        }),
+      }),
+    );
+    let branch = (await published?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      historyHead: string;
+      indexGenerationHash: string;
+    };
+    let response = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/branch-index?branch=main&q=compact',
+      ),
+    );
+    let result = (await response?.json()) as {
+      schema: string;
+      indexGenerationHash: string;
+      view: Record<string, unknown>;
+      cards: Array<{ rri: string; sourcePath: string }>;
+    };
+
+    assert.strictEqual(published?.status, 200);
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(
+      response?.headers.get('cache-control'),
+      'private, no-store',
+    );
+    assert.strictEqual(result.schema, 'boxel-deck-branch-index-query-v1');
+    assert.strictEqual(result.indexGenerationHash, branch.indexGenerationHash);
+    assert.deepEqual(result.view, {
+      schema: 'boxel-realm-view-context-v1',
+      realmRRI: '@acme/theme/',
+      branch: 'main',
+      repositoryHash: branch.repositoryHash,
+      treeHash: branch.treeHash,
+      lockHash: branch.lockHash,
+      historyHead: branch.historyHead,
+    });
+    assert.deepEqual(
+      result.cards.map(({ rri, sourcePath: path }) => ({
+        rri,
+        sourcePath: path,
+      })),
+      [{ rri: '@acme/theme/catalog/compact-status', sourcePath }],
     );
   });
 

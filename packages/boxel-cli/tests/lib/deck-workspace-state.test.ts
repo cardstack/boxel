@@ -28,6 +28,8 @@ function state(files: Record<string, string>): DeckWorkspaceState {
     baseRepositoryHash: hash('repository'),
     baseTreeHash: inventoryTreeHash(files),
     baseLockHash: hash('lock'),
+    baseHistoryHead: 'step7',
+    baseIndexGenerationHash: hash('index:7'),
     observedRefGeneration: 7,
     files,
   };

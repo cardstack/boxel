@@ -4,8 +4,8 @@ import { dirname, join, relative, sep } from 'node:path';
 
 import { treeHashFromEntries } from '@cardstack/deck/node';
 
-export const DECK_WORKSPACE_STATE_SPEC = 'boxel-deck-workspace-v1';
-export const DECK_BRANCH_OBSERVATION_SPEC = 'boxel-deck-branch-observation-v1';
+export const DECK_WORKSPACE_STATE_SPEC = 'boxel-deck-workspace-v2';
+export const DECK_BRANCH_OBSERVATION_SPEC = 'boxel-deck-branch-observation-v2';
 export const DECK_WORKSPACE_STATE_FILE = '.boxel-sync.json';
 
 const HASH = /^[0-9a-f]{64}$/;
@@ -22,6 +22,8 @@ export interface DeckBranchSnapshot extends DeckBranchObservation {
   realmRRI: string;
   branchId: string;
   branchName: string;
+  historyHead: string;
+  indexGenerationHash: string;
   checkpointHash: string | null;
   files: Record<string, string>;
 }
@@ -39,6 +41,8 @@ export interface DeckWorkspaceState {
   baseRepositoryHash: string;
   baseTreeHash: string;
   baseLockHash: string;
+  baseHistoryHead: string;
+  baseIndexGenerationHash: string;
   observedRefGeneration: number;
   files: Record<string, string>;
 }
@@ -104,6 +108,10 @@ export function isDeckWorkspaceState(
     HASH.test(value.baseTreeHash) &&
     typeof value.baseLockHash === 'string' &&
     HASH.test(value.baseLockHash) &&
+    typeof value.baseHistoryHead === 'string' &&
+    value.baseHistoryHead.trim() !== '' &&
+    typeof value.baseIndexGenerationHash === 'string' &&
+    HASH.test(value.baseIndexGenerationHash) &&
     Number.isSafeInteger(value.observedRefGeneration) &&
     (value.observedRefGeneration as number) >= 1 &&
     isHashRecord(value.files) &&
@@ -130,6 +138,10 @@ export function isDeckBranchSnapshot(
     HASH.test(value.treeHash) &&
     typeof value.lockHash === 'string' &&
     HASH.test(value.lockHash) &&
+    typeof value.historyHead === 'string' &&
+    value.historyHead.trim() !== '' &&
+    typeof value.indexGenerationHash === 'string' &&
+    HASH.test(value.indexGenerationHash) &&
     Number.isSafeInteger(value.refGeneration) &&
     (value.refGeneration as number) >= 1 &&
     (value.checkpointHash === null ||
@@ -153,6 +165,8 @@ export function workspaceStateFromBranch(
     baseRepositoryHash: snapshot.repositoryHash,
     baseTreeHash: snapshot.treeHash,
     baseLockHash: snapshot.lockHash,
+    baseHistoryHead: snapshot.historyHead,
+    baseIndexGenerationHash: snapshot.indexGenerationHash,
     observedRefGeneration: snapshot.refGeneration,
     files: snapshot.files,
   };

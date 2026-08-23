@@ -32,6 +32,8 @@ function snapshot(
     repositoryHash: hashWorkspaceBytes(`repository:${generation}`),
     treeHash: inventoryTreeHash(files),
     lockHash: hashWorkspaceBytes('lock'),
+    historyHead: `step${generation}`,
+    indexGenerationHash: hashWorkspaceBytes(`index:${generation}`),
     refGeneration: generation,
     checkpointHash: hashWorkspaceBytes(`checkpoint:${generation}`),
     files,
