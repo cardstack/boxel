@@ -63,7 +63,10 @@ export {
 // Loading/failure/staleness treatment belongs to the embedding author; inside
 // the default templates it is `FilePreviewStage`'s job. For kind-dispatching
 // consumers, `filePreviewComponentFor(file)` resolves the renderer the file's
-// own class declares.
+// own class declares — pass it `ensureFileViewModel(file, mode)` as `@model`,
+// since only the content-only components exported here project a bare
+// instance themselves; the other family renderers read projection-only fields
+// (the fitted budgets among them) straight off `@model`.
 export { AudioPreview } from './audio-preview';
 export { ImagePreview } from './image-preview';
 export { MarkdownPreview } from './markdown-preview';

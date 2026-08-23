@@ -45,7 +45,12 @@ export type FilePreviewComponent = ComponentLike<FilePreviewSignature>;
 // itself in the common case (the component projects it through
 // `fileViewModel`), or a prebuilt FileViewModel (what the shells pass). `mode`
 // defaults to 'embedded', the complete-content rendition; 'fitted' selects the
-// budgeted snippet a collection cell draws. These components render content
+// budgeted snippet a collection cell draws. A prebuilt view model must have
+// been projected at the same format passed as `mode`: the fitted budgets are
+// applied at projection time, so a complete-content projection rendered at
+// 'fitted' would feed the whole file to the snippet branch. A consumer that
+// varies `mode` should pass the instance and let the component re-project.
+// These components render content
 // only — the loading/failure/staleness panes are `FilePreviewStage`'s job
 // inside the shells, so an embedding author owns those states.
 export interface ContentPreviewSignature {

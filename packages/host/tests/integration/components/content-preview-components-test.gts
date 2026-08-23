@@ -137,8 +137,27 @@ module('Integration | content-only file preview components', function (hooks) {
   });
 
   test('MarkdownPreview in fitted mode renders the budgeted snippet rendition', async function (assert) {
-    let { MarkdownPreview } = fileFormats;
-    let file = makeMarkdownFile();
+    let { MarkdownPreview, FITTED_TEXT_LINE_BUDGET } = fileFormats;
+    // A fixture longer than the fitted line budget, so this test pins that
+    // `@mode` flows through `ensureFileViewModel` into the projection-time
+    // budget — not just the branch selection the class name reflects. The
+    // heading occupies line one, so items 1..(budget - 1) survive the cut.
+    let content = [
+      '# Field Notes',
+      ...Array.from(
+        { length: FITTED_TEXT_LINE_BUDGET + 6 },
+        (_, i) => `- budget line ${i + 1}`,
+      ),
+    ].join('\n');
+    let file = new MarkdownDef({
+      id: 'http://example.com/docs/notes.md',
+      url: 'http://example.com/docs/notes.md',
+      sourceUrl: 'http://example.com/docs/notes.md',
+      name: 'notes.md',
+      contentType: 'text/markdown',
+      title: 'Field Notes',
+      content,
+    });
     await renderComponent(
       <template><MarkdownPreview @model={{file}} @mode='fitted' /></template>,
     );
@@ -146,6 +165,18 @@ module('Integration | content-only file preview components', function (hooks) {
       .dom('[data-test-markdown-preview]')
       .hasClass('md-preview--fitted', 'the fitted rendition is selected');
     assert.dom('[data-test-markdown-preview] h1').hasText('Field Notes');
+    assert
+      .dom('[data-test-markdown-preview]')
+      .includesText(
+        `budget line ${FITTED_TEXT_LINE_BUDGET - 1}`,
+        'the last line inside the budget is rendered',
+      );
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotIncludeText(
+        `budget line ${FITTED_TEXT_LINE_BUDGET}`,
+        'lines beyond the fitted budget are cut at projection time',
+      );
   });
 
   test('ImagePreview renders a native <img> from a bare FileDef instance', async function (assert) {
