@@ -8,6 +8,11 @@ import {
   type JsonValue,
 } from '@cardstack/deck/node';
 import { readObject, readTree } from '@cardstack/deck/object-store';
+import {
+  isRealmViewContext,
+  REALM_VIEW_CONTEXT_SPEC,
+  type RealmViewContext,
+} from '@cardstack/runtime-common/realm-view-context';
 
 import {
   DeckProtocolIntegrityError,
@@ -17,18 +22,7 @@ import {
 import type { DeckCollaborationPolicy } from './deck-collaboration-policy.ts';
 import { indexDeckCards, type DeckIndexCard } from './deck-version-index.ts';
 
-export const REALM_VIEW_CONTEXT_SPEC = 'boxel-realm-view-context-v1';
 export const DECK_INDEX_GENERATION_SPEC = 'boxel-deck-index-generation-v1';
-
-export interface RealmViewContext {
-  schema: typeof REALM_VIEW_CONTEXT_SPEC;
-  realmRRI: string;
-  branch: string;
-  repositoryHash: string;
-  treeHash: string;
-  lockHash: string;
-  historyHead: string;
-}
 
 export interface DeckIndexGeneration {
   schema: typeof DECK_INDEX_GENERATION_SPEC;
@@ -74,13 +68,7 @@ function parseGeneration(
   let value = JSON.parse(bytes.toString()) as DeckIndexGeneration;
   if (
     value.schema !== DECK_INDEX_GENERATION_SPEC ||
-    value.view?.schema !== REALM_VIEW_CONTEXT_SPEC ||
-    typeof value.view.realmRRI !== 'string' ||
-    typeof value.view.branch !== 'string' ||
-    !isHash(value.view.repositoryHash) ||
-    !isHash(value.view.treeHash) ||
-    !isHash(value.view.lockHash) ||
-    typeof value.view.historyHead !== 'string' ||
+    !isRealmViewContext(value.view) ||
     !Array.isArray(value.cards) ||
     hashProtocolObject(value as unknown as JsonValue) !== expectedHash
   ) {

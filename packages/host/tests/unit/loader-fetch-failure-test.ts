@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
+import { Loader, REALM_VIEW_HEADER } from '@cardstack/runtime-common';
 
 // The loader's module map keys entries by the extension-trimmed identifier:
 // `foo.gts`, `foo.ts`, and extensionless `foo` share one cache slot. A fetch
@@ -91,5 +91,32 @@ module('Unit | loader fetch-failure caching', function () {
       'the second import refetched instead of replaying a cached failure',
     );
     assert.strictEqual(fetchCount, 2, 'each import performed its own fetch');
+  });
+
+  test('an exact Realm view is stamped on module requests and retained by clones', async function (assert) {
+    let view = 'c'.repeat(64);
+    let requests: Request[] = [];
+    let fetchImpl: typeof globalThis.fetch = async (input, init) => {
+      let request = input instanceof Request ? input : new Request(input, init);
+      requests.push(request);
+      return new Response(`export const value = '${request.url}';`, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+    };
+    let loader = new Loader(fetchImpl, undefined, {
+      realmViewForURL: (url) =>
+        url.hostname === 'test.example' ? view : undefined,
+    });
+    await loader.import('http://test.example/realm/first');
+    let clone = Loader.cloneLoader(loader);
+    await clone.import('http://test.example/realm/second');
+
+    assert.deepEqual(
+      requests.map((request) => request.headers.get(REALM_VIEW_HEADER)),
+      [view, view],
+      'the original and cloned coherent module graphs select the same view',
+    );
+    loader.dispose();
+    clone.dispose();
   });
 });

@@ -19,9 +19,12 @@ import type {
 } from '@cardstack/deck-history/backend';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
+  REALM_VIEW_HEADER,
+  RealmPaths,
   SupportedMimeType,
   inferContentType,
   parseExactVersionTransportURL,
+  realmViewHash,
 } from '@cardstack/runtime-common';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
@@ -49,6 +52,7 @@ import {
   DeckIndexPendingError,
   queryDeckBranchIndex,
   readDeckBranchIndex,
+  readDeckIndexGeneration,
 } from '../lib/deck-branch-index.ts';
 import {
   readDeckBranchHistory,
@@ -358,6 +362,156 @@ async function handleDeckBranchIndexRequest(
   }
 }
 
+async function handleExactRealmViewRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestedView = request.headers.get(REALM_VIEW_HEADER);
+  if (requestedView === null) return null;
+  let indexGenerationHash = realmViewHash(request.headers);
+  if (!indexGenerationHash) {
+    return new Response('Invalid Realm view hash', { status: 400 });
+  }
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('Exact Realm views are read-only', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+
+  let transportURL = new URL(request.url);
+  transportURL.search = '';
+  transportURL.hash = '';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(transportURL)
+    : findOrMountRealm(transportURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+
+  let generation = await readDeckIndexGeneration(
+    realm.dir,
+    indexGenerationHash,
+  );
+  if (!generation || generation.view.realmRRI !== realmRRI) {
+    return new Response('Realm view not found', { status: 404 });
+  }
+
+  let realmURL = new URL(realm.url);
+  realmURL.protocol = transportURL.protocol;
+  let path: string;
+  try {
+    path = new RealmPaths(realmURL).local(transportURL);
+  } catch {
+    return new Response('Realm view not found', { status: 404 });
+  }
+  if (path === '_mtimes') {
+    let tree = await readTree(
+      join(realm.dir, '.deck', 'store'),
+      generation.view.treeHash,
+    );
+    if (!tree) {
+      return new Response('Realm view tree not found', { status: 404 });
+    }
+    let mtimes = Object.fromEntries(
+      tree.entries
+        .filter(({ path: entryPath }) => !entryPath.startsWith('.deck/'))
+        .map(({ path: entryPath }) => [new URL(entryPath, realmURL).href, 0]),
+    );
+    return new Response(
+      request.method === 'HEAD'
+        ? null
+        : JSON.stringify({
+            data: {
+              id: realmURL.href,
+              type: 'mtimes',
+              attributes: { mtimes },
+            },
+          }),
+      {
+        headers: {
+          'cache-control': `${authorization.publicReadable ? 'public' : 'private'}, max-age=31536000, immutable`,
+          'content-type': SupportedMimeType.Mtimes,
+          vary: `${REALM_VIEW_HEADER}, Authorization`,
+          'x-boxel-realm-url': realmURL.href,
+          'x-boxel-realm-view': indexGenerationHash,
+        },
+      },
+    );
+  }
+  if (!path || path.startsWith('.deck/')) {
+    return new Response('Realm view file not found', { status: 404 });
+  }
+
+  let cardProjection = projectsCardDocument(request, path);
+  let storedPath = cardProjection ? `${path}.json` : path;
+  let bytes = await readTreeFile(
+    join(realm.dir, '.deck', 'store'),
+    generation.view.treeHash,
+    storedPath,
+  );
+  if (!bytes) {
+    return new Response('Realm view file not found', { status: 404 });
+  }
+  if (cardProjection) {
+    bytes = projectCardDocument(bytes, transportURL, realmURL, {
+      indexGenerationHash,
+      branch: generation.view.branch,
+    });
+  }
+  let executableModule = requestsExecutableModule(request, path);
+  if (executableModule) {
+    bytes = Buffer.from(
+      await transpileJS(
+        bytes.toString(),
+        `/${generation.view.realmRRI}${path}`,
+      ),
+    );
+  }
+
+  let etag = `"${hashBytes(bytes)}"`;
+  let headers = new Headers({
+    'cache-control': `${authorization.publicReadable ? 'public' : 'private'}, max-age=31536000, immutable`,
+    'content-length': String(bytes.byteLength),
+    'content-type': cardProjection
+      ? SupportedMimeType.CardJson
+      : executableModule
+        ? 'text/javascript'
+        : inferContentType(path),
+    etag,
+    'last-modified': 'Thu, 01 Jan 1970 00:00:00 GMT',
+    'x-created': 'Thu, 01 Jan 1970 00:00:00 GMT',
+    vary: `${REALM_VIEW_HEADER}, Accept, Authorization`,
+    'x-boxel-realm-url': realmURL.href,
+    'x-boxel-realm-rri': realmRRI,
+    'x-boxel-realm-public-readable': String(authorization.publicReadable),
+    'x-boxel-realm-view': indexGenerationHash,
+    'x-boxel-realm-branch': generation.view.branch,
+    'x-boxel-deck-collaboration': 'true',
+    'access-control-expose-headers':
+      'X-Boxel-Realm-Url,X-Boxel-Realm-RRI,X-Boxel-Realm-Public-Readable,X-Boxel-Realm-View,X-Boxel-Realm-Branch,X-Boxel-Deck-Collaboration,Cache-Control,ETag,Content-Length',
+  });
+  if (request.headers.get('if-none-match') === etag) {
+    return new Response(null, { status: 304, headers });
+  }
+  let response = new Response(
+    request.method === 'HEAD' ? null : new Uint8Array(bytes),
+    { headers },
+  ) as ResponseWithNodeStream;
+  if (request.method === 'GET') {
+    response.nodeStream = Readable.from(bytes);
+  }
+  return response;
+}
+
 async function handleDeckTreeFileRequest(
   request: Request,
   deps: DeckVersionServingDeps,
@@ -647,6 +801,7 @@ function projectCardDocument(
   bytes: Buffer,
   cardURL: URL,
   realmURL: URL,
+  view?: { indexGenerationHash: string; branch: string },
 ): Buffer {
   let document = JSON.parse(bytes.toString()) as {
     data?: {
@@ -662,6 +817,7 @@ function projectCardDocument(
   document.data.meta = {
     ...document.data.meta,
     realmURL: realmURL.href,
+    ...(view ? { realmView: view } : {}),
   };
   document.data.links = {
     ...document.data.links,
@@ -736,6 +892,10 @@ export async function handleDeckVersionRequest(
   let capabilities = await handleDeckCapabilitiesRequest(request, deps);
   if (capabilities) {
     return capabilities;
+  }
+  let exactRealmView = await handleExactRealmViewRequest(request, deps);
+  if (exactRealmView) {
+    return exactRealmView;
   }
   let transportURL = new URL(request.url);
   transportURL.search = '';

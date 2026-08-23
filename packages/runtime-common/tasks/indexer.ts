@@ -159,7 +159,14 @@ function parseIncrementalArgsForCoalesce(
   if (!isObjectLike(args)) {
     return undefined;
   }
-  let { realmURL, realmUsername, ignoreData, changes, coalescedCallers } = args;
+  let {
+    realmURL,
+    realmUsername,
+    realmView,
+    ignoreData,
+    changes,
+    coalescedCallers,
+  } = args;
   if (
     typeof realmURL !== 'string' ||
     typeof realmUsername !== 'string' ||
@@ -171,6 +178,7 @@ function parseIncrementalArgsForCoalesce(
   return {
     realmURL,
     realmUsername,
+    ...(typeof realmView === 'string' ? { realmView } : {}),
     ignoreData: ignoreData as Record<string, string>,
     changes: changes as IncrementalChange[],
     coalescedCallers: Array.isArray(coalescedCallers)

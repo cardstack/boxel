@@ -15,6 +15,7 @@ import {
   type RuntimeDependencyTrackingContext,
 } from './dependency-tracker.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { withRealmView } from './realm-view-context.ts';
 
 type FetchingModule = {
   state: 'fetching';
@@ -105,6 +106,8 @@ type EvaluatableDep =
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 type Fetch = typeof fetch;
+
+export type RealmViewResolver = (moduleURL: URL) => string | undefined;
 
 // Transient upstream statuses that we briefly retry on module-source fetches
 // (e.g. nginx returning 502/503/504 while the single-writer realm server is
@@ -232,6 +235,7 @@ export class Loader {
   private prepareModuleResolution:
     | ((moduleURL: URL, response: Response) => Promise<void>)
     | undefined;
+  private realmViewForURL: RealmViewResolver | undefined;
 
   constructor(
     fetch: Fetch,
@@ -243,6 +247,11 @@ export class Loader {
       ) => Promise<void>;
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
+      // A Loader is one coherent module graph. When it represents an exact
+      // Deck view, stamp every matching module request with that immutable
+      // view's index-generation hash. Owners must replace the Loader when
+      // their selected view changes.
+      realmViewForURL?: RealmViewResolver;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -251,6 +260,7 @@ export class Loader {
     this.retrySleep = options?.retrySleep;
     this.prepareModuleResolution = options?.prepareModuleResolution;
     this.virtualNetwork = options?.virtualNetwork;
+    this.realmViewForURL = options?.realmViewForURL;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -288,6 +298,7 @@ export class Loader {
       prepareModuleResolution: loader.prepareModuleResolution,
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
+      realmViewForURL: loader.realmViewForURL,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -877,6 +888,10 @@ export class Loader {
       }
 
       let request = this.asRequest(urlOrRequest, init);
+      let realmView = this.realmViewForURL?.(new URL(request.url));
+      if (realmView) {
+        request = withRealmView(request, realmView);
+      }
       return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =

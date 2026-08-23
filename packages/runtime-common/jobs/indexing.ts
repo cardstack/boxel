@@ -17,8 +17,11 @@ export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 // shares one concurrency group, which is what makes them serialize per realm.
 // Anything that reasons about a realm's index jobs as a set (enqueue,
 // teardown, quiescence) must use this same name.
-export function indexingConcurrencyGroup(realmURL: string): string {
-  return `indexing:${realmURL}`;
+export function indexingConcurrencyGroup(
+  realmURL: string,
+  realmView?: string,
+): string {
+  return `indexing:${realmURL}${realmView ? `:view:${realmView}` : ''}`;
 }
 
 // Await a realm's index lane holding no outstanding work. The in-process
@@ -181,6 +184,7 @@ function parseIncrementalResult(
 export interface IncrementalIndexEnqueueArgs {
   realmURL: string;
   realmUsername: string;
+  realmView?: string;
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
 }
@@ -194,6 +198,7 @@ export function makeIncrementalArgsWithCallerMetadata(
   return {
     realmURL: args.realmURL,
     realmUsername: args.realmUsername,
+    ...(args.realmView ? { realmView: args.realmView } : {}),
     changes: args.changes,
     ignoreData: args.ignoreData,
     coalescedCallers,

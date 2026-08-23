@@ -1,6 +1,7 @@
 import { merge } from 'lodash-es';
 
 import { isNode } from './index.ts';
+import { REALM_VIEW_HEADER } from './realm-view-context.ts';
 
 const cache = new Map<string, { etag: string; body: string }>();
 
@@ -44,7 +45,13 @@ export async function cachedFetch(
         ? urlOrRequest.href
         : urlOrRequest.url;
   let accept = getAcceptHeader(urlOrRequest, init).trim().toLowerCase();
-  let cacheKey = `${key}::accept:${accept}`;
+  let headers =
+    urlOrRequest instanceof Request
+      ? urlOrRequest.headers
+      : new Headers(init?.headers);
+  let realmView =
+    headers.get(REALM_VIEW_HEADER)?.trim().toLowerCase() ?? 'live';
+  let cacheKey = `${key}::accept:${accept}::realm-view:${realmView}`;
   let cached = cache.get(cacheKey);
   if (cached?.etag) {
     if (urlOrRequest instanceof Request) {

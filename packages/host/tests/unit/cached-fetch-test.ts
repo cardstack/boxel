@@ -1,6 +1,11 @@
 import { module, test } from 'qunit';
 
-import { cachedFetch, clearFetchCache } from '@cardstack/runtime-common';
+import {
+  cachedFetch,
+  clearFetchCache,
+  REALM_VIEW_HEADER,
+  withRealmView,
+} from '@cardstack/runtime-common';
 
 type FetchCall = {
   accept: string | null;
@@ -118,6 +123,53 @@ module('Unit | cached-fetch', function (hooks) {
     assert.deepEqual(calls, [
       { accept: '*/*', ifNoneMatch: null },
       { accept: null, ifNoneMatch: 'etag-module' },
+    ]);
+  });
+
+  test('the same URL is cached independently for each exact Realm view', async function (assert) {
+    let viewA = 'a'.repeat(64);
+    let viewB = 'b'.repeat(64);
+    let calls: Array<{ view: string | null; ifNoneMatch: string | null }> = [];
+    let impl: typeof fetch = async (input, init) => {
+      let request = input instanceof Request ? input : new Request(input, init);
+      let view = request.headers.get(REALM_VIEW_HEADER);
+      let ifNoneMatch = request.headers.get('if-none-match');
+      calls.push({ view, ifNoneMatch });
+      if (ifNoneMatch) {
+        return new Response(null, { status: 304 });
+      }
+      return new Response(`body for ${view}`, {
+        headers: {
+          etag: `etag-${view}`,
+          'x-boxel-realm-url': 'http://example.com/',
+        },
+      });
+    };
+
+    let responseA = await cachedFetch(
+      impl,
+      withRealmView(new Request(TEST_URL), viewA),
+    );
+    let bodyA = await responseA.text();
+    responseA.cacheResponse?.(bodyA);
+    let responseB = await cachedFetch(
+      impl,
+      withRealmView(new Request(TEST_URL), viewB),
+    );
+    let bodyB = await responseB.text();
+    responseB.cacheResponse?.(bodyB);
+    let cachedA = await cachedFetch(
+      impl,
+      withRealmView(new Request(TEST_URL), viewA),
+    );
+
+    assert.strictEqual(bodyA, `body for ${viewA}`);
+    assert.strictEqual(bodyB, `body for ${viewB}`);
+    assert.strictEqual(await cachedA.text(), bodyA);
+    assert.deepEqual(calls, [
+      { view: viewA, ifNoneMatch: null },
+      { view: viewB, ifNoneMatch: null },
+      { view: viewA, ifNoneMatch: `etag-${viewA}` },
     ]);
   });
 });

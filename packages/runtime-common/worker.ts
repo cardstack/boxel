@@ -24,6 +24,7 @@ import {
   type DBAdapter,
   type RealmPermissions,
   CachingDefinitionLookup,
+  withRealmView,
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
 import type { MediaCacheAdapter } from './media-cache.ts';
@@ -292,6 +293,11 @@ export class Worker {
   }
 
   private async makeAuthedFetch(args: WorkerArgs) {
+    // WorkerArgs is a JSON object shared by many job families. Deck indexing
+    // jobs add this string only when they select an exact immutable view;
+    // legacy/live jobs omit it.
+    let realmView =
+      typeof args.realmView === 'string' ? args.realmView : undefined;
     let matrixClient: MatrixClient;
     if (this.#matrixClientCache.has(this.#realmServerMatrixUsername)) {
       matrixClient = this.#matrixClientCache.get(
@@ -337,6 +343,17 @@ export class Worker {
     _fetch = fetcher(
       this.#virtualNetwork.fetch,
       [
+        async (req, next) => {
+          if (realmView) {
+            let requestURL = new URL(req.url);
+            let realmURL = new URL(args.realmURL);
+            realmURL.protocol = requestURL.protocol;
+            if (new RealmPaths(realmURL).inRealm(requestURL)) {
+              req = withRealmView(req, realmView);
+            }
+          }
+          return next(req);
+        },
         async (req, next) => {
           req.headers.set('X-Boxel-Assume-User', realmUserId);
           return next(req);

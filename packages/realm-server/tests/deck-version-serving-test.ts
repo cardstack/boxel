@@ -17,7 +17,11 @@ import type {
   RestorePlan,
 } from '@cardstack/deck-history/backend';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
-import { VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  REALM_VIEW_HEADER,
+  SupportedMimeType,
+  VirtualNetwork,
+} from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 
 import { handleDeckVersionRequest } from '../handlers/serve-deck-version.ts';
@@ -452,6 +456,126 @@ module('exact Deck Version serving', function (hooks) {
       })),
       [{ rri: '@acme/theme/catalog/compact-status', sourcePath }],
     );
+  });
+
+  test('serves two immutable source trees at one realm URL without falling through to live', async function (assert) {
+    async function observe() {
+      let response = await serve(
+        new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+      );
+      return (await response?.json()) as {
+        repositoryHash: string;
+        treeHash: string;
+        lockHash: string;
+        refGeneration: number;
+      };
+    }
+
+    async function publish(source: string) {
+      let expected = await observe();
+      let response = await serve(
+        new Request(
+          'https://realms.example/acme/theme/.deck/branch?name=main',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              schema: 'boxel-deck-branch-update-v2',
+              message: 'save: index.js',
+              expected,
+              operations: [
+                {
+                  path: 'index.js',
+                  sha256: hashBytes(source),
+                  contentBase64: Buffer.from(source).toString('base64'),
+                },
+              ],
+            }),
+          },
+        ),
+      );
+      assert.strictEqual(response?.status, 200);
+      return (await response?.json()) as { indexGenerationHash: string };
+    }
+
+    let blueSource = 'export const accent = "blue";\n';
+    let blue = await publish(blueSource);
+    let greenSource = 'export const accent = "green";\n';
+    let green = await publish(greenSource);
+    await writeFile(
+      join(realmDir, 'index.js'),
+      'export const accent = "uncommitted live bytes";\n',
+    );
+    await writeFile(join(realmDir, 'scratch.js'), 'not in either view\n');
+
+    async function sourceAt(indexGenerationHash: string) {
+      return serve(
+        new Request('https://realms.example/acme/theme/index.js', {
+          headers: {
+            accept: SupportedMimeType.CardSource,
+            [REALM_VIEW_HEADER]: indexGenerationHash,
+          },
+        }),
+      );
+    }
+    let blueResponse = await sourceAt(blue.indexGenerationHash);
+    let greenResponse = await sourceAt(green.indexGenerationHash);
+
+    assert.strictEqual(await blueResponse?.text(), blueSource);
+    assert.strictEqual(await greenResponse?.text(), greenSource);
+    assert.strictEqual(
+      blueResponse?.headers.get('x-boxel-realm-view'),
+      blue.indexGenerationHash,
+    );
+    assert.strictEqual(
+      greenResponse?.headers.get('x-boxel-realm-view'),
+      green.indexGenerationHash,
+    );
+    assert.true(
+      blueResponse?.headers.get('vary')?.includes(REALM_VIEW_HEADER),
+      'shared URL caches vary on exact Realm view',
+    );
+    let inventoryResponse = await serve(
+      new Request('https://realms.example/acme/theme/_mtimes', {
+        headers: {
+          accept: SupportedMimeType.Mtimes,
+          [REALM_VIEW_HEADER]: blue.indexGenerationHash,
+        },
+      }),
+    );
+    let inventory = (await inventoryResponse?.json()) as {
+      data: { attributes: { mtimes: Record<string, number> } };
+    };
+    assert.strictEqual(inventoryResponse?.status, 200);
+    assert.strictEqual(
+      inventory.data.attributes.mtimes[
+        'https://realms.example/acme/theme/index.js'
+      ],
+      0,
+    );
+    assert.notOk(
+      inventory.data.attributes.mtimes[
+        'https://realms.example/acme/theme/scratch.js'
+      ],
+      'the exact inventory excludes uncommitted live files',
+    );
+  });
+
+  test('an exact Realm view fails closed for invalid identity and writes', async function (assert) {
+    let invalid = await serve(
+      new Request('https://realms.example/acme/theme/index.js', {
+        headers: { [REALM_VIEW_HEADER]: 'main' },
+      }),
+    );
+    let write = await serve(
+      new Request('https://realms.example/acme/theme/index.js', {
+        method: 'POST',
+        headers: { [REALM_VIEW_HEADER]: 'a'.repeat(64) },
+      }),
+    );
+
+    assert.strictEqual(invalid?.status, 400);
+    assert.strictEqual(write?.status, 405);
   });
 
   test('conditionally publishes branch bytes and records exact main History', async function (assert) {

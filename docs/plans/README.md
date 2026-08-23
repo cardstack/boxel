@@ -25,3 +25,6 @@ contracts and are intentionally not featured on the main documentation page.
 - [B3a reviewer guide](./deck-b3a-reviewers-guide.md) — immutable branch index
   generations, exact `RealmViewContext`, and current-only v2 workspace/view
   observations before the broader Boxel runtime is view-qualified in B3b.
+- [B3b view-isolation design](./deck-b3b-view-isolation-design.md) — one exact
+  view identity through source transport, caches, SQL index rows, jobs,
+  prerender, events, Loader graphs, activity, and test selection.
