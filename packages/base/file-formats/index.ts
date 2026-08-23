@@ -26,8 +26,10 @@ export {
   FITTED_TEXT_CHARACTER_BUDGET,
   FITTED_TEXT_LINE_BUDGET,
   FITTED_WAVEFORM_BAR_BUDGET,
+  ensureFileViewModel,
   fileProfileSource,
   fileViewModel,
+  isFileViewModel,
   type FileFormat,
   type FileModelLike,
   type FileProfileSource,
@@ -48,11 +50,23 @@ export {
 
 export {
   FilePreviewStage,
+  filePreviewComponentFor,
+  type ContentPreviewSignature,
   type FilePreviewComponent,
   type FilePreviewSignature,
 } from './file-preview-stage';
 
+// The content-only family renderers: just the file's content, none of the
+// shell chrome (no file bar, no inspector, no Download/Copy-link). Pass the
+// FileDef instance as `@model` — or a prebuilt view model — and optionally a
+// `@mode`, which defaults to 'embedded' (see `ContentPreviewSignature`).
+// Loading/failure/staleness treatment belongs to the embedding author; inside
+// the default templates it is `FilePreviewStage`'s job. For kind-dispatching
+// consumers, `filePreviewComponentFor(file)` resolves the renderer the file's
+// own class declares.
+export { AudioPreview } from './audio-preview';
 export { ImagePreview } from './image-preview';
+export { MarkdownPreview } from './markdown-preview';
 
 // The compound metadata shapes an extractor writes into. Shared per metadata
 // family rather than per file extension, so a camera or a color profile reads
