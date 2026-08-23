@@ -31,6 +31,7 @@ import {
   visualElementStore,
 } from 'motion-dom';
 
+import { registerBusyProbe } from './activity.ts';
 import { type ChoreoHost, closestChoreo } from './choreo/registry.ts';
 import type { ChoreoNode } from './choreo/types.ts';
 import { initFeatures } from './features.ts';
@@ -46,10 +47,16 @@ import {
   closestMotionConfig,
   type MotionConfigContext,
 } from './motion-config.gts';
-import type { PresenceHandle } from './presence-types.ts';
+import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
-import { slowed } from './speed.ts';
+import { motionSpeed, onMotionSpeed, slowed } from './speed.ts';
 import { styleValue } from './unitless.ts';
+
+/** motion-dom's own `defaultLayoutTransition`, which it does not export */
+const DEFAULT_LAYOUT_TRANSITION = {
+  duration: 0.45,
+  ease: [0.4, 0, 0.1, 1],
+} as const;
 
 /** React's HTMLMotionProps = MotionNodeOptions + style (static values and MotionValues) */
 export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> & {
@@ -186,6 +193,61 @@ function closestProjection(
 }
 
 /**
+ * popLayout leavers, measured but not yet lifted.
+ *
+ * Applying `position:absolute` to one leaver takes it out of flow, which
+ * reflows every sibling after it. A second leaver measured after that reads its
+ * already-shifted box and pins itself there — so popping three crumbs at once
+ * used to collapse them all onto the first one's seat. Measure them all against
+ * the original layout, THEN lift them, so each keeps its own place.
+ *
+ * The flush is a microtask, which always runs before paint; anything that reads
+ * layout in the meantime forces it first.
+ */
+const pendingPops: { apply: () => void }[] = [];
+let popFlushBooked = false;
+
+/** where a popLayout leaver is sitting, and the box it has to be pinned inside */
+interface PopSeat {
+  h: number;
+  isRTL: boolean;
+  left: number;
+  parentHeight: number;
+  parentWidth: number;
+  top: number;
+  w: number;
+}
+
+function seatOf(el: MotionEl): PopSeat | undefined {
+  const parent = (el as HTMLElement).offsetParent as HTMLElement | null;
+  const cs = getComputedStyle(el);
+  const w = parseFloat(cs.width),
+    h = parseFloat(cs.height);
+  if (!w || !h) {
+    return undefined;
+  }
+  return {
+    h,
+    isRTL: cs.direction === 'rtl',
+    left: (el as HTMLElement).offsetLeft,
+    parentHeight: parent?.offsetHeight ?? 0,
+    parentWidth: parent?.offsetWidth ?? 0,
+    top: (el as HTMLElement).offsetTop,
+    w,
+  };
+}
+
+export function flushPendingPops() {
+  if (!pendingPops.length) {
+    return;
+  }
+  popFlushBooked = false;
+  for (const { apply } of pendingPops.splice(0)) {
+    apply();
+  }
+}
+
+/**
  * Glimmer installs modifiers children-first, so a child cannot find its parent's
  * VisualElement when its modifier first runs. React mounts motion elements in
  * effects after commit, parents first — so do we: first runs queue here and the
@@ -195,6 +257,9 @@ const pendingMounts = new Set<MotionNode>();
 /** mount everything rendered this pass — idempotent; presence notifications call it first so that a
  *  leaver is refreshed only after its replacement has joined the shared-element stack (React: same commit) */
 export function flushPendingMounts() {
+  // a leaver that has been measured but not yet lifted is still in flow, and
+  // would be measured as though it were staying
+  flushPendingPops();
   if (!pendingMounts.size) {
     return;
   }
@@ -228,9 +293,29 @@ export function flushPendingMounts() {
 }
 setMountFlusher(flushPendingMounts);
 
+/** elements rendered this pass that have not been constructed or lifted yet */
+registerBusyProbe(() =>
+  pendingMounts.size
+    ? `${pendingMounts.size} motion element(s) waiting to mount`
+    : pendingPops.length
+      ? `${pendingPops.length} popLayout leaver(s) waiting to be lifted`
+      : false,
+);
+
+/** a short, recognisable name for an element in a timeout message */
+function describe(el: Element | undefined): string {
+  if (!el) {
+    return '<detached>';
+  }
+  const cls = typeof el.className === 'string' ? el.className.trim() : '';
+  return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${
+    cls ? `.${cls.split(/\s+/).join('.')}` : ''
+  }`;
+}
+
 let layoutPresenceId = 0;
 
-export default class MotionNode implements ChoreoNode {
+export class MotionNode implements ChoreoNode, PopMeasurable {
   private ve?: HTMLVisualElement;
   private destroyed = false;
   /** this node's registration with its presence child (MeasureLayout registers per node) */
@@ -256,13 +341,46 @@ export default class MotionNode implements ChoreoNode {
     const merged = { ...defaults, ...props } as MotionNodeOptions;
     // slow motion: the engine only ever sees the scaled transition, so the
     // animation is born slower rather than being sped up mid-flight
-    const scaled = slowed(merged.transition as never);
+    let source = merged.transition;
+    if (
+      source === undefined &&
+      motionSpeed() !== 1 &&
+      (merged.layout !== undefined || merged.layoutId !== undefined)
+    ) {
+      // A layout animation resolves its own transition inside the projection
+      // tree: `options.transition`, else the element's own `transition` prop,
+      // else a default the engine keeps to itself. Only the middle one is ours
+      // to scale, so a projecting element that never declared a transition
+      // would ignore slow motion entirely. Hand it the engine's own default,
+      // scaled — and only while slowed, so at normal speed the engine still
+      // reaches its default by its own path and nothing changes.
+      source = DEFAULT_LAYOUT_TRANSITION as never;
+    }
+    const scaled = slowed(source as never);
     return (
       scaled === merged.transition ? merged : { ...merged, transition: scaled }
     ) as MotionNodeOptions;
   }
+
+  /** re-configure when the global speed changes, so the next layout animation is born slowed */
+  private watchSpeed() {
+    this.unsubscribeSpeed ??= onMotionSpeed(() => {
+      if (this.ve && !this.destroyed && this.element && this.latest) {
+        this.apply(
+          this.element,
+          this.configured(this.latest.props),
+          this.latest.ownPresence,
+        );
+      }
+    });
+  }
+  private unsubscribeSpeed?: () => void;
+  private stopProbe?: () => void;
   private unregister?: () => void;
   private popStyle?: HTMLStyleElement;
+  /** the seat measured before the render that removed this element */
+  private popSeat?: PopSeat;
+  private unregisterPop?: () => void;
   /** boxel-motion's sprite identity: a <Choreo> above selects this element by these */
   id: string | null = null;
   role: string | null = null;
@@ -330,13 +448,34 @@ export default class MotionNode implements ChoreoNode {
           presenceContext,
           props,
           blockInitialAnimation: blockInitial,
-          // MotionConfigContext's defaults: reducedMotion "never"
-          reducedMotionConfig: this.config.reducedMotion ?? 'never',
+          // React's MotionConfigContext defaults this to "never" — Motion is a
+          // library you opt into, so it assumes you meant it. On the web
+          // platform the person's setting is the default and honouring it is
+          // not a feature: `prefers-reduced-motion: reduce` disables transform
+          // and layout animation here unless a <MotionConfig> above says
+          // otherwise. Porting a React app that relied on the other default is
+          // one attribute: <MotionConfig @reducedMotion="never">.
+          reducedMotionConfig: this.config.reducedMotion ?? 'user',
           skipAnimations: this.config.skipAnimations,
         },
         { allowProjection: true },
       );
       this.ve = ve;
+      this.stopProbe = registerBusyProbe(() => {
+        const live = this.ve;
+        if (!live || this.destroyed) {
+          return false;
+        }
+        for (const [key, value] of live.values) {
+          if (value.isAnimating()) {
+            return `${describe(this.element)} ${key}`;
+          }
+        }
+        if (live.projection?.currentAnimation) {
+          return `${describe(this.element)} layout`;
+        }
+        return false;
+      });
       nodeOf.set(ve, this);
       visualElementStore.set(element, ve); // visible to children constructed after us, before any mount
       treeVariants.set(
@@ -346,6 +485,11 @@ export default class MotionNode implements ChoreoNode {
       if (presence) {
         presenceOf.set(ve, presence);
         this.unsubscribePresence = presence.subscribe(() => this.refresh());
+      }
+      // only the element the handle was passed to directly pops (React:
+      // PopChild wraps the child of AnimatePresence, not its descendants)
+      if (ownPresence) {
+        this.unregisterPop = ownPresence.popCandidate(this);
       }
       if (props.layout || props.layoutId || props.drag) {
         // React: an element rendered through a portal does not project under its DOM-less parent
@@ -450,6 +594,10 @@ export default class MotionNode implements ChoreoNode {
         this.joinChoreo(element, presenceContext);
       }
       if (ve.projection) {
+        // its transition is resolved inside the projection tree, from props
+        // read at animation time — so a speed change has to re-configure it
+        // before the interaction, not during
+        this.watchSpeed();
         if (hasTakenAnySnapshot) {
           requestSettle();
         }
@@ -677,28 +825,41 @@ export default class MotionNode implements ChoreoNode {
     }
   }
 
+  /**
+   * React's PopChildMeasure.getSnapshotBeforeUpdate: the seat this element
+   * occupies, read BEFORE the render that removes it.
+   *
+   * <Presence> calls this from its own diff, while the arrivals for this pass
+   * are still unrendered. Measuring later reads a layout that already holds
+   * them — the container has grown, and a centred one has moved — so the
+   * leaver would be pinned somewhere it never stood.
+   */
+  measureForPop() {
+    const el = this.element;
+    if (el?.isConnected) {
+      this.popSeat = seatOf(el);
+    }
+  }
+
   /** popLayout: a leaving element is lifted out of flow at its last box so siblings can close up */
   private pop(el: MotionEl, isPresent: boolean, handle: PresenceHandle) {
     if (isPresent) {
       this.popStyle?.remove();
       this.popStyle = undefined;
+      this.popSeat = undefined;
       el.removeAttribute('data-motion-pop-id');
       return;
     }
-    const parent = (el as HTMLElement).offsetParent as HTMLElement | null;
-    const parentWidth = parent?.offsetWidth ?? 0,
-      parentHeight = parent?.offsetHeight ?? 0;
-    const cs = getComputedStyle(el);
-    const w = parseFloat(cs.width),
-      h = parseFloat(cs.height);
-    if (!w || !h) {
+    // the pre-render measurement if <Presence> took one; otherwise this
+    // element mounted already leaving, and where it is now is all there is
+    const seat = this.popSeat ?? seatOf(el);
+    this.popSeat = undefined;
+    if (!seat) {
       return;
     }
-    const top = (el as HTMLElement).offsetTop,
-      left = (el as HTMLElement).offsetLeft;
+    const { w, h, top, left, parentWidth, parentHeight, isRTL } = seat;
     const right = parentWidth - w - left,
       bottom = parentHeight - h - top;
-    const isRTL = cs.direction === 'rtl';
     const x =
       handle.anchorX === 'left'
         ? isRTL
@@ -710,15 +871,28 @@ export default class MotionNode implements ChoreoNode {
     const y = handle.anchorY === 'bottom' ? `bottom:${bottom}` : `top:${top}`;
     const id = `pop-${Math.random().toString(36).slice(2, 8)}`;
     el.dataset['motionPopId'] = id;
-    const style = document.createElement('style');
-    if (this.config.nonce) {
-      style.nonce = this.config.nonce;
+    // measured above against the layout as it stands; the lift itself waits
+    // until every sibling leaving in this pass has been measured too
+    pendingPops.push({
+      apply: () => {
+        if (this.destroyed || el.dataset['motionPopId'] !== id) {
+          return;
+        }
+        const style = document.createElement('style');
+        if (this.config.nonce) {
+          style.nonce = this.config.nonce;
+        }
+        document.head.appendChild(style);
+        style.sheet?.insertRule(
+          `[data-motion-pop-id="${id}"]{position:absolute!important;width:${w}px!important;height:${h}px!important;${x}px!important;${y}px!important;}`,
+        );
+        this.popStyle = style;
+      },
+    });
+    if (!popFlushBooked) {
+      popFlushBooked = true;
+      queueMicrotask(flushPendingPops);
     }
-    document.head.appendChild(style);
-    style.sheet?.insertRule(
-      `[data-motion-pop-id="${id}"]{position:absolute!important;width:${w}px!important;height:${h}px!important;${x}px!important;${y}px!important;}`,
-    );
-    this.popStyle = style;
   }
 
   /** React unmount */
@@ -726,6 +900,10 @@ export default class MotionNode implements ChoreoNode {
     this.destroyed = true;
     pendingMounts.delete(this);
     this.unsubscribePresence?.();
+    this.unregisterPop?.();
+    this.unsubscribeSpeed?.();
+    this.stopProbe?.();
+    this.stopProbe = undefined;
     const ve = this.ve;
     if (!ve) {
       return;
@@ -741,3 +919,5 @@ export default class MotionNode implements ChoreoNode {
     this.ve = undefined;
   }
 }
+
+export default MotionNode;

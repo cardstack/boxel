@@ -2,11 +2,15 @@
  * glimmer-motion — Motion's React glue re-done for Glimmer, on the unchanged motion-dom engine.
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
  */
+export { beacon } from './beacon.ts';
 export type { ChoreoContext } from './choreo.gts';
-export { default as Choreo } from './choreo.gts';
-export type { default as Changeset } from './choreo/changeset.ts';
+export { Choreo } from './choreo.gts';
+export type { BeaconRef } from './choreo/beacons.ts';
+export type { Changeset } from './choreo/changeset.ts';
+export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
 export type {
   Bounds,
+  Easing,
   Query,
   Rect,
   SpringSpec,
@@ -26,6 +30,18 @@ export {
   correctParentTransform,
   transformViewBoxPoint,
 } from './gestures/transform-page-point.ts';
+export type { InertiaArgs, SpringArgs, TweenArgs } from './helpers.ts';
+export {
+  ease,
+  inertia,
+  perValue,
+  spring,
+  stagger,
+  start,
+  styles,
+  to,
+  tween,
+} from './helpers.ts';
 export {
   afterSettle,
   instantLayoutTransition,
@@ -35,21 +51,18 @@ export {
 } from './layout.ts';
 export {
   closestLayoutGroup,
-  default as LayoutGroup,
+  LayoutGroup,
   snapshotOnRender,
 } from './layout-group.gts';
 export type { MotionEl, MotionProps } from './motion.ts';
-export { default as motion } from './motion.ts';
+export { default as motion, MotionModifier } from './motion.ts';
 export type { MotionConfigContext } from './motion-config.gts';
-export {
-  closestMotionConfig,
-  default as MotionConfig,
-} from './motion-config.gts';
-export { flushPendingMounts, default as MotionNode } from './node.ts';
-export { default as Presence } from './presence.gts';
+export { closestMotionConfig, MotionConfig } from './motion-config.gts';
+export { flushPendingMounts, MotionNode } from './node.ts';
+export { Presence } from './presence.gts';
 export type { PresenceHandle } from './presence-types.ts';
-export { default as ReorderGroup } from './reorder/group.gts';
-export { default as ReorderItem } from './reorder/item.gts';
+export { ReorderGroup } from './reorder/group.gts';
+export { ReorderItem } from './reorder/item.gts';
 export type { ReorderAxis, ReorderContextProps } from './reorder/types.ts';
 export { postRender, setPostRender } from './scheduler.ts';
 export type {
@@ -57,7 +70,7 @@ export type {
   UseInViewOptions,
   UseScrollOptions,
 } from './scroll.ts';
-export { InView, useInView, useScroll } from './scroll.ts';
+export { InView, scrollProgress, useInView, useScroll } from './scroll.ts';
 export {
   motionSpeed,
   onMotionSpeed,

@@ -61,7 +61,7 @@ export function snapshotOnRender() {
   }
 }
 
-export default class LayoutGroup extends Component<Signature> {
+export class LayoutGroup extends Component<Signature> {
   @tracked element?: HTMLElement;
   @tracked private version = 0;
   private ownGroup = nodeGroup();
@@ -127,3 +127,5 @@ export default class LayoutGroup extends Component<Signature> {
     </div>
   </template>
 }
+
+export default LayoutGroup;

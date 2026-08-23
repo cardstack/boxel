@@ -34,7 +34,7 @@ interface Signature<V> {
   Element: HTMLElement;
 }
 
-export default class ReorderGroup<V> extends Component<Signature<V>> {
+export class ReorderGroup<V> extends Component<Signature<V>> {
   itemLayouts = new Map<V, Box>();
   @tracked detectedAxis: ReorderAxis = 'y';
   isReordering = false;
@@ -140,3 +140,5 @@ export default class ReorderGroup<V> extends Component<Signature<V>> {
     </ul>
   </template>
 }
+
+export default ReorderGroup;

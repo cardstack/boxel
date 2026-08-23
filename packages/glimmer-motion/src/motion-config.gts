@@ -17,7 +17,7 @@ import type { TransformPoint } from 'motion-utils';
 export interface MotionConfigContext {
   /** CSP nonce for the <style> elements the binding injects (popLayout) */
   nonce?: string;
-  /** "user" respects prefers-reduced-motion, "always" forces it, "never" (React's default) ignores it */
+  /** "user" (the default here) respects prefers-reduced-motion, "always" forces it, "never" ignores it — React's default */
   reducedMotion?: ReducedMotionConfig;
   /** complete every animation instantly (E2E / visual regression runs) */
   skipAnimations?: boolean;
@@ -42,7 +42,7 @@ export function closestMotionConfig(el: Element): MotionConfigContext {
   return component ? component.config : {};
 }
 
-export default class MotionConfig extends Component<Signature> {
+export class MotionConfig extends Component<Signature> {
   private host?: Element;
 
   register = modifier((el: HTMLElement) => {
@@ -85,3 +85,5 @@ export default class MotionConfig extends Component<Signature> {
     </div>
   </template>
 }
+
+export default MotionConfig;

@@ -20,8 +20,22 @@ import Component from '@glimmer/component';
 import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import { modifier } from 'ember-modifier';
 
+import { registerBusyProbe } from './activity.ts';
+import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
 import Changeset from './choreo/changeset.ts';
 import compile from './choreo/compile.ts';
+import {
+  join as joinPass,
+  leave as leavePass,
+  type Pass,
+  setBeforeMeasure,
+  setPassScheduler,
+} from './choreo/far.ts';
+import {
+  boundsOf as bounds,
+  measure,
+  type Snapshot,
+} from './choreo/measure.ts';
 import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
 import { execute, type Run } from './choreo/run.ts';
 import {
@@ -39,7 +53,6 @@ import type {
   ChoreoNode,
   Cue,
   Query,
-  Rect,
   Sprite,
   SpriteType,
 } from './choreo/types.ts';
@@ -65,6 +78,8 @@ export interface ChoreoContext {
   Tween: typeof Tween;
   Wait: typeof Wait;
   all: Selector;
+  /** `{{c.beacon 'trash'}}` — a named box to borrow, for Move's @from / @to */
+  beacon: (name: string) => BeaconRef;
   id: (id: string) => Query;
   inserted: Selector;
   kept: Selector;
@@ -83,6 +98,7 @@ const context: ChoreoContext = {
   Tween,
   Wait,
   all: selector(),
+  beacon: (beacon) => ({ beacon }),
   id: (id) => ({ id }),
   inserted: selector('inserted'),
   kept: selector('kept'),
@@ -102,40 +118,18 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-interface Snapshot {
-  el: DOMRect;
-  parent: DOMRect;
-}
-
-const rect = (r: DOMRect): Rect => ({
-  height: r.height,
-  width: r.width,
-  x: r.left,
-  y: r.top,
-});
-const minus = (a: DOMRect, b: DOMRect): Rect => ({
-  height: a.height,
-  width: a.width,
-  x: a.left - b.left,
-  y: a.top - b.top,
-});
-const bounds = (snap: Snapshot, root: DOMRect): Bounds => ({
-  context: minus(snap.el, root),
-  page: rect(snap.el),
-  parent: minus(snap.el, snap.parent),
-});
-const measure = (el: Element): Snapshot => ({
-  el: el.getBoundingClientRect(),
-  parent: (
-    (el as HTMLElement).offsetParent ??
-    el.parentElement ??
-    el
-  ).getBoundingClientRect(),
-});
-
 let debugStyle: HTMLStyleElement | undefined;
 
-export default class Choreo extends Component<Signature> implements ChoreoHost {
+/**
+ * The barrier books one post-render callback for every region taking part in a
+ * pass. `joinPass(this)` is where the region's PassHost contract (measurePass /
+ * finishPass) is type-checked — it is not on the class, because a `.gts` class
+ * header cannot carry two `implements` clauses through the build.
+ */
+setPassScheduler((run) => postRender(run));
+setBeforeMeasure(() => flushPendingMounts());
+
+export class Choreo extends Component<Signature> implements ChoreoHost {
   private element?: HTMLDivElement;
   private orphanLayer?: HTMLDivElement;
   private participants = new Set<ChoreoNode>();
@@ -157,7 +151,23 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    // what `animationsSettled()` waits for: a pass announced but not yet run,
+    // or a timeline still playing. Orphans are deliberately not counted — a
+    // leaver stranded in the layer is a bug, and a probe that reported it
+    // would turn every one of those into a timeout instead of a failed
+    // assertion with a name on it.
+    const stopProbe = registerBusyProbe(() => {
+      if (this.passPending) {
+        return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> pass pending`;
+      }
+      if (this.run && !this.run.isDone()) {
+        return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> run in flight`;
+      }
+      return false;
+    });
     registerDestructor(this, () => {
+      stopProbe();
+      leavePass(this);
       this.run?.cancel();
       this.run = undefined;
       for (const node of [...this.orphans, ...this.claimed]) {
@@ -206,7 +216,9 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
     if (!this.passPending) {
       this.passPending = true;
       this.snapshot();
-      postRender(() => this.afterPass());
+      // every region announces here, while Glimmer is still rendering, so the
+      // barrier knows the whole cast before anybody measures
+      joinPass(this);
     }
     return undefined;
   }
@@ -223,12 +235,12 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
     }
   }
 
-  private afterPass() {
+  /** phase 1: what changed this pass, measured — nothing is played yet */
+  measurePass(): Pass | undefined {
     this.passPending = false;
-    flushPendingMounts();
     const root = this.element;
     if (!root) {
-      return;
+      return undefined;
     }
     // `initial` was captured before the DOM changed, with any in-flight Move's
     // values still on the elements — that is what was on screen. `final` must
@@ -328,16 +340,36 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
           };
       }
     }
-    const changeset = new Changeset(
-      inserted.filter((s) => s.type === 'inserted'),
-      removed,
-      [...kept, ...inserted.filter((s) => s.type === 'kept')],
-    );
-    this.changeset = changeset;
     this.arrived.clear();
     this.snapshots.clear();
     const claimed = [...this.claimed];
     this.claimed.clear();
+    // the barrier now pairs any id inserted here against the same id removed in
+    // ANOTHER region, before finishPass compiles a timeline against the result
+    return { claimed, host: this, inserted, kept, removed, root };
+  }
+
+  /** phase 3: identities are settled — compile this region's timeline and play it */
+  finishPass(pass: Pass) {
+    const { claimed, inserted, kept, root } = pass;
+    // a sprite whose identity was received by another region is not leaving:
+    // the element that carries it on is already being animated over there
+    const removed = pass.removed.filter((s) => !s.sent);
+    for (const s of pass.removed) {
+      if (s.sent) {
+        this.finish(s);
+      }
+    }
+    const after = root.getBoundingClientRect();
+    const changeset = new Changeset(
+      inserted.filter((s) => s.type === 'inserted'),
+      removed,
+      [...kept, ...inserted.filter((s) => s.type === 'kept')],
+      // measured in the same window as `final`, and re-measured every pass: a
+      // beacon can move without this region rendering at all
+      measureBeacons(after),
+    );
+    this.changeset = changeset;
 
     const firstRender = !this.rendered;
     this.rendered = true;
@@ -360,7 +392,8 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
         named.add(s.counterpart);
       }
     }
-    this.run?.cancel(new Set([...named].map((s) => s.node)));
+    const prior = this.run;
+    prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
         this.finish(s);
@@ -372,6 +405,11 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
       this.log(changeset, cues);
     }
     this.run = execute(cues, {
+      // ember-animated's continuity, in the terms motion-dom offers: it sums a
+      // corrective curve onto the one it interrupted, which transfers velocity
+      // implicitly; a spring takes a velocity outright, so the run that is
+      // being replaced hands over how fast everything was going.
+      inherit: prior?.velocities,
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
     });
@@ -505,3 +543,5 @@ export default class Choreo extends Component<Signature> implements ChoreoHost {
     </div>
   </template>
 }
+
+export default Choreo;

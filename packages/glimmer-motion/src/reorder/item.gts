@@ -48,7 +48,7 @@ interface Signature<V> {
   Element: HTMLElement;
 }
 
-export default class ReorderItem<V> extends Component<Signature<V>> {
+export class ReorderItem<V> extends Component<Signature<V>> {
   point = {
     x: (isMotionValue(this.args.style?.['x'])
       ? this.args.style!['x']
@@ -130,3 +130,5 @@ export default class ReorderItem<V> extends Component<Signature<V>> {
     </li>
   </template>
 }
+
+export default ReorderItem;

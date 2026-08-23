@@ -4,6 +4,8 @@
  */
 import type { VisualElement } from 'motion-dom';
 
+import type { BeaconRef } from './beacons.ts';
+
 export type SpriteType = 'inserted' | 'kept' | 'removed';
 
 export interface Rect {
@@ -51,6 +53,8 @@ export interface Sprite {
   initial?: Bounds;
   node: ChoreoNode;
   role: string | null;
+  /** far matching: this sprite's identity was received by another region, so its own region lets it go */
+  sent?: boolean;
   type: SpriteType;
 }
 
@@ -68,6 +72,8 @@ export type PropSource =
 
 export interface ChangesetLike {
   all: Sprite[];
+  /** the box a `{{beacon}}` claimed this pass, or null */
+  beacon(name: string): Bounds | null;
   /** something happened this pass a choreography could animate */
   dirty: boolean;
   inserted: Sprite[];
@@ -81,7 +87,13 @@ export interface SpringSpec {
   bounce?: number;
   damping?: number;
   mass?: number;
+  /** how far from the target still counts as arrived (the legacy's restDisplacementThreshold) */
+  restDelta?: number;
+  /** how slow still counts as stopped (the legacy's restVelocityThreshold) */
+  restSpeed?: number;
   stiffness?: number;
+  /** present so the `spring` helper's output fits both `@spring=` and `transition=` */
+  type?: 'spring';
   velocity?: number;
   visualDuration?: number;
 }
@@ -90,10 +102,19 @@ interface StepBase {
   /** milliseconds before the step starts, inside its slot */
   delay?: number;
   of: Query | Query[];
+  /**
+   * Milliseconds between one matched sprite and the next, in the order the
+   * query returned them. The step's own length grows by the whole ladder, so a
+   * sequence still waits for the last sprite to finish.
+   */
+  stagger?: number;
 }
 
+/** a named engine easing, a cubic-bezier as four numbers, or any function of 0..1 */
+export type Easing = string | number[] | ((t: number) => number);
+
 export interface TweenStep extends StepBase {
-  ease?: string | number[];
+  ease?: Easing;
   from?: Record<string, PropSource>;
   kind: 'tween';
   ms: number;
@@ -106,12 +127,16 @@ export interface SpringStep extends StepBase {
   spring?: SpringSpec;
 }
 export interface MoveStep extends StepBase {
-  ease?: string | number[];
+  ease?: Easing;
+  /** borrow a beacon's box as the start of the move instead of where the sprite was */
+  from?: BeaconRef;
   kind: 'move';
   ms?: number;
   /** animate width/height as well as position (default true) */
   size?: boolean;
   spring?: SpringSpec;
+  /** borrow a beacon's box as the end of the move instead of where the sprite landed */
+  to?: BeaconRef;
 }
 export interface HoldStep extends StepBase {
   /** keep the values after the window instead of releasing them */

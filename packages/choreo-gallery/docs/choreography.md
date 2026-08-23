@@ -16,6 +16,8 @@ for, what we keep, what we drop, and the API this repo commits to.
 - [Tests](#tests)
 - [Phases](#phases)
 
+Nested regions and beacons: [nested-choreo.md](nested-choreo.md).
+
 ## Goal
 
 Motion is per-element: every `{{motion}}` declares its own
@@ -233,7 +235,10 @@ participant is a normal motion element.
 ```
 
 `<Choreo>` renders a `div` (`...attributes`), hosts the render detector and
-the orphan layer, and yields `c`:
+the orphan layer, and yields `c`. A `{{motion}}` joins the nearest region;
+an inner `<Choreo>` is a separate scene. How they nest, and how a beacon
+shares one measurement across that boundary:
+[nested-choreo.md](nested-choreo.md).
 
 | yield                                           | legacy                                           | meaning                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
@@ -411,8 +416,10 @@ waiting on it. Checked on 2026-08-23 against phase 1. Issue ids are
 
 **Not covered — phase 3 candidates, most important first**
 
-1. **Far matching across regions** — CS-260 (shipped in the legacy:
-   `sentSprite` / `receivedSprite` between two stable contexts), CS-261
+1. **Far matching across regions** — CS-260 (`sentSprite` /
+   `receivedSprite` between two stable contexts — a ticket, never built:
+   the `Changeset` at `394503e3b7^` carries only inserted / removed /
+   kept), CS-261
    (when a context is being destroyed — cross-route), CS-4091 (a _global_
    changeset that reconciles inserted + removed across contexts and tells
    each what it may handle), CS-4532 ("focus on cross-plane navigation"),
@@ -424,25 +431,36 @@ waiting on it. Checked on 2026-08-23 against phase 1. Issue ids are
    a sprite whose counterpart lives in another region is handled by their
    nearest common ancestor region (or a designated `@scope`), with the
    orphan locked in page space as it already is.
-2. **Stagger** — CS-3957 (3): "list items animate in sync or staggered".
-   No step has a per-sprite offset. Add `@stagger={{ms}}` (and a
-   direction / origin, as the engine's `stagger()` has) to every step.
-3. **The region as a sprite** — CS-282 (measure contexts like sprites;
+2. ~~**Beacons**~~ — **done.** A named box that does not animate; other
+   sprites borrow its bounds as a fake start or end (`{{beacon "trash"}}`,
+   `Move` `@from` / `@to`). Distinct from far-matching (two live
+   participants) and from `layoutId` (two elements that morph). The
+   registry is document-global, so the trash can live in the chrome while
+   the list lives in an outlet. `src/beacon.ts`, `src/choreo/beacons.ts`,
+   `compile.ts` `resolveMove`; the Beacons demo is the inbox case.
+   Design: [nested-choreo.md](nested-choreo.md#beacons).
+3. ~~**Stagger**~~ — **done.** CS-3957 (3): "list items animate in sync or
+   staggered". `@stagger={{ms}}` on any step walks its matched sprites up a
+   ladder in document order; the step's own length grows by the whole
+   ladder, so a `Sequence` still waits for the last one. `compile.ts`
+   `resolveStep` / `place`. A direction / origin, as the engine's
+   `stagger()` has, is still open.
+4. **The region as a sprite** — CS-282 (measure contexts like sprites;
    shipped in the legacy), CS-267 (a context grows/shrinks with its
    content). The region measures its own box already but does not expose
    it or move itself. Expose `changeset.region` bounds, and let
    `<Choreo @id @role>` make its root a participant of the region above.
-4. **Size by transform** — CS-4174: width/height transitions fight
+5. **Size by transform** — CS-4174: width/height transitions fight
    translation when both run. Phase 1 animates width/height like the
    legacy. Add `@via='scale'` on `Move` (scale with the engine's
    border-radius / shadow correction), or route such sprites to
    `layout=true` projection.
-5. **Rules** — CS-4739: match elements to animate without a modifier per
+6. **Rules** — CS-4739: match elements to animate without a modifier per
    element. `role` selectors are half of this; a selector-by-CSS query on
    `@of` would be the rest. Low priority.
-6. **Material recipes** — CS-3968 / CS-4000 (canceled, but the analysis is
+7. **Material recipes** — CS-3968 / CS-4000 (canceled, but the analysis is
    good): container transform, shared axis, fade, fade-through as named
-   timelines on top of the steps. A recipe layer, after 1–4.
+   timelines on top of the steps. A recipe layer, after 1–5.
 
 **The host-app tickets this was for** (Miscellaneous Boxel Backlog /
 Connecting Cards Across Contexts, all still open): CS-5320 open/close card

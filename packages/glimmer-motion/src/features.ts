@@ -5,6 +5,9 @@
  */
 import type { MotionNodeOptions, VisualElement } from 'motion-dom';
 import {
+  addScaleCorrector,
+  correctBorderRadius,
+  correctBoxShadow,
   createAnimationState,
   Feature,
   HTMLProjectionNode,
@@ -143,6 +146,30 @@ export function initFeatures() {
     return;
   }
   initialized = true;
+  // React registers these alongside MeasureLayout; without them a projecting
+  // element's corners and shadow are stretched by whatever scale the layout
+  // animation is applying — a square tile becoming a wide hero comes out with
+  // oval corners, worst on a narrow viewport where the scale is most extreme.
+  // The correction is per-frame, and it only reaches values the element
+  // actually has: a radius that lives in the stylesheet is invisible to it, so
+  // an element that wants round corners through a layout animation sets them
+  // through the modifier (`style=(styles borderRadius='18px')`).
+  addScaleCorrector({
+    borderRadius: {
+      ...correctBorderRadius,
+      applyTo: [
+        'borderTopLeftRadius',
+        'borderTopRightRadius',
+        'borderBottomLeftRadius',
+        'borderBottomRightRadius',
+      ],
+    },
+    borderTopLeftRadius: correctBorderRadius,
+    borderTopRightRadius: correctBorderRadius,
+    borderBottomLeftRadius: correctBorderRadius,
+    borderBottomRightRadius: correctBorderRadius,
+    boxShadow: correctBoxShadow,
+  });
   setFeatureDefinitions({
     animation: {
       isEnabled: isEnabled(featureProps['animation']!),

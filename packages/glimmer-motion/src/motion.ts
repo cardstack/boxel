@@ -23,7 +23,8 @@ interface Signature {
   Element: MotionEl;
 }
 
-export default class MotionModifier extends Modifier<Signature> {
+/** `{{motion …}}` — the modifier. Named `motion` where it is used; the class name is for stack traces. */
+export class MotionModifier extends Modifier<Signature> {
   private readonly node = new MotionNode();
 
   constructor(owner: Owner, args: ArgsFor<Signature>) {
@@ -35,3 +36,5 @@ export default class MotionModifier extends Modifier<Signature> {
     this.node.update(element, named);
   }
 }
+
+export default MotionModifier;

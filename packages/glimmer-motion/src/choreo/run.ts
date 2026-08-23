@@ -10,11 +10,16 @@ import { animateTarget, delay } from 'motion-dom';
 import { motionSpeed, scaleTransition } from '../speed.ts';
 import type { ChoreoNode, Cue, PropValue, Sprite } from './types.ts';
 
+/** how fast each value was moving, in units per second, keyed by element then property */
+export type Velocities = Map<HTMLElement, Map<string, number>>;
+
 export interface Run {
   /** stop everything; removed sprites are released unless a next run is keeping them (`keep`) */
   cancel(keep?: Set<ChoreoNode>): void;
   cues: Cue[];
   finished: Promise<void>;
+  /** nothing left to play: every row has ended, or the run was cancelled */
+  isDone(): boolean;
   /**
    * Put every element this run has touched back to its resting layout NOW:
    * borrowed width/height handed back to the stylesheet, and any transform
@@ -27,12 +32,76 @@ export interface Run {
    * cue, and strand that transform on the element permanently.
    */
   releaseForMeasure(): void;
+  /**
+   * What every value this run was driving was doing at the moment it was
+   * interrupted. Sampled before anything is stopped or jumped, because both
+   * of those wipe velocity.
+   */
+  velocities: Velocities;
 }
 
 interface RunOptions {
+  /**
+   * Velocities from the run this one is interrupting. A spring that inherits
+   * one leaves at the speed the old animation was travelling, so a second
+   * click bends the motion instead of restarting it.
+   */
+  inherit?: Velocities;
   /** a removed sprite's row has ended (or the run was cancelled) */
   onSpriteDone(sprite: Sprite): void;
   removed: Sprite[];
+}
+
+/** does this transition resolve to a spring? only a spring can use a velocity */
+function isSpring(transition: Record<string, unknown> | undefined): boolean {
+  if (!transition) {
+    return false;
+  }
+  if (transition['type']) {
+    return transition['type'] === 'spring';
+  }
+  return (
+    'bounce' in transition ||
+    'damping' in transition ||
+    'stiffness' in transition ||
+    'visualDuration' in transition
+  );
+}
+
+/**
+ * Give each inherited property its own copy of the transition carrying the
+ * velocity it was already travelling at.
+ *
+ * The engine reads `transition[key]` in preference to the transition itself,
+ * so a per-property override has to be the whole transition plus the
+ * velocity — not just the velocity on its own.
+ */
+function carryVelocity(
+  transition: Record<string, unknown>,
+  cue: Cue,
+  inherit: Velocities | undefined,
+): Record<string, unknown> {
+  if (!inherit || !cue.target || !isSpring(transition)) {
+    return transition;
+  }
+  // a counterpart hands its momentum to the element that replaced it
+  const was =
+    inherit.get(cue.sprite.element) ??
+    (cue.sprite.counterpart && inherit.get(cue.sprite.counterpart.element));
+  if (!was) {
+    return transition;
+  }
+  let out = transition;
+  for (const key in cue.target) {
+    const velocity = was.get(key);
+    if (velocity) {
+      if (out === transition) {
+        out = { ...transition };
+      }
+      out[key] = { ...transition, velocity };
+    }
+  }
+  return out;
 }
 
 const dash = (key: string) =>
@@ -96,19 +165,53 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     [];
   /** transforms a Move applied, to return to rest */
   const movedValues: { key: string; ve: VisualElement }[] = [];
+  /** every value this run drives, so an interruption can read its speed */
+  const owned: { el: HTMLElement; key: string; ve: VisualElement }[] = [];
+  const velocities: Velocities = new Map();
   let cancelled = false;
+  let ended = false;
+
+  /**
+   * Read how fast everything is going, once. Must run before `jump` or `stop`
+   * touches anything — both of those reset velocity to zero, so a sample taken
+   * afterwards would report a still element that was in fact mid-flight.
+   */
+  const sampleVelocities = () => {
+    for (const { ve, el, key } of owned) {
+      let byKey = velocities.get(el);
+      if (byKey?.has(key)) {
+        continue; // the first sample was the live one; later ones are post-jump
+      }
+      const velocity = ve.getValue(key)?.getVelocity();
+      if (!velocity) {
+        continue;
+      }
+      if (!byKey) {
+        velocities.set(el, (byKey = new Map()));
+      }
+      byKey.set(key, velocity);
+    }
+  };
 
   const releaseForMeasure = () => {
+    sampleVelocities();
+    const touched = new Set<VisualElement>();
     for (const { ve, el, key } of borrowedValues.splice(0)) {
       ve.removeValue(key);
       el.style.removeProperty(dash(key));
-      ve.scheduleRender();
+      touched.add(ve);
     }
     for (const { ve, key } of movedValues.splice(0)) {
       // back to rest, so the element measures where the stylesheet puts it
       ve.getValue(key)?.jump(0);
-      ve.scheduleRender();
+      touched.add(ve);
     }
+    // Synchronously, not scheduled. The caller measures the moment this
+    // returns, and a batched render would not have written the style yet —
+    // `final` would come back with the transform this run is trying to undo
+    // still on the element, and the FLIP delta would be the distance the
+    // element had already travelled ADDED to the distance it still has to go.
+    touched.forEach((ve) => ve.render());
   };
 
   // the phases keep their proportions under slow motion, so a hold still
@@ -176,6 +279,7 @@ export function execute(cues: Cue[], options: RunOptions): Run {
         continue; // an earlier cue already owns this property's start
       }
       pinned.add(seen);
+      owned.push({ el: cue.sprite.element, key, ve });
       if (cue.kind === 'move') {
         if (key in SIZES) {
           if (!ve.hasValue(key)) {
@@ -199,9 +303,13 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     if (cue.target) {
       const controls = animateTarget(ve, {
         ...cue.target,
-        transition: scaleTransition(
-          { ...cue.transition, delay: cue.start / 1000 } as never,
-          scale,
+        transition: carryVelocity(
+          scaleTransition(
+            { ...cue.transition, delay: cue.start / 1000 } as never,
+            scale,
+          ) as unknown as Record<string, unknown>,
+          cue,
+          options.inherit,
         ),
       } as never);
       animations.push(...controls);
@@ -239,7 +347,12 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     at(rowEnd.get(sprite) ?? 0, () => done(sprite));
   }
 
-  const finished = new Promise<void>((resolve) => at(total, resolve));
+  const finished = new Promise<void>((resolve) =>
+    at(total, () => {
+      ended = true;
+      resolve();
+    }),
+  );
 
   return {
     cancel(keep?: Set<ChoreoNode>) {
@@ -247,6 +360,8 @@ export function execute(cues: Cue[], options: RunOptions): Run {
         return;
       }
       cancelled = true;
+      // before stop(), which zeroes velocity along with everything else
+      sampleVelocities();
       timers.splice(0).forEach((cancel) => cancel());
       animations.splice(0).forEach((a) => a.stop());
       // an interrupted Move must give its values back too, or the element
@@ -270,6 +385,8 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     },
     cues,
     finished,
+    isDone: () => ended || cancelled,
     releaseForMeasure,
+    velocities,
   };
 }

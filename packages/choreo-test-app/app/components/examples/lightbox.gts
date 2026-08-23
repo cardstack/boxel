@@ -1,0 +1,209 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { LayoutGroup, motion, Presence } from 'glimmer-motion';
+
+const photos = [
+  {
+    heat: '1280°',
+    id: 'atlas',
+    label: 'Atlas',
+    notes: 'Held the last props. Clean handoff.',
+    stock: 'Kiln floor',
+    take: '04',
+    wash: 'linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%)',
+  },
+  {
+    heat: '920°',
+    id: 'ember',
+    label: 'Ember',
+    notes: 'Orange hold, then snap.',
+    stock: 'Night shift',
+    take: '11',
+    wash: 'linear-gradient(145deg, #ffb36a 0%, #ff3b1f 48%, #4a1208 100%)',
+  },
+  {
+    heat: '640°',
+    id: 'flux',
+    label: 'Flux',
+    notes: 'Steel wash. No bounce.',
+    stock: 'Cooling rack',
+    take: '02',
+    wash: 'linear-gradient(165deg, #c5cdd0 0%, #5c6568 40%, #1a1613 100%)',
+  },
+  {
+    heat: '410°',
+    id: 'halo',
+    label: 'Halo',
+    notes: 'Clear after the pour.',
+    stock: 'Foundry glass',
+    take: '08',
+    wash: 'linear-gradient(150deg, #fff4e8 0%, #e4a35a 45%, #5a3214 100%)',
+  },
+];
+
+const keyOf = (item: { id: string }) => item.id;
+const fade = { opacity: 0 };
+const fadeOn = { opacity: 1 };
+const fadeTween = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
+const detailsIn = { opacity: 0 };
+const detailsOn = { opacity: 1 };
+const detailsOut = { opacity: 0 };
+const detailsTween = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
+const spring = { bounce: 0.12, type: 'spring', visualDuration: 0.5 } as const;
+
+type Photo = (typeof photos)[number];
+
+export class Lightbox extends Component {
+  @tracked lit: Photo | null = null;
+  @tracked open: Photo | null = null;
+
+  get overlay() {
+    return this.open ? [this.open] : [];
+  }
+
+  choose = (photo: Photo) => {
+    this.lit = photo;
+    this.open = photo;
+  };
+
+  close = () => {
+    this.open = null;
+  };
+
+  cleared = () => {
+    this.lit = null;
+  };
+
+  <template>
+    <LayoutGroup>
+      <div class="ex">
+        <div class="shots">
+          {{#each photos as |photo|}}
+            <button
+              type="button"
+              class={{if (isOpen photo this.lit) "shot is-open" "shot"}}
+              {{on "click" (fn this.choose photo)}}
+            >
+              <span
+                class="shot-card"
+                {{motion
+                  layoutId=(cardId photo.id)
+                  style=(photoStyle photo)
+                  transition=spring
+                }}
+              >
+                <span
+                  class="shot-name"
+                  {{motion layoutId=(nameId photo.id) transition=spring}}
+                >{{photo.label}}</span>
+              </span>
+            </button>
+          {{/each}}
+        </div>
+        <Presence
+          @items={{this.overlay}}
+          @key={{keyOf}}
+          @onExitComplete={{this.cleared}}
+          as |photo h|
+        >
+          <div class="overlay">
+            <button
+              type="button"
+              class="backdrop"
+              {{motion
+                presence=h
+                initial=fade
+                animate=fadeOn
+                exit=fade
+                transition=fadeTween
+              }}
+              {{on "click" this.close}}
+            ><span class="sr">Close</span></button>
+            <article
+              class="lightbox"
+              {{motion
+                presence=h
+                layoutId=(cardId photo.id)
+                style=(photoStyle photo)
+                transition=spring
+              }}
+            >
+              <button
+                type="button"
+                class="lightbox-close"
+                aria-label="Close"
+                {{motion
+                  presence=h
+                  initial=detailsIn
+                  animate=detailsOn
+                  exit=detailsOut
+                  transition=detailsTween
+                }}
+                {{on "click" this.close}}
+              >&times;</button>
+              <div class="lightbox-body">
+                <b
+                  {{motion
+                    presence=h
+                    layoutId=(nameId photo.id)
+                    transition=spring
+                  }}
+                >{{photo.label}}</b>
+                <div
+                  class="lightbox-details"
+                  {{motion
+                    presence=h
+                    initial=detailsIn
+                    animate=detailsOn
+                    exit=detailsOut
+                    transition=detailsTween
+                  }}
+                >
+                  <dl class="facts">
+                    <div class="fact">
+                      <dt>Heat</dt>
+                      <dd>{{photo.heat}}</dd>
+                    </div>
+                    <div class="fact">
+                      <dt>Stock</dt>
+                      <dd>{{photo.stock}}</dd>
+                    </div>
+                    <div class="fact">
+                      <dt>Take</dt>
+                      <dd>{{photo.take}}</dd>
+                    </div>
+                  </dl>
+                  <p class="lightbox-notes">{{photo.notes}}</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </Presence>
+      </div>
+    </LayoutGroup>
+  </template>
+}
+
+function cardId(id: string) {
+  return `${id}-card`;
+}
+
+function nameId(id: string) {
+  return `${id}-name`;
+}
+
+function isOpen(photo: Photo, open: Photo | null) {
+  return photo === open;
+}
+
+/**
+ * Declare what you want tweened. Both halves of the shared element carry their
+ * own radius, so the engine can correct it against the scale it is applying —
+ * a thumbnail growing into a hero is scaled hard on both axes, and a radius
+ * left in the stylesheet comes out oval on the way.
+ */
+function photoStyle(photo: Photo) {
+  return { background: photo.wash, borderRadius: '18px' };
+}

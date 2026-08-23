@@ -1,8 +1,13 @@
-import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { type Changeset, Choreo, motion, type Sprite } from 'glimmer-motion';
+import {
+  type Changeset,
+  Choreo,
+  motion,
+  type Sprite,
+  start,
+} from 'glimmer-motion';
 
 const firm = { damping: 34, stiffness: 420 };
 
@@ -47,7 +52,7 @@ export class SplitView extends Component {
           <c.Spring
             @of={{c.id "split-content"}}
             @left={{this.leftTo}}
-            @from={{hash left=this.leftFrom}}
+            @from={{start left=this.leftFrom}}
             @spring={{firm}}
           />
         </c.Parallel>

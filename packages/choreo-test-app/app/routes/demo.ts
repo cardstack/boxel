@@ -2,6 +2,7 @@ import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
+import { setMotionSpeed } from 'glimmer-motion';
 import { findDemo } from 'test-app/lib/catalog';
 
 export default class DemoRoute extends Route {
@@ -19,6 +20,9 @@ export default class DemoRoute extends Route {
   /** the pager keeps you in this route, so nothing resets the scroll: a new
    *  demo should start at the top rather than wherever the last one was */
   afterModel() {
+    // the clock is global, so it goes back to normal with every demo — a stage
+    // with no speed control must never be left mysteriously slow
+    setMotionSpeed(1);
     // eslint-disable-next-line ember/no-runloop -- see the import
     schedule('afterRender', () => window.scrollTo(0, 0));
   }
