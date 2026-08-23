@@ -13,3 +13,6 @@ contracts and are intentionally not featured on the main documentation page.
 - [B0 reviewer guide](./deck-b0-reviewers-guide.md) — the feature-gated realm
   adapter that verifies Repository, branch, Checkpoint, Review, merge, and
   exact Version origin state before later CLI and Host slices consume it.
+- [B1a reviewer guide](./deck-b1a-reviewers-guide.md) — realm-local and
+  direct-S3 conditional object adapters, writer-owned preparation, and
+  recovery semantics; AWS provisioning remains the following B1b slice.
