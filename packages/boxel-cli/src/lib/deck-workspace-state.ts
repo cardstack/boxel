@@ -171,8 +171,10 @@ export async function hashWorkspaceFile(filePath: string): Promise<string> {
 }
 
 const LOCAL_METADATA = new Set([
+  '.boxel-watch.lock',
   '.boxel-sync.json',
   '.boxel-history',
+  '.claude',
   '.deck',
   '.git',
   '.jj',

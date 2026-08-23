@@ -1,8 +1,9 @@
 # PretUI-first Deck collaboration backport
 
-**Status:** A0–A6 are implemented as a local, unpushed stack on 2026-08-23.
-B0–B8 remain the execution plan for PretUI team collaboration. No pull request
-or remote branch has been created from this stack.
+**Status:** A0–A6 are implemented. B0, B1a, and B2a are implemented as a local
+stack on 2026-08-23; B1b is an optional hosted-infrastructure slice, and
+B2b–B8 remain the execution plan for PretUI team collaboration. No B-series
+pull request or remote branch has been created from this stack.
 
 ## Target outcome
 
@@ -302,7 +303,7 @@ Keep the familiar local transport verbs, but give them exact semantics:
 | `realm pull`   | Materialize the selected remote branch head and record its exact Repository/tree/lock/ref generation as the local base. A dirty local tree requires three-way reconciliation or an explicit discard.    |
 | `realm push`   | Compare local content to the recorded base and conditionally apply that change set only if the selected remote branch still has the expected head. Remote movement fails; it never silently overwrites. |
 | `realm sync`   | Three-way reconcile recorded base, current local tree, and current remote branch. Publish one remote write batch on success; write nothing remotely on conflict.                                        |
-| `realm watch`  | Repeatedly run the same conditional content-addressed write protocol, coalescing local saves into small batches and recording server History Steps.                                                     |
+| `realm watch`  | Repeatedly run the same conditional content-addressed write protocol and coalesce local saves into small batches. B2b makes each accepted batch a server History Step.                                  |
 | `realm status` | Report local/base/remote divergence by hashes and branch head, never by newest timestamp.                                                                                                               |
 
 `--prefer-newest` is removed. Explicit `--prefer-local` or `--prefer-remote`

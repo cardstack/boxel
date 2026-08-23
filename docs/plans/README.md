@@ -16,3 +16,6 @@ contracts and are intentionally not featured on the main documentation page.
 - [B1a reviewer guide](./deck-b1a-reviewers-guide.md) — realm-local and
   direct-S3 conditional object adapters, writer-owned preparation, and
   recovery semantics; AWS provisioning remains the following B1b slice.
+- [B2a reviewer guide](./deck-b2a-reviewers-guide.md) — per-realm legacy/Deck
+  negotiation and exact, content-addressed pull, push, sync, status, and watch
+  against a conditionally advanced branch head.

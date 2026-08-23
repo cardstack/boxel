@@ -22,6 +22,17 @@ import { resolveRealmAuthenticator } from '../../../lib/auth-resolver.ts';
 import { resolveRealmSecretSeed } from '../../../lib/prompt.ts';
 import { reconcileSkillsMirror } from '../../../lib/claude-skills-mirror.ts';
 import {
+  hashDeckWorkspaceDirectory,
+  inventoryTreeHash,
+  loadDeckWorkspaceState,
+  planContentAddressedSync,
+} from '../../../lib/deck-workspace-state.ts';
+import { syncDeckBranch } from '../../../lib/deck-realm-sync.ts';
+import {
+  detectRealmSyncMode,
+  readDeckBranchSnapshot,
+} from '../../../lib/realm-sync-mode.ts';
+import {
   acquireWatchLock,
   releaseWatchLock,
   type WatchLockInfo,
@@ -42,6 +53,8 @@ import {
 export interface WatchRealmSpec {
   realmUrl: string;
   localDir: string;
+  /** Deck branch to materialize. Existing Deck workspaces retain their branch. */
+  branchName?: string;
 }
 
 interface PendingChange {
@@ -59,6 +72,23 @@ export interface FlushResult {
    */
   skipped: string[];
   checkpoint: Checkpoint | null;
+  /** Files conditionally published by a content-addressed Deck watcher. */
+  pushed?: string[];
+  /** Files conditionally deleted from a Deck branch. */
+  remoteDeleted?: string[];
+  error?: string;
+}
+
+export interface ActiveRealmWatcher {
+  readonly name: string;
+  readonly localDir: string;
+  readonly realmUrl: string;
+  readonly pendingCount: number;
+  initialize(): Promise<void>;
+  poll(): Promise<boolean>;
+  scheduleFlush(onFlush?: (result: FlushResult) => void): void;
+  sync(): Promise<void>;
+  shutdown(): void;
 }
 
 /**
@@ -66,7 +96,7 @@ export interface FlushResult {
  * ticks, and applying them in a debounced batch (download + delete + write
  * a checkpoint). One instance per realm; `watchRealms()` orchestrates many.
  */
-export class RealmWatcher extends RealmSyncBase {
+export class RealmWatcher extends RealmSyncBase implements ActiveRealmWatcher {
   readonly name: string;
   private readonly debounceMs: number;
   private readonly overwriteLocal: boolean;
@@ -425,6 +455,206 @@ export class RealmWatcher extends RealmSyncBase {
   }
 }
 
+/**
+ * Watches one exact Deck branch. Polling only observes local byte hashes and
+ * the branch ref; the debounced flush performs the same three-way sync and
+ * conditional branch update as `realm sync`. No mtime or hidden Git history
+ * participates in this protocol. Server History Steps are added in B2b.
+ */
+export class DeckRealmWatcher implements ActiveRealmWatcher {
+  readonly name: string;
+  readonly localDir: string;
+  readonly realmUrl: string;
+  private branchName: string;
+  private readonly requestedBranchName: string | undefined;
+  private readonly authenticator: RealmAuthenticator;
+  private readonly debounceMs: number;
+  private readonly claudeSkills: boolean;
+  private debounceTimer: NodeJS.Timeout | null = null;
+  private lastObservation = '';
+  private isShutdown = false;
+  private _pendingCount = 0;
+
+  constructor(
+    spec: WatchRealmSpec,
+    authenticator: RealmAuthenticator,
+    options: { debounceMs: number; claudeSkills?: boolean },
+  ) {
+    this.realmUrl = new URL(spec.realmUrl).href.replace(/\/+$/, '') + '/';
+    this.localDir = spec.localDir;
+    this.requestedBranchName = spec.branchName;
+    this.branchName = spec.branchName ?? 'main';
+    this.authenticator = authenticator;
+    this.debounceMs = options.debounceMs;
+    this.claudeSkills = options.claudeSkills ?? true;
+    this.name = deriveRealmName(this.realmUrl);
+  }
+
+  get pendingCount(): number {
+    return this._pendingCount;
+  }
+
+  async initialize(): Promise<void> {
+    let existing = await loadDeckWorkspaceState(this.localDir);
+    if (existing) {
+      if (existing.realmURL !== this.realmUrl) {
+        throw new Error(
+          `Workspace tracks ${existing.realmURL}, not ${this.realmUrl}`,
+        );
+      }
+      if (
+        this.requestedBranchName !== undefined &&
+        this.requestedBranchName !== existing.branchName
+      ) {
+        throw new Error(
+          `Workspace tracks branch ${existing.branchName}, not ${this.branchName}`,
+        );
+      }
+      this.branchName = existing.branchName;
+    }
+    let result = await this.flushContentAddressedSync();
+    if (result.error) throw new Error(result.error);
+    await this.reconcileSkills();
+    await this.rememberCurrentObservation();
+  }
+
+  async sync(): Promise<void> {
+    let result = await this.flushContentAddressedSync();
+    if (result.error) throw new Error(result.error);
+    await this.reconcileSkills();
+    await this.rememberCurrentObservation();
+  }
+
+  /**
+   * Observe the branch and local tree without changing either side. A ref-only
+   * move is work too: flushing it advances the exact local branch base even
+   * when the package bytes happen to be identical.
+   */
+  async poll(): Promise<boolean> {
+    let observation = await this.observe();
+    let changed = observation.fingerprint !== this.lastObservation;
+    this.lastObservation = observation.fingerprint;
+    this._pendingCount = observation.pendingCount;
+    return changed && observation.pendingCount > 0;
+  }
+
+  scheduleFlush(onFlush?: (result: FlushResult) => void): void {
+    if (this.isShutdown) return;
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(async () => {
+      this.debounceTimer = null;
+      let result: FlushResult;
+      try {
+        result = await this.flushContentAddressedSync();
+        if (!result.error) await this.reconcileSkills();
+        await this.rememberCurrentObservation();
+      } catch (error) {
+        result = emptyDeckFlush(
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+      onFlush?.(result);
+    }, this.debounceMs);
+  }
+
+  shutdown(): void {
+    this.isShutdown = true;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+  }
+
+  private async observe(): Promise<{
+    fingerprint: string;
+    pendingCount: number;
+  }> {
+    let workspace = await loadDeckWorkspaceState(this.localDir);
+    if (!workspace) {
+      return { fingerprint: 'unmaterialized', pendingCount: 1 };
+    }
+    let [local, remote] = await Promise.all([
+      hashDeckWorkspaceDirectory(this.localDir),
+      readDeckBranchSnapshot(
+        workspace.realmURL,
+        workspace.branchName,
+        this.authenticator,
+      ),
+    ]);
+    let plan = planContentAddressedSync({
+      base: workspace.files,
+      local,
+      remote: remote.files,
+    });
+    let contentChanges = plan.entries.filter(
+      ({ action }) => action !== 'noop',
+    ).length;
+    let refMoved =
+      workspace.baseRepositoryHash !== remote.repositoryHash ||
+      workspace.baseTreeHash !== remote.treeHash ||
+      workspace.baseLockHash !== remote.lockHash ||
+      workspace.observedRefGeneration !== remote.refGeneration;
+    return {
+      fingerprint: JSON.stringify({
+        localTreeHash: inventoryTreeHash(local),
+        remoteRepositoryHash: remote.repositoryHash,
+        remoteTreeHash: remote.treeHash,
+        remoteLockHash: remote.lockHash,
+        remoteRefGeneration: remote.refGeneration,
+      }),
+      pendingCount: Math.max(contentChanges, refMoved ? 1 : 0),
+    };
+  }
+
+  private async rememberCurrentObservation(): Promise<void> {
+    let observation = await this.observe();
+    this.lastObservation = observation.fingerprint;
+    this._pendingCount = observation.pendingCount;
+  }
+
+  private async flushContentAddressedSync(): Promise<FlushResult> {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    let result = await syncDeckBranch({
+      realmURL: this.realmUrl,
+      branchName: this.branchName,
+      localDir: this.localDir,
+      authenticator: this.authenticator,
+    });
+    return {
+      pulled: result.pulled,
+      deleted: result.localDeleted,
+      skipped: result.conflicts,
+      checkpoint: null,
+      pushed: result.pushed,
+      remoteDeleted: result.remoteDeleted,
+      ...(result.error ? { error: result.error } : {}),
+    };
+  }
+
+  private async reconcileSkills(): Promise<void> {
+    await reconcileSkillsMirror({
+      realmUrl: this.realmUrl,
+      localDir: this.localDir,
+      enabled: this.claudeSkills,
+    });
+  }
+}
+
+function emptyDeckFlush(error: string): FlushResult {
+  return {
+    pulled: [],
+    deleted: [],
+    skipped: [],
+    checkpoint: null,
+    pushed: [],
+    remoteDeleted: [],
+    error,
+  };
+}
+
 export interface WatchRealmsOptions {
   intervalMs?: number;
   debounceMs?: number;
@@ -452,7 +682,7 @@ export interface WatchRealmsOptions {
 }
 
 export interface WatchRealmsResult {
-  watchers: RealmWatcher[];
+  watchers: ActiveRealmWatcher[];
   error?: string;
 }
 
@@ -522,13 +752,41 @@ export async function watchRealms(
     lockedDirs.push(spec.localDir);
   }
 
-  const watchers: RealmWatcher[] = [];
+  const watchers: ActiveRealmWatcher[] = [];
   for (const spec of specs) {
-    const watcher = new RealmWatcher(spec, authenticator, {
-      debounceMs,
-      overwriteLocal,
-      claudeSkills: options.claudeSkills,
-    });
+    let mode;
+    try {
+      mode = await detectRealmSyncMode(spec.realmUrl, authenticator);
+    } catch (err) {
+      for (const w of watchers) w.shutdown();
+      for (const dir of lockedDirs) await releaseWatchLock(dir);
+      return {
+        watchers: [],
+        error: `Failed to select sync mode for ${spec.realmUrl}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      };
+    }
+    if (mode.mode === 'deck' && overwriteLocal) {
+      for (const w of watchers) w.shutdown();
+      for (const dir of lockedDirs) await releaseWatchLock(dir);
+      return {
+        watchers: [],
+        error:
+          '`--overwrite-local` is a legacy mtime option; Deck watch always uses three-way content reconciliation.',
+      };
+    }
+    const watcher: ActiveRealmWatcher =
+      mode.mode === 'deck'
+        ? new DeckRealmWatcher(spec, authenticator, {
+            debounceMs,
+            claudeSkills: options.claudeSkills,
+          })
+        : new RealmWatcher(spec, authenticator, {
+            debounceMs,
+            overwriteLocal,
+            claudeSkills: options.claudeSkills,
+          });
     try {
       await watcher.initialize();
     } catch (err) {
@@ -688,10 +946,16 @@ function formatLockedError(localDir: string, info: WatchLockInfo): string {
 }
 
 function logFlush(name: string, result: FlushResult): void {
-  const total = result.pulled.length + result.deleted.length;
+  const pushed = result.pushed ?? [];
+  const remoteDeleted = result.remoteDeleted ?? [];
+  const total =
+    result.pulled.length +
+    result.deleted.length +
+    pushed.length +
+    remoteDeleted.length;
   if (total > 0) {
     console.log(
-      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_GREEN}applied ${total} change(s)${RESET} (${result.pulled.length} pulled, ${result.deleted.length} deleted)`,
+      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_GREEN}reconciled ${total} change(s)${RESET} (${result.pulled.length} pulled, ${result.deleted.length} deleted locally, ${pushed.length} pushed, ${remoteDeleted.length} deleted remotely)`,
     );
     if (result.checkpoint) {
       const tag = result.checkpoint.isMajor ? '[MAJOR]' : '[minor]';
@@ -700,9 +964,18 @@ function logFlush(name: string, result: FlushResult): void {
       );
     }
   }
-  for (const file of result.skipped) {
+  if (result.error) {
     console.log(
-      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_YELLOW}⚠ skipped ${file}: local diverges from sync manifest (rerun with --overwrite-local to discard, or \`boxel realm sync\` to reconcile)${RESET}`,
+      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_RED}sync failed: ${result.error}${RESET}`,
+    );
+  }
+  for (const file of result.skipped) {
+    const reason =
+      result.pushed !== undefined
+        ? 'content changed on both the local workspace and exact branch base; resolve the file and the watcher will retry'
+        : 'local diverges from sync manifest (rerun with --overwrite-local to discard, or `boxel realm sync` to reconcile)';
+    console.log(
+      `${DIM}[${timestamp()}]${RESET} [${name}] ${FG_YELLOW}⚠ skipped ${file}: ${reason}${RESET}`,
     );
   }
 }
@@ -768,6 +1041,10 @@ export function registerStartCommand(watch: Command): void {
       'Overwrite local files when the remote changes. Default: skip + warn when the local copy diverges from the sync manifest.',
     )
     .option(
+      '-b, --branch <name>',
+      'Deck branch to materialize (default: existing workspace branch or main)',
+    )
+    .option(
       '--no-claude-skills',
       "Skip mirroring the realm's skills/ directory into the checkout's .claude/skills/ (env: BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1)",
     )
@@ -781,18 +1058,22 @@ export function registerStartCommand(watch: Command): void {
           realmSecretSeed?: boolean;
           overwriteLocal?: boolean;
           claudeSkills?: boolean;
+          branch?: string;
         },
       ) => {
         const realmSecretSeed = await resolveRealmSecretSeed(
           options.realmSecretSeed === true,
         );
-        const result = await watchRealms([{ realmUrl, localDir }], {
-          intervalMs: options.interval * 1000,
-          debounceMs: options.debounce * 1000,
-          realmSecretSeed,
-          overwriteLocal: options.overwriteLocal === true,
-          claudeSkills: options.claudeSkills,
-        });
+        const result = await watchRealms(
+          [{ realmUrl, localDir, branchName: options.branch }],
+          {
+            intervalMs: options.interval * 1000,
+            debounceMs: options.debounce * 1000,
+            realmSecretSeed,
+            overwriteLocal: options.overwriteLocal === true,
+            claudeSkills: options.claudeSkills,
+          },
+        );
         if (result.error) {
           console.error(`${FG_RED}Error:${RESET} ${result.error}`);
           process.exit(1);
