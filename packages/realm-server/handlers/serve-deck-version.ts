@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 
 import type Koa from 'koa';
-import { isExactVersionRRI, parseRRI, realmRRI } from '@cardstack/deck';
+import { isExactVersionRRI, parseRRI } from '@cardstack/deck';
 import {
   hashBytes,
   readStoredFile,
@@ -27,6 +27,10 @@ import {
   buildDeckVersionIndex,
   queryDeckVersionIndex,
 } from '../lib/deck-version-index.ts';
+import {
+  hasDeckCollaboration,
+  type DeckCollaborationPolicy,
+} from '../lib/deck-collaboration-policy.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -39,36 +43,6 @@ type DeckVersionServingDeps = ServeFromRealmDeps & {
     path: string,
   ) => Promise<Buffer | undefined>;
 };
-
-export interface DeckCollaborationPolicy {
-  enabled: boolean;
-  realmRRIs: ReadonlySet<string>;
-}
-
-export function deckCollaborationPolicyFromEnvironment(
-  environment: NodeJS.ProcessEnv = process.env,
-): DeckCollaborationPolicy {
-  return {
-    enabled: environment.BOXEL_DECK_COLLABORATION_ENABLED === 'true',
-    realmRRIs: new Set(
-      (environment.BOXEL_DECK_COLLABORATION_REALM_RRIS ?? '')
-        .split(',')
-        .map((value) => value.trim())
-        .filter((value) => value !== '')
-        .map((value) => realmRRI(value)),
-    ),
-  };
-}
-
-function hasDeckCollaboration(
-  deps: DeckVersionServingDeps,
-  realmRRI: string,
-): boolean {
-  return (
-    deps.deckCollaboration?.enabled === true &&
-    deps.deckCollaboration.realmRRIs.has(realmRRI)
-  );
-}
 
 const CAPABILITIES_PATH = '.deck/capabilities';
 
@@ -113,7 +87,7 @@ async function handleDeckCapabilitiesRequest(
   }
   let realmRRI =
     typeof packageName === 'string' ? `${packageName.replace(/\/$/, '')}/` : '';
-  if (!hasDeckCollaboration(deps, realmRRI)) {
+  if (!hasDeckCollaboration(deps.deckCollaboration, realmRRI)) {
     return new Response('Not found', { status: 404 });
   }
   let authorization = await authorizeRead(request, realm);
@@ -184,7 +158,7 @@ async function handleDeckVersionIndexQuery(
   if (
     !realm?.dir ||
     !packageName ||
-    !hasDeckCollaboration(deps, `@${packageName}/`)
+    !hasDeckCollaboration(deps.deckCollaboration, `@${packageName}/`)
   ) {
     return new Response('Not found', { status: 404 });
   }
@@ -345,7 +319,7 @@ export async function handleDeckVersionRequest(
 
   let { scope, name, version, path } = parseRRI(identifier);
   let mutableIdentifier = `@${scope}/${name}/`;
-  if (!hasDeckCollaboration(deps, mutableIdentifier)) {
+  if (!hasDeckCollaboration(deps.deckCollaboration, mutableIdentifier)) {
     return null;
   }
   let mutableURL = dynamic

@@ -33,10 +33,8 @@ import { createRoutes } from './routes.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { createSendEvent } from './handlers/send-event.ts';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
-import {
-  createServeDeckVersion,
-  deckCollaborationPolicyFromEnvironment,
-} from './handlers/serve-deck-version.ts';
+import { createServeDeckVersion } from './handlers/serve-deck-version.ts';
+import { deckCollaborationPolicyFromEnvironment } from './lib/deck-collaboration-policy.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { Prerenderer } from '@cardstack/runtime-common';

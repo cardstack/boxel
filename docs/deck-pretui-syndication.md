@@ -9,7 +9,7 @@ This is intentionally asymmetric:
 ```text
 @cardstack/pretui@0.4.0/             packages/pretui
 exact canonical Version  ─────────▶  generated workspace representation
- tree + index + lock      syndicate  source files + DECK_SOURCE.json
+ Checkpoint + Version     syndicate  source files + DECK_SOURCE.json
 ```
 
 Daily authoring, History, branching, Reviews, and merges belong to the realm.
@@ -41,14 +41,16 @@ different source tree/index/lock, or a mapping change.
 `packages/pretui/DECK_SOURCE.json` records:
 
 - the exact source Version RRI;
+- its exact canonical source Checkpoint;
 - the canonical tree, card-index, and import-map lock hashes;
 - the syndication mapping version; and
 - one hash over the generated workspace source.
 
-`checkpointHash` is currently `null` by design. The A stack establishes exact
-Versions and deterministic syndication; canonical Checkpoints arrive with the
-B-series collaboration adapter. The Version/tree/index/lock tuple already
-makes this representation reproducible.
+The B0 realm adapter verifies the complete
+Version → Checkpoint → Repository → package tree and lock chain before the
+generator writes anything. A missing object, mismatched PretUI RRI root, or
+Version whose tree/index differs from its recorded Checkpoint fails
+syndication rather than producing source with partial provenance.
 
 ## Verify the downstream consumer
 

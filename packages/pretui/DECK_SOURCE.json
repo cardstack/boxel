@@ -6,6 +6,5 @@
   "sourceIndexHash": "cd2b56bda725f91e6543a399508f3e170381cda5a65183aad63e0628ef4ad2d4",
   "sourceLockHash": "9ec0ee7714c53eb16095926fc15b2c3323e824318aa217805194bc802524b6bc",
   "generatedSourceHash": "07f5d6387c9f2e1fd71c8941765d9bde925f66bd5ddff68c0f84ee10a591a017",
-  "checkpointHash": null,
-  "checkpointNote": "A6 predates the B0 Checkpoint adapter; exact Version, tree, index, and lock hashes are authoritative."
+  "checkpointHash": "ad36bca9ebff6547b37266f9273f7ba796d363de8f390c09db84ecf9d5b5d22c"
 }

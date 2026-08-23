@@ -11,7 +11,8 @@ import {
 } from '@cardstack/deck/node';
 import { format, type Plugin } from 'prettier';
 
-import { deckCollaborationPolicyFromEnvironment } from '../handlers/serve-deck-version.ts';
+import { deckCollaborationPolicyFromEnvironment } from '../lib/deck-collaboration-policy.ts';
+import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import { buildDeckVersionIndex } from '../lib/deck-version-index.ts';
 
 const MAPPING_VERSION = 'pretui-boxel-workspace-v1';
@@ -126,6 +127,24 @@ let sourceIndex = await buildDeckVersionIndex({
   packageName,
   version,
 });
+let protocol = openDeckRepositoryProtocol({
+  realmDir,
+  realmRRI: packageRRI,
+  policy,
+});
+let sourceVersionRRI = `@cardstack/pretui@${version}/`;
+let sourceOrigin = await protocol.readVersionOrigin(sourceVersionRRI);
+if (!sourceOrigin) {
+  throw new Error(`${sourceVersionRRI} has no canonical Checkpoint origin`);
+}
+if (
+  sourceOrigin.treeHash !== treeHash ||
+  sourceOrigin.indexHash !== sourceIndex.indexHash
+) {
+  throw new Error(
+    `${sourceVersionRRI} origin does not match its stored Version`,
+  );
+}
 let outputs = new Map<string, Buffer>();
 for (let path of GENERATED_FILES) {
   let bytes = files.get(path);
@@ -300,14 +319,12 @@ outputs.set(
   json({
     format: 'boxel-deck-syndication-v1',
     mappingVersion: MAPPING_VERSION,
-    sourceVersionRRI: `@cardstack/pretui@${version}/`,
+    sourceVersionRRI,
     sourceTreeHash: treeHash,
     sourceIndexHash: sourceIndex.indexHash,
     sourceLockHash: hashBytes(lockBytes),
     generatedSourceHash,
-    checkpointHash: null,
-    checkpointNote:
-      'A6 predates the B0 Checkpoint adapter; exact Version, tree, index, and lock hashes are authoritative.',
+    checkpointHash: sourceOrigin.checkpointHash,
   }),
 );
 
@@ -316,9 +333,10 @@ console.log(
   JSON.stringify(
     {
       mode: check ? 'verified' : 'syndicated',
-      sourceVersionRRI: `@cardstack/pretui@${version}/`,
+      sourceVersionRRI,
       sourceTreeHash: treeHash,
       sourceIndexHash: sourceIndex.indexHash,
+      checkpointHash: sourceOrigin.checkpointHash,
       generatedSourceHash,
       targetDir,
     },

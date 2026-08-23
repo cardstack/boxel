@@ -10,3 +10,6 @@ contracts and are intentionally not featured on the main documentation page.
   — the remaining B0–B8 plan, with Boxel CLI as the primary Claude Code client,
   S3 Files infrastructure, and deterministic PretUI syndication back into the
   Boxel monorepo.
+- [B0 reviewer guide](./deck-b0-reviewers-guide.md) — the feature-gated realm
+  adapter that verifies Repository, branch, Checkpoint, Review, merge, and
+  exact Version origin state before later CLI and Host slices consume it.
