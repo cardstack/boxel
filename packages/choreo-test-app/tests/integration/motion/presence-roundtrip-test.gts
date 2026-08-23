@@ -1,6 +1,6 @@
 import { render, settled } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
-import { motion, Presence } from 'glimmer-motion';
+import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'test-app/tests/helpers';
@@ -157,6 +157,66 @@ module('Integration | motion | presence round trip', function (hooks) {
       document.querySelectorAll('[data-item]').length,
       1,
       'the leavers are gone from the DOM, not merely invisible'
+    );
+
+    state.items = all;
+    await settled();
+    await animationsSettled();
+    assert.deepEqual(report(), ['a:1', 'b:1', 'c:1'], 'and all three return');
+  });
+
+  /**
+   * The one that took the gallery down.
+   *
+   * A shared-layout leaver is completed by its crossfade: the element it hands
+   * over to owns when it goes. A leaver holding a `layoutId` that NOTHING else
+   * shares is in a stack of one — no counterpart, no crossfade, nobody to
+   * finish it. Treating that as "someone else will report this" left the
+   * registration open forever, and the <Presence> entry with it: the leaver
+   * stayed in the DOM at opacity 0, and bringing it back left it stuck there.
+   */
+  test('a leaver holding a lone layoutId still completes its exit', async function (assert) {
+    const state = new Items();
+
+    await render(
+      <template>
+        <LayoutGroup>
+          <div style="position:relative">
+            <Presence
+              @items={{state.items}}
+              @key={{keyOf}}
+              @mode="popLayout"
+              @initial={{false}}
+              as |item h|
+            >
+              <span
+                data-item={{item.id}}
+                {{motion
+                  presence=h
+                  layout=true
+                  initial=gone
+                  animate=here
+                  exit=gone
+                  transition=quick
+                }}
+              >
+                {{! nothing else shares this id, so its stack has one member }}
+                <i {{motion layoutId=item.id transition=quick}}>{{item.id}}</i>
+              </span>
+            </Presence>
+          </div>
+        </LayoutGroup>
+      </template>
+    );
+    await animationsSettled();
+
+    state.items = [all[1]!];
+    await settled();
+    await animationsSettled();
+    assert.strictEqual(
+      document.querySelectorAll('[data-item]').length,
+      1,
+      'the leavers left the DOM rather than lingering invisible'
     );
 
     state.items = all;

@@ -675,8 +675,17 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
         projection.promote();
       } else if (!projection.relegate()) {
         frame.postRender(() => {
+          // A shared-layout leaver is completed by the crossfade: the element
+          // it hands over to owns when it goes. But a stack whose only member
+          // is this leaver has nobody to hand over to and no crossfade to wait
+          // for — counting it as "someone else will finish this" left the
+          // registration open forever, and with it the whole <Presence> entry.
+          // Filtering the gallery is where that showed: every leaving card
+          // holding a lone-member stack (a layoutId inside its own demo) stayed
+          // in the DOM at opacity 0, and coming back left it stuck there.
           const stack = projection.getStack();
-          if (!stack || !stack.members.length) {
+          const others = stack?.members.filter((m) => m !== projection) ?? [];
+          if (!others.length) {
             presenceContext?.onExitComplete?.(this.layoutPresenceKey);
           }
         });

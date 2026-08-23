@@ -164,7 +164,7 @@ export class Gallery extends Component {
           {{! sync, not popLayout: a popLayout leaver here never reports its
               exit complete, so the card stays in the DOM at opacity 0 and
               coming back leaves it stuck there. See docs/open-bugs.md. }}
-          @mode="sync"
+          @mode="popLayout"
           @initial={{false}}
           as |demo h|
         >

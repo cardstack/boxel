@@ -18,7 +18,7 @@ The parent documents are [choreography.md](choreography.md),
 - [5. Package work not done](#5-package-work-not-done)
 - [6. Recently fixed — do not re-investigate](#6-recently-fixed--do-not-re-investigate)
 
-Current state: **474 tests, 472 pass, 2 skip, 0 fail.** Lint and types clean.
+Current state: **476 tests, 474 pass, 2 skip, 0 fail.** Lint and types clean.
 Nothing committed or pushed — all in the `wip` commit.
 
 ---
@@ -71,44 +71,7 @@ happen — they only check what is left afterwards.
 
 ## 1. Reported, not yet fixed
 
-### 1a. A popLayout leaver with a large subtree never completes its exit
-
-Found by the gallery filter. Filter the gallery from **All** to a category and
-back, and the twenty cards that left do not come back: they sit in the DOM at
-`opacity: 0` with the `initial` transform still on them.
-
-**What the evidence says.** Stamping every card before the switch and reading
-the DOM after the round trip gives `dom=26 stamped=26`, with twenty at
-`o=0 pos=static tf=scale(0.96)` and six at `o=1`. So the leavers are the _same
-elements_ throughout — they were never removed. Their exit animations ran to
-`opacity: 0`, but the exit never reported complete, so `<Presence>` kept the
-entries; marking them present again restores nothing, because as far as the
-entry is concerned they never left.
-
-**The suspected mechanism** is the one already documented in `node.ts`:
-
-> React re-renders the WHOLE subtree of a presence child when it starts
-> leaving. Glimmer only re-runs the modifiers whose own args changed, so a
-> descendant would never learn it is exiting — and its registration would
-> block the exit forever.
-
-Every registered descendant must report before `Entry.checkComplete()` will
-release the leaver. A gallery card contains an entire demo, which is a deep
-tree of motion nodes, several with their own `<Presence>` and `<Choreo>`.
-
-**What is pinned, and what is not.** `tests/integration/motion/gallery-filter-test.gts`
-covers the round trip and is green on `sync`. Three attempts to reduce it did
-NOT reproduce — a plain three-item round trip, a round trip interrupted
-mid-exit, and a leaver with a motion element inside it all pass under
-`popLayout` (`tests/integration/motion/presence-roundtrip-test.gts`). So the
-trigger needs more than one static descendant: scale, depth, a nested
-`<Presence>`, or a `<Choreo>` region. That is the next thing to bisect.
-
-**The gallery is on `sync` in the meantime**, which is verified green. This is
-not a workaround that hides the bug: the failing configuration is one line away
-and the reduction tests are already in place to grow into a real repro.
-
-### 1b. A counterpart is only released when a step names `c.removed`
+### 1a. A counterpart is only released when a step names `c.removed`
 
 Found while building the interruption demo. A timeline with a single
 `<c.Move @of={{c.kept 'x'}}>` and nothing naming `c.removed` leaves the old copy
@@ -123,7 +86,7 @@ Somewhere between those two it does not. **Reproduce with**: two slots, one
 element moving between them by `id`, and a timeline containing only a `kept`
 Move.
 
-### 1c. Variant orchestration on a `<Presence>` child — UNRESOLVED
+### 1b. Variant orchestration on a `<Presence>` child — UNRESOLVED
 
 Two demos were attempted on `when` / `staggerChildren` / `staggerDirection` and
 both were cut. A panel that drives its subtree by variant label
@@ -143,7 +106,7 @@ not on transform strings, and start from the case the gallery already proves
 (Stagger's `variants` + `staggerChildren`) so a green baseline exists before the
 `<Presence>` variable is added.
 
-### 1d. Drag "stopped working" — NOT REPRODUCED
+### 1c. Drag "stopped working" — NOT REPRODUCED
 
 Reported, but could not be reproduced. Verified working two ways on `/drag`:
 
@@ -244,6 +207,40 @@ The Ember-idiom pass covered helpers, named exports, `test-support`,
 ---
 
 ## 6. Recently fixed — do not re-investigate
+
+### A leaver in a stack of one never completed its exit
+
+Filtering the gallery from All to a category and back left twenty cards in the
+DOM at `opacity: 0` with their `initial` transform still on them. Stamping the
+cards showed `dom=26 stamped=26` — the same elements throughout, never removed.
+
+A shared-layout leaver is deliberately NOT completed by its own animation: the
+element it hands over to owns when it goes, because a crossfade has to outlive
+the values of the copy it is replacing. `node.ts` expressed that as "this node
+has a stack, so someone else will report it". A leaver holding a `layoutId`
+that nothing else shares is in a stack of ONE — itself. There is no counterpart
+and no crossfade, so nobody ever reported it, the registration stayed open, and
+`Entry.checkComplete()` never released the entry.
+
+The fix is to ask whether anyone _else_ is in the stack:
+
+```ts
+const others = stack?.members.filter((m) => m !== projection) ?? [];
+if (!others.length) presenceContext?.onExitComplete?.(this.layoutPresenceKey);
+```
+
+Traced by instrumenting the exit path and tallying it over a real filter:
+`pop: 20`, `relegate false: 54`, `exitComplete? members=nostack: 45`,
+**`exitComplete? members=1: 9`** — nine nodes reaching the guard with a stack of
+one and falling through it.
+
+Pinned by `tests/integration/motion/gallery-filter-test.gts`, which fails
+without the fix and passes with it, deterministically. Note that the reductions
+in `presence-roundtrip-test.gts` do NOT pin it: a three-item round trip, one
+interrupted mid-exit, a leaver with a motion descendant, and a leaver holding a
+lone `layoutId` all pass either way. Whatever else the gallery brings — depth,
+twenty leavers at once, nested `<Presence>` and `<Choreo>` regions — is part of
+the trigger and is not yet isolated.
 
 Listed so the next session does not re-derive them.
 
