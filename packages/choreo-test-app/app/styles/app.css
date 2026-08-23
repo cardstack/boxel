@@ -1795,6 +1795,11 @@ html[data-gm-dragging] * {
   height: 68px;
   padding: 0 12px;
   background: rgba(16, 13, 11, 0.82);
+  /* its own corners, because the frame's cannot reach it: a backdrop-filter
+     makes this its own containing block, and an ancestor's overflow:hidden
+     stops clipping it — so the bar sat square inside a 26px radius. One less
+     than the frame's, which is what the frame's 1px border leaves inside. */
+  border-radius: 25px 25px 0 0;
   /* a blurred backdrop is re-composited on every frame of the slide; promoting
      the layer keeps the fade from stuttering against it */
   will-change: transform, opacity;

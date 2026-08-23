@@ -18,7 +18,7 @@ The parent documents are [choreography.md](choreography.md),
 - [5. Package work not done](#5-package-work-not-done)
 - [6. Recently fixed — do not re-investigate](#6-recently-fixed--do-not-re-investigate)
 
-Current state: **477 tests, 475 pass, 2 skip, 0 fail.** Lint and types clean.
+Current state: **482 tests, 480 pass, 2 skip, 0 fail.** Lint and types clean.
 Nothing committed or pushed — all in the `wip` commit.
 
 ---
@@ -71,7 +71,36 @@ happen — they only check what is left afterwards.
 
 ## 1. Reported, not yet fixed
 
-### 1a. Two copies of one `layoutId` leave a leaver waiting on a stranger
+### 1a. A `layout` animation needs someone above it to take the snapshot
+
+A layout animation is the difference between two measurements, and the first
+one has to be taken BEFORE the change. React's Motion takes it for every
+projecting node on every commit (`MeasureLayout.getSnapshotBeforeUpdate`).
+Here it has to be asked for, and only four things ask — `<LayoutGroup>`,
+`<Presence>`, `<Choreo>` and `<ReorderGroup>`, each through a render detector
+consumed during render, before the DOM is patched. `snapshotAll()` is global,
+so ANY of them anywhere on the page serves every projecting node.
+
+So `{{motion layout=true}}` with none of them above it does not animate. It
+does not warn either: the element still ends up in the right place, so the only
+symptom is that it arrives there instantly.
+
+That is why Sheet and Subdivision animated in the gallery and snapped on their
+own pages — the gallery has a `<LayoutGroup>` around the grid, and a page with
+one demo on it has nothing. Both now wrap their state changes in
+`layoutChange()`, which is the documented ask, and
+`tests/integration/motion/sheet-standalone-test.gts` and `subdivision-test.gts`
+pin the difference by sampling three frames in: mid-flight the element is
+between its two seats, and a snap is already at the second one.
+
+**What a real fix looks like** is not settled. The modifier cannot take the
+snapshot itself — a modifier runs after the DOM is patched, which is exactly
+too late. The options are a render detector the app installs once at its root,
+a runloop hook that snapshots before each render flush, or keeping
+`layoutChange()` as the documented idiom and warning when a projecting node
+animates with no snapshot on record.
+
+### 1b. Two copies of one `layoutId` leave a leaver waiting on a stranger
 
 Found while reducing the lone-stack bug above, by building the repro wrong:
 two sibling cards each rendering `<Lightbox>`, so both carry `layoutId`
@@ -93,7 +122,7 @@ copies of one `layoutId` is ambiguous by definition. But hanging forever is the
 wrong answer to it, and a leaver should probably not defer to a member that is
 not itself present-and-leading.
 
-### 1b. A counterpart is only released when a step names `c.removed`
+### 1c. A counterpart is only released when a step names `c.removed`
 
 Found while building the interruption demo. A timeline with a single
 `<c.Move @of={{c.kept 'x'}}>` and nothing naming `c.removed` leaves the old copy
@@ -108,7 +137,7 @@ Somewhere between those two it does not. **Reproduce with**: two slots, one
 element moving between them by `id`, and a timeline containing only a `kept`
 Move.
 
-### 1c. Variant orchestration on a `<Presence>` child — UNRESOLVED
+### 1d. Variant orchestration on a `<Presence>` child — UNRESOLVED
 
 Two demos were attempted on `when` / `staggerChildren` / `staggerDirection` and
 both were cut. A panel that drives its subtree by variant label
@@ -128,7 +157,7 @@ not on transform strings, and start from the case the gallery already proves
 (Stagger's `variants` + `staggerChildren`) so a green baseline exists before the
 `<Presence>` variable is added.
 
-### 1d. Drag "stopped working" — NOT REPRODUCED
+### 1e. Drag "stopped working" — NOT REPRODUCED
 
 Reported, but could not be reproduced. Verified working two ways on `/drag`:
 

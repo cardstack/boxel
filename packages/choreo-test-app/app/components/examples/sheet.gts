@@ -2,7 +2,7 @@ import type { TOC } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { motion, Presence } from 'glimmer-motion';
+import { layoutChange, motion, Presence } from 'glimmer-motion';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -82,6 +82,24 @@ export class Sheet extends Component {
     return this.isApp ? extras : NONE;
   }
 
+  /**
+   * Every mode change is a layout change, and someone has to say so.
+   *
+   * The tiles travel between modes on `layout=true`, which needs a measurement
+   * from BEFORE the class changed. React's Motion takes that snapshot for
+   * every projecting node on every commit; here it is asked for, and the
+   * things that ask are <LayoutGroup>, <Presence>, <Choreo> and
+   * <ReorderGroup>. On its own page this card has none of them above it, so
+   * nothing measured the old layout and the tiles arrived already in place. In
+   * the gallery there is a <LayoutGroup> around the grid — which is the whole
+   * of why the same card tweened there and snapped here.
+   */
+  private toMode(next: Mode) {
+    layoutChange(() => {
+      this.mode = next;
+    });
+  }
+
   grab = () => {
     this.startedAt = DETENTS[this.mode];
   };
@@ -105,17 +123,17 @@ export class Sheet extends Component {
         best = name;
       }
     }
-    this.mode = best;
+    this.toMode(best);
   };
 
   /** a click is a flick with no distance: it steps to the next mode */
   step = () => {
     const next = ORDER.indexOf(this.mode) + 1;
-    this.mode = ORDER[next % ORDER.length]!;
+    this.toMode(ORDER[next % ORDER.length]!);
   };
 
   close = () => {
-    this.mode = 'sliver';
+    this.toMode('sliver');
   };
 
   <template>

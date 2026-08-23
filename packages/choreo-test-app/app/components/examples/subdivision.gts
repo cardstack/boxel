@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { instantLayoutTransition, motion } from 'glimmer-motion';
+import { instantLayoutTransition, layoutChange, motion } from 'glimmer-motion';
 
 const tiles = [
   { id: 'atlas', label: 'Atlas', stock: 'Kiln floor' },
@@ -92,22 +92,35 @@ export class Subdivision extends Component {
     });
   };
 
-  /** released: an ordinary state change, so the tiles' layout animation runs */
+  /**
+   * Released: the tiles spring into the rounded grid.
+   *
+   * An ordinary state change is not enough on its own. A layout animation is
+   * the difference between two measurements, and the first one has to be taken
+   * BEFORE the change — React's Motion does that for every projecting node on
+   * every commit, but here someone has to ask. `<LayoutGroup>`, `<Presence>`,
+   * `<Choreo>` and `<ReorderGroup>` ask; this card has none of them, so on its
+   * own page the tiles arrived already rounded. `layoutChange` is the ask.
+   */
   drop = (axis: 'col' | 'row') => {
     this.live = undefined;
-    if (axis === 'col') {
-      this.col = Math.round(this.col);
-    } else {
-      this.row = Math.round(this.row);
-    }
+    layoutChange(() => {
+      if (axis === 'col') {
+        this.col = Math.round(this.col);
+      } else {
+        this.row = Math.round(this.row);
+      }
+    });
   };
 
   even = (axis: 'col' | 'row') => {
-    if (axis === 'col') {
-      this.col = 50;
-    } else {
-      this.row = 50;
-    }
+    layoutChange(() => {
+      if (axis === 'col') {
+        this.col = 50;
+      } else {
+        this.row = 50;
+      }
+    });
   };
 
   <template>

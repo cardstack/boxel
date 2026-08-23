@@ -48,9 +48,11 @@ const SAMPLE = `{{! Filtering this list is a layout animation, not a page transi
     <Presence
       @items={{this.demos}}
       @key={{demoKey}}
-      @mode='popLayout'      {{! a leaver drops out of flow at once, so the
-                                 survivors close the gap without waiting }}
-      @initial={{false}}     {{! the first paint is not an entrance }}
+      @mode='sync'           {{! popLayout is the one to want here, and the
+                                 one that cannot be used yet: see open-bugs }}
+      {{! no initial=false here: the presence context is inherited, so
+          blocking the first entrance would block it for every motion node
+          inside every card as well }}
       as |demo h|
     >
       <article
@@ -164,8 +166,12 @@ export class Gallery extends Component {
           {{! sync, not popLayout: a popLayout leaver here never reports its
               exit complete, so the card stays in the DOM at opacity 0 and
               coming back leaves it stuck there. See docs/open-bugs.md. }}
-          @mode="popLayout"
-          @initial={{false}}
+          {{! No initial=false handle here, however tempting: the presence
+              context is INHERITED, so blocking the first entrance blocks it
+              for every motion node inside every demo as well — the pour log
+              arrives already scrolled, and a looping keyframe animation is
+              seeded at its last frame instead of running. The cards fading in
+              once on load is the cheaper price. }}
           as |demo h|
         >
           <article
