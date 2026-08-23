@@ -67,19 +67,6 @@ html::before {
   z-index: 50;
 }
 
-/* The grain is a fixed overlay, so a view transition captures it INTO the
-   snapshot and then paints it live over the top as well — the texture doubles
-   for the length of the transition. Take it off while one is running.
-   Kept as two rules on purpose: :active-view-transition is not everywhere, and
-   an unknown selector would invalidate the whole list if they shared one. */
-html:active-view-transition::before {
-  display: none;
-}
-
-html.is-switching::before {
-  display: none;
-}
-
 body {
   margin: 0;
   color: var(--ink);
@@ -298,6 +285,9 @@ button {
 }
 
 .grid {
+  /* popLayout lifts a leaving card out of flow so the survivors can close the
+     gap immediately — it is placed against this box, so this box has to be one */
+  position: relative;
   display: grid;
   /* wider per demo: a stage is a small stage already, and two roomy columns
      read better than three cramped ones */
@@ -3737,23 +3727,4 @@ html[data-gm-dragging] * {
 .filter-code .sample-label {
   margin: 0;
   padding: 14px 18px 0;
-}
-
-/* Motion assigns (and cleans up) the view-transition-names itself; the class
-   is how you reach the generated layers from CSS without knowing them. */
-::view-transition-group(.demo-card) {
-  z-index: 1;
-}
-
-/* A filter is not a page change, and two things have to stand down for it:
-   the body's root layer (its snapshots are hidden, so capturing it blanks the
-   page) and the backdrop the overlay paints for route changes (opaque, so it
-   covers the live page while the cards move over it). Both are right when the
-   page is being REPLACED and wrong when a list is being filtered. */
-html.is-switching body {
-  view-transition-name: none;
-}
-
-html.is-switching::view-transition {
-  background: none;
 }
