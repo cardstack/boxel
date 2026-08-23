@@ -42,11 +42,17 @@ const thread = [
 
 type Line = (typeof thread)[number];
 
+/** how much sustained travel in one direction flips the bar */
+const FLIP = 24;
+/** near either end the bar holds still: that is where the rubber band lives */
+const EDGE = 24;
+
 export class HideHeader extends Component {
   scroll = scrollProgress();
   @tracked hidden = false;
   #last = 0;
   #travel = 0;
+  #column?: HTMLElement;
 
   // fades as it goes, so the bar reads as leaving rather than as being clipped
   // by the frame it slides behind
@@ -55,38 +61,60 @@ export class HideHeader extends Component {
   }
 
   follow = (y: number) => {
-    this.#travel += y - this.#last;
-    this.#last = y;
-    if (y <= 8) {
+    const el = this.#column;
+    const max = el ? Math.max(0, el.scrollHeight - el.clientHeight) : 0;
+    // An overscroll is not a scroll. The rubber band reports positions outside
+    // the range and then recoils back into it, and that recoil reads as a flick
+    // in the opposite direction — which is how a hard flick to the top used to
+    // end with the bar hidden. Clamp to the range that actually exists.
+    const at = Math.min(Math.max(y, 0), max);
+    const delta = at - this.#last;
+    this.#last = at;
+    if (at <= EDGE) {
+      // at the top the bar is always shown, whatever the last delta said
       this.hidden = false;
       this.#travel = 0;
       return;
     }
-    if (this.#travel > 8) {
+    if (at >= max - EDGE) {
+      // and at the bottom it holds, so the bounce cannot flip it either
+      this.#travel = 0;
+      return;
+    }
+    // direction, not distance: a reversal starts the count over rather than
+    // paying down the travel already banked in the other direction
+    if (delta > 0 !== this.#travel > 0) {
+      this.#travel = 0;
+    }
+    this.#travel += delta;
+    if (this.#travel > FLIP) {
       this.hidden = true;
       this.#travel = 0;
-    } else if (this.#travel < -8) {
+    } else if (this.#travel < -FLIP) {
       this.hidden = false;
       this.#travel = 0;
     }
   };
 
   watch = modifier((element: HTMLElement) => {
-    const onScroll = () => {
-      this.follow(element.scrollTop);
-    };
-    element.addEventListener('scroll', onScroll, { passive: true });
+    this.#column = element;
+    this.#last = element.scrollTop;
     const unsubscribe = this.scroll.scrollY.on('change', this.follow);
     return () => {
-      element.removeEventListener('scroll', onScroll);
       unsubscribe();
+      this.#column = undefined;
     };
   });
 
   <template>
     <div class="ex">
       <div class="chat-app">
-        <header class="chat-bar" {{motion style=this.header transition=tween}}>
+        {{! animate, not style: a plain number handed to style is SET, not
+            animated, and the transition beside it would never be consulted }}
+        <header
+          class="chat-bar"
+          {{motion animate=this.header transition=tween}}
+        >
           <span class="chat-back" aria-hidden="true"></span>
           <span class="chat-face">
             <span class="chat-avatar">RT</span>

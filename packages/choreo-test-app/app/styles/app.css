@@ -1790,6 +1790,9 @@ html[data-gm-dragging] * {
   height: 68px;
   padding: 0 12px;
   background: rgba(16, 13, 11, 0.82);
+  /* a blurred backdrop is re-composited on every frame of the slide; promoting
+     the layer keeps the fade from stuttering against it */
+  will-change: transform, opacity;
   backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--line);
 }
