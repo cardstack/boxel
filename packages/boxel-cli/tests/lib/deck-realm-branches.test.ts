@@ -142,6 +142,27 @@ describe('Deck Realm branches', () => {
     });
   });
 
+  it('includes the Realm error when branch creation fails', async () => {
+    let authenticator: RealmAuthenticator = {
+      async authedRealmFetch() {
+        return new Response('Branch view preparation failed', {
+          status: 503,
+          statusText: 'Service Unavailable',
+        });
+      },
+    };
+
+    await expect(
+      createDeckRealmBranch({
+        realmURL: 'https://realm.example/pretui/',
+        branchName: 'mina/focus-ring',
+        authenticator,
+      }),
+    ).rejects.toThrow(
+      'Could not create Deck branch mina/focus-ring: 503 Service Unavailable — Branch view preparation failed',
+    );
+  });
+
   it('switches a clean workspace by exact content and updates its branch base', async () => {
     let localDir = await mkdtemp(join(tmpdir(), 'boxel-deck-branch-switch-'));
     let mainContent = {

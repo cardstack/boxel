@@ -143,6 +143,13 @@ export class RealmAuthClient {
     return this.isRealmServerAuth ? '_server-session' : '_session';
   }
 
+  private get sessionURL() {
+    if (this.isRealmServerAuth) {
+      return new URL('/_server-session', this.realmURL).href;
+    }
+    return new URL('_session', this.realmURL).href;
+  }
+
   private async createRealmSession() {
     let cacheKey = realmSessionCacheKey(this.realmURL, this.sessionEndpoint);
     return getRealmSessionWithCache(this.matrixClient, cacheKey, async () => {
@@ -190,7 +197,7 @@ export class RealmAuthClient {
       body.registration_token = this.registrationToken;
     }
     return this.withRetries(() =>
-      this.fetch(`${this.realmURL.href}${this.sessionEndpoint}`, {
+      this.fetch(this.sessionURL, {
         method: 'POST',
         headers: {
           Accept: 'application/json',

@@ -150,10 +150,11 @@ export async function createDeckRealmBranch(options: {
     },
   );
   if (!response.ok) {
+    let detail = (await response.text()).trim().slice(0, 300);
     throw new Error(
       response.status === 409
-        ? `Deck branch already exists or moved: ${options.branchName}`
-        : `Could not create Deck branch ${options.branchName}: ${response.status} ${response.statusText}`,
+        ? `Deck branch already exists or moved: ${options.branchName}${detail ? ` — ${detail}` : ''}`
+        : `Could not create Deck branch ${options.branchName}: ${response.status} ${response.statusText}${detail ? ` — ${detail}` : ''}`,
     );
   }
   let value: unknown = await response.json();

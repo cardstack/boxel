@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+#MISE description="Start the feature-gated PretUI Deck collaboration stack"
+
+set -euo pipefail
+
+if [ -z "${PRETUI_REALM_PATH:-}" ]; then
+  echo "PRETUI_REALM_PATH must name an initialized PretUI collaboration Realm" >&2
+  echo "Create one with: pnpm --dir packages/realm-server fixture:pretui-live -- /absolute/path" >&2
+  exit 1
+fi
+
+export BOXEL_DECK_COLLABORATION_ENABLED=true
+export BOXEL_DECK_COLLABORATION_REALM_RRIS="${BOXEL_DECK_COLLABORATION_REALM_RRIS:-@cardstack/pretui/}"
+export DECKD_URL="${DECKD_URL:-http://127.0.0.1:8787}"
+export PGDATABASE="${PGDATABASE:-boxel_development}"
+export SKIP_SKILLS="${SKIP_SKILLS:-true}"
+export SKIP_OPENROUTER="${SKIP_OPENROUTER:-true}"
+export SKIP_SOFTWARE_FACTORY="${SKIP_SOFTWARE_FACTORY:-true}"
+export WORKER_USER_INDEX_COUNT="${WORKER_USER_INDEX_COUNT:-1}"
+
+exec mise run dev-minimal

@@ -26,9 +26,15 @@ DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
 DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
+DEFAULT_PRETUI_REALM_URL="${REALM_BASE_URL}/pretui/"
+PRETUI_REALM_URL="${RESOLVED_PRETUI_REALM_URL:-$DEFAULT_PRETUI_REALM_URL}"
+START_PRETUI=$(if [ -n "${PRETUI_REALM_PATH:-}" ]; then echo "true"; else echo ""; fi)
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
+START_SKILLS=$(if [ "${SKIP_SKILLS:-}" != "true" ]; then echo "true"; else echo ""; fi)
+START_OPENROUTER=$(if [ "${SKIP_OPENROUTER:-}" != "true" ]; then echo "true"; else echo ""; fi)
+START_SOFTWARE_FACTORY=$(if [ "${SKIP_SOFTWARE_FACTORY:-}" != "true" ]; then echo "true"; else echo ""; fi)
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
@@ -37,12 +43,13 @@ NODE_ENV=development \
   PGDATABASE="${PGDATABASE}" \
   LOG_LEVELS="${LOG_LEVELS:-*=info}" \
   REALM_SECRET_SEED="shhh! it's a secret" \
-  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  REALM_SERVER_MATRIX_USERNAME="${REALM_SERVER_MATRIX_USERNAME:-realm_server}" \
   LOW_CREDIT_THRESHOLD=2000 \
   OPENROUTER_REALM_URL="${REALM_BASE_URL}/openrouter/" \
   node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --userIndexCount="${WORKER_USER_INDEX_COUNT:-0}" \
   --port="${WORKER_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
@@ -56,13 +63,15 @@ NODE_ENV=development \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  --fromUrl='@cardstack/skills/' \
-  --toUrl="${REALM_BASE_URL}/skills/" \
+  ${START_SKILLS:+--fromUrl='@cardstack/skills/'} \
+  ${START_SKILLS:+--toUrl="${REALM_BASE_URL}/skills/"} \
   \
-  --fromUrl='@cardstack/openrouter/' \
-  --toUrl="${REALM_BASE_URL}/openrouter/" \
+  ${START_OPENROUTER:+--fromUrl='@cardstack/openrouter/'} \
+  ${START_OPENROUTER:+--toUrl="${REALM_BASE_URL}/openrouter/"} \
   \
-  --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
-  --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
+  ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  ${START_PRETUI:+--fromUrl='@cardstack/pretui/'} \
+  ${START_PRETUI:+--toUrl="${PRETUI_REALM_URL}"} \
   2>&1 | "$LOG_TEE" worker
-

@@ -102,6 +102,7 @@
     "fixture:relay": "node scripts/seed-relay-fixture.ts",
     "fixture:pretui-known-date": "node scripts/seed-pretui-known-date.ts",
     "fixture:pretui-team": "node scripts/seed-pretui-team-fixture.ts",
+    "fixture:pretui-live": "node scripts/bootstrap-pretui-collaboration-realm.ts",
     "syndicate:pretui": "node scripts/syndicate-pretui-version.ts",
     "test": "./tests/scripts/run-qunit-with-test-pg.sh",
     "test-module": "./tests/scripts/run-qunit-with-test-pg.sh --module ${TEST_MODULE}",

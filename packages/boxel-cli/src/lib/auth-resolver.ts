@@ -52,6 +52,7 @@ export function resolveRealmAuthenticator(
     try {
       const authenticator = new SeedAuthenticator({
         seed: options.realmSecretSeed,
+        botUsername: process.env.BOXEL_REALM_BOT_USERNAME,
       });
       authenticator.registerRealmUrl(options.realmUrl);
       return { ok: true, authenticator, mode: 'seed' };

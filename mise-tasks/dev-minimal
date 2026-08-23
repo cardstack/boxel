@@ -29,6 +29,10 @@ fi
 READY_PATH="_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson"
 BASE_REALM_READY="http-get://${REALM_BASE_URL#http://}/base/${READY_PATH}"
 NODE_TEST_REALM_READY="http-get://${REALM_TEST_URL#http://}/node-test/${READY_PATH}"
+DEV_REALMS_READY="${BASE_REALM_READY}"
+if [ "${SKIP_SOFTWARE_FACTORY:-}" != "true" ]; then
+  DEV_REALMS_READY="${DEV_REALMS_READY}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}"
+fi
 
 WAIT_ON_TIMEOUT=7200000 \
   SKIP_EXPERIMENTS=true \
@@ -38,7 +42,7 @@ WAIT_ON_TIMEOUT=7200000 \
   NODE_NO_WARNINGS=1 \
   start-server-and-test \
     'run-p -ln start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development' \
-    "${BASE_REALM_READY}|http-get://${REALM_BASE_URL#http://}/software-factory/${READY_PATH}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
+    "${DEV_REALMS_READY}|${MATRIX_URL_VAL}|http://localhost:5001|${ICONS_URL}" \
     'run-p -ln start:worker-test start:test-realms' \
     "${NODE_TEST_REALM_READY}" \
     'wait'

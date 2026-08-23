@@ -6,15 +6,18 @@ export class RealmAuthDataSource {
   private visitedRealms = new Map<string, RealmAuthClient>();
   private matrixClient: MatrixClient;
   private getFetch: () => typeof globalThis.fetch;
+  private authWithRealmServer: boolean;
 
   constructor(
     matrixClient: MatrixClient,
     // we want our fetch to be lazily obtained as it might be the very fetch
     // that is composed by middleware containing this data source instance
     getFetch: () => typeof globalThis.fetch,
+    options?: { authWithRealmServer?: true },
   ) {
     this.matrixClient = matrixClient;
     this.getFetch = getFetch;
+    this.authWithRealmServer = Boolean(options?.authWithRealmServer);
   }
 
   token(url: string): string | undefined {
@@ -62,6 +65,8 @@ export class RealmAuthDataSource {
     matrixClient: MatrixClient,
     fetch: typeof globalThis.fetch,
   ) {
-    return new RealmAuthClient(targetRealmURL, matrixClient, fetch);
+    return new RealmAuthClient(targetRealmURL, matrixClient, fetch, {
+      ...(this.authWithRealmServer ? { authWithRealmServer: true } : {}),
+    });
   }
 }

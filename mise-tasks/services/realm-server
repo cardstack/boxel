@@ -49,6 +49,8 @@ if [ -z "$MATRIX_REGISTRATION_SHARED_SECRET" ]; then
 fi
 
 START_EXPERIMENTS=$(if [ -z "$SKIP_EXPERIMENTS" ]; then echo "true"; else echo ""; fi)
+START_SKILLS=$(if [ "${SKIP_SKILLS:-}" != "true" ]; then echo "true"; else echo ""; fi)
+START_OPENROUTER=$(if [ "${SKIP_OPENROUTER:-}" != "true" ]; then echo "true"; else echo ""; fi)
 START_CATALOG=true
 if [ "${SKIP_CATALOG:-}" = "true" ]; then
   START_CATALOG=""
@@ -59,6 +61,7 @@ if [ "${SKIP_SOFTWARE_FACTORY:-}" = "true" ]; then
 fi
 START_BOXEL_HOMEPAGE=$(if [ -z "$SKIP_BOXEL_HOMEPAGE" ]; then echo "true"; else echo ""; fi)
 START_SUBMISSION=$(if [ -z "$SKIP_SUBMISSION" ]; then echo "true"; else echo ""; fi)
+START_PRETUI=$(if [ -n "${PRETUI_REALM_PATH:-}" ]; then echo "true"; else echo ""; fi)
 
 DEFAULT_CATALOG_REALM_URL="${REALM_BASE_URL}/catalog/"
 CATALOG_REALM_URL="${RESOLVED_CATALOG_REALM_URL:-$DEFAULT_CATALOG_REALM_URL}"
@@ -68,6 +71,8 @@ DEFAULT_BOXEL_HOMEPAGE_REALM_URL="${REALM_BASE_URL}/boxel-homepage/"
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 DEFAULT_SUBMISSION_REALM_URL="${REALM_BASE_URL}/submissions/"
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-$DEFAULT_SUBMISSION_REALM_URL}"
+DEFAULT_PRETUI_REALM_URL="${REALM_BASE_URL}/pretui/"
+PRETUI_REALM_URL="${RESOLVED_PRETUI_REALM_URL:-$DEFAULT_PRETUI_REALM_URL}"
 
 SUBMISSION_REALM_PATH="${SUBMISSION_REALM_PATH:-${REALMS_ROOT}/submissions}"
 
@@ -92,7 +97,7 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   GRAFANA_SECRET="shhh! it's a secret" \
   AI_BOT_DELEGATION_SECRET="shhh! it's a secret" \
   MATRIX_URL="${MATRIX_URL_VAL}" \
-  REALM_SERVER_MATRIX_USERNAME=realm_server \
+  REALM_SERVER_MATRIX_USERNAME="${REALM_SERVER_MATRIX_USERNAME:-realm_server}" \
   ENABLE_FILE_WATCHER=true \
   node main.ts \
   --port="${REALM_PORT}" \
@@ -112,10 +117,10 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_CATALOG:+--fromUrl='@cardstack/catalog/'} \
   ${START_CATALOG:+--toUrl="${CATALOG_REALM_URL}"} \
   \
-  --path='../skills-realm/contents' \
-  --username='skills_realm' \
-  --fromUrl='@cardstack/skills/' \
-  --toUrl="${REALM_BASE_URL}/skills/" \
+  ${START_SKILLS:+--path='../skills-realm/contents'} \
+  ${START_SKILLS:+--username='skills_realm'} \
+  ${START_SKILLS:+--fromUrl='@cardstack/skills/'} \
+  ${START_SKILLS:+--toUrl="${REALM_BASE_URL}/skills/"} \
   \
   ${START_SUBMISSION:+--path="${SUBMISSION_REALM_PATH}"} \
   ${START_SUBMISSION:+--username='submission_realm'} \
@@ -132,13 +137,18 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
   \
-  --path='../openrouter-realm' \
-  --username='openrouter_realm' \
-  --fromUrl='@cardstack/openrouter/' \
-  --toUrl="${REALM_BASE_URL}/openrouter/" \
+  ${START_OPENROUTER:+--path='../openrouter-realm'} \
+  ${START_OPENROUTER:+--username='openrouter_realm'} \
+  ${START_OPENROUTER:+--fromUrl='@cardstack/openrouter/'} \
+  ${START_OPENROUTER:+--toUrl="${REALM_BASE_URL}/openrouter/"} \
   \
   ${START_SOFTWARE_FACTORY:+--path='../software-factory/realm'} \
   ${START_SOFTWARE_FACTORY:+--username='software_factory_realm'} \
   ${START_SOFTWARE_FACTORY:+--fromUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
   ${START_SOFTWARE_FACTORY:+--toUrl="${SOFTWARE_FACTORY_REALM_URL}"} \
+  \
+  ${START_PRETUI:+--path="${PRETUI_REALM_PATH}"} \
+  ${START_PRETUI:+--username='pretui_realm'} \
+  ${START_PRETUI:+--fromUrl='@cardstack/pretui/'} \
+  ${START_PRETUI:+--toUrl="${PRETUI_REALM_URL}"} \
   2>&1 | "$LOG_TEE" realm-server

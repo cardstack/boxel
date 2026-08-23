@@ -323,7 +323,7 @@ function title(id: string): string {
 function componentModule(artifact: Artifact, sourceVersion: string): string {
   let label = title(artifact.id);
   return `
-import { Component } from '@cardstack/base/card-api';
+import Component from '@glimmer/component';
 import { or } from '@cardstack/boxel-ui/helpers';
 
 interface ${artifact.className}Signature {

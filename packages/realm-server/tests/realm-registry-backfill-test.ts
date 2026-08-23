@@ -152,6 +152,35 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('seeds the declared bootstrap Realm identity as its owner', async function (assert) {
+      const bootstrapPath = join(dir.name, 'pretui');
+      const realmURL = 'http://localhost:4201/pretui/';
+      seedRealmJson(bootstrapPath, { name: 'PretUI' });
+
+      await runRegistryBackfill({
+        dbAdapter,
+        realmsRootPath,
+        serverURL,
+        matrixURL: new URL('http://localhost:8008/'),
+        bootstrapRealms: [
+          {
+            diskPath: bootstrapPath,
+            url: realmURL,
+            ownerUsername: 'pretui_realm',
+          },
+        ],
+      });
+
+      assert.deepEqual(await userPermissionsAt(dbAdapter, realmURL), [
+        {
+          username: '@pretui_realm:localhost',
+          read: true,
+          write: true,
+          realm_owner: true,
+        },
+      ]);
+    });
+
     test('inserts source rows from disk scan with pinned=false', async function (assert) {
       seedRealmJson(join(realmsRootPath, 'luke', 'my-realm'), {
         name: 'my-realm',

@@ -337,7 +337,9 @@ export class Worker {
     }
     let realmAuthDataSource = this.#realmAuthCache.get(args.realmURL);
     if (!realmAuthDataSource) {
-      realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch);
+      realmAuthDataSource = new RealmAuthDataSource(matrixClient, getFetch, {
+        authWithRealmServer: true,
+      });
       this.#realmAuthCache.set(args.realmURL, realmAuthDataSource);
     }
     let realmUserId = userIdFromUsername(

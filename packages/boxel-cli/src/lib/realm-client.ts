@@ -64,7 +64,10 @@ export function buildCliRealmClient(
   if (isSeedConfig(auth)) {
     let realmServerURL = ensureTrailingSlash(auth.realmServerURL);
     let serverToken = mintRealmServerToken(auth.realmSecretSeed, auth.asUser);
-    let seedAuth = new SeedAuthenticator({ seed: auth.realmSecretSeed });
+    let seedAuth = new SeedAuthenticator({
+      seed: auth.realmSecretSeed,
+      botUsername: process.env.BOXEL_REALM_BOT_USERNAME,
+    });
     return {
       realmServerURL,
       config: { spaceDomain: '', siteDomain: '' },

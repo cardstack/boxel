@@ -8,6 +8,7 @@ import {
   logger,
   param,
   query,
+  userIdFromUsername,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -35,12 +36,17 @@ export interface BootstrapRealmSeed {
   // The URL the realm is addressed by (matches Realm.url at construction
   // time). This is what populates realm_registry.url.
   url: string;
+  // The Realm identity supplied by the matching --username argument. Phase 3
+  // reconciles bootstrap Realms from registry rows, so backfill must preserve
+  // this boot invariant instead of validating and then dropping it.
+  ownerUsername?: string;
 }
 
 export interface RegistryBackfillOpts {
   dbAdapter: DBAdapter;
   realmsRootPath: string;
   serverURL: URL;
+  matrixURL?: URL;
   bootstrapRealms: BootstrapRealmSeed[];
 }
 
@@ -132,7 +138,7 @@ async function upsertBootstrapRealms(
   opts: RegistryBackfillOpts,
 ): Promise<Set<string>> {
   const seen = new Set<string>();
-  for (const { diskPath, url } of opts.bootstrapRealms) {
+  for (const { diskPath, url, ownerUsername } of opts.bootstrapRealms) {
     seen.add(url);
     // DO UPDATE the disk_id so that if an operator rehomes a bootstrap realm
     // (container rebuild, path change across environments) the registry
@@ -152,6 +158,23 @@ async function upsertBootstrapRealms(
       param(true),
       `) ON CONFLICT (url) DO UPDATE SET disk_id = EXCLUDED.disk_id, pinned = true, updated_at = now() WHERE realm_registry.kind = 'bootstrap'`,
     ]);
+    if (ownerUsername && opts.matrixURL) {
+      let existingOwner = await query(opts.dbAdapter, [
+        `SELECT 1 FROM realm_user_permissions WHERE realm_url =`,
+        param(url),
+        `AND realm_owner = true LIMIT 1`,
+      ]);
+      if (existingOwner.length === 0) {
+        let ownerUserId = userIdFromUsername(
+          ownerUsername,
+          opts.matrixURL.href,
+        );
+        await insertPermissions(opts.dbAdapter, new URL(url), {
+          [ownerUserId]: ['read', 'write', 'realm-owner'],
+        });
+        log.info(`seeded bootstrap owner for ${url}: ${ownerUserId}`);
+      }
+    }
   }
   return seen;
 }

@@ -535,9 +535,11 @@ const reportHostShellToManager = async () => {
     dbAdapter,
     realmsRootPath,
     serverURL: new URL(String(serverURL)),
+    matrixURL: new URL(MATRIX_URL),
     bootstrapRealms: paths.map((p, i) => ({
       diskPath: String(p),
       url: hrefs[i][0],
+      ownerUsername: String(usernames[i]),
     })),
   });
 

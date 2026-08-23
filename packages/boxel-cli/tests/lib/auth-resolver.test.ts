@@ -9,13 +9,21 @@ import * as path from 'path';
 describe('resolveRealmAuthenticator', () => {
   let profileDir: string;
   let pm: ProfileManager;
+  let priorBotUsername: string | undefined;
 
   beforeEach(() => {
+    priorBotUsername = process.env.BOXEL_REALM_BOT_USERNAME;
+    delete process.env.BOXEL_REALM_BOT_USERNAME;
     profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-auth-resolver-'));
     pm = new ProfileManager(profileDir);
   });
 
   afterEach(() => {
+    if (priorBotUsername === undefined) {
+      delete process.env.BOXEL_REALM_BOT_USERNAME;
+    } else {
+      process.env.BOXEL_REALM_BOT_USERNAME = priorBotUsername;
+    }
     fs.rmSync(profileDir, { recursive: true, force: true });
   });
 
@@ -29,6 +37,23 @@ describe('resolveRealmAuthenticator', () => {
     if (result.ok) {
       expect(result.mode).toBe('seed');
       expect(result.authenticator).toBeInstanceOf(SeedAuthenticator);
+    }
+  });
+
+  it('can target a non-default local Realm Server identity', () => {
+    process.env.BOXEL_REALM_BOT_USERNAME = 'deck_worker';
+    const result = resolveRealmAuthenticator({
+      realmUrl: 'https://localhost:4201/pretui/',
+      realmSecretSeed: 'my-seed',
+      profileManager: pm,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(
+        (result.authenticator as SeedAuthenticator).buildClaims(
+          'https://localhost:4201/pretui/',
+        ).user,
+      ).toBe('@deck_worker:localhost');
     }
   });
 

@@ -1,4 +1,11 @@
-import { isHash } from '@cardstack/deck/repository';
+// Keep this context validator browser-safe. `@cardstack/deck/repository`
+// hashes protocol objects with node:crypto and belongs to Deck's Node surface;
+// a Host only needs to validate an already-computed SHA-256 identifier.
+const SHA256 = /^[0-9a-f]{64}$/;
+
+function isHash(value: string): boolean {
+  return SHA256.test(value);
+}
 
 export const REALM_VIEW_CONTEXT_SPEC = 'boxel-realm-view-context-v1';
 export const REALM_VIEW_HEADER = 'X-Boxel-Realm-View';

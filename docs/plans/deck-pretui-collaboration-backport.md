@@ -5,8 +5,9 @@ B3b includes exact source, SQL namespaces, view-qualified jobs/events/caches,
 prerender/Loader/search isolation, Host-owned exact view selection, and the
 ref-after-ready publication gate. B4 includes shared-jj branch workspaces,
 atomic Realm Server branch preparation/listing, named-branch writes and
-History, and Boxel CLI list/create/switch support. The visible Host branch
-chooser remains the final B4 product surface. B1b is an optional
+History, Boxel CLI list/create/switch support, the mounted PretUI development
+task, and a real two-checkout CLI replay against Realm Server. The visible Host
+branch chooser remains the final B4 product surface. B1b is an optional
 hosted-infrastructure slice. No B-series pull request or remote branch has been
 created from this stack.
 
