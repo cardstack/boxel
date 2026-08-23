@@ -7,20 +7,12 @@ import {
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
 } from '@cardstack/runtime-common';
 
+import {
+  selectedRealmView,
+  selectedRealmViewForURL,
+} from './realm-view-selection';
+
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
-
-interface SelectedRealmView {
-  realmURL: string;
-  view: string;
-}
-
-function selectedRealmView(): SelectedRealmView | undefined {
-  return (
-    globalThis as unknown as {
-      __boxelRealmView?: SelectedRealmView;
-    }
-  ).__boxelRealmView;
-}
 
 export function realmViewHeaders(
   targets: string | URL | string[],
@@ -29,12 +21,9 @@ export function realmViewHeaders(
   if (!selected) {
     return {};
   }
-  let selectedURL = new URL(selected.realmURL);
-  let matches = [targets].flat().some((target) => {
-    let targetURL = new URL(String(target));
-    selectedURL.protocol = targetURL.protocol;
-    return targetURL.href.startsWith(selectedURL.href);
-  });
+  let matches = [targets]
+    .flat()
+    .some((target) => selectedRealmViewForURL(target));
   return matches ? { [REALM_VIEW_HEADER]: selected.view } : {};
 }
 

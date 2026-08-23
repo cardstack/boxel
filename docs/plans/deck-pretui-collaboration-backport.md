@@ -416,7 +416,7 @@ PretUI collaboration:
 | **B2a** | Content-addressed Boxel CLI pull/push/sync/status/watch against an exact branch base                                                     | Two local PretUI workspaces detect divergence without mtimes; stale push writes nothing.                                |
 | **B2b** | Branch-keyed deckd History on implicit `main`; accepted CLI writes append Steps; save/restore                                            | Claude edits a PretUI component through watch, sees every save in History, and restores without local Git.              |
 | **B3a** | Immutable index-generation manifests and RRI-bearing `RealmViewContext` through writer/query                                             | Two hidden PretUI views answer differently for the same component RRI.                                                  |
-| **B3b** | View-qualified caches, jobs, events, activity, prerender, Loader, and test selection                                                     | A hidden branch write cannot invalidate or leak into PretUI `main`.                                                     |
+| **B3b** | View-qualified caches, jobs, events, activity, prerender, Loader, and Host-owned exact branch selection                                  | A hidden branch write cannot invalidate or leak into PretUI `main`; switching replaces one coherent Host graph.         |
 | **B4**  | Atomic branch/fork creation: clone source, exact lock, completed index, and History ancestry                                             | Three named PretUI branches become visible only after their catalog previews are ready.                                 |
 | **B5a** | Checkpoint creation and immutable source/index/lock views; CLI command                                                                   | A teammate checkpoints an exact date-picker change while later saves continue.                                          |
 | **B5b** | Review opening, candidate generation, exact diff, Browse/Run/catalog preview; CLI command                                                | Review remains fixed when source or target branch moves.                                                                |
@@ -432,6 +432,14 @@ Every slice that adds observable behavior also wires that behavior through the
 same `deckCollaboration` capability. A layer is incomplete if it works only
 when directly invoked while its endpoint, worker, CLI command, or Host surface
 escapes the gate.
+
+The B3b Host foundation selects one exact PretUI Realm at a time and keeps its
+dependencies live. It checks the Host flag before probing, authenticates both
+capability and branch observation, validates the full exact view, replaces the
+Loader/CardStore graph, and rolls back the graph on failure. B4 supplies the
+visible branch chooser and branch creation operation. Exact targeted-test
+result provenance is attached with the B5b Review candidate rather than kept
+as an unrelated Host-only cache.
 
 ## Progressive PretUI acceptance story
 

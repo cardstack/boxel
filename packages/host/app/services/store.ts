@@ -476,6 +476,13 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  async refreshReferencesForRealmViewChange(reason?: string): Promise<number> {
+    let reasonSuffix = reason ? ` (${reason})` : '';
+    storeLogger.debug(`resetting store for Realm view change${reasonSuffix}`);
+    this.store.reset();
+    return await this.reestablishReferences.perform();
+  }
+
   // Notify-on-delete for callers that hold a card by direct JS reference rather
   // than by linksTo. `consumersOf` only walks linksTo refs, so a direct holder
   // (e.g. MatrixService's `_systemCard`) would otherwise stay pinned to a

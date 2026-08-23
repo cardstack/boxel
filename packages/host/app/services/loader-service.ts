@@ -19,6 +19,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
+import { selectedRealmViewForURL } from '@cardstack/host/lib/realm-view-selection';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
@@ -187,17 +188,7 @@ export default class LoaderService extends Service {
     );
     let loader = new Loader(fetch, this.network.resolveImport, {
       realmViewForURL: (url) => {
-        let selected = (
-          globalThis as unknown as {
-            __boxelRealmView?: { realmURL: string; view: string };
-          }
-        ).__boxelRealmView;
-        if (!selected) {
-          return undefined;
-        }
-        let realmURL = new URL(selected.realmURL);
-        realmURL.protocol = url.protocol;
-        return url.href.startsWith(realmURL.href) ? selected.view : undefined;
+        return selectedRealmViewForURL(url)?.view;
       },
       prepareModuleResolution: (moduleURL, response) =>
         this.network.dynamicRRIResolution.prepare(moduleURL, response),

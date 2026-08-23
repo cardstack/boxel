@@ -12,9 +12,14 @@ import {
   realmEventMatchesSelectedView,
   realmViewHeaders,
 } from '@cardstack/host/lib/prerender-fetch-headers';
+import {
+  clearRealmViewSelection,
+  installRealmViewSelection,
+} from '@cardstack/host/lib/realm-view-selection';
 
 module('Unit | Realm view context', function (hooks) {
   hooks.afterEach(function () {
+    clearRealmViewSelection();
     delete (
       globalThis as unknown as {
         __boxelRealmView?: { realmURL: string; view: string };
@@ -96,6 +101,41 @@ module('Unit | Realm view context', function (hooks) {
       realmViewHeaders('https://realms.example/cardstack/base/card-api'),
       {},
       "an imported Realm never receives another Realm's view hash",
+    );
+  });
+
+  test('an interactive selection supersedes the prerender fallback', function (assert) {
+    let prerenderView = 'a'.repeat(64);
+    let interactiveView = 'b'.repeat(64);
+    (
+      globalThis as unknown as {
+        __boxelRealmView?: { realmURL: string; view: string };
+      }
+    ).__boxelRealmView = {
+      realmURL: 'https://realms.example/cardstack/base/',
+      view: prerenderView,
+    };
+    installRealmViewSelection('https://realms.example/cardstack/pretui/', {
+      context: {
+        schema: REALM_VIEW_CONTEXT_SPEC,
+        realmRRI: '@cardstack/pretui/',
+        branch: 'ana/compact-status',
+        repositoryHash: 'c'.repeat(64),
+        treeHash: 'd'.repeat(64),
+        lockHash: 'e'.repeat(64),
+        historyHead: 'jj-step-8',
+      },
+      indexGenerationHash: interactiveView,
+    });
+
+    assert.deepEqual(
+      realmViewHeaders('https://realms.example/cardstack/pretui/button.gts'),
+      { 'X-Boxel-Realm-View': interactiveView },
+    );
+    assert.deepEqual(
+      realmViewHeaders('https://realms.example/cardstack/base/card-api'),
+      {},
+      'the imported Realm stays live instead of inheriting either view',
     );
   });
 

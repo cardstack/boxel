@@ -180,17 +180,45 @@ main card refresh, Loader reset, or search subscription rerun.
 
 ### B3b.5 — Host, test selection, and view switching
 
-The Host owns one coherent Loader/store/search subscription set per selected
-view. Switching a branch resolves its ref, installs a new exact context, and
-replaces the Loader; it never mutates the resolver underneath an evaluated
-module graph. Mixed-realm stacks may carry different exact views per realm.
+The interactive Host foundation is implemented:
+
+1. One Host-owned selection registry supersedes the prerender-injected global
+   when a person or agent selects a branch. The injected global remains only
+   as the prerender fallback.
+2. The default-off `DECK_COLLABORATION` flag is checked before any capability
+   request. An enabled Host uses authenticated fetches for
+   `.deck/capabilities` and `.deck/branch`, validates the complete response,
+   and constructs one `ExactRealmView`; malformed or unauthorized responses
+   never become live mode.
+3. Installing an exact selection replaces the Loader, clears its fetch cache,
+   resets the CardStore graph, and re-establishes every held card reference.
+   The resolver is never mutated underneath an evaluated module graph.
+4. If rebuilding fails, selection and graph are rebuilt again from the prior
+   view. Logout/test teardown clears the interactive selection.
+5. Only the selected Realm receives the exact-view header. Its imported Realms
+   remain ordinary live dependencies and continue receiving live events.
+
+The PretUI pilot intentionally permits one exact selected Realm plus live
+dependencies. Carrying several independently selected exact Realms through
+one federated request needs a plural transport and is deferred until an
+accepted use case requires it; the current singular header must not silently
+choose one.
 
 Test discovery, dependency selection, and result caching use the same exact
 view. A test run records the view hash it started from, so a branch moving
 during the run cannot change its source set or attach results to the new head.
+That result-provenance record lands with the review/test attachment surface;
+the Host selection and fetch isolation it consumes are already present.
 
-Proof: open main and a hidden PretUI branch side by side, run the same targeted
-component test in both, and retain both results with correct provenance.
+Current proof: selecting a branch makes authenticated capability and branch
+requests, installs its exact hash before one Host graph rebuild, leaves an
+imported Realm live, and restores the prior graph after a simulated rebuild
+failure. Fourteen focused Host browser tests cover controller, header, Loader,
+cache, and SQL-view behavior; the Matrix relay has its own focused proof.
+
+Completion proof: open main and a hidden PretUI branch side by side, run the
+same targeted component test in both, and retain both results with correct
+provenance.
 
 ## Fail-closed rules
 
