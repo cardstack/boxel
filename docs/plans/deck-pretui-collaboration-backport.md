@@ -392,7 +392,7 @@ PretUI collaboration:
 | **B5b** | Review opening, candidate generation, exact diff, Browse/Run/catalog preview; CLI command                                               | Review remains fixed when source or target branch moves.                                                                |
 | **B6**  | Three-way merge, target-head recheck, one target write/index/History batch; CLI command                                                 | Disjoint component work merges; competing token edits conflict with no partial main mutation.                           |
 | **B7**  | Complete Boxel CLI and Claude Code skill/workflow, including branch/fork/switch/checkpoint/review/merge and structured JSON output      | The full collaboration replay runs headlessly through public CLI commands.                                              |
-| **B8**  | Integrated branch, History, Review, conflict, and merge UX in Boxel                                                                     | The team can perform the same proven workflow visually without a second implementation.                                 |
+| **B8**  | Polish the additive collaboration affordances in Workspace Chooser, Interact/Code, stack backgrounds, and Review                        | The team can perform the same proven workflow visually in the existing Host, without a parallel Deck application.       |
 
 CLI support is not deferred until B7. Each B slice lands its corresponding
 public command and integration test. B7 consolidates the full agent workflow,
@@ -448,6 +448,112 @@ state:
 - B5b exposes the exact Review and candidate preview.
 - B6 exposes merge/conflict actions.
 - B8 unifies and polishes these surfaces.
+
+## UX integration into the existing Host
+
+This is an additive change to the current Boxel Host, not a redesign and not a
+parallel "repository protocol" application. Collaboration affordances use the
+existing Workspace Chooser, `SubmodeLayout`, realm backgrounds, card stacks,
+and Review surfaces. Outside the `deckCollaboration` capability boundary, the
+Host must render the existing UI, preserve its keyboard behavior, and make no
+Deck-specific requests.
+
+The gate is conjunctive: the build/boot flag is enabled, the Realm Server
+advertises the capability, the realm is in the PretUI pilot allowlist, and the
+user has the necessary realm permission. Missing any condition restores the
+existing UI rather than showing a disabled or speculative collaboration shell.
+
+### Workspace Chooser
+
+Keep the current filters, sections, tile layout, favorite control, overflow
+menu, visibility indicators, and click-to-open behavior. Add branch identity to
+the tile without turning the dashboard into a source-control screen:
+
+- Put a low-contrast, diagonal, step-and-repeat branch name in the existing
+  tile artwork layer, behind all tile content. `main` keeps the normal clean
+  artwork; a Review candidate uses an amber `REVIEW #N` pattern and separately
+  names its source branch.
+- Add one compact branch pill near the lower-left of the tile, for example
+  `PretUI / ana/known-date-fields`. It is a positioned sibling of the existing
+  open-workspace button, like the star and overflow controls, never an
+  interactive element nested inside that button.
+- Opening a tile still opens the same realm index in Interact, but with the
+  selected `RealmViewContext`. If the prior path is absent in that view, open
+  the realm index and explain why; never silently fall back to `main`.
+- Add `Switch branch`, `New branch`, `History`, and `Reviews` to the existing
+  tile menu as those capabilities land. A read-only imported realm offers
+  `Branch here` when the user may create an owned branch; it does not pretend
+  the imported package is mutable.
+
+The whole tile remains keyboard reachable and understandable without relying
+on the diagonal treatment. Text, focus, and menu state are the authoritative
+branch indicators; the repeated pattern is ambient orientation only.
+
+### Interact and Code
+
+Keep the existing Boxel control, submode switcher, `New` action, profile,
+search, AI assistant, and card-stack model. Add one compact realm-view control
+to the available top-bar track after `New`:
+
+```text
+[ Interact ⌄ ] [ New ]  [ PretUI / ana/known-date-fields ⌄  ● saved just now ]
+```
+
+The popover switches branches and opens History, branch creation, or a Review.
+It reports durable save state from the same accepted write/History result used
+by the CLI; do not add a separate bottom status bar or a client-only notion of
+"saved". Code uses the same control through the shared submode layout so an
+agent and a person see the same selected view.
+
+Apply the branch step-and-repeat treatment only to the existing realm
+background and stack gutters, never over card content. When every open stack
+has the same exact `RealmViewContext`, the top-bar control and one common realm
+background are truthful. When stacks contain different realms or branches,
+reuse the existing per-stack background split and label each stack with its
+own compact realm/branch identity; do not claim there is one global branch.
+Expanded cards remain visually clean.
+
+Switching branches should preserve the current stacks, card IDs, and focused
+path where those resources exist in the destination view. Missing resources
+receive an explicit unavailable-in-this-branch state with actions to return or
+open the realm index. Imported cards pinned to an exact Version show their lock
+and Version; mutation controls appear only after an authorized `Branch here`.
+
+### Reviews and merge feedback
+
+A Review is an immutable candidate view, not another branch. Identify it as
+`Review #3 · ana/known-date-fields → main`, pin Browse/Run/catalog preview to
+its exact candidate Checkpoint, and keep moving source or target branches from
+changing what the reviewer sees. Merge and conflict actions appear only in the
+Review surface and only with target-realm permission.
+
+After a successful merge, the target branch advances once, its source tree and
+index become visible together, one merge Step appears in History, and every
+open target view refreshes from that new exact head. A conflict or failed
+conditional write changes none of those surfaces and keeps the candidate
+available for inspection.
+
+### Progressive delivery under the feature flag
+
+- **B2b:** add the real branch-scoped History entry point and durable save
+  indicator.
+- **B4:** add branch identity, switching, branch URLs, and `Branch here` to the
+  Workspace Chooser and shared submode layout.
+- **B5b:** add fixed Review candidate labels and exact Browse/Run/catalog
+  previews.
+- **B6:** add permission-aware merge/conflict feedback and atomic target-view
+  refresh.
+- **B8:** finish accessibility, responsive layout, visual hierarchy, and
+  cross-surface consistency; it does not introduce a second state model.
+
+Host integration tests cover both sides of the boundary: disabled mode makes
+no collaboration requests and preserves the existing DOM/keyboard workflow;
+enabled PretUI mode covers keyboard branch switching, clean `main` tiles,
+branched and mixed-stack backgrounds, path preservation, explicit missing
+resources, read-only imports, exact Review labels, atomic post-merge refresh,
+and the runtime kill switch. Visual regression proof uses the real Workspace
+Chooser and Interact shell with the Known Date PretUI fixture, not a standalone
+HTML mock.
 
 ## Merge and release gates
 
