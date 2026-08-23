@@ -142,3 +142,39 @@ export async function readDeckTreeFile(options: {
   }
   return bytes;
 }
+
+export async function publishDeckBranchUpdate(options: {
+  realmURL: string;
+  branchName: string;
+  body: unknown;
+  authenticator: RealmAuthenticator;
+}): Promise<DeckBranchSnapshot> {
+  let url = capabilityURL(options.realmURL);
+  url.pathname = url.pathname.replace(/capabilities$/, 'branch');
+  url.searchParams.set('name', options.branchName);
+  let response = await options.authenticator.authedRealmFetch(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(options.body),
+  });
+  if (!response.ok) {
+    throw new Error(
+      response.status === 409
+        ? `Deck branch ${options.branchName} moved; pull or sync before publishing`
+        : `Could not publish Deck branch ${options.branchName}: ${response.status} ${response.statusText}`,
+    );
+  }
+  let snapshot: unknown;
+  try {
+    snapshot = await response.json();
+  } catch {
+    throw new Error('Published Deck branch observation is not valid JSON');
+  }
+  if (!isDeckBranchSnapshot(snapshot)) {
+    throw new Error('Realm returned an invalid published branch observation');
+  }
+  return snapshot;
+}

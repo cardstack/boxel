@@ -287,6 +287,65 @@ module('exact Deck Version serving', function (hooks) {
     );
   });
 
+  test('conditionally publishes branch bytes without mutating the live realm', async function (assert) {
+    let observedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observed = (await observedResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+    };
+    let nextBytes = 'export const accent = "indigo";\n';
+    let update = {
+      schema: 'boxel-deck-branch-update-v1',
+      expected: observed,
+      operations: [
+        {
+          path: 'index.js',
+          sha256: hashBytes(nextBytes),
+          contentBase64: Buffer.from(nextBytes).toString('base64'),
+        },
+      ],
+    };
+    let published = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(update),
+      }),
+    );
+    let next = (await published?.json()) as {
+      treeHash: string;
+      refGeneration: number;
+    };
+
+    assert.strictEqual(published?.status, 200);
+    assert.strictEqual(next.refGeneration, 2);
+    let exact = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/tree-file?tree=${next.treeHash}&path=index.js`,
+      ),
+    );
+    assert.strictEqual(await exact?.text(), nextBytes);
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(realmDir, 'index.js'), 'utf8'),
+      ),
+      'export const accent = "tomato";\n',
+    );
+
+    let stale = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(update),
+      }),
+    );
+    assert.strictEqual(stale?.status, 409);
+  });
+
   test('resolves semver intent to one immutable Version index', async function (assert) {
     let ranged = await serve(
       new Request(

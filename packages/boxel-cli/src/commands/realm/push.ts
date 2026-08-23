@@ -20,6 +20,8 @@ import {
   saveManifest,
   pathExists,
 } from '../../lib/sync-manifest.ts';
+import { pushDeckBranch } from '../../lib/deck-realm-push.ts';
+import { detectRealmSyncMode } from '../../lib/realm-sync-mode.ts';
 
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
@@ -425,6 +427,25 @@ export async function pushCommand(
   }
 
   try {
+    let mode = await detectRealmSyncMode(realmUrl, authenticator);
+    if (mode.mode === 'deck') {
+      if (options.force) {
+        throw new Error(
+          'Deck push does not support --force; pull or sync the exact branch base',
+        );
+      }
+      let result = await pushDeckBranch({
+        realmURL: realmUrl,
+        localDir,
+        authenticator,
+        dryRun: options.dryRun,
+      });
+      if (result.error) throw new Error(result.error);
+      console.log(
+        `Deck push completed: ${result.files.length} written, ${result.deleted.length} deleted`,
+      );
+      return;
+    }
     const pusher = new RealmPusher(
       {
         realmUrl,

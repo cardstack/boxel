@@ -6,6 +6,8 @@ import type Koa from 'koa';
 import { isExactVersionRRI, parseRRI } from '@cardstack/deck';
 import {
   hashBytes,
+  RefBusyError,
+  RefConflictError,
   readStoredFile,
   readStoreMeta,
   resolveVersionSpec,
@@ -33,6 +35,11 @@ import {
   type DeckCollaborationPolicy,
 } from '../lib/deck-collaboration-policy.ts';
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
+import {
+  DeckBranchContentConflictError,
+  updateDeckBranchContent,
+  type DeckBranchUpdateRequest,
+} from '../lib/deck-branch-content-update.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -135,10 +142,14 @@ async function handleDeckBranchRequest(
   let requestURL = new URL(request.url);
   let mutableURL = mutableRealmURLForBranch(requestURL);
   if (!mutableURL) return null;
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Deck branch observations are read-only', {
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.method !== 'POST'
+  ) {
+    return new Response('Unsupported Deck branch method', {
       status: 405,
-      headers: { allow: 'GET, HEAD' },
+      headers: { allow: 'GET, HEAD, POST' },
     });
   }
   let branch = requestURL.searchParams.get('name');
@@ -157,8 +168,42 @@ async function handleDeckBranchRequest(
   ) {
     return new Response('Not found', { status: 404 });
   }
-  let authorization = await authorizeRead(request, realm);
+  let authorization =
+    request.method === 'POST'
+      ? await authorizeWrite(request, realm)
+      : await authorizeRead(request, realm);
   if (authorization.response) return authorization.response;
+  if (request.method === 'POST') {
+    let update: DeckBranchUpdateRequest;
+    try {
+      update = (await request.json()) as DeckBranchUpdateRequest;
+    } catch {
+      return new Response('Deck branch update is not valid JSON', {
+        status: 400,
+      });
+    }
+    try {
+      await updateDeckBranchContent({
+        realmDir: realm.dir,
+        realmRRI,
+        branch,
+        policy: deps.deckCollaboration!,
+        request: update,
+      });
+    } catch (error) {
+      if (
+        error instanceof DeckBranchContentConflictError ||
+        error instanceof RefConflictError ||
+        error instanceof RefBusyError
+      ) {
+        return new Response('Branch moved since it was read', { status: 409 });
+      }
+      if (error instanceof Error && !error.message.startsWith('missing ')) {
+        return new Response(error.message, { status: 400 });
+      }
+      throw error;
+    }
+  }
   let snapshot;
   try {
     snapshot = await openDeckRepositoryProtocol({
@@ -443,6 +488,21 @@ async function authorizeRead(request: Request, realm: Realm) {
     publicReadable:
       response?.headers.get('x-boxel-realm-public-readable') === 'true',
   };
+}
+
+async function authorizeWrite(request: Request, realm: Realm) {
+  let headers = new Headers(request.headers);
+  headers.set('accept', 'application/octet-stream');
+  let response = await realm.handle(
+    new Request(new URL('.deck/__deck_branch_authorize__.bin', realm.url), {
+      method: 'DELETE',
+      headers,
+    }),
+  );
+  if (response && response.status !== 404 && response.status >= 400) {
+    return { response };
+  }
+  return {};
 }
 
 export async function handleDeckVersionRequest(
