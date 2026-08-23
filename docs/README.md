@@ -18,6 +18,9 @@ The following are important concepts:
 - [Indexing](indexing.md): Indexing powers the re-rendering of cards when it's dependencies get updated.
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
 - [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
+- [Deck packages and dynamic RRI resolution](deck-packages-and-runtime-resolution.md): How realm packages combine semver intent, exact URL-free locks, immutable delivery, and cold runtime discovery; includes the Relay acceptance tour.
+- [PretUI Known Date canonical fixture](deck-pretui-known-date-fixture.md): Recreate a bounded real package Version and its immutable card index from a pinned PretUI checkout.
+- [PretUI workspace syndication](deck-pretui-syndication.md): Verify the deterministic projection of one exact canonical PretUI Version into the Boxel monorepo.
 - [Search](search.md): Every Card is searchable within and across realms.
 
 ## Operations

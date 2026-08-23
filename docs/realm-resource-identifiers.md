@@ -71,7 +71,7 @@ per-`VirtualNetwork` instance, not global — two VirtualNetworks in the same
 process see different prefix sets, which is what lets tests register a
 throwaway prefix and drop it again with `removeRealmMapping`.
 
-Registration happens in two places:
+Static registration happens in two places:
 
 - **Host** — `packages/host/app/services/network.ts` registers
   `@cardstack/base/` plus whichever of `@cardstack/catalog/`,
@@ -89,9 +89,14 @@ Prefixes are a convention, not a registry: `@cardstack/<realm>/` maps to
 resolve an RRI against the active profile's realm-server URL without consulting
 a VirtualNetwork at all (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
 
-Realms with no registered prefix — most user workspaces — are addressed by
-their URL, and that URL is their RRI. Nothing about the identifier system
-requires a realm to have a prefix.
+Deck-backed realm packages add a third path: runtime discovery. A successful
+card or module response identifies its realm, after which the Host reads that
+realm's `package.json` name and `importmap.json` lock. The package name becomes
+the mutable prefix mapping and its exact dependencies become a package-owned
+scope. The Realm Server similarly learns the mapping from an indexed root
+resource's portable RRI before normalizing links. URL-form realms remain valid;
+nothing about the identifier system requires a realm to declare package
+metadata.
 
 ## Resolution
 
@@ -154,7 +159,9 @@ graph walks and per-instance realm-membership checks resolve the same handful
 of identifiers thousands of times per render. The memos are a pure function of
 the registered mappings, so adding or removing any mapping clears all three.
 Consumers that key their own caches by resolved form can subscribe to
-`onMappingChange` to invalidate alongside them.
+`onMappingChange`. Notifications distinguish additive discovery from a
+destructive replacement: Loader keeps evaluated modules for an additive
+mapping, but clears them when an existing mapping or lock changes.
 
 ## Resolution belongs at the network boundary
 

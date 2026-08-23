@@ -18,13 +18,24 @@ to this workspace. The root `@cardstack/deck` entry is browser-safe;
 
 ## Boxel integration
 
-Boxel installs a canonical, URL-free dependency lock with
-`VirtualNetwork.setRRIImportMap()`. Import resolution receives the importing
-module URL, converts it back to an RRI, and uses Deck's longest matching scope
-to select an exact Version RRI. `VirtualNetwork.projectRRIImportMap()` derives
-the browser import map from the current transport routes; projected URLs are
-never written back into canonical state. Replacing the canonical lock
-invalidates Loader module caches in one step.
+Boxel installs canonical, URL-free dependency locks with
+`VirtualNetwork.setRRIImportMap()`. A realm's `package.json` holds semver intent
+and its `importmap.json` holds exact RRI selections. The Host discovers both
+documents from card and module responses at runtime, then installs the lock as
+a package-owned scope rather than process-global imports. Import resolution
+receives the importing module URL, converts it back to an RRI, and uses Deck's
+longest matching scope to select an exact Version RRI. This permits multiple
+exact Versions to remain resident for independent importers.
+
+`VirtualNetwork.projectRRIImportMap()` derives browser URLs from current
+transport routes; projected URLs are never written back into canonical state.
+Adding a newly discovered mapping preserves evaluated modules. Replacing a
+mapping or canonical lock invalidates the Loader baseline in one step.
+
+See [Deck packages and dynamic RRI
+resolution](../../docs/deck-packages-and-runtime-resolution.md) for the cold
+discovery sequence, exact source/module delivery, and the Relay acceptance
+fixture.
 
 Run the package checks with:
 

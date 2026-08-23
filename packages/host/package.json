@@ -41,6 +41,7 @@
     "@cardstack/base": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/pretui": "workspace:*",
     "@cardstack/bxl": "workspace:*",
     "@cardstack/deck": "workspace:*",
     "@cardstack/eslint-plugin-boxel": "workspace:*",

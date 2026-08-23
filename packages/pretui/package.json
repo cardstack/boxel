@@ -1,0 +1,29 @@
+{
+  "name": "@cardstack/pretui",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./known-date": "./src/controls-known-date.gts",
+    "./known-date-demo": "./src/known-date-demo.gts"
+  },
+  "dependencies": {
+    "@glimmer/component": "^2.0.0",
+    "@glimmer/tracking": "^1.0.4",
+    "ember-source": "catalog:"
+  },
+  "devDependencies": {
+    "@cardstack/local-types": "workspace:*",
+    "@glint/ember-tsc": "catalog:",
+    "@tsconfig/ember": "3.0.1",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "lint:types": "ember-tsc --noEmit"
+  },
+  "ember-addon": {
+    "type": "addon",
+    "version": 2
+  }
+}
