@@ -44,6 +44,7 @@ import {
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
+import { decodeWireData } from '../lib/matrix-classes/room';
 import {
   getSkillSourceTools,
   isMarkdownSkillId,
@@ -729,19 +730,6 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private getAggregatedReplacement(event: IRoomEvent) {
-    let finalRawEvent;
-    const originalEventId = event.event_id;
-    let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
-    if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
-      finalRawEvent = replacedRawEvent;
-      finalRawEvent.event_id = originalEventId;
-    } else {
-      finalRawEvent = event;
-    }
-    return finalRawEvent;
-  }
-
   private async loadRoomMessage({
     roomId,
     event,
@@ -752,7 +740,7 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-    event = this.getAggregatedReplacement(event);
+    event = getAggregatedReplacement(event);
 
     let clientGeneratedId =
       'clientGeneratedId' in event.content
@@ -1092,6 +1080,31 @@ export class RoomResource extends Resource<Args> {
       !this.isDisplayingCode(toolRequest),
     );
   }
+}
+
+// Backfilled timelines exclude m.replace events (loadAllTimelineEvents
+// filters them server-side), so an edited message's latest content arrives
+// only as a server-side aggregation bundle under
+// unsigned['m.relations']['m.replace']. Substitute the bundle's content for
+// the event's own so the rest of the pipeline sees the edited message. The
+// bundle comes straight off the wire, so its data is decoded here, after
+// substitution — the same ordering constructHistory in
+// runtime-common/ai/history.ts uses — which makes it impossible for the
+// substituted event to carry an undecoded data, whatever the server nests.
+// Everything read off `data` on rebuild depends on this: token usage, and
+// context.agentId, which gates tool auto-run.
+export function getAggregatedReplacement<T extends IRoomEvent>(event: T): T {
+  let finalRawEvent;
+  const originalEventId = event.event_id;
+  let replacedRawEvent = event.unsigned?.['m.relations']?.['m.replace'];
+  if (!event.content['m.relates_to']?.rel_type && replacedRawEvent) {
+    finalRawEvent = replacedRawEvent;
+    finalRawEvent.event_id = originalEventId;
+    decodeWireData(finalRawEvent.content);
+  } else {
+    finalRawEvent = event;
+  }
+  return finalRawEvent;
 }
 
 export function getRoom(
