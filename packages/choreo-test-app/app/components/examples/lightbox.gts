@@ -46,7 +46,23 @@ const photos = [
 const keyOf = (item: { id: string }) => item.id;
 const fade = { opacity: 0 };
 const fadeOn = { opacity: 1 };
-const fadeTween = { duration: 0.28, ease: [0.22, 1, 0.36, 1] } as const;
+/**
+ * The scrim trails the card rather than racing it.
+ *
+ * At 0.28s against the card's 0.5s spring the room went dark before the thing
+ * you tapped had finished growing, so the darkening read as the event and the
+ * card as an afterthought. Slower than the spring, the order reverses: the
+ * card is what moves, and the room settles around it.
+ *
+ * Leaving is the other way round — a scrim that fades out slowly is just a
+ * grey veil sitting over a grid you have already come back to — so exit
+ * carries its own quicker transition.
+ */
+const fadeTween = { duration: 0.62, ease: [0.22, 1, 0.36, 1] } as const;
+const fadeOut = {
+  opacity: 0,
+  transition: { duration: 0.22, ease: [0.22, 1, 0.36, 1] },
+} as const;
 const detailsIn = { opacity: 0 };
 const detailsOn = { opacity: 1 };
 const detailsOut = { opacity: 0 };
@@ -123,7 +139,7 @@ export class Lightbox extends Component {
                 presence=h
                 initial=fade
                 animate=fadeOn
-                exit=fade
+                exit=fadeOut
                 transition=fadeTween
               }}
               {{on "click" this.close}}

@@ -31,6 +31,16 @@ function is(mode: string) {
 export const TempoPicker = <template>
   <label class="tempo">
     <span class="tempo-label">Transition</span>
+    {{! Narrow screens only (see the stylesheet). A native <select> sizes
+        itself to its LONGEST option, and "Show how this works" made this
+        control wide enough to squeeze the wordmark down to "C…". On mobile
+        the select goes transparent and sits on top of this icon, so the tap
+        target and the native picker are untouched — only the label is. }}
+    {{! lucide "gauge" }}
+    <svg class="tempo-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m12 14 4-4" />
+      <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+    </svg>
     <select
       class="tempo-select"
       aria-label="Page transition"

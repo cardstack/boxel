@@ -5,18 +5,30 @@ import { motion, Presence } from 'glimmer-motion';
 
 const keyOf = (item: { id: string }) => item.id;
 
+/**
+ * Two notices, a beat apart.
+ *
+ * Deliberately from the same world as the rest of the gallery — the kiln
+ * floor of the Sheet demo, the names in Beacons — rather than another build
+ * log. Presence already runs "Build passed" a few cards away, and two demos
+ * showing the same notification teaches the reader that the CONTENT is the
+ * point when the arrival is. Concrete copy also gives the eye somewhere to
+ * land while the spring settles: a number that changes, a name it knows.
+ */
 const notes = [
   {
-    app: 'Forge',
-    body: 'main · 12 files · 1m 08s',
-    id: 'ship',
-    title: 'Build 1842 passed',
+    app: 'Kiln',
+    body: 'Shift C · 18 entries · 4m 12s',
+    id: 'pour',
+    late: false,
+    title: 'Pour 42 complete',
   },
   {
-    app: 'Layout',
-    body: 'Shared header snapped in 16ms',
-    id: 'layout',
-    title: 'Projection settled',
+    app: 'Studio',
+    body: 'Halo — three new swatches',
+    id: 'glaze',
+    late: true,
+    title: 'Marlow shared a glaze',
   },
 ] as const;
 
@@ -64,7 +76,7 @@ export class Enter extends Component {
               initial=initial
               animate=animate
               exit=exit
-              transition=(bannerTransition note.id)
+              transition=(bannerTransition note.late)
             }}
           >
             <span class="banner-mark" aria-hidden="true"></span>
@@ -80,8 +92,10 @@ export class Enter extends Component {
   </template>
 }
 
-function bannerTransition(id: string) {
-  const late = id.startsWith('layout');
+/* the second notice trails the first, so they arrive as a pair rather than a
+   block. Read off the note itself now — it used to sniff the id for the
+   prefix "layout", which quietly tied the timing to the copy. */
+function bannerTransition(late: boolean) {
   return {
     ...transition,
     delay: late ? 0.1 : 0,
