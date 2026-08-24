@@ -8,13 +8,29 @@ const quick = { damping: 24, stiffness: 300 };
 const toss = { damping: 22, stiffness: 190 };
 
 const SUBJECTS = [
-  ['Marlow', 'Re: the shared header'],
-  ['Devin', 'Frames from the shoot'],
-  ['Pell', 'Invoice 0912'],
-  ['Ozz', 'Lunch?'],
-  ['Wren', 'Spring constants, revisited'],
-  ['Tam', 'Your package has shipped'],
+  ['Marlow', 'Re: the shared header', '2m'],
+  ['Devin', 'Frames from the shoot', '18m'],
+  ['Pell', 'Invoice 0912', '1h'],
+  ['Ozz', 'Lunch?', '3h'],
+  ['Wren', 'Spring constants, revisited', 'Yesterday'],
+  ['Tam', 'Your package has shipped', 'Mon'],
 ] as const;
+
+/** avatar background — picked from `from`, not stored, so it never has to
+ *  travel with a row */
+const HUES = ['ember', 'copper', 'iris', 'steel', 'teal', 'azure'] as const;
+
+function hueOf(from: string): (typeof HUES)[number] {
+  let h = 0;
+  for (let i = 0; i < from.length; i++) {
+    h = (h * 31 + from.charCodeAt(i)) >>> 0;
+  }
+  return HUES[h % HUES.length]!;
+}
+
+function initialOf(from: string): string {
+  return from.charAt(0).toUpperCase();
+}
 
 let seq = 0;
 
@@ -22,6 +38,7 @@ interface Row {
   from: string;
   id: string;
   subject: string;
+  time: string;
 }
 
 /**
@@ -39,11 +56,14 @@ interface Row {
  * would stretch. A beacon is a point, not an identity.
  */
 export class Inbox extends Component {
-  @tracked rows: Row[] = SUBJECTS.slice(0, 3).map(([from, subject], i) => ({
-    from,
-    id: `seed-${i}`,
-    subject,
-  }));
+  @tracked rows: Row[] = SUBJECTS.slice(0, 3).map(
+    ([from, subject, time], i) => ({
+      from,
+      id: `seed-${i}`,
+      subject,
+      time,
+    })
+  );
   /** what the bin has swallowed — the only thing the trash chip counts */
   @tracked binned = 0;
   /** a run is in flight; rows in the air must not offer their delete button */
@@ -67,7 +87,12 @@ export class Inbox extends Component {
     }
     const [from, subject] = SUBJECTS[seq++ % SUBJECTS.length]!;
     this.startRun();
-    this.rows = [{ from, id: `row-${seq}`, subject }, ...this.rows];
+    // a message you just sent yourself always says "Now" — the canned time
+    // in SUBJECTS is only for the rows the demo starts seeded with
+    this.rows = [
+      { from, id: `row-${seq}`, subject, time: 'Now' },
+      ...this.rows,
+    ];
   };
 
   discard = (id: string) => {
@@ -112,9 +137,15 @@ export class Inbox extends Component {
         <Choreo class={{if this.busy "inbox-list is-busy" "inbox-list"}} as |c|>
           {{#each this.rows key="id" as |row|}}
             <article class="mail" {{motion id=row.id role="row"}}>
-              <span class="mail-dot" aria-hidden="true"></span>
+              <span
+                class="mail-avatar hue-{{hueOf row.from}}"
+                aria-hidden="true"
+              >{{initialOf row.from}}</span>
               <span class="mail-copy">
-                <b>{{row.from}}</b>
+                <span class="mail-line">
+                  <b>{{row.from}}</b>
+                  <time class="mail-time">{{row.time}}</time>
+                </span>
                 <small>{{row.subject}}</small>
               </span>
               {{! revealed on hover or focus, so the row itself stays a plain
@@ -124,7 +155,11 @@ export class Inbox extends Component {
                 class="mail-kill"
                 aria-label="Delete"
                 {{on "click" (fn this.discard row.id)}}
-              >×</button>
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path
+                    d="M6 8h12l-1 11a2 2 0 0 1-2 1.8H9A2 2 0 0 1 7 19L6 8zm3-3h6l.7 2H8.3L9 5zM4.5 7h15"
+                  /></svg>
+              </button>
             </article>
           {{/each}}
 

@@ -46,9 +46,12 @@
   --copper-ink: var(--copper);
   --iris: #9667f7;
   --steel: #8b969c;
+  /* two cooler accents, for the one place a warm-only palette reads as too
+     samey to tell contacts apart at a glance — Beacons' avatars */
+  --teal: #4fb8a6;
+  --azure: #6ea8f0;
   --glow: rgba(255, 59, 31, 0.38);
-  /* see .hero h1 em: a warm, always-clean stop for the tail of a gradient
-     that ember/copper feed into. */
+  /* see .hero h1 em */
   --gradient-tail: var(--ink);
   /* Syne: the wide display face this page was built around. Everything set in
      display type uses it. */
@@ -106,7 +109,7 @@
   --ink-rgb: 33, 29, 24;
   --surface-tint-rgb: 33, 29, 24;
   --copper-ink: #a8672a;
-  --gradient-tail: #7a4420;
+  --gradient-tail: var(--copper);
 }
 
 *,
@@ -345,11 +348,13 @@ button {
   letter-spacing: -0.02em;
   font-style: normal;
   color: transparent;
-  /* the tail used to fade toward var(--ink) — the brightest thing around in
-     dark mode, which is the point of a glow. --ink is the DARKEST thing in
-     light mode instead, so the same stop dragged the gradient's tail through
-     a muddy brown on the way to near-black. --gradient-tail carries the
-     same "fade toward whatever reads brightest" intent without inverting. */
+  /* the tail fades toward --gradient-tail, not straight to var(--ink) — in
+     dark mode --ink IS the tail (a glow brightening toward the brightest
+     thing around, which is the point), but --ink is the DARKEST thing in
+     light mode instead, and that same fade turned into a dirty brown smear
+     on the way to near-black. Light's --gradient-tail is var(--copper)
+     itself, so the gradient plateaus there instead of going anywhere
+     muddy. */
   background: linear-gradient(
     120deg,
     var(--ember-hot) 10%,
@@ -479,19 +484,21 @@ button {
    the default tint is tuned to stay out of the way of demos that fill their
    own frame, and all three are mostly empty air around one small, quiet
    element (a ball, a stroke, a dot) */
-.card[data-demo='gestures'] .card-stage,
-.card[data-demo='path'] .card-stage,
-.card[data-demo='pointer'] .card-stage,
-.stage-wrap:has(.press),
-.stage-wrap:has(.spark-svg),
-.stage-wrap:has(.follow-orb) {
+/* light mode only — dark mode's stage for these three was already fine at
+   the plain .card-stage default above it */
+:root[data-theme='light'] .card[data-demo='gestures'] .card-stage,
+:root[data-theme='light'] .card[data-demo='path'] .card-stage,
+:root[data-theme='light'] .card[data-demo='pointer'] .card-stage,
+:root[data-theme='light'] .stage-wrap:has(.press),
+:root[data-theme='light'] .stage-wrap:has(.spark-svg),
+:root[data-theme='light'] .stage-wrap:has(.follow-orb) {
   background:
     radial-gradient(
       80% 70% at 50% 40%,
       rgba(255, 59, 31, 0.16),
       transparent 60%
     ),
-    rgba(var(--surface-tint-rgb), 0.1);
+    rgba(var(--surface-tint-rgb), 0.14);
 }
 
 .card-meta {
@@ -3504,6 +3511,33 @@ html[data-gm-dragging] * {
   border-radius: 0;
   background: transparent;
   appearance: none;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease);
+}
+
+/* four slots read as one blank track without SOME line between them — a
+   hairline rather than a full border, so it disappears under the puck's own
+   box-shadow instead of competing with it */
+.slot:not(:first-child) {
+  border-left: 1px solid var(--line);
+}
+
+/* the end slots round off to roughly follow .rail's own pill cap — a plain
+   rectangle's hover fill square-cornered its way past the curve, and
+   clipping it with overflow on .rail instead left a seam of its own at
+   the cap where the border's anti-aliasing and the clip boundary
+   disagreed */
+.slot:first-child {
+  border-radius: 999px 0 0 999px;
+}
+
+.slot:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+.slot:hover,
+.slot:focus-visible {
+  background: rgba(var(--surface-tint-rgb), 0.08);
 }
 
 .puck {
@@ -3629,7 +3663,7 @@ html[data-gm-dragging] * {
   align-items: center;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 13px;
+  border-radius: 18px;
   /* a color tint rather than a neutral one — the bar is chrome the same way
      the topbar or a card is, and everything else on the page that plays that
      role takes its warmth from the brand rather than from plain white */
@@ -3649,7 +3683,7 @@ html[data-gm-dragging] * {
   color: #0b0a09;
   background: linear-gradient(180deg, #ffd9a3, #f7ac52);
   padding: 8px 16px 8px 13px;
-  border-radius: 9px;
+  border-radius: 999px;
   box-shadow: 0 5px 14px rgba(247, 172, 82, 0.25);
   transition:
     transform 0.16s var(--ease),
@@ -3723,12 +3757,12 @@ html[data-gm-dragging] * {
 .mail {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   width: 100%;
   text-align: left;
   font: inherit;
-  padding: 11px 13px;
-  border-radius: 11px;
+  padding: 10px 13px 10px 10px;
+  border-radius: 14px;
   background: rgba(var(--surface-tint-rgb), 0.055);
   border: 1px solid rgba(var(--surface-tint-rgb), 0.08);
   color: inherit;
@@ -3738,30 +3772,76 @@ html[data-gm-dragging] * {
 }
 
 .mail:hover {
-  background: rgba(var(--surface-tint-rgb), 0.085);
+  background: rgba(var(--surface-tint-rgb), 0.09);
+  border-color: rgba(var(--surface-tint-rgb), 0.14);
+}
+
+/* one letter, one of six hues picked from the sender's name — the fastest
+   way for an eye to tell six rows of small-caps text apart at a glance,
+   and every mobile inbox from the last decade agrees */
+.mail-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.hue-ember {
+  background: linear-gradient(160deg, var(--ember-hot), var(--ember));
+}
+.hue-copper {
+  background: linear-gradient(160deg, #f2c48a, var(--copper));
+}
+.hue-iris {
+  background: linear-gradient(160deg, #b295fb, var(--iris));
+}
+.hue-steel {
+  background: linear-gradient(160deg, #aab4b9, var(--steel));
+}
+.hue-teal {
+  background: linear-gradient(160deg, #79d2c3, var(--teal));
+}
+.hue-azure {
+  background: linear-gradient(160deg, #97c2fb, var(--azure));
 }
 
 .mail-kill {
   margin-left: auto;
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
+  border-radius: 8px;
   border: 1px solid rgba(var(--surface-tint-rgb), 0.12);
   background: rgba(var(--surface-tint-rgb), 0.06);
   color: rgba(var(--ink-rgb), 0.62);
   font: inherit;
-  font-size: 15px;
-  line-height: 1;
   cursor: pointer;
   /* hidden until the row is hovered, but never display:none — the row is a
      Choreo participant and its measured box must not change on hover */
   opacity: 0;
   transition:
     opacity 0.14s ease,
-    background 0.14s ease;
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.mail-kill svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .mail:hover .mail-kill,
@@ -3782,26 +3862,37 @@ html[data-gm-dragging] * {
   border-color: rgba(255, 120, 90, 0.4);
   color: #ffd9cf;
 }
-.mail-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-  background: #f7ac52;
-}
 .mail-copy {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
+  flex: 1 1 auto;
 }
-.mail-copy b {
-  font-size: 13px;
+.mail-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.mail-line b {
+  font-size: 13.5px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mail-time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: rgba(var(--ink-rgb), 0.4);
 }
 .mail-copy small {
   font-size: 12px;
-  color: rgba(var(--ink-rgb), 0.46);
+  color: rgba(var(--ink-rgb), 0.5);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3873,6 +3964,15 @@ html[data-gm-dragging] * {
   touch-action: none;
   cursor: grab;
   overflow: hidden;
+}
+
+/* --bg-spot is the lightest rung of the ladder — reads as its own elevated
+   surface against the darker things around it in dark mode, and as
+   featureless white in light mode, where "elevated" needing to mean
+   "even brighter than an already-bright page" runs out of room */
+:root[data-theme='light'] .sheet {
+  background: var(--bg);
+  border-color: var(--line);
 }
 
 .sheet:active {
@@ -4228,6 +4328,17 @@ html[data-gm-dragging] * {
 ::view-transition-old(*),
 ::view-transition-new(*) {
   animation-duration: var(--gm-morph, 250ms);
+}
+
+/* the OLD image gets less of the clock and a curve that front-loads the
+   fade — the UA default (ease-out, the full duration) still has it visibly
+   present past the halfway point, fading underneath whatever the incoming
+   page is doing on top of it. Cut short and weighted early, it is gone
+   well before the new image finishes arriving, instead of the two
+   crossfading through each other for the whole transition. */
+::view-transition-old(*) {
+  animation-duration: calc(var(--gm-morph, 250ms) * 0.6);
+  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ---- the transition control, and the code it can show ---- */
@@ -4977,14 +5088,16 @@ html[data-gm-dragging] * {
    opacity every frame, and inline beats stylesheet. */
 .bo-tail {
   fill: none;
-  stroke: rgba(228, 163, 90, 0.4);
+  /* ember, not copper — see choreo-mark.gts, same fix for the same reason */
+  stroke: rgba(255, 59, 31, 0.35);
   stroke-width: 2.2;
   stroke-linecap: round;
 }
 
 .bo-head {
   fill: none;
-  stroke: var(--copper);
+  /* ember read too red for the present-tense line — see choreo-mark.gts */
+  stroke: var(--ember-hot);
   stroke-width: 2.2;
   stroke-linecap: round;
 }

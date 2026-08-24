@@ -34,7 +34,7 @@ import { factor, setCrossing } from 'test-app/lib/tempo';
  * page underneath them is better off blank than a frozen photograph of
  * itself. VEIL_OUT_MS is why the veil has to land before the snapshot does.
  */
-const BASE = 0.72;
+const BASE = 0.9;
 /* Emphasised, not snappy. [0.22, 1, 0.36, 1] leaves almost instantly and then
    coasts, which reads as a jump followed by a settle; a Magic Move wants to
    gather itself, travel, and arrive. */

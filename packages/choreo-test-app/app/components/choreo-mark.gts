@@ -47,22 +47,25 @@ export const ORBIT = 'M13.3 16.2A4.4 4.4 0 0 1 8.4 9.5';
 export const TIP = 'M8.4 9.5A4.4 4.4 0 0 1 14.2 8.2';
 
 export const ChoreoMark = <template>
-  {{! full color, same grade the demo wears: faint copper past, copper
-      present-tense line, ember bead, steel second timeline, hot tip.
-      Static on purpose — the mark performs in the Build Order demo; up
-      here it has already arrived. }}
+  {{! full color, same grade the demo wears: faint ember past, ember-hot
+      present-tense line, ember bead, steel second timeline, hot tip. Copper
+      lost this job — a whole mark leaning on it read as brown rather than
+      the vibrant orange the brand actually is; the present-tense line reads
+      too red at straight ember, so it takes the lighter, more orange grade
+      the tip already wears. Static on purpose — the mark performs in the
+      Build Order demo; up here it has already arrived. }}
   <svg class="choreo-mark" viewBox="0 0 24 24" aria-hidden="true">
     <path
       d={{TAIL}}
       fill="none"
-      stroke="rgba(228, 163, 90, 0.4)"
+      stroke="rgba(255, 59, 31, 0.35)"
       stroke-width="2.2"
       stroke-linecap="round"
     />
     <path
       d={{HEAD}}
       fill="none"
-      stroke="var(--copper)"
+      stroke="var(--ember-hot)"
       stroke-width="2.2"
       stroke-linecap="round"
     />
