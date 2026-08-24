@@ -2841,13 +2841,16 @@ importers:
         version: 2.3.2(@babel/core@7.29.7)
       ember-eslint-parser:
         specifier: ^0.13.0
-        version: 0.13.0(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@9.39.5))(@typescript-eslint/parser@8.19.1(eslint@9.39.5)(typescript@5.9.3))(typescript@5.9.3)
+        version: 0.13.0(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.19.1(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-template-recast:
         specifier: ^6.1.5
         version: 6.1.5
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
       eslint-plugin-qunit:
         specifier: 'catalog:'
-        version: 8.2.6(eslint@9.39.5)
+        version: 8.2.6(eslint@8.57.1)
       ethers:
         specifier: 'catalog:'
         version: 6.16.0
@@ -3358,9 +3361,12 @@ importers:
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
+      eslint:
+        specifier: 'catalog:'
+        version: 8.57.1
       eslint-plugin-qunit:
         specifier: 'catalog:'
-        version: 8.2.6(eslint@9.39.5)
+        version: 8.2.6(eslint@8.57.1)
       fs-extra:
         specifier: 'catalog:'
         version: 11.3.5
@@ -24797,12 +24803,6 @@ snapshots:
     dependencies:
       '@eslint-community/eslint-utils': 4.9.1(eslint@8.57.1)
       eslint: 8.57.1
-      requireindex: 1.2.0
-
-  eslint-plugin-qunit@8.2.6(eslint@9.39.5):
-    dependencies:
-      '@eslint-community/eslint-utils': 4.9.1(eslint@9.39.5)
-      eslint: 9.39.5
       requireindex: 1.2.0
 
   eslint-plugin-simple-import-sort@8.0.0(eslint@9.39.5):
