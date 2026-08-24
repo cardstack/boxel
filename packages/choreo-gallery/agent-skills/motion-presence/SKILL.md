@@ -53,7 +53,7 @@ block re-runs from live tracked state while the leaver plays its exit. So
 anything the exit needs — the label the panel showed, the row the modal flew
 from — must ride on the item `<Presence>` yields, not be read back out of
 state that has already moved on. The modifier freezes an exiting element's
-*props*, but your template's own bindings are yours to keep stable.
+_props_, but your template's own bindings are yours to keep stable.
 
 ## When NOT
 

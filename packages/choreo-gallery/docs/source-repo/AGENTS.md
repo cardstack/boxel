@@ -32,7 +32,9 @@ routes to the right pattern skill. Short form:
 | Animate on removal/insert                                     | `<Presence>` + `exit`                   | `motion-presence`        |
 | Moved because layout changed; same thing in two places        | `layout` / `layoutId` / `<LayoutGroup>` | `motion-layout`          |
 | Ordered multi-element scenes, z-index windows, fly-to-a-place | `<Choreo>` timeline + `{{beacon}}`      | `choreo-scene`           |
+| Multiple regions; cross-region flights                        | nested `<Choreo>` + far matching        | `choreo-regions`         |
 | Route/page change                                             | `animateView` / `viewTransition`        | `motion-page-transition` |
+| The gallery ⇄ demo Magic Move recipe                          | `animateView` pairing                   | `magic-move-navigation`  |
 | Pointer-driven movement                                       | `drag` / `<ReorderGroup>`               | `motion-drag`            |
 | Scroll-driven / in-view                                       | `scrollProgress` / `InView`             | `motion-scroll`          |
 | Tests touching motion                                         | `glimmer-motion/test-support`           | `motion-testing`         |

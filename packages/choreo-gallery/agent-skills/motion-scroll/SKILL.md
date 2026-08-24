@@ -17,7 +17,10 @@ position/progress; bind them through `style=(styles …)`:
 ```ts
 import { scrollProgress } from 'glimmer-motion';
 // container, target, and offsets (['start end', 'end start'] etc.) supported
-const { scrollYProgress } = scrollProgress({ target: el, offset: ['start end', 'end start'] });
+const { scrollYProgress } = scrollProgress({
+  target: el,
+  offset: ['start end', 'end start'],
+});
 ```
 
 Feed a motion value through a transform for parallax (`parallax.gts`), or

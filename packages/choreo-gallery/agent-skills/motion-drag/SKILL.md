@@ -56,7 +56,7 @@ its edges; works inside `<Presence>`.
 
 ## When NOT
 
-Reordering triggered by *state* (not a pointer) is a layout animation →
+Reordering triggered by _state_ (not a pointer) is a layout animation →
 `motion-layout`. A drag that ends in a multi-element scene (drop → everyone
 reflows in sequence) → hand the drop to `choreo-scene`.
 

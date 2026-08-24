@@ -49,10 +49,10 @@ while their content keeps running).
 
 ## When NOT
 
-- The two "elements" aren't the same thing — one is a *place* (a trash can,
+- The two "elements" aren't the same thing — one is a _place_ (a trash can,
   a compose button) that must not deform → `{{beacon}}` + Choreo `c.Move
-  @to` (`choreo-scene`).
-- The move must be *sequenced* against fades of other elements, or needs
+@to` (`choreo-scene`).
+- The move must be _sequenced_ against fades of other elements, or needs
   z-index for exactly the span of the move → `choreo-scene`.
 - Whole-page navigation morph → `motion-page-transition` (but NOT if the
   content is live — layout animation keeps it running; snapshots freeze it).

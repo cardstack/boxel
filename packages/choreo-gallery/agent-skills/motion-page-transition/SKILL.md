@@ -43,23 +43,13 @@ cards fly (see the comment block in `test-app/app/components/gallery.gts`).
 Rule: **same-page state change → layout animation; cross-page navigation →
 view transition.**
 
-## Patterns already in this app (read before touching)
+## This app's route transition
 
-`test-app/app/routes/application.ts` orchestrates route transitions:
-
-- The **veil**: `html.is-crossing` blanks `body` during the morph so the
-  root snapshot is empty rather than a photograph of the old page — and it
-  is theme-aware (`html[data-theme='light'].is-crossing > body { opacity: 1 }`)
-  because blanking to the html background reads as a white flash in light
-  mode. Do not "simplify" this.
-- Non-tweening elements fade out before the morph and back in after it
-  settles (`VEIL_OUT_MS` / `VEIL_IN_MS`).
-- The grain texture fades out before and back in after, so the transition
-  happens on a clean ground.
-- Shared tiles: the demo card on the gallery and the stage on the demo page
-  carry matching view-transition names; both sides must render the element
-  at a size that holds the same proportions or the morph ghosts (the
-  Presence tile bug — sized in container units for exactly this reason).
+The gallery ⇄ demo navigation is a full Magic Move recipe with a dozen
+load-bearing subtleties (the veil, the root-snapshot rule, the
+container-naming freeze, pausing live animations, polled completion, …).
+That has its own skill: **`magic-move-navigation`**. Read it before
+touching `test-app/app/routes/application.ts` or adding a paired element.
 
 ## When NOT
 

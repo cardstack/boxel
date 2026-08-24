@@ -57,13 +57,14 @@ run time:
 contentLeft = (_s: Sprite, cs: Changeset) =>
   cs.sprite({ id: 'sidebar-container' })!.initial!.context.width;
 ```
+
 ```hbs
 <c.Spring @of={{c.id 'sidebar-content'}} @left={{this.contentLeft}} />
 ```
 
 ## Beacons — a point, not an identity
 
-When the destination is a *place* that must not move or stretch (the trash
+When the destination is a _place_ that must not move or stretch (the trash
 can, the compose button):
 
 ```gts
