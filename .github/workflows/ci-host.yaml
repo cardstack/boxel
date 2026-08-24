@@ -468,16 +468,18 @@ jobs:
       # shard and largely irreducible (it is bound by the runner's cores, not
       # by latency — see the four experiments on CS-12583), so each added shard
       # buys a shrinking slice of test time for a fixed ~3 minutes of machine
-      # time and one more slot held. With ~8,665s of test work: 20 shards is
-      # ~10.5 minutes and 3.49 machine-hours, 12 is ~15.3 minutes and 3.06.
+      # time and one more slot held. Measured on ~8,500s of test work: at 20
+      # shards the slowest shard took 13.1 minutes for 3.62 machine-hours, at
+      # 12 it took 18.0 for 3.08. Sixteen sits between them, keeping most of
+      # the wall clock while returning a fifth of the slots to the pool.
       #
       # The modelled wall-clock cost overstates the real one, because it
       # assumes every shard starts immediately. They do not: shards have been
       # observed queueing up to 242s waiting for a runner, and 20 concurrent
       # jobs per host run is a large share of the pool.
       matrix:
-        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-        shardTotal: [12]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardTotal: [16]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -1237,7 +1239,7 @@ jobs:
             # job loudly rather than committing a degraded weights file.
             if [ -f merged-junit-report/host.xml ]; then
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
-                --min-drift-seconds 60 --shard-count 12
+                --min-drift-seconds 60 --shard-count 16
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
