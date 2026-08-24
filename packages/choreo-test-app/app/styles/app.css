@@ -153,6 +153,10 @@
   --surface-tint-rgb: 33, 29, 24;
   --copper-ink: #a8672a;
   --gradient-tail: var(--copper);
+  /* The lightbox keeps its dark glass in light mode, but a hard black hairline
+     around it does not read as an edge here — it reads as an outline someone
+     drew. Same job, warm and faint. */
+  --lightbox-ring: rgba(33, 29, 24, 0.12);
 }
 
 *,
@@ -1710,7 +1714,7 @@ html[data-gm-dragging] * {
      examples/lightbox.gts, so it can be scale-corrected */
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.16) inset,
-    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 0 1px var(--lightbox-ring, rgba(0, 0, 0, 0.5)),
     0 30px 80px rgba(0, 0, 0, 0.62);
 }
 
@@ -1752,6 +1756,12 @@ html[data-gm-dragging] * {
   overflow: hidden;
   border-radius: 15px;
   background: rgba(12, 9, 8, 0.38);
+  /* Set here, not inherited. This panel is dark glass over a photograph in
+     BOTH themes — that is the point of taking its colour from the card behind
+     it — so its text is light in both. Inheriting `--ink` put a near-black
+     title on a dark amber panel the moment light mode existed; the facts and
+     the note never had the bug because they name their own white. */
+  color: #fff;
   backdrop-filter: blur(26px) saturate(1.6);
   -webkit-backdrop-filter: blur(26px) saturate(1.6);
   border: 1px solid rgba(255, 255, 255, 0.18);
