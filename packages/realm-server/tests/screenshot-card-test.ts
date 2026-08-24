@@ -17,6 +17,7 @@ import {
 import {
   chooseScreenshotCardCoalesceDecision,
   estimateScreenshotQueueWait,
+  screenshotCardJobTimeoutSec,
 } from '@cardstack/runtime-common/jobs/screenshot-card';
 import type {
   DBAdapter,
@@ -248,6 +249,188 @@ module(basename(import.meta.filename), function () {
         (published[0]?.args as Record<string, unknown>)?.captureSpec,
         null,
         'default-valued spec reaches the job as null',
+      );
+    });
+
+    test('normalizes a batch captureSpec, folding singular defaults into entries', async function (assert) {
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              captureSpec: {
+                // Singular fields act as batch-wide defaults.
+                deviceScaleFactor: 2,
+                captures: [
+                  { name: 'wide', viewport: { width: 1280, height: 800 } },
+                  {
+                    name: 'thumb',
+                    clip: { x: 0, y: 0, width: 200, height: 200 },
+                  },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      let forwarded = (published[0]?.args as Record<string, unknown>)
+        ?.captureSpec as { captures?: unknown[] };
+      assert.deepEqual(
+        forwarded,
+        {
+          captures: [
+            {
+              name: 'wide',
+              viewport: { width: 1280, height: 800 },
+              deviceScaleFactor: 2,
+            },
+            {
+              name: 'thumb',
+              deviceScaleFactor: 2,
+              clip: { x: 0, y: 0, width: 200, height: 200 },
+            },
+          ],
+        },
+        'entries fold in the singular deviceScaleFactor default and keep their own overrides',
+      );
+    });
+
+    test('an entry override back to an engine default elides after the merge', async function (assert) {
+      // `deviceScaleFactor: 1` on the entry must beat the batch-wide 2, and
+      // 1 is the engine default, so the merged entry carries no scale at all.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              captureSpec: {
+                deviceScaleFactor: 2,
+                captures: [{ name: 'flat', deviceScaleFactor: 1 }],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.deepEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        { captures: [{ name: 'flat' }] },
+        'the explicit 1x wins over the batch default and elides',
+      );
+    });
+
+    test('rejects a batch over the capture cap', async function (assert) {
+      let captures = Array.from({ length: 25 }, (_v, i) => ({
+        name: `c${i}`,
+      }));
+      await expectCaptureSpecRejected(assert, { captures }, 'at most 24');
+    });
+
+    test('rejects an empty captures array', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [] },
+        'must not be empty',
+      );
+    });
+
+    test('rejects a capture entry without a name', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ viewport: { width: 800, height: 600 } }] },
+        'name',
+      );
+    });
+
+    test('rejects duplicate capture names', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ name: 'same' }, { name: 'same' }] },
+        'duplicated',
+      );
+    });
+
+    test('rejects an unknown capture-entry field by name', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ name: 'typo', fullpage: true }] },
+        'captures[0].fullpage',
+      );
+    });
+
+    test('rejects a per-entry override that violates the bounds', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          captures: [{ name: 'huge', viewport: { width: 5000, height: 600 } }],
+        },
+        'captures[0].viewport.width',
+      );
+    });
+
+    test('rejects a per-entry clip beyond the singular default viewport', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          viewport: { width: 400, height: 300 },
+          captures: [
+            { name: 'oob', clip: { x: 200, y: 0, width: 300, height: 100 } },
+          ],
+        },
+        'captures[0].clip',
+      );
+    });
+
+    test('scales the job timeout by capture count', function (assert) {
+      assert.strictEqual(
+        screenshotCardJobTimeoutSec(1),
+        60,
+        'a single capture keeps the 60s floor',
+      );
+      assert.strictEqual(
+        screenshotCardJobTimeoutSec(3),
+        60,
+        'a small batch stays at the floor',
+      );
+      assert.strictEqual(
+        screenshotCardJobTimeoutSec(24),
+        78,
+        'a full 24-entry batch scales to 30 + 2*24',
       );
     });
 

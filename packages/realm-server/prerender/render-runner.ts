@@ -628,11 +628,16 @@ export class RenderRunner {
         };
       } else {
         let shot = capture as ScreenshotCapture;
+        // Top-level base64/width/height mirror captures[0] for back-compat with
+        // the shipped host tool + staging capture command, which read the
+        // singular fields.
+        let first = shot.captures[0];
         response = {
           status: 'ready',
-          base64: shot.base64,
-          width: shot.width,
-          height: shot.height,
+          captures: shot.captures,
+          base64: first.base64,
+          width: first.width,
+          height: first.height,
           contentType: 'image/png',
         };
       }

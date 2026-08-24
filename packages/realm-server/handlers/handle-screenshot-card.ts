@@ -36,9 +36,10 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // One entry of the response's `captures` array: the durable served URL is
 // the reference callers should embed (a re-capture rotates its bytes, never
 // the URL); `base64` rides along by default until callers migrate to URLs
-// (`includeBase64: false` opts out). `name` and `deviceScaleFactor` are
-// null for ad-hoc captures — they populate for declared-screenshot batches
-// and once the capture engine reports a scale factor.
+// (`includeBase64: false` opts out). `name` is null for ad-hoc captures —
+// it populates for declared-screenshot batches. `deviceScaleFactor` is the
+// effective scale the capture engine reports, or null when serving from the
+// ledger, which does not record it.
 interface CaptureResult {
   name: string | null;
   url: string;
@@ -111,10 +112,20 @@ interface CaptureResult {
  * return a 400 naming the offending field. The one bound no request-time
  * parse can enforce — a fullPage capture's document extent — is checked
  * against the same physical-pixel cap at capture time.
- * A spec with overrides is capture-only: the ledger's canonical capture
- * identity cannot represent it yet (the GET DSL reserves those params), so it
- * always renders fresh and returns raw bytes — no ledger fast path, no
- * MediaCache persist, no `captures` URL.
+ * A batch of captures may be requested via `captureSpec.captures`, an array
+ * of named `{ name, ...overrides }` entries (bounded by
+ * `SCREENSHOT_MAX_CAPTURES`). Each entry's overrides win over the singular
+ * `captureSpec` fields, which act as batch-wide defaults; the shared parse
+ * normalizes each entry to its fully-merged spec so the capture path iterates
+ * them directly against one settled render. The response's `captures` then
+ * carries one `{ name, base64, width, height, deviceScaleFactor }` entry per
+ * capture, with the top-level `base64`/`width`/`height` mirroring
+ * `captures[0]` for byte-compatibility with singular-shape callers.
+ *
+ * A spec with overrides — a batch always is one — is capture-only: the
+ * ledger's canonical capture identity cannot represent it yet (the GET DSL
+ * reserves those params), so it always renders fresh and returns raw bytes —
+ * no ledger fast path, no MediaCache persist, no `captures` URL.
  *
  * The `runAs` user is derived from the authenticated JWT.
  */
@@ -345,14 +356,25 @@ export default function handleScreenshotCard({
       let attributes: Record<string, unknown> = { ...result };
       if (!withBase64) {
         delete attributes.base64;
+        // The capture engine's captures[] entries carry their own base64;
+        // honor the opt-out there too.
+        if (Array.isArray(attributes.captures)) {
+          attributes.captures = attributes.captures.map(
+            ({ base64: _dropped, ...rest }) => rest,
+          );
+        }
       }
       if (entryKey && result.status === 'ready') {
+        // A canonical capture persisted under its ledger identity: replace
+        // the engine's byte-only captures[] entry with the durable served-URL
+        // form, carrying through the effective scale the engine reports.
         attributes.captures = [
           captureResult({
             withBase64,
             base64: result.base64,
             width: result.width ?? null,
             height: result.height ?? null,
+            deviceScaleFactor: result.captures?.[0]?.deviceScaleFactor ?? null,
             normalizedRealmURL,
             instanceLocalPath,
             spec,
@@ -387,6 +409,7 @@ function captureResult({
   base64,
   width,
   height,
+  deviceScaleFactor = null,
   normalizedRealmURL,
   instanceLocalPath,
   spec,
@@ -395,6 +418,7 @@ function captureResult({
   base64: string | undefined;
   width: number | null;
   height: number | null;
+  deviceScaleFactor?: number | null;
   normalizedRealmURL: string;
   instanceLocalPath: string;
   spec: CaptureSpec;
@@ -408,7 +432,7 @@ function captureResult({
     }),
     width,
     height,
-    deviceScaleFactor: null,
+    deviceScaleFactor,
     ...(withBase64 && base64 !== undefined ? { base64 } : {}),
   };
 }
