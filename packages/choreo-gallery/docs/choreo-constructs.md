@@ -1,15 +1,16 @@
-# The Keynote gap
+# More Choreo constructs
 
-What Choreo still needs before a presenter could write Keynote in it — as a
-language reference: the tags and parameters, what each commits to, and what
-already exists. Names are provisional; semantics are the contract. The parent
-documents are [choreography.md](choreography.md) (the model) and
-[nested-choreo.md](nested-choreo.md) (regions).
+The next set of constructs, as a language reference: the tags and
+parameters, what each commits to, and what already exists. Names are
+provisional; semantics are the contract. Two references keep it honest —
+Keynote's build inspector, and bento-boxel's interaction patterns (audited
+at the end). The parent documents are [choreography.md](choreography.md)
+(the model) and [nested-choreo.md](nested-choreo.md) (regions).
 
 The measure is the Build Order demo. It already plays a Keynote build
 inspector — `with`/`after` relations, delays, durations, by-word and
 by-character delivery, a scrubbable playhead — but as a private, sampled
-score in `test-app/app/lib/builds.ts`, outside Choreo. Closing the gap means
+score in `test-app/app/lib/builds.ts`, outside Choreo. Closing that distance means
 promoting those semantics into the region, so `schedule()` compiles into
 Choreo cues and the demo becomes a thin inspector over a real timeline.
 
