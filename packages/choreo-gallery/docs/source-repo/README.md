@@ -57,6 +57,10 @@ import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
 ```
 
 <p align="center">
+  <a href="https://cardstack.github.io/choreo/"><strong>See the gallery →</strong></a>
+</p>
+
+<p align="center">
   <img src="docs/gallery.png" alt="The Choreo gallery: the Motion, Choreographed hero above a grid of live demos — Playhead, Lightbox, Beacons and Sequence" width="900">
 </p>
 

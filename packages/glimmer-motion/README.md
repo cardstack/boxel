@@ -1,6 +1,6 @@
 # glimmer-motion
 
-The npm package of [Choreo](https://github.com/cardstack/glimmer-motion) — Cardstack.
+The npm package of [Choreo](https://github.com/cardstack/choreo) — Cardstack.
 
 **Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
 the scene. `{{motion}}`, `<Presence>`, `<LayoutGroup>`, Reorder, drag, and `<Choreo>`. Verified by
@@ -41,7 +41,7 @@ Peers: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glim
 `@glimmer/tracking`, `ember-source >= 5.4`. A v2 addon — Embroider and Vite apps consume it directly, with
 TypeScript types and Glint signatures.
 
-New here? The [guide](https://github.com/cardstack/glimmer-motion/blob/main/docs/guide.md) teaches this
+New here? The [guide](https://github.com/cardstack/choreo/blob/main/docs/guide.md) teaches this
 from a Glimmer card rather than from a React translation table.
 
 ## Features
@@ -113,7 +113,7 @@ upstream commit.
 
 The full story — why the engine is untouched, how the binding was built by porting Motion's test suites and
 what that surfaced — is in the
-[repository README](https://github.com/cardstack/glimmer-motion#readme).
+[repository README](https://github.com/cardstack/choreo#readme).
 
 ## Not ported (yet)
 

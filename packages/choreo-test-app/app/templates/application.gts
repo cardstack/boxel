@@ -25,7 +25,7 @@ import { ThemePicker } from 'test-app/components/theme-picker';
           <TempoPicker />
           <ThemePicker />
           <a
-            href="https://github.com/cardstack/glimmer-motion"
+            href="https://github.com/cardstack/choreo"
             target="_blank"
             rel="noopener"
           >GitHub</a>
@@ -40,7 +40,7 @@ import { ThemePicker } from 'test-app/components/theme-picker';
       <footer class="footer">
         <span>© 2026 Cardstack Foundation</span>
         <a
-          href="https://github.com/cardstack/glimmer-motion/blob/main/LICENSE"
+          href="https://github.com/cardstack/choreo/blob/main/LICENSE"
           target="_blank"
           rel="noopener"
         >

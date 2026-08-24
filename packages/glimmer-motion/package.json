@@ -12,7 +12,7 @@
     "gesture",
     "drag"
   ],
-  "repository": "https://github.com/cardstack/glimmer-motion",
+  "repository": "https://github.com/cardstack/choreo",
   "license": "MIT",
   "author": "Cardstack",
   "exports": {

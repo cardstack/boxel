@@ -4,7 +4,10 @@ module.exports = function (environment) {
   const ENV = {
     modulePrefix: 'test-app',
     environment,
-    rootURL: '/',
+    // must match `base` in vite.config.mjs: on GitHub Pages the app is served
+    // from /<repo>/, and the router has to strip that prefix before it can
+    // recognise /choreo/lightbox as the `lightbox` route
+    rootURL: process.env.APP_BASE || '/',
     locationType: 'history',
     EmberENV: {
       EXTEND_PROTOTYPES: false,
