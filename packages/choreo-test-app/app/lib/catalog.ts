@@ -79,6 +79,61 @@ export interface DemoEntry {
 
 export const catalog: DemoEntry[] = [
   {
+    Example: Playhead,
+    apis: ['spring()', 'motionValue', 'jump()'],
+    group: 'Choreo',
+    id: 'playhead',
+    lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
+    notes: PlayheadNotes,
+    sample: `// A score is beats, not timecodes: walk there, press it, wait. Absolute
+// times fall out of compile(); the coordinates fall out of measuring the cue
+// when the question is asked, so the score names a BUTTON, never a pixel.
+const BEATS = [
+  { kind: 'move',  cue: 'express', ms: 620 },
+  { kind: 'press', cue: 'express', ms: 220 },
+  { kind: 'hold',                  ms: 360 },
+  …
+];
+
+// One description of what a press does. The buttons run it on click, and the
+// timeline folds it to work out what the app IS at a scrubbed time — so a
+// scrubbed state cannot drift from a clicked one.
+function press(state, cue) {
+  switch (cue) {
+    case 'express': return { ...state, speed: 'express' };
+    case 'wrap':    return { ...state, wrap: !state.wrap };
+    …
+  }
+}
+
+// PLAYING — Motion's clock. The score fires a real .click() on the real
+// control; the app's own handler runs; every {{motion}} animates as usual.
+this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
+
+// SCORED — the playhead's clock. Same springs, asked for their value at t
+// instead of run. Motion's spring() generator is closed-form in t and holds
+// no playhead of its own, so it answers about any time in any order — which
+// is exactly what dragging a scrubber backwards does.
+const gen = spring({ keyframes: [from, to], bounce: 0.3, visualDuration: 0.36 });
+const { value } = gen.next(t - since);
+
+{{! and the whole difference between the two is this one line }}
+<span {{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}} />
+
+get poses() {
+  return this.scored
+    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)   // sample
+    : posesOf(this.state);                        // play
+}
+
+// What has no score cannot be seeked: layout, layoutId and Presence are all
+// absent here on purpose. A spring is a function of time; a projection
+// animation is two measurements of a live tree. Closing that gap — valueAt(t)
+// on <Choreo> — is what this stage is a rehearsal for.`,
+    slowmo: false,
+    title: 'Playhead',
+  },
+  {
     Example: Lightbox,
     apis: ['layoutId', 'LayoutGroup', 'Presence'],
     group: 'Layout',
@@ -990,61 +1045,6 @@ move = (event) => {
 <div {{motion style=(styles x=this.x y=this.y)}}></div>`,
     slowmo: false,
     title: 'Follow the pointer',
-  },
-  {
-    Example: Playhead,
-    apis: ['spring()', 'motionValue', 'jump()'],
-    group: 'Choreo',
-    id: 'playhead',
-    lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
-    notes: PlayheadNotes,
-    sample: `// A score is beats, not timecodes: walk there, press it, wait. Absolute
-// times fall out of compile(); the coordinates fall out of measuring the cue
-// when the question is asked, so the score names a BUTTON, never a pixel.
-const BEATS = [
-  { kind: 'move',  cue: 'express', ms: 620 },
-  { kind: 'press', cue: 'express', ms: 220 },
-  { kind: 'hold',                  ms: 360 },
-  …
-];
-
-// One description of what a press does. The buttons run it on click, and the
-// timeline folds it to work out what the app IS at a scrubbed time — so a
-// scrubbed state cannot drift from a clicked one.
-function press(state, cue) {
-  switch (cue) {
-    case 'express': return { ...state, speed: 'express' };
-    case 'wrap':    return { ...state, wrap: !state.wrap };
-    …
-  }
-}
-
-// PLAYING — Motion's clock. The score fires a real .click() on the real
-// control; the app's own handler runs; every {{motion}} animates as usual.
-this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
-
-// SCORED — the playhead's clock. Same springs, asked for their value at t
-// instead of run. Motion's spring() generator is closed-form in t and holds
-// no playhead of its own, so it answers about any time in any order — which
-// is exactly what dragging a scrubber backwards does.
-const gen = spring({ keyframes: [from, to], bounce: 0.3, visualDuration: 0.36 });
-const { value } = gen.next(t - since);
-
-{{! and the whole difference between the two is this one line }}
-<span {{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}} />
-
-get poses() {
-  return this.scored
-    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)   // sample
-    : posesOf(this.state);                        // play
-}
-
-// What has no score cannot be seeked: layout, layoutId and Presence are all
-// absent here on purpose. A spring is a function of time; a projection
-// animation is two measurements of a live tree. Closing that gap — valueAt(t)
-// on <Choreo> — is what this stage is a rehearsal for.`,
-    slowmo: false,
-    title: 'Playhead',
   },
   {
     Example: BuildOrder,
