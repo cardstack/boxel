@@ -150,6 +150,17 @@ export function artifactSinkEnabled(): boolean {
   return artifactBucket() !== undefined;
 }
 
+// True once this process has spent its upload budget, so a caller can skip
+// work whose only purpose is to produce an upload. `getMaxSessionBytes` is
+// exported for the same reason, but the running total it is compared against
+// is private to this module, which left the answer unreachable from outside.
+// It matters most to the heap snapshot, whose expensive part — stopping the
+// world and writing gigabytes to the container's disk — happens before
+// `uploadArtifact` is ever called.
+export function artifactSinkBudgetSpent(): boolean {
+  return sessionBytesUsed >= getMaxSessionBytes();
+}
+
 // ---------------------------------------------------------------------------
 // Per-mode capture flags. Each heavyweight capture is gated by both the
 // affinity trigger (one deliberately-targeted realm) AND its own flag, so a
@@ -173,11 +184,15 @@ export function shouldCaptureHeap(): boolean {
   return flagEnabled('PRERENDER_PROFILE_HEAP');
 }
 
-// Gates the on-demand Node heap snapshot. Off by default and deliberately
-// separate from `PRERENDER_PROFILE_HEAP`: writing this snapshot stops the
-// world for as long as it takes to serialise the whole heap, which is a cost
-// an operator should opt into for one instance rather than something a
-// per-render flag can turn on across the fleet.
+// Gates the Node heap snapshot, both the route and the automatic capture, and
+// kept separate from `PRERENDER_PROFILE_HEAP` because that one profiles a
+// browser page rather than this process.
+//
+// Read from the environment, which comes from the task definition, so this is
+// per-service: turning it on arms every task in the service, and each one
+// stops the world once on its own when its heap crosses the threshold —
+// staggered across the fleet rather than simultaneous, but fleet-wide. The
+// route is the part that is one instance at a moment somebody chose.
 export function shouldAllowHeapSnapshot(): boolean {
   return flagEnabled('PRERENDER_HEAP_SNAPSHOT');
 }

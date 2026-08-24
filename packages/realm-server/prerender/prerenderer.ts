@@ -997,17 +997,27 @@ export class Prerenderer {
       // gating this on current load would hide exactly the growth that
       // has no queue behind it to explain it. Kept separate from the
       // snapshot line so existing greps of that line are unaffected.
+      let snap = this.#pagePool.getQueueDepthSnapshot();
       try {
         let telemetry = heapTelemetry();
         log.info('prerender-heap %s', formatHeapTelemetry(telemetry));
         // Reuses the reading just taken, so the instance that crosses the
-        // threshold captures itself off the same tick that reports it.
-        maybeAutoCaptureHeapSnapshot(telemetry.heapUsedMB);
+        // threshold captures itself off the same tick that reports it. The
+        // pool snapshot comes with it because the capture stops the world,
+        // and doing that while renders are in flight charges the pause to
+        // them.
+        let busy = snap.affinities.reduce(
+          (n, a) => n + a.byQueue.file + a.byQueue.module + a.byQueue.command,
+          0,
+        );
+        maybeAutoCaptureHeapSnapshot(
+          telemetry.heapUsedMB,
+          snap.totalPending === 0 && busy === 0,
+        );
       } catch (e) {
         log.warn('heap telemetry log failed:', e);
       }
       try {
-        let snap = this.#pagePool.getQueueDepthSnapshot();
         if (snap.affinities.length === 0 && snap.totalPending === 0) {
           // Quiet path: no active affinities and no pending work. Skip the
           // log entirely so grep-able lines all describe real load.

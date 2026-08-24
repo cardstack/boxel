@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { logger } from '@cardstack/runtime-common';
 import {
+  artifactSinkBudgetSpent,
   artifactSinkEnabled,
   shouldAllowHeapSnapshot,
   uploadArtifact,
@@ -17,6 +18,7 @@ export type HeapSnapshotOutcome =
   | { status: 'captured'; bytes: number; writeMs: number; uploadMs: number }
   | { status: 'disabled' }
   | { status: 'no-sink' }
+  | { status: 'budget-spent' }
   | { status: 'busy' }
   | { status: 'upload-declined'; bytes: number; writeMs: number }
   | { status: 'failed'; message: string };
@@ -50,16 +52,47 @@ function autoCaptureThresholdMB(): number {
   return DEFAULT_AUTO_CAPTURE_MB;
 }
 
-// Called on each telemetry tick with the heap reading already taken there.
-// Deliberately not awaited by the caller: the write blocks the event loop
-// whether or not anyone waits on it, so awaiting would only delay the tick
-// that follows.
-export function maybeAutoCaptureHeapSnapshot(heapUsedMB: number): void {
-  if (!autoCaptureArmed || !shouldAllowHeapSnapshot()) {
+// How many consecutive over-threshold ticks to spend waiting for an idle one
+// before capturing anyway. An instance under continuous load would otherwise
+// never capture, and its heap keeps climbing while it waits — so the pause
+// only gets more expensive the longer patience lasts. At the tick interval
+// this is a handful of minutes.
+const IDLE_WAIT_TICKS = 10;
+let ticksWaitingForIdle = 0;
+
+// Called on each telemetry tick with the heap reading and pool state already
+// taken there. Deliberately not awaited by the caller: the write blocks the
+// event loop whether or not anyone waits on it, so awaiting would only delay
+// the tick that follows.
+export function maybeAutoCaptureHeapSnapshot(
+  heapUsedMB: number,
+  poolIdle: boolean,
+): void {
+  // `artifactSinkEnabled` is checked here as well as inside the capture,
+  // because flag-on/bucket-absent is an ordinary state rather than a
+  // misconfiguration: without it this announces a capture, gets `no-sink`,
+  // re-arms, and does the same 30 seconds later for the life of the process.
+  if (
+    !autoCaptureArmed ||
+    !shouldAllowHeapSnapshot() ||
+    !artifactSinkEnabled()
+  ) {
     return;
   }
   let threshold = autoCaptureThresholdMB();
   if (heapUsedMB < threshold) {
+    return;
+  }
+
+  // Prefer an idle tick. Timers do not run during the write, so a pause that
+  // lands mid-render is charged to every render in flight, and one far enough
+  // into its budget crosses the render timeout the moment the loop resumes —
+  // turning a diagnostic into a source of the errors it exists to explain. An
+  // idle sample is also the better answer to the question being asked: what
+  // this process still holds once the work is done, rather than the live
+  // state of whatever is running.
+  if (!poolIdle && ticksWaitingForIdle < IDLE_WAIT_TICKS) {
+    ticksWaitingForIdle++;
     return;
   }
 
@@ -90,6 +123,7 @@ export function maybeAutoCaptureHeapSnapshot(heapUsedMB: number): void {
 // Test-only: put the once-per-process arm back.
 export function __rearmAutoCaptureForTests(): void {
   autoCaptureArmed = true;
+  ticksWaitingForIdle = 0;
 }
 
 // Writes the server's own heap to disk and streams it to the artifact sink.
@@ -97,17 +131,31 @@ export function __rearmAutoCaptureForTests(): void {
 // `writeHeapSnapshot` serialises straight to a file descriptor rather than
 // building the snapshot in JS memory, so it stays usable on the process it is
 // diagnosing — a heap that is nearly full could not have buffered its own
-// snapshot. The trade is that it stops the world for the whole write: seconds
-// on a small heap, and long enough on a large one that the manager's
-// heartbeat (30s by default) can lapse and evict this instance until it
-// re-registers. Capture at a couple of gigabytes rather than near the limit —
-// the retention pattern is the same and everything about it is cheaper.
+// snapshot. The trade is that it stops the world for the whole write.
+//
+// Measured on four captures a staging task took of itself, at heaps of
+// 1559–1588 MB: writes of 6.9, 7.3, 12.4 and 15.9 seconds producing files of
+// 198–512 MB, each uploaded in 3.6–13.1 s afterwards. Cost tracks the object
+// count rather than the byte size, so a heap of the same size holding many
+// more, smaller objects serialises far more slowly — treat those figures as
+// this workload's, not as a general rule.
+//
+// The number that bounds all of this is the manager's 30 s heartbeat: a pause
+// longer than that has the instance swept as stale until it re-registers.
+// That is the reason to capture at a couple of gigabytes rather than near the
+// limit — the retention reads the same and every cost is smaller.
 export async function captureHeapSnapshot(): Promise<HeapSnapshotOutcome> {
   if (!shouldAllowHeapSnapshot()) {
     return { status: 'disabled' };
   }
   if (!artifactSinkEnabled()) {
     return { status: 'no-sink' };
+  }
+  // Checked here rather than left to `uploadArtifact`, which only sees it
+  // after the pause and after gigabytes have gone to the container's disk.
+  // A capture whose upload cannot land is all cost and no artifact.
+  if (artifactSinkBudgetSpent()) {
+    return { status: 'budget-spent' };
   }
   if (inFlight) {
     return { status: 'busy' };
@@ -156,10 +204,15 @@ export async function captureHeapSnapshot(): Promise<HeapSnapshotOutcome> {
     });
     let uploadMs = Date.now() - uploadStartedAt;
     if (!uploaded) {
-      // The sink declines rather than throws when its byte budget is spent or
-      // no bucket is configured; the snapshot is still on disk at this point,
-      // so say so rather than reporting success.
-      log.warn(`heap snapshot upload declined bytes=${bytes}`);
+      // `uploadArtifact` returns false for a spent budget, an absent bucket
+      // and any S3 error alike, so this deliberately does not name a cause —
+      // the sink logs the one it saw. The distinction matters to whoever
+      // reads this: a budget needs a fresh task, a permissions or naming
+      // fault needs fixing before any capture on any task will land.
+      log.warn(
+        `heap snapshot upload did not land bytes=${bytes}; see the ` +
+          `artifact-sink log line above for why`,
+      );
       return { status: 'upload-declined', bytes, writeMs };
     }
     log.info(`heap snapshot uploaded bytes=${bytes} uploadMs=${uploadMs}`);
