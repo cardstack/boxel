@@ -36,10 +36,10 @@ animateView(async () => {
 ::view-transition-old(.gm-move),
 ::view-transition-new(.gm-move) { width: 100%; height: 100%; object-fit: fill; }
 
-/* And the grain steps aside for the duration. A noise field is the one thing
-   on the page a compositor cannot carry — it does not scale or blend, it just
-   changes — so it leaves before the morph and returns after it. */
-html.is-crossing::before { opacity: 0; }`;
+/* And the real page is veiled for the duration — a transition captures
+   whatever is on screen, and the root snapshot is better off blank than a
+   frozen photograph of the page underneath the pieces named above: */
+html.is-crossing > body { opacity: 0; }`;
 
 /** out of the control, unfolding as it comes */
 const OPEN = { bounce: 0.14, visualDuration: 0.38 };

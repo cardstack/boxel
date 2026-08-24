@@ -5,6 +5,14 @@
   --bg: #090807;
   --bg-elev: #12100e;
   --bg-spot: #1a1613;
+  /* the page's own resting tone — not --bg. --bg is the recessed end of the
+     surface ladder (bg < bg-elev < bg-spot) that cards and panels sit on top
+     of; the wash behind all of them used to read lighter than pure --bg
+     because a noise texture sat over it at all times. Now that the texture is
+     gone, --bg-page carries that same lift on its own, measured off an actual
+     render of the old grain composited over --bg, so removing it did not also
+     make the page a shade darker than everyone was used to. */
+  --bg-page: #191817;
   --ink: #f3ece3;
   --ink-dim: #9c9287;
   --ink-faint: #6b635b;
@@ -26,7 +34,9 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --page: 1180px;
-  --grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.18'/%3E%3C/svg%3E");
+  /* one flat color plus two soft radial glows — no texture, so the background
+     is exactly as composable as any other layer on the page and a transition
+     never has anything to hide or fade around */
   --wash:
     radial-gradient(
       1200px 640px at 12% -10%,
@@ -38,7 +48,7 @@
       rgba(228, 163, 90, 0.08),
       transparent 50%
     ),
-    var(--bg);
+    var(--bg-page);
 }
 
 *,
@@ -60,40 +70,10 @@ html {
      the clip costs nothing and the bar stays where it was told to stay. */
   overflow-x: hidden;
   /* captured as the root layer, which is clipped to the viewport — the one
-     cheap way to carry a page that is several screens tall */
+     cheap way to carry a page that is several screens tall. Never captured by
+     a transition either, so this background does not fade, move or reload for
+     one — it simply keeps painting, straight through. */
   background: var(--wash);
-}
-
-/* On <html>, which is the one element never captured: the wash it carries and
-   the grain it draws are outside every snapshot, so the background does not
-   fade, move or reload for a transition — it simply keeps painting. */
-html::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image: var(--grain);
-  z-index: 50;
-  opacity: 1;
-  /* A noise field is the one thing on this page a compositor cannot carry: it
-     does not scale or blend, it just changes. So it leaves before the morph
-     and returns after it, rather than being dragged through the middle.
-     
-     Promoted, so the fade is a compositor job rather than a full-viewport
-     repaint of a noise texture — and timed AGAINST THE MORPH rather than in
-     fixed milliseconds. At a fixed 140ms it was a fifth of a normal transition
-     and a fiftieth of a slow one, which is exactly how the hesitation felt:
-     obvious at speed, barely there in slow motion. */
-  will-change: opacity;
-  transition: opacity var(--gm-grain-out, 140ms) linear;
-}
-
-html.is-crossing::before {
-  opacity: 0;
-}
-
-html.is-returning::before {
-  transition: opacity var(--gm-grain-in, 260ms) ease-out;
 }
 
 body {
@@ -103,7 +83,13 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background: transparent;
-  transition: opacity var(--gm-grain-out, 140ms) linear;
+  /* Veiled for the span of a page transition — opacity to 0 and back — so the
+     ROOT snapshot a transition captures is blank rather than a photograph of
+     whatever the old or new page happened to be showing underneath the pieces
+     that actually move. `--gm-veil-out` must stay short enough that the veil
+     is fully down before the snapshot is taken (see routes/application.ts,
+     VEIL_OUT_MS); `--gm-veil-in` just has to feel like an arrival. */
+  transition: opacity var(--gm-veil-out, 20ms) linear;
 }
 
 html.is-crossing > body {
@@ -111,7 +97,7 @@ html.is-crossing > body {
 }
 
 html.is-returning > body {
-  transition: opacity var(--gm-grain-in, 260ms) ease-out;
+  transition: opacity var(--gm-veil-in, 180ms) ease-out;
 }
 
 a {
@@ -151,8 +137,10 @@ button {
   justify-content: space-between;
   gap: 24px;
   padding: 18px 28px;
+  /* blur only — no tint of its own. Content scrolling underneath softens
+     instead of darkening. */
   backdrop-filter: blur(18px);
-  background: rgba(9, 8, 7, 0.62);
+  background: transparent;
   border-bottom: 1px solid var(--line);
 }
 
@@ -175,7 +163,7 @@ button {
      its left than its right, so set flush it looks pulled toward the mark. */
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 17px;
+  font-size: 16px;
   letter-spacing: -0.03em;
   margin-left: 1px;
 }
@@ -381,16 +369,31 @@ button {
   border-color: var(--line-strong);
 }
 
+/* the destination (or source) card of an in-flight page transition — its own
+   background and border are ordinary live DOM, never extracted into the
+   transition the way .card-stage/.card-title/.card-lede/.card-group are, so
+   left alone they sit fully rendered in the grid for the whole flight: the
+   shell arrives before its contents do. `transition: none` on entry keeps
+   this instant rather than a 180ms fade nobody asked to see. */
+.card.is-veiled {
+  background: transparent;
+  border-color: transparent;
+  transition: none;
+}
+
 .card-stage {
   position: relative;
   height: 400px;
+  /* a faint LIGHT tint, not a dark one — the page is already close to black,
+     so darkening further at any opacity is invisible; a light wash is what
+     actually reads as its own surface against it */
   background:
     radial-gradient(
       80% 70% at 50% 40%,
       rgba(255, 59, 31, 0.08),
       transparent 62%
     ),
-    #0e0c0b;
+    rgba(255, 255, 255, 0.03);
 }
 
 .card-meta {
@@ -399,6 +402,12 @@ button {
   gap: 6px;
   padding: 16px 18px 18px;
   border-top: 1px solid var(--line);
+  /* .card's own top-light gradient fades out by 40% of the card's height and
+     never reaches down here, so with no tint of its own this read starkly
+     darker than the stage above it — a hair lighter than plain --bg-elev,
+     just less than .card-stage's own, so it reads a shade darker than the
+     stage rather than a different material entirely */
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .card-meta:hover .card-title {
@@ -453,6 +462,15 @@ button {
   margin-bottom: 28px;
 }
 
+/* the transparent counterpart to .card-meta — no visual style of its own,
+   just the same internal rhythm .demo-head used to give these three
+   directly, now that they are one level deeper */
+.demo-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .demo-head .kicker {
   color: var(--ember-hot);
 }
@@ -460,6 +478,13 @@ button {
 .demo-head .kicker::before {
   background: var(--ember);
   box-shadow: 0 0 12px var(--glow);
+  /* NOT the draw-in animation the base rule gets. This kicker is one of the
+     page transition's own named/paired subjects (see gm-type in pair()) — it
+     is already fading in on the transition's own clock, carried across with
+     everything else. The browser only hands the real, live element back
+     once that flight lands, so a second animation starting from THERE reads
+     as arriving twice: once with the page, then a beat later on its own. */
+  animation: none;
 }
 
 /* "all examples" and "next" on one line above the title: the pager that says
@@ -502,6 +527,29 @@ button {
 
 .back:hover {
   color: var(--ink);
+}
+
+/* the canonical way back — brighter than a plain nav label by default, and
+   the arrow nudges further left on hover so the direction reads as physical
+   rather than decorative */
+.back-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+
+.back-all:hover {
+  color: var(--copper);
+}
+
+.back-arrow {
+  display: inline-block;
+  transition: transform 0.18s var(--ease);
+}
+
+.back-all:hover .back-arrow {
+  transform: translateX(-3px);
 }
 
 .demo-head h1 {
@@ -587,7 +635,7 @@ button {
       rgba(255, 59, 31, 0.1),
       transparent 60%
     ),
-    #0e0c0b;
+    rgba(255, 255, 255, 0.03);
 }
 
 .sample {
@@ -595,7 +643,9 @@ button {
   border: 1px solid var(--line);
   border-radius: 18px;
   overflow: hidden;
-  background: #0a0908;
+  /* the same faint light veil as a demo's own stage — see .card-stage for
+     why it lightens rather than darkens */
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .sample-label {
@@ -1264,7 +1314,9 @@ html[data-gm-dragging] * {
   gap: 4px;
   padding: 4px;
   border-radius: 999px;
-  background: #0a0908;
+  /* a light tint capped at 4%, like every other panel on the page — not a
+     flat near-black fill */
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--line);
 }
 
@@ -1307,10 +1359,9 @@ html[data-gm-dragging] * {
   color: var(--ink);
 }
 
-/* The overlay paints nothing of its own. `html` carries the wash and the grain
-   and is never captured, so it paints straight through the whole transition —
-   which is what keeps the background from moving or flashing. Give the overlay
-   a background of its own and the grain runs doubled. */
+/* The overlay paints nothing of its own. `html` carries the wash and is never
+   captured, so it paints straight through the whole transition — which is
+   what keeps the background from moving or flashing. */
 :root::view-transition {
   background: none;
 }
@@ -3322,10 +3373,18 @@ html[data-gm-dragging] * {
   height: 100%;
 }
 
+/* every other interactive control on the page resets its own native button
+   chrome; this one was missed, and Chrome's default button background/border
+   was showing through as a gray rounded rectangle in each of the four cells */
 .slot {
   display: grid;
   place-items: center;
   height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  appearance: none;
 }
 
 .puck {
@@ -3975,7 +4034,7 @@ html[data-gm-dragging] * {
 .filter-code {
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #0e0c0b;
+  background: rgba(255, 255, 255, 0.03);
   overflow: hidden;
 }
 
@@ -5400,7 +5459,9 @@ html[data-gm-dragging] * {
   padding: 16px 16px 13px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #0a0908;
+  /* a light tint, capped at 4% — see .card-stage for why a dark tint over an
+     already near-black page does not read as its own surface */
+  background: rgba(255, 255, 255, 0.04);
   /* a wide drawing scrolls inside its own box rather than the page */
   overflow-x: auto;
 }

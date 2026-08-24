@@ -1,6 +1,7 @@
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { pageTitle } from 'ember-page-title';
+import { SpeedPicker } from 'test-app/components/speed-picker';
 import { type DemoEntry, neighbors } from 'test-app/lib/catalog';
 import { highlightSample } from 'test-app/lib/highlight';
 
@@ -25,7 +26,10 @@ export class DemoPage extends Component<{
             long way to scroll to say "next". The same link, where you are
             already looking. }}
         <div class="demo-nav">
-          <LinkTo @route="index" class="back">All examples</LinkTo>
+          <LinkTo @route="index" class="back back-all">
+            <span class="back-arrow" aria-hidden="true">←</span>
+            All examples
+          </LinkTo>
           {{#if this.near.next}}
             <LinkTo
               @route="demo"
@@ -38,14 +42,21 @@ export class DemoPage extends Component<{
             </LinkTo>
           {{/if}}
         </div>
-        <p class="kicker">
-          {{@model.group}}
-          {{#if @model.notes}}
-            <span class="kicker-badge">Deep Dive</span>
-          {{/if}}
-        </p>
-        <h1>{{@model.title}}</h1>
-        <p class="lede">{{@model.lede}}</p>
+        {{! the transparent counterpart to the card's own `.card-meta`: not
+            for layout — .demo-head already spaced these — but so the return
+            trip has a SECOND box to tween into, the same shape the gallery
+            already has, rather than one box (the stage) doing all the work
+            while the metadata just appears }}
+        <div class="demo-meta">
+          <p class="kicker">
+            {{@model.group}}
+            {{#if @model.notes}}
+              <span class="kicker-badge">Deep Dive</span>
+            {{/if}}
+          </p>
+          <h1>{{@model.title}}</h1>
+          <p class="lede">{{@model.lede}}</p>
+        </div>
         <div class="apis">
           {{#each @model.apis as |api|}}
             <code class="api">{{api}}</code>
@@ -59,6 +70,9 @@ export class DemoPage extends Component<{
           snapshot. Chrome for stepping through demos is not part of the demo:
           it stays where it is, in the page's own layer, and only sits over
           the stage's edges. }}
+      {{#if @model.slowmo}}
+        <SpeedPicker />
+      {{/if}}
       <div class="stage-row">
         <div class="stage-wrap">
           {{#let @model.Example as |Example|}}

@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
+import { motionSpeed } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
 import { BEAD, HEAD, ORBIT, TAIL, TIP } from 'test-app/components/choreo-mark';
 import {
@@ -421,10 +422,16 @@ export class BuildOrder extends Component {
    * twenty-six demos — and the next frame teleports the playhead to wherever
    * the wall clock got to, which looks exactly like the run never played. A
    * late frame costs the score 50ms and no more.
+   *
+   * The clamp is real wall-clock time; `motionSpeed()` is applied AFTER it, so
+   * the transport's own speed picker (Full · ÷2 · ÷5 · ÷10, gated by
+   * `slowmo` in the catalog) slows this the same way it slows every
+   * `{{motion transition=…}}` on the page — the score is unchanged, only how
+   * much of it a real second covers.
    */
   private advance = (now: number) => {
     const runtime = this.runtime;
-    let t = this.t + Math.min(now - this.last, 50);
+    let t = this.t + Math.min(now - this.last, 50) / motionSpeed();
     this.last = now;
     if (t >= runtime) {
       if (!this.loop) {

@@ -28,8 +28,11 @@ import { factor, setCrossing } from 'test-app/lib/tempo';
  * next, which can be asked for from the foot of the page. Going back is the
  * exception: the gallery returns to the pixel it was left at.
  *
- * The grain steps aside for the duration (see `html::before`): a noise field is
- * the one thing on the page a compositor cannot carry.
+ * The real page is veiled for the duration (see `body` in the stylesheet): a
+ * transition captures a snapshot of whatever is on screen, and the pieces
+ * that actually move are named and paired separately below — the rest of the
+ * page underneath them is better off blank than a frozen photograph of
+ * itself. VEIL_OUT_MS is why the veil has to land before the snapshot does.
  */
 const BASE = 0.72;
 /* Emphasised, not snappy. [0.22, 1, 0.36, 1] leaves almost instantly and then
@@ -37,6 +40,19 @@ const BASE = 0.72;
    gather itself, travel, and arrive. */
 const EASE = [0.2, 0, 0, 1] as const;
 const DEMO_ROUTE = 'demo';
+
+/**
+ * How long the real page is veiled before a transition, and how long it takes
+ * to return after.
+ *
+ * Fixed, not proportional to the morph — there used to be a noise texture
+ * here too, and a fade proportional to the transition's own speed was how it
+ * avoided ever looking out of place at any tempo. The texture is gone; a
+ * plain opacity veil does not have that problem, so a fixed duration reads
+ * the same at any tempo without the arithmetic.
+ */
+const VEIL_OUT_MS = 20;
+const VEIL_IN_MS = 180;
 
 /** recomputed per transition, so the tempo control in the top bar applies */
 function times(morph: number) {
@@ -127,26 +143,38 @@ export default class ApplicationRoute extends Route {
     // the floor for any layer Motion is not given keyframes for (see the
     // ::view-transition-* rule in the stylesheet)
     root.style.setProperty('--gm-morph', `${morph}s`);
-    // and the grain's own fade, in proportion — a fixed number of milliseconds
-    // is a fifth of a normal transition and a fiftieth of a slow one. Both are
-    // kept SHORT relative to the morph on purpose: the noise texture cannot be
-    // composited, so every millisecond it is visible is a millisecond spent
-    // off the clean dark stage the transition is meant to run on. The out fade
-    // only has to be quick enough that the eye reads "gone", not slow enough
-    // to be watched leaving.
-    root.style.setProperty('--gm-grain-out', `${morph * 0.08}s`);
-    root.style.setProperty('--gm-grain-in', `${morph * 0.12}s`);
+    root.style.setProperty('--gm-veil-out', `${VEIL_OUT_MS}ms`);
+    root.style.setProperty('--gm-veil-in', `${VEIL_IN_MS}ms`);
+
+    // The card at the OTHER end of this transition — the one the stage flies
+    // FROM on the way in, or TO on the way back — is not itself a named,
+    // paired subject: it CONTAINS four (see `pair()` below), and naming a
+    // container of already-named things is the nesting violation that froze
+    // the page outright (see the comment on `pair()`). But left alone, its
+    // own background and border are ordinary live DOM, never extracted into
+    // the transition, so they sit there in the grid for the ENTIRE flight —
+    // which is the "black box already in the right place" bug: the shell
+    // arrives before anything it is supposed to be holding does.
+    //
+    // Fixed the same way the grain and the real page are: not named, just
+    // toggled. `is-veiled` drops this one card's own background and border to
+    // nothing, instantly, in the same frame the flight starts — no CSS
+    // transition on it in either direction, because the moment it is REMOVED
+    // is the exact frame the browser hands the real DOM back, and a card
+    // whose shell fades back a beat after its contents have already snapped
+    // into place would be its own small seam. Empty space where the card
+    // would be, for exactly as long as its contents are elsewhere.
+    const cardEl = id
+      ? document.querySelector<HTMLElement>(`.card[data-demo='${id}']`)
+      : null;
+    cardEl?.classList.add('is-veiled');
 
     const resume = quietTheRest();
 
-    // The grain fades out BEFORE the transition starts: the noise texture
-    // cannot be composited (it does not scale or blend), so it leaves first,
-    // the transition runs on a clean dark stage, and the grain returns after
-    // the morph settles. Waiting here means the first snapshot is taken with
-    // the grain already gone — no stale noise baked into the old image. This
-    // delay has to match --gm-grain-out in milliseconds, or the snapshot is
-    // taken mid-fade and the old noise gets baked in after all.
-    const grainMs = morph * 80;
+    // The real page is veiled BEFORE the transition starts, so the snapshot a
+    // moment later captures a blank root rather than a photograph of whatever
+    // was on screen. The delay has to match VEIL_OUT_MS, or the snapshot lands
+    // mid-fade and captures a half-veiled page.
     setTimeout(() => {
       let resumeArrivals: (() => void) | undefined;
 
@@ -165,6 +193,20 @@ export default class ApplicationRoute extends Route {
         pair(view, id, opening, t);
       }
 
+      // NOT unveiled from `done()` below. `done()` fires off `whenEnded`'s own
+      // poll of getAnimations() — and by its own admission (see whenEnded's
+      // doc comment) that poll can find the board empty and call done a whole
+      // morph early, mid-retarget, before Motion has replaced the animations
+      // it is watching for. That is a rounding error for a grain fade nobody
+      // is staring at; it is the whole bug for a card whose entire job is to
+      // stay invisible until its contents visibly land. `t.move.duration` is
+      // not a guess — it IS the box's own tween — so the card is unveiled on
+      // that clock, not on a poll that has already been caught jumping the
+      // gun once in this file.
+      if (cardEl) {
+        setTimeout(() => cardEl.classList.remove('is-veiled'), morph * 1000);
+      }
+
       const done = () => {
         this.wrapping = false;
         setCrossing(false);
@@ -172,9 +214,10 @@ export default class ApplicationRoute extends Route {
         resumeArrivals?.();
         root.classList.add('is-returning');
         root.classList.remove('is-crossing');
+        cardEl?.classList.remove('is-veiled');
       };
       void Promise.resolve(view).then(() => whenEnded(morph, done), done);
-    }, grainMs);
+    }, VEIL_OUT_MS);
   };
 }
 
@@ -222,7 +265,7 @@ function quietTheRest(): () => void {
  *
  * Motion retimes a transition by replacing its animations, so the set you can
  * collect when it becomes ready is not the set that finishes it — await those
- * and the grain returns while the morph is still moving.
+ * and the veil lifts while the morph is still moving.
  */
 function whenEnded(morph: number, done: () => void) {
   const started = performance.now();
@@ -237,7 +280,7 @@ function whenEnded(morph: number, done: () => void) {
   // Polled slowly and deliberately. getAnimations() walks the document, and
   // doing that every 80ms while the compositor is animating a dozen layers
   // costs frames — visible as single-frame dropouts in the middle of the
-  // morph. Nothing here needs to know quickly; it only puts the grain back.
+  // morph. Nothing here needs to know quickly; it only lifts the veil.
   const look = () => {
     if (!running() || performance.now() - started > morph * 1000 + 800) {
       done();
@@ -248,6 +291,19 @@ function whenEnded(morph: number, done: () => void) {
   setTimeout(look, Math.max(250, morph * 1000 * 0.6));
 }
 
+/**
+ * KNOWN BUG, not yet root-caused: the return trip FROM the Shared Layout demo
+ * (`tabs`) — All examples or the brand mark, back to the gallery — hard-freezes
+ * the page. DOM and layout stay entirely correct underneath (confirmed via
+ * `elementFromPoint`/computed rects mid-freeze) but nothing paints; only a hard
+ * reload recovers. Reproduces every time on that one demo; Playhead's own
+ * return trip, tested back to back with it, is clean. Not caused by pairing
+ * `.card-meta` (tried, reverted, froze either way — see the comment where the
+ * type pairs are declared below). Best lead so far: `SharedTabs` runs its own
+ * `layoutId` FLIP animation (the moving tab-pill) on the SAME frame this page
+ * transition is trying to capture and pair a layout move for — worth checking
+ * whether the two layout engines are fighting over the same element.
+ */
 function pair(
   view: ReturnType<typeof animateView>,
   id: string,
@@ -271,6 +327,17 @@ function pair(
     // is the difference between a transition that holds 60fps and one that
     // presents every other frame, which is what the stalls in a screen capture
     // turned out to be. Unnamed, it simply rides inside the stage's snapshot.
+    //
+    // A .card-meta ⇄ .demo-meta pairing was tried here, on the theory that
+    // the card is TWO boxes (stage, then meta) and the page should offer back
+    // the same two. It is disabled: the View Transitions API does not allow a
+    // named element to have independently-named descendants without their own
+    // nested-group setup, and .card-meta's children (title/lede/group, right
+    // below) are already named. Pairing the container too froze the ENTIRE
+    // page — not a visual glitch, an unrecoverable one, only a hard reload
+    // got out of it. If the outer box is worth pairing, it has to happen
+    // WITHOUT also naming what is inside it, which the three lines below do
+    // not currently allow for.
     // the type: the same three lines, set twice
     [...ends(`${card} .card-title`, `${head} h1`), 'gm-move gm-type'],
     [...ends(`${card} .card-lede`, `${head} .lede`), 'gm-move gm-type'],

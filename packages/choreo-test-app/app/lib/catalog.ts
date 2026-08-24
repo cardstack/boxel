@@ -1088,7 +1088,7 @@ return { at: cue.at + (i * (cue.ms - ms)) / (n - 1), ms };
 poseAt(t, cue, slot);   // the run loop calls it. so does the scrubber.
                         // so does an edit, at the same t, so retiming build 2
                         // while parked at 1.4s shows you what 1.4s now is.`,
-    slowmo: false,
+    slowmo: true,
     title: 'Build order',
   },
 ];

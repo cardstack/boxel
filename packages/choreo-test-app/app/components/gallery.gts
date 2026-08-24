@@ -39,9 +39,8 @@ const SAMPLE = `{{! Filtering this list is a layout animation, not a page transi
     A View Transition would be the obvious reach — and the wrong one here.
     It works by snapshotting the page into bitmaps and crossfading them, and
     every card in this grid is a live demo: two dozen running animations would
-    freeze into images for the length of the switch, the fixed grain overlay
-    would be captured into the snapshot AND painted live over the top of it,
-    and the page's own root layer would blank out underneath.
+    freeze into images for the length of the switch, and the page's own root
+    layer would blank out underneath.
 
     layout=true moves the real elements. The demos keep running while their
     cards fly to new seats. }}
