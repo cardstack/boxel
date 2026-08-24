@@ -208,3 +208,32 @@ module('Unit | choreo | compile', function () {
     assert.strictEqual(cues[3]!.start, 800, 'the ladder stretches the step');
   });
 });
+
+import { ladder } from 'glimmer-motion/choreo/compile';
+import { windows } from 'glimmer-motion/choreo/deliver';
+
+module('Unit | choreo | delivery math', function () {
+  test('the ladder orders delivery: forward, reverse, center', function (assert) {
+    assert.deepEqual(ladder(4, 'forward'), [0, 1, 2, 3]);
+    assert.deepEqual(ladder(4, 'reverse'), [3, 2, 1, 0]);
+    assert.deepEqual(ladder(5, 'center'), [3, 1, 0, 2, 4], 'middle first, outward');
+  });
+
+  test('windows: @stagger spaces starts and the remainder is the window', function (assert) {
+    const w = windows(3, 1000, 150);
+    assert.deepEqual(
+      w.map((x) => x.at),
+      [0, 150, 300],
+    );
+    assert.strictEqual(w[0]!.ms, 700, 'span minus the offsets');
+  });
+
+  test('windows: without @stagger, the 0.55-of-span policy from builds.ts', function (assert) {
+    const w = windows(3, 1000, 0);
+    assert.strictEqual(w[0]!.ms, 550);
+    assert.deepEqual(
+      w.map((x) => Math.round(x.at)),
+      [0, 225, 450],
+    );
+  });
+});

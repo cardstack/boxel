@@ -11,6 +11,8 @@ import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 import type {
   Block,
+  DeliveryBy,
+  DeliveryOrder,
   Easing,
   PropSource,
   Query,
@@ -121,45 +123,58 @@ abstract class StepComponent<A extends StepArgs> extends Component<{
 
 export class Tween extends StepComponent<
   StepArgs & {
+    /** split a text sprite's delivery: by word, character, or paragraph */
+    by?: DeliveryBy;
     /** seconds, as Motion counts them */
     duration: number;
     ease?: Easing;
+    order?: DeliveryOrder;
     /** extra plays after the first; `Infinity` is an ambient loop whose phase rides the run clock */
     repeat?: number;
     repeatType?: 'loop' | 'mirror' | 'reverse';
   }
 > {
   node(): TimelineNode {
-    const { of, duration, ease, delay, repeat, repeatType, stagger } =
+    const { of, by, duration, ease, delay, order, repeat, repeatType } =
       this.args;
     return {
       at: this.args.at,
+      by,
       delay: msOf(delay),
       ease,
       kind: 'tween',
       name: this.args.name,
       ms: duration * 1000,
       of,
+      order,
       props: propsOf(this.args),
       repeat,
       repeatType,
-      stagger: msOf(stagger),
+      stagger: msOf(this.args.stagger),
     };
   }
 }
 
-export class Spring extends StepComponent<StepArgs & { spring?: SpringSpec }> {
+export class Spring extends StepComponent<
+  StepArgs & {
+    by?: DeliveryBy;
+    order?: DeliveryOrder;
+    spring?: SpringSpec;
+  }
+> {
   node(): TimelineNode {
-    const { of, spring, delay, stagger } = this.args;
+    const { of, by, spring, delay, order } = this.args;
     return {
       at: this.args.at,
+      by,
       delay: msOf(delay),
       kind: 'spring',
       name: this.args.name,
       of,
+      order,
       props: propsOf(this.args),
       spring,
-      stagger: msOf(stagger),
+      stagger: msOf(this.args.stagger),
     };
   }
 }

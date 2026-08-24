@@ -8,6 +8,7 @@ import type { AnimationPlaybackControls, VisualElement } from 'motion-dom';
 import { animateTarget, delay } from 'motion-dom';
 
 import { motionSpeed, scaleTransition } from '../speed.ts';
+import { deliver, type Delivery } from './deliver.ts';
 import type { ChoreoNode, Cue, PropValue, Sprite } from './types.ts';
 
 /** how fast each value was moving, in units per second, keyed by element then property */
@@ -158,6 +159,7 @@ function releaseHold(ve: VisualElement, el: HTMLElement, held: HeldValue[]) {
 export function execute(cues: Cue[], options: RunOptions): Run {
   const timers: (() => void)[] = [];
   const animations: AnimationPlaybackControls[] = [];
+  const deliveries: Delivery[] = [];
   const active = new Map<Cue, HeldValue[]>();
   const pending = new Set(options.removed);
   /** width/height a Move took over for its duration, to give back after */
@@ -300,7 +302,14 @@ export function execute(cues: Cue[], options: RunOptions): Run {
     if (!ve) {
       continue;
     }
-    if (cue.target) {
+    if (cue.delivery) {
+      // a split sprite delivers by slots on the platform's own animations
+      at(cue.start, () => {
+        if (!cancelled) {
+          deliveries.push(deliver(cue, scale));
+        }
+      });
+    } else if (cue.target) {
       const controls = animateTarget(ve, {
         ...cue.target,
         transition: carryVelocity(
@@ -364,6 +373,7 @@ export function execute(cues: Cue[], options: RunOptions): Run {
       sampleVelocities();
       timers.splice(0).forEach((cancel) => cancel());
       animations.splice(0).forEach((a) => a.stop());
+      deliveries.splice(0).forEach((d) => d.cancel());
       // an interrupted Move must give its values back too, or the element
       // stays frozen mid-flight — squeezing every track around it, and
       // measuring as though it had never needed to move at all

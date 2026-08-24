@@ -134,17 +134,26 @@ interface StepBase {
 /** a named engine easing, a cubic-bezier as four numbers, or any function of 0..1 */
 export type Easing = string | number[] | ((t: number) => number);
 
+/** Keynote's delivery panel: what the unit of delivery is, and in what order */
+export type DeliveryBy = 'character' | 'item' | 'paragraph' | 'word';
+export type DeliveryOrder = 'center' | 'forward' | 'random' | 'reverse';
+
 export interface TweenStep extends StepBase {
+  /** split a text sprite's delivery; 'item' (default) delivers whole sprites */
+  by?: DeliveryBy;
   ease?: Easing;
   kind: 'tween';
   ms: number;
+  order?: DeliveryOrder;
   props: Record<string, PropSource>;
   /** extra plays after the first; Infinity is an ambient loop, phase on the run clock */
   repeat?: number;
   repeatType?: 'loop' | 'mirror' | 'reverse';
 }
 export interface SpringStep extends StepBase {
+  by?: DeliveryBy;
   kind: 'spring';
+  order?: DeliveryOrder;
   props: Record<string, PropSource>;
   spring?: SpringSpec;
 }
@@ -182,6 +191,8 @@ export type TimelineNode = Block | Step;
 
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {
+  /** text delivery: the run splits the sprite and plays the slots inside `duration` */
+  delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
   duration: number;
   /** an infinite-repeat tween: plays past the run's end, excluded from its length */
   loop?: boolean;

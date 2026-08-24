@@ -14,6 +14,7 @@ import type {
   Block,
   ChangesetLike,
   Cue,
+  DeliveryOrder,
   HoldStep,
   MoveStep,
   PropSource,
@@ -76,6 +77,40 @@ function springDuration(from: number, to: number, spec: SpringSpec): number {
 
 /** a cue before it is placed on the run's clock; `offset` is its rung of the stagger ladder */
 type Unplaced = Omit<Cue, 'start'> & { offset: number };
+
+/**
+ * The rung each index takes on the stagger ladder, under a delivery order.
+ * 'center' delivers from the middle outward; 'random' shuffles per run —
+ * seeded input is the native driver's requirement, not this one's.
+ */
+export function ladder(n: number, order: DeliveryOrder): number[] {
+  const ranks = Array.from({ length: n }, (_, i) => i);
+  switch (order) {
+    case 'reverse':
+      return ranks.map((i) => n - 1 - i);
+    case 'center': {
+      const mid = (n - 1) / 2;
+      const byDistance = [...ranks].sort(
+        (a, b) => Math.abs(a - mid) - Math.abs(b - mid),
+      );
+      const out = new Array<number>(n);
+      byDistance.forEach((index, rank) => (out[index] = rank));
+      return out;
+    }
+    case 'random': {
+      const shuffled = [...ranks];
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+      }
+      const out = new Array<number>(n);
+      shuffled.forEach((index, rank) => (out[index] = rank));
+      return out;
+    }
+    default:
+      return ranks;
+  }
+}
 
 interface Resolved {
   cues: Unplaced[];
@@ -216,12 +251,23 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
   const stagger = step.stagger ?? 0;
+  /** text delivery: the sprite is split and the ladder happens INSIDE the
+   *  step's span, so the sprites themselves are not laddered */
+  const splitting =
+    (step.kind === 'tween' || step.kind === 'spring') &&
+    step.by !== undefined &&
+    step.by !== 'item';
+  const order =
+    step.kind === 'tween' || step.kind === 'spring'
+      ? (step.order ?? 'forward')
+      : 'forward';
+  const ranks = splitting ? [] : ladder(sprites.length, order);
   let longest = 0;
   let open = false;
   for (const [index, sprite] of sprites.entries()) {
-    // each sprite starts one rung later than the one before it, in the order
-    // the query returned them — which is document order
-    const offset = stagger * index;
+    // each sprite starts one rung later than the one before it — in the
+    // order the query returned them (document order), reordered by @order
+    const offset = splitting ? 0 : stagger * (ranks[index] ?? index);
     switch (step.kind) {
       case 'tween': {
         const { target } = resolveTarget(step, sprite, cs);
@@ -240,6 +286,9 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
             transition['repeatType'] = step.repeatType ?? 'loop';
           }
           cues.push({
+            delivery: splitting
+              ? { by: step.by!, order, stagger }
+              : undefined,
             duration: length,
             kind: 'tween',
             loop: loop || undefined,
@@ -256,6 +305,9 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         const { target, longest: d } = resolveTarget(step, sprite, cs);
         if (Object.keys(target).length) {
           cues.push({
+            delivery: splitting
+              ? { by: step.by!, order, stagger }
+              : undefined,
             duration: d,
             kind: 'spring',
             offset,
