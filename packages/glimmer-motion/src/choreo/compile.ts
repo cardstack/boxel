@@ -328,7 +328,9 @@ export default function compile(
   };
   const measure = (node: TimelineNode): number => {
     if (!isBlock(node)) {
-      return of(node).duration;
+      // an anchored step is lifted out of its block's flow: it neither pushes
+      // a sequence forward nor stretches a block's span (§4.2)
+      return node.at ? 0 : of(node).duration;
     }
     if (node.kind === 'sequence') {
       return node.children.reduce((sum, c) => sum + measure(c), 0);
@@ -336,11 +338,52 @@ export default function compile(
     return node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
   };
   const out: Cue[] = [];
-  /** span: the time a hold without @ms is allowed to last from `start` */
+  // duplicate names are an authoring error, caught before anything is placed
+  const seen = new Set<string>();
+  const checkNames = (node: TimelineNode) => {
+    if (isBlock(node)) {
+      node.children.forEach(checkNames);
+    } else if (node.name) {
+      if (seen.has(node.name)) {
+        throw new Error(`choreo: two steps named '${node.name}'`);
+      }
+      seen.add(node.name);
+    }
+  };
+  tree.forEach(checkNames);
+  /** where each named step landed: when it starts (delay spent) and how long it plays */
+  const names = new Map<string, { duration: number; start: number }>();
+  /** span: the time a hold without @duration is allowed to last from `start` */
   const place = (node: TimelineNode, start: number, span: number) => {
     if (!isBlock(node)) {
       const r = of(node);
       const delay = node.delay ?? 0;
+      let base = start;
+      if (node.at) {
+        const target = names.get(node.at.anchor);
+        if (!target) {
+          throw new Error(
+            `choreo: @at names '${node.at.anchor}', which is not a step ` +
+              'above this one — anchors point up the score',
+          );
+        }
+        if (r.open) {
+          throw new Error(
+            'choreo: an anchored hold needs its own @duration — lifted out ' +
+              "of its block, it has no span to borrow",
+          );
+        }
+        base =
+          node.at.edge === 'end'
+            ? target.start + target.duration + (node.at.delay ?? 0) * 1000
+            : target.start + (node.at.progress ?? 0) * target.duration;
+      }
+      if (node.name) {
+        names.set(node.name, {
+          duration: Math.max(0, r.duration - delay),
+          start: base + delay,
+        });
+      }
       for (const cue of r.cues) {
         const { offset, ...rest } = cue;
         out.push({
@@ -349,7 +392,7 @@ export default function compile(
             r.open && cue.kind === 'hold'
               ? Math.max(0, span - delay - offset)
               : cue.duration,
-          start: start + delay + offset,
+          start: base + delay + offset,
         });
       }
       return;

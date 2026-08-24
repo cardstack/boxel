@@ -4,6 +4,7 @@
  */
 import type { VisualElement } from 'motion-dom';
 
+import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 
 export type SpriteType = 'inserted' | 'kept' | 'removed';
@@ -111,12 +112,16 @@ export interface SpringSpec {
 }
 
 interface StepBase {
+  /** start against a named step instead of this step's place in its block */
+  at?: AnchorRef;
   /**
    * Milliseconds before the step starts, inside its slot. The template speaks
    * seconds (`@delay={{0.2}}`, as Motion does); the step components convert at
    * the boundary, and everything from here down is one ms clock.
    */
   delay?: number;
+  /** a label other steps may anchor against (`@at={{at 'name'}}`) */
+  name?: string;
   of: Query | Query[];
   /**
    * Milliseconds between one matched sprite and the next, in the order the

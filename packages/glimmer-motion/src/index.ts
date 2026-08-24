@@ -3,6 +3,8 @@
  * Deep imports (`glimmer-motion/motion`, `glimmer-motion/presence`, …) are the same modules.
  */
 export { beacon } from './beacon.ts';
+export type { AnchorRef } from './choreo/anchors.ts';
+export { after, at } from './choreo/anchors.ts';
 export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
 export type { BeaconRef } from './choreo/beacons.ts';

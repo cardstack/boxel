@@ -7,6 +7,7 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
+import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 import type {
   Block,
@@ -94,8 +95,12 @@ const msOf = (seconds: number | undefined): number | undefined =>
 
 interface StepArgs {
   [prop: string]: unknown;
+  /** `{{at 'name' 0.4}}` / `{{after 'name' 0.2}}` — start against a named step */
+  at?: AnchorRef;
   /** seconds before the step starts, inside its slot */
   delay?: number;
+  /** a label other steps may anchor against */
+  name?: string;
   of: Query | Query[];
   /** seconds between one matched sprite and the next, in document order */
   stagger?: number;
@@ -128,9 +133,11 @@ export class Tween extends StepComponent<
     const { of, duration, ease, delay, repeat, repeatType, stagger } =
       this.args;
     return {
+      at: this.args.at,
       delay: msOf(delay),
       ease,
       kind: 'tween',
+      name: this.args.name,
       ms: duration * 1000,
       of,
       props: propsOf(this.args),
@@ -145,8 +152,10 @@ export class Spring extends StepComponent<StepArgs & { spring?: SpringSpec }> {
   node(): TimelineNode {
     const { of, spring, delay, stagger } = this.args;
     return {
+      at: this.args.at,
       delay: msOf(delay),
       kind: 'spring',
+      name: this.args.name,
       of,
       props: propsOf(this.args),
       spring,
@@ -173,10 +182,12 @@ export class Move extends StepComponent<
       this.args;
     propsOf(this.args); // no properties — evaluated for the renamed-arg errors
     return {
+      at: this.args.at,
       delay: msOf(delay),
       ease,
       from,
       kind: 'move',
+      name: this.args.name,
       ms: msOf(duration),
       of,
       size,
@@ -193,9 +204,11 @@ export class Hold extends StepComponent<
   node(): TimelineNode {
     const { of, duration, delay, fill, stagger } = this.args;
     return {
+      at: this.args.at,
       delay: msOf(delay),
       fill,
       kind: 'hold',
+      name: this.args.name,
       ms: msOf(duration),
       of,
       props: propsOf(this.args),
@@ -208,8 +221,10 @@ export class Wait extends StepComponent<StepArgs & { duration: number }> {
   node(): TimelineNode {
     const { of, duration, delay, stagger } = this.args;
     return {
+      at: this.args.at,
       delay: msOf(delay),
       kind: 'wait',
+      name: this.args.name,
       ms: duration * 1000,
       of,
       stagger: msOf(stagger),
