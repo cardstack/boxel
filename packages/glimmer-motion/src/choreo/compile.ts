@@ -10,6 +10,8 @@ import {
   spring,
 } from 'motion-dom';
 
+import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
+
 import type {
   Block,
   ChangesetLike,
@@ -236,25 +238,38 @@ function resolveMove(
   flight?: FlightPath;
   longest: number;
   target: Record<string, unknown>;
+  velocity?: { x: number; y: number };
 } | null {
-  // A beacon rewrites one end of the flight. `@from` gives an inserted sprite
-  // a start it never had (it flies out of the compose button); `@to` gives a
-  // removed one an end it never reaches (it flies into the bin). Everything
-  // after this is the ordinary FLIP — rewriting the bounds IS the whole
-  // implementation. A name nothing claimed leaves that end alone.
-  const borrowedFrom = step.from ? cs.beacon(step.from.beacon) : null;
+  // A beacon — or the live gesture — rewrites one end of the flight. `@from`
+  // gives an inserted sprite a start it never had (out of the compose button,
+  // or from wherever the finger let go); `@to` gives a removed one an end it
+  // never reaches. Everything after this is the ordinary FLIP — rewriting the
+  // bounds IS the whole implementation. A name nothing claimed leaves that
+  // end alone.
+  const size = (sprite.final ?? sprite.initial)?.page ?? {
+    height: 0,
+    width: 0,
+    x: 0,
+    y: 0,
+  };
+  const hot = step.from && isGestureRef(step.from);
+  const borrowedFrom = step.from
+    ? hot
+      ? gestureBounds(size)
+      : cs.beacon((step.from as { beacon: string }).beacon)
+    : null;
   const borrowedTo = step.to ? cs.beacon(step.to.beacon) : null;
   const initial = borrowedFrom ?? sprite.initial;
   const final = borrowedTo ?? sprite.final;
   if (!initial || !final) {
     return null;
   }
-  // Page space, not parent space: the region itself can move and resize in the
-  // very pass that moves its children (a centred grid that grows re-centres),
-  // and a delta measured against a parent that moved by the same amount is
-  // zero — that element alone would sit still while its siblings flew.
-  const from = initial.page;
-  const to = final.page;
+  // Page space by default: the one space two regions agree on, and the region
+  // itself can move in the very pass that moves its children. 'parent'
+  // resolves against the sprite's own container instead (§6.1).
+  const parentSpace = step.space === 'parent' && !borrowedFrom && !borrowedTo;
+  const from = parentSpace ? initial.parent : initial.page;
+  const to = parentSpace ? final.parent : final.page;
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
   const dx = to.x - from.x;
@@ -310,7 +325,13 @@ function resolveMove(
       longest = Math.max(longest, springDuration(a, b, spec));
     }
   }
-  return { flight, longest, target };
+  return {
+    flight,
+    longest,
+    target,
+    // a hot start leaves at the speed it was thrown (§6.1)
+    velocity: hot ? gestureVelocity() : undefined,
+  };
 }
 
 const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
@@ -399,10 +420,19 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       case 'move': {
         const r = resolveMove(step, sprite, cs);
         if (r) {
-          const transition =
+          const transition: Record<string, unknown> =
             step.ms === undefined
               ? springTransition(step.spring)
               : tweenTransition(step, step.ms);
+          if (r.velocity && step.ms === undefined) {
+            // the engine reads transition[key] in preference to the whole
+            if (r.target['x']) {
+              transition['x'] = { ...transition, velocity: r.velocity.x };
+            }
+            if (r.target['y']) {
+              transition['y'] = { ...transition, velocity: r.velocity.y };
+            }
+          }
           cues.push({
             duration: r.longest,
             flight: r.flight,

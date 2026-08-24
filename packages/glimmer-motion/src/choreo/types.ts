@@ -6,6 +6,7 @@ import type { VisualElement } from 'motion-dom';
 
 import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
+import type { GestureRef } from './gesture.ts';
 
 export type SpriteType = 'inserted' | 'kept' | 'removed';
 
@@ -159,8 +160,8 @@ export interface SpringStep extends StepBase {
 }
 export interface MoveStep extends StepBase {
   ease?: Easing;
-  /** borrow a beacon's box as the start of the move instead of where the sprite was */
-  from?: BeaconRef;
+  /** borrow a beacon's box — or the live gesture — as the start of the move */
+  from?: BeaconRef | GestureRef;
   kind: 'move';
   ms?: number;
   /**
@@ -175,6 +176,12 @@ export interface MoveStep extends StepBase {
   /** animate width/height as well as position (default true) */
   size?: boolean;
   spring?: SpringSpec;
+  /**
+   * Which space the delta is measured in (§6.1). 'page' (default) is the
+   * one space two regions agree on; 'parent' resolves the flight against
+   * the sprite's own (possibly animating) container.
+   */
+  space?: 'page' | 'parent';
   /** the counterpart-skin policy: cross mid-flight, carry to the landing, or neither (§6.3) */
   swap?: 'during' | 'none' | 'settle';
   /** borrow a beacon's box as the end of the move instead of where the sprite landed */

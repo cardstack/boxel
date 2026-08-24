@@ -9,6 +9,7 @@ import { modifier } from 'ember-modifier';
 
 import type { AnchorRef } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
+import type { GestureRef } from './gesture.ts';
 import type {
   Block,
   DeliveryBy,
@@ -62,6 +63,7 @@ const RESERVED = new Set([
   'rotate',
   'shadow',
   'size',
+  'space',
   'spring',
   'stagger',
   'swap',
@@ -185,13 +187,15 @@ export class Move extends StepComponent<
     duration?: number;
     ease?: string | number[];
     /** `{{c.beacon 'compose'}}` or `{{c.gesture}}` — fly in from that box */
-    from?: BeaconRef;
+    from?: BeaconRef | GestureRef;
     /** an SVG path for the journey, drawn from where the sprite stands */
     path?: string;
     /** 'auto' orients along the tangent; a number adds a constant offset */
     rotate?: 'auto' | number;
     size?: boolean;
     spring?: SpringSpec;
+    /** measure the delta in 'page' (default) or the sprite's 'parent' space */
+    space?: 'page' | 'parent';
     /** counterpart skins: 'during' (default), 'settle', or 'none' */
     swap?: 'during' | 'none' | 'settle';
     /** `{{c.beacon 'trash'}}` — fly out to that box rather than to where the sprite landed */
@@ -206,6 +210,7 @@ export class Move extends StepComponent<
       delay,
       path,
       rotate,
+      space,
       spring,
       size,
       swap,
@@ -226,6 +231,7 @@ export class Move extends StepComponent<
       path,
       rotate,
       size,
+      space,
       spring,
       stagger: msOf(stagger),
       swap,

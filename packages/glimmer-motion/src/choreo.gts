@@ -22,6 +22,7 @@ import { modifier } from 'ember-modifier';
 
 import { registerBusyProbe } from './activity.ts';
 import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
+import { GESTURE, type GestureRef, trackGestures } from './choreo/gesture.ts';
 import Changeset from './choreo/changeset.ts';
 import compile from './choreo/compile.ts';
 import {
@@ -86,6 +87,8 @@ export interface ChoreoContext {
   all: Selector;
   /** `{{c.beacon 'trash'}}` — a named box to borrow, for Move's @from / @to */
   beacon: (name: string) => BeaconRef;
+  /** the live drag as geometry: its pose as a box, its velocity into springs */
+  gesture: GestureRef;
   /** the removed half an arriving element claimed — orphaned, ready to cross-fade */
   counterpart: Selector;
   id: (id: string) => Query;
@@ -118,6 +121,7 @@ function contextFor(region: Choreo): ChoreoContext {
     advance: () => region.run?.advance(),
     all: selector(),
     beacon: (beacon) => ({ beacon }),
+    gesture: GESTURE,
     counterpart: selector('counterpart'),
     id: (id) => ({ id }),
     inserted: selector('inserted'),
@@ -178,6 +182,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    trackGestures();
     // what `animationsSettled()` waits for: a pass announced but not yet run,
     // or a timeline still playing. Orphans are deliberately not counted — a
     // leaver stranded in the layer is a bug, and a probe that reported it
