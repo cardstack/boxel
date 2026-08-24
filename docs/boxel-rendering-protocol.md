@@ -21,8 +21,11 @@ change this document or the protocol module; a spec change requires a
 version bump, a Direct conformance proof, and adapter updates in one PR.
 
 **RP-0.3** Every normative statement carries an ID (`RP-x.y`). The
-conformance suite mirrors these IDs; CI enforces the bijection: a statement
-with no test and a test citing no statement both fail the build (RP-15.5).
+conformance suite mirrors these IDs; CI enforces the bijection in two grades
+(RP-15.5): a test citing no statement, or citing one the spec does not make,
+fails the build outright; a statement with no test is held by a ratchet whose
+ceiling only descends, and becomes a build failure under `--strict`, which is
+the gate for NORMATIVE status.
 
 **RP-0.4** File/line citations are informative, pinned to the extraction
 commit; the statement text is what binds. `[GAP]` marks main behavior that
@@ -722,9 +725,11 @@ in a real DOM (Sandbox in a real iframe), asserting mounted tier, visible
 output, interaction results, and boundary negatives; (c) the **record
 diff** (RP-14.4).
 
-**RP-15.5** CI enforces the statement↔test bijection (RP-0.3). A fixture
-axis inventory (formats × field kinds × computed/config × links ×
-broken/loading states × edit) is generated, not hand-picked.
+**RP-15.5** CI enforces the statement↔test bijection in RP-0.3's two grades:
+an invalid citation always fails; an uncovered statement is ratcheted until
+`--strict`. A fixture axis inventory (formats × field kinds ×
+computed/config × links × broken/loading states × edit) is generated, not
+hand-picked.
 
 ## RP-16 Capabilities v1
 

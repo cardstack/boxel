@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    // These scripts are executed by node's own type stripping, which erases
+    // annotations without evaluating them. Anything that would need runtime
+    // emit — enum, namespace, parameter properties — must fail here rather
+    // than at the point someone runs the script.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["**/*.ts", "**/*.mts"]
+}
