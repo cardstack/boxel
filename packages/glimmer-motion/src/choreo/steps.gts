@@ -17,6 +17,7 @@ import type {
   Easing,
   PropSource,
   Query,
+  Rect,
   SpringSpec,
   TimelineNode,
 } from './types.ts';
@@ -97,7 +98,7 @@ function propsOf(args: Record<string, unknown>): Record<string, PropSource> {
 const msOf = (seconds: number | undefined): number | undefined =>
   seconds === undefined ? undefined : seconds * 1000;
 
-interface StepArgs {
+interface StepArgsBase {
   [prop: string]: unknown;
   /** `{{at 'name' 0.4}}` / `{{after 'name' 0.2}}` — start against a named step */
   at?: AnchorRef;
@@ -105,12 +106,15 @@ interface StepArgs {
   delay?: number;
   /** a label other steps may anchor against */
   name?: string;
-  of: Query | Query[];
   /** seconds between one matched sprite and the next, in document order */
   stagger?: number;
 }
 
-abstract class StepComponent<A extends StepArgs> extends Component<{
+interface StepArgs extends StepArgsBase {
+  of: Query | Query[];
+}
+
+abstract class StepComponent<A extends StepArgsBase> extends Component<{
   Args: A;
 }> {
   abstract node(): TimelineNode;
@@ -316,6 +320,75 @@ export class Raise extends StepComponent<
       of,
       shadow,
       stagger: msOf(stagger),
+    };
+  }
+}
+
+/**
+ * `<c.Camera />` — the region's frame as a step (§6.3): `@zoom` / `@x` /
+ * `@y` animate the scene, `@origin` aims the zoom at a sprite, `@steady`
+ * names sprites that keep their size against it (damped by default).
+ */
+export class Camera extends StepComponent<
+  StepArgsBase & {
+    duration?: number;
+    ease?: Easing;
+    of?: Query | Query[];
+    origin?: Query;
+    spring?: SpringSpec;
+    steady?: Query | Query[];
+    x?: number;
+    y?: number;
+    zoom?: number;
+  }
+> {
+  node(): TimelineNode {
+    const { duration, ease, delay, origin, spring, steady, x, y, zoom } =
+      this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      ease,
+      kind: 'camera',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: this.args.of ?? {},
+      origin,
+      spring,
+      steady,
+      x,
+      y,
+      zoom,
+    };
+  }
+}
+
+/**
+ * `<c.Tether />` — geometry continuously derived from sprites (§6.1):
+ * `@path` receives both endpoints' region-relative boxes every frame and
+ * returns the path data the wire draws.
+ */
+export class Tether extends StepComponent<
+  StepArgsBase & {
+    duration?: number;
+    from: Query;
+    of?: Query | Query[];
+    path: (from: Rect, to: Rect) => string;
+    to: Query;
+  }
+> {
+  node(): TimelineNode {
+    const { duration, delay, from, path, to } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      from,
+      kind: 'tether',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: this.args.of ?? {},
+      path,
+      to,
     };
   }
 }

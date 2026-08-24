@@ -219,12 +219,47 @@ export interface RaiseStep extends StepBase {
   shadow?: boolean;
 }
 
+/**
+ * The region's frame as a timeline step (§6.3): zoom and pan the scene,
+ * `@origin` aiming at a sprite, `@steady` naming sprites that keep their
+ * size (damped by default — the relative-scale research's curves, §6.4).
+ */
+export interface CameraStep extends StepBase {
+  ease?: Easing;
+  kind: 'camera';
+  ms?: number;
+  /** aim the zoom at this sprite's centre */
+  origin?: Query;
+  spring?: SpringSpec;
+  /** sprites that hold their size against the zoom, damped */
+  steady?: Query | Query[];
+  x?: number;
+  y?: number;
+  zoom?: number;
+}
+
+/**
+ * Geometry continuously derived from sprites (§6.1): every frame of the run
+ * (and every scrubbed still), `@path` receives both endpoints' boxes,
+ * region-relative, and returns the path data the tether draws.
+ */
+export interface TetherStep extends StepBase {
+  from: Query;
+  kind: 'tether';
+  /** the window; without it, the enclosing block's span */
+  ms?: number;
+  path: (from: Rect, to: Rect) => string;
+  to: Query;
+}
+
 export type Step =
+  | CameraStep
   | HoldStep
   | MoveStep
   | RaiseStep
   | ScrollStep
   | SpringStep
+  | TetherStep
   | TweenStep
   | WaitStep;
 
@@ -253,6 +288,13 @@ export interface Compiled {
   gates: GateMark[];
 }
 
+/** where the region's frame stands — yielded, tracked, updated at step boundaries */
+export interface CameraState {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
 /** a sampled flight path: points at even progress, in the sprite's own space */
 export interface FlightPath {
   points: { x: number; y: number }[];
@@ -266,8 +308,20 @@ export interface FlightPath {
 export interface Cue {
   /** move: travel along this sampled path instead of the straight line */
   flight?: FlightPath;
+  /** camera: drive the region's frame */
+  camera?: {
+    origin?: { x: number; y: number };
+    steady: Sprite[];
+    to: { x?: number; y?: number; zoom?: number };
+  };
   /** raise: promote to the elevated layer for the window */
   raise?: { shadow: boolean };
+  /** tether: draw between these two, every frame */
+  tether?: {
+    from: Sprite | null;
+    path: (from: Rect, to: Rect) => string;
+    to: Sprite | null;
+  };
   /** scroll: animate the sprite's scroll container to this alignment */
   scroll?: { align: 'center' | 'end' | 'start' };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */

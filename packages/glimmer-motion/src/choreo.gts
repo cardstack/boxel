@@ -15,8 +15,10 @@
  * docs/choreography.md has the whole design and the legacy it descends from.
  */
 import { registerDestructor } from '@ember/destroyable';
+import { schedule } from '@ember/runloop';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import { modifier } from 'ember-modifier';
 
@@ -40,6 +42,7 @@ import {
 import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
 import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
+  Camera,
   collect,
   Gate,
   Hold,
@@ -49,11 +52,13 @@ import {
   Scroll,
   Sequence,
   Spring,
+  Tether,
   Tween,
   Wait,
 } from './choreo/steps.gts';
 import type {
   Bounds,
+  CameraState,
   ChoreoNode,
   Cue,
   Query,
@@ -74,10 +79,12 @@ const selector = (type?: Query['type']): Selector =>
 
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
+  Camera: typeof Camera;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Raise: typeof Raise;
   Scroll: typeof Scroll;
+  Tether: typeof Tether;
   Move: typeof Move;
   Parallel: typeof Parallel;
   Sequence: typeof Sequence;
@@ -99,6 +106,12 @@ export interface ChoreoContext {
   received: Selector;
   removed: Selector;
   role: (role: string) => Query;
+  /**
+   * Where the region's frame stands — tracked, updated when a camera step
+   * lands or cancels, deliberately not per frame (§9): app logic may derive
+   * from it (the zoom-threshold transmute) without a feedback loop.
+   */
+  readonly camera: CameraState;
   /** the current pass's run, as a value you can hold — null between passes (§4.6) */
   readonly run: ChoreoRun | null;
   still: Selector;
@@ -108,6 +121,7 @@ export interface ChoreoContext {
 
 function contextFor(region: Choreo): ChoreoContext {
   return {
+    Camera,
     Gate,
     Hold,
     Move,
@@ -116,6 +130,7 @@ function contextFor(region: Choreo): ChoreoContext {
     Scroll,
     Sequence,
     Spring,
+    Tether,
     Tween,
     Wait,
     advance: () => region.run?.advance(),
@@ -130,6 +145,9 @@ function contextFor(region: Choreo): ChoreoContext {
     received: selector('received'),
     removed: selector('removed'),
     role: (role) => ({ role }),
+    get camera() {
+      return region.cameraState;
+    },
     get run() {
       return region.run ?? null;
     },
@@ -162,6 +180,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private element?: HTMLDivElement;
   private orphanLayer?: HTMLDivElement;
   private raisedLayer?: HTMLDivElement;
+  private tetherLayer?: SVGSVGElement;
+  private cameraFrame?: HTMLDivElement;
+  /** tracked mirror of the frame's resting state — see ChoreoContext.camera */
+  @tracked cameraState: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */
   private arrived = new Set<ChoreoNode>();
@@ -445,7 +467,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.log(changeset, cues);
     }
     this.run = execute(compiled, {
+      camera: { ...this.cameraState },
+      cameraFrame: this.cameraFrame,
+      // updated at step boundaries only — a still value app logic can
+      // read. Guarded by equality: the landing itself renders, the render
+      // is an all-kept pass, and the pass replays the camera step — an
+      // unguarded set would revalidate forever.
+      onCamera: (state) => {
+        const prior = this.cameraState;
+        if (
+          prior.zoom !== state.zoom ||
+          prior.x !== state.x ||
+          prior.y !== state.y
+        ) {
+          schedule('afterRender', () => (this.cameraState = state));
+        }
+      },
       raisedLayer: this.raisedLayer,
+      tetherLayer: this.tetherLayer,
       // ember-animated's continuity, in the terms motion-dom offers: it sums a
       // corrective curve onto the one it interrupted, which transfers velocity
       // implicitly; a spring takes a velocity outright, so the run that is
@@ -579,6 +618,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     };
   });
 
+  tethers = modifier((el: SVGSVGElement) => {
+    this.tetherLayer = el;
+    return () => {
+      this.tetherLayer = undefined;
+    };
+  });
+
+  frame = modifier((el: HTMLDivElement) => {
+    this.cameraFrame = el;
+    return () => {
+      this.cameraFrame = undefined;
+    };
+  });
+
   <template>
     {{this.renderDetector}}
     <div data-choreo={{if @id @id ''}} {{this.host}} ...attributes>
@@ -594,7 +647,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         style='position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2147483000'
         {{this.raised}}
       ></div>
-      {{yield this.context}}
+      {{! the wires: geometry drawn between sprites, every frame (§6.1) }}
+      <svg
+        data-choreo-tethers
+        style='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible'
+        {{this.tethers}}
+      ></svg>
+      {{! the camera frame: the scene a c.Camera step drives (§6.3) }}
+      <div data-choreo-frame {{this.frame}}>
+        {{yield this.context}}
+      </div>
     </div>
   </template>
 }

@@ -26,6 +26,7 @@ import { easingDefinitionToFunction } from 'motion-utils';
 import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, keyframesOf, type Delivery } from './deliver.ts';
 import type {
+  CameraState,
   ChoreoNode,
   Compiled,
   Cue,
@@ -33,6 +34,7 @@ import type {
   FlightPath,
   GateMark,
   PropValue,
+  Rect,
   Sprite,
 } from './types.ts';
 
@@ -67,11 +69,19 @@ export interface Run {
 }
 
 interface RunOptions {
+  /** where the region's frame stands as this run begins */
+  camera?: CameraState;
+  /** the element the camera transform drives (the region's scene wrapper) */
+  cameraFrame?: HTMLElement;
   inherit?: Velocities;
+  /** a camera step landed or the run ended: the frame's new resting state */
+  onCamera?(state: CameraState): void;
   onSpriteDone(sprite: Sprite): void;
   /** the region's elevated layer, where c.Raise promotes the living */
   raisedLayer?: HTMLElement;
   removed: Sprite[];
+  /** the svg the tethers draw into */
+  tetherLayer?: SVGSVGElement;
 }
 
 function isSpring(transition: Record<string, unknown> | undefined): boolean {
@@ -182,6 +192,10 @@ interface Track {
     placeholder: HTMLElement;
     prior: string;
   };
+  /** camera: where the frame stood when this step began */
+  cameraFrom?: CameraState;
+  /** tether: the wire this step draws */
+  wire?: SVGPathElement;
   /** scroll: the container being driven, and where it is headed */
   scrolling?: {
     cancelListener(): void;
@@ -231,6 +245,7 @@ export class ChoreoRun implements Run {
 
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
+    this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
     this.cues = compiled.cues;
     this.pending = new Set(options.removed);
     const s = this.scale;
@@ -456,6 +471,7 @@ export class ChoreoRun implements Run {
     }
     this.ended = true;
     this.stopTicking();
+    this.options.onCamera?.({ ...this.camera });
     // land every remaining final before handing the layout back; ambient
     // loops play on until the next pass cancels them
     for (const t of this.tracks) {
@@ -535,6 +551,58 @@ export class ChoreoRun implements Run {
         now >= t.start &&
         t.start < limit &&
         (now < t.end || cue.loop || fill);
+      if (cue.camera) {
+        if (inside && !t.started) {
+          t.started = true;
+          t.cameraFrom = { ...this.camera };
+        } else if (!inside && t.started && now < t.start) {
+          t.started = false;
+          if (t.cameraFrom) {
+            this.camera = { ...t.cameraFrom };
+            this.applyCamera(t);
+          }
+        }
+        if (t.started && (now < t.end || !t.passed)) {
+          const p = this.cameraProgress(t, now - t.start);
+          const from = t.cameraFrom!;
+          const to = cue.camera.to;
+          this.camera = {
+            x: from.x + ((to.x ?? from.x) - from.x) * p,
+            y: from.y + ((to.y ?? from.y) - from.y) * p,
+            zoom: from.zoom + ((to.zoom ?? from.zoom) - from.zoom) * p,
+          };
+          this.applyCamera(t);
+          if (now >= t.end && this.playing && !t.passed) {
+            t.passed = true;
+            this.options.onCamera?.({ ...this.camera });
+          }
+        }
+        continue;
+      }
+      if (cue.tether) {
+        if (inside && !t.started) {
+          t.started = true;
+          const layer = this.options.tetherLayer;
+          if (layer) {
+            t.wire = document.createElementNS(
+              'http://www.w3.org/2000/svg',
+              'path',
+            );
+            t.wire.setAttribute('data-choreo-tether', '');
+            layer.appendChild(t.wire);
+          }
+        } else if (!inside && t.started) {
+          t.started = false;
+          t.wire?.remove();
+          t.wire = undefined;
+        }
+        if (t.started && t.wire) {
+          // after the engine's own render this frame, so the wire sits
+          // inside the boxes as they are painted, not as they were
+          this.scheduleTetherDraw();
+        }
+        continue;
+      }
       if (cue.raise) {
         if (inside && !t.started) {
           t.started = true;
@@ -651,6 +719,107 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     return easingDefinitionToFunction('easeInOut')(raw);
+  }
+
+  /* ---- c.Camera: the region's frame (§6.3) ---- */
+
+  camera: CameraState;
+
+  private cameraProgress(t: Track, ms: number): number {
+    const span = t.end - t.start;
+    const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
+    const transition = t.cue.transition as
+      | (Record<string, unknown> & { ease?: unknown })
+      | undefined;
+    if (isSpring(transition)) {
+      const generator = springGenerator({
+        keyframes: [0, 100],
+        ...(transition ?? {}),
+      } as never);
+      return generator.next(ms / this.scale).value / 100;
+    }
+    return easingDefinitionToFunction(
+      (transition?.ease as never) ?? 'easeInOut',
+    )(raw);
+  }
+
+  /**
+   * The damped counter-scale (§6.4): steady sprites scale with the host but
+   * not 1:1 — pow(z, .30) zoomed out so they stay readable, pow(z, .70)
+   * zoomed in so they don't feel stuck, clamped to what the eye tolerates.
+   */
+  private static damped(zoom: number): number {
+    const target = Math.min(
+      1.8,
+      Math.max(0.85, Math.pow(zoom, zoom < 1 ? 0.3 : 0.7)),
+    );
+    return target / zoom;
+  }
+
+  private applyCamera(t: Track) {
+    const frame = this.options.cameraFrame;
+    if (!frame) {
+      return;
+    }
+    const { zoom, x, y } = this.camera;
+    const origin = t.cue.camera?.origin;
+    frame.style.transformOrigin = origin
+      ? `${origin.x}px ${origin.y}px`
+      : '50% 50%';
+    frame.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+    for (const sprite of t.cue.camera?.steady ?? []) {
+      const ve = sprite.node.visualElement;
+      if (ve) {
+        const counter = ChoreoRun.damped(zoom);
+        ve.getValue('scale', counter)!.set(counter);
+      }
+    }
+  }
+
+  /* ---- c.Tether: the wire that follows (§6.1) ---- */
+
+  private tetherDrawScheduled = false;
+
+  private scheduleTetherDraw() {
+    if (this.tetherDrawScheduled) {
+      return;
+    }
+    this.tetherDrawScheduled = true;
+    frame.postRender(() => {
+      this.tetherDrawScheduled = false;
+      for (const t of this.tracks) {
+        if (t.started && t.wire) {
+          this.drawTether(t);
+        }
+      }
+    });
+  }
+
+  private drawTether(t: Track) {
+    const layer = this.options.tetherLayer;
+    const tether = t.cue.tether;
+    if (!layer || !tether || !t.wire) {
+      return;
+    }
+    const box = layer.getBoundingClientRect();
+    const rectOf = (sprite: Sprite | null): Rect | null => {
+      const el = sprite?.element;
+      if (!el?.isConnected) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      return {
+        height: r.height,
+        width: r.width,
+        x: r.left - box.left,
+        y: r.top - box.top,
+      };
+    };
+    const a = rectOf(tether.from);
+    const b = rectOf(tether.to);
+    if (a && b) {
+      t.wire.setAttribute('d', tether.path(a, b));
+    }
   }
 
   /* ---- c.Raise: the elevated layer (§6.3) ---- */
@@ -1157,6 +1326,7 @@ export class ChoreoRun implements Run {
     this.cancelled = true;
     this.stopTicking();
     clearTimeout(this.autoTimer);
+    this.options.onCamera?.({ ...this.camera });
     // resolve everything first: a stop() issued before the async keyframe
     // resolution is dropped, and the revived animation leaves its value
     // reading as animating forever — the probe never settles
@@ -1168,6 +1338,8 @@ export class ChoreoRun implements Run {
       t.loopAnimation?.cancel();
       this.restore(t);
       this.stopScroll(t, false);
+      t.wire?.remove();
+      t.wire = undefined;
       const ve = t.cue.sprite.node.visualElement;
       if (t.held && ve) {
         releaseHold(ve, t.cue.sprite.element, t.held);

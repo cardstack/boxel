@@ -363,6 +363,11 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
   let longest = 0;
   let open = false;
   for (const [index, sprite] of sprites.entries()) {
+    // a camera or tether is a statement about the scene, not a sprite:
+    // one cue regardless of what `of` matched
+    if ((step.kind === 'camera' || step.kind === 'tether') && index > 0) {
+      break;
+    }
     // each sprite starts one rung later than the one before it — in the
     // order the query returned them (document order), reordered by @order
     const offset = splitting ? 0 : stagger * (ranks[index] ?? index);
@@ -530,6 +535,52 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         }
         break;
       }
+      case 'camera': {
+        const ms = step.ms ?? 600;
+        const originSprite = step.origin ? cs.sprite(step.origin) : null;
+        const origin =
+          originSprite?.final?.context ?? originSprite?.initial?.context;
+        cues.push({
+          camera: {
+            origin: origin
+              ? {
+                  x: origin.x + origin.width / 2,
+                  y: origin.y + origin.height / 2,
+                }
+              : undefined,
+            steady: step.steady ? cs.sprites(step.steady) : [],
+            to: { x: step.x, y: step.y, zoom: step.zoom },
+          },
+          duration: ms,
+          kind: 'camera',
+          offset,
+          sprite,
+          transition: step.spring
+            ? springTransition(step.spring)
+            : { duration: ms / 1000, ease: step.ease ?? 'easeInOut' },
+        });
+        longest = Math.max(longest, offset + ms);
+        break;
+      }
+      case 'tether': {
+        cues.push({
+          duration: step.ms ?? 0,
+          kind: 'tether',
+          offset,
+          sprite,
+          tether: {
+            from: cs.sprites(step.from)[0] ?? null,
+            path: step.path,
+            to: cs.sprites(step.to)[0] ?? null,
+          },
+        });
+        if (step.ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + step.ms);
+        }
+        break;
+      }
       case 'scroll': {
         const ms = step.ms ?? 420;
         cues.push({
@@ -669,7 +720,10 @@ export default function compile(
         out.push({
           ...rest,
           duration:
-            r.open && (cue.kind === 'hold' || cue.kind === 'raise')
+            r.open &&
+            (cue.kind === 'hold' ||
+              cue.kind === 'raise' ||
+              cue.kind === 'tether')
               ? Math.max(0, span - delay - offset)
               : cue.duration,
           start: base + delay + offset,
