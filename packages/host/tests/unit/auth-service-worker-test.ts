@@ -10,7 +10,11 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 //
 // We duplicate the core logic here (token matching, fetch interception,
 // on-miss client fallback, `_screenshot/` 503 absorption) to test it in a
-// standard QUnit context where service workers aren't available.
+// standard QUnit context where service workers aren't available. The
+// mirrored logic can drift from the shipped file, so the "shipped worker"
+// module at the bottom evaluates the real public/auth-service-worker.js
+// bytes and exercises the same behavior against them — a change to the
+// shipped constants or helpers that the mirror misses fails there.
 
 function createServiceWorkerEnv(
   opts: {
@@ -1174,3 +1178,194 @@ module(
     });
   },
 );
+
+// Evaluates the REAL public/auth-service-worker.js — the bytes the browser
+// registers — inside a stubbed SW global scope, so the shipped constants and
+// helpers are what these assertions run against. The scaffold modules above
+// exercise a mirror of the worker's logic; this module is the drift guard:
+// an edit to the shipped parse/clamp/loop that the mirror misses fails here.
+module('Unit | auth-service-worker | shipped worker', function () {
+  interface ShippedWorker {
+    isScreenshotRoute: (request: Request) => boolean;
+    screenshotRetryDelayMs: (response: Response) => number | undefined;
+    dispatchMessage: (data: unknown) => void;
+    // Drives the shipped fetch listener; resolves with the Response the SW
+    // would respondWith, or 'pass-through' when the listener declined to
+    // intercept.
+    dispatchFetch: (request: Request) => Promise<Response | 'pass-through'>;
+    fetched: Request[];
+  }
+
+  async function loadShippedWorker(
+    networkResponses: Response[],
+  ): Promise<ShippedWorker> {
+    let source = await (await fetch('/auth-service-worker.js')).text();
+    let listeners = new Map<string, ((event: unknown) => void)[]>();
+    let selfStub = {
+      addEventListener: (type: string, fn: (event: unknown) => void) => {
+        let list = listeners.get(type) ?? [];
+        list.push(fn);
+        listeners.set(type, list);
+      },
+      skipWaiting: () => {},
+      clients: {
+        claim: async () => {},
+        get: async () => undefined,
+        matchAll: async () => [],
+      },
+    };
+    let fetched: Request[] = [];
+    // Bound over the worker source's free `fetch` identifier, so the shipped
+    // absorption loop fetches from this queue.
+    let fetchStub = async (request: Request) => {
+      fetched.push(request);
+      let next = networkResponses.shift();
+      if (!next) {
+        throw new Error('network stub called more times than expected');
+      }
+      return next;
+    };
+    // The worker source declares its helpers at (function-body) top level, so
+    // appending a return statement exposes them without any module plumbing —
+    // a classic `public/` SW cannot be imported as ESM.
+    let factory = new Function(
+      'self',
+      'fetch',
+      `${source}
+      ;return { isScreenshotRoute, screenshotRetryDelayMs };`,
+    );
+    let exported = factory(selfStub, fetchStub) as Pick<
+      ShippedWorker,
+      'isScreenshotRoute' | 'screenshotRetryDelayMs'
+    >;
+    return {
+      ...exported,
+      fetched,
+      dispatchMessage: (data: unknown) => {
+        for (let fn of listeners.get('message') ?? []) {
+          fn({ data });
+        }
+      },
+      dispatchFetch: async (request: Request) => {
+        let responded: Promise<Response> | undefined;
+        let event = {
+          request,
+          clientId: '',
+          respondWith: (promise: Promise<Response>) => {
+            responded = promise;
+          },
+          waitUntil: () => {},
+        };
+        for (let fn of listeners.get('fetch') ?? []) {
+          fn(event);
+        }
+        return responded ? await responded : 'pass-through';
+      },
+    };
+  }
+
+  test('shipped screenshotRetryDelayMs implements the 503 + numeric Retry-After contract', async function (assert) {
+    let sw = await loadShippedWorker([]);
+    let response = (status: number, retryAfter?: string) =>
+      new Response(null, {
+        status,
+        headers: retryAfter !== undefined ? { 'Retry-After': retryAfter } : {},
+      });
+
+    assert.strictEqual(sw.screenshotRetryDelayMs(response(503, '2')), 2000);
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503, '0')),
+      1000,
+      'sub-second values clamp to 1s',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503)),
+      undefined,
+      'a 503 without Retry-After is not absorbable',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503, 'Wed, 21 Oct 2026 07:28:00 GMT')),
+      undefined,
+      'an HTTP-date Retry-After is not absorbable',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(404, '1')),
+      undefined,
+      'only status 503 absorbs',
+    );
+  });
+
+  test('shipped isScreenshotRoute matches GET _screenshot/ requests only', async function (assert) {
+    let sw = await loadShippedWorker([]);
+
+    assert.true(
+      sw.isScreenshotRoute(
+        new Request(
+          'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800',
+        ),
+      ),
+    );
+    assert.false(
+      sw.isScreenshotRoute(
+        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png', {
+          method: 'HEAD',
+        }),
+      ),
+    );
+    assert.false(
+      sw.isScreenshotRoute(
+        new Request('http://localhost:4201/user/realm/images/photo.png'),
+      ),
+    );
+  });
+
+  test('shipped fetch listener absorbs a 503 end-to-end and resolves with the 200', async function (assert) {
+    let sw = await loadShippedWorker([
+      new Response(null, { status: 503, headers: { 'Retry-After': '0' } }),
+      new Response(null, { status: 200 }),
+    ]);
+    sw.dispatchMessage({
+      type: 'set-realm-token',
+      realmURL: 'http://localhost:4201/user/realm/',
+      token: 'shipped-token',
+    });
+
+    let result = await sw.dispatchFetch(
+      new Request(
+        'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800&h=600',
+      ),
+    );
+
+    assert.ok(result instanceof Response, 'the listener intercepted');
+    assert.strictEqual((result as Response).status, 200);
+    assert.strictEqual(sw.fetched.length, 2, 'retried once, per Retry-After');
+    for (let request of sw.fetched) {
+      assert.strictEqual(
+        request.headers.get('Authorization'),
+        'Bearer shipped-token',
+      );
+    }
+  });
+
+  test('shipped fetch listener leaves non-screenshot requests on the single-fetch path', async function (assert) {
+    let sw = await loadShippedWorker([
+      new Response(null, { status: 503, headers: { 'Retry-After': '1' } }),
+    ]);
+    sw.dispatchMessage({
+      type: 'set-realm-token',
+      realmURL: 'http://localhost:4201/user/realm/',
+      token: 'shipped-token',
+    });
+
+    let result = await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/photo.png'),
+    );
+
+    assert.strictEqual(
+      (result as Response).status,
+      503,
+      'the 503 reaches the page unabsorbed',
+    );
+    assert.strictEqual(sw.fetched.length, 1, 'no retry outside _screenshot/');
+  });
+});
