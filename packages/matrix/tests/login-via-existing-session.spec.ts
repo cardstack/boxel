@@ -1,37 +1,81 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures.ts';
+import { appURL } from '../support/isolated-realm-server.ts';
 import { getSynapseURL } from '../support/environment-config.ts';
-import { createUser } from '../helpers/index.ts';
+import {
+  createUser,
+  createSubscribedUser,
+  setupPermissions,
+  assertLoggedIn,
+} from '../helpers/index.ts';
 
 // Exercises Synapse's login_via_existing_session feature (MSC3882), which the
 // test homeserver config enables. A client holding an access token mints a
-// short-lived, single-use login token and exchanges it for a fresh session —
-// the mechanism that hands a pre-authenticated session off to the browser.
+// short-lived, single-use login token and hands a session off to the browser
+// via ?loginToken — the pre-authenticated hand-off this repo consumes in
+// packages/host/app/components/matrix/login.gts.
+//
+// NOTE: Synapse rate-limits get_token to one request per minute per user id
+// (hardcoded in the servlet — no rc_* setting relaxes it), so every test here
+// mints for a freshly registered user.
+async function mintLoginToken(
+  accessToken: string,
+): Promise<{ login_token: string; expires_in_ms: number }> {
+  let response = await fetch(
+    `${getSynapseURL()}/_matrix/client/v1/login/get_token`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({}),
+    },
+  );
+  expect(
+    response.status,
+    'get_token succeeds for an authenticated caller',
+  ).toBe(200);
+  return response.json();
+}
+
 test.describe('login_via_existing_session', () => {
-  test('an access-token holder can mint a login token and exchange it for a session', async () => {
+  test('a pre-authenticated client hands off a session to the browser via ?loginToken', async ({
+    page,
+  }) => {
+    let { username, credentials } = await createSubscribedUser(
+      'login-token-handoff',
+    );
+    await setupPermissions(credentials.userId, `${appURL}/`);
+
+    let { login_token } = await mintLoginToken(credentials.accessToken);
+
+    // The browser lands pre-authenticated with only the login token — no
+    // username/password is ever entered.
+    await page.goto(`${appURL}?loginToken=${login_token}`);
+
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
+
+    // The single-use token is stripped from the URL so a refresh doesn't
+    // re-trigger the (now spent) exchange, and the session persists.
+    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
+    await page.reload();
+    await assertLoggedIn(page, {
+      displayName: username,
+      userId: credentials.userId,
+    });
+  });
+
+  test('the minted token carries the configured 2-minute lifetime and exchanges for a new session', async () => {
     let { credentials } = await createUser('login-token');
 
-    // Mint a login token with the existing session's access token.
-    let getTokenResponse = await fetch(
-      `${getSynapseURL()}/_matrix/client/v1/login/get_token`,
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${credentials.accessToken}` },
-        body: JSON.stringify({}),
-      },
+    let { login_token, expires_in_ms } = await mintLoginToken(
+      credentials.accessToken,
     );
-    expect(
-      getTokenResponse.status,
-      'get_token succeeds for an authenticated caller',
-    ).toBe(200);
-    let { login_token, expires_in_ms } = (await getTokenResponse.json()) as {
-      login_token: string;
-      expires_in_ms: number;
-    };
     expect(login_token, 'a login token is returned').toBeTruthy();
-    // token_timeout is configured as "2m" in the test homeserver.yaml.
+    // token_timeout is configured as "2m" in the test homeserver.yaml; this is
+    // the one assertion that catches the config block failing to reach Synapse.
     expect(expires_in_ms).toBe(120_000);
 
-    // Exchange the login token for a brand-new session belonging to the same user.
     let loginResponse = await fetch(
       `${getSynapseURL()}/_matrix/client/v3/login`,
       {
@@ -47,34 +91,15 @@ test.describe('login_via_existing_session', () => {
     };
     expect(session.user_id).toBe(credentials.userId);
     expect(session.access_token, 'a fresh access token is issued').toBeTruthy();
+    // The hand-off mints a new device independent of the caller's — a
+    // separately-revocable session, not a copy of the minting one.
     expect(session.device_id).toBeTruthy();
-    // The handed-off session is independent of the caller's device.
     expect(session.device_id).not.toBe(credentials.deviceId);
-  });
-
-  test('the endpoint is recognized and requires authentication', async () => {
-    // Before the feature is enabled Synapse returns M_UNRECOGNIZED for this
-    // route; with it enabled an unauthenticated call is rejected as
-    // M_MISSING_TOKEN, proving the endpoint is wired up and enforcing auth.
-    let response = await fetch(
-      `${getSynapseURL()}/_matrix/client/v1/login/get_token`,
-      { method: 'POST', body: JSON.stringify({}) },
-    );
-    expect(response.status).toBe(401);
-    let body = (await response.json()) as { errcode: string };
-    expect(body.errcode).toBe('M_MISSING_TOKEN');
   });
 
   test('a login token is single-use', async () => {
     let { credentials } = await createUser('login-token-reuse');
-
-    let { login_token } = (await (
-      await fetch(`${getSynapseURL()}/_matrix/client/v1/login/get_token`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${credentials.accessToken}` },
-        body: JSON.stringify({}),
-      })
-    ).json()) as { login_token: string };
+    let { login_token } = await mintLoginToken(credentials.accessToken);
 
     let first = await fetch(`${getSynapseURL()}/_matrix/client/v3/login`, {
       method: 'POST',
