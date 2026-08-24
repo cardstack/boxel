@@ -19,6 +19,7 @@ The following are important concepts:
 - [Realm](realm.md): Realms are storage for cards that have their own underlying permissions and indexer.
 - [Realm Resource Identifiers](realm-resource-identifiers.md): How cards, modules, and files are named — including the portable `@cardstack/base/` prefix form and how the VirtualNetwork resolves it.
 - [Search](search.md): Every Card is searchable within and across realms.
+- [Boxel rendering protocol](boxel-rendering-protocol.md): the render contract every execution tier owes a card — what authored code may rely on, what crosses an execution boundary, and how a card is routed to a trust tier. Currently **DRAFT**: it describes today's rendering behavior in normative language, and becomes binding when the Direct equivalence oracle is green. Each statement carries an `RP-x.y` id, and `pnpm lint:rp-bijection` holds statements and conformance tests to each other.
 
 ## Operations
 
