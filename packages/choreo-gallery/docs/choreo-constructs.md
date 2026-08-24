@@ -1,16 +1,51 @@
-# More Choreo constructs
+# Choreo constructs
 
-**Status: proposal.** The next API surface and feature set for Choreo,
-as a language reference: the tags and parameters, what each commits to,
-and what already ships (✓). Names are settled where a decision is
-recorded — ef4's step names stay, the route transition is the crossing —
-and provisional elsewhere; semantics are the contract throughout. Five
-measuring sticks keep it honest, each with its audit in this document:
-Keynote's build inspector, bento-boxel's interaction patterns, Pretui's
-realm law, the Boxel System V16 concept deck, and the boxel-labs
-surfaces research. The parent documents are
-[choreography.md](choreography.md) (the model) and
-[nested-choreo.md](nested-choreo.md) (regions).
+|                |                                                                           |
+| -------------- | ------------------------------------------------------------------------- |
+| **Status**     | Proposed                                                                  |
+| **Start date** | 2026-08-25                                                                |
+| **Package**    | `glimmer-motion` (the Choreo layer)                                       |
+| **Requires**   | breaking changes — accepted; pre-1.0, no-compat ethos                     |
+| **Related**    | [choreography.md](choreography.md) · [nested-choreo.md](nested-choreo.md) |
+
+## Contents
+
+1. [Summary](#1-summary)
+2. [Motivation](#2-motivation)
+3. [The language, complete](#3-the-language-complete)
+4. [Detailed design](#4-detailed-design)
+5. [Design rationale](#5-design-rationale)
+6. [Evidence — the audits](#6-evidence--the-audits)
+7. [Implementation plan](#7-implementation-plan)
+8. [Verification plan](#8-verification-plan)
+9. [Unresolved questions](#9-unresolved-questions)
+
+## 1. Summary
+
+This proposal grows Choreo from a region-scoped timeline into a
+recordable choreography language: gates that park a run for input,
+anchors that start a step against any other, the delivery panel for
+by-word and by-character builds, motion paths, keyframe values, a
+playback handle shaped like Motion's controls, and a set of scene
+constructs — the crossing (route transitions as changesets), the lift
+(a real elevated layer), the camera (the region's frame as a step),
+tethers, scrolls, and the gesture as a first-class geometry source. A
+native WAAPI/CSS driver compiles the same language for environments
+that forbid JavaScript clocks.
+
+One rule organises all of it: **if it should scrub, it must be on the
+timeline.** Everything here exists to make whole scenes — including
+route transitions — replayable from a cue list.
+
+Naming is settled where a decision is recorded: ef4's step names stay
+(`Tween`, `Spring`, `Hold`, `Wait`), the route transition is the
+_crossing_, durations are seconds as in Motion. Everything else is
+provisional; semantics are the contract. Five measuring sticks keep the
+design honest, each with its audit in §6: Keynote's build inspector,
+bento-boxel's interaction patterns, Pretui's realm law, the Boxel
+System V16 concept deck, and the boxel-labs surfaces research.
+
+## 2. Motivation
 
 The measure is the Build Order demo. It already plays a Keynote build
 inspector — `with`/`after` relations, delays, durations, by-word and
@@ -19,7 +54,7 @@ score in `test-app/app/lib/builds.ts`, outside Choreo. Closing that distance mea
 promoting those semantics into the region, so `schedule()` compiles into
 Choreo cues and the demo becomes a thin inspector over a real timeline.
 
-## The map
+### 2.1 The Keynote map
 
 | Keynote                                    | Choreo today                                     | Missing                 |
 | ------------------------------------------ | ------------------------------------------------ | ----------------------- |
@@ -39,15 +74,15 @@ Choreo cues and the demo becomes a thin inspector over a real timeline.
 | Magic Move (slide transition)              | route transition, hand-built on `animateView`    | `@route`, `c.Crossing`  |
 | Builds play backwards on ←                 | free — a changeset reversed is the reverse run   | —                       |
 
-Everything in the right-hand column is specified below.
+Everything in the right-hand column is specified in §4 and §6.
 
-## The language, complete
+## 3. The language, complete
 
 The whole surface in one place — what ships today (marked ✓) and what
-this document adds (marked +). Sections below and the audits carry each
-addition's semantics; this is the index.
+this proposal adds (marked +). §4 and §6 carry each addition's
+semantics; this is the index.
 
-### Region
+### 3.1 Region
 
 `<Choreo @id @debug @route>` — hosts the participants, the orphan layer
 (leavers) and the elevated layer (`c.Lift`), watches its render passes,
@@ -55,7 +90,7 @@ yields `c`. Participants are `{{motion id= role=}}` elements. A pass
 whose changeset is all-kept still runs its timeline (+). `@route` (+)
 treats a route swap inside the region as one pass.
 
-### Queries — every geometry source a step can name
+### 3.2 Queries — every geometry source a step can name
 
 Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 `@origin`, `@follow`.
@@ -69,13 +104,13 @@ Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 | `c.beacon 'x'`                                          | ✓ a named box that is never a participant                        |
 | `c.gesture`                                             | + the live drag: its pose as a box, its velocity into any spring |
 
-### Blocks
+### 3.3 Blocks
 
 `c.Sequence` ✓ · `c.Parallel` ✓ · `c.Gate` + (`@delay` to self-open;
 advanced by `c.advance()`; splits the run into segments; error inside
 `Parallel`).
 
-### Steps
+### 3.4 Steps
 
 After the cuts and the naming pass: ten steps, keeping ef4's names —
 `Tween`, `Spring`, `Hold`, `Wait` descend from boxel-motion's behaviors,
@@ -96,13 +131,13 @@ duration in the language is **seconds**, as in Motion.
 | `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                           |
 | `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@swap` `@scroll`                                                                                                                  |
 
-### Timing
+### 3.5 Timing
 
 Block order ✓ and `@delay` ✓; `@name` / `@at` with `at()` / `after()`
 anchors (+); every duration resolves through the engine's generator, so
 "after a spring" is exact ✓.
 
-### The run
+### 3.6 The run
 
 `c.run` (+) wears Motion's `AnimationPlaybackControls` shape: settable
 `time` (seconds) and `speed`, `duration`, `play` / `pause` / `cancel` —
@@ -111,7 +146,9 @@ plus the two words Motion has no need for: `advance()` and tracked
 are wired in templates. Two drivers: the frameloop ✓ and the native
 WAAPI/CSS target (+), same language, same assertions.
 
-## Gates — `c.Gate`
+## 4. Detailed design
+
+### 4.1 Gates — `c.Gate`
 
 Keynote's driver is not time, it is the click: a build order is chunked into
 segments and the timeline parks between them.
@@ -141,7 +178,7 @@ segments and the timeline parks between them.
   natural run back. The cursor only ever moves forward through one pass's
   timeline.
 
-## Anchors — `@name` and `@at`
+### 4.2 Anchors — `@name` and `@at`
 
 Block order gives Keynote's "with/after **previous**". The rest of the
 inspector — "with/after **build N**" — needs a reference, not a position.
@@ -169,7 +206,7 @@ inspector — "with/after **build N**" — needs a reference, not a position.
 - Forward references are a compile error; anchors point up the score, the
   way Keynote's build list does.
 
-## Delivery — `@by`, `@order`, `@stagger`
+### 4.3 Delivery — `@by`, `@order`, `@stagger`
 
 `@stagger` (today: time between matched sprites, document order — now in
 seconds) is Keynote's "by object". The rest of the delivery panel:
@@ -203,7 +240,7 @@ seconds) is Keynote's "by object". The rest of the delivery panel:
 - The whole step still occupies one slot in the timeline — anchors and
   gates see one step, not one per character.
 
-## Paths — `@path`
+### 4.4 Paths — `@path`
 
 Keynote's Action column moves an object along a drawn curve. `c.Move` is
 box-to-box FLIP; a path is a different statement about the journey, not the
@@ -229,7 +266,7 @@ endpoints.
   from the changeset — a path from here to a beacon's box is
   `(s, cs) => arcTo(cs.beacon('trash'))`.
 
-## Emphasis — keyframe values
+### 4.5 Emphasis — keyframe values
 
 Pulse, jiggle, blink, flip: effects that end where they began. No new step —
 a property value may be a keyframe array, and a round trip is an array that
@@ -245,7 +282,7 @@ returns:
   round-trip set) ships as plain data — importable, inspectable, no
   registration — once the array form exists to express it.
 
-## The timeline handle
+### 4.6 The timeline handle
 
 Gates, the inspector, and the Playhead demo all want the same object: the
 run as a value.
@@ -270,7 +307,7 @@ flight — and what it currently rebuilds by sampling a private score.
 This handle is the substrate; `Gate` and the Build Order inspector are
 its first two consumers.
 
-## The crossing — `@route` and `c.Crossing`
+### 4.7 The crossing — `@route` and `c.Crossing`
 
 The gallery ⇄ demo transition is built on `animateView`, and
 `test-app/app/routes/application.ts` is four hundred lines of what that
@@ -355,7 +392,16 @@ What `animateView` remains for: cross-document transitions (MPA), and any
 move where snapshotting is the point — freezing a page that is too expensive
 to keep live. Same-document navigation defaults to `@route`.
 
-## As simple as it gets? Five cuts
+### 4.8 Constructs specified with their evidence
+
+Six additions are specified inside the audit that produced them, and
+indexed in §3: the hot start and `c.gesture` (§6.1), `c.Tether` (§6.1,
+§6.4), `c.Scroll` (§6.1), `@space` (§6.1), `c.Lift` (§6.3), `c.Camera`
+with `@steady` (§6.3, §6.4), and the `@swap` policy (§6.3).
+
+## 5. Design rationale
+
+### 5.1 As simple as it gets: five cuts
 
 The first draft of this language was audited the way the constructs
 were: hunt the redundancy. Five spellings carried no information; three
@@ -400,14 +446,14 @@ as English, and each remaining step names a genuinely different
 mechanism. Ten steps, two blocks, ten queries: an author who knows
 _who · what · how long_ can read all of it.
 
-## One vocabulary — the naming pass
+### 5.2 One vocabulary — the naming pass
 
 Three audiences read this language: authors of these templates, people
 (and models) who already know motion.dev, and Ember developers raised
 on the ecosystem's patterns. The same pass serves all three. Breaking
 renames are accepted; the reference above is post-pass.
 
-### Internal rules
+#### Internal rules
 
 1. **A name has one type and one meaning everywhere.** `@from` / `@to`
    are geometry (a beacon, a sprite, the gesture) — so `c.Tween`'s old
@@ -425,7 +471,7 @@ renames are accepted; the reference above is post-pass.
 4. **Playback lives on the run**, shaped like Motion's controls;
    `c.advance` is the sole template alias.
 
-### The motion.dev alignment
+#### The motion.dev alignment
 
 The binding already keeps Motion's names 1:1 (`initial`, `layout`,
 `stiffness`, `visualDuration`…). The timeline now holds the same line
@@ -444,7 +490,7 @@ relearn a name, and a divergence should mean a genuinely new concept:
 | playback controls           | `time` (settable, s), `speed`, `duration`                      | identical, plus `advance()` / `segment` for gates                                                                                                                            |
 | what Motion has no word for | —                                                              | changesets, roles, beacons, the gesture, gates, camera, tether, lift, crossing — new concepts, new words                                                                     |
 
-### The Ember lineage
+#### The Ember lineage
 
 Is a yielded step component idiomatic Ember? Yes — the
 provider-and-contextual-components pattern is the ecosystem's own
@@ -480,7 +526,7 @@ changeset)`. And the names themselves are the lineage kept whole:
 into the third generation — a merge that would have retired them was
 considered and declined.
 
-## The seam with the binding
+### 5.3 The seam with the binding
 
 The reason to draw this line sharply is the recording rule:
 
@@ -538,7 +584,9 @@ regions (emergent scenes like a filtered grid that nobody needs to
 scrub) and _underneath_ everything — the projection tree is the engine
 `c.Move` rides; the region replaces its scheduler, not its math.
 
-## The bento-boxel test
+## 6. Evidence — the audits
+
+### 6.1 The bento-boxel test
 
 `bento-boxel-choreo` is the phase-2 conversion target, and today it imports
 `{{motion}}` only — every scene is still a service holding measured rects, a
@@ -558,7 +606,7 @@ first, and the flight is the changeset's.
 
 **Four constructs it needs that nothing above provides:**
 
-### Hot start — a gesture seeds the sprite
+#### Hot start — a gesture seeds the sprite
 
 The fly-down starts from wherever the finger let go, at whatever speed it
 was moving — not from the sender's resting box. A participant that is being
@@ -574,7 +622,7 @@ session instead of a box; velocity flows into the spring the way Motion's
 own drag-to-`layout` handoff already works within one element. Without
 this, every drop flight keeps its measuring service.
 
-### Tethers — geometry that follows sprites per frame
+#### Tethers — geometry that follows sprites per frame
 
 The ERD's wires are measured after layout and painted straight into the
 SVG, blind while anything moves, with a re-measure "once more late, after
@@ -591,7 +639,7 @@ current boxes and returns path data. This is the construct
 Boxel UI will lean on hardest: wires between cards, comment anchors,
 selection halos — anything drawn _between_ things that move.
 
-### `c.Scroll` — the scroll container as a step
+#### `c.Scroll` — the scroll container as a step
 
 "Jump to the cited post" is today a 30ms timeout, a `scrollIntoView`, and
 an 1800ms timeout to drop the highlight. As a timeline:
@@ -607,7 +655,7 @@ A `Scroll` step animates the sprite's scroll container so the sprite lands
 at `@align`; it occupies the sequence like any step, so "scroll, then
 mark" is finally an ordering statement instead of two timers.
 
-### Relative space — flying inside a moving frame
+#### Relative space — flying inside a moving frame
 
 The detail transmute zooms the canvas with the same spring as the flight
 "so the composite path stays straight" — a coincidence of constants doing
@@ -622,7 +670,7 @@ wire are a `c.Hold` with a lifetime, but their trigger is an event that
 inserts, removes and moves nothing; the model needs to say plainly that a
 pass whose changeset is all-kept still runs its timeline.
 
-## The Pretui test — the realm target
+### 6.2 The Pretui test — the realm target
 
 Pretui is the other kind of stress test. It is a Boxel realm, and realm law
 forbids `setTimeout`, `setInterval`, `requestAnimationFrame`, `Date.now`
@@ -638,7 +686,7 @@ So porting Pretui to Choreo is not blocked on choreography — it uses less
 of it than Choreo already has. It is blocked on the clock. The gaps are a
 runtime target, not constructs:
 
-### Compile to the platform
+#### Compile to the platform
 
 `glimmer-motion`'s own source contains no `requestAnimationFrame`; every
 frame is scheduled through motion-dom's batcher, and motion-dom already
@@ -669,7 +717,7 @@ What never compiles, with its law-legal substitute:
 | `c.Tether` per-frame draw              | CSS anchor positioning, when it lands; until then tethers re-measure at cue boundaries                                                                                  |
 | `@order='random'`                      | a seed argument — realms have `seedFrom`; randomness must be an input, never a clock                                                                                    |
 
-### Package for the realm
+#### Package for the realm
 
 Realm dependency law is "vendored, single file" — Pretui carries
 photoswipe, gridstack and floating-ui as one `index.js` each. Choreo needs
@@ -687,7 +735,7 @@ changeset; its drag stays a listener), and every hand-computed
 per-character `animation-delay` schedule, which is the delivery panel
 (`@by` / `@order` / `@stagger`) compiled by hand today.
 
-## The concept-model test — Boxel System V16
+### 6.3 The concept-model test — Boxel System V16
 
 The original Keynote deck for the Boxel spatial system (98 slides; the
 first half is the model, the second its application to Tally) is the
@@ -712,7 +760,7 @@ is a counterpart flight and the best small demo of one. The tray as "the
 physical element which carries the focused boxel between scenes" is the
 counterpart's carrier role under another name.
 
-### `c.Lift` — planes, made of the orphan layer
+#### `c.Lift` — planes, made of the orphan layer
 
 The deck's plane stack is not vocabulary; it is the answer to a DOM
 fact. `z-index` cannot escape an ancestor's stacking context, and no
@@ -745,7 +793,7 @@ test is the deck's inversion — A contains B, then B contains A — which
 is only animatable at all if both can cross the boundary on a shared
 layer and land in their new containment: `c.Lift`'s contract case.
 
-### `c.Camera` — the third column
+#### `c.Camera` — the third column
 
 The deck's camera rules: zoom out to reveal the edges for rearranging;
 zoom in for in-place editing; a modal plane "causes the planes below to
@@ -772,7 +820,7 @@ threshold a boxel _transmutes_ to a smaller form — camera state feeding
 the next changeset, which is app logic riding a camera value the region
 must expose.
 
-### `@swap='settle'` — the transmute's crossfade policy
+#### `@swap='settle'` — the transmute's crossfade policy
 
 Lift-and-place states it exactly: "the focused boxel retains its 2D
 rendering throughout, just scaling the bitmap through the lift and place
@@ -783,7 +831,7 @@ The counterpart crossfade needs a policy argument: `@swap='during'`
 happens at landing — the lift). One word for a decision every flight
 makes implicitly today.
 
-### The hierarchy, as a lint
+#### The hierarchy, as a lint
 
 The deck's Motion Hierarchy rule is quantitative: **primary** — one, at
 most two, focused boxels transmute; **secondary** — the tray carries;
@@ -796,7 +844,7 @@ warning with the sprite's id in it. The ceiling (too many primaries) is
 taste, but a debug count of sprites moved by `Move` steps per pass makes
 the review conversation possible.
 
-## The surfaces test — boxel-labs
+### 6.4 The surfaces test — boxel-labs
 
 The surfaces research (`boxel-labs`: `boxel-surface` / `boxel-grid` /
 `boxel-canvas`, mirrored into Pretui's `surfaces/` bundle; the staging
@@ -860,7 +908,7 @@ _trigger_ vocabulary — a focus-path change is what fires a pass — not a
 motion construct; the deck's "shifting focus" table is application
 choreography written against it.
 
-## Build order
+## 7. Implementation plan
 
 | piece                           | state                                                           | depends on |
 | ------------------------------- | --------------------------------------------------------------- | ---------- |
@@ -876,7 +924,7 @@ The Build Order demo is the acceptance test throughout: each promotion
 deletes a piece of `builds.ts`, and the demo is done being a simulation when
 `OPENING` is a `<c.Sequence>`.
 
-## Proving it — demos and contract cases
+## 8. Verification plan
 
 The house method already exists: upstream behaviour is pinned by a ported
 suite, Choreo's own rules live in a contract suite on small fixtures
@@ -897,7 +945,7 @@ a silent visual delta between drivers is the one unacceptable bug.
 constructs introduce: advancing a gate mid-flight, seeking backwards,
 cancelling a parked run, crossing a route mid-morph.
 
-### Demos
+### 8.1 Demos
 
 Three upgrades and five new pages — each demo is the acceptance test for
 exactly the construct it wears:
@@ -916,7 +964,7 @@ exactly the construct it wears:
 `@path` and emphasis need no page of their own: Deck's builds use a path
 move and a pulse, which is also how Keynote would.
 
-### Contract cases — the sharp ones
+### 8.2 Contract cases — the sharp ones
 
 The cases below are the ones that catch real bugs, not coverage filler.
 Each is a small fixture in `tests/integration/choreo/`.
@@ -988,7 +1036,7 @@ stays identity while its parent flies (the pre-sampled counter-scale);
 and the realm bundle passes a static scan — no `setTimeout`,
 `requestAnimationFrame`, `Date.now`, or `Math.random` in the artifact.
 
-### Test-support additions
+### 8.3 Test-support additions
 
 The suite needs four helpers to say any of the above:
 `advanceGate()` (advance and settle one segment), `seekTo(seconds)`
@@ -997,3 +1045,28 @@ The suite needs four helpers to say any of the above:
 random advance/seek/route-cross against the live gallery, invariants
 checked after every blow — the same discipline `interruption-test.gts`
 applies today, aimed at the new surface.
+
+## 9. Unresolved questions
+
+1. **The `Lift` name collision** (§6.4): `boxel-surface` ships `Lift`
+   the component while this proposal specifies `c.Lift` the step —
+   product and mechanism of one idea. If one renames, it should be the
+   step (`c.Raise` is free); the decision belongs to whichever lands
+   second.
+2. **The seconds migration**: `@ms` and ms-valued `@stagger` ship
+   today. Pre-1.0 the rename is clean, but the gallery and the contract
+   suite carry the old spellings and convert in the same change.
+3. **`@route` detection**: whether a route swap is recognised purely as
+   a render pass inside the region, or needs a router-service hook for
+   scroll intent and query-param suppression (§4.7 assumes the
+   latter's information is available to the region).
+4. **Camera state feeding changesets** (§6.3): past a zoom threshold a
+   boxel transmutes — application logic riding a camera value the
+   region must expose. The shape of that exposure (a tracked value on
+   `c`? a motion value?) is undecided.
+5. **Tethers under the realm driver** (§6.2): re-measure at cue
+   boundaries until CSS anchor positioning is dependable, then adopt
+   it — the crossover criterion is not set.
+6. **The `<Presence>`-inside-a-region warning** (§5.3): warn always,
+   or only when the wrapped items are participants of the enclosing
+   region?
