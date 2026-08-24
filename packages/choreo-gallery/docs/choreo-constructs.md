@@ -36,6 +36,124 @@ Choreo cues and the demo becomes a thin inspector over a real timeline.
 
 Everything in the right-hand column is specified below.
 
+## The language, complete
+
+The whole surface in one place — what ships today (marked ✓) and what
+this document adds (marked +). Sections below and the audits carry each
+addition's semantics; this is the index.
+
+### Region
+
+`<Choreo @id @debug @route>` — hosts the participants, the orphan layer
+(leavers) and the elevated layer (`c.Lift`), watches its render passes,
+yields `c`. Participants are `{{motion id= role=}}` elements. A pass
+whose changeset is all-kept still runs its timeline (+). `@route` (+)
+treats a route swap inside the region as one pass.
+
+### Queries — every geometry source a step can name
+
+Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
+`@origin`, `@follow`.
+
+| query                                                   | matches                                                          |
+| ------------------------------------------------------- | ---------------------------------------------------------------- |
+| `c.all` / `c.kept` / `c.inserted` / `c.removed` (role?) | ✓ by changeset type                                              |
+| `c.role 'x'` / `c.id 'x'`                               | ✓ by identity                                                    |
+| `c.still` / `c.moved`                                   | ✓ kept, split by bounds delta                                    |
+| `c.received` / `c.counterpart`                          | ✓ the two halves of a counterpart match, far match included      |
+| `c.beacon 'x'`                                          | ✓ a named box that is never a participant                        |
+| `c.gesture`                                             | + the live drag: its pose as a box, its velocity into any spring |
+
+### Blocks
+
+`c.Sequence` ✓ · `c.Parallel` ✓ · `c.Gate` + (`@auto`; advanced by
+`c.advance()`; splits the run into segments; error inside `Parallel`).
+
+### Steps
+
+| step         | today                                                                                         | added                                                                                                                                            |
+| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `c.Tween`    | ✓ `@ms` `@ease` `@delay` `@from` `@stagger`, properties as flat args, values may be functions | + keyframe-array values; `@by` `@order` `@overlap` delivery; `@repeat` for ambient loops with phase derived from the run clock, so a loop scrubs |
+| `c.Spring`   | ✓ `@spring` `@delay` `@from`                                                                  | + the same delivery args                                                                                                                         |
+| `c.Move`     | ✓ FLIP kept sprites; `@spring`/`@ms`/`@ease`, `@size`, `@from`/`@to` (beacons)                | + `@from={{c.gesture}}` hot start; `@path` + `@rotate`; `@swap='during'\|'settle'`; `@crossfade`                                                 |
+| `c.Hold`     | ✓ properties for a window; `@ms`, `@fill`                                                     |                                                                                                                                                  |
+| `c.Wait`     | ✓ `@ms`                                                                                       |                                                                                                                                                  |
+| `c.Lift`     |                                                                                               | + promote to the region's elevated layer for the block's span; `@shadow`; escapes stacking contexts and clips                                    |
+| `c.Camera`   |                                                                                               | + `@zoom` `@x` `@y` `@origin` `@follow`; per-sprite `counterScale: true \| 'damped' \| false`                                                    |
+| `c.Scroll`   |                                                                                               | + animate the sprite's scroll container to `@block`; occupies the sequence                                                                       |
+| `c.Tether`   |                                                                                               | + `@from` `@to` `@draw` — geometry continuously derived from sprites (or the gesture)                                                            |
+| `c.Crossing` |                                                                                               | + the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@crossfade` `@scroll`                                                    |
+
+### Timing
+
+Block order ✓ and `@delay` ✓; `@name` / `@at` with `at()` / `after()`
+anchors (+); every duration resolves through the engine's generator, so
+"after a spring" is exact ✓.
+
+### The run
+
+`c.run` (+): `play` / `pause` / `seek` / `advance` / `cancel`, tracked
+`t` / `duration` / `segment`. Two drivers: the frameloop ✓ and the
+native WAAPI/CSS target (+), same language, same assertions.
+
+## The seam with the binding
+
+The reason to draw this line sharply is the recording rule:
+
+> **If it should scrub, it must be on the timeline.** A recorded run can
+> only replay what its cue list names. Anything that schedules itself —
+> an `animate=` firing off a tracked getter, a `<Presence>` exit, a
+> `layout` spring — happens _beside_ the timeline, and a seek cannot
+> place it. The Playhead demo is the proof by construction: it scrubs
+> precisely because nothing in it self-schedules.
+
+So: is `{{motion}}` still useful? Yes — but inside a region its job
+narrows to what a timeline cannot own.
+
+**The modifier keeps, everywhere:** identity (`id` / `role`), style
+custody (`style=` through the modifier — rule 1 is unchanged), and the
+input-driven states: `drag`, `whileHover` / `whileTap` / `whileFocus`,
+pan handlers. A hover has no duration and a drag has no cue — they are
+unscrubbable by nature, and they stay element-owned (this is the same
+line the surfaces research drew). Their _consequences_ re-enter the
+timeline: a release is `c.gesture`, a focus change fires an all-kept
+pass.
+
+**Inside a region, the modifier loses its animation authority.**
+`initial` / `animate` / `exit` / `variants` on a participant are a
+second scheduler competing with the timeline — the gallery's
+entrance-suppression flag (`isCrossing()`) is what that conflict costs
+today. Every one of them has a `c.` spelling: entrances are `c.Tween
+@of={{c.inserted}}`, exits are steps over `c.removed`, `animate`-on-
+state-change is a step in an all-kept pass, variants with
+`staggerChildren` are delivery (`@by` / `@stagger` / `@overlap`), and a
+repeating keyframe loop is `@repeat` — which is the one construct this
+section adds, because an ambient loop whose phase derives from the run
+clock scrubs and records; a self-scheduled one cannot. In `@debug`, a
+participant carrying `animate` or `exit` warns.
+
+**`<Presence>` does not overlap — it partitions.** Inside a region it
+is redundant by design: leavers are the region's own (kept alive
+exactly as long as the timeline names them — which is also what
+`popLayout` was reaching for, done with a real layer), and a
+`<Presence>` wrapped around participants double-retains them; that
+nesting should warn. Outside any region, `<Presence>` remains the
+light tool for micro enter/exit — menus, toasts, tooltips, the
+surfaces `Lift`'s world — where a timeline would be ceremony. `wait`
+is a two-step `Sequence`, `sync` is a `Parallel`; if a scene grows
+enough to want those words, it has grown into a region.
+
+**`layout` / `layoutId` overlap `c.Move` — and the region wins.** They
+are the same FLIP on the same projection engine; the difference is
+authority. `layout=true` re-decides on every render, self-scheduled and
+off the record; `c.Move` is a cue. On a participant, `layout` is the
+two-engines-on-one-element hazard the SharedTabs freeze already
+demonstrated — so participants do not carry `layout`; the timeline
+moves them. `layoutId` / `<LayoutGroup>` remain fully in force outside
+regions (emergent scenes like a filtered grid that nobody needs to
+scrub) and _underneath_ everything — the projection tree is the engine
+`c.Move` rides; the region replaces its scheduler, not its math.
+
 ## Gates — `c.Gate`
 
 Keynote's driver is not time, it is the click: a build order is chunked into
