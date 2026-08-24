@@ -131,10 +131,12 @@ export async function browse(
     return;
   }
 
-  log(
-    `Opening ${hostUrl} as ${profile.matrixUserId} ` +
-      `(login token valid ${describeDuration(token.expiresInMs)}, single use)`,
-  );
+  // The validity window is only stated when the server reported one.
+  let tokenNote =
+    token.expiresInMs !== undefined
+      ? `(login token valid ${describeDuration(token.expiresInMs)}, single use)`
+      : `(single-use login token)`;
+  log(`Opening ${hostUrl} as ${profile.matrixUserId} ${tokenNote}`);
 
   let opened = await openBrowserFn(url);
   if (!opened) {

@@ -63,7 +63,8 @@ export async function matrixLogin(
 export interface LoginToken {
   loginToken: string;
   // How long the token is valid, in milliseconds, as reported by the server.
-  expiresInMs: number;
+  // Absent when the server omits `expires_in_ms`.
+  expiresInMs?: number;
 }
 
 // Parse a Matrix error body, which is JSON `{ errcode, error, ... }` on a
@@ -119,7 +120,9 @@ export async function requestLoginToken(
     }
     return {
       loginToken: json.login_token,
-      expiresInMs: json.expires_in_ms ?? 0,
+      ...(json.expires_in_ms !== undefined
+        ? { expiresInMs: json.expires_in_ms }
+        : {}),
     };
   }
 
@@ -138,11 +141,13 @@ export async function requestLoginToken(
   // The endpoint is unrecognized (feature off) or gated behind an interactive
   // UIA challenge (require_ui_auth). Neither is something this non-interactive
   // path can drive, and both mean the same thing to the user: the server isn't
-  // set up to mint login tokens from a session.
+  // set up to mint login tokens from a session. `M_UNRECOGNIZED` covers both
+  // response shapes for an unknown endpoint (404 per spec, 400 from older
+  // Synapse); a 400 with any other errcode is a genuine bad request and falls
+  // through to the raw failure below.
   let featureUnavailable =
     errcode === 'M_UNRECOGNIZED' ||
     response.status === 404 ||
-    response.status === 400 ||
     (response.status === 401 && Array.isArray(flows));
   if (featureUnavailable) {
     throw new Error(

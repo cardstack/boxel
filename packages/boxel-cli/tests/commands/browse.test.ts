@@ -142,6 +142,50 @@ describe('requestLoginToken', () => {
       /login_via_existing_session enabled/,
     );
   });
+
+  it('treats an old-Synapse 400 M_UNRECOGNIZED as "not enabled"', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        fakeResponse(400, { errcode: 'M_UNRECOGNIZED', error: 'Unrecognized' }),
+      );
+
+    await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).rejects.toThrow(
+      /login_via_existing_session enabled/,
+    );
+  });
+
+  it('reports a 400 with another errcode as a raw failure, not "not enabled"', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        fakeResponse(400, { errcode: 'M_NOT_JSON', error: 'Bad request' }),
+      );
+
+    await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).rejects.toThrow(
+      /login-token request failed: 400/,
+    );
+  });
+
+  it('errors when a 200 response has no login_token', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(fakeResponse(200, { expires_in_ms: 120000 }));
+
+    await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).rejects.toThrow(
+      /did not include a login_token/,
+    );
+  });
+
+  it('omits expiresInMs when the server does not report one', async () => {
+    let fetchFn = vi
+      .fn()
+      .mockResolvedValue(fakeResponse(200, { login_token: 'lt_abc' }));
+
+    await expect(requestLoginToken(MATRIX_AUTH, fetchFn)).resolves.toEqual({
+      loginToken: 'lt_abc',
+    });
+  });
 });
 
 describe('browse', () => {
@@ -262,6 +306,32 @@ describe('browse', () => {
     expect(openBrowserFn).toHaveBeenCalledWith(
       'https://localhost:4200/?loginToken=lt_fresh',
     );
+  });
+
+  it('propagates a second auth rejection instead of re-authenticating again', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let reAuthenticate = vi.fn().mockResolvedValue({
+      accessToken: 'fresh-token',
+      userId: '@alice:localhost',
+      deviceId: 'DEVICE',
+      matrixUrl: 'http://localhost:8008',
+    });
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockRejectedValue(new MatrixAuthError(401, 'still rejected'));
+
+    await expect(
+      browse(undefined, {
+        profileManager: fakeProfileManager({ reAuthenticate }),
+        requestLoginToken: requestLoginTokenFn,
+        openBrowserFn,
+        log: () => {},
+      }),
+    ).rejects.toBeInstanceOf(MatrixAuthError);
+
+    expect(reAuthenticate).toHaveBeenCalledTimes(1);
+    expect(requestLoginTokenFn).toHaveBeenCalledTimes(2);
+    expect(openBrowserFn).not.toHaveBeenCalled();
   });
 
   it('uses a named --profile via getProfile', async () => {
