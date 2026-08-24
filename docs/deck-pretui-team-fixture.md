@@ -10,6 +10,11 @@ different layers of a design system, preview exact development locks, submit
 normal Reviews, release on `main`, and begin the next train without treating
 GitHub or a checkout as canonical state?
 
+The live bootstrap adds an Astra query harness without inventing a separate
+application. The Realm's `index.json` adopts the standard Base `Workspace`,
+pins the release train and harness, and exposes the generated view cards
+through the ordinary Workspace Library.
+
 ## Scenario
 
 ```text
@@ -108,6 +113,50 @@ cat "$REALM_DIR/.deck/store/cardstack/pretui/meta.json"
 Mount the generated directory as the `@cardstack/pretui/` source realm and
 open `index.json` to see the Release Train card. It visually connects the four
 developer lanes, five Reviews, three lock moments, and the 28-unit main result.
+
+For the browser-ready Realm with real multi-view query evidence, use deckd and
+the live bootstrap:
+
+```sh
+cargo run --manifest-path packages/deckd/Cargo.toml -- serve --port 8787
+
+REALM_DIR="$(mktemp -d /tmp/boxel-pretui-live.XXXXXX)"
+mise exec -- pnpm fixture:pretui-live -- "$REALM_DIR"
+PRETUI_REALM_PATH="$REALM_DIR" mise run dev-pretui
+```
+
+For a single foreground `mise` environment containing both Host and Realm
+Server, use:
+
+```sh
+PRETUI_REALM_PATH="$REALM_DIR" mise run dev-pretui-all
+```
+
+`dev-pretui` remains the backend-only variant. Start the Host with the same
+mise environment in a second terminal when independent restart cycles are
+useful:
+
+```sh
+mise exec -- pnpm -C packages/host start
+```
+
+The mutable Realm is `https://localhost:4201/pretui/` and the Host is
+`https://localhost:4200/`. Keeping the fixture path explicit prevents a task
+from silently deleting or replacing a developer's collaboration Realm.
+
+The bootstrap runs the current Astra implementation against four exact views,
+writes the result to `.deck/fixtures/astra-query.json`, and materializes five
+ordinary cards: one harness plus previous, stable, next, and main views. The
+expected 0.9.0 → 1.0.0 comparison is 20 added, 8 changed, 0 removed, and 8
+unchanged. Semantic card names live in `cardInfo.name`, so the Workspace,
+activity feed, and generic card shells never fall back to “Untitled”.
+
+The **Astra Query Harness** is not a static proof card. It posts the visible
+request to the live Realm endpoint and redraws both its four-view corpus ledger
+and answer pane from the response. Its saved questions cover layer, owner,
+availability, development locks, and design-review concepts; the JSON editor
+keeps the protocol inspectable when a teammate needs a query beyond those
+shortcuts.
 
 Focused verification:
 

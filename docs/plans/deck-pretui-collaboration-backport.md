@@ -26,6 +26,14 @@ fixed Review candidates, merges them through Realm Server, advances the source
 branches to their next semver/import-map locks, and round-trips each checkout
 through `main` without losing its exact branch state.
 
+The current A4 continuation adds Astra QueryView v1 and a browser-ready PretUI
+Workspace fixture. One query resolves branch, Checkpoint, immutable index, and
+Version views with full provenance and can compare two views by logical RRI.
+The live bootstrap replays the protocol from an empty directory and exposes the
+results as ordinary Realm cards. A clean local index contains 36 successful
+card instances and zero card errors; its 0.9.0 → 1.0.0 comparison is 20 added,
+8 changed, 0 removed, and 8 unchanged.
+
 ## Target outcome
 
 PretUI becomes the first production-shaped realm to use Deck collaboration.
@@ -574,6 +582,13 @@ existing Workspace Chooser, `SubmodeLayout`, realm backgrounds, card stacks,
 and Review surfaces. Outside the `deckCollaboration` capability boundary, the
 Host must render the existing UI, preserve its keyboard behavior, and make no
 Deck-specific requests.
+
+The Astra fixture is the reference boundary for the protocol-first phase: the
+Realm's default `index.json` adopts the standard Base `Workspace`; its harness,
+views, and release train are Realm-owned cards. The global Boxel icon,
+Interact/Code selector, New action, stack rails, profile, and assistant remain
+untouched. Any future branch styling is additive, capability-gated, and must
+pass visual regression against this unchanged shell.
 
 The gate is conjunctive: the build/boot flag is enabled, the Realm Server
 advertises the capability, the realm is in the PretUI pilot allowlist, and the

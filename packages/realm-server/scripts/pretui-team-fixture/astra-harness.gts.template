@@ -1,0 +1,849 @@
+import {
+  CardDef,
+  Component,
+  contains,
+  field,
+  realmURL,
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+
+type ViewSelector =
+  | { kind: 'version'; spec: string }
+  | { kind: 'branch'; branch: string };
+
+interface AstraRequest {
+  schema: 'boxel-astra-query-v1';
+  query: { text?: string };
+  views: ViewSelector[];
+  compare?: { from: number; to: number };
+}
+
+interface AstraCard {
+  logicalRRI: string;
+  sourcePath: string;
+  document: {
+    data?: {
+      attributes?: {
+        title?: string;
+        name?: string;
+        layer?: string;
+        owner?: string;
+        sourceVersion?: string;
+        state?: string;
+      };
+    };
+  };
+}
+
+interface AstraView {
+  provenance: {
+    kind: 'version' | 'branch' | 'checkpoint' | 'index';
+    mutability: 'mutable' | 'immutable';
+    resolved?: string;
+    branch?: string;
+    treeHash: string;
+    indexHash: string;
+  };
+  cards: AstraCard[];
+}
+
+interface AstraResult {
+  views: AstraView[];
+  comparison?: {
+    added: string[];
+    changed: string[];
+    removed: string[];
+    unchanged: string[];
+  };
+}
+
+const VIEWS: ViewSelector[] = [
+  { kind: 'version', spec: '0.9.0' },
+  { kind: 'version', spec: '1.0.0' },
+  { kind: 'version', spec: '1.1.0-dev.1' },
+  { kind: 'branch', branch: 'main' },
+];
+
+const SAMPLE_GROUPS = [
+  {
+    numeral: '01',
+    title: 'The release surface',
+    blurb: 'Ask what exists across every exact view.',
+    samples: [
+      ['Everything', ''],
+      ['Controls', 'control'],
+      ['Fields', 'field'],
+      ['Layout primitives', 'layout'],
+    ],
+  },
+  {
+    numeral: '02',
+    title: 'The team',
+    blurb: 'Follow ownership across the release train.',
+    samples: [
+      ['Mina Park', 'Mina Park'],
+      ['Jo Bell', 'Jo Bell'],
+      ['Ana Costa', 'Ana Costa'],
+      ['Leo Wong', 'Leo Wong'],
+    ],
+  },
+  {
+    numeral: '03',
+    title: 'The evolving system',
+    blurb: 'Find concepts whose presence changes by Version.',
+    samples: [
+      ['Known Date', 'known date'],
+      ['Available components', 'available'],
+      ['Development locks', 'development'],
+      ['Design review', 'design review'],
+    ],
+  },
+] as const;
+
+function requestFor(text: string): AstraRequest {
+  return {
+    schema: 'boxel-astra-query-v1',
+    query: text ? { text } : {},
+    views: VIEWS,
+    compare: { from: 0, to: 1 },
+  };
+}
+
+function shortHash(hash: string): string {
+  return hash.slice(0, 10);
+}
+
+export class AstraHarness extends CardDef {
+  static displayName = 'Astra Query Harness';
+  static prefersWideFormat = true;
+  @field title = contains(StringField);
+  @field query = contains(StringField);
+  @field from = contains(StringField);
+  @field to = contains(StringField);
+  @field viewCount = contains(StringField);
+  @field added = contains(StringField);
+  @field changed = contains(StringField);
+  @field removed = contains(StringField);
+  @field unchanged = contains(StringField);
+  @field evidence = contains(StringField);
+}
+
+class AstraHarnessIsolated extends Component<typeof AstraHarness> {
+  @tracked draft = JSON.stringify(requestFor(''), null, 2);
+  @tracked activeLabel = 'Everything';
+  @tracked result: AstraResult | undefined;
+  @tracked population: AstraResult | undefined;
+  @tracked error: string | undefined;
+  @tracked loading = false;
+  private runNumber = 0;
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    void this.loadInitial();
+  }
+
+  private get endpoint(): string {
+    let root = this.args.model[realmURL]?.href;
+    return root ? new URL('.deck/astra/query', root).href : '';
+  }
+
+  private async queryAstra(request: AstraRequest): Promise<AstraResult> {
+    if (!this.endpoint) {
+      throw new Error('This card is not attached to a Realm.');
+    }
+    let response = await fetch(this.endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status} · ${await response.text()}`);
+    }
+    return (await response.json()) as AstraResult;
+  }
+
+  private async loadInitial() {
+    this.loading = true;
+    this.error = undefined;
+    try {
+      [this.population, this.result] = await Promise.all([
+        this.queryAstra(requestFor('')),
+        this.queryAstra(requestFor('')),
+      ]);
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  get sampleGroups() {
+    return SAMPLE_GROUPS.map((group) => ({
+      ...group,
+      samples: group.samples.map(([label, text]) => ({
+        label,
+        text,
+        state: label === this.activeLabel ? 'active' : 'idle',
+      })),
+    }));
+  }
+
+  private labelFor(view: AstraView): string {
+    return view.provenance.kind === 'version'
+      ? (view.provenance.resolved ?? 'Version')
+      : `${view.provenance.branch ?? view.provenance.kind} · ${shortHash(view.provenance.treeHash)}`;
+  }
+
+  get viewRows() {
+    return (this.population?.views ?? []).map((populationView, index) => {
+      let resultView = this.result?.views[index];
+      let hits = new Set(
+        (resultView?.cards ?? []).map((card) => card.sourcePath),
+      );
+      return {
+        label: this.labelFor(populationView),
+        mutability: populationView.provenance.mutability,
+        indexHash: shortHash(populationView.provenance.indexHash),
+        count: resultView?.cards.length ?? 0,
+        total: populationView.cards.length,
+        verdict: (resultView?.cards.length ?? 0) > 0 ? 'matched' : 'no match',
+        dots: populationView.cards.map((card) => ({
+          title: card.document.data?.attributes?.title ?? card.sourcePath,
+          state: hits.has(card.sourcePath) ? 'hit' : 'miss',
+        })),
+      };
+    });
+  }
+
+  get comparison() {
+    return (
+      this.result?.comparison ?? {
+        added: [],
+        changed: [],
+        removed: [],
+        unchanged: [],
+      }
+    );
+  }
+
+  get matchedTotal() {
+    return (this.result?.views ?? []).reduce(
+      (total, view) => total + view.cards.length,
+      0,
+    );
+  }
+
+  get populationTotal() {
+    return (this.population?.views ?? []).reduce(
+      (total, view) => total + view.cards.length,
+      0,
+    );
+  }
+
+  get hits() {
+    return (this.result?.views ?? []).flatMap((view) =>
+      view.cards.slice(0, 8).map((card) => {
+        let attributes = card.document.data?.attributes;
+        return {
+          view: this.labelFor(view),
+          title: attributes?.title ?? card.sourcePath,
+          layer: attributes?.layer ?? 'card',
+          owner: attributes?.owner ?? 'PretUI',
+          version: attributes?.sourceVersion ?? 'workspace',
+        };
+      }),
+    );
+  }
+
+  @action updateDraft(event: Event) {
+    this.draft = (event.target as HTMLTextAreaElement).value;
+  }
+
+  @action maybeRun(event: Event) {
+    if (
+      event instanceof KeyboardEvent &&
+      event.key === 'Enter' &&
+      (event.metaKey || event.ctrlKey)
+    ) {
+      event.preventDefault();
+      void this.run();
+    }
+  }
+
+  @action loadSample(text: string, label: string) {
+    this.draft = JSON.stringify(requestFor(text), null, 2);
+    this.activeLabel = label;
+    void this.run();
+  }
+
+  @action async run() {
+    let runNumber = ++this.runNumber;
+    this.loading = true;
+    this.error = undefined;
+    try {
+      let request = JSON.parse(this.draft) as AstraRequest;
+      let result = await this.queryAstra(request);
+      if (runNumber === this.runNumber) {
+        this.result = result;
+      }
+    } catch (error) {
+      if (runNumber === this.runNumber) {
+        this.error = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      if (runNumber === this.runNumber) {
+        this.loading = false;
+      }
+    }
+  }
+
+  <template>
+    <section class='console'>
+      <div class='sheet'>
+        <header class='masthead'>
+          <div class='mast-row'>
+            <span class='eyebrow'>Astra · PretUI · four exact views</span>
+            <span class='protocol'><i></i>live protocol</span>
+          </div>
+          <h1>Ask across the release.</h1>
+          <p>Twenty-eight design-system components, four team-owned layers,
+            three immutable Versions, and mutable main. One query shows what
+            exists in every reality without changing Workspace context.</p>
+        </header>
+
+        <hr />
+
+        <section class='ledger'>
+          <div class='section-head'>
+            <span class='eyebrow'>The corpus · every card, and what this query
+              did with it</span>
+            <span class='legend'><i data-state='hit'></i>matched<i
+                data-state='miss'
+              ></i>no match</span>
+          </div>
+          <div class='views'>
+            {{#each this.viewRows as |view|}}
+              <article class='view'>
+                <div class='view-top'>
+                  <code>{{view.label}}</code>
+                  <span
+                    data-mutability={{view.mutability}}
+                  >{{view.mutability}}</span>
+                </div>
+                <div class='dots'>
+                  {{#each view.dots as |dot|}}
+                    <i data-state={{dot.state}} title={{dot.title}}></i>
+                  {{/each}}
+                </div>
+                <div class='view-foot'>
+                  <b>{{view.count}} / {{view.total}}</b>
+                  <span>{{view.verdict}} · index {{view.indexHash}}</span>
+                </div>
+              </article>
+            {{else}}
+              <p class='muted'>Reading the indexed views…</p>
+            {{/each}}
+          </div>
+        </section>
+
+        <hr />
+
+        <div class='columns'>
+          <aside class='rail'>
+            {{#each this.sampleGroups as |group|}}
+              <section>
+                <div class='group-head'>
+                  <span>{{group.numeral}}</span>
+                  <div><b>{{group.title}}</b><small
+                    >{{group.blurb}}</small></div>
+                </div>
+                <ul>
+                  {{#each group.samples as |sample|}}
+                    <li><button
+                        type='button'
+                        data-state={{sample.state}}
+                        {{on
+                          'click'
+                          (fn this.loadSample sample.text sample.label)
+                        }}
+                      >{{sample.label}}</button></li>
+                  {{/each}}
+                </ul>
+              </section>
+            {{/each}}
+          </aside>
+
+          <section class='ask'>
+            <div class='pane-head'><span class='eyebrow'>The question</span><kbd
+              >⌘ Enter</kbd></div>
+            <div class='brief'><b>{{this.activeLabel}}</b><span>Edit the
+                protocol request directly, or choose a question from the rail.</span></div>
+            <textarea
+              aria-label='Astra query JSON'
+              spellcheck='false'
+              {{on 'input' this.updateDraft}}
+              {{on 'keydown' this.maybeRun}}
+            >{{this.draft}}</textarea>
+            <div class='actions'>
+              <button type='button' {{on 'click' this.run}}>Run query</button>
+              {{#if this.loading}}<span>running…</span>{{else}}<span>POST
+                  /.deck/astra/query</span>{{/if}}
+            </div>
+            {{#if this.error}}
+              <div class='alert'><b>Query refused</b><span
+                >{{this.error}}</span></div>
+            {{/if}}
+          </section>
+
+          <section class='answer'>
+            <div class='pane-head'><span class='eyebrow'>The answer</span><span
+                class='ran'
+              >{{this.activeLabel}}</span></div>
+            <div class='stat'><b>{{this.matchedTotal}}</b><span
+              >matches</span><small>of
+                {{this.populationTotal}}
+                card appearances across four views</small></div>
+            <div class='delta'>
+              <span><b>+{{this.comparison.added.length}}</b>added</span>
+              <span><b>~{{this.comparison.changed.length}}</b>changed</span>
+              <span><b>−{{this.comparison.removed.length}}</b>removed</span>
+              <span><b>{{this.comparison.unchanged.length}}</b>unchanged</span>
+            </div>
+            <ul class='hits'>
+              {{#each this.hits as |hit|}}
+                <li><code>{{hit.view}}</code><div><b>{{hit.title}}</b><span
+                    >{{hit.layer}}
+                      ·
+                      {{hit.owner}}
+                      ·
+                      {{hit.version}}</span></div></li>
+              {{else}}
+                <li class='empty'><b>Nothing matched.</b><span>The ledger still
+                    shows every card that was asked and answered no.</span></li>
+              {{/each}}
+            </ul>
+          </section>
+        </div>
+
+        <footer><span>RRI identity · immutable index generations · exact
+            provenance</span><code>{{@model.evidence}}</code></footer>
+      </div>
+    </section>
+
+    <style scoped>
+      .console {
+        --bg: var(--background, #f7f8f7);
+        --card: var(--card, #fff);
+        --ink: var(--foreground, #17231f);
+        --muted: var(--muted-foreground, #6e7c76);
+        --line: var(--border, #d9e3df);
+        --accent: var(--primary, #13c77a);
+        --accent-ink: #087a4f;
+        --warn: #9a6a00;
+        container-type: inline-size;
+        min-height: 100%;
+        max-height: calc(100vh - 7rem);
+        overflow: auto;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--font-sans, 'IBM Plex Sans', system-ui, sans-serif);
+        font-size: 0.875rem;
+        line-height: 1.55;
+      }
+      .sheet {
+        max-width: 92rem;
+        margin: 0 auto;
+        padding: 1.8rem 2rem 2.5rem;
+      }
+      .mast-row,
+      .section-head,
+      .pane-head,
+      .view-top,
+      .view-foot,
+      .actions,
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .eyebrow {
+        color: var(--muted);
+        font: 600 0.67rem var(--font-mono, 'IBM Plex Mono', monospace);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .protocol {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        font: 600 0.67rem var(--font-mono, monospace);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .protocol i {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 0.25rem
+          color-mix(in srgb, var(--accent) 16%, transparent);
+      }
+      h1 {
+        margin: 0.65rem 0 0.3rem;
+        font-family: var(--font-serif, 'IBM Plex Serif', Georgia, serif);
+        font-size: clamp(2rem, 5vw, 3.6rem);
+        font-weight: 400;
+        line-height: 1;
+        letter-spacing: -0.035em;
+      }
+      .masthead p {
+        max-width: 66ch;
+        margin: 0;
+        color: var(--muted);
+        text-wrap: pretty;
+      }
+      hr {
+        height: 1px;
+        margin: 1.4rem 0;
+        border: 0;
+        background: var(--line);
+      }
+      .legend {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+      .legend i,
+      .dots i {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 0.18rem;
+        background: #e8ecea;
+        box-shadow: inset 0 0 0 1px var(--line);
+      }
+      .legend i[data-state='hit'],
+      .dots i[data-state='hit'] {
+        background: var(--accent);
+        box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 65%, #000);
+      }
+      .views {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+      }
+      .view {
+        display: grid;
+        gap: 0.7rem;
+        padding: 0.85rem 1rem;
+        border-radius: 0.7rem;
+        background: var(--card);
+        box-shadow:
+          0 0 0 1px var(--line),
+          0 0.25rem 0.8rem rgb(23 35 31 / 5%);
+      }
+      code {
+        font-family: var(--font-mono, 'IBM Plex Mono', monospace);
+        font-size: 0.7rem;
+      }
+      .view-top span {
+        padding: 0.15rem 0.4rem;
+        border-radius: 999px;
+        background: #e8f8ef;
+        color: var(--accent-ink);
+        font: 600 0.6rem var(--font-mono, monospace);
+        text-transform: uppercase;
+      }
+      .view-top span[data-mutability='mutable'] {
+        background: #fff0c9;
+        color: var(--warn);
+      }
+      .dots {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        min-height: 1.55rem;
+      }
+      .view-foot b {
+        font-family: var(--font-mono, monospace);
+        font-size: 0.75rem;
+      }
+      .view-foot span {
+        color: var(--muted);
+        font-size: 0.65rem;
+      }
+      .columns {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+        align-items: start;
+      }
+      .rail {
+        display: grid;
+        gap: 1.25rem;
+      }
+      .group-head {
+        display: grid;
+        grid-template-columns: 2rem 1fr;
+        gap: 0.65rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .group-head > span {
+        color: #a1aaa6;
+        font: 1.35rem var(--font-serif, Georgia, serif);
+      }
+      .group-head b,
+      .group-head small {
+        display: block;
+      }
+      .group-head b {
+        font-size: 0.78rem;
+      }
+      .group-head small {
+        color: var(--muted);
+        font-size: 0.67rem;
+      }
+      .rail ul,
+      .hits {
+        display: grid;
+        gap: 0.18rem;
+        margin: 0.45rem 0 0;
+        padding: 0;
+        list-style: none;
+      }
+      .rail button {
+        width: 100%;
+        padding: 0.4rem 0.6rem;
+        border: 0;
+        border-radius: 0.45rem;
+        background: transparent;
+        color: var(--muted);
+        font-family: inherit;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-align: left;
+        cursor: pointer;
+      }
+      .rail button:hover {
+        background: color-mix(in srgb, var(--accent) 6%, var(--card));
+        color: var(--ink);
+      }
+      .rail button[data-state='active'] {
+        background: var(--card);
+        color: var(--accent-ink);
+        box-shadow:
+          0 0 0 1px var(--line),
+          0 0.15rem 0.45rem rgb(23 35 31 / 5%);
+      }
+      .pane-head {
+        min-height: 1.7rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--line);
+      }
+      kbd {
+        padding: 0.1rem 0.35rem;
+        border-radius: 0.25rem;
+        background: #edf0ee;
+        color: var(--muted);
+        font: 0.62rem var(--font-mono, monospace);
+      }
+      .brief {
+        display: grid;
+        gap: 0.1rem;
+        margin: 0.75rem 0;
+        padding-left: 0.7rem;
+        border-left: 2px solid var(--accent);
+      }
+      .brief b {
+        font-size: 0.78rem;
+      }
+      .brief span {
+        color: var(--muted);
+        font-size: 0.7rem;
+      }
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 20rem;
+        resize: vertical;
+        padding: 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 0.6rem;
+        outline: none;
+        background: #f1f4f2;
+        color: var(--ink);
+        font: 0.7rem/1.55 var(--font-mono, 'IBM Plex Mono', monospace);
+        box-shadow: inset 0 0.1rem 0.25rem rgb(23 35 31 / 6%);
+      }
+      textarea:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 0.18rem
+          color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+      .actions {
+        margin-top: 0.65rem;
+      }
+      .actions button {
+        padding: 0.5rem 0.9rem;
+        border: 0;
+        border-radius: 0.5rem;
+        background: var(--accent);
+        color: #062f20;
+        font-family: inherit;
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow:
+          inset 0 1px 0 rgb(255 255 255 / 28%),
+          0 0.15rem 0.4rem rgb(8 122 79 / 15%);
+      }
+      .actions span {
+        color: var(--muted);
+        font: 0.65rem var(--font-mono, monospace);
+      }
+      .alert {
+        display: grid;
+        gap: 0.2rem;
+        margin-top: 0.7rem;
+        padding: 0.65rem 0.75rem;
+        border: 1px solid #e5a9a1;
+        border-radius: 0.55rem;
+        background: #fff2ef;
+        color: #8b3129;
+      }
+      .alert span {
+        font-size: 0.7rem;
+      }
+      .ran {
+        color: var(--muted);
+        font-size: 0.68rem;
+      }
+      .stat {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: 0.65rem;
+        align-items: baseline;
+        margin: 0.8rem 0;
+      }
+      .stat b {
+        grid-row: 1 / 3;
+        color: var(--accent-ink);
+        font: 400 3.4rem/1 var(--font-serif, Georgia, serif);
+      }
+      .stat span {
+        align-self: end;
+        font-weight: 600;
+      }
+      .stat small {
+        align-self: start;
+        color: var(--muted);
+      }
+      .delta {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        overflow: hidden;
+        margin-bottom: 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 0.55rem;
+        background: var(--line);
+        gap: 1px;
+      }
+      .delta span {
+        display: grid;
+        gap: 0.1rem;
+        padding: 0.55rem;
+        background: var(--card);
+        color: var(--muted);
+        font-size: 0.62rem;
+      }
+      .delta b {
+        color: var(--ink);
+        font: 600 1rem var(--font-mono, monospace);
+      }
+      .hits {
+        max-height: 22rem;
+        overflow: auto;
+      }
+      .hits li {
+        display: grid;
+        grid-template-columns: 6.8rem 1fr;
+        gap: 0.7rem;
+        align-items: start;
+        padding: 0.5rem 0.1rem;
+        border-bottom: 1px solid var(--line);
+      }
+      .hits code {
+        overflow: hidden;
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.3rem;
+        background: color-mix(in srgb, var(--accent) 7%, var(--card));
+        color: var(--accent-ink);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .hits b,
+      .hits span {
+        display: block;
+      }
+      .hits b {
+        font-size: 0.75rem;
+      }
+      .hits span {
+        color: var(--muted);
+        font-size: 0.65rem;
+      }
+      .hits .empty {
+        grid-template-columns: 1fr;
+        padding: 1rem 0;
+      }
+      footer {
+        margin-top: 1.5rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font: 0.62rem var(--font-mono, monospace);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      @container (min-width: 58rem) {
+        .columns {
+          grid-template-columns: minmax(12rem, 0.7fr) minmax(19rem, 1fr) minmax(
+              20rem,
+              1.1fr
+            );
+          gap: 1.8rem;
+        }
+      }
+      @container (max-width: 40rem) {
+        .sheet {
+          padding: 1.2rem;
+        }
+        .section-head,
+        footer {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .delta {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+    </style>
+  </template>
+}
+
+AstraHarness.isolated = AstraHarnessIsolated;

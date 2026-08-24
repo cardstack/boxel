@@ -498,6 +498,16 @@ export default class RenderRoute extends Route<Model> {
     }
 
     let realmURL = response.headers.get('x-boxel-realm-url')!;
+    // The prerender/indexing path fetches card source directly rather than
+    // through CardService. Install the package-owned RRI mapping before we
+    // inspect adoptsFrom, otherwise a fresh index cannot resolve canonical
+    // module refs from a Deck-enabled Realm.
+    if (response.url) {
+      await this.network.dynamicRRIResolution.prepare(
+        new URL(response.url),
+        response,
+      );
+    }
     let lastModified = new Date(response.headers.get('last-modified')!);
     let doc: LooseSingleCardDocument | CardErrorsJSONAPI =
       await response.json();

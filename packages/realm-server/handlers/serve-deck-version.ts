@@ -24,6 +24,7 @@ import type {
   ResponseWithNodeStream,
 } from '@cardstack/runtime-common';
 import {
+  isAstraQueryRequest,
   REALM_VIEW_HEADER,
   RealmPaths,
   SupportedMimeType,
@@ -87,6 +88,7 @@ import {
   restoreDeckBranchHistory,
   type DeckHistoryRestoreRequest,
 } from '../lib/deck-branch-history.ts';
+import { runDeckAstraQuery } from '../lib/deck-astra-query.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -112,6 +114,7 @@ const BRANCH_INDEX_PATH = '.deck/branch-index';
 const CHECKPOINT_PATH = '.deck/checkpoint';
 const REVIEW_PATH = '.deck/review';
 const REVIEWS_PATH = '.deck/reviews';
+const ASTRA_QUERY_PATH = '.deck/astra/query';
 const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
 const TRANSPILED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs'];
 
@@ -240,6 +243,7 @@ async function handleDeckCapabilitiesRequest(
     protocol: 'deck-r0',
     sync: 'content-addressed',
     history: 'jj',
+    astra: 'query-view-v1',
   });
   return new Response(request.method === 'HEAD' ? null : body, {
     headers: {
@@ -923,6 +927,69 @@ async function handleDeckBranchIndexRequest(
   }
 }
 
+async function handleDeckAstraQueryRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(ASTRA_QUERY_PATH)) return null;
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -ASTRA_QUERY_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  if (request.method !== 'POST') {
+    return new Response('Astra queries require POST', {
+      status: 405,
+      headers: { allow: 'POST' },
+    });
+  }
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  if (!realm?.dir || !packageName) {
+    return new Response('Not found', { status: 404 });
+  }
+  let realmRRI = `@${packageName}/`;
+  if (!hasDeckCollaboration(deps.deckCollaboration, realmRRI)) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization = await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return new Response('Astra query is not valid JSON', { status: 400 });
+  }
+  if (!isAstraQueryRequest(body)) {
+    return new Response('Invalid Astra QueryView request', { status: 400 });
+  }
+  try {
+    let result = await runDeckAstraQuery({
+      realmDir: realm.dir,
+      realmRRI,
+      packageName,
+      policy: deps.deckCollaboration!,
+      request: body,
+    });
+    return Response.json(result, {
+      headers: {
+        'cache-control': 'private, no-store',
+        'x-boxel-astra-query': 'true',
+      },
+    });
+  } catch (error) {
+    if (error instanceof DeckIndexPendingError) {
+      return new Response(error.message, { status: 409 });
+    }
+    return new Response(
+      error instanceof Error ? error.message : 'Astra query failed',
+      { status: 400 },
+    );
+  }
+}
+
 async function handleExactRealmViewRequest(
   request: Request,
   deps: DeckVersionServingDeps,
@@ -1501,6 +1568,10 @@ export async function handleDeckVersionRequest(
   let branchIndex = await handleDeckBranchIndexRequest(request, deps);
   if (branchIndex) {
     return branchIndex;
+  }
+  let astraQuery = await handleDeckAstraQueryRequest(request, deps);
+  if (astraQuery) {
+    return astraQuery;
   }
   let history = await handleDeckHistoryRequest(request, deps);
   if (history) {

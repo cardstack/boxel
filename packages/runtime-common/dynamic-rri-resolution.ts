@@ -68,7 +68,35 @@ export class DynamicRRIResolution {
     let exact = parseExactVersionTransportURL(moduleURL);
     let transportRootURL =
       exact?.packageURL.href ?? ensureTrailingSlash(realmURL);
-    let key = transportRootURL;
+    return this.prepareContext({
+      exactRootRRI: exact ? parseRRI(exact.identifier).root : undefined,
+      mutableRealmURL: ensureTrailingSlash(realmURL),
+      transportRootURL,
+    });
+  }
+
+  /**
+   * Bootstrap a known Realm before a persisted RRI is first resolved. This is
+   * the cold-start counterpart to response-driven prepare(): operator-mode
+   * state can contain an RRI before loading that card has produced a response.
+   */
+  async prepareRealm(realmURL: URL): Promise<void> {
+    if (!this.enabled) {
+      return;
+    }
+    let transportRootURL = ensureTrailingSlash(realmURL.href);
+    return this.prepareContext({
+      mutableRealmURL: transportRootURL,
+      transportRootURL,
+    });
+  }
+
+  private async prepareContext(options: {
+    exactRootRRI?: string;
+    mutableRealmURL: string;
+    transportRootURL: string;
+  }): Promise<void> {
+    let key = options.transportRootURL;
     let inFlight = this.pending.get(key);
     if (inFlight) {
       return inFlight;
@@ -77,11 +105,9 @@ export class DynamicRRIResolution {
       return;
     }
 
-    let preparation = this.discoverAndInstall({
-      exactRootRRI: exact ? parseRRI(exact.identifier).root : undefined,
-      mutableRealmURL: ensureTrailingSlash(realmURL),
-      transportRootURL,
-    }).finally(() => this.pending.delete(key));
+    let preparation = this.discoverAndInstall(options).finally(() =>
+      this.pending.delete(key),
+    );
     this.pending.set(key, preparation);
     return preparation;
   }

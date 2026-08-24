@@ -6,6 +6,8 @@ import {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 
+import { prepareDynamicRRIResponses } from '@cardstack/host/services/network';
+
 const CURRENT_URL = 'https://realms.example/acme/current/';
 const LEGACY_URL = 'https://realms.example/acme/legacy/';
 const PALETTE_URL = 'https://realms.example/catalog/palette/';
@@ -40,7 +42,10 @@ function makeRuntime() {
     },
     [`${CURRENT_URL}importmap.json`]: {
       body: json({
-        imports: { palette: '@catalog/palette@2.0.0/index.js' },
+        imports: {
+          palette: '@catalog/palette@2.0.0/index.js',
+          'palette/': '@catalog/palette@2.0.0/',
+        },
       }),
     },
     [`${LEGACY_URL}scene.js`]: {
@@ -59,7 +64,10 @@ function makeRuntime() {
     },
     [`${LEGACY_URL}importmap.json`]: {
       body: json({
-        imports: { palette: '@catalog/palette@1.0.0/index.js' },
+        imports: {
+          palette: '@catalog/palette@1.0.0/index.js',
+          'palette/': '@catalog/palette@1.0.0/',
+        },
       }),
     },
     [`${PALETTE_V1_URL}index.js`]: {
@@ -112,6 +120,38 @@ function makeRuntime() {
 }
 
 module('Unit | Loader | dynamic RRI resolution', function () {
+  test('bootstraps a known Realm before a persisted RRI is resolved', async function (assert) {
+    let { resolution, virtualNetwork } = makeRuntime();
+
+    await resolution.prepareRealm(new URL(CURRENT_URL));
+
+    assert.strictEqual(
+      virtualNetwork.toURLHref('@acme/current/incident'),
+      `${CURRENT_URL}incident`,
+    );
+  });
+
+  test('authenticated Realm responses prepare RRI mappings before callers consume them', async function (assert) {
+    let { resolution, virtualNetwork } = makeRuntime();
+    let response = new Response(json({ data: [] }), {
+      headers: { 'X-Boxel-Realm-Url': CURRENT_URL },
+    });
+    Object.defineProperty(response, 'url', {
+      value: `${CURRENT_URL}_search`,
+    });
+    let fetch: typeof globalThis.fetch = async () => response;
+
+    let preparedFetch = prepareDynamicRRIResponses(fetch, resolution);
+    let result = await preparedFetch(`${CURRENT_URL}_search`);
+
+    assert.strictEqual(result, response, 'the original response is preserved');
+    assert.strictEqual(
+      virtualNetwork.toURLHref('@acme/current/incident'),
+      `${CURRENT_URL}incident`,
+      'a search response prepares its Realm before embedded RRI ids are read',
+    );
+  });
+
   test('is inert unless the Host pilot flag is enabled', async function (assert) {
     let virtualNetwork = new VirtualNetwork();
     let resolution = new DynamicRRIResolution(virtualNetwork, globalThis.fetch);
@@ -171,6 +211,58 @@ module('Unit | Loader | dynamic RRI resolution', function () {
     assert.strictEqual(
       virtualNetwork.toURLHref('@acme/current/scene'),
       `${CURRENT_URL}scene`,
+    );
+  });
+
+  test('applies adoptsFrom specificity: portable dependency refs use the lock while explicit identities bypass it', async function (assert) {
+    let { resolution, virtualNetwork } = makeRuntime();
+
+    await resolution.prepare(
+      new URL(`${CURRENT_URL}incident`),
+      new Response(
+        json({
+          data: {
+            id: '@acme/current/incident',
+            meta: {
+              adoptsFrom: {
+                module: 'palette/card',
+                name: 'PaletteCard',
+              },
+            },
+          },
+        }),
+        { headers: { 'X-Boxel-Realm-Url': CURRENT_URL } },
+      ),
+    );
+
+    assert.strictEqual(
+      virtualNetwork.resolveImport('palette/card', '@acme/current/incident'),
+      `${PALETTE_V2_URL}card`,
+      'a portable dependency specifier follows the importing package lock',
+    );
+    assert.strictEqual(
+      virtualNetwork.resolveImport(
+        '@catalog/palette/card',
+        '@acme/current/incident',
+      ),
+      `${PALETTE_URL}card`,
+      'an explicit mutable RRI deliberately selects live package identity',
+    );
+    assert.strictEqual(
+      virtualNetwork.resolveImport(
+        '@catalog/palette@1.0.0/card',
+        '@acme/current/incident',
+      ),
+      `${PALETTE_V1_URL}card`,
+      'an explicit exact RRI deliberately pins that immutable Version',
+    );
+    assert.strictEqual(
+      virtualNetwork.resolveImport(
+        `${PALETTE_V1_URL}card`,
+        '@acme/current/incident',
+      ),
+      `${PALETTE_V1_URL}card`,
+      'a hardcoded absolute URL is already resolved and bypasses RRI locking',
     );
   });
 

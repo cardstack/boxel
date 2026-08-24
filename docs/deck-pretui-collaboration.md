@@ -19,20 +19,50 @@ be empty:
 pnpm --dir packages/realm-server fixture:pretui-live -- /tmp/pretui-team-realm
 ```
 
-Start Realm Server, a dedicated user-index lane, and the prerender worker:
+Start the complete Host and Realm environment:
+
+```sh
+PRETUI_REALM_PATH=/tmp/pretui-team-realm mise run dev-pretui-all
+```
+
+For independent Host and Realm restart cycles, use the backend-only task:
 
 ```sh
 PRETUI_REALM_PATH=/tmp/pretui-team-realm mise run dev-pretui
-```
-
-Start Host in another terminal:
-
-```sh
 mise exec -- pnpm -C packages/host start
 ```
 
 The Realm is `https://localhost:4201/pretui/`. The Host is
 `https://localhost:4200/`.
+
+Open the Realm from the existing Workspace Chooser and then open **Astra Query
+Harness** from the normal pinned-card area. The Realm root is an ordinary
+`Workspace` card in `index.json`; there is no parallel Deck application and no
+replacement for Interact mode. The Boxel product icon, Interact selector, New
+menu, stack rails, profile, and assistant remain Host-owned and unchanged.
+
+The harness is Realm content backed by the real `POST /.deck/astra/query`
+protocol. The deterministic replay compares PretUI 0.9.0 with 1.0.0 and shows
+20 added cards, 8 changed, 0 removed, and 8 unchanged. Its four views cover an
+older Version, the stable Version, the next development Version, and mutable
+`main`; every result includes the exact tree/index/Repository/History
+provenance needed to explain what was queried.
+
+The query card keeps the Deck-at-rest console's useful interaction model while
+remaining an ordinary card inside Interact mode:
+
+- the top ledger shows every card in all four exact views, with match/miss
+  marks and the index generation used for each view;
+- the question rail provides release-surface, ownership, and evolving-system
+  queries such as **Known Date**, **Development locks**, and **Design review**;
+- the request is editable as `boxel-astra-query-v1` JSON and runs with the
+  button or Command/Control+Enter;
+- the answer lists exact matches with Version or branch provenance and reports
+  added, changed, removed, and unchanged counts for the selected comparison.
+
+Selecting **Known Date** is the shortest smoke tour: 0.9.0 has no matches,
+1.0.0 and 1.1.0-dev.1 each have the control and field, and mutable `main`
+resolves those same two cards from its current index.
 
 The pilot task deliberately mounts only Base and PretUI and skips optional
 Skills, OpenRouter, and Software Factory realms. Ordinary Boxel development
@@ -148,3 +178,10 @@ that branch ref once.
 Review open/list/show/merge commands are layered on this same branch state.
 Exact candidate Browse/Run presentation and exact-Version syndication follow
 the rollout order in the backport plan.
+
+The same replay also proves the Realm can present this state with normal Boxel
+cards. `workspace.gts` supplies the standard Workspace behavior through the
+Base package, `index.json` is the default entry card, and the Astra harness and
+four view cards remain ordinary inspectable Realm resources. This is an
+additive Realm-level demonstration; future branch and Review controls remain
+feature-gated Host work.

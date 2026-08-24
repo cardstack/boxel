@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#MISE description="Start Host + feature-gated PretUI Deck collaboration stack"
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -z "${PRETUI_REALM_PATH:-}" ]; then
+  echo "PRETUI_REALM_PATH must name an initialized PretUI collaboration Realm" >&2
+  echo "Create one with:" >&2
+  echo "  cargo run --manifest-path packages/deckd/Cargo.toml -- serve --port 8787" >&2
+  echo "  mise exec -- pnpm --dir packages/realm-server fixture:pretui-live -- /absolute/path" >&2
+  exit 1
+fi
+
+case "$PRETUI_REALM_PATH" in
+  /*) ;;
+  *)
+    echo "PRETUI_REALM_PATH must be absolute: $PRETUI_REALM_PATH" >&2
+    exit 1
+    ;;
+esac
+
+if [ ! -f "$PRETUI_REALM_PATH/package.json" ] ||
+  [ ! -f "$PRETUI_REALM_PATH/.deck/repository.json" ]; then
+  echo "PRETUI_REALM_PATH is not an initialized Deck Realm: $PRETUI_REALM_PATH" >&2
+  exit 1
+fi
+
+export BOXEL_DECK_COLLABORATION_ENABLED=true
+export BOXEL_DECK_COLLABORATION_REALM_RRIS="${BOXEL_DECK_COLLABORATION_REALM_RRIS:-@cardstack/pretui/}"
+export DECKD_URL="${DECKD_URL:-http://127.0.0.1:8787}"
+export PGDATABASE="${PGDATABASE:-boxel_development}"
+export SKIP_SKILLS="${SKIP_SKILLS:-true}"
+export SKIP_OPENROUTER="${SKIP_OPENROUTER:-true}"
+export SKIP_SOFTWARE_FACTORY="${SKIP_SOFTWARE_FACTORY:-true}"
+export WORKER_USER_INDEX_COUNT="${WORKER_USER_INDEX_COUNT:-1}"
+export REALM_SERVER_FULL_INDEX_ON_STARTUP="${REALM_SERVER_FULL_INDEX_ON_STARTUP:-true}"
+
+if ! curl -sS -o /dev/null "$DECKD_URL/"; then
+  echo "deckd is not reachable at $DECKD_URL" >&2
+  echo "Start it with:" >&2
+  echo "  cargo run --manifest-path packages/deckd/Cargo.toml -- serve --port 8787" >&2
+  exit 1
+fi
+
+echo "[dev-pretui-all] Realm: $PRETUI_REALM_PATH"
+echo "[dev-pretui-all] Host:  ${HOST_URL:-https://localhost:4200/}"
+echo "[dev-pretui-all] Deck:  enabled for $BOXEL_DECK_COLLABORATION_REALM_RRIS"
+
+cd "$REPO_ROOT"
+
+HOST_PID=""
+set -m
+
+cleanup() {
+  if [ -n "$HOST_PID" ]; then
+    kill -TERM -- "-$HOST_PID" 2>/dev/null || true
+    wait "$HOST_PID" 2>/dev/null || true
+  fi
+}
+
+trap cleanup EXIT
+trap 'exit 0' INT TERM HUP
+
+(cd "$REPO_ROOT/packages/host" && exec node scripts/vite-serve.js) &
+HOST_PID=$!
+
+HOST_READY_URL="${HOST_URL:-https://localhost:4200/}"
+HOST_TIMEOUT_SECONDS=120
+HOST_WAITED_SECONDS=0
+
+while true; do
+  if ! kill -0 "$HOST_PID" 2>/dev/null; then
+    echo "Host app process stopped before becoming ready" >&2
+    exit 1
+  fi
+
+  if [ "$(curl -ks -o /dev/null -w '%{http_code}' "$HOST_READY_URL")" = "200" ]; then
+    break
+  fi
+
+  sleep 2
+  HOST_WAITED_SECONDS=$((HOST_WAITED_SECONDS + 2))
+  if [ "$HOST_WAITED_SECONDS" -ge "$HOST_TIMEOUT_SECONDS" ]; then
+    echo "Host app did not become ready within ${HOST_TIMEOUT_SECONDS}s" >&2
+    exit 1
+  fi
+done
+
+echo "[dev-pretui-all] Host is ready"
+mise run dev-pretui

@@ -32,7 +32,7 @@ export default class NetworkService extends Service {
   virtualNetwork = this.makeVirtualNetwork();
   dynamicRRIResolution = new DynamicRRIResolution(
     this.virtualNetwork,
-    this.authedFetch,
+    this.unpreparedAuthedFetch,
     { enabled: config.featureFlags?.DECK_COLLABORATION === true },
   );
 
@@ -50,10 +50,20 @@ export default class NetworkService extends Service {
   }
 
   get authedFetch() {
+    return prepareDynamicRRIResponses(
+      this.unpreparedAuthedFetch,
+      this.dynamicRRIResolution,
+    );
+  }
+
+  private get unpreparedAuthedFetch() {
     // The timing middleware is innermost (last): it wraps each real network
     // attempt, so an auth-retry (the authorization middleware re-running the
     // chain on a 401) is observed as a separate, retried-flagged attempt. It
-    // is a passive no-op whenever telemetry is disabled.
+    // is a passive no-op whenever telemetry is disabled. Dynamic RRI metadata
+    // discovery also uses this raw path: routing package.json/importmap.json
+    // back through authedFetch would recursively prepare the response that is
+    // already being prepared.
     return fetcher(
       this.fetch,
       [
@@ -136,13 +146,21 @@ export default class NetworkService extends Service {
     this.virtualNetwork = this.makeVirtualNetwork();
     this.dynamicRRIResolution = new DynamicRRIResolution(
       this.virtualNetwork,
-      this.authedFetch,
+      this.unpreparedAuthedFetch,
       { enabled: config.featureFlags?.DECK_COLLABORATION === true },
     );
   };
 
   invalidateDynamicRRIResolution() {
     this.dynamicRRIResolution.invalidate();
+  }
+
+  async prepareDynamicRRIRealms(realmURLs: Iterable<string>): Promise<void> {
+    await Promise.all(
+      [...realmURLs].map((realmURL) =>
+        this.dynamicRRIResolution.prepareRealm(new URL(realmURL)),
+      ),
+    );
   }
 }
 
@@ -154,4 +172,21 @@ declare module '@ember/service' {
 
 function withTrailingSlash(url: string): string {
   return url.endsWith('/') ? url : `${url}/`;
+}
+
+export function prepareDynamicRRIResponses(
+  fetch: typeof globalThis.fetch,
+  resolution: Pick<DynamicRRIResolution, 'prepare'>,
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    let response = await fetch(input, init);
+    // Cards can enter the Store through search/index documents without a
+    // direct card or module fetch. Prepare every authoritative Realm response
+    // before its caller consumes embedded RRI ids and links, so those indirect
+    // cards get the same package context as cold card and Loader paths.
+    if (response.url) {
+      await resolution.prepare(new URL(response.url), response);
+    }
+    return response;
+  };
 }

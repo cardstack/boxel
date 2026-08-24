@@ -23,6 +23,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -56,6 +57,7 @@ export default class Card extends Route {
   @service declare private hostModeService: HostModeService;
   @service declare private hostModeStateService: HostModeStateService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
@@ -167,6 +169,15 @@ export default class Card extends Route {
     // in the workspace chooser we'll retrigger login and wait for them to complete
     // and when fetching cards or files we have reauthentication mechanism.
     this.matrixService.loginToRealms();
+
+    // Persisted operator-mode state can begin with an RRI. Prepare package
+    // mappings for the user's known Realms before restoring those stacks;
+    // otherwise the Store must resolve an RRI before any response exists to
+    // teach the dynamic resolver which transport Realm owns it. This is inert
+    // when Deck collaboration is not feature-flagged.
+    await this.network.prepareDynamicRRIRealms(
+      this.realmServer.availableRealmIdentifiers,
+    );
 
     let pathOrCardPath = cardPath ?? params.path;
 

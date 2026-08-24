@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   appendReviewEvent,
@@ -52,6 +54,10 @@ const releaseVersion = '1.0.0';
 const nextVersion = '1.1.0-dev.1';
 const pretuiRealmURL =
   process.env.PRETUI_REALM_URL ?? 'https://localhost:4201/pretui/';
+const fixtureSourceDir = join(
+  dirname(fileURLToPath(import.meta.url)),
+  'pretui-team-fixture',
+);
 const storeVersions = [
   baselineVersion,
   candidateVersion,
@@ -416,11 +422,13 @@ function releaseTrainCard(sourceVersion: string): string {
   let accent = isNext ? '#b9a7ff' : '#8fe2bb';
   let header = isNext ? '#2a2145' : '#14241f';
   return `
-import { CardDef, Component } from '@cardstack/base/card-api';
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 export class ReleaseTrain extends CardDef {
   static displayName = 'PretUI Release Train';
   static sourceVersion = '${sourceVersion}';
+  @field title = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -456,6 +464,88 @@ export class ReleaseTrain extends CardDef {
   };
 }
 `.trimStart();
+}
+
+function componentEntryCard(): string {
+  return `
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+
+export class ComponentEntry extends CardDef {
+  static displayName = 'PretUI Catalog Entry';
+  @field title = contains(StringField);
+  @field name = contains(StringField);
+  @field module = contains(StringField);
+  @field layer = contains(StringField);
+  @field owner = contains(StringField);
+  @field sourceVersion = contains(StringField);
+  @field state = contains(StringField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article class='entry'>
+        <header><span>{{@model.layer}}</span><strong>{{@model.state}}</strong></header>
+        <h2>{{@model.name}}</h2>
+        <code>{{@model.module}}</code>
+        <footer><span>{{@model.owner}}</span><b>{{@model.sourceVersion}}</b></footer>
+      </article>
+      <style scoped>
+        .entry { display: grid; gap: .75rem; min-height: 12rem; padding: 1.15rem; border: 1px solid #d9e3df; border-radius: 1rem; background: #fff; color: #16221e; font-family: Inter, system-ui, sans-serif; }
+        header, footer { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        header span { color: #718079; font: 700 .65rem ui-monospace, monospace; letter-spacing: .12em; text-transform: uppercase; }
+        header strong { padding: .25rem .45rem; border-radius: 999px; background: #e8f8ef; color: #087a4f; font-size: .65rem; }
+        h2 { margin: auto 0 0; font-size: 1.15rem; letter-spacing: -.025em; }
+        code { overflow: hidden; color: #52625c; font: .7rem ui-monospace, monospace; text-overflow: ellipsis; white-space: nowrap; }
+        footer { padding-top: .75rem; border-top: 1px solid #edf2ef; color: #718079; font-size: .72rem; }
+        footer b { color: #2a5245; font-family: ui-monospace, monospace; }
+      </style>
+    </template>
+  };
+}
+`.trimStart();
+}
+
+function astraViewCard(): string {
+  return `
+import { CardDef, Component, contains, field } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+
+export class AstraView extends CardDef {
+  static displayName = 'Astra View';
+  @field title = contains(StringField);
+  @field label = contains(StringField);
+  @field kind = contains(StringField);
+  @field selector = contains(StringField);
+  @field resolved = contains(StringField);
+  @field mutability = contains(StringField);
+  @field resultCount = contains(StringField);
+  @field indexHash = contains(StringField);
+
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <article class='view'>
+        <header><span>ASTRA VIEW</span><b data-mutability={{@model.mutability}}>{{@model.mutability}}</b></header>
+        <h2>{{@model.label}}</h2>
+        <div class='selector'><span>{{@model.kind}}</span><code>{{@model.selector}}</code></div>
+        <dl><div><dt>resolved</dt><dd>{{@model.resolved}}</dd></div><div><dt>cards</dt><dd>{{@model.resultCount}}</dd></div><div><dt>index</dt><dd><code>{{@model.indexHash}}</code></dd></div></dl>
+      </article>
+      <style scoped>
+        .view { display: grid; gap: 1rem; min-height: 15rem; padding: 1.25rem; border: 1px solid #d9e3df; border-radius: 1rem; background: linear-gradient(145deg, #fff 45%, #eef8f4); color: #16221e; font-family: Inter, system-ui, sans-serif; }
+        header { display: flex; align-items: center; justify-content: space-between; } header span { color: #087a4f; font: 700 .65rem ui-monospace, monospace; letter-spacing: .14em; } header b { padding: .28rem .5rem; border-radius: 999px; background: #e7f8ee; color: #087a4f; font-size: .66rem; } header b[data-mutability='mutable'] { background: #fff0c9; color: #7b5500; }
+        h2 { margin: 0; font-size: 1.4rem; letter-spacing: -.035em; } .selector { display: flex; align-items: center; gap: .6rem; } .selector span { color: #718079; font-size: .68rem; text-transform: uppercase; } code { font: .7rem ui-monospace, monospace; }
+        dl { display: grid; gap: .45rem; margin: auto 0 0; } dl div { display: grid; grid-template-columns: 4.5rem 1fr; gap: .75rem; padding-top: .45rem; border-top: 1px solid #e4ebe8; } dt { color: #718079; font-size: .68rem; } dd { min-width: 0; margin: 0; overflow: hidden; font-size: .75rem; text-overflow: ellipsis; white-space: nowrap; }
+      </style>
+    </template>
+  };
+}
+`.trimStart();
+}
+
+function astraHarnessCard(): string {
+  return readFileSync(
+    join(fixtureSourceDir, 'astra-harness.gts.template'),
+    'utf8',
+  );
 }
 
 function artifactModule(artifact: Artifact, sourceVersion: string): string {
@@ -575,13 +665,111 @@ function stateFor(options: {
     json({
       data: {
         type: 'card',
-        attributes: {},
+        attributes: {
+          signage: 'ASTRA',
+          purpose:
+            'PretUI collaboration across exact Versions, branches, Checkpoints, and index views.',
+          moduleOrder: 'pinned,about,browse',
+          pinnedSize: 'regular',
+        },
+        relationships: {
+          'entryPoints.0': { links: { self: './astra/harness' } },
+          'entryPoints.1': { links: { self: './release-train' } },
+          readme: { links: { self: './README.md' } },
+        },
         meta: {
-          adoptsFrom: { module: './cards/release-train', name: 'ReleaseTrain' },
+          adoptsFrom: {
+            module: '@cardstack/base/workspace',
+            name: 'Workspace',
+          },
         },
       },
     }),
   );
+  files.set(
+    'README.md',
+    `# PretUI Team Lab\n\nA real multi-party design-system Realm. **Astra** queries the same cards across exact Versions, branches, Checkpoints, and immutable index generations while the Workspace remains normal Boxel UI.\n\nOpen the Astra harness for the cross-Version comparison, or use Library to inspect the individual view and component cards.\n`,
+  );
+  files.set('cards/component-entry.gts', componentEntryCard());
+  files.set('cards/astra-view.gts', astraViewCard());
+  files.set('cards/astra-harness.gts', astraHarnessCard());
+  files.set(
+    'release-train.json',
+    json({
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'PretUI Release Train' },
+          title: 'PretUI Release Train',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${packageRRI}cards/release-train`,
+            name: 'ReleaseTrain',
+          },
+        },
+      },
+    }),
+  );
+  files.set(
+    'astra/harness.json',
+    json({
+      data: {
+        type: 'card',
+        attributes: {
+          cardInfo: { name: 'Astra Query Harness' },
+          title: 'Astra Query Harness',
+          query: 'all cards',
+          from: `previous · ${baselineVersion}`,
+          to: `stable · ${releaseVersion}`,
+          viewCount: '4',
+          added: 'pending',
+          changed: 'pending',
+          removed: 'pending',
+          unchanged: 'pending',
+          evidence: '.deck/fixtures/astra-query.json',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${packageRRI}cards/astra-harness`,
+            name: 'AstraHarness',
+          },
+        },
+      },
+    }),
+  );
+  for (let [slug, label, kind, selector, mutability] of [
+    ['previous', 'Previous release', 'version', baselineVersion, 'immutable'],
+    ['stable', 'Stable on main', 'version', releaseVersion, 'immutable'],
+    ['next', 'Next development', 'version', nextVersion, 'immutable'],
+    ['main', 'Current main branch', 'branch', 'main', 'mutable'],
+  ]) {
+    files.set(
+      `astra/views/${slug}.json`,
+      json({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: label },
+            title: label,
+            label,
+            kind,
+            selector,
+            resolved: 'resolved during live bootstrap',
+            mutability,
+            resultCount: 'pending',
+            indexHash: 'pending',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${packageRRI}cards/astra-view`,
+              name: 'AstraView',
+            },
+          },
+        },
+      }),
+    );
+  }
   files.set(
     'TEAM_SCENARIO.json',
     json({
@@ -609,6 +797,30 @@ function stateFor(options: {
         ? baselineVersion
         : sourceVersion;
     files.set(`${artifact.id}.gts`, artifactModule(artifact, artifactVersion));
+    files.set(
+      `catalog/${artifact.id}.json`,
+      json({
+        data: {
+          type: 'card',
+          attributes: {
+            cardInfo: { name: title(artifact.id) },
+            title: title(artifact.id),
+            name: title(artifact.id),
+            module: artifact.id,
+            layer: artifact.layer,
+            owner: developers.find(({ id }) => id === artifact.owner)!.name,
+            sourceVersion: artifactVersion,
+            state: options.phase === 'next' ? 'in development' : 'available',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${packageRRI}cards/component-entry`,
+              name: 'ComponentEntry',
+            },
+          },
+        },
+      }),
+    );
   }
   for (let [path, content] of Object.entries(workspaceFiles(options.phase))) {
     if (

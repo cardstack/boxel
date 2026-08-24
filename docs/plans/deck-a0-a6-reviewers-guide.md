@@ -136,6 +136,23 @@ Review package-owned scopes, authenticated server capability discovery,
 additive versus destructive invalidation, cold card deserialization, cold
 module evaluation, and concurrent exact Versions.
 
+The current local A4 continuation also adds the first Astra QueryView contract.
+Read `packages/runtime-common/astra-query-view.ts`, then
+`packages/realm-server/lib/deck-astra-query.ts`, the query route in
+`serve-deck-version.ts`, and
+`scripts/bootstrap-pretui-collaboration-realm.ts`. One request may query up to
+eight branch, Checkpoint, immutable index-generation, or semver/Version views
+and optionally compare two by logical RRI and canonical document hash. Results
+carry selector, mutability, tree, index, Repository, lock, History, and Version
+provenance rather than returning anonymous search rows.
+
+The Host-side addition is deliberately below the UI layer: the prerender route
+installs the package-owned RRI mapping before it derives `adoptsFrom` from a
+cold card response. The browser proof uses the normal Workspace Chooser,
+standard `Workspace` index card, pinned cards, Library, and existing Interact
+chrome. No A4 change replaces or restyles the Boxel icon, submode selector, New
+menu, stack layout, profile, or assistant.
+
 Focused gates:
 
 ```sh
@@ -148,6 +165,10 @@ mise exec -- pnpm exec ember test --path dist \
 cd ../realm-server
 MATRIX_REGISTRATION_SHARED_SECRET=xxxx \
   TEST_FILES=deck-version-serving-test mise exec -- pnpm test
+
+# Real protocol + Realm-content replay (deckd must be listening on 8787)
+REALM_DIR="$(mktemp -d /tmp/boxel-pretui-live.XXXXXX)"
+mise exec -- pnpm fixture:pretui-live -- "$REALM_DIR"
 ```
 
 ## A5 — index immutable Versions

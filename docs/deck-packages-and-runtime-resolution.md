@@ -12,6 +12,28 @@ documents with deliberately different jobs:
 The range is what a person or dependency tool edits. The exact RRI is what a
 Checkpoint, Review, Version, and running card can reproduce.
 
+## Reference specificity, including `adoptsFrom`
+
+An `adoptsFrom.module` reference follows the same resolution rules as a module
+import. Its spelling is an intentional choice, not interchangeable syntax:
+
+1. A portable dependency specifier such as `pretui/card` is resolved through
+   the importing package's lock. The nearest importer scope wins; within that
+   scope an exact key wins, then the longest trailing-slash prefix.
+2. An explicit exact RRI such as `@cardstack/pretui@1.0.0/card` pins that
+   immutable Version and bypasses the import-map selection.
+3. An explicit mutable RRI such as `@cardstack/pretui/card` deliberately follows
+   that package's live Realm and also bypasses the lock.
+4. A hardcoded absolute URL is already resolved and bypasses RRI locking. It is
+   supported at the Boxel compatibility boundary, but canonical Deck-authored
+   package dependencies should use portable specifiers or exact RRIs instead.
+5. A relative reference resolves inside the current mutable or exact package
+   context.
+
+This ordering keeps ordinary package consumption reproducible while preserving
+an explicit escape hatch for live development and deliberate exact pins. The
+Host test named `applies adoptsFrom specificity` locks the boundary down.
+
 ## Cold runtime discovery
 
 Mappings are not compiled into the Host and a realm does not need a global

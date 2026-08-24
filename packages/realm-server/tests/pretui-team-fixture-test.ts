@@ -65,10 +65,26 @@ module(basename(import.meta.filename), function (hooks) {
       { three: 8, two: 20 },
       'every unit varies across two or three source states',
     );
+    let materializedModules = await listGTS(realmDir);
     assert.strictEqual(
-      (await listGTS(realmDir)).length,
-      28,
-      'main materializes the complete release',
+      materializedModules.length,
+      31,
+      'main materializes 28 release units and three inspectable fixture cards',
+    );
+    assert.deepEqual(
+      materializedModules.filter((path) =>
+        [
+          'cards/astra-harness.gts',
+          'cards/astra-view.gts',
+          'cards/component-entry.gts',
+        ].includes(path),
+      ),
+      [
+        'cards/astra-harness.gts',
+        'cards/astra-view.gts',
+        'cards/component-entry.gts',
+      ],
+      'the query harness, exact-view card, and catalog card ship with the realm',
     );
     assert.strictEqual(
       report.reviews.length,

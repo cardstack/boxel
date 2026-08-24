@@ -1081,6 +1081,7 @@ export * from './stream.ts';
 export * from './realm.ts';
 export * from './realm-index-updater.ts';
 export * from './realm-view-context.ts';
+export * from './astra-query-view.ts';
 export * from './fetcher.ts';
 export * from './test-waiters.ts';
 export * from './scoped-css.ts';

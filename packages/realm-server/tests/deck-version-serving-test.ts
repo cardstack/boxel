@@ -324,6 +324,7 @@ module('exact Deck Version serving', function (hooks) {
       protocol: 'deck-r0',
       sync: 'content-addressed',
       history: 'jj',
+      astra: 'query-view-v1',
     });
     assert.strictEqual(wrongRealm?.status, 404);
 
@@ -716,6 +717,141 @@ module('exact Deck Version serving', function (hooks) {
       })),
       [{ rri: '@acme/theme/catalog/compact-status', sourcePath }],
     );
+  });
+
+  test('Astra queries and compares branch, Checkpoint, and Version views with provenance', async function (assert) {
+    let observedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observed = (await observedResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+    };
+    let sourcePath = 'catalog/compact-status.json';
+    let bytes = JSON.stringify({
+      data: {
+        type: 'card',
+        attributes: { title: 'Compact Status preview' },
+      },
+    });
+    let published = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-update-v2',
+          message: `save: ${sourcePath}`,
+          expected: observed,
+          operations: [
+            {
+              path: sourcePath,
+              sha256: hashBytes(bytes),
+              contentBase64: Buffer.from(bytes).toString('base64'),
+            },
+          ],
+        }),
+      }),
+    );
+    let branch = (await published?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      historyHead: string;
+      indexGenerationHash: string;
+      refGeneration: number;
+    };
+    let checkpointResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/checkpoint?branch=main',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            schema: 'boxel-deck-checkpoint-create-v1',
+            message: 'Compact status candidate',
+            expected: branch,
+          }),
+        },
+      ),
+    );
+    let checkpoint = (await checkpointResponse?.json()) as {
+      checkpointHash: string;
+    };
+    let response = await serve(
+      new Request('https://realms.example/acme/theme/.deck/astra/query', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-astra-query-v1',
+          query: {},
+          views: [
+            { kind: 'version', spec: '1.1.0' },
+            { kind: 'branch', branch: 'main' },
+            { kind: 'checkpoint', checkpointHash: checkpoint.checkpointHash },
+            {
+              kind: 'index',
+              indexGenerationHash: branch.indexGenerationHash,
+            },
+          ],
+          compare: { from: 0, to: 1 },
+        }),
+      }),
+    );
+    let result = (await response?.json()) as {
+      schema: string;
+      views: Array<{
+        provenance: {
+          kind: string;
+          mutability: string;
+          indexHash: string;
+          checkpointHash?: string;
+        };
+        cards: Array<{ logicalRRI: string; sourcePath: string }>;
+      }>;
+      comparison: {
+        added: string[];
+        removed: string[];
+        changed: string[];
+      };
+    };
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(response?.headers.get('x-boxel-astra-query'), 'true');
+    assert.strictEqual(result.schema, 'boxel-astra-query-result-v1');
+    assert.deepEqual(
+      result.views.map(({ provenance }) => ({
+        kind: provenance.kind,
+        mutability: provenance.mutability,
+      })),
+      [
+        { kind: 'version', mutability: 'immutable' },
+        { kind: 'branch', mutability: 'mutable' },
+        { kind: 'checkpoint', mutability: 'immutable' },
+        { kind: 'index', mutability: 'immutable' },
+      ],
+    );
+    assert.strictEqual(
+      result.views[1].provenance.indexHash,
+      branch.indexGenerationHash,
+    );
+    assert.strictEqual(
+      result.views[2].provenance.checkpointHash,
+      checkpoint.checkpointHash,
+    );
+    assert.deepEqual(
+      result.views[1].cards.map(({ logicalRRI, sourcePath: path }) => ({
+        logicalRRI,
+        sourcePath: path,
+      })),
+      [{ logicalRRI: '@acme/theme/catalog/compact-status', sourcePath }],
+    );
+    assert.deepEqual(result.comparison.added, [
+      '@acme/theme/catalog/compact-status',
+    ]);
+    assert.deepEqual(result.comparison.removed, ['@acme/theme/card']);
+    assert.deepEqual(result.comparison.changed, []);
   });
 
   test('serves two immutable source trees at one realm URL without falling through to live', async function (assert) {
