@@ -1,11 +1,16 @@
 # More Choreo constructs
 
-The next set of constructs, as a language reference: the tags and
-parameters, what each commits to, and what already exists. Names are
-provisional; semantics are the contract. Two references keep it honest —
-Keynote's build inspector, and bento-boxel's interaction patterns (audited
-at the end). The parent documents are [choreography.md](choreography.md)
-(the model) and [nested-choreo.md](nested-choreo.md) (regions).
+**Status: proposal.** The next API surface and feature set for Choreo,
+as a language reference: the tags and parameters, what each commits to,
+and what already ships (✓). Names are settled where a decision is
+recorded — ef4's step names stay, the route transition is the crossing —
+and provisional elsewhere; semantics are the contract throughout. Five
+measuring sticks keep it honest, each with its audit in this document:
+Keynote's build inspector, bento-boxel's interaction patterns, Pretui's
+realm law, the Boxel System V16 concept deck, and the boxel-labs
+surfaces research. The parent documents are
+[choreography.md](choreography.md) (the model) and
+[nested-choreo.md](nested-choreo.md) (regions).
 
 The measure is the Build Order demo. It already plays a Keynote build
 inspector — `with`/`after` relations, delays, durations, by-word and
@@ -24,11 +29,11 @@ Choreo cues and the demo becomes a thin inspector over a real timeline.
 | Action: emphasis (pulse, jiggle…)          | —                                                | keyframe values         |
 | With / After Previous (+ delay)            | block order in `Sequence` / `Parallel`, `@delay` | —                       |
 | With / After Build N                       | —                                                | `@name` / `@at` anchors |
-| Duration                                   | `@ms` / `@spring`                                | —                       |
+| Duration                                   | `@duration` / `@spring`                          | —                       |
 | On Click                                   | —                                                | `c.Gate`, `c.advance()` |
-| Start automatically after N s              | `@delay` on the first step                       | `@auto` on a gate       |
-| Delivery: by object                        | `@stagger` (ms between matched sprites)          | —                       |
-| Delivery: by word / character / paragraph  | demo-only (`builds.ts`)                          | `@by`, `@overlap`       |
+| Start automatically after N s              | `@delay` on the first step                       | `@delay` on a gate      |
+| Delivery: by object                        | `@stagger` (seconds between matched sprites)     | —                       |
+| Delivery: by word / character / paragraph  | demo-only (`builds.ts`)                          | `@by` (+ `@stagger`)    |
 | Delivery order: forward / reverse / random | —                                                | `@order`                |
 | Rehearse / scrub                           | demo-only (Playhead samples its own score)       | the timeline handle     |
 | Magic Move (slide transition)              | route transition, hand-built on `animateView`    | `@route`, `c.Crossing`  |
@@ -89,7 +94,7 @@ duration in the language is **seconds**, as in Motion.
 | `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                |
 | `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites or the gesture                                                                                                                       |
 | `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                           |
-| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                          |
+| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@swap` `@scroll`                                                                                                                  |
 
 ### Timing
 
@@ -106,13 +111,255 @@ plus the two words Motion has no need for: `advance()` and tracked
 are wired in templates. Two drivers: the frameloop ✓ and the native
 WAAPI/CSS target (+), same language, same assertions.
 
+## Gates — `c.Gate`
+
+Keynote's driver is not time, it is the click: a build order is chunked into
+segments and the timeline parks between them.
+
+```gts
+<c.Sequence>
+  <c.Tween @of={{c.inserted 'title'}} @opacity={{1}} @duration={{0.3}} />
+  <c.Gate />
+  <c.Move @of={{c.moved 'card'}} @spring={{soft}} />
+  <c.Gate @delay={{0.8}} />
+  <c.Tween @of={{c.inserted 'tag'}} @opacity={{1}} @duration={{0.4}} />
+</c.Sequence>
+```
+
+- A `Gate` splits the timeline into **segments**. A run plays to the next
+  gate and parks; `c.advance()` (yielded, imperative — wire it to click or
+  keys) resumes. `c.segment` is tracked: which segment the cursor is in.
+- `@delay` opens the gate by itself after that many seconds — Keynote's
+  "start build automatically after".
+- Advancing mid-segment **completes the segment instantly** (Keynote's
+  click-through), it does not skip it: every property lands on its segment-end
+  value, holds included.
+- A gate directly inside `Parallel` is a compile error. A pause is a total
+  order; only `Sequence` can hold one. (A `Parallel` _between_ gates is fine.)
+- Going backwards is not a gate concern. State drives Choreo: reverting the
+  state that produced the pass produces the reverse changeset, and the
+  natural run back. The cursor only ever moves forward through one pass's
+  timeline.
+
+## Anchors — `@name` and `@at`
+
+Block order gives Keynote's "with/after **previous**". The rest of the
+inspector — "with/after **build N**" — needs a reference, not a position.
+
+```gts
+<c.Sequence>
+  <c.Tween @name='tail' @of={{c.id 'tail'}} @pathLength={{1}} @duration={{0.52}} />
+  <c.Tween @name='head' @of={{c.id 'head'}} @pathLength={{1}} @duration={{0.52}} />
+  <c.Tween @at={{at 'head'}} @of={{c.id 'orbit'}} @pathLength={{1}} @duration={{0.56}} />
+  <c.Tween @at={{at 'head' 0.4}} @of={{c.id 'bead'}} @scale={{1}} @duration={{0.38}} />
+  <c.Tween @at={{after 'tail' 0.2}} @of={{c.id 'rule'}} @pathLength={{1}} @duration={{0.52}} />
+</c.Sequence>
+```
+
+- `@name` labels a step. Names are per-region, per-pass; naming two steps the
+  same is a compile error.
+- `@at={{at name progress?}}` starts the step at the named step's start plus
+  `progress` (0–1) of its duration. `@at={{after name delay?}}` starts at its
+  end plus `delay` seconds. `at 'head' 1` and `after 'head'` are the same moment.
+- A step with `@at` is **lifted out of its block's flow**: it does not push
+  the sequence forward, and its own end still counts toward the run's length
+  (the Build Order rule — `runtimeOf` is `max`, not `last`).
+- Progress against a spring resolves the way `Sequence` already follows a
+  spring: the duration comes from the engine's generator.
+- Forward references are a compile error; anchors point up the score, the
+  way Keynote's build list does.
+
+## Delivery — `@by`, `@order`, `@stagger`
+
+`@stagger` (today: time between matched sprites, document order — now in
+seconds) is Keynote's "by object". The rest of the delivery panel:
+
+```gts
+<c.Tween
+  @of={{c.inserted 'word'}}
+  @by='character'
+  @order='reverse'
+  @stagger={{0.04}}
+  @opacity={{1}}
+  @duration={{0.76}}
+/>
+```
+
+- `@by` — `'item'` (default; the sprite is the unit) | `'word'` |
+  `'character'` | `'paragraph'`. The text values split a text sprite's
+  delivery: each slot plays the step's full property change over a
+  window of the step's span.
+- `@stagger` — seconds between one slot's start and the next, for every
+  `@by`. Each slot's window is what remains of `@duration` after the
+  offsets — the Build Order demo's `windowOf`, with its 0.55-of-span
+  window as the derived default when `@stagger` is omitted. `0` is
+  everyone together; large is strict relay.
+- `@order` — `'forward'` (default) | `'reverse'` | `'center'` |
+  `'random'`. Reverse is how Keynote builds text out: last word first.
+  Random takes a seed on the realm build.
+- `@by` text values on a sprite with no text is a compile error;
+  splitting happens at measure time and the spans are the region's to
+  own and clean up.
+- The whole step still occupies one slot in the timeline — anchors and
+  gates see one step, not one per character.
+
+## Paths — `@path`
+
+Keynote's Action column moves an object along a drawn curve. `c.Move` is
+box-to-box FLIP; a path is a different statement about the journey, not the
+endpoints.
+
+```gts
+<c.Move
+  @of={{c.id 'comet'}}
+  @path='M 0 0 C 40 -80, 160 -80, 200 0'
+  @rotate='auto'
+  @spring={{glide}}
+/>
+```
+
+- `@path` is an SVG path string in the sprite's own coordinate space,
+  relative to its **initial** position — Keynote's model: the path is drawn
+  from where the object stands.
+- On a `Move` with both a bounds delta and a `@path`, the path owns position
+  and FLIP still owns size. Without a path, `Move` is unchanged.
+- `@rotate='auto'` orients the sprite along the tangent; a number is a fixed
+  additional rotation; absent means no rotation.
+- Property functions compose: `@path={{this.arcVia}}` may build the string
+  from the changeset — a path from here to a beacon's box is
+  `(s, cs) => arcTo(cs.beacon('trash'))`.
+
+## Emphasis — keyframe values
+
+Pulse, jiggle, blink, flip: effects that end where they began. No new step —
+a property value may be a keyframe array, and a round trip is an array that
+returns:
+
+```gts
+<c.Tween @of={{c.kept 'card'}} @scale={{array 1 1.06 1}} @duration={{0.42}} />
+```
+
+- `PropSource` widens to accept arrays (and functions returning them). The
+  engine already speaks keyframes; this only lets a step say them.
+- The preset vocabulary (the Build Order demo's `EFFECTS`, plus the
+  round-trip set) ships as plain data — importable, inspectable, no
+  registration — once the array form exists to express it.
+
+## The timeline handle
+
+Gates, the inspector, and the Playhead demo all want the same object: the
+run as a value.
+
+```ts
+interface ChoreoRun {
+  advance(): void; // open the current gate
+  cancel(): void;
+  pause(): void;
+  play(): void;
+  time: number; // settable, seconds — scrub; crossing a gate parks there
+  speed: number; // 1 = normal, 0.5 = half, as Motion's controls
+  readonly duration: number;
+  readonly segment: number;
+}
+```
+
+Yielded as `c.run` (null between passes), wearing Motion's
+`AnimationPlaybackControls` shape. Settable `time` is what the Playhead
+demo proves is possible — a scrubbed frame is a still, nothing in
+flight — and what it currently rebuilds by sampling a private score.
+This handle is the substrate; `Gate` and the Build Order inspector are
+its first two consumers.
+
+## The crossing — `@route` and `c.Crossing`
+
+The gallery ⇄ demo transition is built on `animateView`, and
+`test-app/app/routes/application.ts` is four hundred lines of what that
+costs: a veil timed against the snapshot, rules about what may be named, a
+poll for completion, every live animation paused so the compositor survives.
+All of it follows from one fact — **a view transition animates bitmaps**.
+
+Choreo's model fits the crossing better, because a crossing is a
+changeset.
+A route swap inside a region is one render pass: the old page's participants
+are `removed`, the new page's are `inserted`, and an id present on both
+sides pairs as a counterpart — the same machinery that already flies a card
+between bays. And the shape a crossing actually wants — _leaves fade
+first, then everything moves, then arrivals fade in near settle_ — is a
+sentence Choreo already speaks and the builder API cannot say cleanly:
+
+```gts
+<Choreo @route={{true}} as |c|>
+  {{outlet}}
+
+  <c.Sequence>
+    <c.Tween @of={{c.removed}} @opacity={{0}} @duration={{0.18}} />
+    <c.Parallel>
+      <c.Move @name='flight' @of={{c.received}} @spring={{glide}} />
+      <c.Hold @of={{c.received}} @zIndex={{2}} />
+    </c.Parallel>
+    <c.Tween @at={{at 'flight' 0.7}} @of={{c.inserted}} @opacity={{array 0 1}} @duration={{0.22}} />
+  </c.Sequence>
+</Choreo>
+```
+
+Participants are just ids on both pages — `{{motion id='stage-playhead'
+role='stage'}}` on the gallery card and on the demo page — and pairing is
+the id, exactly as far matching works today. The canned form:
+
+```gts
+<Choreo @route={{true}} as |c|>
+  {{outlet}}
+  <c.Crossing @spring={{glide}} @leave={{0.18}} @arrive={{0.22}} @overlap={{0.7}} />
+</Choreo>
+```
+
+| arg                               | meaning                                                                                                                                  | default       |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `@spring` / `@duration` + `@ease` | the flight                                                                                                                               | a soft spring |
+| `@leave`                          | seconds to fade what only the old page had                                                                                               | 0.18          |
+| `@arrive`                         | seconds to fade what only the new page has                                                                                               | 0.22          |
+| `@overlap`                        | arrivals start at this fraction of the flight — "after settle or close to it" is `0.85`; eager is `0.5`                                  | 0.7           |
+| `@swap`                           | the counterpart-skin policy: `'during'` (cross over the flight — glyphs cannot morph; two real elements can cross), `'settle'`, `'none'` | `'during'`    |
+| `@scroll`                         | `'top'` \| `'restore'` \| `(transition) => y` — applied after the swap, before final measure                                             | `'top'`       |
+
+What `@route` itself must add, beyond sugar:
+
+1. **Scroll inside the pass.** The window is placed after the route renders
+   and before final bounds are measured — scroll is part of the move, the
+   one lesson from `application.ts` that carries over unchanged.
+2. **Whole-subtree leavers.** The orphan layer holds a page's worth of
+   removed participants, not a row's. The layer exists; the size is new.
+3. **Route awareness.** Suppress on non-animated changes (query params), and
+   respect the tempo control's zero the way the current code does: no run at
+   all, not a zero-length run.
+
+And what the thirteen subtleties of the `animateView` version become:
+
+| in `application.ts` today                           | under `@route`                                                                                                     |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| the veil, timed against the snapshot                | gone — nothing is snapshotted                                                                                      |
+| never name the grid / the root-snapshot rule        | gone — no textures                                                                                                 |
+| never name a container of named things (the freeze) | gone — no names                                                                                                    |
+| the `is-veiled` counterpart card                    | gone — the card IS the counterpart, orphaned and crossfaded                                                        |
+| `quietTheRest()` pausing every demo                 | gone — live content keeps running; this is the same reason the gallery filter already uses layout animation        |
+| polled completion (`whenEnded`)                     | gone — the timeline knows its own end; `animationsSettled()` already waits on it                                   |
+| arrive/leave overlap arithmetic                     | `@overlap`, one number                                                                                             |
+| `crop(false)` everywhere                            | gone — real boxes, no `object-fit`                                                                                 |
+| entrance suppression (`isCrossing`)                 | stays, as a region concern: inserted sprites the timeline names don't also play their own `initial`                |
+| proportion-matched pairs (the ghosting)             | eased — a crossfade of two real elements tolerates mismatch the bitmap stretch could not                           |
+| tempo composition                                   | free — Choreo already scales with the tempo                                                                        |
+| scroll inside the update                            | `@scroll`                                                                                                          |
+| the SharedTabs freeze                               | avoided by construction — no capture to fight `layoutId`; the standing "one engine per element" rule still applies |
+
+What `animateView` remains for: cross-document transitions (MPA), and any
+move where snapshotting is the point — freezing a page that is too expensive
+to keep live. Same-document navigation defaults to `@route`.
+
 ## As simple as it gets? Five cuts
 
 The first draft of this language was audited the way the constructs
 were: hunt the redundancy. Five spellings carried no information; three
-cuts survived, and two were reversed by decision. (Earlier sections
-show pre-cut spellings in their examples; the reference is
-authoritative.)
+cuts survived, and two were reversed by decision.
 
 **Reversed: `Tween` / `Spring` / `Wait` stay.** The audit proposed
 merging `c.Tween` + `c.Spring` into one `c.To` (which interpolator a
@@ -125,11 +372,11 @@ lineage is worth more than one step fewer. The equivalences remain
 true and worth knowing (`Spring` is `Tween` with a generator for a
 clock; `Hold` with no properties waits) — they are just not the API.
 
-**Delivery loses `@overlap`.** Two spacing knobs — `@stagger` (ms
+**Delivery loses `@overlap`.** Two spacing knobs — `@stagger` (seconds
 between starts) and `@overlap` (window as a fraction of the span) —
 describe the same schedule from opposite ends: given the step's span
 and the slot count, either determines the other. `@stagger` survives,
-for every `@by`, because ms-between-starts is the one an author can
+for every `@by`, because time-between-starts is the one an author can
 hear; the 0.55-window default becomes the derived value, not a second
 argument.
 
@@ -140,7 +387,7 @@ the default), `'settle'` (carry the old skin whole, swap on landing),
 
 **`counterScale` moves onto the step.** A per-sprite attribute on the
 modifier was the seam rule broken in the other direction — camera
-policy leaking onto participants. `c.Camera @hold={{c.role 'focus'}}`
+policy leaking onto participants. `c.Camera @steady={{c.role 'focus'}}`
 names the sprites that keep their size, damped by default, and the
 timeline stays the only authority.
 
@@ -291,260 +538,6 @@ regions (emergent scenes like a filtered grid that nobody needs to
 scrub) and _underneath_ everything — the projection tree is the engine
 `c.Move` rides; the region replaces its scheduler, not its math.
 
-## Gates — `c.Gate`
-
-Keynote's driver is not time, it is the click: a build order is chunked into
-segments and the timeline parks between them.
-
-```gts
-<c.Sequence>
-  <c.Tween @of={{c.inserted 'title'}} @opacity={{1}} @ms={{300}} />
-  <c.Gate />
-  <c.Move @of={{c.moved 'card'}} @spring={{soft}} />
-  <c.Gate @auto={{800}} />
-  <c.Tween @of={{c.inserted 'tag'}} @opacity={{1}} @ms={{400}} />
-</c.Sequence>
-```
-
-- A `Gate` splits the timeline into **segments**. A run plays to the next
-  gate and parks; `c.advance()` (yielded, imperative — wire it to click or
-  keys) resumes. `c.segment` is tracked: which segment the cursor is in.
-- `@auto={{ms}}` opens the gate itself after the delay — Keynote's "start
-  build automatically after".
-- Advancing mid-segment **completes the segment instantly** (Keynote's
-  click-through), it does not skip it: every property lands on its segment-end
-  value, holds included.
-- A gate directly inside `Parallel` is a compile error. A pause is a total
-  order; only `Sequence` can hold one. (A `Parallel` _between_ gates is fine.)
-- Going backwards is not a gate concern. State drives Choreo: reverting the
-  state that produced the pass produces the reverse changeset, and the
-  natural run back. The cursor only ever moves forward through one pass's
-  timeline.
-
-## Anchors — `@name` and `@at`
-
-Block order gives Keynote's "with/after **previous**". The rest of the
-inspector — "with/after **build N**" — needs a reference, not a position.
-
-```gts
-<c.Sequence>
-  <c.Tween @name='tail' @of={{c.id 'tail'}} @pathLength={{1}} @ms={{520}} />
-  <c.Tween @name='head' @of={{c.id 'head'}} @pathLength={{1}} @ms={{520}} />
-  <c.Tween @at={{at 'head'}} @of={{c.id 'orbit'}} @pathLength={{1}} @ms={{560}} />
-  <c.Tween @at={{at 'head' 0.4}} @of={{c.id 'bead'}} @scale={{1}} @ms={{380}} />
-  <c.Tween @at={{after 'tail' 200}} @of={{c.id 'rule'}} @pathLength={{1}} @ms={{520}} />
-</c.Sequence>
-```
-
-- `@name` labels a step. Names are per-region, per-pass; naming two steps the
-  same is a compile error.
-- `@at={{at name progress?}}` starts the step at the named step's start plus
-  `progress` (0–1) of its duration. `@at={{after name delay?}}` starts at its
-  end plus `delay` ms. `at 'head' 1` and `after 'head'` are the same moment.
-- A step with `@at` is **lifted out of its block's flow**: it does not push
-  the sequence forward, and its own end still counts toward the run's length
-  (the Build Order rule — `runtimeOf` is `max`, not `last`).
-- Progress against a spring resolves the way `Sequence` already follows a
-  spring: the duration comes from the engine's generator.
-- Forward references are a compile error; anchors point up the score, the
-  way Keynote's build list does.
-
-## Delivery — `@by`, `@order`, `@overlap`
-
-`@stagger` (exists today: ms between matched sprites, document order) is
-Keynote's "by object". The rest of the delivery panel:
-
-```gts
-<c.Tween
-  @of={{c.inserted 'word'}}
-  @by='character'
-  @order='reverse'
-  @overlap={{0.55}}
-  @opacity={{1}}
-  @ms={{760}}
-/>
-```
-
-- `@by` — `'item'` (default; the sprite is the unit, `@stagger` spaces them)
-  | `'word'` | `'character'` | `'paragraph'`. The text values split a text
-  sprite's delivery: each slot plays the step's full property change over a
-  window of the step's span.
-- `@overlap` — each slot's window is `overlap × @ms`, starts distributed
-  evenly across the remainder (the demo's `windowOf`, with its 0.55 as the
-  default). `@overlap={{1}}` is everyone together; near 0 is strict relay.
-- `@order` — `'forward'` (default) | `'reverse'` | `'random'`. Reverse is how
-  Keynote builds text out: last word first. Random reseeds per run.
-- `@by` text values on a sprite with no text is a compile error; splitting
-  happens at measure time and the spans are the region's to own and clean up.
-- The whole step still occupies one slot in the timeline — anchors and gates
-  see one step, not one per character.
-
-## Paths — `@path`
-
-Keynote's Action column moves an object along a drawn curve. `c.Move` is
-box-to-box FLIP; a path is a different statement about the journey, not the
-endpoints.
-
-```gts
-<c.Move
-  @of={{c.id 'comet'}}
-  @path='M 0 0 C 40 -80, 160 -80, 200 0'
-  @rotate='auto'
-  @spring={{glide}}
-/>
-```
-
-- `@path` is an SVG path string in the sprite's own coordinate space,
-  relative to its **initial** position — Keynote's model: the path is drawn
-  from where the object stands.
-- On a `Move` with both a bounds delta and a `@path`, the path owns position
-  and FLIP still owns size. Without a path, `Move` is unchanged.
-- `@rotate='auto'` orients the sprite along the tangent; a number is a fixed
-  additional rotation; absent means no rotation.
-- Property functions compose: `@path={{this.arcVia}}` may build the string
-  from the changeset — a path from here to a beacon's box is
-  `(s, cs) => arcTo(cs.beacon('trash'))`.
-
-## Emphasis — keyframe values
-
-Pulse, jiggle, blink, flip: effects that end where they began. No new step —
-a property value may be a keyframe array, and a round trip is an array that
-returns:
-
-```gts
-<c.Tween @of={{c.kept 'card'}} @scale={{array 1 1.06 1}} @ms={{420}} />
-```
-
-- `PropSource` widens to accept arrays (and functions returning them). The
-  engine already speaks keyframes; this only lets a step say them.
-- The preset vocabulary (the Build Order demo's `EFFECTS`, plus the
-  round-trip set) ships as plain data — importable, inspectable, no
-  registration — once the array form exists to express it.
-
-## The timeline handle
-
-Gates, the inspector, and the Playhead demo all want the same object: the
-run as a value.
-
-```ts
-interface ChoreoRun {
-  advance(): void; // open the current gate
-  cancel(): void;
-  pause(): void;
-  play(): void;
-  seek(ms: number): void; // scrub; crossing a gate parks there
-  readonly duration: number;
-  readonly segment: number;
-  readonly t: number;
-}
-```
-
-Yielded as `c.run` (null between passes). `seek` is what the Playhead demo
-proves is possible — a scrubbed frame is a still, nothing in flight — and
-what it currently rebuilds by sampling a private score. This handle is the
-substrate; `Gate` and the Build Order inspector are its first two consumers.
-
-## The crossing — `@route` and `c.Crossing`
-
-The gallery ⇄ demo transition is built on `animateView`, and
-`test-app/app/routes/application.ts` is four hundred lines of what that
-costs: a veil timed against the snapshot, rules about what may be named, a
-poll for completion, every live animation paused so the compositor survives.
-All of it follows from one fact — **a view transition animates bitmaps**.
-
-Choreo's model fits the crossing better, because a crossing is a
-changeset.
-A route swap inside a region is one render pass: the old page's participants
-are `removed`, the new page's are `inserted`, and an id present on both
-sides pairs as a counterpart — the same machinery that already flies a card
-between bays. And the shape a crossing actually wants — _leaves fade
-first, then everything moves, then arrivals fade in near settle_ — is a
-sentence Choreo already speaks and the builder API cannot say cleanly:
-
-```gts
-<Choreo @route={{true}} as |c|>
-  {{outlet}}
-
-  <c.Sequence>
-    <c.Tween @of={{c.removed}} @opacity={{0}} @ms={{180}} />
-    <c.Parallel>
-      <c.Move @name='flight' @of={{c.received}} @spring={{glide}} />
-      <c.Hold @of={{c.received}} @zIndex={{2}} />
-    </c.Parallel>
-    <c.Tween @at={{at 'flight' 0.7}} @of={{c.inserted}} @opacity={{1}} @from={{hidden}} @ms={{220}} />
-  </c.Sequence>
-</Choreo>
-```
-
-Participants are just ids on both pages — `{{motion id='stage-playhead'
-role='stage'}}` on the gallery card and on the demo page — and pairing is
-the id, exactly as far matching works today. The canned form:
-
-```gts
-<Choreo @route={{true}} as |c|>
-  {{outlet}}
-  <c.Crossing @spring={{glide}} @leave={{180}} @arrive={{220}} @overlap={{0.7}} />
-</Choreo>
-```
-
-| arg                         | meaning                                                                                                     | default       |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------- |
-| `@spring` / `@ms` + `@ease` | the flight                                                                                                  | a soft spring |
-| `@leave`                    | ms to fade what only the old page had                                                                       | 180           |
-| `@arrive`                   | ms to fade what only the new page has                                                                       | 220           |
-| `@overlap`                  | arrivals start at this fraction of the flight — "after settle or close to it" is `0.85`; eager is `0.5`     | 0.7           |
-| `@crossfade`                | counterpart pairs crossfade old into new over the flight (glyphs cannot morph; two real elements can cross) | on            |
-| `@scroll`                   | `'top'` \| `'restore'` \| `(transition) => y` — applied after the swap, before final measure                | `'top'`       |
-
-What `@route` itself must add, beyond sugar:
-
-1. **Scroll inside the pass.** The window is placed after the route renders
-   and before final bounds are measured — scroll is part of the move, the
-   one lesson from `application.ts` that carries over unchanged.
-2. **Whole-subtree leavers.** The orphan layer holds a page's worth of
-   removed participants, not a row's. The layer exists; the size is new.
-3. **Route awareness.** Suppress on non-animated changes (query params), and
-   respect the tempo control's zero the way the current code does: no run at
-   all, not a zero-length run.
-
-And what the thirteen subtleties of the `animateView` version become:
-
-| in `application.ts` today                           | under `@route`                                                                                                     |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| the veil, timed against the snapshot                | gone — nothing is snapshotted                                                                                      |
-| never name the grid / the root-snapshot rule        | gone — no textures                                                                                                 |
-| never name a container of named things (the freeze) | gone — no names                                                                                                    |
-| the `is-veiled` counterpart card                    | gone — the card IS the counterpart, orphaned and crossfaded                                                        |
-| `quietTheRest()` pausing every demo                 | gone — live content keeps running; this is the same reason the gallery filter already uses layout animation        |
-| polled completion (`whenEnded`)                     | gone — the timeline knows its own end; `animationsSettled()` already waits on it                                   |
-| arrive/leave overlap arithmetic                     | `@overlap`, one number                                                                                             |
-| `crop(false)` everywhere                            | gone — real boxes, no `object-fit`                                                                                 |
-| entrance suppression (`isCrossing`)                 | stays, as a region concern: inserted sprites the timeline names don't also play their own `initial`                |
-| proportion-matched pairs (the ghosting)             | eased — a crossfade of two real elements tolerates mismatch the bitmap stretch could not                           |
-| tempo composition                                   | free — Choreo already scales with the tempo                                                                        |
-| scroll inside the update                            | `@scroll`                                                                                                          |
-| the SharedTabs freeze                               | avoided by construction — no capture to fight `layoutId`; the standing "one engine per element" rule still applies |
-
-What `animateView` remains for: cross-document transitions (MPA), and any
-move where snapshotting is the point — freezing a page that is too expensive
-to keep live. Same-document navigation defaults to `@route`.
-
-## Build order
-
-| piece                           | state                                                           | depends on |
-| ------------------------------- | --------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | smallest; unlocks emphasis + presets                            | —          |
-| `@name` / `@at` anchors         | compile-time only (`compile.ts` already places cues absolutely) | —          |
-| `@by` / `@order` / `@overlap`   | the demo's `windowOf`/`slotOf`, moved into the region           | —          |
-| the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof    | —          |
-| `c.Gate`                        | segments over the handle                                        | the handle |
-| `@path`                         | the one engine-adjacent piece                                   | —          |
-| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                          | anchors    |
-
-The Build Order demo is the acceptance test throughout: each promotion
-deletes a piece of `builds.ts`, and the demo is done being a simulation when
-`OPENING` is a `<c.Sequence>`.
-
 ## The bento-boxel test
 
 `bento-boxel-choreo` is the phase-2 conversion target, and today it imports
@@ -558,8 +551,8 @@ region, one id, and `endDrag` is already shaped like a pass — commit, render,
 measure, fly. The staged/dragging z-index arithmetic is `c.Hold`. The
 version deck's fold-away — "has to outlive the state that raised it" — is
 what leavers are for. The row ⇄ detail transmute's two skins crossing over
-one flying box is the counterpart crossfade (`@crossfade` should therefore
-be a `Move` argument, not only `Crossing` sugar). The `restore()` pattern —
+one flying box is the counterpart-skin policy — `@swap`, on `Move`
+itself. The `restore()` pattern —
 animate forward, `setTimeout`, then commit — inverts under Choreo: commit
 first, and the flight is the changeset's.
 
@@ -590,11 +583,11 @@ timeline knows. Property functions resolve once, at cue time; a tether is
 the continuous version:
 
 ```gts
-<c.Tether @from={{c.id 'orders'}} @to={{c.id 'customers'}} @draw={{curve}} />
+<c.Tether @from={{c.id 'orders'}} @to={{c.id 'customers'}} @path={{curve}} />
 ```
 
-Every frame of the run (and at rest), `@draw` receives both sprites'
-current boxes and returns path data / properties. This is the construct
+Every frame of the run (and at rest), `@path` receives both sprites'
+current boxes and returns path data. This is the construct
 Boxel UI will lean on hardest: wires between cards, comment anchors,
 selection halos — anything drawn _between_ things that move.
 
@@ -605,13 +598,13 @@ an 1800ms timeout to drop the highlight. As a timeline:
 
 ```gts
 <c.Sequence>
-  <c.Scroll @of={{c.id postId}} @block='center' @ms={{420}} />
-  <c.Hold @of={{c.id postId}} @outline='var(--cite)' @ms={{1400}} />
+  <c.Scroll @of={{c.id postId}} @align='center' @duration={{0.42}} />
+  <c.Hold @of={{c.id postId}} @outline='var(--cite)' @duration={{1.4}} />
 </c.Sequence>
 ```
 
 A `Scroll` step animates the sprite's scroll container so the sprite lands
-at `@block`; it occupies the sequence like any step, so "scroll, then
+at `@align`; it occupies the sequence like any step, so "scroll, then
 mark" is finally an ordering statement instead of two timers.
 
 ### Relative space — flying inside a moving frame
@@ -692,129 +685,7 @@ What that buys back from Pretui's vendored shelf: the lightbox flight
 gesture-owned), the dashboard reflow (gridstack's reflow is `Move` over a
 changeset; its drag stays a listener), and every hand-computed
 per-character `animation-delay` schedule, which is the delivery panel
-(`@by` / `@overlap` / `@order`) compiled by hand today.
-
-## Proving it — demos and contract cases
-
-The house method already exists: upstream behaviour is pinned by a ported
-suite, Choreo's own rules live in a contract suite on small fixtures
-(`tests/integration/choreo/`), the gallery is the taste test, and a soak
-hammers the real thing. The constructs extend each in kind. Two standing
-rules first:
-
-**One suite, two drivers.** The native compile target is not a second
-implementation to test separately — it is the same language with a
-different back end. The entire Choreo contract suite runs twice, once on
-the frameloop driver and once on the native one, same fixtures, same
-pixel assertions (`setupMotion(hooks, { driver: 'native' })`). Anything
-the native driver cannot pass, it must refuse loudly at compile time —
-a silent visual delta between drivers is the one unacceptable bug.
-
-**Every interruption test ends the same way.** `orphanCount() === 0` and
-`strandedTransforms()` empty, after every new kind of interruption the
-constructs introduce: advancing a gate mid-flight, seeking backwards,
-cancelling a parked run, crossing a route mid-morph.
-
-### Demos
-
-Three upgrades and five new pages — each demo is the acceptance test for
-exactly the construct it wears:
-
-| demo                                        | construct proven                   | done when                                                                                                            |
-| ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                           |
-| **Playhead** (upgrade)                      | the timeline handle                | the scrubber drives `c.run.seek()`; the private sampled score deleted                                                |
-| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                           |
-| **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes an `@auto` gate and a click-through mid-build |
-| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                       |
-| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity               |
-| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                 |
-| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component               |
-
-`@path` and emphasis need no page of their own: Deck's builds use a path
-move and a pulse, which is also how Keynote would.
-
-### Contract cases — the sharp ones
-
-The cases below are the ones that catch real bugs, not coverage filler.
-Each is a small fixture in `tests/integration/choreo/`.
-
-**Gates.** Advance mid-segment lands every property on its exact
-segment-end value (pin the numbers). A leaver named after a gate survives
-the park — and is released on `cancel()`. A gate directly inside
-`Parallel` fails at compile with a named error. `animationsSettled()`
-treats a parked run as settled — otherwise every gated test hangs; this
-is a semantic decision and the test is its record.
-
-**Anchors.** `at 'x' 0.4` against a spring resolves through the
-generator: pin against `calcGeneratorDuration`. A lifted step does not
-push the sequence, but the run's duration is the `max` including it.
-Duplicate `@name` and a forward reference each fail at compile, named.
-
-**Delivery.** The split reassembles: `innerText` before equals after,
-and the assistive mirror stays whole. The window math is pinned by
-porting `windowOf`'s literal numbers from `builds.ts` as expectations.
-`@order='random'` with the same seed is byte-identical across two runs;
-without a seed it is a compile error on the realm build.
-
-**Paths.** Closure: a `@path` move's final frame equals the FLIP final
-bounds exactly — the path bends the journey, never the destination.
-`@rotate='auto'` matches the tangent at both endpoints. Reduced motion
-collapses a path move the way it collapses a `Move`.
-
-**Keyframe values.** A round-trip array ends byte-equal to its start;
-interrupted mid-pulse, it settles to base, not to the peak.
-
-**The handle.** `seek(t)` is a still: no animation is running while
-paused, at any `t`, including mid-spring. Seek across a gate parks at the
-gate. `pause()` then `play()` resumes from the same `t` (pin it). After
-`cancel()`, the two invariants.
-
-**`@route` / Crossing.** Flight continuity: the received sprite's first
-frame equals the old page's measured box. The anti-snapshot assertion: a
-looping animation inside a moving participant advances its
-`currentTime` during the morph — the frame that proves live content
-never froze. Scroll is applied before the final measure (final bounds
-reflect it). Tempo zero produces no run at all — assert zero cues, not a
-zero-length run.
-
-**Hot start.** `initial` equals the release rect, not the resting rect.
-Velocity continuity: the first flight frame's velocity matches the
-pointer's within tolerance — `shape()` sampled across two frames.
-
-**Tether.** At three sampled mid-flight frames, wire endpoints sit
-inside the moving boxes within ε. A tether to a removed sprite detaches
-without error. At rest, a container resize re-aims it.
-
-**`c.Scroll`.** The container ends with the sprite at `@block`; the next
-step starts only after (it occupies the sequence). A user wheel during
-the step cancels it and the run survives — interruption invariants hold.
-
-**`@space`.** The bento assertion, made literal: sample the flight's
-page-space midpoint while the parent scales; start, midpoint and end are
-collinear within ε.
-
-**All-kept passes.** A pass that inserts, removes and moves nothing
-still runs its timeline: a `c.Hold @ms` fires on an event-only change
-and releases on schedule — measured against the run clock, not wall
-time.
-
-**The native driver.** Beyond the shared suite: a frameloop spy proves
-zero engine ticks during steady playback; the sampled `linear()` spring
-matches the JS spring within ε at five offsets; a child's `shape()`
-stays identity while its parent flies (the pre-sampled counter-scale);
-and the realm bundle passes a static scan — no `setTimeout`,
-`requestAnimationFrame`, `Date.now`, or `Math.random` in the artifact.
-
-### Test-support additions
-
-The suite needs four helpers to say any of the above:
-`advanceGate()` (advance and settle one segment), `seekTo(ms)` (drive a
-run's handle from a test), `velocityOf(el)` (two-frame sample), and the
-`driver` option on `setupMotion`. The soak extends with a storm mode:
-random advance/seek/route-cross against the live gallery, invariants
-checked after every blow — the same discipline `interruption-test.gts`
-applies today, aimed at the new surface.
+(`@by` / `@order` / `@stagger`) compiled by hand today.
 
 ## The concept-model test — Boxel System V16
 
@@ -892,8 +763,8 @@ a timeline step:
 ```
 
 `@zoom` / `@x` / `@y` animate the region's own frame; `@origin` aims it
-at a sprite. Participants may opt out (`counterScale=true` — the deck's
-"focus boxels stay the same size"). This is the construct `@space` was
+at a sprite. Sprites named by `@steady` keep their size — the deck's
+"focus boxels stay the same size" — damped by default. This is the construct `@space` was
 circling: `@space='parent'` resolves a flight _inside_ a moving frame,
 `c.Camera` is what _drives_ the frame, and the Zoom demo proves them
 together. The deck's second half adds the coupling to watch: past a zoom
@@ -955,14 +826,13 @@ One query, three consumers; the gesture becomes a first-class source of
 geometry the way a beacon already is.
 
 **Extract: the damped counter-scale.** `relative-scale.ts` is finished
-research into exactly the `c.Camera` `counterScale` problem: secondary
-UI in a zooming world should scale _with_ the host but not 1:1 —
-asymmetrically damped (`pow(z, 0.30)` zoomed out so it stays readable,
-`pow(z, 0.70)` zoomed in so it doesn't feel stuck), clamped to
-`[0.85, 1.8]`. `counterScale` should be `true | 'damped' | false`, with
-these curves as the `'damped'` constants. The deck said "focus boxels
-stay the same size"; the research measured what the eye actually
-tolerates.
+research into exactly `c.Camera`'s `@steady` problem: secondary UI in a
+zooming world should scale _with_ the host but not 1:1 — asymmetrically
+damped (`pow(z, 0.30)` zoomed out so it stays readable, `pow(z, 0.70)`
+zoomed in so it doesn't feel stuck), clamped to `[0.85, 1.8]`. These
+curves are `@steady`'s damped default; full size-holding remains a
+per-query choice. The deck said "focus boxels stay the same size"; the
+research measured what the eye actually tolerates.
 
 **Extract: escalation is a crossing.** `boxel-surface`'s `<Lift>` is a
 semantic anchored surface — kind, placement (`attached` / `shadow` /
@@ -989,3 +859,141 @@ destination before the timeline sees it. And the focus ladder is the
 _trigger_ vocabulary — a focus-path change is what fires a pass — not a
 motion construct; the deck's "shifting focus" table is application
 choreography written against it.
+
+## Build order
+
+| piece                           | state                                                           | depends on |
+| ------------------------------- | --------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | smallest; unlocks emphasis + presets                            | —          |
+| `@name` / `@at` anchors         | compile-time only (`compile.ts` already places cues absolutely) | —          |
+| `@by` / `@order` / `@stagger`   | the demo's `windowOf`/`slotOf`, moved into the region           | —          |
+| the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof    | —          |
+| `c.Gate`                        | segments over the handle                                        | the handle |
+| `@path`                         | the one engine-adjacent piece                                   | —          |
+| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                          | anchors    |
+
+The Build Order demo is the acceptance test throughout: each promotion
+deletes a piece of `builds.ts`, and the demo is done being a simulation when
+`OPENING` is a `<c.Sequence>`.
+
+## Proving it — demos and contract cases
+
+The house method already exists: upstream behaviour is pinned by a ported
+suite, Choreo's own rules live in a contract suite on small fixtures
+(`tests/integration/choreo/`), the gallery is the taste test, and a soak
+hammers the real thing. The constructs extend each in kind. Two standing
+rules first:
+
+**One suite, two drivers.** The native compile target is not a second
+implementation to test separately — it is the same language with a
+different back end. The entire Choreo contract suite runs twice, once on
+the frameloop driver and once on the native one, same fixtures, same
+pixel assertions (`setupMotion(hooks, { driver: 'native' })`). Anything
+the native driver cannot pass, it must refuse loudly at compile time —
+a silent visual delta between drivers is the one unacceptable bug.
+
+**Every interruption test ends the same way.** `orphanCount() === 0` and
+`strandedTransforms()` empty, after every new kind of interruption the
+constructs introduce: advancing a gate mid-flight, seeking backwards,
+cancelling a parked run, crossing a route mid-morph.
+
+### Demos
+
+Three upgrades and five new pages — each demo is the acceptance test for
+exactly the construct it wears:
+
+| demo                                        | construct proven                   | done when                                                                                                                         |
+| ------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                                        |
+| **Playhead** (upgrade)                      | the timeline handle                | the scrubber sets `c.run.time`; the private sampled score deleted                                                                 |
+| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                                        |
+| **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes a self-opening `@delay` gate and a click-through mid-build |
+| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                                    |
+| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity                            |
+| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                              |
+| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component                            |
+
+`@path` and emphasis need no page of their own: Deck's builds use a path
+move and a pulse, which is also how Keynote would.
+
+### Contract cases — the sharp ones
+
+The cases below are the ones that catch real bugs, not coverage filler.
+Each is a small fixture in `tests/integration/choreo/`.
+
+**Gates.** Advance mid-segment lands every property on its exact
+segment-end value (pin the numbers). A leaver named after a gate survives
+the park — and is released on `cancel()`. A gate directly inside
+`Parallel` fails at compile with a named error. `animationsSettled()`
+treats a parked run as settled — otherwise every gated test hangs; this
+is a semantic decision and the test is its record.
+
+**Anchors.** `at 'x' 0.4` against a spring resolves through the
+generator: pin against `calcGeneratorDuration`. A lifted step does not
+push the sequence, but the run's duration is the `max` including it.
+Duplicate `@name` and a forward reference each fail at compile, named.
+
+**Delivery.** The split reassembles: `innerText` before equals after,
+and the assistive mirror stays whole. The window math is pinned by
+porting `windowOf`'s literal numbers from `builds.ts` as expectations.
+`@order='random'` with the same seed is byte-identical across two runs;
+without a seed it is a compile error on the realm build.
+
+**Paths.** Closure: a `@path` move's final frame equals the FLIP final
+bounds exactly — the path bends the journey, never the destination.
+`@rotate='auto'` matches the tangent at both endpoints. Reduced motion
+collapses a path move the way it collapses a `Move`.
+
+**Keyframe values.** A round-trip array ends byte-equal to its start;
+interrupted mid-pulse, it settles to base, not to the peak.
+
+**The handle.** A set `time` is a still: no animation is running while
+paused, at any `time`, including mid-spring. Setting `time` across a
+gate parks at the gate. `pause()` then `play()` resumes from the same
+`time` (pin it). After `cancel()`, the two invariants.
+
+**`@route` / Crossing.** Flight continuity: the received sprite's first
+frame equals the old page's measured box. The anti-snapshot assertion: a
+looping animation inside a moving participant advances its
+`currentTime` during the morph — the frame that proves live content
+never froze. Scroll is applied before the final measure (final bounds
+reflect it). Tempo zero produces no run at all — assert zero cues, not a
+zero-length run.
+
+**Hot start.** `initial` equals the release rect, not the resting rect.
+Velocity continuity: the first flight frame's velocity matches the
+pointer's within tolerance — `shape()` sampled across two frames.
+
+**Tether.** At three sampled mid-flight frames, wire endpoints sit
+inside the moving boxes within ε. A tether to a removed sprite detaches
+without error. At rest, a container resize re-aims it.
+
+**`c.Scroll`.** The container ends with the sprite at `@align`; the next
+step starts only after (it occupies the sequence). A user wheel during
+the step cancels it and the run survives — interruption invariants hold.
+
+**`@space`.** The bento assertion, made literal: sample the flight's
+page-space midpoint while the parent scales; start, midpoint and end are
+collinear within ε.
+
+**All-kept passes.** A pass that inserts, removes and moves nothing
+still runs its timeline: a `c.Hold @duration` fires on an event-only change
+and releases on schedule — measured against the run clock, not wall
+time.
+
+**The native driver.** Beyond the shared suite: a frameloop spy proves
+zero engine ticks during steady playback; the sampled `linear()` spring
+matches the JS spring within ε at five offsets; a child's `shape()`
+stays identity while its parent flies (the pre-sampled counter-scale);
+and the realm bundle passes a static scan — no `setTimeout`,
+`requestAnimationFrame`, `Date.now`, or `Math.random` in the artifact.
+
+### Test-support additions
+
+The suite needs four helpers to say any of the above:
+`advanceGate()` (advance and settle one segment), `seekTo(seconds)`
+(set a run's `time` from a test), `velocityOf(el)` (two-frame sample), and the
+`driver` option on `setupMotion`. The soak extends with a storm mode:
+random advance/seek/route-cross against the live gallery, invariants
+checked after every blow — the same discipline `interruption-test.gts`
+applies today, aimed at the new surface.
