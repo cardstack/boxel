@@ -9,9 +9,12 @@ import {
   asExpressions,
   captureSpecHash,
   insert,
+  insertPermissions,
+  param,
   putMedia,
   query,
 } from '@cardstack/runtime-common';
+import { estimateScreenshotQueueWait } from '@cardstack/runtime-common/jobs/screenshot-card';
 import type {
   DBAdapter,
   QueuePublisher,
@@ -20,6 +23,7 @@ import type {
   PgPrimitive,
   ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
+import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 
 import handleScreenshotCard from '../handlers/handle-screenshot-card.ts';
@@ -304,11 +308,24 @@ module(basename(import.meta.filename), function () {
 
     let dbAdapter: PgAdapter;
     let adapter: FakeMediaCacheAdapter;
+    // The permission checker consults the matrix profile only for realms
+    // with a `users` grant; these tests seed exact-user rows, so the stub
+    // is never called.
+    let matrixClient = {
+      async getProfile() {
+        return null;
+      },
+    } as unknown as MatrixClient;
 
     setupDB(hooks, {
       beforeEach: async (_dbAdapter: PgAdapter): Promise<void> => {
         dbAdapter = _dbAdapter;
         adapter = new FakeMediaCacheAdapter();
+        // The ledger fast path is gated on realm read; `@stranger:localhost`
+        // is deliberately left without permissions for the negative tests.
+        await insertPermissions(dbAdapter, new URL(REALM_URL), {
+          '@someone:localhost': ['read'],
+        });
       },
     });
 
@@ -351,6 +368,7 @@ module(basename(import.meta.filename), function () {
         handleScreenshotCard({
           dbAdapter,
           queue,
+          matrixClient,
           mediaCacheAdapter: adapter,
           ...opts,
         } as unknown as CreateRoutesArgs),
@@ -359,7 +377,10 @@ module(basename(import.meta.filename), function () {
       return app;
     }
 
-    async function seedInstanceRow(generation = 1) {
+    async function seedInstanceRow(
+      generation = 1,
+      opts: { hasError?: boolean } = {},
+    ) {
       let { nameExpressions, valueExpressions } = asExpressions(
         {
           url: `${CARD_ID}.json`,
@@ -371,8 +392,11 @@ module(basename(import.meta.filename), function () {
           resource_created_at: Date.now(),
           is_deleted: false,
           pristine_doc: { attributes: {} },
+          ...(opts.hasError
+            ? { has_error: true, error_doc: { message: 'index error' } }
+            : {}),
         },
-        { jsonFields: ['pristine_doc'] },
+        { jsonFields: ['pristine_doc', 'error_doc'] },
       );
       await query(
         dbAdapter,
@@ -380,9 +404,13 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    function post(app: Koa, attributes: Record<string, unknown>) {
+    function post(
+      app: Koa,
+      attributes: Record<string, unknown>,
+      user = '@someone:localhost',
+    ) {
       let token = createJWT(
-        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        { user, sessionRoom: '!room:localhost' },
         realmSecretSeed,
       );
       return supertest(app.callback())
@@ -552,6 +580,178 @@ module(basename(import.meta.filename), function () {
       let attrs = response.body.data.attributes;
       assert.strictEqual(attrs.base64, PNG_BASE64, 'legacy shape intact');
       assert.false('captures' in attrs, 'no served URL without a persist');
+    });
+
+    test('a caller without realm read never touches the ledger', async function (assert) {
+      await seedInstanceRow();
+      let ledgerBytes = new TextEncoder().encode('private-ledger-bytes');
+      let ledgerBase64 = Buffer.from(ledgerBytes).toString('base64');
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: ledgerBytes,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(
+        persistApp(queue),
+        { realmURL: REALM_URL, cardId: CARD_ID, format: 'isolated' },
+        '@stranger:localhost',
+      ).expect(201);
+
+      assert.strictEqual(
+        published.length,
+        1,
+        'goes to the render path (whose permissions the worker enforces) instead of the ledger',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'no persist identity without realm read',
+      );
+      let attrs = response.body.data.attributes;
+      assert.notStrictEqual(
+        attrs.base64,
+        ledgerBase64,
+        'the stored capture bytes never reach a caller without read',
+      );
+      assert.false(
+        'captures' in attrs,
+        'no served URL is disclosed without read',
+      );
+    });
+
+    test('an errored instance captures without persisting', async function (assert) {
+      await seedInstanceRow(1, { hasError: true });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+      }).expect(201);
+
+      // An errored instance can never serve on the GET `_screenshot/` route
+      // (its liveness gate excludes effective-error rows), so persisting
+      // here would return a served URL that 404s.
+      assert.strictEqual((published[0]?.args as any)?.persist, null);
+      assert.false('captures' in response.body.data.attributes);
+    });
+
+    test('a ledger hit refreshes a stale last-accessed stamp', async function (assert) {
+      await seedInstanceRow();
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      // Age the entry past the touch throttle so the hit must bump it —
+      // otherwise a capture consumed only through this endpoint looks idle
+      // to the GC's on-demand TTL while in active use.
+      let staleStamp = Date.now() - 25 * 60 * 60 * 1000;
+      await query(dbAdapter, [
+        `UPDATE media_cache_ledger SET last_accessed_at =`,
+        param(staleStamp),
+        `WHERE realm_url =`,
+        param(REALM_URL),
+        `AND source_url =`,
+        param(CARD_ID),
+      ]);
+      let { queue, published } = makePersistQueue('ready');
+
+      await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+      }).expect(201);
+
+      assert.deepEqual(published, [], 'answered from the ledger');
+      let rows = (await query(dbAdapter, [
+        `SELECT last_accessed_at FROM media_cache_ledger WHERE realm_url =`,
+        param(REALM_URL),
+        `AND source_url =`,
+        param(CARD_ID),
+      ])) as { last_accessed_at: string | number }[];
+      assert.true(
+        Number(rows[0]?.last_accessed_at) > staleStamp,
+        'the hit bumped last_accessed_at',
+      );
+    });
+  });
+
+  module('screenshot queue twin estimate', function (hooks) {
+    let dbAdapter: PgAdapter;
+
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter: PgAdapter): Promise<void> => {
+        dbAdapter = _dbAdapter;
+      },
+    });
+
+    test('hasTwin requires the runAs the caller would render under', async function (assert) {
+      let concurrencyGroup = 'screenshot:http://example.test/';
+      let persist = {
+        realmURL: 'http://example.test/',
+        sourceURL: 'http://example.test/Person/fadhlan',
+        captureSpecHash: 'abc123',
+        sourceGeneration: 1,
+        lane: 'on-demand',
+      };
+      let { nameExpressions, valueExpressions } = asExpressions(
+        {
+          job_type: 'screenshot-card',
+          concurrency_group: concurrencyGroup,
+          args: {
+            cardId: persist.sourceURL,
+            format: 'isolated',
+            runAs: '@owner:localhost',
+            persist,
+          },
+        },
+        { jsonFields: ['args'] },
+      );
+      await query(dbAdapter, insert('jobs', nameExpressions, valueExpressions));
+
+      let twinKey = {
+        sourceURL: persist.sourceURL,
+        captureSpecHash: persist.captureSpecHash,
+        sourceGeneration: persist.sourceGeneration,
+      };
+      let sameIdentity = await estimateScreenshotQueueWait(
+        dbAdapter,
+        concurrencyGroup,
+        { ...twinKey, runAs: '@owner:localhost' },
+      );
+      assert.true(
+        sameIdentity.hasTwin,
+        'a same-runAs pending job is a joinable twin',
+      );
+
+      // A persist-target match under a different runAs is a job the caller
+      // cannot join (the coalesce key includes runAs), so reporting it as a
+      // twin would wave a gate-skipping request into a lane that then
+      // renders anyway.
+      let differentRunAs = await estimateScreenshotQueueWait(
+        dbAdapter,
+        concurrencyGroup,
+        { ...twinKey, runAs: '@someone-else:localhost' },
+      );
+      assert.false(
+        differentRunAs.hasTwin,
+        'a different-runAs job is not a twin',
+      );
     });
   });
 });

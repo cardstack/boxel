@@ -4187,11 +4187,17 @@ export class Realm {
       });
     }
 
+    // Render as the realm's owner — the same identity an index pass renders
+    // under. The requester already proved realm read; the capture is a
+    // realm-derived artifact, not a per-user view. Resolved ahead of the
+    // congestion pre-check because the twin probe matches on `runAs`.
+    let owner = await this.getRealmOwnerUserId();
+
     let concurrencyGroup = `screenshot:${this.url}`;
     let estimate = await estimateScreenshotQueueWait(
       this.#dbAdapter,
       concurrencyGroup,
-      entryKey,
+      { ...entryKey, runAs: owner },
     );
     // A request whose capture is already queued or rendering coalesces onto
     // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
@@ -4208,10 +4214,6 @@ export class Realm {
       );
     }
 
-    // Render as the realm's owner — the same identity an index pass renders
-    // under. The requester already proved realm read; the capture is a
-    // realm-derived artifact, not a per-user view.
-    let owner = await this.getRealmOwnerUserId();
     let job = await enqueueScreenshotCardJob(
       {
         realmURL: this.url,

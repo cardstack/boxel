@@ -11,6 +11,7 @@ import {
   type Expression,
 } from './expression.ts';
 import { uint8ArrayToHex } from './index.ts';
+import { effectiveHasError, prerenderedJoin } from './index-query-engine.ts';
 
 const log = logger('media-cache');
 
@@ -306,21 +307,30 @@ export async function findMediaCacheEntry(
 // The generation of a live indexed instance, addressable by either its
 // extensionless card-id URL or its `.json` file URL — the capture-identity
 // resolution a caller needs before it can compute a MediaCache key. Returns
-// undefined when the instance is absent or tombstoned.
+// undefined when the instance is absent, tombstoned, or in effective-error
+// state.
+//
+// "Live" here MUST mean what `IndexQueryEngine.liveInstanceGeneration` (the
+// GET `_screenshot/` serving gate) means, or a capture persisted under this
+// probe's generation resolves to a URL that route answers as a miss. The
+// row predicate is that method's, built from the same exported fragments
+// (`prerenderedJoin`, `effectiveHasError`), plus a realm scope this caller
+// has and the engine's path does not need.
 export async function findLiveInstanceGeneration(
   dbAdapter: DBAdapter,
   { realmURL, instanceURL }: { realmURL: string; instanceURL: string },
 ): Promise<number | undefined> {
   let rows = (await query(dbAdapter, [
-    `SELECT generation FROM boxel_index
-     WHERE (url =`,
+    `SELECT i.generation FROM boxel_index AS i ${prerenderedJoin()}
+     WHERE (i.url =`,
     param(instanceURL),
-    `OR file_alias =`,
+    `OR i.file_alias =`,
     param(instanceURL),
-    `) AND realm_url =`,
+    `) AND i.realm_url =`,
     param(realmURL),
-    `AND type = 'instance'
-      AND (is_deleted = FALSE OR is_deleted IS NULL)
+    `AND i.type = 'instance'
+      AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+      AND NOT ${effectiveHasError()}
      LIMIT 1`,
   ] as Expression)) as { generation: number | string }[];
   let row = rows[0];

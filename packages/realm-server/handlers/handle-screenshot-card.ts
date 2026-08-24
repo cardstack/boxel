@@ -3,15 +3,19 @@ import type Koa from 'koa';
 import {
   captureSpecHash,
   ensureTrailingSlash,
+  fetchRealmPermissions,
   findLiveInstanceGeneration,
   findMediaCacheEntry,
   isCaptureFormat,
   screenshotURLFor,
+  touchMediaCacheEntryOnHit,
   type CaptureSpec,
+  type DBAdapter,
   type MediaCacheEntry,
   type MediaCacheEntryKey,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
+import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import {
   enqueueScreenshotCardJob,
   estimateScreenshotQueueWait,
@@ -52,8 +56,11 @@ interface CaptureResult {
  * `_screenshot/` DSL resolves, so a capture published here serves on that
  * route immediately, even on realms whose `allowArbitraryScreenshots` gate
  * is closed (the gate blocks new GET-triggered captures, never serving).
- * This endpoint itself is deliberately ungated: it is an authenticated
- * surface with full captureSpec power under realm-read trust.
+ * This endpoint skips that gate deliberately: it is an authenticated
+ * surface with full captureSpec power under realm-read trust. Realm read is
+ * enforced in two places: the ledger fast path (and the generation probe
+ * feeding it) checks it here, since it answers before any job exists; the
+ * render path relies on the worker task's permission check.
  *
  * A request whose canonical identity already has a ledger entry answers
  * from the store with zero render work — which is also what lets a
@@ -89,6 +96,7 @@ interface CaptureResult {
 export default function handleScreenshotCard({
   dbAdapter,
   queue,
+  matrixClient,
   mediaCacheAdapter,
   screenshotSyncWaitMs = SCREENSHOT_SYNC_WAIT_BUDGET_MS,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
@@ -128,14 +136,30 @@ export default function handleScreenshotCard({
       return sendResponseForBadRequest(ctxt, 'includeBase64 must be a boolean');
     }
     let withBase64 = includeBase64 !== false;
-    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    // Both URLs go through `new URL` resolution (dot segments,
+    // percent-encoding, default ports) before anything derives from them:
+    // the containment check below must mean real containment (a dotted
+    // `cardId` prefixed with the realm URL escapes a plain string-prefix
+    // test), and the persist identity must key an instance exactly the way
+    // the GET route's `paths.fileURL` derivation does.
+    let normalizedRealmURL: string;
+    let normalizedCardId: string;
+    try {
+      normalizedRealmURL = ensureTrailingSlash(new URL(realmURL).href);
+      normalizedCardId = new URL(cardId).href;
+    } catch {
+      return sendResponseForBadRequest(
+        ctxt,
+        'realmURL and cardId must be valid absolute URLs',
+      );
+    }
     // The persist identity (and the served URL) hang off the instance's
     // location within its realm.
-    if (!cardId.startsWith(normalizedRealmURL)) {
+    if (!normalizedCardId.startsWith(normalizedRealmURL)) {
       return sendResponseForBadRequest(ctxt, 'cardId must be within realmURL');
     }
     let spec: CaptureSpec = { format };
-    let sourceURL = cardId.replace(/\.json$/, '');
+    let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
     let token = ctxt.state.token as RealmServerTokenClaim;
@@ -154,17 +178,35 @@ export default function handleScreenshotCard({
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
       if (mediaCacheAdapter) {
-        let generation = await findLiveInstanceGeneration(dbAdapter, {
-          realmURL: normalizedRealmURL,
-          instanceURL: sourceURL,
-        });
-        if (generation !== undefined) {
-          entryKey = {
+        // The ledger fast path and the generation probe feeding it answer
+        // from the store before any job exists, so the worker task's
+        // permission check never covers them — realm read is enforced here
+        // instead (ahead of the probe, which alone would leak instance
+        // existence on a private realm). Read is checked the way the realm
+        // itself checks it — exact rows plus the `*` and `users` grants. A
+        // caller without read goes straight to the render path, whose
+        // permissions the worker enforces, and never persists.
+        let permissions = await fetchRealmPermissions(
+          dbAdapter,
+          new URL(normalizedRealmURL),
+        );
+        let mayRead = await new RealmPermissionChecker(
+          permissions,
+          matrixClient,
+        ).can(userId, 'read');
+        if (mayRead) {
+          let generation = await findLiveInstanceGeneration(dbAdapter, {
             realmURL: normalizedRealmURL,
-            sourceURL,
-            captureSpecHash: await captureSpecHash(spec),
-            sourceGeneration: generation,
-          };
+            instanceURL: sourceURL,
+          });
+          if (generation !== undefined) {
+            entryKey = {
+              realmURL: normalizedRealmURL,
+              sourceURL,
+              captureSpecHash: await captureSpecHash(spec),
+              sourceGeneration: generation,
+            };
+          }
         }
       }
 
@@ -178,6 +220,7 @@ export default function handleScreenshotCard({
             instanceLocalPath,
             spec,
             mediaCacheAdapter: mediaCacheAdapter!,
+            dbAdapter,
           });
           if (response) {
             return await setContextResponse(ctxt, response);
@@ -187,12 +230,15 @@ export default function handleScreenshotCard({
         }
       }
 
+      // The canonical realm URL keys the per-realm serialization lane (the
+      // job's default concurrency group) so this surface and the GET lane —
+      // which keys off the realm's own URL — share one lane per realm.
       let job = await enqueueScreenshotCardJob(
         {
-          realmURL,
+          realmURL: normalizedRealmURL,
           realmUsername: userId,
           runAs: userId,
-          cardId,
+          cardId: normalizedCardId,
           format,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
         },
@@ -226,7 +272,7 @@ export default function handleScreenshotCard({
         // with no second render. The retry hint is one average capture.
         let estimate = await estimateScreenshotQueueWait(
           dbAdapter,
-          `screenshot:${realmURL}`,
+          `screenshot:${normalizedRealmURL}`,
         );
         return await setContextResponse(
           ctxt,
@@ -325,6 +371,7 @@ async function respondFromLedger({
   instanceLocalPath,
   spec,
   mediaCacheAdapter,
+  dbAdapter,
 }: {
   entry: MediaCacheEntry;
   withBase64: boolean;
@@ -332,6 +379,7 @@ async function respondFromLedger({
   instanceLocalPath: string;
   spec: CaptureSpec;
   mediaCacheAdapter: NonNullable<CreateRoutesArgs['mediaCacheAdapter']>;
+  dbAdapter: DBAdapter;
 }): Promise<Response | undefined> {
   let base64: string | undefined;
   if (withBase64) {
@@ -347,6 +395,11 @@ async function respondFromLedger({
   } else if (!(await mediaCacheAdapter.head(entry.objectKey))) {
     return undefined;
   }
+  // A hit consumed through this endpoint is a use like any GET serve: the
+  // same guarded bump (on-demand lane only, hourly-throttled) keeps a
+  // capture refreshed exclusively via POST from aging out of the GC's
+  // idle TTL while in active use.
+  await touchMediaCacheEntryOnHit(dbAdapter, entry);
   let attributes: Record<string, unknown> = {
     status: 'ready',
     width: entry.width,
