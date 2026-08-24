@@ -64,7 +64,7 @@
     "decorator-transforms": "catalog:",
     "diff": "catalog:",
     "ember-concurrency-async-plugin": "workspace:*",
-    "ember-eslint-parser": "^0.13.0",
+    "ember-eslint-parser": "catalog:",
     "ember-source": "catalog:",
     "eslint": "catalog:",
     "ethers": "catalog:",
