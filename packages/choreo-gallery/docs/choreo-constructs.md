@@ -580,13 +580,44 @@ deck confirms, and the two constructs it adds:
 **Confirmed.** Wells — a visible landing slot that appears before the
 flight, is stretched into, reflows, and fades — are an inserted
 placeholder participant plus a timeline, not a new primitive (and the
-deck's "drag into the well" is the hot start). Lift-and-place is `c.Move`
-with a `c.Hold` elevation and a shadow — vocabulary, not machinery.
-"Settle into a badge" (a dialog confirms and collapses to an XS chip
-inside the card it edited) is a counterpart flight and the best small
-demo of one. The tray as "the physical element which carries the focused
-boxel between scenes" is the counterpart's carrier role under another
-name.
+deck's "drag into the well" is the hot start). "Settle into a badge" (a
+dialog confirms and collapses to an XS chip inside the card it edited)
+is a counterpart flight and the best small demo of one. The tray as "the
+physical element which carries the focused boxel between scenes" is the
+counterpart's carrier role under another name.
+
+### `c.Lift` — planes, made of the orphan layer
+
+The deck's plane stack is not vocabulary; it is the answer to a DOM
+fact. `z-index` cannot escape an ancestor's stacking context, and no
+value of it survives an `overflow` clip — so any flight that crosses
+containers clips against the first scroller it passes. That is why
+bento-boxel hand-built its portal `.flight-layer`s, and it is why
+`c.Hold @zIndex` alone cannot say "lift". Choreo already owns the
+machinery that solves this: the orphan layer, a region-owned overlay
+that removed elements are reparented into with their bounds locked —
+one plane, currently reserved for the dead.
+
+`c.Lift` points the same machinery at the living:
+
+```gts
+<c.Parallel>
+  <c.Lift @of={{c.id 'card'}} @shadow={{true}} />
+  <c.Move @of={{c.id 'card'}} @spring={{carry}} />
+</c.Parallel>
+```
+
+For the span of its block, the sprite is promoted into the region's
+elevated layer — reparented with measured continuity, above every
+stacking context and clip in the region — and placed back where it
+lands when the block ends. `@shadow` casts on the layer below (the
+deck's "tray casts the shadow on the plane below"). The rest of the
+deck's plane phenomena then decompose: the modal plane shrinking what
+is beneath it is `c.Camera`; the window tint is a `Tween` on everyone
+else; a plane sliding in is a participant like any other. The acid
+test is the deck's inversion — A contains B, then B contains A — which
+is only animatable at all if both can cross the boundary on a shared
+layer and land in their new containment: `c.Lift`'s contract case.
 
 ### `c.Camera` — the third column
 
