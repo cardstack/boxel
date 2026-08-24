@@ -560,3 +560,81 @@ run's handle from a test), `velocityOf(el)` (two-frame sample), and the
 random advance/seek/route-cross against the live gallery, invariants
 checked after every blow — the same discipline `interruption-test.gts`
 applies today, aimed at the new surface.
+
+## The concept-model test — Boxel System V16
+
+The original Keynote deck for the Boxel spatial system (98 slides; the
+first half is the model, the second its application to Tally) is the
+third measuring stick, and its animation data agrees with its thesis: of
+74 slide transitions in the first half, 52 are Magic Move. The concept
+model is a **chain of crossings** — the same objects tracked across
+dozens of consecutive scenes — with almost no discrete builds. That is
+Choreo's model, stated five years early.
+
+Its taxonomy is the finding. Every motion pattern in the deck is scored
+in three columns — **local motion** (the focused boxel transmutes),
+**scene motion** (the tray carries, wells reflow, planes slide), and
+**camera motion** — and Choreo today speaks only the first two. What the
+deck confirms, and the two constructs it adds:
+
+**Confirmed.** Wells — a visible landing slot that appears before the
+flight, is stretched into, reflows, and fades — are an inserted
+placeholder participant plus a timeline, not a new primitive (and the
+deck's "drag into the well" is the hot start). Lift-and-place is `c.Move`
+with a `c.Hold` elevation and a shadow — vocabulary, not machinery.
+"Settle into a badge" (a dialog confirms and collapses to an XS chip
+inside the card it edited) is a counterpart flight and the best small
+demo of one. The tray as "the physical element which carries the focused
+boxel between scenes" is the counterpart's carrier role under another
+name.
+
+### `c.Camera` — the third column
+
+The deck's camera rules: zoom out to reveal the edges for rearranging;
+zoom in for in-place editing; a modal plane "causes the planes below to
+shrink proportionally and reveal a bit of the edges" while "the focus
+boxels stay the same size"; camera moves scale things proportionally but
+never change what a thing is. That is a region-frame transform played as
+a timeline step:
+
+```gts
+<c.Sequence>
+  <c.Camera @zoom={{0.85}} @spring={{glide}} />
+  <c.Move @of={{c.moved 'card'}} @spring={{soft}} />
+  <c.Camera @zoom={{1}} @origin={{c.id 'focus'}} />
+</c.Sequence>
+```
+
+`@zoom` / `@x` / `@y` animate the region's own frame; `@origin` aims it
+at a sprite. Participants may opt out (`counterScale=true` — the deck's
+"focus boxels stay the same size"). This is the construct `@space` was
+circling: `@space='parent'` resolves a flight _inside_ a moving frame,
+`c.Camera` is what _drives_ the frame, and the Zoom demo proves them
+together. The deck's second half adds the coupling to watch: past a zoom
+threshold a boxel _transmutes_ to a smaller form — camera state feeding
+the next changeset, which is app logic riding a camera value the region
+must expose.
+
+### `@swap='settle'` — the transmute's crossfade policy
+
+Lift-and-place states it exactly: "the focused boxel retains its 2D
+rendering throughout, just scaling the bitmap through the lift and place
+journey. After placing into new flow, it should re-render and reflow."
+The counterpart crossfade needs a policy argument: `@swap='during'`
+(both skins cross mid-flight — the detail transmute) or
+`@swap='settle'` (the old rendering is carried whole and the swap
+happens at landing — the lift). One word for a decision every flight
+makes implicitly today.
+
+### The hierarchy, as a lint
+
+The deck's Motion Hierarchy rule is quantitative: **primary** — one, at
+most two, focused boxels transmute; **secondary** — the tray carries;
+**tertiary** — everything else fades or slides, because "abrupt
+disappearance of any boxel element during scene transition leads to
+uncanny valley where the world doesn't feel spatially and physically
+real." Choreo can enforce the floor of that: in `@debug`, a removed
+participant that no step names — one that will simply vanish — is a
+warning with the sprite's id in it. The ceiling (too many primaries) is
+taste, but a debug count of sprites moved by `Move` steps per pass makes
+the review conversation possible.
