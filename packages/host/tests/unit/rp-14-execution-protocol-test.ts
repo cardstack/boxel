@@ -1,7 +1,5 @@
 import { module, test } from 'qunit';
 
-import { formats, rri } from '@cardstack/runtime-common';
-import type { Format } from '@cardstack/runtime-common';
 import {
   BOXEL_EXECUTION_PROTOCOL_VERSION,
   BOXEL_EXECUTION_TRANSPORT_VERSION,
@@ -34,6 +32,9 @@ import type {
   TemplateBundle,
   TemplateDependency,
 } from '@cardstack/runtime-common/boxel-execution-protocol';
+import { formats } from '@cardstack/runtime-common/formats';
+import type { Format } from '@cardstack/runtime-common/formats';
+import { rri } from '@cardstack/runtime-common/realm-identifiers';
 
 const support: ProtocolSupport = {
   protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
@@ -214,7 +215,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.1: every record shape survives structuredClone unchanged', function (assert) {
+  test('RP-14.1: a record of each shape survives structuredClone unchanged', function (assert) {
     for (let [name, record] of [
       ['BoxelDescription', description()],
       ['InstanceProjection', projection()],
@@ -254,7 +255,9 @@ module('Unit | rendering protocol | records and operations', function () {
         $boxel: {
           id: 'http://test/x',
           type: testRef,
-          model: { title: 'Ada' },
+          // Sorts after `type`, so this fails on the marker's exact key count
+          // rather than on the key-name comparison.
+          value: { title: 'Ada' },
         },
       }),
       'the target embedded inside the marker',
@@ -307,7 +310,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.1: the SafeEvent allowlists are disjoint and name nothing that hands back authority', function (assert) {
+  test('RP-14.1: the SafeEvent allowlists are disjoint and exclude the members that hand back authority', function (assert) {
     let eventLists = [
       SAFE_EVENT_BOOLEAN_PROPERTIES,
       SAFE_EVENT_NUMBER_PROPERTIES,
@@ -360,7 +363,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.2: the runtime operation set is closed, and writing is not one of them', function (assert) {
+  test('RP-14.2: the runtime operation names are exactly the ones the protocol declares, and writing is not among them', function (assert) {
     assert.deepEqual(
       [...BOXEL_RUNTIME_OPERATIONS],
       [
@@ -469,16 +472,25 @@ module('Unit | rendering protocol | records and operations', function () {
       'an unimplemented transport version is refused',
     );
 
-    // An endpoint speaking a later transport accepts it while the records it
-    // carries stay on this consumer's semantic version, and vice versa: a
-    // record at the current semantic version passes its gate no matter what
-    // the transport underneath it is doing.
-    assertExecutionTransportVersion(
-      BOXEL_EXECUTION_TRANSPORT_VERSION + 1,
-      BOXEL_EXECUTION_TRANSPORT_VERSION + 1,
-    );
+    // Neither gate consults the other's number: a record at this consumer's
+    // semantic version passes whatever the transport is doing, and a message
+    // at this endpoint's transport version passes whatever semantic version
+    // the record inside it declares.
+    assertExecutionTransportVersion(BOXEL_EXECUTION_TRANSPORT_VERSION);
     assertUsableExecutionRecord(description(), support);
-    assert.true(true, 'neither check consults the other');
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          description({
+            protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION + 1,
+          }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code ===
+        'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
+      'a semantic mismatch is a semantic refusal, never a transport one',
+    );
   });
 
   test('RP-14.3: an unrecognized template dependency kind refuses the whole generation', function (assert) {
@@ -511,19 +523,31 @@ module('Unit | rendering protocol | records and operations', function () {
       }
     }
 
-    // The recognized vocabulary passes whole.
+    // The recognized vocabulary passes whole. The authored-component entry
+    // names a template the bundle actually carries, since a reference to one
+    // it does not is its own refusal.
+    let carried = bundle([
+      {
+        kind: 'trusted-component',
+        module: '@cardstack/boxel-ui',
+        name: 'Pill',
+      },
+      { kind: 'trusted-helper', module: '@cardstack/base', name: 'cn' },
+      { kind: 'safe-modifier', module: '@ember/modifier', name: 'on' },
+      { kind: 'authored-component', template: 'template-1' },
+      { kind: 'block', name: 'default' },
+    ]);
     assertKnownTemplateDependencies(
-      bundle([
-        {
-          kind: 'trusted-component',
-          module: '@cardstack/boxel-ui',
-          name: 'Pill',
+      {
+        ...carried,
+        templates: {
+          ...carried.templates,
+          'template-1': {
+            ...carried.templates['template-0'],
+            id: 'template-1',
+          },
         },
-        { kind: 'trusted-helper', module: '@cardstack/base', name: 'cn' },
-        { kind: 'safe-modifier', module: '@ember/modifier', name: 'on' },
-        { kind: 'authored-component', template: 'template-1' },
-        { kind: 'block', name: 'default' },
-      ]),
+      },
       support,
     );
     assert.deepEqual(
@@ -584,7 +608,145 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.3: every refusal a consumer can hit has a name in the catalog', function (assert) {
+  test('RP-14.3: a record whose own shape is unreadable is refused by name, not by TypeError', function (assert) {
+    // The producer is across a trust boundary, so the record's shape is the
+    // first thing in doubt. A consumer catches ProtocolRefusal; anything else
+    // escapes it unhandled and takes the last-known-good output with it.
+    let malformed: [string, unknown][] = [
+      ['a null record', null],
+      ['an array', []],
+      ['a string', 'BoxelDescription'],
+      ['no protocolVersion', { requiredFeatures: [] }],
+      [
+        'a string protocolVersion',
+        { protocolVersion: '1', requiredFeatures: [] },
+      ],
+      ['a NaN protocolVersion', { protocolVersion: NaN, requiredFeatures: [] }],
+      ['no requiredFeatures', { protocolVersion: 1 }],
+      [
+        'requiredFeatures as a bare string',
+        { protocolVersion: 1, requiredFeatures: 'guides-v2' },
+      ],
+      [
+        'a non-string among requiredFeatures',
+        { protocolVersion: 1, requiredFeatures: ['ok', 7] },
+      ],
+    ];
+    for (let [label, record] of malformed) {
+      assert.throws(
+        () =>
+          assertUsableExecutionRecord(
+            record as unknown as BoxelDescription,
+            support,
+          ),
+        (error: Error) =>
+          error instanceof ProtocolRefusal &&
+          error.code === 'BOXEL_RECORD_MALFORMED',
+        `${label} is refused by name`,
+      );
+    }
+  });
+
+  test('RP-14.3: the version answers before the feature list, so a later version is never judged against this consumer feature set', function (assert) {
+    // Both are wrong, and only one answer is right: feature names from a
+    // version this consumer does not implement mean nothing measured against
+    // the features it does.
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          description({
+            protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION + 1,
+            requiredFeatures: ['a-feature-from-a-later-version'],
+          }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code ===
+        'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
+      'the version refusal wins',
+    );
+  });
+
+  test('RP-14.3: a component update is gated on its envelope, not only on its effect kinds', function (assert) {
+    assert.throws(
+      () =>
+        assertKnownComponentEffects(
+          update({ protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION + 1 }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code ===
+        'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
+      'an unreadable version is refused before its effects are inspected',
+    );
+    assert.throws(
+      () =>
+        assertKnownComponentEffects(
+          update({ requiredFeatures: ['an-unbuilt-feature'] }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code ===
+        'BOXEL_PROTOCOL_FEATURE_UNSUPPORTED',
+      'so is an unimplemented required feature',
+    );
+    assert.throws(
+      () =>
+        assertKnownComponentEffects(
+          update({ effects: [null] as unknown as ComponentUpdate['effects'] }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'and an entry that is not an effect at all',
+    );
+  });
+
+  test('RP-14.3: a bundle naming a template it does not carry is refused whole', function (assert) {
+    // A dangling reference reifies into a component whose scope resolves to
+    // nothing at render time — the same failure an unrecognized kind causes,
+    // reached by a different route.
+    let carried = bundle();
+    let dangling: [string, TemplateBundle][] = [
+      ['a root that names nothing', { ...carried, root: 'template-absent' }],
+      ['an empty bundle', { ...carried, templates: {} }],
+      [
+        'an authored component that names nothing',
+        {
+          ...carried,
+          templates: {
+            'template-0': {
+              ...carried.templates['template-0'],
+              scope: [{ kind: 'authored-component', template: 'template-9' }],
+            },
+          },
+        },
+      ],
+      [
+        'a descriptor whose id disagrees with its key',
+        {
+          ...carried,
+          templates: {
+            'template-0': {
+              ...carried.templates['template-0'],
+              id: 'template-renamed',
+            },
+          },
+        },
+      ],
+    ];
+    for (let [label, candidate] of dangling) {
+      assert.throws(
+        () => assertKnownTemplateDependencies(candidate, support),
+        (error: Error) =>
+          error instanceof ProtocolRefusal &&
+          error.code === 'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
+        `${label} is refused`,
+      );
+    }
+  });
+
+  test('RP-14.3: every code the catalog declares is reachable, and every reachable refusal is declared', function (assert) {
     let thrown = new Set<string>();
     let attempts: (() => void)[] = [
       () =>
@@ -618,6 +780,16 @@ module('Unit | rendering protocol | records and operations', function () {
               } as unknown as ComponentUpdate['effects'][number],
             ],
           }),
+          support,
+        ),
+      () =>
+        assertUsableExecutionRecord(
+          null as unknown as BoxelDescription,
+          support,
+        ),
+      () =>
+        assertKnownTemplateDependencies(
+          { ...bundle(), root: 'template-absent' },
           support,
         ),
     ];

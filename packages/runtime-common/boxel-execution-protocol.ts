@@ -36,15 +36,23 @@ import type { Format } from './formats.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
 /**
- * The inert-data proof. `Cloneable<T>` resolves to `T`, so it costs consumers
+ * The inert-data check. `Cloneable<T>` resolves to `T`, so it costs consumers
  * nothing, but a member typed as a function, a class instance, a DOM node, a
- * `Map`/`Set`, or `unknown` fails the constraint and the module does not
- * compile.
+ * `Map`, `Set`, `Date`, `Promise`, `RegExp`, `symbol`, `bigint`, `object`, or
+ * `unknown` fails the constraint and the module does not compile.
  *
- * Records here are type aliases rather than interfaces because the proof
- * rests on the implicit index signature TypeScript infers for an object type
- * alias and does not infer for an interface: an interface cannot satisfy the
- * constraint at all, however inert its members are.
+ * What it does not catch is `any`, which satisfies the constraint at any
+ * depth — `any` opts out of the type system here exactly as it does
+ * everywhere else. A record member typed `any` gets no check at all.
+ *
+ * The constraint rests on the implicit index signature TypeScript infers for
+ * an object type alias, so two consequences follow. Records here are type
+ * aliases: an interface *without* an index signature cannot satisfy the
+ * constraint however inert its members are (one *with* an index signature
+ * satisfies it fine — that is why `JSONTypes.Value`, built from interfaces,
+ * works throughout). And a member whose type transitively resolves to an
+ * index-signature-less interface is rejected, so turning a neighbor's type
+ * alias into an interface surfaces as an error here rather than there.
  */
 type JsonData =
   | JSONTypes.Primitive
@@ -95,10 +103,12 @@ export interface ProtocolSupport {
 }
 
 export const PROTOCOL_REFUSAL_CODES = [
+  'BOXEL_RECORD_MALFORMED',
   'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
   'BOXEL_TRANSPORT_VERSION_UNSUPPORTED',
   'BOXEL_PROTOCOL_FEATURE_UNSUPPORTED',
   'BOXEL_TEMPLATE_DEPENDENCY_KIND_UNKNOWN',
+  'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
   'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
 ] as const;
 export type ProtocolRefusalCode = (typeof PROTOCOL_REFUSAL_CODES)[number];
@@ -134,7 +144,7 @@ export function assertUsableExecutionRecord(
 ): void {
   // Read once, up front: the envelope is the whole basis of the decision, and
   // reading it exactly once is what makes that checkable.
-  let { protocolVersion, requiredFeatures } = record;
+  let { protocolVersion, requiredFeatures } = readEnvelope(record);
   if (protocolVersion !== support.protocolVersion) {
     throw new ProtocolRefusal(
       'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
@@ -152,18 +162,78 @@ export function assertUsableExecutionRecord(
   }
 }
 
+/** Names a rejected value in a diagnostic without quoting boundary data. */
+function describeValue(value: unknown): string {
+  if (value === null) {
+    return 'null';
+  }
+  return Array.isArray(value) ? 'an array' : typeof value;
+}
+
+/**
+ * The envelope, read as untrusted input rather than as the type it claims.
+ *
+ * A record's producer is on the far side of a trust boundary, so the record's
+ * own shape is the first thing in doubt. Every refusal here has to be a
+ * `ProtocolRefusal` for the same reason the version and feature refusals do:
+ * a consumer catches that one type, and a `TypeError` from an absent or
+ * mistyped member would escape it unhandled — discarding the last-known-good
+ * output the refusal exists to protect, and skipping the one diagnostic
+ * RP-14.3 asks for.
+ */
+function readEnvelope(record: ProtocolEnvelope): {
+  protocolVersion: number;
+  requiredFeatures: string[];
+} {
+  let candidate: unknown = record;
+  if (
+    typeof candidate !== 'object' ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `expected a record object, received ${describeValue(candidate)}`,
+    );
+  }
+  let { protocolVersion, requiredFeatures } =
+    candidate as Partial<ProtocolEnvelope>;
+  if (
+    typeof protocolVersion !== 'number' ||
+    !Number.isFinite(protocolVersion)
+  ) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `protocolVersion must be a finite number, received ${describeValue(protocolVersion)}`,
+    );
+  }
+  if (
+    !Array.isArray(requiredFeatures) ||
+    requiredFeatures.some((feature) => typeof feature !== 'string')
+  ) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `requiredFeatures must be an array of strings, received ${describeValue(requiredFeatures)}`,
+    );
+  }
+  return { protocolVersion, requiredFeatures };
+}
+
 /**
  * The transport counterpart, checked on a message envelope before its payload
  * is dispatched to a lane.
+ *
+ * The supported version is the constant, not a parameter: one build carries
+ * one transport implementation, so a caller-supplied "supported" value could
+ * only ever weaken the gate.
  */
 export function assertExecutionTransportVersion(
   transportVersion: number,
-  supported = BOXEL_EXECUTION_TRANSPORT_VERSION,
 ): void {
-  if (transportVersion !== supported) {
+  if (transportVersion !== BOXEL_EXECUTION_TRANSPORT_VERSION) {
     throw new ProtocolRefusal(
       'BOXEL_TRANSPORT_VERSION_UNSUPPORTED',
-      `message declares transport version ${transportVersion}; this endpoint implements ${supported}`,
+      `message declares transport version ${describeValue(transportVersion)}; this endpoint implements ${BOXEL_EXECUTION_TRANSPORT_VERSION}`,
     );
   }
 }
@@ -200,11 +270,26 @@ export type BoxelRuntimeOperation = (typeof BOXEL_RUNTIME_OPERATIONS)[number];
  * template rendering as `containingFormat`, when the author names none
  * (RP-2.6).
  *
- * This is the one definition of the cascade for every consumer outside Base's
- * own field components, and it mirrors `defaultFieldFormats` in
+ * This is the one definition of *this* cascade for every consumer outside
+ * Base's own field components, and it mirrors `defaultFieldFormats` in
  * `@cardstack/base/field-component.gts`. A second copy renders nested cards
  * in the wrong format on whichever tier holds it — a divergence invisible in
  * that tier's own tests, since they would agree with its copy.
+ *
+ * It is the default cascade and nothing more. Three sibling rules narrow the
+ * answer afterwards and are not expressible through this signature, which
+ * sees neither the field's kind nor the target's definition kind:
+ *
+ * - RP-2.7: in `edit`, a linked CardDef or FileDef target renders `fitted` —
+ *   a linked card is never edited inline — while a linked FieldDef keeps
+ *   `edit` (`getChildFormat`, `@cardstack/base/card-api.gts`).
+ * - RP-2.5: a computed field never renders `edit`; it is rewritten to
+ *   `embedded` at format resolution.
+ * - RP-2.4: an explicit `@format` outside the renderable inventory is
+ *   silently ignored rather than treated as an error.
+ *
+ * A tier that applies only this function renders a linked card inline-
+ * editable, which RP-2.7 says never happens.
  *
  * `containingFormat` is a plain string, not `Format`: an unknown format is
  * not an error here, it degrades to the display default exactly as it does in
@@ -224,6 +309,12 @@ export function childFieldFormatsFor(containingFormat: string): {
       // point: a field inside a markdown template delegates to the child's
       // markdown template rather than to embedded/fitted HTML, so the
       // composed output is uniformly markdown text.
+      //
+      // `head` carries a known gap forward (RP-2.9, carried per RP-17.3):
+      // FieldDef declares no `head` slot, so a contained field inside a
+      // `head` template resolves to nothing and fails the render. Reproducing
+      // it is deliberate — main behaves this way — and a fallback would be a
+      // versioned change, not a fix applied here.
       return { fieldDef: containingFormat, cardDef: containingFormat };
     default:
       // isolated, embedded, fitted — and every unrecognized format, which
@@ -232,16 +323,12 @@ export function childFieldFormatsFor(containingFormat: string): {
   }
 }
 
-export const BOXEL_KINDS = ['card', 'field', 'file'] as const;
-export type BoxelKind = (typeof BOXEL_KINDS)[number];
-
-export const FIELD_KINDS = [
-  'contains',
-  'containsMany',
-  'linksTo',
-  'linksToMany',
-] as const;
-export type FieldKind = (typeof FIELD_KINDS)[number];
+// Stated as types rather than as `as const` arrays: an exported array reads
+// as a vocabulary a gate enforces, and nothing enforces these two. The gate
+// that would — a per-record shape check over a `BoxelDescription` — belongs
+// with the projection pipeline that produces one.
+export type BoxelKind = 'card' | 'field' | 'file';
+export type FieldKind = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
 /**
  * One field a Boxel type declares.
@@ -463,24 +550,102 @@ const templateDependencyKinds: ReadonlySet<string> = new Set(
  * templates reference, so reifying the recognized part of it would render a
  * component whose scope is missing exactly the name nobody understood. Every
  * unrecognized kind is reported at once, so one diagnostic names all of them.
+ *
+ * A dangling reference is that same failure reached by a different route, so
+ * it is refused here too: a `root` or an `authored-component` naming a
+ * template the bundle does not carry would otherwise reify into a component
+ * whose scope resolves to nothing at render time, past every gate.
  */
 export function assertKnownTemplateDependencies(
   bundle: TemplateBundle,
   support: ProtocolSupport,
 ): void {
   assertUsableExecutionRecord(bundle, support);
+
+  let { root, templates } = bundle as Partial<TemplateBundle>;
+  if (
+    typeof templates !== 'object' ||
+    templates === null ||
+    Array.isArray(templates)
+  ) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `template bundle's templates must be an object keyed by template id, received ${describeValue(templates)}`,
+    );
+  }
+  if (typeof root !== 'string') {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `template bundle's root must be a template id, received ${describeValue(root)}`,
+    );
+  }
+
   let unrecognized: string[] = [];
-  for (let descriptor of Object.values(bundle.templates)) {
+  let dangling: string[] = [];
+  // Own keys only. `in` would resolve `root: 'toString'` against
+  // Object.prototype and report a template the bundle does not carry.
+  let carried = new Set(Object.keys(templates));
+  if (!carried.has(root)) {
+    dangling.push(`root '${root}'`);
+  }
+  for (let [key, descriptor] of Object.entries(templates)) {
+    if (
+      typeof descriptor !== 'object' ||
+      descriptor === null ||
+      Array.isArray(descriptor) ||
+      !Array.isArray(descriptor.scope)
+    ) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `template '${key}' must be a descriptor carrying a scope array, received ${describeValue(descriptor)}`,
+      );
+    }
+    // The key is how every reference reaches a descriptor, so a descriptor
+    // whose own id disagrees with it means one of the two is a lie and the
+    // bundle's references cannot be resolved with confidence.
+    if (descriptor.id !== key) {
+      dangling.push(
+        `template keyed '${key}' identifies itself as ${
+          typeof descriptor.id === 'string'
+            ? `'${descriptor.id}'`
+            : describeValue(descriptor.id)
+        }`,
+      );
+    }
     for (let dependency of descriptor.scope) {
+      if (
+        typeof dependency !== 'object' ||
+        dependency === null ||
+        typeof (dependency as { kind?: unknown }).kind !== 'string'
+      ) {
+        throw new ProtocolRefusal(
+          'BOXEL_RECORD_MALFORMED',
+          `template '${key}' carries a scope entry that is not a dependency, received ${describeValue(dependency)}`,
+        );
+      }
       if (!templateDependencyKinds.has(dependency.kind)) {
-        unrecognized.push(`${descriptor.id}: '${dependency.kind}'`);
+        unrecognized.push(`${key}: '${dependency.kind}'`);
+      } else if (
+        dependency.kind === 'authored-component' &&
+        !carried.has(dependency.template)
+      ) {
+        dangling.push(
+          `${key} references authored component '${dependency.template}'`,
+        );
       }
     }
   }
+
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_DEPENDENCY_KIND_UNKNOWN',
-      `template bundle '${bundle.root}' names dependency kinds this consumer does not recognize — ${unrecognized.join('; ')}`,
+      `template bundle '${root}' names dependency kinds this consumer does not recognize — ${unrecognized.join('; ')}`,
+    );
+  }
+  if (dangling.length > 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
+      `template bundle '${root}' names templates it does not carry — ${dangling.join('; ')}`,
     );
   }
 }
@@ -542,9 +707,30 @@ export function assertKnownComponentEffects(
   support: ProtocolSupport,
 ): void {
   assertUsableExecutionRecord(update, support);
-  let unrecognized = update.effects
-    .map((effect) => effect.kind)
-    .filter((kind) => !componentEffectKinds.has(kind));
+
+  let { effects } = update as Partial<ComponentUpdate>;
+  if (!Array.isArray(effects)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `component update's effects must be an array, received ${describeValue(effects)}`,
+    );
+  }
+  let unrecognized: string[] = [];
+  for (let effect of effects) {
+    if (
+      typeof effect !== 'object' ||
+      effect === null ||
+      typeof (effect as { kind?: unknown }).kind !== 'string'
+    ) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `component update carries an entry that is not an effect, received ${describeValue(effect)}`,
+      );
+    }
+    if (!componentEffectKinds.has(effect.kind)) {
+      unrecognized.push(effect.kind);
+    }
+  }
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
@@ -613,6 +799,16 @@ export const SAFE_EVENT_TARGET_SCALAR_PROPERTIES = ['value'] as const;
 export type SafeEventTarget = Cloneable<
   {
     tagName: string;
+    /**
+     * The element's `data-*` attributes. The one member here not drawn from a
+     * per-member allowlist, so the projection carries the burden the type
+     * cannot: Base stamps its own identifiers into this namespace —
+     * `data-boxel-card-id` holds a card's canonical URL — and those are the
+     * Host's, not the card's (RP-11.4). A projection that copies the dataset
+     * wholesale hands an authored handler the identity of whatever card the
+     * event happened to land on, including one it was never given a
+     * reference to. Base-owned `data-boxel-*` keys do not cross.
+     */
     dataset?: Record<string, string>;
   } & {
     [K in (typeof SAFE_EVENT_TARGET_BOOLEAN_PROPERTIES)[number]]?: boolean;
