@@ -17,6 +17,7 @@ import {
   cancelFrame,
   frame,
   type FrameData,
+  JSAnimation,
   spring as springGenerator,
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
@@ -28,6 +29,7 @@ import type {
   Compiled,
   Cue,
   Easing,
+  FlightPath,
   GateMark,
   PropValue,
   Sprite,
@@ -689,6 +691,10 @@ export class ChoreoRun implements Run {
       }
       return;
     }
+    if (cue.flight) {
+      this.startFlight(t);
+      return;
+    }
     if (!cue.target) {
       return;
     }
@@ -722,12 +728,103 @@ export class ChoreoRun implements Run {
     }
   }
 
+  /** put the sprite at progress `p` of its sampled flight path (§4.4) */
+  private applyFlight(t: Track, p: number) {
+    const { cue } = t;
+    const ve = cue.sprite.node.visualElement;
+    const flight = cue.flight;
+    if (!ve || !flight) {
+      return;
+    }
+    const pts = flight.points;
+    const at = Math.min(pts.length - 1 - 1e-9, Math.max(0, p) * (pts.length - 1));
+    const index = Math.floor(at);
+    const local = at - index;
+    const a = pts[index]!;
+    const b = pts[Math.min(index + 1, pts.length - 1)]!;
+    const x = a.x + (b.x - a.x) * local - flight.rest.x;
+    const y = a.y + (b.y - a.y) * local - flight.rest.y;
+    ve.getValue('x', x)!.set(x);
+    ve.getValue('y', y)!.set(y);
+    if (flight.rotate !== undefined) {
+      const angle =
+        (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI +
+        (typeof flight.rotate === 'number' ? flight.rotate : 0);
+      ve.getValue('rotate', angle)!.set(angle);
+    }
+  }
+
+  /** the eased progress a flight sits at, `ms` into its window */
+  private flightProgress(t: Track, ms: number): number {
+    const span = t.end - t.start;
+    const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
+    const transition = t.cue.transition as
+      | (Record<string, unknown> & { ease?: unknown })
+      | undefined;
+    if (isSpring(transition)) {
+      const pts = t.cue.flight!.points;
+      const end = pts[pts.length - 1]!;
+      const distance = Math.hypot(end.x, end.y) || 1;
+      const generator = springGenerator({
+        keyframes: [0, distance],
+        ...(transition ?? {}),
+      } as never);
+      return generator.next(ms / this.scale).value / distance;
+    }
+    return easingDefinitionToFunction((transition?.ease as never) ?? 'easeInOut')(
+      raw,
+    );
+  }
+
+  private startFlight(t: Track) {
+    const { cue } = t;
+    const ve = cue.sprite.node.visualElement;
+    if (!ve) {
+      return;
+    }
+    if (!this.playing) {
+      this.sampleStill(t, this.master);
+      return;
+    }
+    const span = (t.end - t.start) / 1000;
+    const controls: AnimationPlaybackControls[] = [];
+    // size pairs still ride the engine; position rides the sampled path
+    if (cue.target && Object.keys(cue.target).length) {
+      const transition = scaleTransition(
+        { ...cue.transition, onUpdate: noop } as never,
+        this.scale,
+      ) as Record<string, unknown>;
+      controls.push(
+        ...animateTarget(ve, { ...cue.target, transition } as never),
+      );
+    }
+    const anim = new JSAnimation({
+      duration: span,
+      ease: (p: number) => p,
+      keyframes: [0, 1],
+      onUpdate: (p: number) =>
+        this.applyFlight(t, this.flightProgress(t, p * (t.end - t.start))),
+    });
+    controls.push(anim as unknown as AnimationPlaybackControls);
+    for (const c of controls) {
+      c.speed = this.rate;
+    }
+    t.controls = controls;
+  }
+
   /** compute one still frame of a cue and jump the values onto the element */
   private sampleStill(t: Track, now: number) {
     const { cue } = t;
     const ve = cue.sprite.node.visualElement;
-    if (!ve || !cue.target) {
+    if (!ve || (!cue.target && !cue.flight)) {
       return;
+    }
+    if (cue.flight) {
+      this.applyFlight(t, this.flightProgress(t, now - t.start));
+      ve.render();
+      if (!cue.target) {
+        return;
+      }
     }
     const span = t.end - t.start;
     const p = span > 0 ? Math.min(1, Math.max(0, (now - t.start) / span)) : 1;
@@ -809,7 +906,23 @@ export class ChoreoRun implements Run {
     for (const t of [...this.tracks].sort((a, b) => a.start - b.start)) {
       const cue = t.cue;
       const ve = cue.sprite.node.visualElement;
-      if (!ve || !cue.target || cue.delivery || cue.loop) {
+      if (!ve || cue.delivery || cue.loop) {
+        continue;
+      }
+      if (cue.flight) {
+        this.movedValues.push({ key: 'x', ve }, { key: 'y', ve });
+        this.owned.push(
+          { el: cue.sprite.element, key: 'x', ve },
+          { el: cue.sprite.element, key: 'y', ve },
+        );
+        if (cue.flight.rotate !== undefined) {
+          this.movedValues.push({ key: 'rotate', ve });
+        }
+        // stand the sprite on the path's first point before first paint
+        this.applyFlight({ ...t }, 0);
+        rendered.add(ve);
+      }
+      if (!cue.target) {
         continue;
       }
       for (const key in cue.target) {

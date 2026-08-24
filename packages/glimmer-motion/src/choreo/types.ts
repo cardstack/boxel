@@ -163,9 +163,20 @@ export interface MoveStep extends StepBase {
   from?: BeaconRef;
   kind: 'move';
   ms?: number;
+  /**
+   * An SVG path for the journey, drawn from where the sprite stands (§4.4).
+   * The path is similarity-mapped so its start is the sprite's start and its
+   * end is the measured landing — the path bends the journey, never the
+   * destination.
+   */
+  path?: string;
+  /** 'auto' orients along the tangent; a number adds a constant offset to it */
+  rotate?: 'auto' | number;
   /** animate width/height as well as position (default true) */
   size?: boolean;
   spring?: SpringSpec;
+  /** the counterpart-skin policy: cross mid-flight, carry to the landing, or neither (§6.3) */
+  swap?: 'during' | 'none' | 'settle';
   /** borrow a beacon's box as the end of the move instead of where the sprite landed */
   to?: BeaconRef;
 }
@@ -208,8 +219,19 @@ export interface Compiled {
   gates: GateMark[];
 }
 
+/** a sampled flight path: points at even progress, in the sprite's own space */
+export interface FlightPath {
+  points: { x: number; y: number }[];
+  /** tangent-follow: degrees added on top when a number was given */
+  rotate?: 'auto' | number;
+  /** what the element's x/y are at rest, to subtract for kept sprites */
+  rest: { x: number; y: number };
+}
+
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {
+  /** move: travel along this sampled path instead of the straight line */
+  flight?: FlightPath;
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
   duration: number;

@@ -16,6 +16,7 @@ import type {
   Compiled,
   Cue,
   DeliveryOrder,
+  FlightPath,
   GateMark,
   HoldStep,
   MoveStep,
@@ -36,6 +37,63 @@ const isGate = (node: TimelineNode): node is import('./types.ts').GateNode =>
   node.kind === 'gate';
 
 const DEFAULT_SPRING: SpringSpec = { damping: 30, stiffness: 300 };
+
+/** the shared offstage <svg> that path geometry is sampled inside */
+let pathHost: SVGSVGElement | undefined;
+function samplePath(d: string, samples = 64): { x: number; y: number }[] {
+  if (!pathHost) {
+    pathHost = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    pathHost.setAttribute('aria-hidden', 'true');
+    pathHost.style.cssText =
+      'position:absolute;width:0;height:0;overflow:hidden';
+    document.body.appendChild(pathHost);
+  }
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  el.setAttribute('d', d);
+  pathHost.appendChild(el);
+  try {
+    const length = el.getTotalLength();
+    return Array.from({ length: samples + 1 }, (_, i) => {
+      const pt = el.getPointAtLength((length * i) / samples);
+      return { x: pt.x, y: pt.y };
+    });
+  } finally {
+    el.remove();
+  }
+}
+
+/**
+ * Similarity-map a drawn path so its start is the sprite's start and its end
+ * is the measured landing (§4.4): the path bends the journey, never the
+ * destination. Complex multiplication: m = D / v rotates and scales the
+ * author's stroke onto the real displacement.
+ */
+function mapFlight(
+  raw: { x: number; y: number }[],
+  dx: number,
+  dy: number,
+): { x: number; y: number }[] {
+  const s0 = raw[0]!;
+  const e = raw[raw.length - 1]!;
+  const vx = e.x - s0.x;
+  const vy = e.y - s0.y;
+  const mag = vx * vx + vy * vy;
+  if (mag < 1e-6) {
+    // a degenerate stroke: fall back to the straight line
+    return raw.map((_, i) => ({
+      x: (dx * i) / (raw.length - 1),
+      y: (dy * i) / (raw.length - 1),
+    }));
+  }
+  // m = (dx + i·dy) / (vx + i·vy)
+  const mr = (dx * vx + dy * vy) / mag;
+  const mi = (dy * vx - dx * vy) / mag;
+  return raw.map((pt) => {
+    const px = pt.x - s0.x;
+    const py = pt.y - s0.y;
+    return { x: px * mr - py * mi, y: px * mi + py * mr };
+  });
+}
 
 const resolve = (
   v: PropSource,
@@ -174,7 +232,11 @@ function resolveMove(
   step: MoveStep,
   sprite: Sprite,
   cs: ChangesetLike,
-): { longest: number; target: Record<string, unknown> } | null {
+): {
+  flight?: FlightPath;
+  longest: number;
+  target: Record<string, unknown>;
+} | null {
   // A beacon rewrites one end of the flight. `@from` gives an inserted sprite
   // a start it never had (it flies out of the compose button); `@to` gives a
   // removed one an end it never reaches (it flies into the bin). Everything
@@ -209,13 +271,24 @@ function resolveMove(
    */
   const holdsStart = sprite.type === 'removed';
   const leg = (d: number): [number, number] => (holdsStart ? [0, d] : [-d, 0]);
-  if (dx !== 0) {
-    target['x'] = leg(dx);
-    pairs.push(leg(dx));
-  }
-  if (dy !== 0) {
-    target['y'] = leg(dy);
-    pairs.push(leg(dy));
+  let flight: FlightPath | undefined;
+  if (step.path && (dx !== 0 || dy !== 0)) {
+    // the path owns position; FLIP still owns size
+    flight = {
+      points: mapFlight(samplePath(step.path), dx, dy),
+      rest: holdsStart ? { x: 0, y: 0 } : { x: dx, y: dy },
+      rotate: step.rotate,
+    };
+    pairs.push(leg(Math.hypot(dx, dy)));
+  } else {
+    if (dx !== 0) {
+      target['x'] = leg(dx);
+      pairs.push(leg(dx));
+    }
+    if (dy !== 0) {
+      target['y'] = leg(dy);
+      pairs.push(leg(dy));
+    }
   }
   if (step.size !== false) {
     if (from.width !== to.width) {
@@ -237,7 +310,7 @@ function resolveMove(
       longest = Math.max(longest, springDuration(a, b, spec));
     }
   }
-  return { longest, target };
+  return { flight, longest, target };
 }
 
 const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
@@ -326,18 +399,83 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       case 'move': {
         const r = resolveMove(step, sprite, cs);
         if (r) {
+          const transition =
+            step.ms === undefined
+              ? springTransition(step.spring)
+              : tweenTransition(step, step.ms);
           cues.push({
             duration: r.longest,
+            flight: r.flight,
             kind: 'move',
             offset,
             sprite,
             target: r.target,
-            transition:
-              step.ms === undefined
-                ? springTransition(step.spring)
-                : tweenTransition(step, step.ms),
+            transition,
           });
           longest = Math.max(longest, offset + r.longest);
+          // the counterpart-skin policy (§6.3): the claimed leaver rides the
+          // same flight, and the two skins swap during it or at its landing
+          const cp = sprite.counterpart;
+          const swap = step.swap ?? 'during';
+          if (cp && swap !== 'none' && sprite.final && cp.initial) {
+            const from = cp.initial.page;
+            const to = sprite.final.page;
+            const cpTarget: Record<string, unknown> = {};
+            if (to.x !== from.x) {
+              cpTarget['x'] = [0, to.x - from.x];
+            }
+            if (to.y !== from.y) {
+              cpTarget['y'] = [0, to.y - from.y];
+            }
+            if (step.size !== false) {
+              if (from.width !== to.width) {
+                cpTarget['width'] = [from.width, to.width];
+              }
+              if (from.height !== to.height) {
+                cpTarget['height'] = [from.height, to.height];
+              }
+            }
+            if (Object.keys(cpTarget).length) {
+              cues.push({
+                duration: r.longest,
+                kind: 'move',
+                offset,
+                sprite: cp,
+                target: cpTarget,
+                transition,
+              });
+            }
+            if (swap === 'during') {
+              // both skins cross over the one flying box
+              cues.push({
+                duration: r.longest,
+                kind: 'tween',
+                offset,
+                sprite,
+                target: { opacity: [0, 1] },
+                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+              });
+              cues.push({
+                duration: r.longest,
+                kind: 'tween',
+                offset,
+                sprite: cp,
+                target: { opacity: [1, 0] },
+                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+              });
+            } else {
+              // 'settle': the old rendering is carried whole; the swap is
+              // the landing itself — the receiver hides for the flight and
+              // the released hold reveals it as the leaver is dropped
+              cues.push({
+                duration: r.longest,
+                hold: { fill: false, values: { opacity: 0 } },
+                kind: 'hold',
+                offset,
+                sprite,
+              });
+            }
+          }
         }
         break;
       }

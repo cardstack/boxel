@@ -184,17 +184,35 @@ export class Move extends StepComponent<
     /** seconds; with @ease, the tween form of the flight */
     duration?: number;
     ease?: string | number[];
-    /** `{{c.beacon 'compose'}}` — fly in from that box rather than from where the sprite was */
+    /** `{{c.beacon 'compose'}}` or `{{c.gesture}}` — fly in from that box */
     from?: BeaconRef;
+    /** an SVG path for the journey, drawn from where the sprite stands */
+    path?: string;
+    /** 'auto' orients along the tangent; a number adds a constant offset */
+    rotate?: 'auto' | number;
     size?: boolean;
     spring?: SpringSpec;
+    /** counterpart skins: 'during' (default), 'settle', or 'none' */
+    swap?: 'during' | 'none' | 'settle';
     /** `{{c.beacon 'trash'}}` — fly out to that box rather than to where the sprite landed */
     to?: BeaconRef;
   }
 > {
   node(): TimelineNode {
-    const { of, duration, ease, delay, spring, size, from, to, stagger } =
-      this.args;
+    const {
+      of,
+      duration,
+      ease,
+      delay,
+      path,
+      rotate,
+      spring,
+      size,
+      swap,
+      from,
+      to,
+      stagger,
+    } = this.args;
     propsOf(this.args); // no properties — evaluated for the renamed-arg errors
     return {
       at: this.args.at,
@@ -205,9 +223,12 @@ export class Move extends StepComponent<
       name: this.args.name,
       ms: msOf(duration),
       of,
+      path,
+      rotate,
       size,
       spring,
       stagger: msOf(stagger),
+      swap,
       to,
     };
   }
