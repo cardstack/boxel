@@ -72,21 +72,24 @@ advanced by `c.advance()`; splits the run into segments; error inside
 
 ### Steps
 
-After the cuts and the naming pass: nine steps. Every animating step
-reads _who · what · how long_, position in the block gives _when_, and
-every duration in the language is **seconds**, as in Motion.
+After the cuts and the naming pass: ten steps, keeping ef4's names —
+`Tween`, `Spring`, `Hold`, `Wait` descend from boxel-motion's behaviors,
+and they stay (decided; see the cuts below). Every animating step reads
+_who · what · how long_, position in the block gives _when_, and every
+duration in the language is **seconds**, as in Motion.
 
-| step         | reads as                                                                                                                                                                                                  |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c.To`       | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), then `@duration` + `@ease` or `@spring`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger` |
-| `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins   |
-| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                   |
-| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                                    |
-| `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                     |
-| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                  |
-| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites or the gesture                                                                                                                         |
-| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                             |
-| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                            |
+| step         | reads as                                                                                                                                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.Tween`    | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), `@duration` + `@ease`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger`                 |
+| `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                          |
+| `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins |
+| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                 |
+| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                                  |
+| `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                   |
+| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                |
+| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites or the gesture                                                                                                                       |
+| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                           |
+| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                          |
 
 ### Timing
 
@@ -106,21 +109,21 @@ WAAPI/CSS target (+), same language, same assertions.
 ## As simple as it gets? Five cuts
 
 The first draft of this language was audited the way the constructs
-were: hunt the redundancy. Five spellings were carrying no information,
-and the reference above is written with them already removed. (Earlier
-sections show the pre-cut spellings in their examples; the reference is
+were: hunt the redundancy. Five spellings carried no information; three
+cuts survived, and two were reversed by decision. (Earlier sections
+show pre-cut spellings in their examples; the reference is
 authoritative.)
 
-**`c.Tween` + `c.Spring` → `c.To`.** Two step names that differ only in
-which timing argument they take is the engine's taxonomy, not the
-author's. One step: pass `@ms` + `@ease` or pass `@spring`, and the
-name reads as the sentence it is — `<c.To @of={{c.inserted 'card'}}
-@opacity={{1}} @ms={{260}} />`. Keynote never asks which interpolator;
-neither should the template.
-
-**`c.Wait` dies.** A `c.Hold` with no properties already means "occupy
-this much of the sequence and keep these sprites alive" — that IS the
-wait. One step fewer, no meaning lost.
+**Reversed: `Tween` / `Spring` / `Wait` stay.** The audit proposed
+merging `c.Tween` + `c.Spring` into one `c.To` (which interpolator a
+step uses is the engine's taxonomy) and folding `c.Wait` into a
+property-less `c.Hold`. Both merges were sound as compression — and
+rejected on provenance: these names descend from ef4's boxel-motion
+behaviors (`TweenBehavior`, `SpringBehavior`, `WaitBehavior`), the
+second-generation design this whole model carries forward, and the
+lineage is worth more than one step fewer. The equivalences remain
+true and worth knowing (`Spring` is `Tween` with a generator for a
+clock; `Hold` with no properties waits) — they are just not the API.
 
 **Delivery loses `@overlap`.** Two spacing knobs — `@stagger` (ms
 between starts) and `@overlap` (window as a fraction of the span) —
@@ -147,7 +150,7 @@ queries are the changeset (the model itself), the blocks exist because
 list — Keynote's own shape, and `builds.ts`'s — cannot say "for the
 duration of these three steps"), the anchors are two helpers that read
 as English, and each remaining step names a genuinely different
-mechanism. Nine steps, two blocks, ten queries: an author who knows
+mechanism. Ten steps, two blocks, ten queries: an author who knows
 _who · what · how long_ can read all of it.
 
 ## One vocabulary — the naming pass
@@ -160,7 +163,7 @@ renames are accepted; the reference above is post-pass.
 ### Internal rules
 
 1. **A name has one type and one meaning everywhere.** `@from` / `@to`
-   are geometry (a beacon, a sprite, the gesture) — so `c.To`'s old
+   are geometry (a beacon, a sprite, the gesture) — so `c.Tween`'s old
    property-hash `@from` dies; a keyframe array (`@opacity={{array 0
 1}}`) already says start-and-end in one value. `@path` is path data
    on both `Move` (a string to travel) and `Tether` (a function to
@@ -225,9 +228,10 @@ of orchestration functions, because a timeline declared as markup is
 data — co-located, compile-checkable, serializable, seekable, and
 legible to a model reading a skill. The escape hatch stays where gen-2
 users expect it — any property may be a function of `(sprite,
-changeset)` — and the one thing knowingly traded is naming: `c.To`
-gives up the `TweenBehavior` name-lineage, which the migration table
-keeps.
+changeset)`. And the names themselves are the lineage kept whole:
+`Tween`, `Spring`, `Hold` and `Wait` are ef4's behavior names carried
+into the third generation — a merge that would have retired them was
+considered and declined.
 
 ## The seam with the binding
 
