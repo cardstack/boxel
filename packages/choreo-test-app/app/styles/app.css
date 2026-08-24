@@ -1422,9 +1422,9 @@ html[data-gm-dragging] * {
      20% of the stage's height around it — without that third term the card is
      only ever bounded by width, and on a short stage it grows straight through
      the top and bottom of the frame it is supposed to open inside. */
-  width: min(74cqw, 268px, 64cqh);
+  width: min(74cqw, 268px, 56cqh);
   aspect-ratio: 4 / 5;
-  max-height: 80cqh;
+  max-height: 72cqh;
   overflow: hidden;
   /* radius is declared on the element — see photoStyle() in
      examples/lightbox.gts, so it can be scale-corrected */
@@ -1830,7 +1830,7 @@ html[data-gm-dragging] * {
 
 .para-pad {
   box-sizing: border-box;
-  min-height: calc(100% + 540px);
+  min-height: calc(100% + 300px);
   padding: 56cqh 22px 28px;
 }
 
@@ -4742,21 +4742,22 @@ html[data-gm-dragging] * {
   stroke-linecap: round;
 }
 
-/* the elements NOW: the only filled things on the mark. fill-box, because
-   without it a transform on an SVG child is measured against the viewport's
-   origin and Pop would fling them off their arcs. */
-.bo-bead,
-.bo-dot {
-  transform-box: fill-box;
-  transform-origin: 50% 50%;
+/* the inner NOW: not a bead but the line itself, burning — the last 85° of
+   the sweep in the hot color, rounded caps */
+.bo-tip {
+  fill: none;
+  stroke: var(--ember-hot);
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 
+/* the outer NOW: the one filled thing on the mark. fill-box, because without
+   it a transform on an SVG child is measured against the viewport's origin
+   and Pop would fling it off the arc. */
 .bo-bead {
   fill: var(--ember);
-}
-
-.bo-dot {
-  fill: var(--ember-hot);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
 }
 
 /* text: one span per glyph, grouped into words. Both groupings exist in the
