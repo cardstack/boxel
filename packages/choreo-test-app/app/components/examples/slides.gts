@@ -68,6 +68,48 @@ export class Slides extends Component {
     this.go(((this.slide + 1) % slides.length) as Slide);
   };
 
+  back = () => {
+    this.go(((this.slide + slides.length - 1) % slides.length) as Slide);
+  };
+
+  /* -- swipe: the deck reads like a deck on touch --
+     One pointer, measured down-to-up. A horizontal throw past the threshold
+     turns the page (left = next, right = back); anything shorter falls
+     through to the tap, which advances as it always has. The browser still
+     fires a click after a swipe, so the swipe sets a flag the click eats. */
+  private downAt: { x: number; y: number } | null = null;
+  private swiped = false;
+
+  down = (event: PointerEvent) => {
+    this.downAt = { x: event.clientX, y: event.clientY };
+  };
+
+  up = (event: PointerEvent) => {
+    const from = this.downAt;
+    this.downAt = null;
+    if (!from) {
+      return;
+    }
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+      this.swiped = true;
+      if (dx < 0) {
+        this.advance();
+      } else {
+        this.back();
+      }
+    }
+  };
+
+  tap = () => {
+    if (this.swiped) {
+      this.swiped = false;
+      return;
+    }
+    this.advance();
+  };
+
   pick = (slide: Slide, event: Event) => {
     event.stopPropagation();
     this.go(slide);
@@ -93,7 +135,9 @@ export class Slides extends Component {
         <Choreo
           class="slide"
           data-slide={{this.slide}}
-          {{on "click" this.advance}}
+          {{on "click" this.tap}}
+          {{on "pointerdown" this.down}}
+          {{on "pointerup" this.up}}
           as |c|
         >
           {{! Every slide renders the same elements. Only the stylesheet, keyed

@@ -6,14 +6,14 @@
      handful of demos that mock up their own device chrome (a composer bar,
      a scrubber's channel) and want something recessed rather than merely
      dark. */
-  --bg-well: #070605;
-  --bg: #090807;
-  --bg-elev: #12100e;
-  --bg-spot: #1a1613;
+  --bg-well: #0d0b0a;
+  --bg: #110f0d;
+  --bg-elev: #1a1714;
+  --bg-spot: #221d19;
 
   /* Playhead's own surfaces.
      The light-mode sweep pointed this demo's card, button and grooves at the
-     shared --bg-spot/--bg-well ladder, which in dark is a near-black (#070605)
+     shared --bg-spot/--bg-well ladder, which in dark is a near-black
      — a good page ground, and far too stark for a small UI sitting ON that
      ground. These are the warm tones the demo carried before light mode: a
      card a shade above the page rather than a hole cut in it, and grooves
@@ -35,7 +35,7 @@
      gone, --bg-page carries that same lift on its own, measured off an actual
      render of the old grain composited over --bg, so removing it did not also
      make the page a shade darker than everyone was used to. */
-  --bg-page: #191817;
+  --bg-page: #211e1b;
   --ink: #f3ece3;
   --ink-dim: #9c9287;
   --ink-faint: #6b635b;
@@ -46,7 +46,7 @@
      for — a line, a scrim, a dimmed icon. Redefined alongside --bg/--ink in
      each theme block below, so those call sites repaint without knowing a
      theme exists. */
-  --bg-rgb: 9, 8, 7;
+  --bg-rgb: 17, 15, 13;
 
   /* Shadows.
      Every drop shadow here was picked against a near-black page, where a 45%
@@ -338,8 +338,10 @@ summary,
   color: var(--ink-dim);
 }
 
-.top-links a:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .top-links a:hover {
+    color: var(--ink);
+  }
 }
 
 .page {
@@ -457,9 +459,11 @@ summary,
   text-underline-offset: 3px;
 }
 
-.lede a:hover {
-  color: var(--ember-hot);
-  text-decoration-color: var(--ember-hot);
+@media (hover: hover) {
+  .lede a:hover {
+    color: var(--ember-hot);
+    text-decoration-color: var(--ember-hot);
+  }
 }
 
 .filters {
@@ -480,11 +484,18 @@ summary,
   text-transform: uppercase;
 }
 
-.chip.is-on,
-.chip:hover {
+.chip.is-on {
   color: var(--ink);
   border-color: var(--line-strong);
   background: var(--bg-spot);
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+    background: var(--bg-spot);
+  }
 }
 
 .chip.is-on {
@@ -527,8 +538,10 @@ summary,
   transition: border-color 180ms var(--ease);
 }
 
-.card:hover {
-  border-color: var(--line-strong);
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--line-strong);
+  }
 }
 
 /* the destination (or source) card of an in-flight page transition — its own
@@ -601,8 +614,10 @@ summary,
   background: rgba(var(--surface-tint-rgb), 0.015);
 }
 
-.card-meta:hover .card-title {
-  color: var(--ember-hot);
+@media (hover: hover) {
+  .card-meta:hover .card-title {
+    color: var(--ember-hot);
+  }
 }
 
 .card-group {
@@ -707,8 +722,10 @@ summary,
   color: var(--ink);
 }
 
-.next-demo:hover b {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .next-demo:hover b {
+    color: var(--copper-ink);
+  }
 }
 
 .back {
@@ -720,8 +737,10 @@ summary,
   color: var(--ink-dim);
 }
 
-.back:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .back:hover {
+    color: var(--ink);
+  }
 }
 
 /* the canonical way back — brighter than a plain nav label by default, and
@@ -734,8 +753,10 @@ summary,
   color: var(--ink);
 }
 
-.back-all:hover {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .back-all:hover {
+    color: var(--copper-ink);
+  }
 }
 
 .back-arrow {
@@ -743,8 +764,10 @@ summary,
   transition: transform 0.18s var(--ease);
 }
 
-.back-all:hover .back-arrow {
-  transform: translateX(-3px);
+@media (hover: hover) {
+  .back-all:hover .back-arrow {
+    transform: translateX(-3px);
+  }
 }
 
 .demo-head h1 {
@@ -811,11 +834,18 @@ summary,
   right: 12px;
 }
 
-.stage-arrow:hover,
 .stage-arrow:focus-visible {
   opacity: 1;
   color: var(--ink);
   border-color: var(--copper);
+}
+
+@media (hover: hover) {
+  .stage-arrow:hover {
+    opacity: 1;
+    color: var(--ink);
+    border-color: var(--copper);
+  }
 }
 
 .stage-wrap {
@@ -930,8 +960,10 @@ summary,
   white-space: nowrap;
 }
 
-.pager a:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .pager a:hover {
+    color: var(--ink);
+  }
 }
 
 html[data-gm-dragging],
@@ -985,8 +1017,10 @@ html[data-gm-dragging] * {
   color: var(--ink-dim);
 }
 
-.replay:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .replay:hover {
+    color: var(--ink);
+  }
 }
 
 .replay.is-off {
@@ -1741,9 +1775,11 @@ html[data-gm-dragging] * {
     border-color 0.16s var(--ease);
 }
 
-.lightbox-close:hover {
-  background: rgba(8, 7, 6, 0.72);
-  border-color: rgba(255, 255, 255, 0.42);
+@media (hover: hover) {
+  .lightbox-close:hover {
+    background: rgba(8, 7, 6, 0.72);
+    border-color: rgba(255, 255, 255, 0.42);
+  }
 }
 
 .lightbox-body {
@@ -2071,17 +2107,23 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
-.covers:hover .cover::after {
-  opacity: 0.45;
-  transform: translateY(0);
+@media (hover: hover) {
+  .covers:hover .cover::after {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
 }
 
-.cover:hover::after {
-  opacity: 1;
+@media (hover: hover) {
+  .cover:hover::after {
+    opacity: 1;
+  }
 }
 
-.cover:hover {
-  box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+@media (hover: hover) {
+  .cover:hover {
+    box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+  }
 }
 
 .cover:active {
@@ -2969,11 +3011,16 @@ html[data-gm-dragging] * {
   translate: -50% -50%;
 }
 
-.sub-seam:hover::after,
-.sub-seam:hover::before,
 .sub-seam.is-live::after,
 .sub-seam.is-live::before {
   background: var(--ember-hot);
+}
+
+@media (hover: hover) {
+  .sub-seam:hover::after,
+  .sub-seam:hover::before {
+    background: var(--ember-hot);
+  }
 }
 
 /* while the pointer holds it, the grip is bigger than the seam it rides */
@@ -3160,8 +3207,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.slides-next:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .slides-next:hover {
+    color: var(--ink);
+  }
 }
 
 /* the <Choreo> region: one slide's worth of space, and a container so the type
@@ -3174,6 +3223,8 @@ html[data-gm-dragging] * {
   border-radius: 16px;
   background: var(--bg-spot);
   cursor: pointer;
+  /* horizontal swipes turn the page; vertical stays the page's scroll */
+  touch-action: pan-y;
   /* deliberately NOT a container: this element is the <Choreo> region and the
      projection ancestor for everything in it */
   position: relative;
@@ -3570,8 +3621,10 @@ html[data-gm-dragging] * {
   background: var(--wash);
 }
 
-.piece:hover {
-  border-color: var(--line-hot, var(--line-strong));
+@media (hover: hover) {
+  .piece:hover {
+    border-color: var(--line-hot, var(--line-strong));
+  }
 }
 
 .rails {
@@ -3654,9 +3707,14 @@ html[data-gm-dragging] * {
   border-radius: 0 999px 999px 0;
 }
 
-.slot:hover,
 .slot:focus-visible {
   background: rgba(var(--surface-tint-rgb), 0.08);
+}
+
+@media (hover: hover) {
+  .slot:hover {
+    background: rgba(var(--surface-tint-rgb), 0.08);
+  }
 }
 
 .puck {
@@ -3761,8 +3819,10 @@ html[data-gm-dragging] * {
     background-color 0.16s var(--ease);
 }
 
-.speed:hover {
-  color: var(--ink-dim);
+@media (hover: hover) {
+  .speed:hover {
+    color: var(--ink-dim);
+  }
 }
 
 .speed.is-on {
@@ -3808,9 +3868,11 @@ html[data-gm-dragging] * {
     transform 0.16s var(--ease),
     box-shadow 0.16s var(--ease);
 }
-.inbox-compose:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 7px 18px rgba(247, 172, 82, 0.34);
+@media (hover: hover) {
+  .inbox-compose:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 7px 18px rgba(247, 172, 82, 0.34);
+  }
 }
 .inbox-compose-icon {
   width: 15px;
@@ -3890,9 +3952,11 @@ html[data-gm-dragging] * {
   position: relative;
 }
 
-.mail:hover {
-  background: rgba(var(--surface-tint-rgb), 0.09);
-  border-color: rgba(var(--surface-tint-rgb), 0.14);
+@media (hover: hover) {
+  .mail:hover {
+    background: rgba(var(--surface-tint-rgb), 0.09);
+    border-color: rgba(var(--surface-tint-rgb), 0.14);
+  }
 }
 
 /* one letter, one of six hues picked from the sender's name — the fastest
@@ -3963,9 +4027,14 @@ html[data-gm-dragging] * {
   stroke-linejoin: round;
 }
 
-.mail:hover .mail-kill,
 .mail-kill:focus-visible {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .mail:hover .mail-kill {
+    opacity: 1;
+  }
 }
 
 /* A row entering from Compose passes straight under the pointer, which would
@@ -3976,10 +4045,12 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
-.mail-kill:hover {
-  background: rgba(255, 120, 90, 0.22);
-  border-color: rgba(255, 120, 90, 0.4);
-  color: #ffd9cf;
+@media (hover: hover) {
+  .mail-kill:hover {
+    background: rgba(255, 120, 90, 0.22);
+    border-color: rgba(255, 120, 90, 0.4);
+    color: #ffd9cf;
+  }
 }
 .mail-copy {
   display: flex;
@@ -4292,9 +4363,11 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.share-extra:hover {
-  color: var(--ink);
-  background: var(--bg-spot);
+@media (hover: hover) {
+  .share-extra:hover {
+    color: var(--ink);
+    background: var(--bg-spot);
+  }
 }
 
 .sheet-hint {
@@ -4328,8 +4401,10 @@ html[data-gm-dragging] * {
   text-decoration: none;
 }
 
-.footer a:hover {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .footer a:hover {
+    color: var(--copper-ink);
+  }
 }
 
 /* ---- the filter row is itself a View Transition demo ---- */
@@ -4365,11 +4440,17 @@ html[data-gm-dragging] * {
     border-color 160ms ease;
 }
 
-.filter-row:hover .filter-tell,
 .filter-row:focus-within .filter-tell,
 .filter-tell.is-on {
   opacity: 1;
   translate: 0 0;
+}
+
+@media (hover: hover) {
+  .filter-row:hover .filter-tell {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 /* A tell that waits for a pointer is a tell a finger never sees. Where there
@@ -4390,10 +4471,16 @@ html[data-gm-dragging] * {
   }
 }
 
-.filter-tell:hover,
 .filter-tell.is-on {
   color: var(--copper-ink);
   border-color: var(--line-strong);
+}
+
+@media (hover: hover) {
+  .filter-tell:hover {
+    color: var(--copper-ink);
+    border-color: var(--line-strong);
+  }
 }
 
 .filter-tell-mark {
@@ -4497,8 +4584,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.tempo-select:hover {
-  border-color: var(--copper);
+@media (hover: hover) {
+  .tempo-select:hover {
+    border-color: var(--copper);
+  }
 }
 
 /* only ever visible in the narrow layout below */
@@ -4583,10 +4672,16 @@ html[data-gm-dragging] * {
     border-color 0.16s var(--ease);
 }
 
-.theme-toggle:hover,
 .theme-toggle:focus-visible {
   border-color: var(--copper);
   color: var(--ink);
+}
+
+@media (hover: hover) {
+  .theme-toggle:hover {
+    border-color: var(--copper);
+    color: var(--ink);
+  }
 }
 
 .theme-toggle-icon {
@@ -4619,10 +4714,16 @@ html[data-gm-dragging] * {
     border-color 140ms ease;
 }
 
-.transition-note:hover,
 .transition-note.is-on {
   color: var(--copper-ink);
   border-color: var(--line-strong);
+}
+
+@media (hover: hover) {
+  .transition-note:hover {
+    color: var(--copper-ink);
+    border-color: var(--line-strong);
+  }
 }
 
 .transition-note-mark {
@@ -4707,9 +4808,11 @@ html[data-gm-dragging] * {
     border-color 140ms ease;
 }
 
-.how-close:hover {
-  color: var(--copper-ink);
-  border-color: var(--copper);
+@media (hover: hover) {
+  .how-close:hover {
+    color: var(--copper-ink);
+    border-color: var(--copper);
+  }
 }
 
 .how pre {
@@ -5576,8 +5679,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.bo-arrows button:hover {
-  color: var(--ember-hot);
+@media (hover: hover) {
+  .bo-arrows button:hover {
+    color: var(--ember-hot);
+  }
 }
 
 /* the transport ----------------------------------------------------------- */
@@ -6302,8 +6407,10 @@ html[data-gm-dragging] * {
   background: #221b16;
 }
 
-:root:not([data-theme='light']) .share-extra:hover {
-  background: #221b16;
+@media (hover: hover) {
+  :root:not([data-theme='light']) .share-extra:hover {
+    background: #221b16;
+  }
 }
 
 :root:not([data-theme='light']) .how {
@@ -6393,8 +6500,10 @@ html[data-gm-dragging] * {
   stroke: rgba(255, 255, 255, 0.5);
 }
 
-:root:not([data-theme='light']) .mail:hover {
-  background: rgba(255, 255, 255, 0.085);
+@media (hover: hover) {
+  :root:not([data-theme='light']) .mail:hover {
+    background: rgba(255, 255, 255, 0.085);
+  }
 }
 
 :root:not([data-theme='light']) .mail-kill {

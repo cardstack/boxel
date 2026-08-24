@@ -195,7 +195,6 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private orphanLayer?: HTMLDivElement;
   private raisedLayer?: HTMLDivElement;
   private tetherLayer?: SVGSVGElement;
-  private cameraFrame?: HTMLDivElement;
   /** tracked mirror of the frame's resting state — see ChoreoContext.camera */
   @tracked cameraState: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
@@ -524,7 +523,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     this.run = execute(compiled, {
       camera: { ...this.cameraState },
-      cameraFrame: this.cameraFrame,
+      cameraFrame: this.element,
       // updated at step boundaries only — a still value app logic can
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an
@@ -681,13 +680,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     };
   });
 
-  frame = modifier((el: HTMLDivElement) => {
-    this.cameraFrame = el;
-    return () => {
-      this.cameraFrame = undefined;
-    };
-  });
-
+  /**
+   * The host is the scene: participants are its DIRECT children, so the
+   * author's own grid/flex layout on the region element applies to them —
+   * a wrapper here would silently unhook every gap and track. c.Camera
+   * therefore drives the host element itself (§6.3), and the overlay
+   * layers ride the frame with the content they annotate.
+   */
   <template>
     {{this.renderDetector}}
     <div data-choreo={{if @id @id ''}} {{this.host}} ...attributes>
@@ -709,10 +708,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         style='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible'
         {{this.tethers}}
       ></svg>
-      {{! the camera frame: the scene a c.Camera step drives (§6.3) }}
-      <div data-choreo-frame {{this.frame}}>
-        {{yield this.context}}
-      </div>
+      {{yield this.context}}
     </div>
   </template>
 }

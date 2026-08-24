@@ -768,7 +768,12 @@ export class ChoreoRun implements Run {
     frame.style.transformOrigin = origin
       ? `${origin.x}px ${origin.y}px`
       : '50% 50%';
-    frame.style.transform = `translate(${x}px, ${y}px) scale(${zoom})`;
+    // the frame is the author's own region element: at identity, leave no
+    // trace — a resting transform would quietly become a containing block
+    frame.style.transform =
+      zoom === 1 && x === 0 && y === 0
+        ? ''
+        : `translate(${x}px, ${y}px) scale(${zoom})`;
     for (const sprite of t.cue.camera?.steady ?? []) {
       const ve = sprite.node.visualElement;
       if (ve) {
@@ -803,18 +808,31 @@ export class ChoreoRun implements Run {
     if (!layer || !tether || !t.wire) {
       return;
     }
+    // the svg rides the camera with the scene, so client coordinates are
+    // mapped through its screen CTM — a wire drawn in user units lands on
+    // its sprites at any zoom, not only at identity
+    const inverse = layer.getScreenCTM()?.inverse();
     const box = layer.getBoundingClientRect();
+    const toLocal = (clientX: number, clientY: number) => {
+      if (!inverse) {
+        return { x: clientX - box.left, y: clientY - box.top };
+      }
+      const p = new DOMPoint(clientX, clientY).matrixTransform(inverse);
+      return { x: p.x, y: p.y };
+    };
     const rectOf = (sprite: Sprite | null): Rect | null => {
       const el = sprite?.element;
       if (!el?.isConnected) {
         return null;
       }
       const r = el.getBoundingClientRect();
+      const tl = toLocal(r.left, r.top);
+      const br = toLocal(r.right, r.bottom);
       return {
-        height: r.height,
-        width: r.width,
-        x: r.left - box.left,
-        y: r.top - box.top,
+        height: br.y - tl.y,
+        width: br.x - tl.x,
+        x: tl.x,
+        y: tl.y,
       };
     };
     const a = rectOf(tether.from);

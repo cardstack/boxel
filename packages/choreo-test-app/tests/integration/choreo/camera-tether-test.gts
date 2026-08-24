@@ -51,7 +51,7 @@ module('Integration | choreo | camera and tether', function (hooks) {
     assert.strictEqual(ctx.camera.zoom, 1, 'the frame starts at rest');
     app!.step = 1;
     await animationsSettled();
-    const frame = find('[data-choreo-frame]') as HTMLElement;
+    const frame = find('[data-choreo]') as HTMLElement;
     assert.true(
       frame.style.transform.includes('scale(2)'),
       `the frame zoomed (${frame.style.transform})`,
