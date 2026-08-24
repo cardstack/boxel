@@ -26,6 +26,7 @@ import {
   CachingDefinitionLookup,
 } from './index.ts';
 import { MatrixClient } from './matrix-client.ts';
+import type { MediaCacheAdapter } from './media-cache.ts';
 import * as Tasks from './tasks/index.ts';
 import type { WorkerArgs, TaskArgs } from './tasks/index.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -153,6 +154,7 @@ export class Worker {
   #reportRealmEvent: ((event: RealmEventContent) => void) | undefined;
   #realmServerMatrixUsername;
   #indexJobsOnly: boolean;
+  #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #createPrerenderAuth: (
     userId: string,
     permissions: RealmPermissions,
@@ -173,6 +175,7 @@ export class Worker {
     prerenderer,
     createPrerenderAuth,
     indexJobsOnly,
+    mediaCacheAdapter,
   }: {
     indexWriter: IndexWriter;
     queue: QueueRunner;
@@ -189,6 +192,9 @@ export class Worker {
     // When true, register handlers only for INDEX_JOB_TYPES so this worker
     // is a dedicated indexing lane — see INDEX_JOB_TYPES above.
     indexJobsOnly?: boolean;
+    // The MediaCache object store, absent when the process has none
+    // configured (media-cache tasks then no-op).
+    mediaCacheAdapter?: MediaCacheAdapter;
     createPrerenderAuth: (
       userId: string,
       permissions: RealmPermissions,
@@ -208,6 +214,7 @@ export class Worker {
     this.#prerenderer = prerenderer;
     this.#createPrerenderAuth = createPrerenderAuth;
     this.#indexJobsOnly = indexJobsOnly ?? false;
+    this.#mediaCacheAdapter = mediaCacheAdapter;
   }
 
   async run() {
@@ -232,6 +239,7 @@ export class Worker {
       reportProgress: this.reportProgress.bind(this),
       reportRealmEvent: this.reportRealmEvent.bind(this),
       createPrerenderAuth: this.#createPrerenderAuth,
+      mediaCacheAdapter: this.#mediaCacheAdapter,
     };
 
     let registrations: Record<string, () => Promise<unknown> | unknown> = {
@@ -255,6 +263,8 @@ export class Worker {
           `prerender-html-reconcile`,
           Tasks['prerenderHtmlReconcile'](taskArgs),
         ),
+      'media-cache-gc': () =>
+        this.#queue.register(`media-cache-gc`, Tasks['mediaCacheGc'](taskArgs)),
       'copy-index': () =>
         this.#queue.register(`copy-index`, Tasks['copy'](taskArgs)),
       'lint-source': () =>
