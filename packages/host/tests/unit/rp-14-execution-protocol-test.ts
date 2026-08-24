@@ -5,7 +5,8 @@ import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
   BOXEL_RUNTIME_OPERATIONS,
   COMPONENT_EFFECT_KINDS,
-  HOST_OWNED_DATASET_PREFIX,
+  HOST_OWNED_DATASET_PREFIXES,
+  PROJECTED_ERROR_MAX_TEXT_LENGTH,
   MATERIALIZATION_PURPOSES,
   PROJECTED_ERROR_MAX_CAUSE_DEPTH,
   PROTOCOL_REFUSAL_CODES,
@@ -491,25 +492,44 @@ module('Unit | rendering protocol | records and operations', function () {
   });
 
   test('RP-14.1: the Host keeps its own identifiers out of a projected dataset', function (assert) {
-    // Base stamps data-boxel-card-id onto every card container it renders, and
-    // a card is entitled to its own data attributes but not to the Host's.
+    // Base stamps a card's canonical URL under BOTH namespaces on the same
+    // container: `data-boxel-card-id` and `data-test-card` carry the identical
+    // `card.id`, and nothing strips the test spelling on the way to a realm.
+    // Filtering one and not the other filters nothing.
     let projected = projectDataset({
       boxelCardId: 'http://test/vendors/1',
       boxelCardFormat: 'fitted',
+      testCard: 'http://test/vendors/1',
+      testCardFormat: 'fitted',
       sku: 'A-17',
-      testId: 'row',
+      boxelish: 'the author owns this one',
+      testimonial: 'and this one',
     });
     assert.deepEqual(
-      projected,
-      { sku: 'A-17', testId: 'row' },
-      "the author keeps their own keys and none of the Host's",
+      { ...projected },
+      {
+        sku: 'A-17',
+        boxelish: 'the author owns this one',
+        testimonial: 'and this one',
+      },
+      'no spelling of a card id crosses, and a key that merely begins with those letters does',
     );
-    assert.strictEqual(
-      HOST_OWNED_DATASET_PREFIX,
-      'boxel',
-      'the prefix is the camelCase form a DOMStringMap exposes, not the attribute spelling',
+    for (let [key, value] of Object.entries(projected)) {
+      assert.false(
+        value.includes('/vendors/'),
+        `${key} carries no card identity`,
+      );
+    }
+    assert.deepEqual(
+      [...HOST_OWNED_DATASET_PREFIXES],
+      ['boxel', 'test'],
+      'both namespaces Base stamps, in the camelCase form a DOMStringMap exposes',
     );
-    assert.deepEqual(projectDataset({}), {}, 'an empty dataset projects empty');
+    assert.deepEqual(
+      { ...projectDataset({}) },
+      {},
+      'an empty dataset projects empty',
+    );
   });
 
   test('RP-14.3: a record whose protocol version this consumer does not implement is refused', function (assert) {
@@ -836,18 +856,6 @@ module('Unit | rendering protocol | records and operations', function () {
           },
         },
       ],
-      [
-        'a descriptor whose id disagrees with its key',
-        {
-          ...carried,
-          templates: {
-            'template-0': {
-              ...carried.templates['template-0'],
-              id: 'template-renamed',
-            },
-          },
-        },
-      ],
     ];
     for (let [label, candidate] of dangling) {
       assert.throws(
@@ -858,6 +866,24 @@ module('Unit | rendering protocol | records and operations', function () {
         `${label} is refused`,
       );
     }
+
+    // A descriptor whose id differs from its map key is NOT dangling. The key
+    // is the bundle's reference space and the id is the compiler's, and a
+    // class inheriting its template from an ancestor legitimately yields two
+    // entries carrying one compiler id.
+    assertKnownTemplateDependencies(
+      {
+        ...carried,
+        templates: {
+          'template-0': {
+            ...carried.templates['template-0'],
+            id: 'a-compiler-assigned-id',
+          },
+        },
+      },
+      support,
+    );
+    assert.true(true, 'the two id spaces may differ');
   });
 
   test('RP-14.3: a version this consumer does not implement is refused in either direction', function (assert) {
@@ -1055,6 +1081,205 @@ module('Unit | rendering protocol | records and operations', function () {
         (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
       'effects that is not an array is refused',
     );
+  });
+
+  test('RP-14.1: a refusal is constructible where the intrinsics are hardened', function (assert) {
+    // SES lockdown() freezes Error.prototype, and `name` is inherited from it.
+    // Assigning rather than defining makes ProtocolRefusal unconstructible in
+    // a Compartment — turning every refusal in the module back into the raw
+    // TypeError it exists to replace, in the one environment it exists for.
+    let descriptor = Object.getOwnPropertyDescriptor(Error.prototype, 'name');
+    Object.defineProperty(Error.prototype, 'name', {
+      value: 'Error',
+      writable: false,
+      configurable: true,
+    });
+    try {
+      assertUsableExecutionRecord(
+        description({ protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION + 1 }),
+        support,
+      );
+      assert.true(false, 'expected a refusal');
+    } catch (error) {
+      assert.true(
+        error instanceof ProtocolRefusal,
+        'the refusal survives a non-writable inherited name',
+      );
+      assert.strictEqual((error as Error).name, 'ProtocolRefusal');
+      assert.strictEqual(
+        (error as ProtocolRefusal).code,
+        'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
+      );
+    } finally {
+      Object.defineProperty(Error.prototype, 'name', descriptor!);
+    }
+  });
+
+  test('RP-14.1: a code ref carrying more than its own members is not a reference', function (assert) {
+    // The exactness the marker promises has to reach inside the ref: a ref
+    // that admits extra members lets a whole card ride in `type`.
+    assert.false(
+      isBoxelValueReference({
+        $boxel: {
+          id: 'http://test/x',
+          type: {
+            module: 'http://test/person',
+            name: 'Person',
+            attributes: { title: 'Ada', notes: 'the entire card' },
+          },
+        },
+      }),
+      'an expanded graph inside the ref is refused',
+    );
+    assert.true(
+      isBoxelValueReference({
+        $boxel: {
+          id: null,
+          type: { type: 'fieldOf', card: testRef, field: 'title' },
+        },
+      }),
+      'a well-formed fieldOf still answers true',
+    );
+
+    // A predicate whose contract is to answer must not throw instead.
+    let nested: unknown = { module: 'http://test/person', name: 'Person' };
+    for (let i = 0; i < 5000; i++) {
+      nested = { type: 'ancestorOf', card: nested };
+    }
+    assert.false(
+      isBoxelValueReference({ $boxel: { id: null, type: nested } }),
+      'a ref nested past any reasonable depth is refused, not a stack overflow',
+    );
+  });
+
+  test('RP-14.3: a literal value that is not data is refused before a consumer clones it', function (assert) {
+    let notData: [string, TemplateDependency][] = [
+      ['a function', { kind: 'literal-value', value: () => 'evil' }],
+      [
+        'a nested function',
+        { kind: 'literal-value', value: { a: { b: () => 1 } } },
+      ],
+      ['a class instance', { kind: 'literal-value', value: new Date() }],
+      ['undefined', { kind: 'literal-value', value: undefined }],
+    ] as unknown as [string, TemplateDependency][];
+    for (let [label, dependency] of notData) {
+      assert.throws(
+        () => assertKnownTemplateDependencies(bundle([dependency]), support),
+        (error: Error) =>
+          (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+        `${label} is not a literal value`,
+      );
+    }
+
+    // Reading the member would invoke the accessor — running far-side code
+    // inside the gate, and escaping as its own error rather than a refusal.
+    let hostile = { kind: 'literal-value' } as unknown as TemplateDependency;
+    Object.defineProperty(hostile, 'value', {
+      get() {
+        throw new Error('executed inside the gate');
+      },
+      enumerable: true,
+    });
+    assert.throws(
+      () => assertKnownTemplateDependencies(bundle([hostile]), support),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'an accessor is refused without being read',
+    );
+
+    assertKnownTemplateDependencies(
+      bundle([
+        { kind: 'literal-value', value: { a: [1, 'x', null, false] } },
+        { kind: 'literal-value', value: null },
+        { kind: 'literal-value', value: false },
+      ]),
+      support,
+    );
+    assert.true(true, 'ordinary JSON, null and false all cross');
+  });
+
+  test('RP-14.3: an update whose guard members are unusable is refused', function (assert) {
+    for (let [label, override] of [
+      ['a generation that cannot be compared', { generation: 'nine' }],
+      ['a non-finite generation', { generation: NaN }],
+      ['changed that is not a record', { changed: 'oops' }],
+      ['changed carrying a function', { changed: { total: () => 1 } }],
+    ] as [string, Partial<ComponentUpdate>][]) {
+      assert.throws(
+        () => assertKnownComponentEffects(update(override), support),
+        (error: Error) =>
+          (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+        `${label} is refused`,
+      );
+    }
+  });
+
+  test('RP-14.3: a sparse requiredFeatures is not an array of strings', function (assert) {
+    // `some` and `filter` skip holes, so `[, ,]` would pass an
+    // every-entry-is-a-string check and be carried as phantom features.
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          description({
+            // Built rather than written as `[, ,]`, which eslint refuses on
+            // sight — the point is the holes, however they are produced.
+            requiredFeatures: new Array(2) as string[],
+          }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'a sparse array is refused',
+    );
+  });
+
+  test('RP-14.3: a diagnostic is bounded in item count, not only token length', function (assert) {
+    // Bounding each token is not enough: the far side chooses how many there
+    // are, so fifty thousand short names is the same megabyte by another route.
+    try {
+      assertUsableExecutionRecord(
+        description({
+          requiredFeatures: Array.from({ length: 50000 }, (_, i) => `f${i}`),
+        }),
+        support,
+      );
+      assert.true(false, 'expected a refusal');
+    } catch (error) {
+      assert.true(
+        (error as Error).message.length < 1000,
+        'the refusal names a bounded sample, not every offending item',
+      );
+    }
+
+    let vast = projectError({
+      name: 'Error',
+      message: 'M'.repeat(500000),
+      stack: 'S'.repeat(500000),
+    });
+    assert.true(
+      vast.message.length <= PROJECTED_ERROR_MAX_TEXT_LENGTH + 1,
+      'a projected message is bounded before it reaches error presentation',
+    );
+    assert.true(
+      (vast.stack?.length ?? 0) <= PROJECTED_ERROR_MAX_TEXT_LENGTH + 1,
+      'so is its stack',
+    );
+  });
+
+  test('RP-14.3: a rejected scalar is named by its value, not by its type', function (assert) {
+    // describeValue names a value by type when the type is the fault; when the
+    // value is the whole complaint, printing "number" says nothing.
+    try {
+      assertExecutionTransportVersion(BOXEL_EXECUTION_TRANSPORT_VERSION + 98);
+      assert.true(false, 'expected a refusal');
+    } catch (error) {
+      assert.true(
+        (error as Error).message.includes(
+          String(BOXEL_EXECUTION_TRANSPORT_VERSION + 98),
+        ),
+        'the diagnostic names the version it was handed',
+      );
+    }
   });
 
   test('RP-14.3: every code the catalog declares is reachable, and every reachable refusal is declared', function (assert) {

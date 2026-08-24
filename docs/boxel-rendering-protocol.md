@@ -607,8 +607,12 @@ invocation requires — RP-11.3 — which must cross as data because the Theme
 card itself crosses only as a reference, and resolving that reference is
 the graph walk a projection forbids); `TemplateBundle` (validated wire
 templates + typed dependency union
-`trusted-export | authored-component | literal-value`; an unknown kind, or
-a kind without the members it is redeemed through, rejects the generation);
+`trusted-export | authored-component | literal-value`; the generation is
+rejected by an unknown kind, by a kind without the members it is redeemed
+through, by a descriptor a consumer could not reify, and by a reference —
+the bundle's root, or an `authored-component` — naming a template the
+bundle does not carry, since each of those reaches the consumer as a
+failure past every gate rather than as a refusal);
 `SafeEvent` (exported, versioned); `ComponentUpdate`
 (`{generation, changed, effects}`); `ProjectedError` (a thrown error as
 data, carrying `stack` and a `cause` chain the protocol module's own

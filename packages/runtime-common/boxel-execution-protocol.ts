@@ -167,9 +167,9 @@ export function assertUsableExecutionRecord(
   if (unsupported.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_PROTOCOL_FEATURE_UNSUPPORTED',
-      `record requires features this consumer does not implement: ${unsupported
-        .map((feature) => describeValue(feature))
-        .join(', ')}`,
+      `record requires features this consumer does not implement: ${joinTokens(
+        unsupported.map((feature) => describeValue(feature)),
+      )}`,
     );
   }
 }
@@ -184,6 +184,15 @@ export function assertUsableExecutionRecord(
 const DIAGNOSTIC_TOKEN_LIMIT = 64;
 
 /**
+ * How many offending items a diagnostic names before summarizing the rest.
+ *
+ * Bounding each token is not enough on its own: the far side also chooses how
+ * many there are, so fifty thousand short names is the same megabyte of log
+ * by a different route.
+ */
+const DIAGNOSTIC_LIST_LIMIT = 10;
+
+/**
  * Quotes a boundary-supplied string for a diagnostic: JSON-escaped, so an
  * embedded newline cannot forge a log line, and truncated to a length the
  * far side does not choose.
@@ -194,6 +203,74 @@ function quoteToken(value: string): string {
       ? `${value.slice(0, DIAGNOSTIC_TOKEN_LIMIT)}…`
       : value,
   );
+}
+
+/** Joins offending items for a diagnostic, bounded in count as well as size. */
+function joinTokens(items: string[], separator = ', '): string {
+  let shown = items.slice(0, DIAGNOSTIC_LIST_LIMIT);
+  let withheld = items.length - shown.length;
+  return withheld > 0
+    ? `${shown.join(separator)} (and ${withheld} more)`
+    : shown.join(separator);
+}
+
+/**
+ * How deep a literal value may nest before it is refused.
+ *
+ * Doubles as the cycle guard: a value that loops back on itself runs the depth
+ * down and is refused rather than walked forever.
+ */
+const MAX_LITERAL_VALUE_DEPTH = 32;
+
+/**
+ * Whether an object carries `key` as an own data property holding inert JSON.
+ * Never reads through an accessor.
+ */
+function isJsonDataProperty(source: object, key: string): boolean {
+  let descriptor = Object.getOwnPropertyDescriptor(source, key);
+  return (
+    descriptor !== undefined &&
+    'value' in descriptor &&
+    isJsonData(descriptor.value)
+  );
+}
+
+/**
+ * Whether a value is inert JSON data all the way down.
+ *
+ * Accessors are refused rather than read: a getter is not data, and invoking
+ * one to find out would run far-side code inside the gate. Prototypes other
+ * than `Object.prototype` are refused for the same reason a class instance is
+ * — the members that matter would not be the own ones.
+ */
+function isJsonData(value: unknown, depth = MAX_LITERAL_VALUE_DEPTH): boolean {
+  if (value === null) {
+    return true;
+  }
+  if (typeof value === 'string' || typeof value === 'boolean') {
+    return true;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+  if (typeof value !== 'object' || depth <= 0) {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.every((entry) => isJsonData(entry, depth - 1));
+  }
+  let prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+  return Object.keys(value).every((key) => {
+    let descriptor = Object.getOwnPropertyDescriptor(value, key);
+    return (
+      descriptor !== undefined &&
+      'value' in descriptor &&
+      isJsonData(descriptor.value, depth - 1)
+    );
+  });
 }
 
 /**
@@ -292,20 +369,6 @@ export function assertExecutionTransportVersion(
 }
 
 /**
- * The operations a tier's runtime offers, and nothing else (RP-14.2). The set
- * is closed: a tier that cannot express a behavior through these is a spec
- * change, not a new operation on one adapter.
- *
- * Mutation is absent on purpose. Writing is not an operation any tier may
- * perform on its own — it is a `set` capability the Host grants, revokes, and
- * re-authorizes on every use (RP-9.8).
- *
- * `getRenderSlot` is the one operation whose result is not cloneable: a
- * component definition is executable and stays with the runtime that owns it.
- * Rendering is a process-local effect, so the slot never crosses a boundary —
- * only the request for one does.
- */
-/**
  * Why an instance is being materialized. `createFromSerialized` carries it,
  * because the answer changes what a runtime is allowed to be lenient about:
  * an indexing pass must fail loudly on a definition it cannot identify, where
@@ -322,6 +385,22 @@ export const MATERIALIZATION_PURPOSES = [
 ] as const;
 export type MaterializationPurpose = (typeof MATERIALIZATION_PURPOSES)[number];
 
+/**
+ * The operations a tier's runtime offers, and nothing else (RP-14.2). The set
+ * is closed: a tier that cannot express a behavior through these is a spec
+ * change, not a new operation on one adapter.
+ *
+ * Mutation is absent on purpose. Writing is not an operation any tier may
+ * perform on its own — it is a `set` capability the Host grants, revokes, and
+ * re-authorizes on every use (RP-9.8).
+ *
+ * `getRenderSlot` is the one operation whose result is not uniformly
+ * cloneable, and the tiers differ in why. Where the slot is a component
+ * definition it is executable and stays with the runtime that owns it, so only
+ * the request for one crosses. Where the slot names a trusted Base component
+ * for the Host to resolve, it is an ordinary code ref and does cross. A tier's
+ * adapter answers for its own slot; the name is shared, the shape is not.
+ */
 export const BOXEL_RUNTIME_OPERATIONS = [
   'loadBoxel',
   'describeBoxel',
@@ -358,8 +437,11 @@ export type BoxelRuntimeOperation = (typeof BOXEL_RUNTIME_OPERATIONS)[number];
  * - RP-2.4: an explicit `@format` that is in the renderable inventory
  *   **replaces** this answer on both axes rather than narrowing it, and one
  *   outside the inventory is silently ignored rather than treated as an error
- *   (`determineFormats`). So a caller with an explicit format never consults
- *   this function at all.
+ *   (`determineFormats`). Note that an explicit format does not take this
+ *   function out of the picture: Base feeds the *effective* format — explicit
+ *   or defaulted — straight back through the cascade to seed the children's
+ *   ambient defaults, so a tier that skips it under an explicit `@format`
+ *   breaks every nested render beneath that node.
  *
  * A tier that applies only this function renders a linked card inline-
  * editable, which RP-2.7 says never happens.
@@ -540,6 +622,13 @@ export function isBoxelValueReference(
 }
 
 /**
+ * How deep an `ancestorOf` / `fieldOf` chain may nest before it is refused.
+ * Real refs are one or two levels; the bound exists because the value is the
+ * far side's to shape.
+ */
+const MAX_CODE_REF_DEPTH = 16;
+
+/**
  * A code ref carrying its own members and nothing else.
  *
  * Stricter than `isCodeRef`, deliberately. That predicate answers "can this be
@@ -549,18 +638,26 @@ export function isBoxelValueReference(
  * card ride inside `type` — the expanded graph the marker's own exactness
  * check was written to refuse, one level further down.
  */
-function isExactCodeRef(ref: unknown): boolean {
-  if (!isCodeRef(ref)) {
+function isExactCodeRef(ref: unknown, depth = MAX_CODE_REF_DEPTH): boolean {
+  // A predicate whose contract is to answer must not throw instead. The
+  // traversal is this function's own, and `isCodeRef` is only ever handed a
+  // leaf — it recurses without a bound of its own, so a nested chain would
+  // blow the stack inside it before this guard could apply.
+  if (depth <= 0 || !isPlainRecord(ref)) {
     return false;
   }
-  let keys = Object.keys(ref as object).sort();
-  let { type, card } = ref as { type?: unknown; card?: unknown };
+  let keys = Object.keys(ref).sort();
+  let { type, card, field } = ref as {
+    type?: unknown;
+    card?: unknown;
+    field?: unknown;
+  };
   if (type === 'ancestorOf') {
     return (
       keys.length === 2 &&
       keys[0] === 'card' &&
       keys[1] === 'type' &&
-      isExactCodeRef(card)
+      isExactCodeRef(card, depth - 1)
     );
   }
   if (type === 'fieldOf') {
@@ -569,10 +666,18 @@ function isExactCodeRef(ref: unknown): boolean {
       keys[0] === 'card' &&
       keys[1] === 'field' &&
       keys[2] === 'type' &&
-      isExactCodeRef(card)
+      typeof field === 'string' &&
+      isExactCodeRef(card, depth - 1)
     );
   }
-  return keys.length === 2 && keys[0] === 'module' && keys[1] === 'name';
+  // The leaf's own member types are the repo's predicate to judge, not a
+  // second opinion written here.
+  return (
+    keys.length === 2 &&
+    keys[0] === 'module' &&
+    keys[1] === 'name' &&
+    isCodeRef(ref)
+  );
 }
 
 /**
@@ -787,16 +892,6 @@ export function assertKnownTemplateDependencies(
         `template ${quoteToken(key)} must be a descriptor carrying a scope array, received ${describeValue(descriptor)}`,
       );
     }
-    // The key is how every reference reaches a descriptor, so a descriptor
-    // whose own id disagrees with it means one of the two is a lie and the
-    // bundle's references cannot be resolved with confidence.
-    if (descriptor.id !== key) {
-      dangling.push(
-        `template keyed ${quoteToken(key)} identifies itself as ${describeValue(
-          descriptor.id,
-        )}`,
-      );
-    }
     assertReifiableDescriptor(key, descriptor);
     for (let dependency of descriptor.scope) {
       if (
@@ -836,13 +931,13 @@ export function assertKnownTemplateDependencies(
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_DEPENDENCY_KIND_UNKNOWN',
-      `template bundle ${quoteToken(root)} names dependency kinds this consumer does not recognize — ${unrecognized.join('; ')}`,
+      `template bundle ${quoteToken(root)} names dependency kinds this consumer does not recognize — ${joinTokens(unrecognized, '; ')}`,
     );
   }
   if (dangling.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
-      `template bundle ${quoteToken(root)} names templates it does not carry — ${dangling.join('; ')}`,
+      `template bundle ${quoteToken(root)} cannot be reified — ${joinTokens(dangling, '; ')}`,
     );
   }
 }
@@ -874,9 +969,16 @@ function hasReifiableDependencyPayload(
     case 'authored-component':
       return typeof dependency.templateId === 'string';
     case 'literal-value':
-      // Any JSON value is admissible, `null` and `false` included, so the
-      // check is that the member exists rather than that it is truthy.
-      return 'value' in dependency;
+      // The kind that carries an arbitrary value is the one most worth
+      // checking. An own `value` — `in` would accept one inherited from a
+      // prototype — that is inert JSON all the way down. A function here
+      // survives to the redeemer, where it either fails `structuredClone`
+      // with a bare error past every gate, or on a tier that shares a heap
+      // and does not clone, reaches authored scope as the live object.
+      // Read the descriptor, not the member: `dependency.value` would invoke
+      // an accessor, running far-side code inside the gate — and a getter that
+      // throws would escape as its own error rather than as a refusal.
+      return isJsonDataProperty(dependency, 'value');
   }
 }
 
@@ -894,6 +996,17 @@ function assertReifiableDescriptor(
   descriptor: TemplateDescriptor,
 ): void {
   let faults: string[] = [];
+  // Deliberately NOT `descriptor.id === key`. The map key is the bundle's own
+  // reference space and the descriptor's id is the compiler's, and the two are
+  // allowed to differ — a class inheriting its template from an ancestor
+  // legitimately yields two entries carrying one compiler id. What a consumer
+  // needs is that the id is nameable at all, since it names the reified
+  // factory.
+  if (typeof descriptor.id !== 'string') {
+    faults.push(
+      `id must be a string, received ${describeValue(descriptor.id)}`,
+    );
+  }
   if (typeof descriptor.block !== 'string') {
     faults.push(
       `block must be the compiled template, received ${describeValue(descriptor.block)}`,
@@ -925,9 +1038,9 @@ function assertReifiableDescriptor(
         `instance.handle must be a string, received ${describeValue(instance.handle)}`,
       );
     }
-    if (!isPlainRecord(instance.state)) {
+    if (!isPlainRecord(instance.state) || !isJsonData(instance.state)) {
       faults.push(
-        `instance.state must be a record, received ${describeValue(instance.state)}`,
+        `instance.state must be a record of data, received ${describeValue(instance.state)}`,
       );
     }
     if (!isStringArray(instance.getters)) {
@@ -944,7 +1057,7 @@ function assertReifiableDescriptor(
   if (faults.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `template ${quoteToken(key)} cannot be reified — ${faults.join('; ')}`,
+      `template ${quoteToken(key)} cannot be reified — ${joinTokens(faults, '; ')}`,
     );
   }
 }
@@ -1007,7 +1120,21 @@ export function assertKnownComponentEffects(
 ): void {
   assertUsableExecutionRecord(update, support);
 
-  let { effects } = update as Partial<ComponentUpdate>;
+  let { generation, changed, effects } = update as Partial<ComponentUpdate>;
+  // The generation is the guard that stops superseded output being applied, so
+  // a generation that cannot be compared defeats it silently.
+  if (typeof generation !== 'number' || !Number.isFinite(generation)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `component update's generation must be a finite number, received ${describeValue(generation)}`,
+    );
+  }
+  if (!isPlainRecord(changed) || !isJsonData(changed)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `component update's changed must be a record of data, received ${describeValue(changed)}`,
+    );
+  }
   if (!Array.isArray(effects)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
@@ -1033,9 +1160,9 @@ export function assertKnownComponentEffects(
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
-      `component update names effect kinds this consumer does not recognize: ${unrecognized
-        .map((kind) => quoteToken(kind))
-        .join(', ')}`,
+      `component update names effect kinds this consumer does not recognize: ${joinTokens(
+        unrecognized.map((kind) => quoteToken(kind)),
+      )}`,
     );
   }
 }
@@ -1074,6 +1201,20 @@ export type ProjectedError = Cloneable<ProjectedErrorShape>;
  * preserves cycles, so a chain that loops back on itself arrives intact; a
  * consumer walking it without a bound hangs instead of reporting.
  */
+/**
+ * How much of a projected error's text crosses.
+ *
+ * Generous enough for a real stack, bounded because the text is chosen by the
+ * side that failed, and this record reaches the Host's error presentation.
+ */
+export const PROJECTED_ERROR_MAX_TEXT_LENGTH = 8192;
+
+function boundText(value: string): string {
+  return value.length > PROJECTED_ERROR_MAX_TEXT_LENGTH
+    ? `${value.slice(0, PROJECTED_ERROR_MAX_TEXT_LENGTH)}…`
+    : value;
+}
+
 export function projectError(
   error: unknown,
   depth: number = PROJECTED_ERROR_MAX_CAUSE_DEPTH,
@@ -1087,12 +1228,13 @@ export function projectError(
     cause: unknown;
   }>;
   let projected: ProjectedErrorShape = {
-    name: typeof source.name === 'string' ? source.name : 'Error',
-    message:
+    name: boundText(typeof source.name === 'string' ? source.name : 'Error'),
+    message: boundText(
       typeof source.message === 'string' ? source.message : String(error),
+    ),
   };
   if (typeof source.stack === 'string') {
-    projected.stack = source.stack;
+    projected.stack = boundText(source.stack);
   }
   if (source.cause != null && depth > 1) {
     projected.cause = projectError(source.cause, depth - 1);
@@ -1142,13 +1284,34 @@ export const SAFE_EVENT_STRING_PROPERTIES = [
 export const SAFE_EVENT_NULLABLE_STRING_PROPERTIES = ['data'] as const;
 
 /**
- * The dataset prefix Base stamps its own identifiers under.
+ * The dataset namespaces Base stamps its own identifiers under.
  *
- * In the camelCase form a `DOMStringMap` exposes, not the `data-boxel-*`
- * attribute spelling: `data-boxel-card-id` reads back as `boxelCardId`, and a
- * filter written against the attribute name matches nothing.
+ * In the camelCase form a `DOMStringMap` exposes, not the attribute spelling:
+ * `data-boxel-card-id` reads back as `boxelCardId`, and a filter written
+ * against the attribute name matches nothing.
+ *
+ * Both namespaces, because Base stamps a card's canonical URL twice on the
+ * same element — `data-boxel-card-id` and `data-test-card` carry the identical
+ * `card.id` (`field-component.gts`), and nothing strips the test spelling on
+ * the way to a realm. Filtering one and not the other filters nothing.
+ *
+ * A denylist, and therefore only as complete as this list: a namespace Base
+ * adds later leaks until it is named here. It is a denylist rather than an
+ * allowlist because the alternative — knowing which keys the author's own
+ * template wrote — is not answerable from a `DOMStringMap`, whose element may
+ * be Host-rendered chrome the author never wrote.
  */
-export const HOST_OWNED_DATASET_PREFIX = 'boxel';
+export const HOST_OWNED_DATASET_PREFIXES = ['boxel', 'test'] as const;
+
+// Anchored on a camelCase boundary, so an author's own `boxelish` or
+// `testimonial` key is theirs and survives.
+const hostOwnedDatasetKey = new RegExp(
+  `^(?:${HOST_OWNED_DATASET_PREFIXES.join('|')})(?:[A-Z]|$)`,
+);
+
+function isHostOwnedDatasetKey(key: string): boolean {
+  return hostOwnedDatasetKey.test(key);
+}
 
 /**
  * The dataset an event target may hand an authored handler.
@@ -1156,9 +1319,9 @@ export const HOST_OWNED_DATASET_PREFIX = 'boxel';
  * Every other member of `SafeEventTarget` is drawn from a per-member
  * allowlist; a dataset cannot be, since its keys are whatever the author
  * wrote. What makes it safe is subtraction rather than enumeration: Base
- * stamps the Host's own identifiers into this namespace — `data-boxel-card-id`
- * carries a card's canonical URL (RP-11.4) — and a card is entitled to its own
- * data attributes but not to those.
+ * stamps the Host's own identifiers into these namespaces — `data-boxel-card-id`
+ * and `data-test-card` both carry a card's canonical URL (RP-11.4) — and a card
+ * is entitled to its own data attributes but not to those.
  *
  * Concretely: an authored template containing `<@fields.vendor />` renders a
  * Base container stamped with the vendor's id. A click landing there bubbles
@@ -1171,9 +1334,11 @@ export const HOST_OWNED_DATASET_PREFIX = 'boxel';
 export function projectDataset(
   dataset: Record<string, string>,
 ): Record<string, string> {
-  let projected: Record<string, string> = {};
+  // Null prototype: a `__proto__` key would otherwise be swallowed by an
+  // ordinary object literal, or set the result's prototype outright.
+  let projected: Record<string, string> = Object.create(null);
   for (let [key, value] of Object.entries(dataset)) {
-    if (!key.startsWith(HOST_OWNED_DATASET_PREFIX)) {
+    if (!isHostOwnedDatasetKey(key)) {
       projected[key] = value;
     }
   }
