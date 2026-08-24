@@ -442,6 +442,34 @@ export class IndexQueryEngine {
     return rows.length > 0;
   }
 
+  // The index generation of a live instance, or undefined when none matches —
+  // the generation companion to `hasLiveInstance`, matching the same row
+  // predicate (including the effective-error channel) but selecting the one
+  // column the screenshot cache key needs, still without hydrating the row.
+  // Used where the caller needs both the liveness gate and the generation, so
+  // the two collapse into a single narrow read.
+  async liveInstanceGeneration(
+    url: URL,
+    opts?: GetEntryOptions,
+  ): Promise<number | undefined> {
+    let rows = (await this.#query([
+      'SELECT i.generation',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        [`NOT ${effectiveHasError()}`],
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { generation: number }[];
+    return rows.length > 0 ? Number(rows[0].generation) : undefined;
+  }
+
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(

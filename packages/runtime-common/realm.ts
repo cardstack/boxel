@@ -4068,9 +4068,10 @@ export class Realm {
   // parent instance must be live: this gives per-instance ACLs a place to
   // land, and captures of a deleted instance stop serving the moment its
   // index tombstone appears, ahead of GC reclaiming their artifacts. The
-  // gate is a narrow existence probe (`hasLiveInstance`), never an instance
-  // hydration — it runs on every request, 304 revalidations included. Any
-  // request that resolves to no capture — instance missing or errored,
+  // gate is a narrow index read (`liveInstanceGeneration`) that returns the
+  // live instance's generation for the cache key, never a full hydration — it
+  // runs on every request, 304 revalidations included. Any request that
+  // resolves to no capture — instance missing or errored,
   // store unconfigured, addressing unresolvable — is an uncaptured miss:
   // 404 with a short max-age so an `<img>` picks up a later capture on
   // revalidation, never a synchronous wait inside an image load.
@@ -4085,7 +4086,13 @@ export class Realm {
     let instanceURL = this.paths.fileURL(
       instanceLocalPath.replace(/\.json$/, ''),
     );
-    if (!(await this.#realmIndexQueryEngine.hasLiveInstance(instanceURL))) {
+    // One narrow read is both the liveness gate and the cache key's
+    // generation: undefined means the instance is missing, deleted, or
+    // errored — an uncaptured miss — and otherwise it pins the generation an
+    // edit bumps, without hydrating the row.
+    let sourceGeneration =
+      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
     }
     let searchParams = new URL(request.url).searchParams;
@@ -4121,7 +4128,7 @@ export class Realm {
       realmURL: this.url,
       sourceURL: instanceURL.href,
       captureSpecHash: await captureSpecHash(parsed.spec),
-      sourceGeneration: Number(instance.generation),
+      sourceGeneration,
     };
     let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
     if (entry) {
