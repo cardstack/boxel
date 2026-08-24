@@ -118,7 +118,7 @@ async function initESLint(): Promise<any> {
     // to them.
     ignore: false,
     overrideConfig: {
-      plugins: ['@cardstack/boxel', 'unused-imports'],
+      plugins: ['@cardstack/boxel'],
       rules: {
         // Prettier runs as a separate pass after ESLint (see lintOne); folding
         // it in lets the prettier plugin see a mid-fix file (e.g. a not-yet-
@@ -140,8 +140,21 @@ async function initESLint(): Promise<any> {
         // is safe to automate: if a usage appears later, the
         // missing-card-api-import rule re-injects the import. Unused
         // *variables* stay reported via @typescript-eslint/no-unused-vars —
-        // deleting those would change behavior.
-        'unused-imports/no-unused-imports': 'error',
+        // deleting those would change behavior. Whole declarations are
+        // deleted only for platform module namespaces that are known
+        // side-effect-free; any other module keeps a bare side-effect
+        // import so its top-level code still runs.
+        '@cardstack/boxel/no-unused-imports': [
+          'error',
+          {
+            sideEffectFreeModules: [
+              '@cardstack/base/*',
+              'https://cardstack.com/base/*',
+              '@cardstack/boxel-ui/*',
+              '@cardstack/boxel-icons/*',
+            ],
+          },
+        ],
         '@cardstack/boxel/no-css-position-fixed': 'warn',
         '@cardstack/boxel/no-forbidden-head-tags': 'warn',
         '@cardstack/boxel/no-literal-realm-urls': 'error',

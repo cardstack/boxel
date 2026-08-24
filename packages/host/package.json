@@ -149,7 +149,6 @@
     "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-qunit": "catalog:",
     "eslint-plugin-qunit-dom": "catalog:",
-    "eslint-plugin-unused-imports": "catalog:",
     "ethers": "catalog:",
     "eventemitter3": "catalog:",
     "fast-json-stable-stringify": "catalog:",

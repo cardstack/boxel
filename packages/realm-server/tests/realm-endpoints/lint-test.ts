@@ -581,6 +581,44 @@ export class MyCard extends CardDef {}
       assert.true(responseJson.passed, 'lint passes after the autofix');
     });
 
+    test('a fully-unused import of an unknown module keeps its module evaluation', async function (assert) {
+      // './register' may rely on being evaluated for its top-level side
+      // effects, so the fix drops the binding but keeps a bare import.
+      // Whole-declaration deletion is reserved for platform modules that
+      // are known side-effect-free (see the safelist in the lint task).
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'side-effect-import.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import registration from './register';
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { CardDef } from '@cardstack/base/card-api';
+import './register';
+
+export class MyCard extends CardDef {}
+`,
+        'the unused binding is removed but the import still evaluates',
+      );
+      assert.deepEqual(
+        responseJson.messages,
+        [],
+        'the rewritten side-effect import reports nothing',
+      );
+    });
+
     test('unused local variables are still reported, not auto-removed', async function (assert) {
       let response = await request
         .post('/_lint')
