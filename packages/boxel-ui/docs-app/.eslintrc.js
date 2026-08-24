@@ -94,6 +94,10 @@ module.exports = {
         'prefer-const': 'off',
         '@typescript-eslint/no-explicit-any': 'off',
         '@typescript-eslint/ban-types': 'off',
+        // The rules `ban-types` was split into, off for the same reason.
+        '@typescript-eslint/no-empty-object-type': 'off',
+        '@typescript-eslint/no-unsafe-function-type': 'off',
+        '@typescript-eslint/no-wrapper-object-types': 'off',
         '@typescript-eslint/ban-ts-comment': 'off',
         '@typescript-eslint/explicit-module-boundary-types': 'off',
         '@typescript-eslint/no-this-alias': 'off',
@@ -133,6 +137,8 @@ module.exports = {
       rules: {
         'n/no-unpublished-require': 'off',
         '@typescript-eslint/no-var-requires': 'off',
+        // Successor to the rule above.
+        '@typescript-eslint/no-require-imports': 'off',
       },
     },
     {
