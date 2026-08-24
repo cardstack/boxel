@@ -363,6 +363,9 @@ catalogs:
     ember-elsewhere:
       specifier: ^2.0.1
       version: 2.0.1
+    ember-eslint-parser:
+      specifier: ^0.14.6
+      version: 0.14.6
     ember-freestyle:
       specifier: ^0.24.0
       version: 0.24.0
@@ -1204,6 +1207,9 @@ importers:
       concurrently:
         specifier: 'catalog:'
         version: 8.2.2
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-source:
         specifier: 'catalog:'
         version: 6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5)
@@ -1662,6 +1668,9 @@ importers:
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=0e5253a008cc7bf02424d786e7a8fb2397bc48962f3cd1443f2c0fdd8200c96d)
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-freestyle:
         specifier: 'catalog:'
         version: 0.24.0(@babel/core@7.29.7)(@ember/string@4.0.1)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(webpack@5.107.2(postcss@8.5.15))
@@ -1848,7 +1857,7 @@ importers:
         specifier: 'catalog:'
         version: 5.2.0(@babel/core@7.29.7)(@glint/template@1.7.7)
       ember-eslint-parser:
-        specifier: ^0.14.6
+        specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-modifier:
         specifier: ^4.1.0
@@ -1899,7 +1908,7 @@ importers:
   packages/eslint-plugin-boxel:
     dependencies:
       ember-eslint-parser:
-        specifier: ^0.14.6
+        specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       requireindex:
         specifier: 'catalog:'
@@ -2331,6 +2340,9 @@ importers:
       ember-elsewhere:
         specifier: 'catalog:'
         version: 2.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))
+      ember-eslint-parser:
+        specifier: 'catalog:'
+        version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-exam:
         specifier: ^10.1.0
         version: 10.1.0(@glint/template@1.7.7)(ember-qunit@9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7))(qunit@2.26.0))(ember-source@6.10.1(patch_hash=ea945024993105fb6cc4ae5cb5e9ea8e0eff6cd5fe0b0033c43dd0cf9453eb0d)(@glimmer/component@2.1.1)(rsvp@4.8.5))(qunit@2.26.0)(webpack@5.107.2)
@@ -2840,7 +2852,7 @@ importers:
         specifier: 'catalog:'
         version: 2.3.2(@babel/core@7.29.7)
       ember-eslint-parser:
-        specifier: ^0.14.6
+        specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-template-recast:
         specifier: ^6.1.5
@@ -3128,7 +3140,7 @@ importers:
         specifier: workspace:*
         version: link:../../vendor/ember-concurrency-async-plugin
       ember-eslint-parser:
-        specifier: ^0.14.6
+        specifier: 'catalog:'
         version: 0.14.6(patch_hash=364c7e71472801c87618bf2b2cdabd256358166bbe107f29d321ab35d0a53425)(@babel/eslint-parser@7.29.7(@babel/core@7.29.7)(eslint@8.57.1))(@typescript-eslint/parser@8.67.0(eslint@8.57.1)(typescript@5.9.3))(typescript@5.9.3)
       ember-source:
         specifier: 'catalog:'

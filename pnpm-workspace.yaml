@@ -133,6 +133,7 @@ catalog:
   ember-concurrency: ^5.2.0
   ember-concurrency-ts: ^0.3.1
   ember-elsewhere: ^2.0.1
+  ember-eslint-parser: ^0.14.6
   ember-freestyle: ^0.24.0
   ember-keyboard: ^9.0.4
   ember-modify-based-class-resource: ^1.1.0

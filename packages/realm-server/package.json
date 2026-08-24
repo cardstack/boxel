@@ -51,7 +51,7 @@
     "cron": "catalog:",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
-    "ember-eslint-parser": "^0.14.6",
+    "ember-eslint-parser": "catalog:",
     "ember-template-recast": "^6.1.5",
     "eslint": "catalog:",
     "eslint-plugin-qunit": "catalog:",
