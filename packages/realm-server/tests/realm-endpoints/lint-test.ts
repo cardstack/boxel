@@ -546,6 +546,108 @@ export class MyCard extends CardDef {
       );
     });
 
+    test('removes unused imports automatically instead of reporting them', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'unused-imports.gts')
+        .send(`import { CardDef, FieldDef, linksToMany } from '@cardstack/base/card-api';
+import type { Foo } from 'somewhere';
+import StringField from '@cardstack/base/string';
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { CardDef } from '@cardstack/base/card-api';
+
+export class MyCard extends CardDef {}
+`,
+        'unused named, type-only, and default imports are all removed',
+      );
+      assert.deepEqual(
+        responseJson.messages,
+        [],
+        'nothing is left to report once the unused imports are fixed away',
+      );
+      assert.true(responseJson.passed, 'lint passes after the autofix');
+    });
+
+    test('unused local variables are still reported, not auto-removed', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'unused-variable.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+
+const leftover = 1;
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        responseJson.output.includes('const leftover = 1;'),
+        'the unused variable is not deleted',
+      );
+      assert.ok(
+        responseJson.messages.some(
+          (m: { ruleId: string | null; message: string }) =>
+            m.ruleId === '@typescript-eslint/no-unused-vars' &&
+            m.message.includes(`'leftover'`),
+        ),
+        `unused variable is still reported: ${JSON.stringify(
+          responseJson.messages,
+        )}`,
+      );
+    });
+
+    test('an import used only inside <template> is not treated as unused', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'template-only-usage.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import MyComponent from 'somewhere';
+
+export class MyCard extends CardDef {}
+
+<template><MyComponent /></template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        responseJson.output.includes(`import MyComponent from 'somewhere';`),
+        `template-only component import survives the autofix: ${responseJson.output}`,
+      );
+      assert.notOk(
+        responseJson.messages.some((m: { message: string }) =>
+          m.message.includes('MyComponent'),
+        ),
+        'template-only usage is not reported as unused',
+      );
+    });
+
     test('warns about position: fixed in card CSS', async function (assert) {
       let response = await request
         .post('/_lint')
