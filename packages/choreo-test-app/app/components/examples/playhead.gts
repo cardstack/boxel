@@ -296,9 +296,28 @@ export class Playhead extends Component {
    */
   private get home(): Point {
     const el = this.stage;
+    const w = el?.clientWidth ?? 320;
+    const h = el?.clientHeight ?? 380;
+    // Beside the CARD, not at a fraction of the stage.
+    //
+    // Fractions of the stage only look right at the stage's desktop
+    // proportions. On a phone the stage is tall and narrow, and the same
+    // 82%/40% put the hand halfway down open space with the card nowhere
+    // near it — "returns to the middle of the board" rather than to where it
+    // started. The card is the thing the hand is waiting to touch, so the
+    // rest position is measured from the card: just off its right edge, a
+    // third of the way down, clamped so it can never sit outside the stage.
+    const card = this.stage?.querySelector<HTMLElement>('.ph-app');
+    if (!card || !el) {
+      return { x: w * 0.82, y: h * 0.4 };
+    }
+    const box = card.getBoundingClientRect();
+    const root = el.getBoundingClientRect();
+    const left = box.left - root.left;
+    const top = box.top - root.top;
     return {
-      x: (el?.clientWidth ?? 320) * 0.82,
-      y: (el?.clientHeight ?? 380) * 0.4,
+      x: Math.min(left + box.width + 34, w - 26),
+      y: Math.max(top + box.height * 0.32, 26),
     };
   }
 
@@ -610,7 +629,10 @@ export class Playhead extends Component {
         class={{if this.state.placed "ph-receipt is-on" "ph-receipt"}}
         {{motion animate=(this.pose "receipt") transition=(this.tx "receipt")}}
       >
-        <span class="ph-tick" aria-hidden="true">✓</span>
+        {{! lucide "check" }}
+        <svg class="ph-tick" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
         <b>Order placed</b>
         <small>{{this.line}}</small>
         <button
@@ -642,7 +664,22 @@ export class Playhead extends Component {
           class="ph-play"
           aria-label={{if this.playing "Pause" "Play"}}
           {{on "click" this.toggle}}
-        >{{if this.playing "❚❚" "▶"}}</button>
+        >
+          {{#if this.playing}}
+            {{! lucide "pause" }}
+            <svg class="tp-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="14" y="3" width="5" height="18" rx="1" />
+              <rect x="5" y="3" width="5" height="18" rx="1" />
+            </svg>
+          {{else}}
+            {{! lucide "play" }}
+            <svg class="tp-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"
+              />
+            </svg>
+          {{/if}}
+        </button>
 
         <div class="ph-track">
           <span class="ph-rail"></span>

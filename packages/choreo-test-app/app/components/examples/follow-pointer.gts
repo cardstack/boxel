@@ -8,6 +8,17 @@ import { preventSelect } from 'test-app/lib/pointer';
 const tight = { damping: 24, stiffness: 480, type: 'spring' } as const;
 const mid = { damping: 22, stiffness: 240, type: 'spring' } as const;
 const loose = { damping: 20, stiffness: 120, type: 'spring' } as const;
+/**
+ * Letting go.
+ *
+ * The three springs above are all CHASING — they are tuned to keep up with a
+ * pointer that is still moving. Coming home is the opposite gesture: nothing
+ * is leading it any more, so it wants a lower stiffness and enough bounce to
+ * read as elastic rather than as a slide back to zero. Slightly under-damped
+ * on purpose — the overshoot is what makes it feel like a band letting go
+ * instead of an animation ending.
+ */
+const homing = { bounce: 0.34, type: 'spring', visualDuration: 0.62 } as const;
 
 export class FollowPointer extends Component {
   x = motionValue(0);
@@ -53,13 +64,37 @@ export class FollowPointer extends Component {
     this.aim(event, event.currentTarget as HTMLElement);
   };
 
+  /**
+   * Back to the middle, elastically.
+   *
+   * It used to aim one last time at wherever the pointer left, which parked
+   * the whole rig against the edge it exited through and left the demo
+   * looking stuck. Nothing is following anything once the pointer is gone,
+   * so the honest resting state is the centre — and the trailing ring and
+   * halo keep their own slower springs, so the three arrive in sequence the
+   * same way they do when chasing.
+   */
+  private release = () => {
+    void animate(this.x, 0, homing);
+    void animate(this.y, 0, homing);
+    void animate(this.rx, 0, { ...homing, visualDuration: 0.72 });
+    void animate(this.ry, 0, { ...homing, visualDuration: 0.72 });
+    void animate(this.hx, 0, { ...homing, visualDuration: 0.84 });
+    void animate(this.hy, 0, { ...homing, visualDuration: 0.84 });
+  };
+
   leave = (event: PointerEvent) => {
     const stage = event.currentTarget as HTMLElement;
     const next = event.relatedTarget;
     if (next instanceof Node && stage.contains(next)) {
       return;
     }
-    this.aim(event, stage);
+    this.release();
+  };
+
+  /** a finger has no "leave": lifting it is the same event as going away */
+  lift = () => {
+    this.release();
   };
 
   <template>
@@ -67,6 +102,8 @@ export class FollowPointer extends Component {
       class="ex follow-stage no-select"
       {{on "pointermove" this.move}}
       {{on "pointerleave" this.leave}}
+      {{on "pointerup" this.lift}}
+      {{on "pointercancel" this.lift}}
       {{on "selectstart" preventSelect}}
     >
       <div class="follow-halo" {{motion style=this.halo}}></div>

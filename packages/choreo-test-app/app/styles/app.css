@@ -47,6 +47,16 @@
      each theme block below, so those call sites repaint without knowing a
      theme exists. */
   --bg-rgb: 9, 8, 7;
+
+  /* Shadows.
+     Every drop shadow here was picked against a near-black page, where a 45%
+     black is depth. On the cream ground of light mode the same value is a
+     grey smear sitting on the card — most visible in Presence, where three
+     panels of stacked toasts turn into three stacked smudges. The alpha is
+     scaled and the colour warmed for light; in dark the multiplier is 1 and
+     the tint is black, so every shadow resolves to exactly what it was. */
+  --shadow-rgb: 0, 0, 0;
+  --shadow-a: 1;
   --ink-rgb: 243, 236, 227;
   /* a panel raised OFF the page reads as its own surface by going lighter
      than --bg-page in dark mode, and darker than it in light mode — see
@@ -117,6 +127,10 @@
   --bg: #efe9df;
   --bg-elev: #f7f3ec;
   --bg-spot: #fbf8f3;
+
+  /* warmer and much softer — see --shadow-rgb in the dark palette */
+  --shadow-rgb: 72, 56, 44;
+  --shadow-a: 0.3;
 
   /* light keeps the shared ladder: on a light card these read as intended */
   --ph-card-top: var(--bg-spot);
@@ -197,6 +211,20 @@ html.is-crossing > body {
   opacity: 0;
 }
 
+/* ...but only where the ground behind it is dark.
+ *
+ * The veil works by letting <html>'s own background show through for the
+ * length of the morph, and in dark that background is very nearly black, so
+ * "the page is not there" reads as "the pieces are flying over a dark stage".
+ * In light the same background is cream, and the identical rule reads as the
+ * whole screen flashing white — most obvious on Parallax, Reveal and Build
+ * Order, whose stages are dark enough to make the blank frame jump. There is
+ * nothing to hide behind on a light ground, so light keeps its page and lets
+ * the root snapshot do the ordinary thing. */
+html[data-theme='light'].is-crossing > body {
+  opacity: 1;
+}
+
 html.is-returning > body {
   transition: opacity var(--gm-veil-in, 180ms) ease-out;
 }
@@ -214,6 +242,23 @@ input {
 
 button {
   cursor: pointer;
+}
+
+/* No double-tap-to-zoom on anything you are meant to tap.
+ *
+ * Safari waits ~300ms after a tap on an interactive element to see whether a
+ * second one is coming, because two taps means zoom. On demos you tap
+ * repeatedly — the transport, the segmented controls, a card you open and
+ * close — that reads as lag, and a fast second tap gets eaten by the zoom
+ * gesture instead of arriving. `manipulation` keeps panning and PINCH zoom
+ * (so the page is still zoomable, which matters) and drops only the
+ * double-tap shortcut, on controls only. */
+button,
+a,
+select,
+summary,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 :focus-visible {
@@ -528,6 +573,14 @@ button {
       transparent 60%
     ),
     rgba(var(--surface-tint-rgb), 0.14);
+}
+
+/* The orb is white, which is the right answer on a near-black stage and no
+   answer at all on a cream one — a white dot on a light ground is a hole.
+   In light it takes the mark's own bead colour, so the thing the pointer
+   leaves behind is the same solid dot the logo ends on. */
+:root[data-theme='light'] .follow-orb {
+  background: var(--ember);
 }
 
 .card-meta {
@@ -1072,11 +1125,21 @@ html[data-gm-dragging] * {
   font-size: 12px;
 }
 
+/* Sized in CONTAINER units, not a pixel cap.
+ *
+ * `.ex` is a size container and most of the gallery scales with it, but this
+ * grid was min(94%, 620px) — so it filled 91% of a gallery tile and only 53%
+ * of the full-width stage. The Magic Move between the two stretches both
+ * snapshots into one box and crosses them, and two copies of the same three
+ * panels at wildly different fractions is exactly the doubled, almost-aligned
+ * ghosting you see mid-flight. Holding one fraction at both sizes is what
+ * makes the crossfade land on itself. cqh keeps it from going absurdly wide
+ * on a short, wide stage. */
 .modes {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  width: min(94%, 620px);
+  gap: clamp(8px, 2cqw, 18px);
+  width: min(92cqw, 260cqh);
 }
 
 .mode {
@@ -1113,7 +1176,7 @@ html[data-gm-dragging] * {
   border-radius: 16px;
   background: var(--bg-spot);
   border: 1px solid var(--line-strong);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
 }
 
 .toast.is-fail {
@@ -1419,7 +1482,7 @@ html[data-gm-dragging] * {
   height: 56px;
   border-radius: 14px;
   flex: none;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 22px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
 }
 
 .shelf.is-grid .record-art {
@@ -1559,7 +1622,7 @@ html[data-gm-dragging] * {
   inset: 0;
   /* radius is declared on the element — see photoStyle() in
      examples/lightbox.gts, so it can be scale-corrected */
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 28px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
 }
 
 .shot.is-open {
@@ -1771,7 +1834,7 @@ html[data-gm-dragging] * {
   border-radius: 22px;
   background: var(--bg-well);
   touch-action: none;
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 22px 50px rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
   transition:
     border-color 1.5s var(--ease),
     box-shadow 1.5s var(--ease);
@@ -1974,7 +2037,7 @@ html[data-gm-dragging] * {
   color: #fff;
   cursor: grab;
   touch-action: none;
-  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
+  box-shadow: 0 10px 22px rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a)));
 }
 
 /* a grip appears on hover: these rearrange, and nothing said so before you
@@ -2008,7 +2071,7 @@ html[data-gm-dragging] * {
 }
 
 .cover:hover {
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
 }
 
 .cover:active {
@@ -2161,7 +2224,7 @@ html[data-gm-dragging] * {
     ),
     var(--bg-well);
   border: 1px solid var(--line-strong);
-  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 22px 50px rgba(var(--shadow-rgb), calc(0.4 * var(--shadow-a)));
 }
 
 .chat-scroll {
@@ -2472,6 +2535,10 @@ html[data-gm-dragging] * {
 
 .follow-stage {
   cursor: none;
+  /* the finger is the input here, so the gesture belongs to this stage and
+     not to the scroller: without it the page scrolls out from under the
+     pointer mid-track and the orb is left reading a stale position */
+  touch-action: none;
 }
 
 .follow-halo {
@@ -2748,7 +2815,7 @@ html[data-gm-dragging] * {
   }
 
   .stage-wrap {
-    min-height: min(68vh, 560px);
+    min-height: min(74vh, 620px);
     border-radius: 16px;
   }
 
@@ -2846,7 +2913,7 @@ html[data-gm-dragging] * {
   border-radius: 999px;
   background: rgb(243 236 227 / 42%);
   border: 1px solid var(--bg-spot);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 55%);
+  box-shadow: 0 2px 8px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
   transition:
     background 120ms ease,
     scale 140ms ease;
@@ -3117,7 +3184,7 @@ html[data-gm-dragging] * {
   border-radius: 10px;
   overflow: clip;
   background: linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 12px 28px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
 }
 
 /* fit-content on both, so projection scales the type between two real sizes
@@ -3274,7 +3341,7 @@ html[data-gm-dragging] * {
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 24px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
 }
 
 .study-card.is-open {
@@ -3586,7 +3653,7 @@ html[data-gm-dragging] * {
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 6px 18px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
 }
 
 .puck.is-spring {
@@ -4002,7 +4069,7 @@ html[data-gm-dragging] * {
   border-bottom: 0;
   border-radius: 20px 20px 0 0;
   background: var(--bg-spot);
-  box-shadow: 0 -14px 40px rgb(0 0 0 / 55%);
+  box-shadow: 0 -14px 40px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
   touch-action: none;
   cursor: grab;
   overflow: hidden;
@@ -4121,7 +4188,7 @@ html[data-gm-dragging] * {
   justify-content: center;
   border-radius: 12px;
   margin-right: -27px;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 60%);
+  box-shadow: 0 4px 14px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
 }
 
 .sheet.is-sliver .share-tile:last-child {
@@ -4302,6 +4369,15 @@ html[data-gm-dragging] * {
     opacity: 1;
     translate: 0 0;
   }
+
+  /* Same rule, and the one place it was actually load-bearing: the delete
+     button on an inbox row is revealed on hover, so on a phone it never
+     appeared at all and the row could not be deleted. It keeps its box either
+     way — the row is a Choreo participant and its measurement must not change
+     — so this only paints what was already there. */
+  .mail-kill {
+    opacity: 1;
+  }
 }
 
 .filter-tell:hover,
@@ -4415,9 +4491,68 @@ html[data-gm-dragging] * {
   border-color: var(--copper);
 }
 
+/* only ever visible in the narrow layout below */
+.tempo-icon {
+  display: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* The control becomes an icon.
+ *
+ * A native <select> is as wide as its longest option, and "Show how this
+ * works" is long enough to push the brand into an ellipsis — the wordmark
+ * read as "C…" on a phone. Hiding the text is not enough on its own, because
+ * the element still reserves that width, so the select is laid over the icon
+ * at zero opacity instead: the tap target, the native picker and the
+ * accessible name all stay exactly as they were, and only the painted label
+ * goes. Matches .theme-toggle's 30px circle so the two read as a pair. */
 @media (max-width: 720px) {
+  /* The phone has to BE a phone.
+     At the shared 78cqh cap this box came out 272x371 on a handset — a 0.73
+     ratio, nearly square — and the expanded detent is a fixed 320px, so the
+     sheet swallowed 86% of the screen it was supposedly sliding up inside and
+     the content above it was cropped away. Portrait gives the detents
+     somewhere to be, which is the entire point of the demo.
+     (Must live after the base rule: same specificity, so source order is what
+     decides which cap wins.) */
+  .sheet-app {
+    height: min(96cqh, 560px);
+  }
+
+  .tempo {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    background: rgba(var(--bg-rgb), 0.72);
+    color: var(--ink-dim);
+  }
+
+  .tempo-icon {
+    display: block;
+  }
+
   .tempo-select {
-    padding: 6px 22px 6px 10px;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    opacity: 0;
+    /* iOS zooms the page in when a control smaller than 16px is focused */
+    font-size: 16px;
   }
 }
 
@@ -4633,7 +4768,7 @@ html[data-gm-dragging] * {
   border: 1px solid var(--line);
   border-radius: 16px;
   background: linear-gradient(180deg, var(--ph-card-top), var(--ph-card-bot));
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 18px 44px rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
 }
 
 .ph-head {
@@ -4770,7 +4905,7 @@ html[data-gm-dragging] * {
   height: 18px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
 }
 
 .ph-go {
@@ -4803,7 +4938,7 @@ html[data-gm-dragging] * {
     var(--ph-receipt-top),
     var(--ph-receipt-bot)
   );
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 24px 60px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
   text-align: center;
   /* invisible until the score places the order, and not in the way until then
      — but still measurable, which is how the hand knows where Done is */
@@ -4817,12 +4952,34 @@ html[data-gm-dragging] * {
 .ph-tick {
   display: grid;
   place-items: center;
+  box-sizing: border-box;
   width: 32px;
   height: 32px;
+  /* the disc is the element; the padding is what keeps the tick inside it */
+  padding: 8px;
   border-radius: 50%;
   background: rgba(255, 59, 31, 0.16);
   color: var(--ember-hot);
-  font-size: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Transport glyphs, drawn rather than typed.
+   ▶ and ❚❚ are characters, and a character is at the mercy of whatever font
+   resolves it — on iOS they picked up the emoji face and rendered as colour
+   emoji next to a monospace clock. These are Lucide (lucide.dev, ISC), taken
+   as published, which is also why they are stroked and not filled. */
+.tp-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .ph-receipt b {
@@ -5001,6 +5158,13 @@ html[data-gm-dragging] * {
 
 /* the real control, invisible over the drawing */
 .ph-range {
+  /* A horizontal slider and a vertical scroll want the same gesture, and on a
+     touch screen the scroller wins by default: the drag panned the page and
+     the playhead never moved, so the timeline read as broken rather than as
+     scrubbable. `none` hands the gesture to the control, which is the only
+     thing on this row that a sideways drag could plausibly mean. */
+  touch-action: none;
+
   position: absolute;
   inset: 0;
   z-index: 3;
@@ -5107,7 +5271,7 @@ html[data-gm-dragging] * {
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
-  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 46px rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
 }
 
 .bo-art {
@@ -5245,7 +5409,7 @@ html[data-gm-dragging] * {
   /* same device-chrome treatment as .ph-app — a neutral black veil read as
      flat grey once its card turned light */
   background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 18px 44px rgba(var(--shadow-rgb), calc(0.45 * var(--shadow-a)));
   overflow: hidden;
 }
 
@@ -5493,6 +5657,13 @@ html[data-gm-dragging] * {
 
 /* the real control, invisible over the drawing */
 .bo-range {
+  /* A horizontal slider and a vertical scroll want the same gesture, and on a
+     touch screen the scroller wins by default: the drag panned the page and
+     the playhead never moved, so the timeline read as broken rather than as
+     scrubbable. `none` hands the gesture to the control, which is the only
+     thing on this row that a sideways drag could plausibly mean. */
+  touch-action: none;
+
   position: absolute;
   inset: 0;
   z-index: 3;
