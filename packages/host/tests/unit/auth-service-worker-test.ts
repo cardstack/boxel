@@ -9,8 +9,8 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 // the SW environment. The actual SW is at public/auth-service-worker.js.
 //
 // We duplicate the core logic here (token matching, fetch interception,
-// on-miss client fallback) to test it in a standard QUnit context where
-// service workers aren't available.
+// on-miss client fallback, `_screenshot/` 503 absorption) to test it in a
+// standard QUnit context where service workers aren't available.
 
 function createServiceWorkerEnv(
   opts: {
@@ -35,6 +35,11 @@ function createServiceWorkerEnv(
     // Mirrors TOKEN_REQUEST_REFRESH_TIMEOUT_MS — the extended budget
     // applied after the client posts `{type:'pending'}`.
     tokenRequestRefreshTimeoutMs?: number;
+    // Network stub for the `_screenshot/` 503-absorption loop. Receives the
+    // Request the SW would fetch on each attempt. Absorption paths require
+    // it; leaving it unset makes any unexpected engagement of the loop fail
+    // loudly.
+    screenshotFetch?: (request: Request) => Promise<Response>;
   } = {},
 ) {
   const realmTokens = new Map<string, string>();
@@ -153,20 +158,85 @@ function createServiceWorkerEnv(
     return promise;
   }
 
-  function buildAuthedRequest(request: Request, token: string): Request {
+  function buildRealmRequest(request: Request, token?: string): Request {
     let headers = new Headers(request.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
     return new Request(request, { headers, mode: 'cors' });
+  }
+
+  // Mirrors the SCREENSHOT_* constants and helpers in auth-service-worker.js.
+  const SCREENSHOT_PATH_SEGMENT = '/_screenshot/';
+  const SCREENSHOT_RETRY_BUDGET_MS = 90000;
+
+  function isScreenshotRoute(request: Request): boolean {
+    if (request.method !== 'GET') {
+      return false;
+    }
+    try {
+      return new URL(request.url).pathname.includes(SCREENSHOT_PATH_SEGMENT);
+    } catch {
+      return false;
+    }
+  }
+
+  function screenshotRetryDelayMs(response: Response): number | undefined {
+    if (response.status !== 503) {
+      return undefined;
+    }
+    let retryAfter = response.headers.get('Retry-After');
+    if (retryAfter === null) {
+      return undefined;
+    }
+    let seconds = Number(retryAfter);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return undefined;
+    }
+    return Math.max(1000, seconds * 1000);
+  }
+
+  // Virtual clock for the absorption loop: sleeps advance it instantly and
+  // are recorded so tests can assert on the server-suggested pacing without
+  // holding real time.
+  let clock = 0;
+  let sleeps: number[] = [];
+  let now = () => clock;
+  let sleep = async (ms: number) => {
+    sleeps.push(ms);
+    clock += ms;
+  };
+
+  async function fetchScreenshotAbsorbing503s(
+    buildRequest: () => Request,
+  ): Promise<Response> {
+    let doFetch = opts.screenshotFetch;
+    if (!doFetch) {
+      throw new Error(
+        'screenshot absorption engaged but no screenshotFetch was configured',
+      );
+    }
+    let deadline = now() + SCREENSHOT_RETRY_BUDGET_MS;
+    for (;;) {
+      let response = await doFetch(buildRequest());
+      let delayMs = screenshotRetryDelayMs(response);
+      if (delayMs === undefined || now() + delayMs > deadline) {
+        return response;
+      }
+      await sleep(delayMs);
+    }
   }
 
   // Returns:
   //   - Request: the SW would respondWith fetch of this authed Request
+  //   - Response: the `_screenshot/` absorption loop ran the network via
+  //     opts.screenshotFetch and this is what the page would receive
   //   - 'pass-through': the SW would not intercept (returns from fetch handler)
   //   - 'fallthrough-fetch': the SW called respondWith but with the original
   //     request (client had no token); will hit the network unauth'd
   let processFetch = async (
     request: Request,
-  ): Promise<Request | 'pass-through' | 'fallthrough-fetch'> => {
+  ): Promise<Request | Response | 'pass-through' | 'fallthrough-fetch'> => {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return 'pass-through';
     }
@@ -177,7 +247,12 @@ function createServiceWorkerEnv(
     let url = request.url;
     let matchedToken = lookupToken(url);
     if (matchedToken) {
-      return buildAuthedRequest(request, matchedToken);
+      if (isScreenshotRoute(request)) {
+        return fetchScreenshotAbsorbing503s(() =>
+          buildRealmRequest(request, lookupToken(url) ?? matchedToken),
+        );
+      }
+      return buildRealmRequest(request, matchedToken);
     }
 
     let origin: string;
@@ -192,7 +267,17 @@ function createServiceWorkerEnv(
 
     let token = await requestTokenFromClient(url);
     if (token) {
-      return buildAuthedRequest(request, token);
+      if (isScreenshotRoute(request)) {
+        return fetchScreenshotAbsorbing503s(() =>
+          buildRealmRequest(request, lookupToken(url) ?? token),
+        );
+      }
+      return buildRealmRequest(request, token);
+    }
+    if (isScreenshotRoute(request) && realmHosts.has(origin)) {
+      return fetchScreenshotAbsorbing503s(() =>
+        buildRealmRequest(request, lookupToken(url)),
+      );
     }
     return 'fallthrough-fetch';
   };
@@ -203,6 +288,7 @@ function createServiceWorkerEnv(
     realmTokens,
     realmHosts,
     inflightTokenRequests,
+    sleeps,
   };
 }
 
@@ -672,6 +758,249 @@ module('Unit | auth-service-worker', function () {
         new Request('http://localhost:4201/r/image.png'),
       );
       assert.strictEqual(result, 'fallthrough-fetch');
+    });
+  });
+
+  module('_screenshot/ 503 absorption', function () {
+    const REALM_URL = 'http://localhost:4201/user/realm/';
+    const SCREENSHOT_URL = `${REALM_URL}_screenshot/Card/1.png?w=800&h=600`;
+
+    function response(status: number, retryAfter?: string) {
+      return new Response(null, {
+        status,
+        headers: retryAfter !== undefined ? { 'Retry-After': retryAfter } : {},
+      });
+    }
+
+    // Builds a SW env whose network answers the given responses in order,
+    // recording each Request the absorption loop actually sent.
+    function makeSw(responses: Response[], extraOpts = {}) {
+      let fetched: Request[] = [];
+      let sw = createServiceWorkerEnv({
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          let next = responses.shift();
+          if (!next) {
+            throw new Error('screenshotFetch called more times than expected');
+          }
+          return next;
+        },
+        ...extraOpts,
+      });
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: REALM_URL,
+        token: 'realm-token',
+      });
+      return { sw, fetched };
+    }
+
+    test('injects Authorization on query-param _screenshot URLs and resolves with the eventual 200 after absorbing 503s', async function (assert) {
+      let { sw, fetched } = makeSw([
+        response(503, '2'),
+        response(503, '3'),
+        response(200),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.ok(result instanceof Response, 'the page receives a Response');
+      assert.strictEqual((result as Response).status, 200);
+      assert.strictEqual(fetched.length, 3, 'fetched until the capture landed');
+      for (let request of fetched) {
+        assert.strictEqual(
+          request.headers.get('Authorization'),
+          'Bearer realm-token',
+          'every attempt carries the realm JWT',
+        );
+        assert.strictEqual(request.mode, 'cors');
+      }
+      assert.deepEqual(
+        sw.sleeps,
+        [2000, 3000],
+        'retries pace at the server-suggested Retry-After',
+      );
+    });
+
+    test('a 503 without Retry-After is let through untouched', async function (assert) {
+      let { sw, fetched } = makeSw([response(503)]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('a 503 with an unparseable Retry-After is let through untouched', async function (assert) {
+      let { sw, fetched } = makeSw([
+        response(503, 'Wed, 21 Oct 2026 07:28:00 GMT'),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('404s are never retried', async function (assert) {
+      // An uncaptured `name=` miss answers 404; retrying it from a fitted
+      // template rendered across a large grid would multiply into that many
+      // synchronized poll loops.
+      let { sw, fetched } = makeSw([response(404, '1')]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 404);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('the 503 is let through once the absorption budget is exhausted', async function (assert) {
+      // Budget is 90s; each 503 asks for a 30s pause. Attempts at t=0, 30s,
+      // 60s, 90s absorb; the pause after the t=90s attempt would overrun,
+      // so its 503 goes to the page.
+      let { sw, fetched } = makeSw([
+        response(503, '30'),
+        response(503, '30'),
+        response(503, '30'),
+        response(503, '30'),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual(
+        (result as Response).status,
+        503,
+        'exhaustion surfaces the 503 so the <img> errors visibly',
+      );
+      assert.strictEqual(fetched.length, 4);
+    });
+
+    test('a Retry-After beyond the whole budget passes the 503 through at once', async function (assert) {
+      let { sw, fetched } = makeSw([response(503, '600')]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(
+        fetched.length,
+        1,
+        'no pointless wait before erroring',
+      );
+    });
+
+    test('sub-second Retry-After values are clamped to a 1s pause', async function (assert) {
+      let { sw } = makeSw([response(503, '0'), response(200)]);
+
+      await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.deepEqual(sw.sleeps, [1000]);
+    });
+
+    test('each retry rebuilds the request with the freshest token', async function (assert) {
+      let swRef: { sw?: ReturnType<typeof createServiceWorkerEnv> } = {};
+      let fetched: Request[] = [];
+      let responses = [response(503, '1'), response(200)];
+      let sw = createServiceWorkerEnv({
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          if (fetched.length === 1) {
+            // Token rotates while the first attempt is being absorbed.
+            swRef.sw!.processMessage({
+              type: 'set-realm-token',
+              realmURL: REALM_URL,
+              token: 'rotated-token',
+            });
+          }
+          return responses.shift()!;
+        },
+      });
+      swRef.sw = sw;
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: REALM_URL,
+        token: 'original-token',
+      });
+
+      await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.deepEqual(
+        fetched.map((r) => r.headers.get('Authorization')),
+        ['Bearer original-token', 'Bearer rotated-token'],
+      );
+    });
+
+    test('non-_screenshot GETs never engage absorption', async function (assert) {
+      // The screenshotFetch stub would throw if invoked with no responses
+      // queued; a plain image URL must instead come back as an authed
+      // Request for the ordinary single-fetch path.
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request(`${REALM_URL}images/photo.png`),
+      );
+
+      assert.ok(
+        result instanceof Request,
+        'ordinary single-fetch interception',
+      );
+    });
+
+    test('HEAD requests to _screenshot URLs keep single-fetch behavior', async function (assert) {
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request(SCREENSHOT_URL, { method: 'HEAD' }),
+      );
+
+      assert.ok(
+        result instanceof Request,
+        'ordinary single-fetch interception',
+      );
+    });
+
+    test('tokenless _screenshot requests on a known realm origin absorb via a cors request without Authorization', async function (assert) {
+      // A public realm the page holds no session for: the client lookup
+      // yields nothing, but the origin is a known realm host. The request
+      // is rebuilt as cors (a no-cors response would be opaque, hiding the
+      // 503) with no auth header.
+      let fetched: Request[] = [];
+      let responses = [response(503, '1'), response(200)];
+      let sw = createServiceWorkerEnv({
+        clientTokenLookup: async () => undefined,
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          return responses.shift()!;
+        },
+      });
+      // Seed realmHosts via a different realm on the same origin.
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: 'http://localhost:4201/other/realm/',
+        token: 'other-token',
+      });
+
+      let result = await sw.processFetch(
+        new Request(
+          'http://localhost:4201/public/realm/_screenshot/Card/1.png?w=800',
+        ),
+      );
+
+      assert.strictEqual((result as Response).status, 200);
+      assert.strictEqual(fetched.length, 2);
+      for (let request of fetched) {
+        assert.strictEqual(request.headers.get('Authorization'), null);
+        assert.strictEqual(request.mode, 'cors');
+      }
+    });
+
+    test('_screenshot requests on unknown origins pass through untouched', async function (assert) {
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request('https://unrelated.example.com/x/_screenshot/Card/1.png'),
+      );
+
+      assert.strictEqual(result, 'pass-through');
     });
   });
 });
