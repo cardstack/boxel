@@ -590,3 +590,31 @@ export function fileViewModel(
     thumbnailMetadata: file.thumbnailMetadata,
   };
 }
+
+// A projection produced by `fileViewModel`, as opposed to a FileDef instance.
+// The projection is always a plain object literal, and a card instance never
+// is, so the constructor check can't be fooled by a family that happens to
+// declare fields with these names.
+export function isFileViewModel(value: unknown): value is FileViewModel {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    value.constructor === Object &&
+    'source' in value &&
+    'fileState' in value
+  );
+}
+
+// Accept either side of the projection. The format shells hand their preview
+// renderers a prebuilt FileViewModel; a content-only consumer passes the
+// FileDef instance itself and this projects it, including the profile axes the
+// instance's own class pins (`static fileFamily` and friends).
+export function ensureFileViewModel(
+  model: object | undefined | null,
+  format: FileFormat = 'embedded',
+): FileViewModel {
+  if (isFileViewModel(model)) {
+    return model;
+  }
+  return fileViewModel(model, format, fileProfileSource(model));
+}

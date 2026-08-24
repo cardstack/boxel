@@ -14,7 +14,11 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { Warning } from '@cardstack/boxel-ui/icons';
 
 import { downloadNameFor, fileIconFor, humanSize } from './file-presentation';
-import type { FileFormat, FileViewModel } from './file-view-model';
+import type {
+  FileFormat,
+  FileModelLike,
+  FileViewModel,
+} from './file-view-model';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -33,6 +37,30 @@ export interface FilePreviewSignature {
 }
 
 export type FilePreviewComponent = ComponentLike<FilePreviewSignature>;
+
+// The content-only face of a family renderer, for the components the
+// `file-formats/index` barrel exports (MarkdownPreview, ImagePreview,
+// AudioPreview): just the file's content, none of the shell chrome — no file
+// bar, no inspector, no Download/Copy-link. `model` is the FileDef instance
+// itself in the common case (the component projects it through
+// `fileViewModel`), or a prebuilt FileViewModel (what the shells pass). `mode`
+// defaults to 'embedded', the complete-content rendition; 'fitted' selects the
+// budgeted snippet a collection cell draws. A prebuilt view model must have
+// been projected at the same format passed as `mode`: the fitted budgets are
+// applied at projection time, so a complete-content projection rendered at
+// 'fitted' would feed the whole file to the snippet branch. A consumer that
+// varies `mode` should pass the instance and let the component re-project.
+// These components render content
+// only — the loading/failure/staleness panes are `FilePreviewStage`'s job
+// inside the shells, so an embedding author owns those states.
+export interface ContentPreviewSignature {
+  Args: {
+    model: FileViewModel | FileModelLike | undefined | null;
+    mode?: FileFormat;
+    fields?: Record<string, any>;
+  };
+  Element: HTMLElement;
+}
 
 // The renderer a file's own class declares, if its family has landed one. Read
 // from the instance's constructor rather than the declared field class, since a
