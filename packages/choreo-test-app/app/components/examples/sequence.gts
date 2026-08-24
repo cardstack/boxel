@@ -48,7 +48,7 @@ const from0 = { opacity: 0 };
  *
  * The move itself is `layout=true`, not `c.Move`: these cards are grid items,
  * and animating a grid item's width/height distorts every track around it
- * (boxel-motion filed this as CS-4174). Projection animates with transforms
+ * (a known limitation of the legacy model). Projection animates with transforms
  * only. Choreo sequences the phases and holds the layers.
  */
 export class Sequence extends Component {

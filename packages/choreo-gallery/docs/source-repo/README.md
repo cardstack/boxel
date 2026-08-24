@@ -1,9 +1,32 @@
 # Choreo
 
-**Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
-the scene. `motion-dom`, untouched, bound as a modifier and a handful of components: layout,
-shared-element transitions, presence, variants, drag, reorder. Then `<Choreo>`: a changeset and a
-sequence over a whole render pass, which Motion's per-element model does not have.
+**Motion, Choreo-graphed.** Choreography for Ember. `<Choreo>` watches a whole render pass and
+hands you its **changeset** — what was inserted, removed and kept, and where each of them stood
+before and after — then plays a timeline you declare over it. A scene that is sequenced, rather
+than a set of elements each animating on its own.
+
+```gts
+import { Choreo, motion } from 'glimmer-motion';
+
+<template>
+  <Choreo as |c|>
+    {{#each this.cards key='id' as |card|}}
+      <div {{motion id=card.id role='card'}}>{{card.title}}</div>
+    {{/each}}
+
+    <c.Sequence>
+      <c.Tween @of={{c.removed 'card'}} @opacity={{0}} @ms={{220}} />
+      <c.Move @of={{c.moved 'card'}} @spring={{this.soft}} />
+      <c.Tween @of={{c.inserted 'card'}} @opacity={{1}} @ms={{260}} />
+    </c.Sequence>
+  </Choreo>
+</template>
+```
+
+Underneath it, **`glimmer-motion`** binds the [Motion](https://motion.dev) engine to Glimmer:
+`motion-dom`, untouched, as a modifier and a handful of components — layout, shared-element
+transitions, presence, variants, drag, reorder. That binding is a complete, usable port in its own
+right, and it is what Choreo stands on. Both ship in the one package.
 
 ```gts
 import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
@@ -37,7 +60,8 @@ import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
 > published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`.
 
 **New here?** [docs/guide.md](docs/guide.md) teaches this from a Glimmer card rather than from a React
-translation table. The document below is the fidelity record: what Motion does, and where each piece went.
+translation table. The rest of this document is the reference: what Choreo adds, what the binding
+covers, and where each piece of Motion went.
 
 - [Features](#features)
 - [Why the engine is untouched](#why-the-engine-is-untouched)
@@ -51,8 +75,22 @@ translation table. The document below is the fidelity record: what Motion does, 
 
 ## Features
 
-Everything below is Motion's implementation, driven through Glimmer, and covered by a port of the upstream
-test that pins it.
+**Choreography** — Choreo's own, and the reason this repo exists: a region-scoped model Motion's
+per-element API has no equivalent for ([docs/choreography.md](docs/choreography.md);
+[nested regions and beacons](docs/nested-choreo.md))
+
+- `<Choreo>` watches its render passes and hands each one's **changeset** — inserted / removed / kept
+  participants with their bounds before and after — to a timeline declared inside it
+- `c.Sequence` / `c.Parallel` blocks of `c.Tween` / `c.Spring` / `c.Move` (FLIP) / `c.Hold` / `c.Wait`
+  steps; a sequence can follow a spring (its length is computed with the engine's generator)
+- **z-index as a window**: `c.Hold` sets a value for the span of its block and releases it
+- removed participants stay on screen, locked where they were, for as long as the timeline names them —
+  no `<Presence>` needed; an inserted id that replaces a removed one carries it as a `counterpart`
+- any property may be a function of the sprite and the changeset: one element's motion from another's
+  measurement
+
+Everything below this point is the `glimmer-motion` binding: Motion's own implementation, driven
+through Glimmer, and covered by a port of the upstream test that pins it.
 
 **Animation**
 
@@ -123,20 +161,6 @@ test that pins it.
 - **`glimmer-motion/test-support`**: `animationsSettled()`, `bounds()`, `shape()`, `setupMotion(hooks)` —
   a suite that waits for motion instead of sleeping through it
 - host hooks isolated in ~40 lines (`{{motion}}` shell + a `postRender` scheduler) so the engine glue can be re-hosted
-
-**Choreography** — not in Motion; boxel-motion's region-scoped model, rebuilt on the engine
-([docs/choreography.md](docs/choreography.md);
-[nested regions and beacons](docs/nested-choreo.md))
-
-- `<Choreo>` watches its render passes and hands each one's **changeset** — inserted / removed / kept
-  participants with their bounds before and after — to a timeline declared inside it
-- `c.Sequence` / `c.Parallel` blocks of `c.Tween` / `c.Spring` / `c.Move` (FLIP) / `c.Hold` / `c.Wait`
-  steps; a sequence can follow a spring (its length is computed with the engine's generator)
-- **z-index as a window**: `c.Hold` sets a value for the span of its block and releases it
-- removed participants stay on screen, locked where they were, for as long as the timeline names them —
-  no `<Presence>` needed; an inserted id that replaces a removed one carries it as a `counterpart`
-- any property may be a function of the sprite and the changeset: one element's motion from another's
-  measurement
 
 ## Why the engine is untouched
 
@@ -550,7 +574,6 @@ projection node.
   keeps everything above the adapter line. Three host transitions are the proving ground: a stack
   open/close (far match), a panel that is its own scene over a moving shell (nested `<Choreo>`), and
   compose/trash (`{{beacon}}`, not `layoutId`).
-- **Open work** is tracked in [docs/open-bugs.md](docs/open-bugs.md), including the demos still missing.
 
 ## License
 

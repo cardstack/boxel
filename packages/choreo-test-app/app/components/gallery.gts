@@ -50,7 +50,7 @@ const SAMPLE = `{{! Filtering this list is a layout animation, not a page transi
       @items={{this.demos}}
       @key={{demoKey}}
       @mode='sync'           {{! popLayout is the one to want here, and the
-                                 one that cannot be used yet: see open-bugs }}
+                                 one that cannot be used yet }}
       {{! no initial=false here: the presence context is inherited, so
           blocking the first entrance would block it for every motion node
           inside every card as well }}
@@ -181,7 +181,7 @@ export class Gallery extends Component {
           @key={{demoKey}}
           {{! sync, not popLayout: a popLayout leaver here never reports its
               exit complete, so the card stays in the DOM at opacity 0 and
-              coming back leaves it stuck there. See docs/open-bugs.md. }}
+              coming back leaves it stuck there. }}
           {{! No initial=false handle here, however tempting: the presence
               context is INHERITED, so blocking the first entrance blocks it
               for every motion node inside every demo as well — the pour log

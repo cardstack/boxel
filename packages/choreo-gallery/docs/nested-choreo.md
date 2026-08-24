@@ -57,7 +57,7 @@ The card is only in the panel changeset. The chrome is only in the
 shell. Each region has its own snapshot, orphan layer, and run.
 
 This is the intended answer to “a card controls its own contents while a
-layout above moves it” (CS-4524). The inner region measures its own
+layout above moves it”. The inner region measures its own
 pass even if the outer one is translating the box it lives in.
 
 ## Isolation

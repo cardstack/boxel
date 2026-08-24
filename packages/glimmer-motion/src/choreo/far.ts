@@ -9,7 +9,7 @@
  * Ember Animated calls the two halves `sentSprites` and `receivedSprites` and
  * pairs them at a `farMatch` rendezvous — every animator that is starting this
  * pass parks, they all wake together, and each reads the others' lists. The
- * legacy boxel-motion filed this as CS-260 and never built it.
+ * legacy boxel-motion described this but never built it.
  *
  * The rendezvous here is a barrier in the render pass itself, not a timed one.
  * Every region that will animate this pass announces itself while Glimmer is
