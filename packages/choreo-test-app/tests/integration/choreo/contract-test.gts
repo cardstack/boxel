@@ -121,7 +121,7 @@ module('Integration | choreo | contract', function (hooks) {
                 {{motion id="card" role="card"}}
               ></div>
               <Choreo @id="panel" class="panel" as |p|>
-                <p.Tween @of={{p.all}} @opacity={{0}} @ms={{400}} />
+                <p.Tween @of={{p.all}} @opacity={{0}} @duration={{0.4}} />
               </Choreo>
             </div>
             {{! deliberately no step of its own: if the shell collected the
@@ -188,7 +188,7 @@ module('Integration | choreo | contract', function (hooks) {
                 @to={{c.beacon "bin"}}
                 @spring={{SLOW}}
               />
-              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{900}} />
+              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @duration={{0.9}} />
             </Choreo>
           </div>
         </template>
@@ -242,7 +242,7 @@ module('Integration | choreo | contract', function (hooks) {
                 @to={{c.beacon "bin"}}
                 @spring={{SLOW}}
               />
-              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{900}} />
+              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @duration={{0.9}} />
             </Choreo>
           </div>
         </template>
@@ -305,7 +305,7 @@ module('Integration | choreo | contract', function (hooks) {
                 @to={{c.beacon "bin"}}
                 @spring={{SLOW}}
               />
-              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{900}} />
+              <c.Tween @of={{c.removed "row"}} @opacity={{0}} @duration={{0.9}} />
             </Choreo>
           </div>
         </template>
@@ -354,7 +354,7 @@ module('Integration | choreo | contract', function (hooks) {
               ></div>
             {{/if}}
             <c.Move @of={{c.kept "row"}} @spring={{SLOW}} />
-            <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{600}} />
+            <c.Tween @of={{c.removed "row"}} @opacity={{0}} @duration={{0.6}} />
           </Choreo>
         </template>
       }
@@ -412,7 +412,7 @@ module('Integration | choreo | contract', function (hooks) {
                 ></span>
               </div>
             {{/if}}
-            <c.Tween @of={{c.removed "card"}} @opacity={{0}} @ms={{400}} />
+            <c.Tween @of={{c.removed "card"}} @opacity={{0}} @duration={{0.4}} />
           </Choreo>
         </template>
       }
@@ -560,7 +560,7 @@ module('Integration | choreo | contract', function (hooks) {
                   {{motion id="token" role="tok"}}
                 ></div>
               {{/if}}
-              <c.Tween @of={{c.removed "tok"}} @opacity={{0}} @ms={{300}} />
+              <c.Tween @of={{c.removed "tok"}} @opacity={{0}} @duration={{0.3}} />
             </Choreo>
             {{! a second region that renders every pass and receives nothing }}
             <Choreo

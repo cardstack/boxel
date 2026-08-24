@@ -194,7 +194,7 @@ get poses() {
         layoutId could not do this: it pairs two REAL elements and morphs
         one into the other, so the bin itself would stretch. }}
     <c.Move @of={{c.removed 'row'}} @to={{c.beacon 'trash'}} @spring={{toss}} />
-    <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @ms={{380}} />
+    <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @duration={{0.38}} />
 
     {{! and the tray closes up around the gap }}
     <c.Move @of={{c.moved 'row'}} @spring={{quick}} @size={{false}} />
@@ -239,7 +239,7 @@ get poses() {
 
     <c.Parallel>
       <c.Hold  @of={{c.removed 'card-content'}} @zIndex={{1}} />
-      <c.Tween @of={{c.removed 'card-content'}} @opacity={{0}} @ms={{220}} />
+      <c.Tween @of={{c.removed 'card-content'}} @opacity={{0}} @duration={{0.22}} />
     </c.Parallel>
 
     {{! The geometry belongs to projection (layout=true), because animating a
@@ -248,10 +248,10 @@ get poses() {
         move, and the new details fade in partway THROUGH it — so the card
         arrives already carrying its content. }}
     <c.Parallel>
-      <c.Wait  @of={{c.all}} @ms={{560}} />
+      <c.Wait  @of={{c.all}} @duration={{0.56}} />
       <c.Tween
         @of={{c.inserted 'card-content'}}
-        @opacity={{1}} @from={{start opacity=0}} @delay={{170}} @ms={{300}}
+        @opacity={{array 0 1}} @delay={{0.17}} @duration={{0.3}}
       />
     </c.Parallel>
   </c.Sequence>
@@ -292,7 +292,7 @@ get poses() {
       can only mean starting a NEW curve from wherever it happens to be — it
       stops dead and eases away again. Nothing is broken; it is what a
       duration means. }}
-  <c.Move @of={{c.kept 'puck'}} @ms={{620}} @ease='easeInOut' @size={{false}} />
+  <c.Move @of={{c.kept 'puck'}} @duration={{0.62}} @ease='easeInOut' @size={{false}} />
 </Choreo>`,
     notes: InterruptNotes,
     slowmo: true,
@@ -339,17 +339,16 @@ get poses() {
         transitioned between, so there was nothing to interpolate, and it had
         to be carried across by hand in a pair of custom properties. On a
         timeline it is one more animated property. }}
-    <c.Tween @of={{c.all 'plate'}} @borderRadius={{radiusFor this.slide}} @ms={{420}} />
+    <c.Tween @of={{c.all 'plate'}} @borderRadius={{radiusFor this.slide}} @duration={{0.42}} />
 
     {{! the note is the only thing that comes and goes: out fast, in late, so
         a slide is never carrying two of them }}
-    <c.Tween @of={{c.removed 'note'}} @opacity={{0}} @ms={{140}} />
+    <c.Tween @of={{c.removed 'note'}} @opacity={{0}} @duration={{0.14}} />
     <c.Tween
       @of={{c.inserted 'note'}}
-      @opacity={{1}}
-      @from={{start opacity=0}}
-      @delay={{220}}
-      @ms={{260}}
+      @opacity={{array 0 1}}
+      @delay={{0.22}}
+      @duration={{0.26}}
     />
   </c.Parallel>
 </Choreo>`,
@@ -446,8 +445,8 @@ get poses() {
 
       {{! with matching on, neither of these fires: the sender is let go
           quietly by its own region, and the receiver is kept, not inserted }}
-      <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @ms={{200}} />
-      <c.Tween @of={{c.inserted 'piece'}} @opacity={{1}} @from={{hidden}} @ms={{260}} />
+      <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @duration={{0.2}} />
+      <c.Tween @of={{c.inserted 'piece'}} @opacity={{array 0 1}} @duration={{0.26}} />
 
       <c.Move @of={{c.moved 'bay'}} @spring={{settle}} />
     </c.Parallel>
@@ -575,10 +574,12 @@ land = (event, info) => {
     lede: 'A value read off another element’s measurement.',
     sample: `// A property function is handed the sprite and the whole changeset, so one
 // element can be animated from ANOTHER element's measurement. The content's
-// left edge is not styled anywhere — it is wherever the bar was measured to
-// be, before and after.
-leftFrom = (_s, cs) => cs.sprite({ id: 'split-bar' }).initial.parent.width;
-leftTo   = (_s, cs) => cs.sprite({ id: 'split-bar' }).final.parent.width;
+// left edge is not styled anywhere — it is a keyframe pair read off wherever
+// the bar was measured to be, before and after.
+leftRange = (_s, cs) => {
+  const bar = cs.sprite({ id: 'split-bar' });
+  return [bar.initial.parent.width, bar.final.parent.width];
+};
 
 <Choreo class={{if this.split 'split is-split' 'split'}} as |c|>
   <aside {{motion id='split-bar'}} />
@@ -588,12 +589,7 @@ leftTo   = (_s, cs) => cs.sprite({ id: 'split-bar' }).final.parent.width;
       spring, so the two edges stay welded together the whole way }}
   <c.Parallel>
     <c.Move @of={{c.id 'split-bar'}} @spring={{firm}} />
-    <c.Spring
-      @of={{c.id 'split-content'}}
-      @left={{this.leftTo}}
-      @from={{start left=this.leftFrom}}
-      @spring={{firm}}
-    />
+    <c.Spring @of={{c.id 'split-content'}} @left={{this.leftRange}} @spring={{firm}} />
   </c.Parallel>
 </Choreo>`,
     slowmo: true,

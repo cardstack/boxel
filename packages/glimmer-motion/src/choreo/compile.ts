@@ -17,6 +17,7 @@ import type {
   HoldStep,
   MoveStep,
   PropSource,
+  PropTarget,
   PropValue,
   SpringSpec,
   SpringStep,
@@ -35,7 +36,9 @@ const resolve = (
   v: PropSource,
   sprite: Sprite,
   cs: ChangesetLike,
-): PropValue => (typeof v === 'function' ? v(sprite, cs) : v);
+): PropTarget => (typeof v === 'function' ? v(sprite, cs) : v);
+
+const single = (v: PropTarget): PropValue => (Array.isArray(v) ? v[0]! : v);
 
 const num = (v: unknown): number => {
   if (typeof v === 'number') {
@@ -91,14 +94,24 @@ function resolveTarget(
   let longest = 0;
   for (const key in step.props) {
     const to = resolve(step.props[key]!, sprite, cs);
-    const fromSource = step.from?.[key];
-    if (fromSource !== undefined) {
-      const from = resolve(fromSource, sprite, cs);
-      target[key] = [from, to];
+    // A keyframe array is the from-and-to (and any waypoints) in one value —
+    // `@opacity={{array 0 1}}` — which is why there is no property-hash @from.
+    if (Array.isArray(to)) {
+      if (step.kind === 'spring' && to.length > 2) {
+        throw new Error(
+          'choreo: a spring animates between two keyframes; ' +
+            `\`${key}\` was given ${to.length}`,
+        );
+      }
+      target[key] = to;
       if (step.kind === 'spring') {
         longest = Math.max(
           longest,
-          springDuration(num(from), num(to), step.spring ?? DEFAULT_SPRING),
+          springDuration(
+            num(to[0]),
+            num(to[to.length - 1]),
+            step.spring ?? DEFAULT_SPRING,
+          ),
         );
       }
     } else {
@@ -213,15 +226,29 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       case 'tween': {
         const { target } = resolveTarget(step, sprite, cs);
         if (Object.keys(target).length) {
+          // an infinite repeat is an ambient loop: it occupies one cycle of
+          // the schedule and keeps playing past the run's end
+          const loop = step.repeat === Infinity;
+          const plays = loop ? 1 : 1 + (step.repeat ?? 0);
+          const length = step.ms * plays;
+          const transition: Record<string, unknown> = tweenTransition(
+            step,
+            step.ms,
+          );
+          if (step.repeat) {
+            transition['repeat'] = step.repeat;
+            transition['repeatType'] = step.repeatType ?? 'loop';
+          }
           cues.push({
-            duration: step.ms,
+            duration: length,
             kind: 'tween',
+            loop: loop || undefined,
             offset,
             sprite,
             target,
-            transition: tweenTransition(step, step.ms),
+            transition,
           });
-          longest = Math.max(longest, offset + step.ms);
+          longest = Math.max(longest, offset + (loop ? step.ms : length));
         }
         break;
       }
@@ -261,7 +288,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       case 'hold': {
         const values: Record<string, PropValue> = {};
         for (const key in (step as HoldStep).props) {
-          values[key] = resolve(step.props[key]!, sprite, cs);
+          values[key] = single(resolve(step.props[key]!, sprite, cs));
         }
         cues.push({
           duration: step.ms ?? 0,

@@ -1,8 +1,8 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, spring, start, to } from 'glimmer-motion';
+import { Choreo, motion, spring, to } from 'glimmer-motion';
 
 const slides = [0, 1, 2] as const;
 /** the one line that is not on every slide — it arrives and leaves */
@@ -141,13 +141,12 @@ export class Slides extends Component {
 
             {{! The note is the only thing that comes and goes. It leaves fast
                 and arrives late, so the slide is never carrying two of them. }}
-            <c.Tween @of={{c.removed "note"}} @opacity={{0}} @ms={{140}} />
+            <c.Tween @of={{c.removed "note"}} @opacity={{0}} @duration={{0.14}} />
             <c.Tween
               @of={{c.inserted "note"}}
-              @opacity={{1}}
-              @from={{start opacity=0}}
-              @delay={{220}}
-              @ms={{260}}
+              @opacity={{array 0 1}}
+              @delay={{0.22}}
+              @duration={{0.26}}
             />
           </c.Parallel>
         </Choreo>

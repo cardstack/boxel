@@ -76,9 +76,11 @@ export interface Query {
 }
 
 export type PropValue = number | string;
-/** a step property: a value, or a function of the sprite and the whole changeset */
+/** a property target: one value, or a keyframe array (a round trip is an array that returns) */
+export type PropTarget = PropValue | PropValue[];
+/** a step property: a target, or a function of the sprite and the whole changeset */
 export type PropSource =
-  PropValue | ((sprite: Sprite, changeset: ChangesetLike) => PropValue);
+  PropTarget | ((sprite: Sprite, changeset: ChangesetLike) => PropTarget);
 
 export interface ChangesetLike {
   all: Sprite[];
@@ -109,13 +111,17 @@ export interface SpringSpec {
 }
 
 interface StepBase {
-  /** milliseconds before the step starts, inside its slot */
+  /**
+   * Milliseconds before the step starts, inside its slot. The template speaks
+   * seconds (`@delay={{0.2}}`, as Motion does); the step components convert at
+   * the boundary, and everything from here down is one ms clock.
+   */
   delay?: number;
   of: Query | Query[];
   /**
    * Milliseconds between one matched sprite and the next, in the order the
-   * query returned them. The step's own length grows by the whole ladder, so a
-   * sequence still waits for the last sprite to finish.
+   * query returned them (seconds in the template). The step's own length grows
+   * by the whole ladder, so a sequence still waits for the last sprite.
    */
   stagger?: number;
 }
@@ -125,13 +131,14 @@ export type Easing = string | number[] | ((t: number) => number);
 
 export interface TweenStep extends StepBase {
   ease?: Easing;
-  from?: Record<string, PropSource>;
   kind: 'tween';
   ms: number;
   props: Record<string, PropSource>;
+  /** extra plays after the first; Infinity is an ambient loop, phase on the run clock */
+  repeat?: number;
+  repeatType?: 'loop' | 'mirror' | 'reverse';
 }
 export interface SpringStep extends StepBase {
-  from?: Record<string, PropSource>;
   kind: 'spring';
   props: Record<string, PropSource>;
   spring?: SpringSpec;
@@ -171,6 +178,8 @@ export type TimelineNode = Block | Step;
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {
   duration: number;
+  /** an infinite-repeat tween: plays past the run's end, excluded from its length */
+  loop?: boolean;
   /** hold: the values to set (and whether to keep them) */
   hold?: { fill: boolean; values: Record<string, PropValue> };
   kind: Step['kind'];

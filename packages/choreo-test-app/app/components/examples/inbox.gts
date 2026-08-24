@@ -177,7 +177,7 @@ export class Inbox extends Component {
               @to={{c.beacon "trash"}}
               @spring={{toss}}
             />
-            <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{380}} />
+            <c.Tween @of={{c.removed "row"}} @opacity={{0}} @duration={{0.38}} />
             {{! everything still in the tray closes up on the same spring }}
             <c.Move @of={{c.moved "row"}} @spring={{quick}} @size={{false}} />
           </c.Parallel>

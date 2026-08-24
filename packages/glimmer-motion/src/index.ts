@@ -37,7 +37,6 @@ export {
   perValue,
   spring,
   stagger,
-  start,
   styles,
   to,
   tween,

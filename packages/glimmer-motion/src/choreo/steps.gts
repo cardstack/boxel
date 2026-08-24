@@ -42,33 +42,62 @@ export function collect(el: Element): TimelineNode[] {
 
 /** args that are the step's own; every other named arg is a property to animate */
 const RESERVED = new Set([
+  'align',
+  'at',
+  'by',
   'delay',
+  'duration',
   'ease',
   'fill',
   'from',
-  'ms',
+  'name',
   'of',
+  'order',
+  'path',
+  'repeat',
+  'repeatType',
+  'rotate',
+  'shadow',
   'size',
   'spring',
   'stagger',
+  'swap',
   'to',
 ]);
+
+/** the pre-seconds spellings, kept only to fail loudly with the new name */
+const RENAMED: Record<string, string> = {
+  crossfade: '@swap',
+  ms: '@duration (in seconds)',
+  overlap: '@stagger (in seconds)',
+};
 
 function propsOf(args: Record<string, unknown>): Record<string, PropSource> {
   const props: Record<string, PropSource> = {};
   for (const key of Object.keys(args)) {
-    if (!RESERVED.has(key) && args[key] !== undefined) {
+    if (args[key] === undefined) {
+      continue;
+    }
+    if (RENAMED[key]) {
+      throw new Error(`choreo: @${key} was renamed — use ${RENAMED[key]}`);
+    }
+    if (!RESERVED.has(key)) {
       props[key] = args[key] as PropSource;
     }
   }
   return props;
 }
 
+/** the template speaks seconds, as Motion does; the compiler's clock is ms */
+const msOf = (seconds: number | undefined): number | undefined =>
+  seconds === undefined ? undefined : seconds * 1000;
+
 interface StepArgs {
   [prop: string]: unknown;
+  /** seconds before the step starts, inside its slot */
   delay?: number;
   of: Query | Query[];
-  /** milliseconds between one matched sprite and the next, in document order */
+  /** seconds between one matched sprite and the next, in document order */
   stagger?: number;
 }
 
@@ -87,49 +116,52 @@ abstract class StepComponent<A extends StepArgs> extends Component<{
 
 export class Tween extends StepComponent<
   StepArgs & {
+    /** seconds, as Motion counts them */
+    duration: number;
     ease?: Easing;
-    from?: Record<string, PropSource>;
-    ms: number;
+    /** extra plays after the first; `Infinity` is an ambient loop whose phase rides the run clock */
+    repeat?: number;
+    repeatType?: 'loop' | 'mirror' | 'reverse';
   }
 > {
   node(): TimelineNode {
-    const { of, ms, ease, delay, from, stagger } = this.args;
+    const { of, duration, ease, delay, repeat, repeatType, stagger } =
+      this.args;
     return {
-      delay,
+      delay: msOf(delay),
       ease,
-      from,
       kind: 'tween',
-      ms,
+      ms: duration * 1000,
       of,
       props: propsOf(this.args),
-      stagger,
+      repeat,
+      repeatType,
+      stagger: msOf(stagger),
     };
   }
 }
 
-export class Spring extends StepComponent<
-  StepArgs & { from?: Record<string, PropSource>; spring?: SpringSpec }
-> {
+export class Spring extends StepComponent<StepArgs & { spring?: SpringSpec }> {
   node(): TimelineNode {
-    const { of, spring, delay, from, stagger } = this.args;
+    const { of, spring, delay, stagger } = this.args;
     return {
-      delay,
-      from,
+      delay: msOf(delay),
       kind: 'spring',
       of,
       props: propsOf(this.args),
       spring,
-      stagger,
+      stagger: msOf(stagger),
     };
   }
 }
 
 export class Move extends StepComponent<
   StepArgs & {
+    /** seconds; with @ease, the tween form of the flight */
+    duration?: number;
     ease?: string | number[];
     /** `{{c.beacon 'compose'}}` — fly in from that box rather than from where the sprite was */
     from?: BeaconRef;
-    ms?: number;
     size?: boolean;
     spring?: SpringSpec;
     /** `{{c.beacon 'trash'}}` — fly out to that box rather than to where the sprite landed */
@@ -137,43 +169,51 @@ export class Move extends StepComponent<
   }
 > {
   node(): TimelineNode {
-    const { of, ms, ease, delay, spring, size, from, to, stagger } = this.args;
+    const { of, duration, ease, delay, spring, size, from, to, stagger } =
+      this.args;
+    propsOf(this.args); // no properties — evaluated for the renamed-arg errors
     return {
-      delay,
+      delay: msOf(delay),
       ease,
       from,
       kind: 'move',
-      ms,
+      ms: msOf(duration),
       of,
       size,
       spring,
-      stagger,
+      stagger: msOf(stagger),
       to,
     };
   }
 }
 
 export class Hold extends StepComponent<
-  StepArgs & { fill?: boolean; ms?: number }
+  StepArgs & { duration?: number; fill?: boolean }
 > {
   node(): TimelineNode {
-    const { of, ms, delay, fill, stagger } = this.args;
+    const { of, duration, delay, fill, stagger } = this.args;
     return {
-      delay,
+      delay: msOf(delay),
       fill,
       kind: 'hold',
-      ms,
+      ms: msOf(duration),
       of,
       props: propsOf(this.args),
-      stagger,
+      stagger: msOf(stagger),
     };
   }
 }
 
-export class Wait extends StepComponent<StepArgs & { ms: number }> {
+export class Wait extends StepComponent<StepArgs & { duration: number }> {
   node(): TimelineNode {
-    const { of, ms, delay, stagger } = this.args;
-    return { delay, kind: 'wait', ms, of, stagger };
+    const { of, duration, delay, stagger } = this.args;
+    return {
+      delay: msOf(delay),
+      kind: 'wait',
+      ms: duration * 1000,
+      of,
+      stagger: msOf(stagger),
+    };
   }
 }
 

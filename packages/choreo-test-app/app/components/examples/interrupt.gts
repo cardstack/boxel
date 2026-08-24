@@ -12,7 +12,7 @@ const stations = [0, 1, 2, 3];
  */
 const carry = spring({ damping: 15, stiffness: 130 });
 /** the same journey, timed instead of simulated */
-const TIMED = 620;
+const TIMED = 0.62;
 
 /**
  * Interruption — the thing the engine does best, and the hardest to see.
@@ -101,7 +101,7 @@ export class Interrupt extends Component {
             </div>
             <c.Move
               @of={{c.kept "puck"}}
-              @ms={{TIMED}}
+              @duration={{TIMED}}
               @ease="easeInOut"
               @size={{false}}
             />
