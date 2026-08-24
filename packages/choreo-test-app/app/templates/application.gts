@@ -4,6 +4,7 @@ import { MotionConfig } from 'glimmer-motion';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
 import { HowPanel } from 'test-app/components/how-panel';
 import { TempoPicker } from 'test-app/components/tempo-picker';
+import { ThemePicker } from 'test-app/components/theme-picker';
 
 <template>
   {{pageTitle "Choreo"}}
@@ -22,6 +23,7 @@ import { TempoPicker } from 'test-app/components/tempo-picker';
             competes with the one thing this bar is for. }}
         <nav class="top-links">
           <TempoPicker />
+          <ThemePicker />
           <a href="https://github.com/cardstack/glimmer-motion">GitHub</a>
         </nav>
       </header>

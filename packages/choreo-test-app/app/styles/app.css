@@ -2,6 +2,11 @@
 
 :root {
   color-scheme: dark;
+  /* one notch BELOW --bg: the groove a track or a well sinks into, for the
+     handful of demos that mock up their own device chrome (a composer bar,
+     a scrubber's channel) and want something recessed rather than merely
+     dark. */
+  --bg-well: #070605;
   --bg: #090807;
   --bg-elev: #12100e;
   --bg-spot: #1a1613;
@@ -16,14 +21,35 @@
   --ink: #f3ece3;
   --ink-dim: #9c9287;
   --ink-faint: #6b635b;
-  --line: rgba(243, 236, 227, 0.09);
-  --line-strong: rgba(243, 236, 227, 0.16);
+  --line: rgba(var(--ink-rgb), 0.09);
+  --line-strong: rgba(var(--ink-rgb), 0.16);
+  /* the same three colors above, as bare triplets for `rgba(var(--x-rgb), a)`
+     call sites that want a THIRD alpha app.css doesn't already have a token
+     for — a line, a scrim, a dimmed icon. Redefined alongside --bg/--ink in
+     each theme block below, so those call sites repaint without knowing a
+     theme exists. */
+  --bg-rgb: 9, 8, 7;
+  --ink-rgb: 243, 236, 227;
+  /* a panel raised OFF the page reads as its own surface by going lighter
+     than --bg-page in dark mode, and darker than it in light mode — see
+     .card-stage below for the reasoning. This is that one bit, factored out
+     so every panel flips direction together instead of each guessing. */
+  --surface-tint-rgb: 255, 255, 255;
   --ember: #ff3b1f;
   --ember-hot: #ff6a3a;
   --copper: #e4a35a;
+  /* copper as running TEXT — same hue, but --copper on its own is a
+     highlight color tuned to sit on near-black. As small-caps labels it is
+     legible there; on light mode's cream it is nearly as light as the page
+     behind it, so this is the one accent that needs a second, darker value
+     rather than carrying over unchanged like ember/iris/steel do. */
+  --copper-ink: var(--copper);
   --iris: #9667f7;
   --steel: #8b969c;
   --glow: rgba(255, 59, 31, 0.38);
+  /* see .hero h1 em: a warm, always-clean stop for the tail of a gradient
+     that ember/copper feed into. */
+  --gradient-tail: var(--ink);
   /* Syne: the wide display face this page was built around. Everything set in
      display type uses it. */
   --font-display: 'Syne', 'Avenir Next', sans-serif;
@@ -51,6 +77,38 @@
     var(--bg-page);
 }
 
+/**
+ * Light mode.
+ *
+ * Dark is the default — the unconditional `:root` above already is that
+ * palette, so there is no dark override block to write. Picking "light"
+ * from the top-nav switch (test-app/lib/theme.ts) stamps `data-theme="light"`
+ * on <html>, which is what this block matches.
+ *
+ * Every other token — accents, fonts, spacing — is left alone. The ember/
+ * copper/iris hues are saturated enough to read on both a near-black and a
+ * near-cream ground, so they carry over as the one constant between themes
+ * rather than a thing each theme restates.
+ */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg-well: #e2dccf;
+  --bg: #efe9df;
+  --bg-elev: #f7f3ec;
+  --bg-spot: #fbf8f3;
+  --bg-page: #f2ece1;
+  --ink: #211d18;
+  --ink-dim: #6b6255;
+  --ink-faint: #9a9082;
+  --line: rgba(33, 29, 24, 0.1);
+  --line-strong: rgba(33, 29, 24, 0.18);
+  --bg-rgb: 239, 233, 223;
+  --ink-rgb: 33, 29, 24;
+  --surface-tint-rgb: 33, 29, 24;
+  --copper-ink: #a8672a;
+  --gradient-tail: #7a4420;
+}
+
 *,
 *::before,
 *::after {
@@ -71,9 +129,15 @@ html {
   overflow-x: hidden;
   /* captured as the root layer, which is clipped to the viewport — the one
      cheap way to carry a page that is several screens tall. Never captured by
-     a transition either, so this background does not fade, move or reload for
-     one — it simply keeps painting, straight through. */
+     a VIEW transition either, so this background does not fade, move or
+     reload for one — it simply keeps painting, straight through.
+
+     It DOES ease for a plain CSS transition, though — the theme switch (see
+     lib/theme.ts) is exactly that, a `data-theme` attribute flip with no
+     view transition involved, so --wash's gradient stops interpolate like
+     any other background change rather than snapping. */
   background: var(--wash);
+  transition: background 220ms var(--ease);
 }
 
 body {
@@ -88,8 +152,13 @@ body {
      whatever the old or new page happened to be showing underneath the pieces
      that actually move. `--gm-veil-out` must stay short enough that the veil
      is fully down before the snapshot is taken (see routes/application.ts,
-     VEIL_OUT_MS); `--gm-veil-in` just has to feel like an arrival. */
-  transition: opacity var(--gm-veil-out, 20ms) linear;
+     VEIL_OUT_MS); `--gm-veil-in` just has to feel like an arrival.
+
+     `color` is a second, unrelated transition riding the same declaration —
+     the theme switch's, easing body text between --ink's two values. */
+  transition:
+    opacity var(--gm-veil-out, 20ms) linear,
+    color 220ms var(--ease);
 }
 
 html.is-crossing > body {
@@ -142,6 +211,7 @@ button {
   backdrop-filter: blur(18px);
   background: transparent;
   border-bottom: 1px solid var(--line);
+  transition: border-color 220ms var(--ease);
 }
 
 .brand {
@@ -214,7 +284,7 @@ button {
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .kicker::before {
@@ -275,11 +345,16 @@ button {
   letter-spacing: -0.02em;
   font-style: normal;
   color: transparent;
+  /* the tail used to fade toward var(--ink) — the brightest thing around in
+     dark mode, which is the point of a glow. --ink is the DARKEST thing in
+     light mode instead, so the same stop dragged the gradient's tail through
+     a muddy brown on the way to near-black. --gradient-tail carries the
+     same "fade toward whatever reads brightest" intent without inverting. */
   background: linear-gradient(
     120deg,
     var(--ember-hot) 10%,
     var(--copper) 70%,
-    var(--ink) 120%
+    var(--gradient-tail) 120%
   );
   background-clip: text;
   -webkit-background-clip: text;
@@ -358,7 +433,11 @@ button {
   min-height: 100%;
   border: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 40%),
+    linear-gradient(
+      180deg,
+      rgba(var(--surface-tint-rgb), 0.02),
+      transparent 40%
+    ),
     var(--bg-elev);
   border-radius: 18px;
   overflow: hidden;
@@ -393,7 +472,26 @@ button {
       rgba(255, 59, 31, 0.08),
       transparent 62%
     ),
-    rgba(255, 255, 255, 0.03);
+    rgba(var(--surface-tint-rgb), 0.03);
+}
+
+/* these three need a stage with a little more presence than the default —
+   the default tint is tuned to stay out of the way of demos that fill their
+   own frame, and all three are mostly empty air around one small, quiet
+   element (a ball, a stroke, a dot) */
+.card[data-demo='gestures'] .card-stage,
+.card[data-demo='path'] .card-stage,
+.card[data-demo='pointer'] .card-stage,
+.stage-wrap:has(.press),
+.stage-wrap:has(.spark-svg),
+.stage-wrap:has(.follow-orb) {
+  background:
+    radial-gradient(
+      80% 70% at 50% 40%,
+      rgba(255, 59, 31, 0.16),
+      transparent 60%
+    ),
+    rgba(var(--surface-tint-rgb), 0.1);
 }
 
 .card-meta {
@@ -407,7 +505,7 @@ button {
      darker than the stage above it — a hair lighter than plain --bg-elev,
      just less than .card-stage's own, so it reads a shade darker than the
      stage rather than a different material entirely */
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(var(--surface-tint-rgb), 0.015);
 }
 
 .card-meta:hover .card-title {
@@ -431,8 +529,12 @@ button {
   font-family: var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--copper);
-  border: 1px solid var(--copper);
+  /* ember, not copper — copper's own text variant (--copper-ink) darkens
+     into a brown on light mode's cream to stay legible, and a whole pill
+     outlined and set in that shade read as muddy where the plain kicker's
+     one word did not */
+  color: var(--ember);
+  border: 1px solid var(--ember);
   border-radius: 3px;
   opacity: 0.7;
   vertical-align: middle;
@@ -513,7 +615,7 @@ button {
 }
 
 .next-demo:hover b {
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .back {
@@ -540,7 +642,7 @@ button {
 }
 
 .back-all:hover {
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .back-arrow {
@@ -594,7 +696,7 @@ button {
   margin-top: -19px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(9, 8, 7, 0.66);
+  background: rgba(var(--bg-rgb), 0.66);
   backdrop-filter: blur(10px);
   font-family: var(--font-display);
   font-size: 20px;
@@ -635,7 +737,7 @@ button {
       rgba(255, 59, 31, 0.1),
       transparent 60%
     ),
-    rgba(255, 255, 255, 0.03);
+    rgba(var(--surface-tint-rgb), 0.03);
 }
 
 .sample {
@@ -645,7 +747,7 @@ button {
   overflow: hidden;
   /* the same faint light veil as a demo's own stage — see .card-stage for
      why it lightens rather than darkens */
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--surface-tint-rgb), 0.03);
 }
 
 .sample-label {
@@ -655,7 +757,7 @@ button {
   font-size: 10px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .sample pre {
@@ -679,7 +781,7 @@ button {
 }
 
 .syn-attr {
-  color: #cbbba8;
+  color: color-mix(in srgb, var(--ink) 80%, var(--bg-page));
 }
 
 .syn-arg {
@@ -779,7 +881,7 @@ html[data-gm-dragging] * {
   right: 14px;
   z-index: 3;
   border: 1px solid var(--line-strong);
-  background: rgba(9, 8, 7, 0.72);
+  background: rgba(var(--bg-rgb), 0.72);
   backdrop-filter: blur(8px);
   border-radius: 999px;
   padding: 7px 12px;
@@ -809,7 +911,7 @@ html[data-gm-dragging] * {
   padding: 8px 12px;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: #14110f;
+  background: var(--bg-spot);
 }
 
 .crumb {
@@ -883,7 +985,8 @@ html[data-gm-dragging] * {
   padding: 14px 16px;
   border-radius: 20px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #1c1815;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%),
+    var(--bg-spot);
   border: 1px solid var(--line-strong);
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.4),
@@ -962,7 +1065,7 @@ html[data-gm-dragging] * {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: linear-gradient(180deg, #14110f, #0a0908);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
   overflow: visible;
 }
 
@@ -972,27 +1075,27 @@ html[data-gm-dragging] * {
   gap: 10px;
   padding: 12px;
   border-radius: 16px;
-  background: #221c19;
+  background: var(--bg-spot);
   border: 1px solid var(--line-strong);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
 }
 
 .toast.is-fail {
-  background: #1a1c1e;
+  background: color-mix(in srgb, var(--steel) 14%, var(--bg-spot));
   border-color: rgba(139, 150, 156, 0.28);
 }
 
 .toast.is-fail .toast-mark {
   background:
     radial-gradient(circle at 30% 25%, #fff4, transparent 42%),
-    linear-gradient(160deg, #8b969c, #2a211c);
+    linear-gradient(160deg, var(--steel), var(--bg-spot));
   box-shadow: none;
 }
 
 .mode-rest {
   padding: 8px 12px;
   border-radius: 12px;
-  background: #161311;
+  background: var(--bg-spot);
   border: 1px dashed var(--line);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1316,7 +1419,7 @@ html[data-gm-dragging] * {
   border-radius: 999px;
   /* a light tint capped at 4%, like every other panel on the page — not a
      flat near-black fill */
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--surface-tint-rgb), 0.04);
   border: 1px solid var(--line);
 }
 
@@ -1336,7 +1439,10 @@ html[data-gm-dragging] * {
 }
 
 .tab.is-on {
-  color: #140c0a;
+  /* the pill sliding underneath is var(--ink) — see .tab-line — so the label
+     riding on top needs var(--bg), not a fixed dark, or it goes invisible
+     the moment --ink turns dark in light mode instead of light */
+  color: var(--bg);
 }
 
 .tab-line {
@@ -1472,8 +1578,8 @@ html[data-gm-dragging] * {
     ),
     radial-gradient(
       100% 100% at 50% 50%,
-      rgba(8, 7, 6, 0.5),
-      rgba(6, 5, 4, 0.9)
+      rgba(var(--bg-rgb), 0.5),
+      rgba(var(--bg-rgb), 0.86)
     );
   backdrop-filter: blur(10px) saturate(0.8);
 }
@@ -1627,7 +1733,7 @@ html[data-gm-dragging] * {
   overflow: hidden;
   border: 2px solid rgba(255, 215, 168, 0.28);
   border-radius: 22px;
-  background: #0a0908;
+  background: var(--bg-well);
   touch-action: none;
   box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
   transition:
@@ -1647,7 +1753,7 @@ html[data-gm-dragging] * {
   pointer-events: none;
   position: absolute;
   inset: 10px;
-  border: 1px solid rgba(243, 236, 227, 0.22);
+  border: 1px solid rgba(var(--ink-rgb), 0.22);
   border-radius: 8px;
 }
 
@@ -1678,7 +1784,7 @@ html[data-gm-dragging] * {
   left: -14%;
   width: 204%;
   height: 152%;
-  color: #f3ece3;
+  color: var(--ink);
   cursor: grab;
   touch-action: none;
   user-select: none;
@@ -1711,7 +1817,7 @@ html[data-gm-dragging] * {
   font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(243, 236, 227, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 
 .still-slate b {
@@ -1757,7 +1863,7 @@ html[data-gm-dragging] * {
   align-items: center;
   gap: 10px;
   border-radius: 16px;
-  background: #1a1613;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
   padding: 10px 12px;
   cursor: grab;
@@ -1894,7 +2000,7 @@ html[data-gm-dragging] * {
   overscroll-behavior-x: none;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: #0a0908;
+  background: var(--bg-well);
   container-type: size;
 }
 
@@ -1917,7 +2023,7 @@ html[data-gm-dragging] * {
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .para-title {
@@ -1988,7 +2094,7 @@ html[data-gm-dragging] * {
   letter-spacing: -0.07em;
   line-height: 0.8;
   color: transparent;
-  background: linear-gradient(180deg, rgba(243, 236, 227, 0.18), transparent);
+  background: linear-gradient(180deg, rgba(var(--ink-rgb), 0.18), transparent);
   background-clip: text;
   -webkit-background-clip: text;
   pointer-events: none;
@@ -2017,7 +2123,7 @@ html[data-gm-dragging] * {
       rgba(255, 59, 31, 0.08),
       transparent 55%
     ),
-    #100d0b;
+    var(--bg-well);
   border: 1px solid var(--line-strong);
   box-shadow: 0 22px 50px rgba(0, 0, 0, 0.4);
 }
@@ -2042,7 +2148,7 @@ html[data-gm-dragging] * {
   gap: 10px;
   height: 68px;
   padding: 0 12px;
-  background: rgba(16, 13, 11, 0.82);
+  background: rgba(var(--bg-rgb), 0.82);
   /* its own corners, because the frame's cannot reach it: a backdrop-filter
      makes this its own containing block, and an ancestor's overflow:hidden
      stops clipping it — so the bar sat square inside a 26px radius. One less
@@ -2093,7 +2199,7 @@ html[data-gm-dragging] * {
   height: 10px;
   border-radius: 50%;
   background: #3dd68c;
-  box-shadow: 0 0 0 2px #100d0b;
+  box-shadow: 0 0 0 2px var(--bg-spot);
 }
 
 .chat-who {
@@ -2128,7 +2234,7 @@ html[data-gm-dragging] * {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #1c1815;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
   display: grid;
   place-items: center;
@@ -2154,7 +2260,7 @@ html[data-gm-dragging] * {
   margin: 6px 0 10px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #1a1613;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2168,7 +2274,7 @@ html[data-gm-dragging] * {
   margin: 0;
   padding: 9px 12px;
   border-radius: 18px 18px 18px 6px;
-  background: #1c1815;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
   font-size: 13.5px;
   line-height: 1.4;
@@ -2186,12 +2292,16 @@ html[data-gm-dragging] * {
 .bubble.is-me {
   align-self: flex-end;
   border-radius: 18px 18px 6px 18px;
-  background: linear-gradient(180deg, #4a241c, #2e1612);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--ember) 20%, var(--bg-spot)),
+    color-mix(in srgb, var(--ember) 10%, var(--bg-well))
+  );
   border-color: rgba(255, 59, 31, 0.28);
 }
 
 .bubble.is-me small {
-  color: rgba(243, 236, 227, 0.45);
+  color: rgba(var(--ink-rgb), 0.45);
   text-align: right;
 }
 
@@ -2202,7 +2312,7 @@ html[data-gm-dragging] * {
   width: min(78%, 220px);
   padding: 8px;
   border-radius: 16px;
-  background: #1c1815;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
 }
 
@@ -2238,7 +2348,7 @@ html[data-gm-dragging] * {
   gap: 8px;
   flex: none;
   padding: 10px 12px 12px;
-  background: rgba(16, 13, 11, 0.94);
+  background: rgba(var(--bg-rgb), 0.94);
   border-top: 1px solid var(--line);
 }
 
@@ -2249,7 +2359,7 @@ html[data-gm-dragging] * {
   border-radius: 50%;
   flex: none;
   position: relative;
-  background: #1c1815;
+  background: var(--bg-spot);
   border: 1px solid var(--line);
 }
 
@@ -2282,7 +2392,7 @@ html[data-gm-dragging] * {
   display: flex;
   align-items: center;
   color: var(--ink-faint);
-  background: #0a0908;
+  background: var(--bg-well);
   border: 1px solid var(--line);
   font-size: 13px;
 }
@@ -2506,8 +2616,8 @@ html[data-gm-dragging] * {
 }
 
 .choreo-mark {
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   display: block;
 }
 
@@ -2651,7 +2761,7 @@ html[data-gm-dragging] * {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: #16130f;
+  background: var(--bg-spot);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -2660,7 +2770,7 @@ html[data-gm-dragging] * {
 
 .sub-tile.is-on {
   border-color: rgba(255, 59, 31, 0.45);
-  background: #1f1815;
+  background: var(--bg-spot);
 }
 
 .sub-tile b {
@@ -2699,7 +2809,7 @@ html[data-gm-dragging] * {
   position: absolute;
   border-radius: 999px;
   background: rgb(243 236 227 / 42%);
-  border: 1px solid #16130f;
+  border: 1px solid var(--bg-spot);
   box-shadow: 0 2px 8px rgb(0 0 0 / 55%);
   transition:
     background 120ms ease,
@@ -2804,7 +2914,7 @@ html[data-gm-dragging] * {
   padding: 13px 12px;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: #16130f;
+  background: var(--bg-spot);
   overflow: hidden;
 }
 
@@ -2825,7 +2935,7 @@ html[data-gm-dragging] * {
   font-family: var(--font-mono);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .pour.is-hot small {
@@ -2882,7 +2992,7 @@ html[data-gm-dragging] * {
 }
 
 .key-pour {
-  background: #16130f;
+  background: var(--bg-spot);
   border-color: var(--copper);
 }
 
@@ -2901,7 +3011,7 @@ html[data-gm-dragging] * {
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 22px;
-  background: #100e0c;
+  background: var(--bg-well);
   /* the type is sized against the deck, not the page. inline-size, not size:
      `container-type: size` on the region below it made the projection tree
      measure a contained box and strand its transforms. */
@@ -2949,7 +3059,7 @@ html[data-gm-dragging] * {
   margin: 10px 10px 0;
   overflow: hidden;
   border-radius: 16px;
-  background: #14110f;
+  background: var(--bg-spot);
   cursor: pointer;
   /* deliberately NOT a container: this element is the <Choreo> region and the
      projection ancestor for everything in it */
@@ -3278,7 +3388,7 @@ html[data-gm-dragging] * {
 
 .list-name.is-bench {
   border-color: rgba(228, 163, 90, 0.4);
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .foundry {
@@ -3370,7 +3480,7 @@ html[data-gm-dragging] * {
   padding: 0 6px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: linear-gradient(180deg, #131110, #0b0a09);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
 }
 
 /* four equal slots, so a puck's home is decided by which slot it is rendered
@@ -3480,7 +3590,7 @@ html[data-gm-dragging] * {
   gap: 2px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(9, 8, 7, 0.5);
+  background: rgba(var(--bg-rgb), 0.5);
 }
 
 .speed {
@@ -3503,7 +3613,7 @@ html[data-gm-dragging] * {
 }
 
 .speed.is-on {
-  background: rgba(243, 236, 227, 0.08);
+  background: rgba(var(--ink-rgb), 0.08);
   color: var(--ink);
 }
 
@@ -3593,13 +3703,13 @@ html[data-gm-dragging] * {
   text-align: right;
   font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(var(--ink-rgb), 0.72);
 }
 .inbox-trash svg {
   width: 19px;
   height: 19px;
   fill: none;
-  stroke: rgba(255, 255, 255, 0.5);
+  stroke: rgba(var(--ink-rgb), 0.5);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -3619,8 +3729,8 @@ html[data-gm-dragging] * {
   font: inherit;
   padding: 11px 13px;
   border-radius: 11px;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(var(--surface-tint-rgb), 0.055);
+  border: 1px solid rgba(var(--surface-tint-rgb), 0.08);
   color: inherit;
 }
 .mail {
@@ -3628,7 +3738,7 @@ html[data-gm-dragging] * {
 }
 
 .mail:hover {
-  background: rgba(255, 255, 255, 0.085);
+  background: rgba(var(--surface-tint-rgb), 0.085);
 }
 
 .mail-kill {
@@ -3639,9 +3749,9 @@ html[data-gm-dragging] * {
   display: grid;
   place-items: center;
   border-radius: 7px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(var(--surface-tint-rgb), 0.12);
+  background: rgba(var(--surface-tint-rgb), 0.06);
+  color: rgba(var(--ink-rgb), 0.62);
   font: inherit;
   font-size: 15px;
   line-height: 1;
@@ -3691,7 +3801,7 @@ html[data-gm-dragging] * {
 }
 .mail-copy small {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.46);
+  color: rgba(var(--ink-rgb), 0.46);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3706,7 +3816,7 @@ html[data-gm-dragging] * {
   overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 24px;
-  background: #100e0c;
+  background: var(--bg-well);
 }
 
 .sheet-behind {
@@ -3740,7 +3850,7 @@ html[data-gm-dragging] * {
   z-index: 1;
   border: 0;
   padding: 0;
-  background: #050403;
+  background: var(--bg);
   opacity: 0;
   cursor: pointer;
 }
@@ -3758,7 +3868,7 @@ html[data-gm-dragging] * {
   border: 1px solid var(--line-strong);
   border-bottom: 0;
   border-radius: 20px 20px 0 0;
-  background: #1a1613;
+  background: var(--bg-spot);
   box-shadow: 0 -14px 40px rgb(0 0 0 / 55%);
   touch-action: none;
   cursor: grab;
@@ -3815,7 +3925,7 @@ html[data-gm-dragging] * {
   display: flex;
   align-items: center;
   border: 1px solid var(--line);
-  background: #16130f;
+  background: var(--bg-spot);
   color: var(--ink);
   cursor: pointer;
   overflow: hidden;
@@ -3933,7 +4043,7 @@ html[data-gm-dragging] * {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background: #221b16;
+  background: var(--bg-spot);
 }
 
 /* app: the same rows, with everything an app has around them */
@@ -3965,7 +4075,7 @@ html[data-gm-dragging] * {
 
 .share-extra:hover {
   color: var(--ink);
-  background: #221b16;
+  background: var(--bg-spot);
 }
 
 .sheet-hint {
@@ -4000,7 +4110,7 @@ html[data-gm-dragging] * {
 }
 
 .footer a:hover {
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 /* ---- the filter row is itself a View Transition demo ---- */
@@ -4054,7 +4164,7 @@ html[data-gm-dragging] * {
 
 .filter-tell:hover,
 .filter-tell.is-on {
-  color: var(--copper);
+  color: var(--copper-ink);
   border-color: var(--line-strong);
 }
 
@@ -4067,7 +4177,7 @@ html[data-gm-dragging] * {
 .filter-code {
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--surface-tint-rgb), 0.03);
   overflow: hidden;
 }
 
@@ -4141,7 +4251,7 @@ html[data-gm-dragging] * {
   background:
     linear-gradient(45deg, transparent 50%, var(--ink-dim) 50%)
       calc(100% - 13px) calc(50% - 1px) / 5px 5px no-repeat,
-    rgba(9, 8, 7, 0.72);
+    rgba(var(--bg-rgb), 0.72);
   color: var(--ink);
   font: inherit;
   letter-spacing: 0.1em;
@@ -4156,6 +4266,39 @@ html[data-gm-dragging] * {
   .tempo-select {
     padding: 6px 22px 6px 10px;
   }
+}
+
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgba(var(--bg-rgb), 0.72);
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition:
+    color 0.16s var(--ease),
+    border-color 0.16s var(--ease);
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  border-color: var(--copper);
+  color: var(--ink);
+}
+
+.theme-toggle-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .transition-note {
@@ -4180,7 +4323,7 @@ html[data-gm-dragging] * {
 
 .transition-note:hover,
 .transition-note.is-on {
-  color: var(--copper);
+  color: var(--copper-ink);
   border-color: var(--line-strong);
 }
 
@@ -4217,7 +4360,7 @@ html[data-gm-dragging] * {
   overflow: hidden;
   border: 1px solid rgba(255, 59, 31, 0.28);
   border-radius: 18px;
-  background: #0a0908;
+  background: var(--bg-well);
   box-shadow:
     0 28px 70px rgba(0, 0, 0, 0.62),
     0 2px 0 rgba(255, 255, 255, 0.03) inset;
@@ -4267,7 +4410,7 @@ html[data-gm-dragging] * {
 }
 
 .how-close:hover {
-  color: var(--copper);
+  color: var(--copper-ink);
   border-color: var(--copper);
 }
 
@@ -4336,7 +4479,7 @@ html[data-gm-dragging] * {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: linear-gradient(180deg, #17130f, #100d0b);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 }
 
@@ -4381,7 +4524,10 @@ html[data-gm-dragging] * {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.3);
+  /* a recessed groove relative to .ph-app's own surface, not a neutral
+     black veil — black-over-a-light-card reads as flat grey once .ph-app
+     turns light, so this reaches for the warm well tone directly */
+  background: var(--bg-well);
 }
 
 /* the pill travels on x — 127px, the width of one half. A fixed number
@@ -4425,7 +4571,7 @@ html[data-gm-dragging] * {
   padding: 10px 10px 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--bg-well);
   font: inherit;
   color: var(--ink);
   text-align: left;
@@ -4452,7 +4598,7 @@ html[data-gm-dragging] * {
   height: 24px;
   padding: 3px;
   border-radius: 12px;
-  background: rgba(243, 236, 227, 0.1);
+  background: rgba(var(--ink-rgb), 0.1);
 }
 
 /* the "on" colour is its own element rather than a class, because a class is
@@ -4480,7 +4626,7 @@ html[data-gm-dragging] * {
   margin-top: 12px;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
-  background: linear-gradient(180deg, #2b221c, #1b1512);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -4499,7 +4645,7 @@ html[data-gm-dragging] * {
   padding: 20px 18px 16px;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: linear-gradient(180deg, #1d1611, #120f0d);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
   text-align: center;
   /* invisible until the score places the order, and not in the way until then
@@ -4600,7 +4746,10 @@ html[data-gm-dragging] * {
   z-index: 7;
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* .ph-thumb rests at the track's own left edge, and its glow ring reaches
+     back out ~8.5px past that — against a 10px gap, the ring and the play
+     button were nearly touching at rest. */
+  gap: 18px;
 }
 
 .ph-play,
@@ -4611,7 +4760,7 @@ html[data-gm-dragging] * {
   height: 28px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-well);
   font: inherit;
   font-size: 11px;
   color: var(--ink);
@@ -4751,7 +4900,7 @@ html[data-gm-dragging] * {
 }
 
 .ph-note.is-live {
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 /* Build Order — a logo, and the score that assembles it -------------------- */
@@ -4800,7 +4949,7 @@ html[data-gm-dragging] * {
   inset: 0;
   border: 1px solid var(--line-strong);
   border-radius: 20px;
-  background: linear-gradient(180deg, #17130f, #100d0b);
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
   box-shadow: 0 20px 46px rgba(0, 0, 0, 0.5);
 }
 
@@ -4934,7 +5083,10 @@ html[data-gm-dragging] * {
   max-height: 100%;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.34);
+  /* same device-chrome treatment as .ph-app — a neutral black veil read as
+     flat grey once its card turned light */
+  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
   overflow: hidden;
 }
 
@@ -5041,7 +5193,7 @@ html[data-gm-dragging] * {
   padding: 0 4px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #0d0b0a;
+  background: var(--bg-well);
   font: inherit;
   font-size: 10px;
   color: var(--ink);
@@ -5061,7 +5213,7 @@ html[data-gm-dragging] * {
   padding: 0 2px 0 7px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;
-  background: #0d0b0a;
+  background: var(--bg-well);
 }
 
 .bo-step b {
@@ -5127,7 +5279,7 @@ html[data-gm-dragging] * {
   display: block;
   height: 3px;
   border-radius: 2px;
-  background: rgba(243, 236, 227, 0.07);
+  background: rgba(var(--ink-rgb), 0.07);
 }
 
 .bo-bar {
@@ -5151,7 +5303,7 @@ html[data-gm-dragging] * {
   position: absolute;
   z-index: 1;
   width: 1px;
-  background: rgba(243, 236, 227, 0.28);
+  background: rgba(var(--ink-rgb), 0.28);
   pointer-events: none;
 }
 
@@ -5210,7 +5362,7 @@ html[data-gm-dragging] * {
   height: 24px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-well);
   font: inherit;
   font-size: 9px;
   color: var(--ink);
@@ -5234,7 +5386,7 @@ html[data-gm-dragging] * {
   padding: 0 9px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--bg-well);
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -5344,14 +5496,23 @@ html[data-gm-dragging] * {
   line-height: 1.14;
   letter-spacing: -0.01em;
   text-wrap: balance;
-  color: #d8d0c7;
+  /* a HAIR dimmer than running ink, so the lede below still reads as the
+     quieter line. #d8d0c7 was that relationship measured once against dark
+     mode's own --ink/--bg-page and frozen as a literal — correct there,
+     backwards in light mode, where it landed closer to the page than to any
+     text. color-mix keeps the same relationship instead of one snapshot
+     of it. */
+  color: color-mix(in srgb, var(--ink) 82%, var(--bg-page));
 }
 
 .dive-lede {
   margin: 0;
   font-size: 15px;
   line-height: 1.65;
-  color: #ada49a;
+  /* same fix as .dive-head h2 just above — a literal muted warm-grey that
+     read correctly against dark mode's own ink/page and backwards in
+     light's */
+  color: color-mix(in srgb, var(--ink) 68%, var(--bg-page));
 }
 
 .dd {
@@ -5392,7 +5553,7 @@ html[data-gm-dragging] * {
   font-weight: 700;
   line-height: 1.22;
   text-wrap: balance;
-  color: #c9c0b5;
+  color: color-mix(in srgb, var(--ink) 80%, var(--bg-page));
 }
 
 /* prose keeps a reading measure; figures and code boxes do not */
@@ -5405,25 +5566,25 @@ html[data-gm-dragging] * {
 
 .dd-col p {
   margin: 0;
-  color: #ada49a;
+  color: color-mix(in srgb, var(--ink) 68%, var(--bg-page));
 }
 
 .dd-col strong {
   font-weight: 600;
-  color: #d8d0c7;
+  color: color-mix(in srgb, var(--ink) 82%, var(--bg-page));
 }
 
 .dd-col em,
 .dd-call em {
   font-style: normal;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 .dd code,
 .dd-call code {
   font-family: var(--font-mono);
   font-size: 0.86em;
-  color: var(--copper);
+  color: var(--copper-ink);
 }
 
 /* the sample box is the same object here as it is above the dive; only its
@@ -5442,12 +5603,12 @@ html[data-gm-dragging] * {
 
 .dd-call p {
   margin: 0;
-  color: #ada49a;
+  color: color-mix(in srgb, var(--ink) 68%, var(--bg-page));
 }
 
 .dd-call b {
   font-weight: 600;
-  color: #d8d0c7;
+  color: color-mix(in srgb, var(--ink) 82%, var(--bg-page));
 }
 
 .dd-modes {
@@ -5494,7 +5655,7 @@ html[data-gm-dragging] * {
   border-radius: 16px;
   /* a light tint, capped at 4% — see .card-stage for why a dark tint over an
      already near-black page does not read as its own surface */
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--surface-tint-rgb), 0.04);
   /* a wide drawing scrolls inside its own box rather than the page */
   overflow-x: auto;
 }
@@ -5554,7 +5715,7 @@ html[data-gm-dragging] * {
 }
 
 .dg-band {
-  fill: rgba(243, 236, 227, 0.04);
+  fill: rgba(var(--ink-rgb), 0.04);
 }
 
 .dg-rule {

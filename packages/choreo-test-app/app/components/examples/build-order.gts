@@ -143,7 +143,13 @@ const WHOLE: Slot = { i: 0, n: 1 };
  */
 class Track {
   private blur = motionValue('none');
-  private clip = motionValue('inset(0 0% 0 0)');
+  // `round 20px` matches .bo-plate's own border-radius — inset() defaults to
+  // square corners regardless of the element's actual radius, so left off,
+  // the plate's two right corners get clipped flat by this at ANY progress,
+  // including 0%, where the clip should be invisible. Barely showed on a
+  // near-black plate against a near-black stage; a light stage behind a
+  // light-mode plate makes the squared-off sliver obvious.
+  private clip = motionValue('inset(0 0% 0 0 round 20px)');
   private o = motionValue(0);
   private path = motionValue(0);
   private rot = motionValue(0);
@@ -215,7 +221,9 @@ class Track {
       this.path.jump(pose.pathLength);
     }
     if (!was || was.clip !== pose.clip) {
-      this.clip.jump(`inset(0 ${(pose.clip * 100).toFixed(3)}% 0 0)`);
+      this.clip.jump(
+        `inset(0 ${(pose.clip * 100).toFixed(3)}% 0 0 round 20px)`
+      );
     }
     if (!was || was.blur !== pose.blur) {
       // `none` rather than `blur(0px)`: a filter that is doing nothing still
