@@ -166,6 +166,11 @@ import {
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
+import type { MediaCacheAdapter, MediaCacheEntry } from './media-cache.ts';
+import {
+  mediaCacheMissResponse,
+  serveMediaCacheEntry,
+} from './media-cache-serving.ts';
 import { mergeRelationships } from './merge-relationships.ts';
 import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
@@ -959,6 +964,7 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
+  #mediaCacheAdapter: MediaCacheAdapter | undefined;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
@@ -1035,6 +1041,7 @@ export class Realm {
       audioSizeLimitBytes,
       videoSizeLimitBytes,
       transpileCoordinator,
+      mediaCacheAdapter,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -1056,6 +1063,10 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
+      // The MediaCache object store the `_screenshot/` route streams from.
+      // Optional — a process without one configured serves every screenshot
+      // request as an uncaptured miss.
+      mediaCacheAdapter?: MediaCacheAdapter;
     },
     opts?: Options,
   ) {
@@ -1086,6 +1097,7 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
+    this.#mediaCacheAdapter = mediaCacheAdapter;
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -2480,6 +2492,18 @@ export class Realm {
           return;
         }
 
+        // Same reservation `internalHandle` enforces for direct writes:
+        // the `_screenshot/` subtree is claimed by capture serving, so a
+        // file written there could never be read back.
+        if (localPath.startsWith('_screenshot/')) {
+          errors.push({
+            title: 'Reserved path',
+            detail: `Cannot write '${operation.href}': '_screenshot/' is reserved for serving captures`,
+            status: 422,
+          });
+          return;
+        }
+
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           errors.push({
@@ -3181,6 +3205,39 @@ export class Realm {
         return systemError({
           requestContext,
           message: 'search index is not available',
+        });
+      }
+      // Screenshot serving dispatches on the path prefix, not the router
+      // table: the router keys routes on the Accept header, and the browser
+      // requests this route must serve (`<img>` loads, og:image fetches)
+      // send `image/*`-shaped Accept values that match no supported mime
+      // type. Placed after checkPermission so the route inherits realm-read
+      // auth exactly like any realm resource. GET only — checkPermission
+      // exempts HEAD from auth realm-wide, so admitting HEAD here would
+      // hand unauthenticated callers an existence/size/content-hash oracle
+      // over a private realm's captures; no consumer of this route (image
+      // loads, crawlers) sends HEAD.
+      if (request.method === 'GET' && localPath.startsWith('_screenshot/')) {
+        return await this.serveScreenshot(
+          request,
+          requestContext,
+          localPath.slice('_screenshot/'.length),
+        );
+      }
+      // The GET dispatch above claims the whole `_screenshot/` subtree, so a
+      // realm file stored under it could never be read back — it would
+      // index, list, and answer every GET as an uncaptured miss. Refuse
+      // creation writes up front so the collision surfaces at write time
+      // (the `/_atomic` precheck enforces the same reservation for its
+      // operation hrefs). DELETE stays admitted as the recovery path for
+      // anything already stored there.
+      if (
+        ['PUT', 'PATCH', 'POST'].includes(request.method) &&
+        localPath.startsWith('_screenshot/')
+      ) {
+        return badRequest({
+          message: `'_screenshot/' is reserved for serving captures and cannot be written to`,
+          requestContext,
         });
       }
       if (this.#router.handles(request)) {
@@ -3973,6 +4030,65 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
+  // resolves a capture of one instance and streams it from the MediaCache
+  // with content-hash ETags and short-max-age revalidation (see
+  // `media-cache-serving.ts` for the response contract). The durable URL is
+  // the only public reference — MediaCache hashes surface solely as ETags —
+  // so a re-capture changes what the URL serves, never the URL itself.
+  //
+  // Beyond realm read (enforced by internalHandle before dispatch), the
+  // parent instance must be live: this gives per-instance ACLs a place to
+  // land, and captures of a deleted instance stop serving the moment its
+  // index tombstone appears, ahead of GC reclaiming their artifacts. The
+  // gate is a narrow existence probe (`hasLiveInstance`), never an instance
+  // hydration — it runs on every request, 304 revalidations included. Any
+  // request that resolves to no capture — instance missing or errored,
+  // store unconfigured, addressing unresolvable — is an uncaptured miss:
+  // 404 with a short max-age so an `<img>` picks up a later capture on
+  // revalidation, never a synchronous wait inside an image load.
+  private async serveScreenshot(
+    request: Request,
+    requestContext: RequestContext,
+    instanceLocalPath: string,
+  ): Promise<ResponseWithNodeStream> {
+    if (!this.#mediaCacheAdapter) {
+      return mediaCacheMissResponse({ requestContext });
+    }
+    let instanceURL = this.paths.fileURL(
+      instanceLocalPath.replace(/\.json$/, ''),
+    );
+    if (!(await this.#realmIndexQueryEngine.hasLiveInstance(instanceURL))) {
+      return mediaCacheMissResponse({ requestContext });
+    }
+    let entry = await this.resolveScreenshotEntry(
+      instanceURL,
+      new URL(request.url).searchParams,
+    );
+    if (!entry) {
+      return mediaCacheMissResponse({ requestContext });
+    }
+    return await serveMediaCacheEntry({
+      request,
+      requestContext,
+      entry,
+      mediaCacheAdapter: this.#mediaCacheAdapter,
+      dbAdapter: this.#dbAdapter,
+    });
+  }
+
+  // Resolution seam for the route's addressing forms: `name=` resolves
+  // through the instance's declared-screenshot manifest, and capture-spec
+  // params resolve through canonicalization to a ledger entry (see
+  // `findMediaCacheEntry`). This method is where those resolvers plug in;
+  // with none available, every request is an uncaptured miss.
+  private async resolveScreenshotEntry(
+    _instanceURL: URL,
+    _searchParams: URLSearchParams,
+  ): Promise<MediaCacheEntry | undefined> {
+    return undefined;
   }
 
   private async serveLocalFile(

@@ -45,6 +45,7 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   type MatrixConfig,
+  type MediaCacheAdapter,
   type QueuePublisher,
   type QueueRunner,
   type Prerenderer,
@@ -1236,6 +1237,7 @@ export async function createRealm({
   videoSizeLimitBytes,
   transpileCoordinator,
   fullIndexOnStartup,
+  mediaCacheAdapter,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1269,6 +1271,9 @@ export async function createRealm({
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
+  // MediaCache object store for the realm's `_screenshot/` route; absent
+  // means every screenshot request serves as an uncaptured miss.
+  mediaCacheAdapter?: MediaCacheAdapter;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1345,6 +1350,7 @@ export async function createRealm({
           process.env.VIDEO_SIZE_LIMIT_BYTES ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
         ),
       transpileCoordinator,
+      mediaCacheAdapter,
     },
     fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
   );
@@ -1394,6 +1400,7 @@ export async function runTestRealmServer({
     boxelSite: 'localhost',
   },
   prerenderer: providedPrerenderer,
+  mediaCacheAdapter,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1416,6 +1423,7 @@ export async function runTestRealmServer({
     boxelSite?: string;
   };
   prerenderer?: Prerenderer;
+  mediaCacheAdapter?: MediaCacheAdapter;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1453,6 +1461,7 @@ export async function runTestRealmServer({
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   });
 
   await testRealm.logInToMatrix();
@@ -2109,6 +2118,7 @@ type InternalPermissionedRealmSetupOptions = {
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
   videoSizeLimitBytes?: number;
+  mediaCacheAdapter?: MediaCacheAdapter;
 };
 
 async function startPermissionedRealmFixture(
@@ -2127,6 +2137,7 @@ async function startPermissionedRealmFixture(
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2196,6 +2207,7 @@ async function startPermissionedRealmFixture(
     audioSizeLimitBytes,
     videoSizeLimitBytes,
     prerenderer,
+    mediaCacheAdapter,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2264,6 +2276,7 @@ export function setupPermissionedRealm(
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2292,6 +2305,7 @@ export function setupPermissionedRealm(
     fileSizeLimitBytes?: number;
     audioSizeLimitBytes?: number;
     videoSizeLimitBytes?: number;
+    mediaCacheAdapter?: MediaCacheAdapter;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2321,6 +2335,7 @@ export function setupPermissionedRealm(
         fileSizeLimitBytes,
         audioSizeLimitBytes,
         videoSizeLimitBytes,
+        mediaCacheAdapter,
       });
       testRealmServer = server;
 

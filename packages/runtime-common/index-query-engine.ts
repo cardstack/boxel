@@ -415,6 +415,33 @@ export class IndexQueryEngine {
     return resultMap;
   }
 
+  // Existence probe with `getInstance`'s exact row predicate — the same
+  // url/file_alias match, instance type, tombstone exclusion, and
+  // effective-error channel (a row `getInstance` would map to
+  // `instance-error` probes as not-live) — without hydrating the row.
+  // `getInstance` selects every wide column in the index (prerendered HTML,
+  // pristine/search docs), so callers that gate on liveness alone — the
+  // screenshot route runs this on every request, 304 revalidations
+  // included — must not pay for a hydration they discard.
+  async hasLiveInstance(url: URL, opts?: GetEntryOptions): Promise<boolean> {
+    let rows = (await this.#query([
+      'SELECT 1',
+      `FROM ${tableFromOpts(opts)} AS i ${prerenderedJoin(opts)}`,
+      'WHERE',
+      ...every([
+        any([
+          [`i.url =`, param(url.href)],
+          [`i.file_alias =`, param(url.href)],
+        ]),
+        ['i.type =', param('instance')],
+        any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
+        [`NOT ${effectiveHasError()}`],
+      ]),
+      'LIMIT 1',
+    ] as Expression)) as unknown as { 1: number }[];
+    return rows.length > 0;
+  }
+
   // Shared row → InstanceOrError mapping for getInstance / getInstances.
   // `lookupURL` is used only for error context and is optional in the batch path.
   #rowToInstanceOrError(
