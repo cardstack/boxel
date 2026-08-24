@@ -592,37 +592,50 @@ isolated render) plus its scoped-CSS URLs.
 `packages/runtime-common/boxel-execution-protocol.ts`: cloneable, versioned,
 no Ember imports. Records: `CodeRef`; `BoxelDescription` (ref, kind,
 ancestors, fields, formats, presentation statics); `FieldDescription`
-(name, kind, field type ref, computed?) — configuration is **not** on the
-type description, because resolution takes the owning root instance as
-`this` and memoizes per `(instance, fieldName)` (RP-5.1–5.2);
+(`fieldName`, `type` code ref, `kind`, `isComputed`) — configuration is
+**not** on the type description, because resolution takes the owning root
+instance as `this` and memoizes per `(instance, fieldName)` (RP-5.1–5.2);
 `ResolvedField` (a field's declaration plus the configuration resolved
 against one instance), which is what `getFields`/`getField` answer with and
 which carries no value, since the value lives in the projection's model;
 `InstanceProjection` (id, type ref, revision, cloneable model with linked
 values as `{$boxel:{id,type}}` **references, never expanded graphs**, plus
 its presentation); `InstancePresentation` (title, summary, thumbnailURL,
-theme reference, and the Host-derived `themeScope`/`themeCss`/`cssImports`
-that a themed card's trusted `CardContainer` invocation requires — RP-11.3
-— which must cross as data because the Theme card itself crosses only as a
-reference, and resolving that reference is the graph walk a projection
-forbids); `TemplateBundle` (validated wire templates + typed dependency
-union `trusted-export | authored-component | block | literal-value`;
-unknown kind rejects the generation); `SafeEvent` (exported, versioned);
-`ComponentUpdate` (`{generation, changed, effects}`); `ProjectedError` (a
-thrown error as data, carrying `stack` and a depth-bounded `cause` chain,
-so presentation shows the root cause and not the boundary wrapper);
-`MaterializationPurpose`; the protocol-version/feature record.
+theme reference, and the Host-derived `isThemed` / `themeScope` /
+`themeCss` / `cssImports` that a themed card's trusted `CardContainer`
+invocation requires — RP-11.3 — which must cross as data because the Theme
+card itself crosses only as a reference, and resolving that reference is
+the graph walk a projection forbids); `TemplateBundle` (validated wire
+templates + typed dependency union
+`trusted-export | authored-component | literal-value`; an unknown kind, or
+a kind without the members it is redeemed through, rejects the generation);
+`SafeEvent` (exported, versioned); `ComponentUpdate`
+(`{generation, changed, effects}`); `ProjectedError` (a thrown error as
+data, carrying `stack` and a `cause` chain the protocol module's own
+projector bounds, so presentation shows the root cause and not the boundary
+wrapper); `MaterializationPurpose`; the protocol-version/feature record.
+
+`isThemed` is carried and not derived: Base answers it one way for a card
+linking a Theme and another for a Theme card previewing its own CSS, and
+the second links no Theme at all — so neither the theme reference nor
+`themeCss` implies it.
 
 `trusted-export` is a single portal token — module plus export name — and
 not a per-category split. Whether that export is admissible as a component,
 a helper, or a modifier is decided where the token is redeemed, against the
 Host's vocabulary for the position it appears in; capture holds only a
 reference to the export and cannot classify it. `literal-value` is the
-plain data a template closed over, crossing as cloned JSON.
+plain data a template closed over, crossing as cloned JSON. Three kinds,
+because scope classification has three outcomes: a vocabulary admitting a
+kind no producer emits gives the Host neither a rule to redeem it by nor a
+rule to refuse it against.
 
 **RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
 `describeBoxel`, `createFromSerialized(resource, doc, relativeTo, purpose)`,
-`getFields`/`getField` (answering `ResolvedField`),
+`getFields`/`getField` (answering `ResolvedField`, whose members are named
+`fieldName` / `type` / `kind` — deliberately not RP-3.6's `fieldType`,
+which names the _kind_ string there, so one name never carries two
+meanings across these two sections),
 `getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
 `dispose`. Nothing else — mutation is not an operation on this interface
 (RP-9.8: it is a Host-granted `set` capability). The `purpose` is required,

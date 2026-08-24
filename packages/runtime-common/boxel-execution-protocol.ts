@@ -123,7 +123,17 @@ export class ProtocolRefusal extends Error {
 
   constructor(code: ProtocolRefusalCode, detail: string) {
     super(`${code}: ${detail}`);
-    this.name = 'ProtocolRefusal';
+    // Defined, not assigned. `name` is inherited from `Error.prototype`, which
+    // SES's lockdown() freezes, and a strict-mode assignment through a frozen
+    // non-writable inherited property throws. Assigning here would make this
+    // class unconstructible inside a Compartment — turning every refusal in
+    // the module into the raw TypeError it exists to replace, in exactly the
+    // environment the module exists to serve.
+    Object.defineProperty(this, 'name', {
+      value: 'ProtocolRefusal',
+      writable: true,
+      configurable: true,
+    });
     this.code = code;
   }
 }
@@ -157,17 +167,55 @@ export function assertUsableExecutionRecord(
   if (unsupported.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_PROTOCOL_FEATURE_UNSUPPORTED',
-      `record requires features this consumer does not implement: ${unsupported.join(', ')}`,
+      `record requires features this consumer does not implement: ${unsupported
+        .map((feature) => describeValue(feature))
+        .join(', ')}`,
     );
   }
 }
 
-/** Names a rejected value in a diagnostic without quoting boundary data. */
+/**
+ * How much of a boundary-supplied string a diagnostic repeats.
+ *
+ * A refusal is written to a log, and the string that triggered it is chosen by
+ * the code being refused. Caged code that emits one malformed record per
+ * render would otherwise put a megabyte into the log stream on every attempt.
+ */
+const DIAGNOSTIC_TOKEN_LIMIT = 64;
+
+/**
+ * Quotes a boundary-supplied string for a diagnostic: JSON-escaped, so an
+ * embedded newline cannot forge a log line, and truncated to a length the
+ * far side does not choose.
+ */
+function quoteToken(value: string): string {
+  return JSON.stringify(
+    value.length > DIAGNOSTIC_TOKEN_LIMIT
+      ? `${value.slice(0, DIAGNOSTIC_TOKEN_LIMIT)}…`
+      : value,
+  );
+}
+
+/**
+ * Names a rejected value in a diagnostic. A scalar is named by its value,
+ * because the value is the whole content of the complaint; a string goes
+ * through `quoteToken`; anything else is named by its type, since the type is
+ * what was wrong with it.
+ */
 function describeValue(value: unknown): string {
   if (value === null) {
     return 'null';
   }
-  return Array.isArray(value) ? 'an array' : typeof value;
+  if (Array.isArray(value)) {
+    return 'an array';
+  }
+  if (typeof value === 'string') {
+    return quoteToken(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return typeof value;
 }
 
 /**
@@ -209,7 +257,10 @@ function readEnvelope(record: ProtocolEnvelope): {
   }
   if (
     !Array.isArray(requiredFeatures) ||
-    requiredFeatures.some((feature) => typeof feature !== 'string')
+    // Spread first: `some` and `filter` skip the holes in a sparse array, so
+    // `[, ,]` would pass as "an array of strings" and then be carried as two
+    // features named `undefined`.
+    ![...requiredFeatures].every((feature) => typeof feature === 'string')
   ) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
@@ -233,7 +284,9 @@ export function assertExecutionTransportVersion(
   if (transportVersion !== BOXEL_EXECUTION_TRANSPORT_VERSION) {
     throw new ProtocolRefusal(
       'BOXEL_TRANSPORT_VERSION_UNSUPPORTED',
-      `message declares transport version ${describeValue(transportVersion)}; this endpoint implements ${BOXEL_EXECUTION_TRANSPORT_VERSION}`,
+      `message declares transport version ${describeValue(
+        transportVersion,
+      )}; this endpoint implements ${BOXEL_EXECUTION_TRANSPORT_VERSION}`,
     );
   }
 }
@@ -302,8 +355,11 @@ export type BoxelRuntimeOperation = (typeof BOXEL_RUNTIME_OPERATIONS)[number];
  *   `edit` (`getChildFormat`, `@cardstack/base/card-api.gts`).
  * - RP-2.5: a computed field never renders `edit`; it is rewritten to
  *   `embedded` at format resolution.
- * - RP-2.4: an explicit `@format` outside the renderable inventory is
- *   silently ignored rather than treated as an error.
+ * - RP-2.4: an explicit `@format` that is in the renderable inventory
+ *   **replaces** this answer on both axes rather than narrowing it, and one
+ *   outside the inventory is silently ignored rather than treated as an error
+ *   (`determineFormats`). So a caller with an explicit format never consults
+ *   this function at all.
  *
  * A tier that applies only this function renders a linked card inline-
  * editable, which RP-2.7 says never happens.
@@ -354,6 +410,12 @@ export type FieldKind = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
  * no getter, and no component definition: those stay with the runtime that
  * loaded the type.
  *
+ * The member names deliberately avoid `fieldType`. Main's own descriptor
+ * (RP-3.6) uses that name for the *kind* string — `contains`, `linksTo` — so
+ * reusing it here for the type's code ref would give one name two meanings
+ * across two sections of the same spec. `type` is the ref, `kind` is the kind,
+ * and neither reads as the other.
+ *
  * Configuration is absent here on purpose. Resolution runs with the owning
  * root instance as `this` and memoizes per `(instance, fieldName)`
  * (RP-5.1–5.2), so a description of a *type* has nothing to resolve against.
@@ -362,7 +424,7 @@ export type FieldKind = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
  */
 export type FieldDescription = Cloneable<{
   fieldName: string;
-  fieldType: CodeRef;
+  type: CodeRef;
   kind: FieldKind;
   isComputed: boolean;
 }>;
@@ -381,7 +443,7 @@ export type FieldDescription = Cloneable<{
  */
 export type ResolvedField = Cloneable<{
   fieldName: string;
-  fieldType: CodeRef;
+  type: CodeRef;
   kind: FieldKind;
   isComputed: boolean;
   resolvedConfiguration: JSONTypes.Value | null;
@@ -474,7 +536,43 @@ export function isBoxelValueReference(
     return false;
   }
   let { id, type } = marker as { id: unknown; type: unknown };
-  return (id === null || typeof id === 'string') && isCodeRef(type);
+  return (id === null || typeof id === 'string') && isExactCodeRef(type);
+}
+
+/**
+ * A code ref carrying its own members and nothing else.
+ *
+ * Stricter than `isCodeRef`, deliberately. That predicate answers "can this be
+ * read as a ref", which is right for a document whose resources may carry
+ * more than one reader needs; here the question is whether a value is a
+ * reference *instead of* data. A ref admitting extra members lets an entire
+ * card ride inside `type` — the expanded graph the marker's own exactness
+ * check was written to refuse, one level further down.
+ */
+function isExactCodeRef(ref: unknown): boolean {
+  if (!isCodeRef(ref)) {
+    return false;
+  }
+  let keys = Object.keys(ref as object).sort();
+  let { type, card } = ref as { type?: unknown; card?: unknown };
+  if (type === 'ancestorOf') {
+    return (
+      keys.length === 2 &&
+      keys[0] === 'card' &&
+      keys[1] === 'type' &&
+      isExactCodeRef(card)
+    );
+  }
+  if (type === 'fieldOf') {
+    return (
+      keys.length === 3 &&
+      keys[0] === 'card' &&
+      keys[1] === 'field' &&
+      keys[2] === 'type' &&
+      isExactCodeRef(card)
+    );
+  }
+  return keys.length === 2 && keys[0] === 'module' && keys[1] === 'name';
 }
 
 /**
@@ -523,14 +621,24 @@ export type InstanceProjection = Cloneable<
  *   font faces.
  *
  * A tier makes the same trusted `CardContainer` invocation main makes from
- * these three; without them a themed card renders unthemed, which is not a
- * degraded theme but a different design. `null` throughout when the instance
- * has no theme.
+ * these; without them a themed card renders unthemed, which is not a degraded
+ * theme but a different design.
+ *
+ * `isThemed` is carried rather than derived, because neither `theme` nor
+ * `themeCss` implies it. Base answers the question two different ways
+ * (`hasTheme`, `field-component.gts`): an ordinary card is themed when it
+ * links a Theme, but a Theme card previewing its own CSS is themed when that
+ * CSS is non-empty — and such a card links no Theme at all, so `theme` is
+ * `null` while the three derived strings are not. Reading `theme !== null` as
+ * "themed" renders a Theme card's own preview without the CSS it exists to
+ * show; reading `themeCss !== null` gets the converse wrong, since a card
+ * linking a Theme whose variables are empty is still themed.
  */
 export type InstancePresentation = Cloneable<{
   title: string | null;
   summary: string | null;
   thumbnailURL: string | null;
+  isThemed: boolean;
   theme: BoxelValueReference | null;
   themeScope: string | null;
   themeCss: string | null;
@@ -558,6 +666,11 @@ export type InstancePresentation = Cloneable<{
  * constant a template interpolates is neither a component nor a Host export,
  * and it crosses as cloned JSON.
  *
+ * Three kinds, because scope classification has three outcomes. A vocabulary
+ * admitting a fourth that no producer emits would be a kind the Host has no
+ * rule to redeem and no rule to refuse it against, which is the wrong default
+ * for a boundary.
+ *
  * A name that fits none of these kinds — a locally defined function used as a
  * template helper, most often — has no safe category and is refused by name
  * at capture time rather than smuggled across.
@@ -565,15 +678,15 @@ export type InstancePresentation = Cloneable<{
 export const TEMPLATE_DEPENDENCY_KINDS = [
   'trusted-export',
   'authored-component',
-  'block',
   'literal-value',
 ] as const;
 export type TemplateDependencyKind = (typeof TEMPLATE_DEPENDENCY_KINDS)[number];
 
 export type TemplateDependency = Cloneable<
   | { kind: 'trusted-export'; module: string; name: string }
-  | { kind: 'authored-component'; template: string }
-  | { kind: 'block'; name: string }
+  // `templateId` keys into the bundle's `templates` map. Not `template`,
+  // which reads as the template itself — that is `TemplateDescriptor.block`.
+  | { kind: 'authored-component'; templateId: string }
   | { kind: 'literal-value'; value: JSONTypes.Value }
 >;
 
@@ -660,7 +773,7 @@ export function assertKnownTemplateDependencies(
   // Object.prototype and report a template the bundle does not carry.
   let carried = new Set(Object.keys(templates));
   if (!carried.has(root)) {
-    dangling.push(`root '${root}'`);
+    dangling.push(`root ${quoteToken(root)}`);
   }
   for (let [key, descriptor] of Object.entries(templates)) {
     if (
@@ -671,7 +784,7 @@ export function assertKnownTemplateDependencies(
     ) {
       throw new ProtocolRefusal(
         'BOXEL_RECORD_MALFORMED',
-        `template '${key}' must be a descriptor carrying a scope array, received ${describeValue(descriptor)}`,
+        `template ${quoteToken(key)} must be a descriptor carrying a scope array, received ${describeValue(descriptor)}`,
       );
     }
     // The key is how every reference reaches a descriptor, so a descriptor
@@ -679,13 +792,12 @@ export function assertKnownTemplateDependencies(
     // bundle's references cannot be resolved with confidence.
     if (descriptor.id !== key) {
       dangling.push(
-        `template keyed '${key}' identifies itself as ${
-          typeof descriptor.id === 'string'
-            ? `'${descriptor.id}'`
-            : describeValue(descriptor.id)
-        }`,
+        `template keyed ${quoteToken(key)} identifies itself as ${describeValue(
+          descriptor.id,
+        )}`,
       );
     }
+    assertReifiableDescriptor(key, descriptor);
     for (let dependency of descriptor.scope) {
       if (
         typeof dependency !== 'object' ||
@@ -694,17 +806,28 @@ export function assertKnownTemplateDependencies(
       ) {
         throw new ProtocolRefusal(
           'BOXEL_RECORD_MALFORMED',
-          `template '${key}' carries a scope entry that is not a dependency, received ${describeValue(dependency)}`,
+          `template ${quoteToken(key)} carries a scope entry that is not a dependency, received ${describeValue(dependency)}`,
         );
       }
       if (!templateDependencyKinds.has(dependency.kind)) {
-        unrecognized.push(`${key}: '${dependency.kind}'`);
+        unrecognized.push(`${quoteToken(key)}: ${quoteToken(dependency.kind)}`);
+      } else if (
+        !hasReifiableDependencyPayload(dependency as TemplateDependency)
+      ) {
+        throw new ProtocolRefusal(
+          'BOXEL_RECORD_MALFORMED',
+          `template ${quoteToken(key)} carries a ${quoteToken(
+            dependency.kind,
+          )} dependency without the members that kind requires`,
+        );
       } else if (
         dependency.kind === 'authored-component' &&
-        !carried.has(dependency.template)
+        !carried.has(dependency.templateId)
       ) {
         dangling.push(
-          `${key} references authored component '${dependency.template}'`,
+          `${quoteToken(key)} references authored component ${quoteToken(
+            dependency.templateId,
+          )}`,
         );
       }
     }
@@ -713,13 +836,115 @@ export function assertKnownTemplateDependencies(
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_DEPENDENCY_KIND_UNKNOWN',
-      `template bundle '${root}' names dependency kinds this consumer does not recognize — ${unrecognized.join('; ')}`,
+      `template bundle ${quoteToken(root)} names dependency kinds this consumer does not recognize — ${unrecognized.join('; ')}`,
     );
   }
   if (dangling.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
-      `template bundle '${root}' names templates it does not carry — ${dangling.join('; ')}`,
+      `template bundle ${quoteToken(root)} names templates it does not carry — ${dangling.join('; ')}`,
+    );
+  }
+}
+
+function isStringArray(value: unknown): boolean {
+  return Array.isArray(value) && [...value].every((v) => typeof v === 'string');
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Whether a dependency carries the members its own kind is redeemed through.
+ *
+ * The kind allowlist alone establishes almost nothing: a `trusted-export` with
+ * no `module` passes it and then fails at resolution, past every gate, which
+ * is the class of escape this gate exists to prevent.
+ */
+function hasReifiableDependencyPayload(
+  dependency: TemplateDependency,
+): boolean {
+  switch (dependency.kind) {
+    case 'trusted-export':
+      return (
+        typeof dependency.module === 'string' &&
+        typeof dependency.name === 'string'
+      );
+    case 'authored-component':
+      return typeof dependency.templateId === 'string';
+    case 'literal-value':
+      // Any JSON value is admissible, `null` and `false` included, so the
+      // check is that the member exists rather than that it is truthy.
+      return 'value' in dependency;
+  }
+}
+
+/**
+ * Whether a descriptor carries what a consumer reads when it reifies one.
+ *
+ * Checked here rather than left to the consumer because `block` is compiled,
+ * `stylesheets` is iterated, and `instance` is dereferenced — so a descriptor
+ * that is merely shaped like one turns into a compile of arbitrary data, a
+ * loop over the characters of a string, or the same bare TypeError this
+ * module refuses everywhere else.
+ */
+function assertReifiableDescriptor(
+  key: string,
+  descriptor: TemplateDescriptor,
+): void {
+  let faults: string[] = [];
+  if (typeof descriptor.block !== 'string') {
+    faults.push(
+      `block must be the compiled template, received ${describeValue(descriptor.block)}`,
+    );
+  }
+  if (typeof descriptor.moduleName !== 'string') {
+    faults.push(
+      `moduleName must be a string, received ${describeValue(descriptor.moduleName)}`,
+    );
+  }
+  if (typeof descriptor.isStrictMode !== 'boolean') {
+    faults.push(
+      `isStrictMode must be a boolean, received ${describeValue(descriptor.isStrictMode)}`,
+    );
+  }
+  if (!isStringArray(descriptor.stylesheets)) {
+    faults.push(
+      `stylesheets must be an array of urls, received ${describeValue(descriptor.stylesheets)}`,
+    );
+  }
+  let instance: unknown = descriptor.instance;
+  if (!isPlainRecord(instance)) {
+    faults.push(
+      `instance must be a component descriptor, received ${describeValue(instance)}`,
+    );
+  } else {
+    if (typeof instance.handle !== 'string') {
+      faults.push(
+        `instance.handle must be a string, received ${describeValue(instance.handle)}`,
+      );
+    }
+    if (!isPlainRecord(instance.state)) {
+      faults.push(
+        `instance.state must be a record, received ${describeValue(instance.state)}`,
+      );
+    }
+    if (!isStringArray(instance.getters)) {
+      faults.push(
+        `instance.getters must be an array of names, received ${describeValue(instance.getters)}`,
+      );
+    }
+    if (!isStringArray(instance.actions)) {
+      faults.push(
+        `instance.actions must be an array of names, received ${describeValue(instance.actions)}`,
+      );
+    }
+  }
+  if (faults.length > 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `template ${quoteToken(key)} cannot be reified — ${faults.join('; ')}`,
     );
   }
 }
@@ -808,7 +1033,9 @@ export function assertKnownComponentEffects(
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
-      `component update names effect kinds this consumer does not recognize: ${unrecognized.join(', ')}`,
+      `component update names effect kinds this consumer does not recognize: ${unrecognized
+        .map((kind) => quoteToken(kind))
+        .join(', ')}`,
     );
   }
 }
@@ -837,6 +1064,41 @@ type ProjectedErrorShape = {
  * root cause said which getter threw and where.
  */
 export type ProjectedError = Cloneable<ProjectedErrorShape>;
+
+/**
+ * Projects a thrown value into the cloneable record, following `cause` no
+ * further than `PROJECTED_ERROR_MAX_CAUSE_DEPTH`.
+ *
+ * The bound is what makes the depth limit real rather than advisory. A cause
+ * chain is built from data the far side controls and `structuredClone`
+ * preserves cycles, so a chain that loops back on itself arrives intact; a
+ * consumer walking it without a bound hangs instead of reporting.
+ */
+export function projectError(
+  error: unknown,
+  depth: number = PROJECTED_ERROR_MAX_CAUSE_DEPTH,
+): ProjectedError {
+  let source = (
+    isPlainRecord(error) ? error : { message: String(error) }
+  ) as Partial<{
+    name: unknown;
+    message: unknown;
+    stack: unknown;
+    cause: unknown;
+  }>;
+  let projected: ProjectedErrorShape = {
+    name: typeof source.name === 'string' ? source.name : 'Error',
+    message:
+      typeof source.message === 'string' ? source.message : String(error),
+  };
+  if (typeof source.stack === 'string') {
+    projected.stack = source.stack;
+  }
+  if (source.cause != null && depth > 1) {
+    projected.cause = projectError(source.cause, depth - 1);
+  }
+  return projected;
+}
 
 /**
  * The event members that may cross into an authored handler, grouped by the
@@ -879,6 +1141,45 @@ export const SAFE_EVENT_STRING_PROPERTIES = [
 ] as const;
 export const SAFE_EVENT_NULLABLE_STRING_PROPERTIES = ['data'] as const;
 
+/**
+ * The dataset prefix Base stamps its own identifiers under.
+ *
+ * In the camelCase form a `DOMStringMap` exposes, not the `data-boxel-*`
+ * attribute spelling: `data-boxel-card-id` reads back as `boxelCardId`, and a
+ * filter written against the attribute name matches nothing.
+ */
+export const HOST_OWNED_DATASET_PREFIX = 'boxel';
+
+/**
+ * The dataset an event target may hand an authored handler.
+ *
+ * Every other member of `SafeEventTarget` is drawn from a per-member
+ * allowlist; a dataset cannot be, since its keys are whatever the author
+ * wrote. What makes it safe is subtraction rather than enumeration: Base
+ * stamps the Host's own identifiers into this namespace — `data-boxel-card-id`
+ * carries a card's canonical URL (RP-11.4) — and a card is entitled to its own
+ * data attributes but not to those.
+ *
+ * Concretely: an authored template containing `<@fields.vendor />` renders a
+ * Base container stamped with the vendor's id. A click landing there bubbles
+ * to the author's own handler, and a dataset copied wholesale would hand it
+ * the canonical URL of a card the author holds only a reference to.
+ *
+ * A pure string function, so it lives here with the shape it guards rather
+ * than with the projection: it needs no `Event`, no `Element`, and no DOM.
+ */
+export function projectDataset(
+  dataset: Record<string, string>,
+): Record<string, string> {
+  let projected: Record<string, string> = {};
+  for (let [key, value] of Object.entries(dataset)) {
+    if (!key.startsWith(HOST_OWNED_DATASET_PREFIX)) {
+      projected[key] = value;
+    }
+  }
+  return projected;
+}
+
 /** The same allowlist discipline for the element an event came from. */
 export const SAFE_EVENT_TARGET_BOOLEAN_PROPERTIES = ['checked'] as const;
 export const SAFE_EVENT_TARGET_NUMBER_PROPERTIES = ['selectedIndex'] as const;
@@ -899,14 +1200,8 @@ export type SafeEventTarget = Cloneable<
   {
     tagName: string;
     /**
-     * The element's `data-*` attributes. The one member here not drawn from a
-     * per-member allowlist, so the projection carries the burden the type
-     * cannot: Base stamps its own identifiers into this namespace —
-     * `data-boxel-card-id` holds a card's canonical URL — and those are the
-     * Host's, not the card's (RP-11.4). A projection that copies the dataset
-     * wholesale hands an authored handler the identity of whatever card the
-     * event happened to land on, including one it was never given a
-     * reference to. Base-owned `data-boxel-*` keys do not cross.
+     * The element's `data-*` attributes, less the ones the Host owns — see
+     * `projectDataset`, which is how a projection produces this member.
      */
     dataset?: Record<string, string>;
   } & {
