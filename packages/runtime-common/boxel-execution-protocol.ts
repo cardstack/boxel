@@ -5,10 +5,13 @@
  * Three properties make this module what it is, and each one is a constraint
  * on what may be added here:
  *
- * 1. **No Ember imports, and no runtime imports at all.** This module is
- *    evaluated inside a SES Compartment and inside an origin-isolated iframe
- *    child, neither of which has the Host's module graph. Every import below
- *    is `import type`, so nothing survives to run.
+ * 1. **No Ember imports, and nothing that pulls the Host's module graph.**
+ *    This module is evaluated inside a SES Compartment and inside an
+ *    origin-isolated iframe child, neither of which has that graph. Every
+ *    import here is either `import type`, erased entirely, or a pure shape
+ *    predicate from `card-document-shape.ts` — a module that exists precisely
+ *    so a caller can recognize a shape without pulling the heavy runtime
+ *    chain rooted at `code-ref.ts`.
  * 2. **Inert data only.** No live object crosses a boundary — no store,
  *    loader, service, class, component instance, callback, DOM node, or
  *    browser event. Each record type below is declared through `Cloneable`,
@@ -27,6 +30,7 @@
 
 import type * as JSONTypes from 'json-typescript';
 
+import { isCodeRef } from './card-document-shape.ts';
 import type { CodeRef } from './code-ref.ts';
 import type { Format } from './formats.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
@@ -317,6 +321,12 @@ export type BoxelValueReference = Cloneable<{
  * `type`, or sitting beside sibling members, is an expanded graph wearing a
  * reference's clothes and answers `false` here rather than being accepted as
  * a reference.
+ *
+ * `type` is checked as a real `CodeRef`, not merely as an object, because
+ * this predicate narrows and its caller resolves that ref through the Store.
+ * A structurally plausible ref — `{}`, a `{module}` with no `name`, an
+ * `ancestorOf` whose `card` is garbage — would otherwise arrive there
+ * carrying the authority of a check that never happened.
  */
 export function isBoxelValueReference(
   value: unknown,
@@ -341,12 +351,7 @@ export function isBoxelValueReference(
     return false;
   }
   let { id, type } = marker as { id: unknown; type: unknown };
-  return (
-    (id === null || typeof id === 'string') &&
-    typeof type === 'object' &&
-    type !== null &&
-    !Array.isArray(type)
-  );
+  return (id === null || typeof id === 'string') && isCodeRef(type);
 }
 
 /**

@@ -230,7 +230,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.1: a projected link is exactly {$boxel: {id, type}} and nothing more', function (assert) {
+  test('RP-14.1: a projected link is exactly {$boxel: {id, type}} with a resolvable code ref', function (assert) {
     assert.true(
       isBoxelValueReference({ $boxel: { id: 'http://test/x', type: testRef } }),
       'a saved link',
@@ -263,6 +263,42 @@ module('Unit | rendering protocol | records and operations', function () {
       isBoxelValueReference({ $boxel: { id: 'http://test/x' } }),
       'no type to resolve against',
     );
+
+    // The marker's shape is not the whole contract: a consumer resolves the
+    // ref, so a ref that is merely object-shaped must not narrow.
+    assert.true(
+      isBoxelValueReference({
+        $boxel: { id: null, type: { type: 'ancestorOf', card: testRef } },
+      }),
+      'a code ref may be one of the recursive forms',
+    );
+    assert.true(
+      isBoxelValueReference({
+        $boxel: {
+          id: null,
+          type: { type: 'fieldOf', card: testRef, field: 'title' },
+        },
+      }),
+      'including fieldOf',
+    );
+    for (let [label, type] of [
+      ['an empty object', {}],
+      ['a module with no export name', { module: 'http://test/person' }],
+      ['a non-string export name', { module: 'http://test/person', name: 7 }],
+      [
+        'an ancestorOf wrapping nothing resolvable',
+        {
+          type: 'ancestorOf',
+          card: {},
+        },
+      ],
+      ['an unrecognized ref form', { type: 'siblingOf', card: testRef }],
+    ] as const) {
+      assert.false(
+        isBoxelValueReference({ $boxel: { id: 'http://test/x', type } }),
+        `${label} is not a code ref`,
+      );
+    }
     assert.false(isBoxelValueReference({ title: 'Ada' }), 'plain field data');
     assert.false(isBoxelValueReference(null), 'null');
     assert.false(
