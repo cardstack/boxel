@@ -145,18 +145,23 @@ describe('requestLoginToken', () => {
 });
 
 describe('browse', () => {
-  function fakeProfileManager(): ProfileManager {
+  const ALICE_PROFILE = {
+    displayName: 'Alice',
+    matrixUrl: 'http://localhost:8008',
+    realmServerUrl: 'https://localhost:4201/',
+    matrixAccessToken: 'access-token',
+    matrixUserId: '@alice:localhost',
+    matrixDeviceId: 'DEVICE',
+  };
+
+  // A ProfileManager stub whose relevant methods can be overridden per test.
+  function fakeProfileManager(
+    overrides: Partial<Record<string, unknown>> = {},
+  ): ProfileManager {
     return {
       getActiveProfile: () => ({
         id: '@alice:localhost',
-        profile: {
-          displayName: 'Alice',
-          matrixUrl: 'http://localhost:8008',
-          realmServerUrl: 'https://localhost:4201/',
-          matrixAccessToken: 'access-token',
-          matrixUserId: '@alice:localhost',
-          matrixDeviceId: 'DEVICE',
-        },
+        profile: ALICE_PROFILE,
       }),
       getProfile: () => undefined,
       getStoredMatrixAuth: () => ({
@@ -171,6 +176,7 @@ describe('browse', () => {
         deviceId: 'DEVICE',
         matrixUrl: 'http://localhost:8008',
       }),
+      ...overrides,
     } as unknown as ProfileManager;
   }
 
@@ -256,5 +262,102 @@ describe('browse', () => {
     expect(openBrowserFn).toHaveBeenCalledWith(
       'https://localhost:4200/?loginToken=lt_fresh',
     );
+  });
+
+  it('uses a named --profile via getProfile', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let getStoredMatrixAuth = vi.fn().mockReturnValue({
+      accessToken: 'access-token',
+      userId: '@bob:boxel.ai',
+      deviceId: 'DEVICE',
+      matrixUrl: 'https://matrix.boxel.ai',
+    });
+    let pm = fakeProfileManager({
+      // A named profile shouldn't fall back to the active one.
+      getActiveProfile: () => null,
+      getProfile: (id: string) =>
+        id === '@bob:boxel.ai'
+          ? { ...ALICE_PROFILE, realmServerUrl: 'https://app.boxel.ai/' }
+          : undefined,
+      getStoredMatrixAuth,
+    });
+
+    await browse(undefined, {
+      profile: '@bob:boxel.ai',
+      profileManager: pm,
+      requestLoginToken: vi
+        .fn()
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+      openBrowserFn,
+      log: () => {},
+    });
+
+    expect(getStoredMatrixAuth).toHaveBeenCalledWith('@bob:boxel.ai');
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://app.boxel.ai/?loginToken=lt_abc',
+    );
+  });
+
+  it('errors when the named --profile does not exist', async () => {
+    await expect(
+      browse(undefined, {
+        profile: '@nobody:boxel.ai',
+        profileManager: fakeProfileManager({ getProfile: () => undefined }),
+        requestLoginToken: vi.fn(),
+        openBrowserFn: vi.fn(),
+        log: () => {},
+      }),
+    ).rejects.toThrow(/No profile named "@nobody:boxel.ai"/);
+  });
+
+  it('errors when there is no active profile', async () => {
+    await expect(
+      browse(undefined, {
+        profileManager: fakeProfileManager({ getActiveProfile: () => null }),
+        requestLoginToken: vi.fn(),
+        openBrowserFn: vi.fn(),
+        log: () => {},
+      }),
+    ).rejects.toThrow(/No active profile/);
+  });
+
+  it('honors --host-url over the derived URL', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+
+    await browse(undefined, {
+      hostUrl: 'https://cs-123.localhost:4200',
+      profileManager: fakeProfileManager(),
+      requestLoginToken: vi
+        .fn()
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+      openBrowserFn,
+      log: () => {},
+    });
+
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://cs-123.localhost:4200/?loginToken=lt_abc',
+    );
+  });
+
+  it('warns with the URL when the browser cannot be opened', async () => {
+    // spawn failed → the URL (a live single-use credential) is surfaced on
+    // stderr so the user can finish by hand.
+    let openBrowserFn = vi.fn().mockResolvedValue(false);
+    let stderr = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+
+    await browse(undefined, {
+      profileManager: fakeProfileManager(),
+      requestLoginToken: vi
+        .fn()
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+      openBrowserFn,
+      log: () => {},
+    });
+
+    let written = stderr.mock.calls.map((c) => String(c[0])).join('');
+    expect(written).toContain('https://localhost:4200/?loginToken=lt_abc');
+    stderr.mockRestore();
   });
 });
