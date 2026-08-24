@@ -142,6 +142,17 @@ class Assistant {
     // the cast.
     (request as Record<string, unknown>).usage = { include: true };
 
+    // Prompt caches live per provider, and the router is otherwise free to
+    // spread a room's requests across providers — which turns a warm cache
+    // prefix into a full-price miss mid-conversation. Bias Anthropic-model
+    // requests to Anthropic itself, keeping fallbacks for availability.
+    if (this.getModel(prompt).startsWith('anthropic/')) {
+      (request as Record<string, unknown>).provider = {
+        order: ['anthropic'],
+        allow_fallbacks: true,
+      };
+    }
+
     if (prompt.reasoningEffort !== undefined) {
       request.reasoning_effort = prompt.reasoningEffort;
     }

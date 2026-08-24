@@ -104,7 +104,6 @@ import { skillsIndexId } from '../lib/utils';
 import { importResource } from '../resources/import';
 
 import { getRoom } from '../resources/room';
-import { addPatchTools } from '../tools/utils';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
@@ -144,7 +143,6 @@ import type {
   ToolResultWithNoOutputContent,
   ToolResultWithOutputContent,
   RealmEventContent,
-  Tool,
   ToolResultStatus,
 } from '@cardstack/base/matrix-event';
 import type * as SkillModule from '@cardstack/base/skill';
@@ -1982,23 +1980,6 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
   ): Promise<void> {
-    let tools: Tool[] = [];
-    // Open cards are attached automatically
-    // If they are not attached, the user is not allowing us to
-    // modify them
-    let openCardIds = context?.openCardIds ?? [];
-    let patchableCards = attachedCards
-      .filter((c) => openCardIds.includes(c.id))
-      .filter((c) => this.realm.canWrite(c.id));
-    // Generate tool calls for patching currently open cards permitted for modification
-    tools = tools.concat(
-      await addPatchTools(
-        this.toolService.toolContext,
-        patchableCards,
-        this.cardAPI,
-      ),
-    );
-
     await this.updateSkillsAndToolsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
@@ -2020,7 +2001,16 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          tools,
+          // Interactive messages carry no per-card patch tool: a definition
+          // generated from the open card's type changes on every card open,
+          // switch, or schema edit, and tool definitions render ahead of
+          // all message history, so each change re-bills the whole
+          // conversation at full input price. Skills route card edits
+          // through patch-fields and SEARCH/REPLACE patches; the executor
+          // still honors patchCardInstance calls (old rooms carry them in
+          // history), and the programmatic SendAiAssistantMessage tool
+          // still injects it for callers that require a forced patch call.
+          tools: [],
           debug: context?.debug,
           functions: [],
         },
