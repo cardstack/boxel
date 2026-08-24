@@ -124,8 +124,20 @@ export default class ApplicationRoute extends Route {
 
     const resume = quietTheRest();
 
+    let resumeArrivals: (() => void) | undefined;
+
     const view = animateView(async () => {
       await transition.retry();
+      // Again, now that the new page has mounted.
+      //
+      // The first call quiets what was already running. The page arriving in
+      // this callback has its own demo, and it starts animating the moment it
+      // mounts — after that call, and therefore not covered by it. It then runs
+      // at full tilt for the whole morph, which is a cost spread evenly through
+      // the transition rather than at either end: measured off a screen
+      // capture, about one frame in ten dropped in the BODY of the animation
+      // rather than clustered at its start.
+      resumeArrivals = quietTheRest();
       window.scrollTo(0, scrollTo);
       // Scrolled HERE, inside the snapshot, and not before it.
       //
@@ -152,6 +164,7 @@ export default class ApplicationRoute extends Route {
       this.wrapping = false;
       setCrossing(false);
       resume();
+      resumeArrivals?.();
       root.classList.add('is-returning');
       root.classList.remove('is-crossing');
     };
