@@ -247,6 +247,26 @@ export class Wait extends StepComponent<StepArgs & { duration: number }> {
   }
 }
 
+/**
+ * `<c.Gate />` — park the run until `c.advance()`; `@delay` opens it by
+ * itself after that many seconds (§4.1). A gate is a pause, and a pause is
+ * a total order: it may only stand in a sequence that no parallel contains.
+ */
+export class Gate extends Component<{
+  Args: { delay?: number };
+}> {
+  node(): TimelineNode {
+    return { kind: 'gate', ms: msOf(this.args.delay) };
+  }
+  mark = modifier((el: Element) => {
+    providers.set(el, this);
+    return () => providers.delete(el);
+  });
+  <template>
+    <span hidden data-choreo-step {{this.mark}}></span>
+  </template>
+}
+
 abstract class BlockComponent extends Component<{
   Blocks: { default: [] };
 }> {

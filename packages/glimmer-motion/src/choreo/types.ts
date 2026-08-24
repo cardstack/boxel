@@ -183,11 +183,30 @@ export interface WaitStep extends StepBase {
 }
 export type Step = HoldStep | MoveStep | SpringStep | TweenStep | WaitStep;
 
+/** park the run until advance(); `ms` opens it by itself (§4.1) */
+export interface GateNode {
+  kind: 'gate';
+  /** self-open delay, ms (template: `@delay` seconds) */
+  ms?: number;
+}
+
 export interface Block {
   children: TimelineNode[];
   kind: 'parallel' | 'sequence';
 }
-export type TimelineNode = Block | Step;
+export type TimelineNode = Block | GateNode | Step;
+
+/** a gate, placed on the run's clock */
+export interface GateMark {
+  at: number;
+  /** self-open: resume this long after parking, unadvanced */
+  auto?: number;
+}
+
+export interface Compiled {
+  cues: Cue[];
+  gates: GateMark[];
+}
 
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {

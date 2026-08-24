@@ -108,10 +108,18 @@ module('Integration | choreo', function (hooks) {
     assert.notOk(find('#leaver'));
   });
 
-  test('the first render never animates; a clean pass never runs', async function (assert) {
-    let runs = 0;
+  test('the first render never animates; an all-kept pass still runs its timeline', async function (assert) {
+    // docs/choreo-constructs.md §3.1: the share badge, the hot wire — a Hold
+    // with a lifetime fired by an event that inserts, removes and moves
+    // nothing. Steps that select CHANGE stay quiet on such a pass.
+    let holds = 0;
+    let changed = 0;
     const count = () => {
-      runs++;
+      holds++;
+      return 0;
+    };
+    const countChanged = () => {
+      changed++;
       return 0;
     };
     class App extends Component {
@@ -123,18 +131,26 @@ module('Integration | choreo', function (hooks) {
       <template>
         <Choreo as |c|>
           <div id="box" {{motion id="box"}}>{{this.label}}</div>
-          <c.Hold @of={{c.all}} @zIndex={{count}} @duration={{0.01}} />
+          <c.Parallel>
+            <c.Hold @of={{c.all}} @zIndex={{count}} @duration={{0.01}} />
+            <c.Tween
+              @of={{c.moved}}
+              @opacity={{countChanged}}
+              @duration={{0.01}}
+            />
+          </c.Parallel>
         </Choreo>
       </template>
     }
     let app: App | undefined;
     await render(<template><App /></template>);
     await nextFrame();
-    assert.strictEqual(runs, 0, 'first render');
+    assert.strictEqual(holds, 0, 'first render never animates');
     app!.label = 'b';
     await settled();
     await nextFrame();
-    assert.strictEqual(runs, 0, 'nothing moved, nothing inserted or removed');
+    assert.strictEqual(holds, 1, 'the all-kept pass ran its timeline');
+    assert.strictEqual(changed, 0, 'steps that select change stayed quiet');
   });
 
   test('Move: a kept participant animates from where it was to where it is', async function (assert) {

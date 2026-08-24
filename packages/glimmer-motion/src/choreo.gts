@@ -37,9 +37,10 @@ import {
   type Snapshot,
 } from './choreo/measure.ts';
 import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
-import { execute, type Run } from './choreo/run.ts';
+import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
   collect,
+  Gate,
   Hold,
   Move,
   Parallel,
@@ -70,6 +71,7 @@ const selector = (type?: Query['type']): Selector =>
 
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
+  Gate: typeof Gate;
   Hold: typeof Hold;
   Move: typeof Move;
   Parallel: typeof Parallel;
@@ -90,29 +92,40 @@ export interface ChoreoContext {
   received: Selector;
   removed: Selector;
   role: (role: string) => Query;
+  /** the current pass's run, as a value you can hold — null between passes (§4.6) */
+  readonly run: ChoreoRun | null;
   still: Selector;
+  /** open the gate the run is parked at; template-stable, because gates are wired in templates */
+  advance: () => void;
 }
 
-const context: ChoreoContext = {
-  Hold,
-  Move,
-  Parallel,
-  Sequence,
-  Spring,
-  Tween,
-  Wait,
-  all: selector(),
-  beacon: (beacon) => ({ beacon }),
-  counterpart: selector('counterpart'),
-  id: (id) => ({ id }),
-  inserted: selector('inserted'),
-  kept: selector('kept'),
-  moved: selector('moved'),
-  received: selector('received'),
-  removed: selector('removed'),
-  role: (role) => ({ role }),
-  still: selector('still'),
-};
+function contextFor(region: Choreo): ChoreoContext {
+  return {
+    Gate,
+    Hold,
+    Move,
+    Parallel,
+    Sequence,
+    Spring,
+    Tween,
+    Wait,
+    advance: () => region.run?.advance(),
+    all: selector(),
+    beacon: (beacon) => ({ beacon }),
+    counterpart: selector('counterpart'),
+    id: (id) => ({ id }),
+    inserted: selector('inserted'),
+    kept: selector('kept'),
+    moved: selector('moved'),
+    received: selector('received'),
+    removed: selector('removed'),
+    role: (role) => ({ role }),
+    get run() {
+      return region.run ?? null;
+    },
+    still: selector('still'),
+  };
+}
 
 interface Signature {
   Args: {
@@ -151,7 +164,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private rootSnapshot?: DOMRect;
   private passPending = false;
   private rendered = false;
-  private run?: Run;
+  run?: ChoreoRun;
+  private context = contextFor(this);
   /** the last changeset this region built — read it from a property function or a test */
   changeset?: Changeset;
 
@@ -166,7 +180,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (this.passPending) {
         return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> pass pending`;
       }
-      if (this.run && !this.run.isDone()) {
+      if (this.run && !this.run.isDone() && !this.run.parked) {
         return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> run in flight`;
       }
       return false;
@@ -380,8 +394,15 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
     const firstRender = !this.rendered;
     this.rendered = true;
-    const tree = firstRender || !changeset.dirty ? [] : collect(root);
-    const cues = tree.length ? compile(tree, changeset) : [];
+    // A pass whose changeset is all-kept still runs its timeline (§3.1):
+    // the share badge, the hot wire — a Hold with a lifetime fired by an
+    // event that inserts, removes and moves nothing. Steps that select
+    // change (inserted / removed / moved) produce no cues on such a pass.
+    const tree = firstRender ? [] : collect(root);
+    const compiled = tree.length
+      ? compile(tree, changeset)
+      : { cues: [], gates: [] };
+    const cues = compiled.cues;
     if (!cues.length) {
       // nothing to play: let every leaver go now
       for (const node of claimed) {
@@ -411,7 +432,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     if (this.args.debug) {
       this.log(changeset, cues);
     }
-    this.run = execute(cues, {
+    this.run = execute(compiled, {
       // ember-animated's continuity, in the terms motion-dom offers: it sums a
       // corrective curve onto the one it interrupted, which transfers velocity
       // implicitly; a spring takes a velocity outright, so the run that is
@@ -546,7 +567,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         style='position:absolute;inset:0;pointer-events:none;overflow:visible'
         {{this.layer}}
       ></div>
-      {{yield context}}
+      {{yield this.context}}
     </div>
   </template>
 }

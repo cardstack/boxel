@@ -232,6 +232,11 @@ export function springEasing(spec: SpringSpec | undefined): {
 export interface Delivery {
   cancel(): void;
   finished: Promise<void>;
+  pause(): void;
+  play(): void;
+  /** place the whole delivery at `ms` past its cue start (unscaled) */
+  seek(ms: number): void;
+  speed(rate: number): void;
 }
 
 /** play one delivery cue: split, animate the slots, restore, land the end values */
@@ -294,5 +299,18 @@ export function deliver(cue: Cue, speed: number): Delivery {
       parts.restore();
     },
     finished,
+    pause() {
+      animations.forEach((a) => a.pause());
+    },
+    play() {
+      animations.forEach((a) => a.play());
+    },
+    seek(ms: number) {
+      const t = Math.max(0, ms * speed);
+      animations.forEach((a) => (a.currentTime = t));
+    },
+    speed(rate: number) {
+      animations.forEach((a) => (a.playbackRate = rate));
+    },
   };
 }

@@ -43,7 +43,7 @@ const fade = (over: Partial<TimelineNode> = {}): TimelineNode =>
 module('Unit | choreo | compile', function () {
   test('an anchored step starts against the named one and is lifted from the flow', function (assert) {
     const cs = changeset('a', 'b', 'c');
-    const cues = compile(
+    const { cues } = compile(
       [
         {
           children: [
@@ -68,7 +68,7 @@ module('Unit | choreo | compile', function () {
 
   test("after 'name' is the step's end plus seconds", function (assert) {
     const cs = changeset('a', 'b');
-    const cues = compile(
+    const { cues } = compile(
       [
         {
           children: [
@@ -85,7 +85,7 @@ module('Unit | choreo | compile', function () {
 
   test('a named step records its start with its delay spent', function (assert) {
     const cs = changeset('a', 'b');
-    const cues = compile(
+    const { cues } = compile(
       [
         {
           children: [
@@ -143,7 +143,7 @@ module('Unit | choreo | compile', function () {
 
   test('repeat multiplies the schedule; Infinity occupies one cycle and marks the cue', function (assert) {
     const cs = changeset('a', 'b');
-    const cues = compile(
+    const { cues } = compile(
       [
         {
           children: [
@@ -158,7 +158,7 @@ module('Unit | choreo | compile', function () {
     assert.strictEqual(cues[0]!.duration, 1500, 'three plays of 500ms');
     assert.strictEqual(cues[1]!.start, 1500);
 
-    const looped = compile([fade({ repeat: Infinity })], cs);
+    const looped = compile([fade({ repeat: Infinity })], cs).cues;
     assert.true(looped[0]!.loop, 'an ambient loop is marked');
     assert.strictEqual(
       looped[0]!.duration,
@@ -169,7 +169,7 @@ module('Unit | choreo | compile', function () {
 
   test('a keyframe array is the from-and-to; springs take exactly two', function (assert) {
     const cs = changeset('a');
-    const cues = compile([fade({ props: { opacity: [0, 1, 0] } })], cs);
+    const { cues } = compile([fade({ props: { opacity: [0, 1, 0] } })], cs);
     assert.deepEqual(cues[0]!.target!['opacity'], [0, 1, 0]);
     assert.throws(
       () =>
@@ -189,7 +189,7 @@ module('Unit | choreo | compile', function () {
 
   test('stagger ladders the matched sprites and stretches the step', function (assert) {
     const cs = changeset('a', 'b', 'c');
-    const cues = compile(
+    const { cues } = compile(
       [
         {
           children: [

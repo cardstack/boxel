@@ -500,7 +500,13 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
           return false;
         }
         for (const [key, value] of live.values) {
-          if (value.isAnimating()) {
+          // paused by a run handle is a still, not motion (§4.6): a parked
+          // gate or a held scrub must read as settled
+          if (
+            value.isAnimating() &&
+            (value.animation as { state?: string } | undefined)?.state !==
+              'paused'
+          ) {
             return `${describe(this.element)} ${key}`;
           }
         }

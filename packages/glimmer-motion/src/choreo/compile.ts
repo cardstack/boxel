@@ -13,8 +13,10 @@ import {
 import type {
   Block,
   ChangesetLike,
+  Compiled,
   Cue,
   DeliveryOrder,
+  GateMark,
   HoldStep,
   MoveStep,
   PropSource,
@@ -30,6 +32,8 @@ import type {
 
 const isBlock = (node: TimelineNode): node is Block =>
   node.kind === 'sequence' || node.kind === 'parallel';
+const isGate = (node: TimelineNode): node is import('./types.ts').GateNode =>
+  node.kind === 'gate';
 
 const DEFAULT_SPRING: SpringSpec = { damping: 30, stiffness: 300 };
 
@@ -368,7 +372,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
 export default function compile(
   tree: TimelineNode[],
   cs: ChangesetLike,
-): Cue[] {
+): Compiled {
   const resolved = new Map<Step, Resolved>();
   const of = (step: Step) => {
     let r = resolved.get(step);
@@ -379,6 +383,9 @@ export default function compile(
     return r;
   };
   const measure = (node: TimelineNode): number => {
+    if (isGate(node)) {
+      return 0;
+    }
     if (!isBlock(node)) {
       // an anchored step is lifted out of its block's flow: it neither pushes
       // a sequence forward nor stretches a block's span (§4.2)
@@ -393,6 +400,9 @@ export default function compile(
   // duplicate names are an authoring error, caught before anything is placed
   const seen = new Set<string>();
   const checkNames = (node: TimelineNode) => {
+    if (isGate(node)) {
+      return;
+    }
     if (isBlock(node)) {
       node.children.forEach(checkNames);
     } else if (node.name) {
@@ -405,8 +415,29 @@ export default function compile(
   tree.forEach(checkNames);
   /** where each named step landed: when it starts (delay spent) and how long it plays */
   const names = new Map<string, { duration: number; start: number }>();
+  const gates: GateMark[] = [];
+  /**
+   * A pause is a total order (§4.1): a gate may only stand in a sequence
+   * that no parallel contains — including the implicit parallel that is the
+   * region's root when it has more than one top-level node.
+   */
+  const forbidGates = (node: TimelineNode) => {
+    if (isGate(node)) {
+      throw new Error(
+        'choreo: a gate inside a parallel has no meaning — a pause is a ' +
+          'total order; only an uncontained sequence can hold one',
+      );
+    }
+    if (isBlock(node)) {
+      node.children.forEach(forbidGates);
+    }
+  };
   /** span: the time a hold without @duration is allowed to last from `start` */
   const place = (node: TimelineNode, start: number, span: number) => {
+    if (isGate(node)) {
+      gates.push({ at: start, auto: node.ms });
+      return;
+    }
     if (!isBlock(node)) {
       const r = of(node);
       const delay = node.delay ?? 0;
@@ -458,14 +489,20 @@ export default function compile(
       }
       return;
     }
+    // a parallel: every child at once — and no gate anywhere under it
+    node.children.forEach(forbidGates);
     const total = measure(node);
     for (const child of node.children) {
       place(child, start, total);
     }
   };
   const root = measure({ children: tree, kind: 'parallel' });
+  if (tree.length > 1) {
+    tree.forEach(forbidGates);
+  }
   for (const node of tree) {
     place(node, 0, root);
   }
-  return out;
+  gates.sort((a, b) => a.at - b.at);
+  return { cues: out, gates };
 }
