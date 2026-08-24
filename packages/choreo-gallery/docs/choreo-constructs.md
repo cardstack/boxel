@@ -66,25 +66,27 @@ Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 
 ### Blocks
 
-`c.Sequence` ✓ · `c.Parallel` ✓ · `c.Gate` + (`@auto`; advanced by
-`c.advance()`; splits the run into segments; error inside `Parallel`).
+`c.Sequence` ✓ · `c.Parallel` ✓ · `c.Gate` + (`@delay` to self-open;
+advanced by `c.advance()`; splits the run into segments; error inside
+`Parallel`).
 
 ### Steps
 
-After the cuts below: nine steps, and every animating step reads
-_who · what · how long_, with position in the block giving _when_.
+After the cuts and the naming pass: nine steps. Every animating step
+reads _who · what · how long_, position in the block gives _when_, and
+every duration in the language is **seconds**, as in Motion.
 
-| step         | reads as                                                                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c.To`       | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), then either `@ms` + `@ease` or `@spring`; `@delay` `@from` `@repeat`; delivery via `@by` `@order` `@stagger` |
-| `c.Move`     | FLIP the measured delta: `@spring`/`@ms`+`@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins      |
-| `c.Hold`     | set properties for a window and release: `@ms` or the block's span, `@fill`; with no properties it is a pure wait                                                                                 |
-| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                            |
-| `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@hold={{query}}` names sprites that keep their size (damped by default)                                                               |
-| `c.Scroll`   | animate the sprite's scroll container to `@block`; occupies the sequence                                                                                                                          |
-| `c.Tether`   | `@from` `@to` `@draw` — geometry continuously derived from sprites or the gesture                                                                                                                 |
-| `c.Gate`     | park the run until `c.advance()`; `@auto`                                                                                                                                                         |
-| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                    |
+| step         | reads as                                                                                                                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.To`       | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), then `@duration` + `@ease` or `@spring`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger` |
+| `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins   |
+| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                   |
+| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                                    |
+| `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                     |
+| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                  |
+| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites or the gesture                                                                                                                         |
+| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                             |
+| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                            |
 
 ### Timing
 
@@ -94,9 +96,12 @@ anchors (+); every duration resolves through the engine's generator, so
 
 ### The run
 
-`c.run` (+): `play` / `pause` / `seek` / `advance` / `cancel`, tracked
-`t` / `duration` / `segment`. Two drivers: the frameloop ✓ and the
-native WAAPI/CSS target (+), same language, same assertions.
+`c.run` (+) wears Motion's `AnimationPlaybackControls` shape: settable
+`time` (seconds) and `speed`, `duration`, `play` / `pause` / `cancel` —
+plus the two words Motion has no need for: `advance()` and tracked
+`segment`. `c.advance` is the one template-level alias, because gates
+are wired in templates. Two drivers: the frameloop ✓ and the native
+WAAPI/CSS target (+), same language, same assertions.
 
 ## As simple as it gets? Five cuts
 
@@ -144,6 +149,73 @@ duration of these three steps"), the anchors are two helpers that read
 as English, and each remaining step names a genuinely different
 mechanism. Nine steps, two blocks, ten queries: an author who knows
 _who · what · how long_ can read all of it.
+
+## One vocabulary — the naming pass
+
+Three audiences read this language: authors of these templates, people
+(and models) who already know motion.dev, and Ember developers raised
+on the ecosystem's patterns. The same pass serves all three. Breaking
+renames are accepted; the reference above is post-pass.
+
+### Internal rules
+
+1. **A name has one type and one meaning everywhere.** `@from` / `@to`
+   are geometry (a beacon, a sprite, the gesture) — so `c.To`'s old
+   property-hash `@from` dies; a keyframe array (`@opacity={{array 0
+1}}`) already says start-and-end in one value. `@path` is path data
+   on both `Move` (a string to travel) and `Tether` (a function to
+   draw); `@draw` dies.
+2. **A step's name is reserved.** `c.Hold` the step means `@hold` the
+   argument cannot — the camera's exempt sprites are `@steady`, the
+   crossing's own word for "same on both sides". `@block` collided
+   with timeline blocks; the scroll alignment is `@align`.
+3. **Durations are one word and one unit.** `@duration`, in seconds
+   (`@ms` dies). A gate that opens by itself is a `@delay` — the same
+   word every step already uses for time-before-start.
+4. **Playback lives on the run**, shaped like Motion's controls;
+   `c.advance` is the sole template alias.
+
+### The motion.dev alignment
+
+The binding already keeps Motion's names 1:1 (`initial`, `layout`,
+`stiffness`, `visualDuration`…). The timeline now holds the same line
+wherever a concept overlaps — a reader who knows Motion should never
+relearn a name, and a divergence should mean a genuinely new concept:
+
+| concept                     | motion.dev                                                     | Choreo                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| duration / delay            | seconds                                                        | same — `@duration` / `@delay`, seconds (`@ms` dropped: one template was speaking two units)                                                                                  |
+| spring spec                 | `stiffness` `damping` `mass` `bounce` `visualDuration`         | identical, same engine                                                                                                                                                       |
+| easing                      | named / cubic-bezier array                                     | identical — `@ease`                                                                                                                                                          |
+| keyframes                   | value arrays                                                   | identical, as property values                                                                                                                                                |
+| repeat                      | `repeat` count + `repeatType: 'loop' \| 'reverse' \| 'mirror'` | identical pair — the invented `@repeat='loop'\|'mirror'` enum dies                                                                                                           |
+| sequence labels             | `at: 'label'`                                                  | `@name` + `@at={{at 'label' 0.4}}` — same concept, typed helpers instead of the string micro-DSL (`"<"`, `"+0.5"`), which Glint cannot check                                 |
+| stagger                     | `stagger(0.1, { from: 'first' \| 'last' \| 'center' })`        | `@stagger` seconds; `@order` adds `'center'` alongside `'forward'` / `'reverse'` / `'random'` — order and origin are the same idea for a line, and `random` is ours (seeded) |
+| playback controls           | `time` (settable, s), `speed`, `duration`                      | identical, plus `advance()` / `segment` for gates                                                                                                                            |
+| what Motion has no word for | —                                                              | changesets, roles, beacons, the gesture, gates, camera, tether, lift, crossing — new concepts, new words                                                                     |
+
+### The Ember lineage
+
+Is a yielded step component idiomatic Ember? Yes — the
+provider-and-contextual-components pattern is the ecosystem's own
+(`ember-power-select`, `ember-leaflet`'s `<layers.tile>`,
+`ember-google-maps`' `<map.marker>`: components that render nothing
+visual and register with their parent). What it is **not** is the
+ef4 lineage: ember-animated puts choreography in JavaScript generator
+functions over sprite lists, and legacy boxel-motion followed it with
+orchestration functions over behavior classes — whose names
+(`TweenBehavior`, `SpringBehavior`, `StaticBehavior`, `WaitBehavior`)
+are the direct ancestors of these steps, as choreography.md's mapping
+table records. The departure is deliberate, and the recording rule is
+the reason: a timeline declared as markup is data — co-located with
+its participants, compile-checkable (every "fails at compile, named"
+promise in this document), serializable, seekable, and legible to a
+model reading a skill. A generator that decides mid-flight is
+authorable but not recordable. The escape hatch stays where legacy
+users expect it — any property may be a function of `(sprite,
+changeset)` — so the JS muscle memory has somewhere to go; the
+`c.To` rename does trade away the `TweenBehavior` name-lineage, which
+the migration table keeps.
 
 ## The seam with the binding
 
