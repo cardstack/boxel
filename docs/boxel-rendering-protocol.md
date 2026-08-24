@@ -8,17 +8,17 @@ and operations that cross an execution boundary, the routing rules that
 select a trust tier, and each tier's obligations. It is derived from `main`'s
 observed behavior (extracted at `origin/main` = `43e3a530cb`), not designed
 forward. Rationale and the larger future live in
-[boxel-execution-runtime-architecture.md](https://github.com/cardstack/boxel/blob/codex/boxel-execution-runtime-architecture/docs/boxel-execution-runtime-architecture.md);
+[boxel-execution-runtime-architecture.md](https://github.com/cardstack/boxel/blob/1314098dd215f11020d1ecfda2ed2b96a488365c/docs/boxel-execution-runtime-architecture.md);
 the delivery plan is
-[boxel-rendering-protocol-plan.md](https://github.com/cardstack/boxel/blob/codex/boxel-execution-runtime-architecture/docs/boxel-rendering-protocol-plan.md).
-Those two, and every other document this one cites, live on the reference
-implementation branch `codex/boxel-execution-runtime-architecture`, which is
-frozen and is the behavioral oracle for the tiers this spec describes.
+[boxel-rendering-protocol-plan.md](https://github.com/cardstack/boxel/blob/1314098dd215f11020d1ecfda2ed2b96a488365c/docs/boxel-rendering-protocol-plan.md).
+Documents this one cites are pinned by commit, as `main` is above, so a
+citation resolves to the text the statement was written against.
 
 **RP-0.2** Status: **DRAFT**. It becomes NORMATIVE when the Direct
-equivalence oracle (RP-15.4) is green. From that point, no adapter PR may
-change this document or the protocol module; a spec change requires a
-version bump, a Direct conformance proof, and adapter updates in one PR.
+equivalence oracle (RP-15.4) is green and RP-17.3's named prerequisites are
+closed. From that point, no adapter PR may change this document or the
+protocol module; a spec change requires a version bump, a Direct conformance
+proof, and adapter updates in one PR.
 
 **RP-0.3** Every normative statement carries an ID (`RP-x.y`). The
 conformance suite mirrors these IDs; CI enforces the bijection in two grades
@@ -740,9 +740,8 @@ All dispatch to the Host-owned `SurfaceService`; grants are per mounted
 surface; released handles fail closed.
 
 **RP-16.2** Everything else in the architecture doc's `surface*` catalog is
-DEFERRED (RP-9 list). Each future capability enters as its own spec section
-
-- version bump + three-tier conformance.
+DEFERRED (RP-17.1). Each future capability enters as its own spec section —
+version bump + three-tier conformance.
 
 ## RP-17 Deferred and excluded
 
@@ -834,7 +833,7 @@ generations.
 ## RP-19 Volatile execution v1 (promotion)
 
 Un-defers the volatile-promotion half of
-[boxel-volatile-execution-plan.md](https://github.com/cardstack/boxel/blob/codex/boxel-execution-runtime-architecture/docs/boxel-volatile-execution-plan.md):
+[boxel-volatile-execution-plan.md](https://github.com/cardstack/boxel/blob/1314098dd215f11020d1ecfda2ed2b96a488365c/docs/boxel-volatile-execution-plan.md):
 which cards get RP-18's source volatility, and what the rest of the
 workspace is guaranteed while they have it. The entry seam is
 `BoxelExecutionService.promoteToVolatile(moduleIdentifier)`.
