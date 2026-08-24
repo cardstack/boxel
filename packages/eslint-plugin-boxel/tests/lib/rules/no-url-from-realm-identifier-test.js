@@ -38,6 +38,11 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
       code: `let u = new URL(new URL('https://example.com/').href);`,
       filename,
     },
+    // A comparison against an identifier yields a boolean, not an identifier.
+    {
+      code: `${IMPORT}declare const a: string;\nlet u = new URL(a === rri('@cardstack/base/x') ? 'https://example.com/' : 'https://example.org/');`,
+      filename,
+    },
   ],
 
   invalid: [
@@ -66,6 +71,41 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
     // An optional identifier still carries the brand in its union.
     {
       code: `${IMPORT}declare const maybe: ReturnType<typeof rri> | undefined;\nlet u = new URL(maybe as ReturnType<typeof rri>);`,
+      filename,
+      errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // A ternary between an identifier and a plain string: the union
+    // `RealmResourceIdentifier | string` reduces to `string`, so the argument's
+    // own type carries no brand and only walking the branches finds it.
+    {
+      code: `${IMPORT}let m = rri('@cardstack/base/card-api');\nlet u = new URL(m.endsWith('.gts') ? m : `+"`${m}.gts`"+`);`,
+      filename,
+      errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // Interpolating an identifier produces a string that is still spelled like
+    // an identifier.
+    {
+      code: `${IMPORT}let m = rri('@cardstack/base/card-api');\nlet u = new URL(`+"`${m}.gts`"+`);`,
+      filename,
+      errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // Concatenation erases the brand the same way.
+    {
+      code: `${IMPORT}let m = rri('@cardstack/base/card-api');\nlet u = new URL(m + '.gts');`,
+      filename,
+      errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // A fallback through `??` keeps the identifier on one side.
+    {
+      code: `${IMPORT}declare const maybe: ReturnType<typeof rri> | undefined;\nlet u = new URL(maybe ?? 'https://example.com/');`,
+      filename,
+      errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // Computing the value into a `const` first is the shape this appears in:
+    // the local's own type is `string`, and the identifier is only visible in
+    // the expression it was initialized with.
+    {
+      code: `${IMPORT}const m = rri('@cardstack/base/card-api');\nconst f = m.endsWith('.gts') ? m : `+"`${m}.gts`"+`;\nlet u = new URL(f);`,
       filename,
       errors: [{ messageId: 'urlFromIdentifier' }],
     },

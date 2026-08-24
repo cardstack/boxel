@@ -70,6 +70,99 @@ module.exports = {
     }
     const checker = services.program.getTypeChecker();
 
+    function typeBrandOf(node) {
+      const tsNode = services.esTreeNodeToTSNodeMap.get(node);
+      if (!tsNode) {
+        return undefined;
+      }
+      return brandOf(checker.getTypeAtLocation(tsNode), checker);
+    }
+
+    // A branded string is a subtype of `string`, and TypeScript reduces
+    // `RealmResourceIdentifier | string` to plain `string` — so a ternary
+    // between an identifier and a template literal, or a concatenation with
+    // one, has no brand left to find. The value is still an identifier at
+    // runtime and `new URL` still throws on it, so the expression is walked
+    // for a branded part rather than only asked for its own type.
+    //
+    // Only the forms that carry an identifier's spelling through are walked. A
+    // branded operand of `===`, or a member of an array being indexed, does not
+    // make the result an identifier.
+    // Resolve a `const` binding to the expression it was initialized with, so
+    // that computing the value into a local before parsing it does not hide the
+    // identifier. Only single-definition `const`s are followed; anything
+    // reassigned is not reliably the expression seen here.
+    function constInitializerOf(node) {
+      const sourceCode = context.sourceCode || context.getSourceCode();
+      let scope = sourceCode.getScope
+        ? sourceCode.getScope(node)
+        : context.getScope();
+      for (; scope; scope = scope.upper) {
+        const variable = scope.set && scope.set.get(node.name);
+        if (!variable) {
+          continue;
+        }
+        if (variable.defs.length !== 1) {
+          return undefined;
+        }
+        const def = variable.defs[0];
+        if (
+          def.type !== 'Variable' ||
+          def.parent.kind !== 'const' ||
+          !def.node.init
+        ) {
+          return undefined;
+        }
+        return def.node.init;
+      }
+      return undefined;
+    }
+
+    function brandInExpression(node, depth = 0) {
+      if (!node || depth > 6) {
+        return undefined;
+      }
+      const own = typeBrandOf(node);
+      if (own) {
+        return own;
+      }
+      switch (node.type) {
+        case 'ConditionalExpression':
+          return (
+            brandInExpression(node.consequent, depth + 1) ||
+            brandInExpression(node.alternate, depth + 1)
+          );
+        case 'LogicalExpression':
+          return (
+            brandInExpression(node.left, depth + 1) ||
+            brandInExpression(node.right, depth + 1)
+          );
+        case 'BinaryExpression':
+          return node.operator === '+'
+            ? brandInExpression(node.left, depth + 1) ||
+                brandInExpression(node.right, depth + 1)
+            : undefined;
+        case 'TemplateLiteral':
+          for (const part of node.expressions) {
+            const found = brandInExpression(part, depth + 1);
+            if (found) {
+              return found;
+            }
+          }
+          return undefined;
+        case 'Identifier': {
+          const init = constInitializerOf(node);
+          return init ? brandInExpression(init, depth + 1) : undefined;
+        }
+        case 'TSAsExpression':
+        case 'TSNonNullExpression':
+        case 'TSSatisfiesExpression':
+          return brandInExpression(node.expression, depth + 1);
+        default:
+          return undefined;
+      }
+    }
+
     return {
       NewExpression(node) {
         if (node.callee.type !== 'Identifier' || node.callee.name !== 'URL') {
@@ -79,11 +172,7 @@ module.exports = {
         if (!arg || arg.type === 'SpreadElement') {
           return;
         }
-        const tsNode = services.esTreeNodeToTSNodeMap.get(arg);
-        if (!tsNode) {
-          return;
-        }
-        const brand = brandOf(checker.getTypeAtLocation(tsNode), checker);
+        const brand = brandInExpression(arg);
         if (brand) {
           context.report({
             node,
