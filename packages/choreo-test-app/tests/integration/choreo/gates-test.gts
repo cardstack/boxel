@@ -4,7 +4,7 @@
  * Keynote's click-through — every property lands on its segment-end
  * value. A parked run is a still, and settled.
  */
-import { find, render, setupOnerror, settled } from '@ember/test-helpers';
+import { find, render, settled,setupOnerror } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';

@@ -8,10 +8,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import { Choreo, motion } from 'glimmer-motion';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
-import { animationsSettled } from 'glimmer-motion/test-support';
 
 let app: { toggle(): void };
 

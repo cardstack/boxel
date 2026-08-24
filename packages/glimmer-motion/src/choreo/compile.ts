@@ -417,7 +417,9 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
           // same flight, and the two skins swap during it or at its landing
           const cp = sprite.counterpart;
           const swap = step.swap ?? 'during';
-          if (cp && swap !== 'none' && sprite.final && cp.initial) {
+          // a far match's sender is released to its own region, not carried
+          // here — there is no second skin to fly (§3.2)
+          if (cp && !cp.sent && swap !== 'none' && sprite.final && cp.initial) {
             const from = cp.initial.page;
             const to = sprite.final.page;
             const cpTarget: Record<string, unknown> = {};

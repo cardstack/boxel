@@ -15,6 +15,7 @@ import type { AnimationPlaybackControls, VisualElement } from 'motion-dom';
 import {
   animateTarget,
   cancelFrame,
+  flushKeyframeResolvers,
   frame,
   type FrameData,
   JSAnimation,
@@ -559,8 +560,8 @@ export class ChoreoRun implements Run {
         // the values back on their origin
         t.passed = false;
         t.started = false;
-        t.controls?.forEach((c) => c.stop());
-        t.controls = undefined;
+        flushKeyframeResolvers();
+        this.stopTrack(t);
         t.delivery?.cancel();
         t.delivery = undefined;
         t.loopAnimation?.cancel();
@@ -591,10 +592,26 @@ export class ChoreoRun implements Run {
           // a still frame is COMPUTED, not driven: the live animation (if
           // any) is retired and every value jumped to its sampled position —
           // deterministic, and immune to animation-lifecycle races
-          t.controls?.forEach((c) => c.stop());
-          t.controls = undefined;
+          if (t.controls) {
+            flushKeyframeResolvers();
+            this.stopTrack(t);
+          }
           this.sampleStill(t, now);
         }
+      }
+    }
+  }
+
+  /** stop a track's animations at the value level — an async animation
+   *  cancelled before it resolves stays 'idle' forever if only the controls
+   *  are stopped, and its value then reads as animating for good */
+  private stopTrack(t: Track) {
+    t.controls?.forEach((c) => c.stop());
+    t.controls = undefined;
+    const ve = t.cue.sprite.node.visualElement;
+    if (ve && t.cue.target) {
+      for (const key in t.cue.target) {
+        ve.getValue(key)?.stop();
       }
     }
   }
@@ -885,8 +902,8 @@ export class ChoreoRun implements Run {
     // it — so a completed track is stopped outright and its finals jumped;
     // a scrub back re-creates it from the recorded origin
     t.started = false;
-    t.controls?.forEach((c) => c.stop());
-    t.controls = undefined;
+    flushKeyframeResolvers();
+    this.stopTrack(t);
     const ve = cue.sprite.node.visualElement;
     if (ve && cue.target) {
       for (const key in cue.target) {
@@ -991,9 +1008,13 @@ export class ChoreoRun implements Run {
     this.cancelled = true;
     this.stopTicking();
     clearTimeout(this.autoTimer);
+    // resolve everything first: a stop() issued before the async keyframe
+    // resolution is dropped, and the revived animation leaves its value
+    // reading as animating forever — the probe never settles
+    flushKeyframeResolvers();
     this.sampleVelocities();
     for (const t of this.tracks) {
-      t.controls?.forEach((c) => c.stop());
+      this.stopTrack(t);
       t.delivery?.cancel();
       t.loopAnimation?.cancel();
       const ve = t.cue.sprite.node.visualElement;
