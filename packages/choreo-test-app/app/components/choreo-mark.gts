@@ -33,8 +33,16 @@ export const BEAD = { cx: 18.3, cy: 7.1, r: 2.8 } as const;
  * choreography, and concentric is what keeps the promise that nothing on
  * this mark ever crosses anything — orbits at different radii cannot meet.
  * 210° from the lower left over the top, arriving at its own dot.
+ *
+ * It starts 5° further round than the geometry alone wants (67.8° rather
+ * than 72.8°, measured from the centre). The outer sweep is a 2.2 stroke and
+ * this one a 1.6, and the lighter line read as stopping short at the bottom
+ * against the heavier one beside it — the two ends looked staggered when they
+ * are meant to sit level. Five degrees is what squares them to the eye. The
+ * whole mark is exported from here, so the top bar and the Build Order demo
+ * both take the correction from one number.
  */
-export const ORBIT = 'M13.3 16.2A4.4 4.4 0 0 1 8.4 9.5';
+export const ORBIT = 'M13.66 16.07A4.4 4.4 0 0 1 8.4 9.5';
 
 /**
  * The inner element now — not a bead but a burning stretch of the line

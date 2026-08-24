@@ -9,6 +9,44 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
+    <!-- Open Graph / Twitter.
+         These are the ones that MATTER: link crawlers (Facebook, Slack,
+         Discord, iMessage, most of Twitter's) fetch the HTML and never run the
+         app, so whatever <SocialMeta> sets at runtime is invisible to them.
+         This static block is what actually gets scraped; the component only
+         refines the tab for a visitor who is already here.
+
+         og:url and og:image must be ABSOLUTE — a relative og:image is dropped
+         by Facebook outright. Update SITE below when the domain is settled. -->
+    <meta property="og:site_name" content="Choreo" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Choreo — Motion, Choreographed" />
+    <meta
+      property="og:description"
+      content="Choreography for Ember: a changeset and a timeline over a whole render pass, on the Motion engine."
+    />
+    <meta property="og:url" content="https://cardstack.github.io/glimmer-motion/" />
+    <meta
+      property="og:image"
+      content="https://cardstack.github.io/glimmer-motion/og.png"
+    />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="The Choreo gallery: a Motion, Choreographed headline over a grid of live motion demos"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Choreo — Motion, Choreographed" />
+    <meta
+      name="twitter:description"
+      content="Choreography for Ember: a changeset and a timeline over a whole render pass, on the Motion engine."
+    />
+    <meta
+      name="twitter:image"
+      content="https://cardstack.github.io/glimmer-motion/og.png"
+    />
+
     {{content-for "head"}}
 
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />

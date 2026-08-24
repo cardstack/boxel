@@ -10,6 +10,24 @@
   --bg: #090807;
   --bg-elev: #12100e;
   --bg-spot: #1a1613;
+
+  /* Playhead's own surfaces.
+     The light-mode sweep pointed this demo's card, button and grooves at the
+     shared --bg-spot/--bg-well ladder, which in dark is a near-black (#070605)
+     — a good page ground, and far too stark for a small UI sitting ON that
+     ground. These are the warm tones the demo carried before light mode: a
+     card a shade above the page rather than a hole cut in it, and grooves
+     that are a translucent black over the card instead of the page colour.
+     Light overrides them back to the shared ladder, where it reads right. */
+  --ph-card-top: #17130f;
+  --ph-card-bot: #100d0b;
+  --ph-go-top: #2b221c;
+  --ph-go-bot: #1b1512;
+  --ph-receipt-top: #1d1611;
+  --ph-receipt-bot: #120f0d;
+  --ph-row: rgba(0, 0, 0, 0.22);
+  --ph-groove: rgba(0, 0, 0, 0.3);
+  --ph-btn: rgba(0, 0, 0, 0.35);
   /* the page's own resting tone — not --bg. --bg is the recessed end of the
      surface ladder (bg < bg-elev < bg-spot) that cards and panels sit on top
      of; the wash behind all of them used to read lighter than pure --bg
@@ -99,6 +117,17 @@
   --bg: #efe9df;
   --bg-elev: #f7f3ec;
   --bg-spot: #fbf8f3;
+
+  /* light keeps the shared ladder: on a light card these read as intended */
+  --ph-card-top: var(--bg-spot);
+  --ph-card-bot: var(--bg-well);
+  --ph-go-top: var(--bg-spot);
+  --ph-go-bot: var(--bg-well);
+  --ph-receipt-top: var(--bg-spot);
+  --ph-receipt-bot: var(--bg-well);
+  --ph-row: var(--bg-well);
+  --ph-groove: var(--bg-well);
+  --ph-btn: var(--bg-well);
   --bg-page: #f2ece1;
   --ink: #211d18;
   --ink-dim: #6b6255;
@@ -3522,16 +3551,29 @@ html[data-gm-dragging] * {
   border-left: 1px solid var(--line);
 }
 
-/* the end slots round off to roughly follow .rail's own pill cap — a plain
+/* the end slots round off to follow .rail's own pill cap — a plain
    rectangle's hover fill square-cornered its way past the curve, and
    clipping it with overflow on .rail instead left a seam of its own at
    the cap where the border's anti-aliasing and the clip boundary
-   disagreed */
+   disagreed.
+
+   The negative margin is what makes the fill actually REACH the cap.
+   .rail carries 6px of side padding, so the track — and every slot in it —
+   starts 6px inside the rail's own curve, and a hover fill that stopped
+   there left a dark crescent in the cap that the pointer was already over.
+   Bleeding the end slots back across that padding, with matching padding of
+   their own so the content box (and therefore the puck's centre) does not
+   move, covers it. At 44px of inner height a 999px radius resolves to the
+   same 22px as the rail's inner edge, so the two curves coincide. */
 .slot:first-child {
+  margin-left: -6px;
+  padding-left: 6px;
   border-radius: 999px 0 0 999px;
 }
 
 .slot:last-child {
+  margin-right: -6px;
+  padding-right: 6px;
   border-radius: 0 999px 999px 0;
 }
 
@@ -4590,7 +4632,7 @@ html[data-gm-dragging] * {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+  background: linear-gradient(180deg, var(--ph-card-top), var(--ph-card-bot));
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
 }
 
@@ -4638,7 +4680,7 @@ html[data-gm-dragging] * {
   /* a recessed groove relative to .ph-app's own surface, not a neutral
      black veil — black-over-a-light-card reads as flat grey once .ph-app
      turns light, so this reaches for the warm well tone directly */
-  background: var(--bg-well);
+  background: var(--ph-groove);
 }
 
 /* the pill travels on x — 127px, the width of one half. A fixed number
@@ -4682,7 +4724,7 @@ html[data-gm-dragging] * {
   padding: 10px 10px 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: var(--bg-well);
+  background: var(--ph-row);
   font: inherit;
   color: var(--ink);
   text-align: left;
@@ -4737,7 +4779,7 @@ html[data-gm-dragging] * {
   margin-top: 12px;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
-  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+  background: linear-gradient(180deg, var(--ph-go-top), var(--ph-go-bot));
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -4756,7 +4798,11 @@ html[data-gm-dragging] * {
   padding: 20px 18px 16px;
   border: 1px solid var(--line-strong);
   border-radius: 16px;
-  background: linear-gradient(180deg, var(--bg-spot), var(--bg-well));
+  background: linear-gradient(
+    180deg,
+    var(--ph-receipt-top),
+    var(--ph-receipt-bot)
+  );
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
   text-align: center;
   /* invisible until the score places the order, and not in the way until then
@@ -4871,7 +4917,7 @@ html[data-gm-dragging] * {
   height: 28px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
-  background: var(--bg-well);
+  background: var(--ph-btn);
   font: inherit;
   font-size: 11px;
   color: var(--ink);
@@ -5927,4 +5973,293 @@ html[data-gm-dragging] * {
 
 .dg-h.is-hot {
   fill: var(--ember-hot);
+}
+
+/* ---- dark: the surfaces the light-mode sweep flattened ----
+ *
+ * Adding light mode introduced --bg-well (#070605) and pointed a lot of demo
+ * surfaces at it. It is darker than --bg itself, and darker than every literal
+ * it replaced (#0a0908, #100e0c, #0d0b0a, #16130f …), so demos that used to sit
+ * a shade ABOVE the page became holes cut into it — and neighbouring tones that
+ * were deliberately different (.sub-tile vs .sub-tile.is-on) collapsed onto one
+ * value.
+ *
+ * These restore each surface's own pre-light-mode tone, for dark only. The
+ * tokenised rule above stays as written and is what light mode uses, so this
+ * block cannot affect it: `:not([data-theme='light'])` matches dark and the
+ * unstamped default, never light.
+ */
+
+:root:not([data-theme='light']) .trail {
+  background: #14110f;
+}
+
+:root:not([data-theme='light']) .banner {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #1c1815;
+}
+
+:root:not([data-theme='light']) .mode-slot {
+  background: linear-gradient(180deg, #14110f, #0a0908);
+}
+
+:root:not([data-theme='light']) .toast {
+  background: #221c19;
+}
+
+:root:not([data-theme='light']) .toast.is-fail {
+  background: #1a1c1e;
+}
+
+:root:not([data-theme='light']) .toast.is-fail .toast-mark {
+  background:
+    radial-gradient(circle at 30% 25%, #fff4, transparent 42%),
+    linear-gradient(160deg, #8b969c, #2a211c);
+}
+
+:root:not([data-theme='light']) .mode-rest {
+  background: #161311;
+}
+
+:root:not([data-theme='light']) .crop {
+  background: #0a0908;
+}
+
+:root:not([data-theme='light']) .track {
+  background: #1a1613;
+}
+
+:root:not([data-theme='light']) .scroll-well {
+  background: #0a0908;
+}
+
+:root:not([data-theme='light']) .chat-app {
+  background:
+    radial-gradient(
+      80% 50% at 50% 0%,
+      rgba(255, 59, 31, 0.08),
+      transparent 55%
+    ),
+    #100d0b;
+}
+
+:root:not([data-theme='light']) .chat-pip {
+  box-shadow: 0 0 0 2px #100d0b;
+}
+
+:root:not([data-theme='light']) .chat-icon {
+  background: #1c1815;
+}
+
+:root:not([data-theme='light']) .chat-day {
+  background: #1a1613;
+}
+
+:root:not([data-theme='light']) .bubble {
+  background: #1c1815;
+}
+
+:root:not([data-theme='light']) .bubble.is-me {
+  background: linear-gradient(180deg, #4a241c, #2e1612);
+}
+
+:root:not([data-theme='light']) .clip {
+  background: #1c1815;
+}
+
+:root:not([data-theme='light']) .composer-add,
+:root:not([data-theme='light']) .composer-send {
+  background: #1c1815;
+}
+
+:root:not([data-theme='light']) .composer-field {
+  background: #0a0908;
+}
+
+:root:not([data-theme='light']) .sub-tile {
+  background: #16130f;
+}
+
+:root:not([data-theme='light']) .sub-tile.is-on {
+  background: #1f1815;
+}
+
+:root:not([data-theme='light']) .pour {
+  background: #16130f;
+}
+
+:root:not([data-theme='light']) .key-pour {
+  background: #16130f;
+}
+
+:root:not([data-theme='light']) .slides {
+  background: #100e0c;
+}
+
+:root:not([data-theme='light']) .slide {
+  background: #14110f;
+}
+
+:root:not([data-theme='light']) .rail {
+  background: linear-gradient(180deg, #131110, #0b0a09);
+}
+
+:root:not([data-theme='light']) .sheet-app {
+  background: #100e0c;
+}
+
+:root:not([data-theme='light']) .sheet {
+  background: #1a1613;
+}
+
+:root:not([data-theme='light']) .share-tile {
+  background: #16130f;
+}
+
+:root:not([data-theme='light']) .sheet.is-rows .share-mark,
+:root:not([data-theme='light']) .sheet.is-app .share-mark {
+  background: #221b16;
+}
+
+:root:not([data-theme='light']) .share-extra:hover {
+  background: #221b16;
+}
+
+:root:not([data-theme='light']) .how {
+  background: #0a0908;
+}
+
+:root:not([data-theme='light']) .bo-plate {
+  background: linear-gradient(180deg, #17130f, #100d0b);
+}
+
+:root:not([data-theme='light']) .bo-field select {
+  background: #0d0b0a;
+}
+
+:root:not([data-theme='light']) .bo-step {
+  background: #0d0b0a;
+}
+
+:root:not([data-theme='light']) .bo-play {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+:root:not([data-theme='light']) .bo-chip {
+  background: rgba(0, 0, 0, 0.35);
+}
+
+/* The rest of the sweep's dark-side drift.
+ *
+ * Same rule as the block above: light mode was allowed to REBIND a variable,
+ * never to change what dark renders. These are the places where the swap was
+ * not value-for-value — a copper badge that became ember, warm translucent
+ * chrome re-based onto the colder --bg, pure-white overlays re-based onto
+ * --ink, and the deep-dive text colours approximated with a color-mix that
+ * lands a few points off the hand-picked hex. Restored for dark only; the
+ * tokenised declarations above are what light uses.
+ *
+ * Deliberately NOT reverted: the logo's warmer stroke (.bo-head / .bo-tail)
+ * and the Inbox geometry, which were design changes made in the same commits
+ * rather than side effects of tokenising.
+ */
+
+:root:not([data-theme='light']) .card-badge,
+:root:not([data-theme='light']) .kicker-badge {
+  color: #e4a35a;
+}
+
+:root:not([data-theme='light']) .card-badge,
+:root:not([data-theme='light']) .kicker-badge {
+  border: 1px solid #e4a35a;
+}
+
+:root:not([data-theme='light']) .tab.is-on {
+  color: #140c0a;
+}
+
+:root:not([data-theme='light']) .backdrop {
+  background:
+    radial-gradient(
+      120% 90% at 50% 42%,
+      rgba(255, 106, 58, 0.16),
+      transparent 58%
+    ),
+    radial-gradient(
+      100% 100% at 50% 50%,
+      rgba(8, 7, 6, 0.5),
+      rgba(6, 5, 4, 0.9)
+    );
+}
+
+:root:not([data-theme='light']) .chat-bar {
+  background: rgba(16, 13, 11, 0.82);
+}
+
+:root:not([data-theme='light']) .composer {
+  background: rgba(16, 13, 11, 0.94);
+}
+
+:root:not([data-theme='light']) .sub-seam::before {
+  border: 1px solid #16130f;
+}
+
+:root:not([data-theme='light']) .inbox-trash b {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+:root:not([data-theme='light']) .inbox-trash svg {
+  stroke: rgba(255, 255, 255, 0.5);
+}
+
+:root:not([data-theme='light']) .mail:hover {
+  background: rgba(255, 255, 255, 0.085);
+}
+
+:root:not([data-theme='light']) .mail-kill {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+:root:not([data-theme='light']) .mail-copy small {
+  color: rgba(255, 255, 255, 0.46);
+}
+
+:root:not([data-theme='light']) .sheet-scrim {
+  background: #050403;
+}
+
+:root:not([data-theme='light']) .bo-panel {
+  background: rgba(0, 0, 0, 0.34);
+}
+
+:root:not([data-theme='light']) .dive-head h2 {
+  color: #d8d0c7;
+}
+
+:root:not([data-theme='light']) .dive-lede {
+  color: #ada49a;
+}
+
+:root:not([data-theme='light']) .dd h3 {
+  color: #c9c0b5;
+}
+
+:root:not([data-theme='light']) .dd-col p {
+  color: #ada49a;
+}
+
+:root:not([data-theme='light']) .dd-col strong {
+  color: #d8d0c7;
+}
+
+:root:not([data-theme='light']) .dd-call p {
+  color: #ada49a;
+}
+
+:root:not([data-theme='light']) .dd-call b {
+  color: #d8d0c7;
+}
+
+:root:not([data-theme='light']) .syn-attr {
+  color: #cbbba8;
 }

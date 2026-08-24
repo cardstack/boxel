@@ -24,7 +24,11 @@ import { ThemePicker } from 'test-app/components/theme-picker';
         <nav class="top-links">
           <TempoPicker />
           <ThemePicker />
-          <a href="https://github.com/cardstack/glimmer-motion">GitHub</a>
+          <a
+            href="https://github.com/cardstack/glimmer-motion"
+            target="_blank"
+            rel="noopener"
+          >GitHub</a>
         </nav>
       </header>
       {{! it flies out of the picker above and back into it, so it belongs
@@ -35,7 +39,11 @@ import { ThemePicker } from 'test-app/components/theme-picker';
       </main>
       <footer class="footer">
         <span>© 2026 Cardstack Foundation</span>
-        <a href="https://github.com/cardstack/glimmer-motion/blob/main/LICENSE">
+        <a
+          href="https://github.com/cardstack/glimmer-motion/blob/main/LICENSE"
+          target="_blank"
+          rel="noopener"
+        >
           MIT License
         </a>
       </footer>

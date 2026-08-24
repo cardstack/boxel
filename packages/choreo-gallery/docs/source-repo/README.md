@@ -56,6 +56,10 @@ import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
 </template>
 ```
 
+<p align="center">
+  <img src="docs/gallery.png" alt="The Choreo gallery: the Motion, Choreographed hero above a grid of live demos — Playhead, Lightbox, Beacons and Sequence" width="900">
+</p>
+
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still
 > published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`.
 
