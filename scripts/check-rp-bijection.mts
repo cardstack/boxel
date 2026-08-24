@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node
 // Enforces the rendering-protocol spec's statement<->test bijection (RP-0.3).
 //
 // Direction 1 (always an error): a conformance test cites an RP id that does
@@ -38,7 +38,7 @@ const strict = process.argv.includes('--strict');
 const uncoveredCeiling = 109;
 const exemptSections = new Set(['RP-0']);
 const exemptStatements = new Set(['RP-17.1']);
-const isExempt = (id) =>
+const isExempt = (id: string): boolean =>
   exemptSections.has(id.split('.')[0]) || exemptStatements.has(id);
 
 const spec = readFileSync(specPath, 'utf8');
@@ -46,7 +46,7 @@ const spec = readFileSync(specPath, 'utf8');
 // DEFERRED**` — so the id is delimited by a word boundary, not by the closing
 // `**`. Requiring the `**` would skip such a statement entirely, letting it
 // land with no test while the ratchet reports itself satisfied.
-const specIdList = [...spec.matchAll(/\*\*RP-(\d+\.\d+)\b/g)].map(
+const specIdList: string[] = [...spec.matchAll(/\*\*RP-(\d+\.\d+)\b/g)].map(
   (m) => `RP-${m[1]}`,
 );
 const specIds = new Set(specIdList);
@@ -68,7 +68,7 @@ if (duplicateIds.length > 0) {
   process.exit(1);
 }
 
-function* walk(dir) {
+function* walk(dir: string): Generator<string> {
   for (let entry of readdirSync(dir)) {
     let full = join(dir, entry);
     if (statSync(full).isDirectory()) {
@@ -86,8 +86,8 @@ function* walk(dir) {
 // comment is blanked: a trailing `//` is left alone, because `//` inside a
 // test title is ordinary text and treating it as a comment would truncate the
 // title mid-citation.
-function blankComments(source) {
-  let out = [];
+function blankComments(source: string): string {
+  let out: string[] = [];
   let inBlock = false;
   for (let line of source.split('\n')) {
     if (inBlock) {
@@ -114,14 +114,14 @@ function blankComments(source) {
 // its coverage nor a bogus id it cites.
 const TEST_DECLARATION = /\btest(\.skip)?\(\s*['"`]([^'"`]*)/g;
 
-const citedIds = new Map(); // id -> [file:line], live tests only
-const skippedIds = new Map(); // id -> [file:line], cited only by test.skip
-let badCitations = [];
+const citedIds = new Map<string, string[]>(); // id -> sites, live tests only
+const skippedIds = new Map<string, string[]>(); // id -> sites, test.skip only
+let badCitations: string[] = [];
 for (let root of testRoots) {
   for (let file of walk(root)) {
     let source = blankComments(readFileSync(file, 'utf8'));
     for (let title of source.matchAll(TEST_DECLARATION)) {
-      let line = source.slice(0, title.index).split('\n').length;
+      let line = source.slice(0, title.index ?? 0).split('\n').length;
       let skipped = Boolean(title[1]);
       let ids = [...title[2].matchAll(/RP-\d+\.\d+/g)].map((m) => m[0]);
       if (ids.length === 0) {
@@ -165,7 +165,7 @@ console.log(
 if (skippedOnly.length > 0) {
   console.log('\nCited only by skipped tests (not counted as coverage):');
   for (let id of skippedOnly) {
-    for (let site of skippedIds.get(id)) {
+    for (let site of skippedIds.get(id)!) {
       console.log(`  ${id} ${site}`);
     }
   }
