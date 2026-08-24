@@ -437,3 +437,125 @@ gesture-owned), the dashboard reflow (gridstack's reflow is `Move` over a
 changeset; its drag stays a listener), and every hand-computed
 per-character `animation-delay` schedule, which is the delivery panel
 (`@by` / `@overlap` / `@order`) compiled by hand today.
+
+## Proving it — demos and contract cases
+
+The house method already exists: upstream behaviour is pinned by a ported
+suite, Choreo's own rules live in a contract suite on small fixtures
+(`tests/integration/choreo/`), the gallery is the taste test, and a soak
+hammers the real thing. The constructs extend each in kind. Two standing
+rules first:
+
+**One suite, two drivers.** The native compile target is not a second
+implementation to test separately — it is the same language with a
+different back end. The entire Choreo contract suite runs twice, once on
+the frameloop driver and once on the native one, same fixtures, same
+pixel assertions (`setupMotion(hooks, { driver: 'native' })`). Anything
+the native driver cannot pass, it must refuse loudly at compile time —
+a silent visual delta between drivers is the one unacceptable bug.
+
+**Every interruption test ends the same way.** `orphanCount() === 0` and
+`strandedTransforms()` empty, after every new kind of interruption the
+constructs introduce: advancing a gate mid-flight, seeking backwards,
+cancelling a parked run, crossing a route mid-morph.
+
+### Demos
+
+Three upgrades and five new pages — each demo is the acceptance test for
+exactly the construct it wears:
+
+| demo                                        | construct proven                   | done when                                                                                                            |
+| ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                           |
+| **Playhead** (upgrade)                      | the timeline handle                | the scrubber drives `c.run.seek()`; the private sampled score deleted                                                |
+| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.MagicMove`            | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                           |
+| **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes an `@auto` gate and a click-through mid-build |
+| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                       |
+| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity               |
+| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                 |
+| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component               |
+
+`@path` and emphasis need no page of their own: Deck's builds use a path
+move and a pulse, which is also how Keynote would.
+
+### Contract cases — the sharp ones
+
+The cases below are the ones that catch real bugs, not coverage filler.
+Each is a small fixture in `tests/integration/choreo/`.
+
+**Gates.** Advance mid-segment lands every property on its exact
+segment-end value (pin the numbers). A leaver named after a gate survives
+the park — and is released on `cancel()`. A gate directly inside
+`Parallel` fails at compile with a named error. `animationsSettled()`
+treats a parked run as settled — otherwise every gated test hangs; this
+is a semantic decision and the test is its record.
+
+**Anchors.** `at 'x' 0.4` against a spring resolves through the
+generator: pin against `calcGeneratorDuration`. A lifted step does not
+push the sequence, but the run's duration is the `max` including it.
+Duplicate `@name` and a forward reference each fail at compile, named.
+
+**Delivery.** The split reassembles: `innerText` before equals after,
+and the assistive mirror stays whole. The window math is pinned by
+porting `windowOf`'s literal numbers from `builds.ts` as expectations.
+`@order='random'` with the same seed is byte-identical across two runs;
+without a seed it is a compile error on the realm build.
+
+**Paths.** Closure: a `@path` move's final frame equals the FLIP final
+bounds exactly — the path bends the journey, never the destination.
+`@rotate='auto'` matches the tangent at both endpoints. Reduced motion
+collapses a path move the way it collapses a `Move`.
+
+**Keyframe values.** A round-trip array ends byte-equal to its start;
+interrupted mid-pulse, it settles to base, not to the peak.
+
+**The handle.** `seek(t)` is a still: no animation is running while
+paused, at any `t`, including mid-spring. Seek across a gate parks at the
+gate. `pause()` then `play()` resumes from the same `t` (pin it). After
+`cancel()`, the two invariants.
+
+**`@route` / MagicMove.** Flight continuity: the received sprite's first
+frame equals the old page's measured box. The anti-snapshot assertion: a
+looping animation inside a moving participant advances its
+`currentTime` during the morph — the frame that proves live content
+never froze. Scroll is applied before the final measure (final bounds
+reflect it). Tempo zero produces no run at all — assert zero cues, not a
+zero-length run.
+
+**Hot start.** `initial` equals the release rect, not the resting rect.
+Velocity continuity: the first flight frame's velocity matches the
+pointer's within tolerance — `shape()` sampled across two frames.
+
+**Tether.** At three sampled mid-flight frames, wire endpoints sit
+inside the moving boxes within ε. A tether to a removed sprite detaches
+without error. At rest, a container resize re-aims it.
+
+**`c.Scroll`.** The container ends with the sprite at `@block`; the next
+step starts only after (it occupies the sequence). A user wheel during
+the step cancels it and the run survives — interruption invariants hold.
+
+**`@space`.** The bento assertion, made literal: sample the flight's
+page-space midpoint while the parent scales; start, midpoint and end are
+collinear within ε.
+
+**All-kept passes.** A pass that inserts, removes and moves nothing
+still runs its timeline: a `c.Hold @ms` fires on an event-only change
+and releases on schedule — measured against the run clock, not wall
+time.
+
+**The native driver.** Beyond the shared suite: a frameloop spy proves
+zero engine ticks during steady playback; the sampled `linear()` spring
+matches the JS spring within ε at five offsets; a child's `shape()`
+stays identity while its parent flies (the pre-sampled counter-scale);
+and the realm bundle passes a static scan — no `setTimeout`,
+`requestAnimationFrame`, `Date.now`, or `Math.random` in the artifact.
+
+### Test-support additions
+
+The suite needs four helpers to say any of the above:
+`advanceGate()` (advance and settle one segment), `seekTo(ms)` (drive a
+run's handle from a test), `velocityOf(el)` (two-frame sample), and the
+`driver` option on `setupMotion`. The soak extends with a storm mode:
+random advance/seek/route-cross against the live gallery, invariants
+checked after every blow — the same discipline `interruption-test.gts`
+applies today, aimed at the new surface.
