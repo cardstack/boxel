@@ -239,5 +239,33 @@ module.exports = {
         ],
       },
     },
+    {
+      // Type-aware linting.
+      //
+      // `no-url-from-realm-identifier` asks whether a value carries one of the
+      // realm-identifier brands, which exist only in the type system, so the
+      // rule needs a TypeScript program. Without `parserOptions.project` it is
+      // silently inert.
+      //
+      // Scoped to app code. The build and config scripts at the package root
+      // are outside `tsconfig.json`, where asking for a program is a parse
+      // error rather than a lint result. Tests are left out for signal: they
+      // build URLs by interpolating the test realm's identifier, which is
+      // always a URL there, so the rule has 342 things to say about them and
+      // 8 about the app.
+      //
+      // The parser for each file still comes from the overrides above —
+      // `@typescript-eslint/parser` for `.ts`, `ember-eslint-parser` for
+      // `.gts` — and only the program is added here.
+      files: ['app/**/*.{ts,gts}'],
+      excludedFiles: ['**/*.d.ts'],
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: __dirname,
+      },
+      rules: {
+        '@cardstack/boxel/no-url-from-realm-identifier': 'warn',
+      },
+    },
   ],
 };
