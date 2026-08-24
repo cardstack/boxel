@@ -78,10 +78,10 @@ same render, they play side by side. There is no shared clock.
 
 ## What nesting does not do
 
-- **No sent / received across the boundary.** A sprite that leaves the
-  panel and appears in the shell is not one kept sprite. Far-matching
-  between regions is still a later item; see
-  [choreography.md](choreography.md#phases).
+- **No shared timeline across the boundary.** Far matching (below in
+  spirit, `src/choreo/far.ts` in fact) pairs an inserted id in one region
+  with a removed id in another so the receiver flies from the sender's
+  box — but each region still compiles and plays its own timeline.
 - **No shared clock.** The shell's `Sequence` does not wait for the
   panel's `Move`.
 - **Queries do not leak.** `id` / `role` are local to the region that
@@ -232,12 +232,12 @@ the high-risk path and is out of scope.
 
 ## Status
 
-| Piece                                              | State                                                   |
-| -------------------------------------------------- | ------------------------------------------------------- |
-| Nearest-ancestor host (`closestChoreo`)            | done                                                    |
-| `collect()` skips nested `[data-choreo]`           | done                                                    |
-| Isolated snapshot / changeset / orphans / timeline | done                                                    |
-| Far-matching across regions                        | not done; see [choreography.md](choreography.md#phases) |
-| `{{beacon}}`, `c.beacon`, `changeset.beacon`       | done — `src/beacon.ts`, `src/choreo/beacons.ts`         |
-| `Move` `@from` / `@to` rewriting initial / final   | done — `compile.ts` `resolveMove`                       |
-| App-global beacon registry                         | done — the version the Beacons demo needs               |
+| Piece                                              | State                                           |
+| -------------------------------------------------- | ----------------------------------------------- |
+| Nearest-ancestor host (`closestChoreo`)            | done                                            |
+| `collect()` skips nested `[data-choreo]`           | done                                            |
+| Isolated snapshot / changeset / orphans / timeline | done                                            |
+| Far-matching across regions                        | done — `src/choreo/far.ts`, the Far match demo  |
+| `{{beacon}}`, `c.beacon`, `changeset.beacon`       | done — `src/beacon.ts`, `src/choreo/beacons.ts` |
+| `Move` `@from` / `@to` rewriting initial / final   | done — `compile.ts` `resolveMove`               |
+| App-global beacon registry                         | done — the version the Beacons demo needs       |
