@@ -5,6 +5,8 @@ import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
   BOXEL_RUNTIME_OPERATIONS,
   COMPONENT_EFFECT_KINDS,
+  MATERIALIZATION_PURPOSES,
+  PROJECTED_ERROR_MAX_CAUSE_DEPTH,
   PROTOCOL_REFUSAL_CODES,
   ProtocolRefusal,
   SAFE_EVENT_BOOLEAN_PROPERTIES,
@@ -27,7 +29,9 @@ import type {
   BoxelDescription,
   ComponentUpdate,
   InstanceProjection,
+  ProjectedError,
   ProtocolSupport,
+  ResolvedField,
   SafeEvent,
   TemplateBundle,
   TemplateDependency,
@@ -58,7 +62,6 @@ function description(
         fieldType: { module: rri('@cardstack/base/string'), name: 'default' },
         kind: 'contains',
         isComputed: false,
-        resolvedConfiguration: { placeholder: 'Name' },
       },
     ],
     formats: [
@@ -74,6 +77,25 @@ function description(
   };
 }
 
+function resolvedField(): ResolvedField {
+  return {
+    fieldName: 'title',
+    fieldType: { module: rri('@cardstack/base/string'), name: 'default' },
+    kind: 'contains',
+    isComputed: false,
+    resolvedConfiguration: { placeholder: 'Name' },
+  };
+}
+
+function projectedError(): ProjectedError {
+  return {
+    name: 'Error',
+    message: 'render failed',
+    stack: 'at Component.render',
+    cause: { name: 'TypeError', message: 'total is not a function' },
+  };
+}
+
 function projection(
   overrides: Partial<InstanceProjection> = {},
 ): InstanceProjection {
@@ -86,6 +108,15 @@ function projection(
     model: {
       title: 'Ada',
       vendor: { $boxel: { id: 'http://test/vendors/1', type: testRef } },
+    },
+    presentation: {
+      title: 'Ada',
+      summary: null,
+      thumbnailURL: null,
+      theme: { $boxel: { id: rri('http://test/themes/1'), type: testRef } },
+      themeScope: 'http://test/themes/1-9f2c1a',
+      themeCss: '--boxel-accent: rebeccapurple;',
+      cssImports: ['https://fonts.example/inter.css'],
     },
     ...overrides,
   };
@@ -219,9 +250,11 @@ module('Unit | rendering protocol | records and operations', function () {
     for (let [name, record] of [
       ['BoxelDescription', description()],
       ['InstanceProjection', projection()],
-      ['TemplateBundle', bundle([{ kind: 'block', name: 'default' }])],
+      ['TemplateBundle', bundle([{ kind: 'literal-value', value: 42 }])],
       ['ComponentUpdate', update()],
       ['SafeEvent', safeEvent()],
+      ['ResolvedField', resolvedField()],
+      ['ProjectedError', projectedError()],
     ] as const) {
       assert.deepEqual(
         structuredClone(record),
@@ -388,6 +421,44 @@ module('Unit | rendering protocol | records and operations', function () {
         `${mutation} is a capability, not an operation`,
       );
     }
+
+    // createFromSerialized carries why it is materializing, because indexing
+    // must fail loudly where an interactive surface degrades to an error
+    // card. Collapsing the two lets an indexing failure ride as a rendering
+    // failure.
+    assert.deepEqual(
+      [...MATERIALIZATION_PURPOSES],
+      [
+        'host-display',
+        'code-preview',
+        'interactive-edit',
+        'command-validation',
+        'indexing',
+      ],
+      'the purposes a runtime must distinguish',
+    );
+    assert.true(
+      (MATERIALIZATION_PURPOSES as readonly string[]).includes('indexing'),
+      'indexing is named separately from every interactive purpose',
+    );
+  });
+
+  test('RP-14.1: a projected error carries its root cause, bounded', function (assert) {
+    let error = projectedError();
+    assert.strictEqual(
+      error.cause?.message,
+      'total is not a function',
+      'the fault under the boundary wrapper crosses, not just the wrapper',
+    );
+    assert.true(
+      PROJECTED_ERROR_MAX_CAUSE_DEPTH > 0,
+      'the chain is built from data the far side controls, so the walk is bounded',
+    );
+    assert.deepEqual(
+      structuredClone(error),
+      error,
+      'an error crosses as data, never as an Error instance',
+    );
   });
 
   test('RP-14.3: a record whose protocol version this consumer does not implement is refused', function (assert) {
@@ -495,11 +566,7 @@ module('Unit | rendering protocol | records and operations', function () {
 
   test('RP-14.3: an unrecognized template dependency kind refuses the whole generation', function (assert) {
     let unrecognized = bundle([
-      {
-        kind: 'trusted-component',
-        module: '@cardstack/boxel-ui',
-        name: 'Pill',
-      },
+      { kind: 'trusted-export', module: '@cardstack/boxel-ui', name: 'Pill' },
       {
         kind: 'homemade-helper',
         name: 'formatMoney',
@@ -527,15 +594,16 @@ module('Unit | rendering protocol | records and operations', function () {
     // names a template the bundle actually carries, since a reference to one
     // it does not is its own refusal.
     let carried = bundle([
-      {
-        kind: 'trusted-component',
-        module: '@cardstack/boxel-ui',
-        name: 'Pill',
-      },
-      { kind: 'trusted-helper', module: '@cardstack/base', name: 'cn' },
-      { kind: 'safe-modifier', module: '@ember/modifier', name: 'on' },
+      { kind: 'trusted-export', module: '@cardstack/boxel-ui', name: 'Pill' },
+      { kind: 'trusted-export', module: '@ember/modifier', name: 'on' },
       { kind: 'authored-component', template: 'template-1' },
       { kind: 'block', name: 'default' },
+      // A module-level constant a template interpolates. This is the fall-
+      // through of scope classification, so it is the common case, not an
+      // edge one: a vocabulary without it refuses the whole generation for
+      // `const LABEL = '...'; <template>{{LABEL}}</template>`.
+      { kind: 'literal-value', value: 'Ships in 2 days' },
+      { kind: 'literal-value', value: { nested: [1, 2, null] } },
     ]);
     assertKnownTemplateDependencies(
       {
@@ -552,13 +620,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
     assert.deepEqual(
       [...TEMPLATE_DEPENDENCY_KINDS],
-      [
-        'trusted-component',
-        'authored-component',
-        'trusted-helper',
-        'safe-modifier',
-        'block',
-      ],
+      ['trusted-export', 'authored-component', 'block', 'literal-value'],
       'the dependency vocabulary is closed',
     );
   });

@@ -252,6 +252,23 @@ export function assertExecutionTransportVersion(
  * Rendering is a process-local effect, so the slot never crosses a boundary —
  * only the request for one does.
  */
+/**
+ * Why an instance is being materialized. `createFromSerialized` carries it,
+ * because the answer changes what a runtime is allowed to be lenient about:
+ * an indexing pass must fail loudly on a definition it cannot identify, where
+ * an interactive surface shows an error card and carries on. Collapsing the
+ * two lets an indexing failure ride as a rendering failure — which is how a
+ * single unidentifiable card takes a whole indexing shard with it.
+ */
+export const MATERIALIZATION_PURPOSES = [
+  'host-display',
+  'code-preview',
+  'interactive-edit',
+  'command-validation',
+  'indexing',
+] as const;
+export type MaterializationPurpose = (typeof MATERIALIZATION_PURPOSES)[number];
+
 export const BOXEL_RUNTIME_OPERATIONS = [
   'loadBoxel',
   'describeBoxel',
@@ -337,13 +354,32 @@ export type FieldKind = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
  * no getter, and no component definition: those stay with the runtime that
  * loaded the type.
  *
- * `resolvedConfiguration` is the resolved configuration *data*, never the
- * functions that produced it — a configuration function runs with its
- * semantic owner and only its result crosses (RP-5.4). It is `null` in a
- * description built without an owning instance, because resolution takes the
- * owning root instance as `this` (RP-5.1).
+ * Configuration is absent here on purpose. Resolution runs with the owning
+ * root instance as `this` and memoizes per `(instance, fieldName)`
+ * (RP-5.1–5.2), so a description of a *type* has nothing to resolve against.
+ * The resolved data belongs to `ResolvedField`, which an instance-aware
+ * operation produces.
  */
 export type FieldDescription = Cloneable<{
+  fieldName: string;
+  fieldType: CodeRef;
+  kind: FieldKind;
+  isComputed: boolean;
+}>;
+
+/**
+ * One field as an instance actually has it: the type's declaration plus the
+ * configuration resolved against the instance that owns it.
+ *
+ * This is what `getFields`/`getField` answer with. `resolvedConfiguration` is
+ * the resolved configuration *data*, never the functions that produced it — a
+ * configuration function runs with its semantic owner and only its result
+ * crosses (RP-5.4) — and is `null` for a field that configures nothing.
+ *
+ * The field's *value* is deliberately absent: it lives in the instance
+ * projection's `model`, and carrying it twice would let the two disagree.
+ */
+export type ResolvedField = Cloneable<{
   fieldName: string;
   fieldType: CodeRef;
   kind: FieldKind;
@@ -464,43 +500,81 @@ export type InstanceProjection = Cloneable<
     type: CodeRef;
     revision: number;
     model: Record<string, JSONTypes.Value>;
+    presentation: InstancePresentation;
   }
 >;
+
+/**
+ * What the Host's own chrome needs in order to wrap an instance, derived
+ * Host-side and crossed as data.
+ *
+ * The theme members are why this record exists rather than being read out of
+ * `model`. A themed card's stylesheet lives on a *linked* Theme card, which a
+ * projection carries only as a reference — resolving it is exactly the graph
+ * walk the projection forbids. So the Host resolves the theme once, against
+ * the canonical instance, and the three derived strings cross:
+ *
+ * - `themeScope` is the `data-boxel-theme-scope` token, a content hash of the
+ *   theme's id and CSS (RP-11.3), so shared themes emit one stylesheet and
+ *   prerendered HTML stays stable across processes.
+ * - `themeCss` is the theme's raw custom-property block, from which the
+ *   scoped stylesheet compiles.
+ * - `cssImports` are the stylesheet imports the theme depends on, typically
+ *   font faces.
+ *
+ * A tier makes the same trusted `CardContainer` invocation main makes from
+ * these three; without them a themed card renders unthemed, which is not a
+ * degraded theme but a different design. `null` throughout when the instance
+ * has no theme.
+ */
+export type InstancePresentation = Cloneable<{
+  title: string | null;
+  summary: string | null;
+  thumbnailURL: string | null;
+  theme: BoxelValueReference | null;
+  themeScope: string | null;
+  themeCss: string | null;
+  cssImports: string[] | null;
+}>;
 
 /**
  * What a name in a captured template resolves to. Every entry is a token the
  * Host redeems against a vocabulary — never the value itself, and never
  * anything executable.
  *
- * The three trusted kinds carry the same `module`/`name` pair and differ only
- * in kind, which is the point: the Host resolves a component reference, a
- * helper reference, and a modifier reference against three different
- * allowlists, and a token that names a real export of the wrong category is
- * refused rather than invoked.
+ * A `trusted-export` is a portal token — the module and export name of
+ * something the Host owns. Whether that export may be used as a component, a
+ * helper, or a modifier is decided where the token is redeemed, against the
+ * Host's vocabulary for the position it appears in; a token naming a real
+ * export used in the wrong position is refused there rather than invoked.
+ * Splitting the token itself by category would require the capture side to
+ * classify an export it only holds a reference to.
  *
  * An `authored-component` names another captured template in the same bundle,
  * which goes through capture, validation, and rebuild exactly like the one
  * referencing it.
+ *
+ * A `literal-value` is the plain data a template closed over: a module-level
+ * constant a template interpolates is neither a component nor a Host export,
+ * and it crosses as cloned JSON.
  *
  * A name that fits none of these kinds — a locally defined function used as a
  * template helper, most often — has no safe category and is refused by name
  * at capture time rather than smuggled across.
  */
 export const TEMPLATE_DEPENDENCY_KINDS = [
-  'trusted-component',
+  'trusted-export',
   'authored-component',
-  'trusted-helper',
-  'safe-modifier',
   'block',
+  'literal-value',
 ] as const;
 export type TemplateDependencyKind = (typeof TEMPLATE_DEPENDENCY_KINDS)[number];
 
 export type TemplateDependency = Cloneable<
-  | { kind: 'trusted-component'; module: string; name: string }
-  | { kind: 'trusted-helper'; module: string; name: string }
-  | { kind: 'safe-modifier'; module: string; name: string }
+  | { kind: 'trusted-export'; module: string; name: string }
   | { kind: 'authored-component'; template: string }
   | { kind: 'block'; name: string }
+  | { kind: 'literal-value'; value: JSONTypes.Value }
 >;
 
 /**
@@ -738,6 +812,31 @@ export function assertKnownComponentEffects(
     );
   }
 }
+
+/**
+ * How far a `ProjectedError`'s `cause` chain is followed. Bounded because the
+ * chain is built from data the far side controls, and an unbounded walk over a
+ * cyclic or adversarial chain is a hang rather than a diagnostic.
+ */
+export const PROJECTED_ERROR_MAX_CAUSE_DEPTH = 8;
+
+type ProjectedErrorShape = {
+  name: string;
+  message: string;
+  stack?: string;
+  cause?: ProjectedErrorShape;
+};
+
+/**
+ * A failure, as data.
+ *
+ * An `Error` is a class instance and cannot cross a boundary, so a tier that
+ * fails projects it into this. The `stack` and the `cause` chain ride along
+ * because the error a boundary hands back is usually the wrapper, not the
+ * fault: presenting `name`/`message` alone shows "render failed" where the
+ * root cause said which getter threw and where.
+ */
+export type ProjectedError = Cloneable<ProjectedErrorShape>;
 
 /**
  * The event members that may cross into an authored handler, grouped by the
