@@ -31,7 +31,7 @@ Choreo cues and the demo becomes a thin inspector over a real timeline.
 | Delivery: by word / character / paragraph  | demo-only (`builds.ts`)                          | `@by`, `@overlap`       |
 | Delivery order: forward / reverse / random | —                                                | `@order`                |
 | Rehearse / scrub                           | demo-only (Playhead samples its own score)       | the timeline handle     |
-| Magic Move (slide transition)              | route transition, hand-built on `animateView`    | `@route`, `c.MagicMove` |
+| Magic Move (slide transition)              | route transition, hand-built on `animateView`    | `@route`, `c.Crossing`  |
 | Builds play backwards on ←                 | free — a changeset reversed is the reverse run   | —                       |
 
 Everything in the right-hand column is specified below.
@@ -189,7 +189,7 @@ proves is possible — a scrubbed frame is a still, nothing in flight — and
 what it currently rebuilds by sampling a private score. This handle is the
 substrate; `Gate` and the Build Order inspector are its first two consumers.
 
-## Magic Move as a Choreo default — `@route` and `c.MagicMove`
+## The crossing — `@route` and `c.Crossing`
 
 The gallery ⇄ demo transition is built on `animateView`, and
 `test-app/app/routes/application.ts` is four hundred lines of what that
@@ -197,11 +197,12 @@ costs: a veil timed against the snapshot, rules about what may be named, a
 poll for completion, every live animation paused so the compositor survives.
 All of it follows from one fact — **a view transition animates bitmaps**.
 
-Choreo's model fits Magic Move better, because Magic Move is a changeset.
+Choreo's model fits the crossing better, because a crossing is a
+changeset.
 A route swap inside a region is one render pass: the old page's participants
 are `removed`, the new page's are `inserted`, and an id present on both
 sides pairs as a counterpart — the same machinery that already flies a card
-between bays. And the shape a Magic Move actually wants — _leaves fade
+between bays. And the shape a crossing actually wants — _leaves fade
 first, then everything moves, then arrivals fade in near settle_ — is a
 sentence Choreo already speaks and the builder API cannot say cleanly:
 
@@ -227,7 +228,7 @@ the id, exactly as far matching works today. The canned form:
 ```gts
 <Choreo @route={{true}} as |c|>
   {{outlet}}
-  <c.MagicMove @spring={{glide}} @leave={{180}} @arrive={{220}} @overlap={{0.7}} />
+  <c.Crossing @spring={{glide}} @leave={{180}} @arrive={{220}} @overlap={{0.7}} />
 </Choreo>
 ```
 
@@ -283,7 +284,7 @@ to keep live. Same-document navigation defaults to `@route`.
 | the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof    | —          |
 | `c.Gate`                        | segments over the handle                                        | the handle |
 | `@path`                         | the one engine-adjacent piece                                   | —          |
-| `@route` + `c.MagicMove`        | region + orphan-layer work, then sugar                          | anchors    |
+| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                          | anchors    |
 
 The Build Order demo is the acceptance test throughout: each promotion
 deletes a piece of `builds.ts`, and the demo is done being a simulation when
@@ -303,7 +304,7 @@ measure, fly. The staged/dragging z-index arithmetic is `c.Hold`. The
 version deck's fold-away — "has to outlive the state that raised it" — is
 what leavers are for. The row ⇄ detail transmute's two skins crossing over
 one flying box is the counterpart crossfade (`@crossfade` should therefore
-be a `Move` argument, not only `MagicMove` sugar). The `restore()` pattern —
+be a `Move` argument, not only `Crossing` sugar). The `restore()` pattern —
 animate forward, `setTimeout`, then commit — inverts under Choreo: commit
 first, and the flight is the changeset's.
 
@@ -468,7 +469,7 @@ exactly the construct it wears:
 | ------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                           |
 | **Playhead** (upgrade)                      | the timeline handle                | the scrubber drives `c.run.seek()`; the private sampled score deleted                                                |
-| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.MagicMove`            | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                           |
+| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                           |
 | **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes an `@auto` gate and a click-through mid-build |
 | **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                       |
 | **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity               |
@@ -514,7 +515,7 @@ paused, at any `t`, including mid-spring. Seek across a gate parks at the
 gate. `pause()` then `play()` resumes from the same `t` (pin it). After
 `cancel()`, the two invariants.
 
-**`@route` / MagicMove.** Flight continuity: the received sprite's first
+**`@route` / Crossing.** Flight continuity: the received sprite's first
 frame equals the old page's measured box. The anti-snapshot assertion: a
 looping animation inside a moving participant advances its
 `currentTime` during the morph — the frame that proves live content
