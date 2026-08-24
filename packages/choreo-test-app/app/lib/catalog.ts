@@ -259,27 +259,42 @@ get poses() {
     title: 'Sequence',
   },
   {
-    Example: SharedTabs,
-    apis: ['layoutId'],
-    group: 'Layout',
-    id: 'tabs',
-    lede: 'One highlight. It moves.',
-    sample: `<LayoutGroup>
-  {{#each tabs as |tab|}}
-    <button type='button' {{on 'click' (fn this.select tab)}}>
-      {{! The highlight UNMOUNTS here and MOUNTS under the next tab — two
-          different elements that never coexist. Sharing one layoutId makes
-          the engine treat them as the same thing, so the new one animates
-          from the old one's box instead of appearing. }}
-      {{#if (eq tab this.selected)}}
-        <span {{motion layoutId='tab-pill' transition=pill}}></span>
+    Example: Interrupt,
+    apis: ['Choreo', 'Move', 'velocity'],
+    group: 'Choreo',
+    id: 'interrupt',
+    lede: 'Change your mind halfway.',
+    sample: `{{! A puck is not positioned — it is RENDERED into one slot or another, and
+    the region works out that the same id is somewhere new. Two rails, the
+    same clicks, differing only in what carries the puck. }}
+<Choreo @id='spring' as |c|>
+  {{#each stations as |station|}}
+    <span class='slot'>
+      {{#if (this.isAt station)}}
+        <span {{motion id='puck' role='puck'}}></span>
       {{/if}}
-      {{tab}}
-    </button>
+    </span>
   {{/each}}
-</LayoutGroup>`,
+
+  {{! Retarget mid-flight and the run being replaced hands over how fast
+      everything was going, so the new spring is born already travelling. It
+      bends toward the new station, and overshoots if you send it back the way
+      it came. That is momentum, and it is not scripted anywhere. }}
+  <c.Move @of={{c.kept 'puck'}} @spring={{carry}} @size={{false}} />
+</Choreo>
+
+<Choreo @id='tween' as |c|>
+  …same markup…
+
+  {{! A tween has a start, an end and a curve between them, so interrupting it
+      can only mean starting a NEW curve from wherever it happens to be — it
+      stops dead and eases away again. Nothing is broken; it is what a
+      duration means. }}
+  <c.Move @of={{c.kept 'puck'}} @ms={{620}} @ease='easeInOut' @size={{false}} />
+</Choreo>`,
+    notes: InterruptNotes,
     slowmo: true,
-    title: 'Shared layout',
+    title: 'Interruption',
   },
   {
     Example: Slides,
@@ -367,42 +382,27 @@ get poses() {
     title: 'Reorder grid',
   },
   {
-    Example: Interrupt,
-    apis: ['Choreo', 'Move', 'velocity'],
-    group: 'Choreo',
-    id: 'interrupt',
-    lede: 'Change your mind halfway.',
-    sample: `{{! A puck is not positioned — it is RENDERED into one slot or another, and
-    the region works out that the same id is somewhere new. Two rails, the
-    same clicks, differing only in what carries the puck. }}
-<Choreo @id='spring' as |c|>
-  {{#each stations as |station|}}
-    <span class='slot'>
-      {{#if (this.isAt station)}}
-        <span {{motion id='puck' role='puck'}}></span>
+    Example: SharedTabs,
+    apis: ['layoutId'],
+    group: 'Layout',
+    id: 'tabs',
+    lede: 'One highlight. It moves.',
+    sample: `<LayoutGroup>
+  {{#each tabs as |tab|}}
+    <button type='button' {{on 'click' (fn this.select tab)}}>
+      {{! The highlight UNMOUNTS here and MOUNTS under the next tab — two
+          different elements that never coexist. Sharing one layoutId makes
+          the engine treat them as the same thing, so the new one animates
+          from the old one's box instead of appearing. }}
+      {{#if (eq tab this.selected)}}
+        <span {{motion layoutId='tab-pill' transition=pill}}></span>
       {{/if}}
-    </span>
+      {{tab}}
+    </button>
   {{/each}}
-
-  {{! Retarget mid-flight and the run being replaced hands over how fast
-      everything was going, so the new spring is born already travelling. It
-      bends toward the new station, and overshoots if you send it back the way
-      it came. That is momentum, and it is not scripted anywhere. }}
-  <c.Move @of={{c.kept 'puck'}} @spring={{carry}} @size={{false}} />
-</Choreo>
-
-<Choreo @id='tween' as |c|>
-  …same markup…
-
-  {{! A tween has a start, an end and a curve between them, so interrupting it
-      can only mean starting a NEW curve from wherever it happens to be — it
-      stops dead and eases away again. Nothing is broken; it is what a
-      duration means. }}
-  <c.Move @of={{c.kept 'puck'}} @ms={{620}} @ease='easeInOut' @size={{false}} />
-</Choreo>`,
-    notes: InterruptNotes,
+</LayoutGroup>`,
     slowmo: true,
-    title: 'Interruption',
+    title: 'Shared layout',
   },
   {
     Example: FarMatch,
