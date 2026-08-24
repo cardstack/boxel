@@ -48,12 +48,15 @@ export interface MediaObjectStat {
 // `put` must leave the object durable before resolving, and may skip the
 // upload when the key is already stored — the key is a hash of the bytes, so
 // an existing object under the same key already holds them (dedupe-on-write).
+// The result reports which of the two happened (`deduped: true` = the bytes
+// were already stored and no upload ran) so capture telemetry can tell a
+// dedupe hit from a real upload.
 export interface MediaCacheAdapter {
   put(
     key: string,
     bytes: Uint8Array,
     opts: { contentType: string },
-  ): Promise<void>;
+  ): Promise<MediaPutResult>;
   head(key: string): Promise<MediaObjectStat | undefined>;
   getStream(key: string): Promise<AsyncIterable<Uint8Array> | undefined>;
   delete(key: string): Promise<void>;
@@ -80,6 +83,10 @@ export interface MediaCacheEntryKey {
   sourceGeneration: number;
 }
 
+export interface MediaPutResult {
+  deduped: boolean;
+}
+
 export interface MediaCacheEntry extends MediaCacheEntryKey {
   objectKey: string;
   sourceContentHash: string | null;
@@ -93,6 +100,10 @@ export interface MediaCacheEntry extends MediaCacheEntryKey {
   height: number | null;
   createdAt: number;
   lastAccessedAt: number;
+  // Per-capture stage telemetry recorded by the capture that wrote this row
+  // (a `ScreenshotCapturePerfEvent`-shaped breakdown: queue wait, prerender
+  // stages, persist). Null for rows whose writer recorded none.
+  diagnostics: Record<string, unknown> | null;
 }
 
 // The content address for a blob of output bytes. sha256 rather than the
@@ -145,9 +156,9 @@ export async function putMedia(
     width?: number | null;
     height?: number | null;
   },
-): Promise<{ objectKey: string; sizeBytes: number }> {
+): Promise<{ objectKey: string; sizeBytes: number; deduped: boolean }> {
   let objectKey = await computeMediaCacheKey(bytes);
-  await adapter.put(objectKey, bytes, { contentType });
+  let { deduped } = await adapter.put(objectKey, bytes, { contentType });
   let priorRows = (await query(dbAdapter, [
     `SELECT object_key FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
@@ -187,7 +198,36 @@ export async function putMedia(
   if (priorObjectKey && priorObjectKey !== objectKey) {
     await reclaimRepointedObject(dbAdapter, adapter, priorObjectKey);
   }
-  return { objectKey, sizeBytes: bytes.length };
+  return { objectKey, sizeBytes: bytes.length, deduped };
+}
+
+// Records a capture's stage-telemetry breakdown on its ledger row. A
+// separate write from `putMedia` because the breakdown includes the persist
+// leg's own duration and outcome, which exist only once the put has
+// returned. Callers treat it as best-effort: a missing breakdown never
+// affects serving, so this must never fail a capture.
+export async function updateMediaCacheDiagnostics(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    sourceURL,
+    captureSpecHash,
+    sourceGeneration,
+  }: MediaCacheEntryKey,
+  diagnostics: Record<string, unknown>,
+): Promise<void> {
+  await query(dbAdapter, [
+    `UPDATE media_cache_ledger SET diagnostics =`,
+    param(JSON.stringify(diagnostics)),
+    `WHERE realm_url =`,
+    param(realmURL),
+    `AND source_url =`,
+    param(sourceURL),
+    `AND capture_spec_hash =`,
+    param(captureSpecHash),
+    `AND source_generation =`,
+    param(sourceGeneration),
+  ] as Expression);
 }
 
 // Reclaims the object a repointing upsert stripped of its reference — unless
@@ -282,6 +322,7 @@ export async function findMediaCacheEntry(
     height: number | null;
     created_at: number | string;
     last_accessed_at: number | string;
+    diagnostics: Record<string, unknown> | null;
   }[];
   let row = rows[0];
   if (!row) {
@@ -301,6 +342,7 @@ export async function findMediaCacheEntry(
     height: row.height == null ? null : Number(row.height),
     createdAt: Number(row.created_at),
     lastAccessedAt: Number(row.last_accessed_at),
+    diagnostics: row.diagnostics ?? null,
   };
 }
 

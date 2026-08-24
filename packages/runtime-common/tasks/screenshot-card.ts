@@ -8,9 +8,14 @@ import {
   hasCaptureSpecOverrides,
   jobIdentity,
   putMedia,
+  updateMediaCacheDiagnostics,
+  emitScreenshotPerf,
   type MediaCacheLane,
   type ScreenshotCaptureSpec,
+  type ScreenshotCapturePerfEvent,
+  type ScreenshotPersistOutcome,
   type ScreenshotPrerenderResponse,
+  type ScreenshotRequestSurface,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
 } from '../index.ts';
@@ -46,6 +51,16 @@ export interface ScreenshotCardArgs extends JSONTypes.Object {
   // Non-optional `| null` rather than `?:` because the args are a
   // `JSONTypes.Object`, whose index signature rejects `undefined`.
   persist: ScreenshotPersistArgs | null;
+  // Which serving surface enqueued this job, carried onto the capture's
+  // telemetry record so captures slice by surface.
+  surface: ScreenshotRequestSurface;
+  // The enqueuing HTTP request's `x-boxel-logging-correlation-id` (already
+  // sanitized by the surface), joining this job's telemetry back to the
+  // realm-server's request logs. `| null` for the JSONTypes index-signature
+  // reason above. Deliberately not part of the coalesce identity: a joined
+  // request hands its waiter the twin's result, and each surface still emits
+  // its own request record under its own correlation id.
+  loggingCorrelationId: string | null;
 }
 
 export { screenshotCard };
@@ -60,8 +75,18 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
   mediaCacheAdapter,
 }) =>
   async function (args) {
-    let { jobInfo, realmURL, runAs, cardId, format, captureSpec, persist } =
-      args;
+    let {
+      jobInfo,
+      realmURL,
+      runAs,
+      cardId,
+      format,
+      captureSpec,
+      persist,
+      surface,
+      loggingCorrelationId,
+    } = args;
+    let taskStart = Date.now();
     log.debug(
       `${jobIdentity(jobInfo)} starting screenshot-card for job: ${JSON.stringify(
         {
@@ -75,17 +100,51 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     );
     reportStatus(jobInfo, 'start');
 
+    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    // One capture, one telemetry record: every exit path below finishes by
+    // emitting this event, and the persisting path also writes it onto the
+    // capture's ledger row so the breakdown is readable by SQL after the
+    // logs age out.
+    let perfEvent = (
+      fields: Partial<ScreenshotCapturePerfEvent> & {
+        status: ScreenshotCapturePerfEvent['status'];
+        persistOutcome: ScreenshotPersistOutcome;
+      },
+    ): ScreenshotCapturePerfEvent => ({
+      eventType: 'capture',
+      surface: surface ?? 'post',
+      realmURL: normalizedRealmURL,
+      sourceURL: persist?.sourceURL ?? cardId.replace(/\.json$/, ''),
+      captureSpecHash: persist?.captureSpecHash ?? null,
+      sourceGeneration: persist?.sourceGeneration ?? null,
+      lane: persist?.lane ?? null,
+      correlationId: loggingCorrelationId ?? null,
+      jobId: jobInfo?.jobId ?? null,
+      reservationId: jobInfo?.reservationId ?? null,
+      runAs,
+      format,
+      prerenderRequestId: null,
+      ...(jobInfo?.queueWaitMs != null
+        ? { queueWaitMs: jobInfo.queueWaitMs }
+        : {}),
+      totalMs: Date.now() - taskStart,
+      ...fields,
+    });
+
     if (!prerenderer.prerenderScreenshot) {
       let message = `${jobIdentity(jobInfo)} prerenderer does not support screenshot capture`;
       log.error(message);
       reportStatus(jobInfo, 'finish');
+      emitScreenshotPerf(
+        perfEvent({ status: 'error', persistOutcome: 'skipped' }),
+      );
       return {
         status: 'error',
         error: message,
       };
     }
 
-    let normalizedRealmURL = ensureTrailingSlash(realmURL);
+    let permissionsStart = Date.now();
     let realmPermissions = await fetchRealmPermissions(
       dbAdapter,
       new URL(normalizedRealmURL),
@@ -96,6 +155,13 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
       log.error(message);
       reportStatus(jobInfo, 'finish');
+      emitScreenshotPerf(
+        perfEvent({
+          status: 'error',
+          persistOutcome: 'skipped',
+          permissionsMs: Date.now() - permissionsStart,
+        }),
+      );
       return {
         status: 'error',
         error: message,
@@ -109,7 +175,9 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     });
     allUserPermissions[normalizedRealmURL] = userPermissions;
     let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
+    let permissionsMs = Date.now() - permissionsStart;
 
+    let prerenderStart = Date.now();
     let result = await prerenderer.prerenderScreenshot({
       realm: normalizedRealmURL,
       url: cardId,
@@ -117,13 +185,21 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       format,
       ...(captureSpec ? { captureSpec } : {}),
       priority: jobInfo?.priority,
+      // Joins the prerender server's and manager's logs for this render back
+      // to the worker job (forwarded as the x-boxel-job-id header by the
+      // remote prerenderer; in-process prerenderers ignore it).
+      jobId: jobInfo ? `${jobInfo.jobId}.${jobInfo.reservationId}` : undefined,
     });
+    let prerenderMs = Date.now() - prerenderStart;
     // The local (in-process) prerenderer resolves to `{response, timings,
     // pool}` while the remote one resolves to the bare response; unwrap so
     // the job result is one shape either way.
     let response: ScreenshotPrerenderResponse =
       (result as any)?.response ?? result;
 
+    let persistOutcome: ScreenshotPersistOutcome = 'skipped';
+    let decodeMs: number | undefined;
+    let persistMs: number | undefined;
     if (persist && response.status === 'ready' && response.base64) {
       if (hasCaptureSpecOverrides(captureSpec)) {
         // The ledger identity in `persist` is the canonical capture's; it
@@ -142,24 +218,96 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
         // Persist failure must not fail the capture: the response still
         // carries the bytes, so the caller can serve (or store) them itself.
         try {
+          let decodeStart = Date.now();
           let binary = atob(response.base64);
           let bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) {
             bytes[i] = binary.charCodeAt(i);
           }
-          await putMedia(dbAdapter, mediaCacheAdapter, {
+          decodeMs = Date.now() - decodeStart;
+          let persistStart = Date.now();
+          let { deduped } = await putMedia(dbAdapter, mediaCacheAdapter, {
             ...persist,
             bytes,
             contentType: response.contentType ?? 'image/png',
             width: response.width ?? null,
             height: response.height ?? null,
           });
+          persistMs = Date.now() - persistStart;
+          persistOutcome = deduped ? 'deduped' : 'uploaded';
         } catch (e: any) {
+          persistOutcome = 'failed';
           log.error(
             `${jobIdentity(jobInfo)} screenshot-card failed to persist capture to the media cache`,
             e,
           );
         }
+      }
+    }
+
+    // The prerender breakdown rides on the response's diagnostics block —
+    // the one prerender timing surface that survives the remote wire (see
+    // `render-runner.captureScreenshotAttempt`).
+    let diagnostics = response.meta?.diagnostics ?? {};
+    let event = perfEvent({
+      status: response.status,
+      persistOutcome,
+      prerenderRequestId: response.meta?.requestId ?? null,
+      permissionsMs,
+      prerenderMs,
+      ...(diagnostics.launchMs != null
+        ? { launchMs: diagnostics.launchMs }
+        : {}),
+      ...(diagnostics.waits?.semaphoreMs != null
+        ? { semaphoreMs: diagnostics.waits.semaphoreMs }
+        : {}),
+      ...(diagnostics.waits?.admissionMs != null
+        ? { admissionMs: diagnostics.waits.admissionMs }
+        : {}),
+      ...(diagnostics.waits?.tabQueueMs != null
+        ? { tabQueueMs: diagnostics.waits.tabQueueMs }
+        : {}),
+      ...(diagnostics.waits?.tabStartupMs != null
+        ? { tabStartupMs: diagnostics.waits.tabStartupMs }
+        : {}),
+      ...(diagnostics.waits?.tabProbeMs != null
+        ? { tabProbeMs: diagnostics.waits.tabProbeMs }
+        : {}),
+      ...(diagnostics.tabReused != null
+        ? { tabReused: diagnostics.tabReused }
+        : {}),
+      ...(diagnostics.renderElapsedMs != null
+        ? { renderMs: diagnostics.renderElapsedMs }
+        : {}),
+      ...(diagnostics.screenshotNavMs != null
+        ? { navMs: diagnostics.screenshotNavMs }
+        : {}),
+      ...(diagnostics.screenshotSettleMs != null
+        ? { settleMs: diagnostics.screenshotSettleMs }
+        : {}),
+      ...(diagnostics.screenshotImagePaintMs != null
+        ? { imagePaintMs: diagnostics.screenshotImagePaintMs }
+        : {}),
+      ...(diagnostics.screenshotCaptureMs != null
+        ? { screenshotMs: diagnostics.screenshotCaptureMs }
+        : {}),
+      ...(decodeMs != null ? { decodeMs } : {}),
+      ...(persistMs != null ? { persistMs } : {}),
+    });
+    emitScreenshotPerf(event);
+    if (
+      persist &&
+      (persistOutcome === 'uploaded' || persistOutcome === 'deduped')
+    ) {
+      // Best-effort: the ledger copy of the breakdown must never fail the
+      // capture.
+      try {
+        await updateMediaCacheDiagnostics(dbAdapter, persist, { ...event });
+      } catch (e: any) {
+        log.warn(
+          `${jobIdentity(jobInfo)} failed to record capture diagnostics on the ledger row`,
+          e,
+        );
       }
     }
 

@@ -1198,6 +1198,19 @@ export interface ScreenshotCapture {
   base64: string;
   width: number;
   height: number;
+  // Per-step wall-clock inside the capture, for stage telemetry: navigation
+  // (route transition + path settle), the prerender settle wait, the
+  // image/font paint wait, and the CDP screenshot itself. Together these
+  // account for nearly all of the render wall; the remainder is the terminal
+  // error probe and dimension reads.
+  stepTimings: ScreenshotStepTimings;
+}
+
+export interface ScreenshotStepTimings {
+  navMs: number;
+  settleMs: number;
+  imagePaintMs: number;
+  screenshotMs: number;
 }
 
 // Block in the browser context until images, CSS background-image URLs, and
@@ -1328,13 +1341,17 @@ export async function captureScreenshot(
       viewportOverridden = true;
     }
 
+    let stepStart = Date.now();
     await transitionTo(page, 'render.html', format, String(ancestorLevel));
     await waitForRoutePathSuffix(
       page,
       `/html/${format}/${ancestorLevel}`,
       opts,
     );
+    let navMs = Date.now() - stepStart;
+    stepStart = Date.now();
     await waitForPrerenderSettle(page);
+    let settleMs = Date.now() - stepStart;
     // After settle, surface any terminal prerender error rather than
     // screenshotting a skeleton/error frame. Reuses the same data-attribute
     // signaling as the HTML capture path.
@@ -1379,7 +1396,9 @@ export async function captureScreenshot(
     // fonts. Without this extra wait the screenshot races those resources and
     // produces empty avatars / missing thumbnails. Bounded by an internal
     // timeout so a slow / 401-looping image can't hang the capture.
+    stepStart = Date.now();
     await waitForImagePaint(page);
+    let imagePaintMs = Date.now() - stepStart;
     // Reported CSS dimensions of the capture. `fullPage` reports the
     // captured document (derived from the PNG itself below, so report and
     // bytes cannot disagree); `clip` reports its own region; otherwise the
@@ -1418,12 +1437,14 @@ export async function captureScreenshot(
         height: window.innerHeight,
       }));
     }
+    stepStart = Date.now();
     let base64 = (await page.screenshot({
       encoding: 'base64',
       type: 'png',
       ...(captureSpec?.fullPage ? { fullPage: true } : {}),
       ...(captureSpec?.clip ? { clip: captureSpec.clip } : {}),
     })) as string;
+    let screenshotMs = Date.now() - stepStart;
     if (captureSpec?.fullPage) {
       // The scroll-size read above and the capture are two separate
       // measurements (Chromium sizes fullPage from its own layout metrics),
@@ -1439,7 +1460,12 @@ export async function captureScreenshot(
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,
     );
-    return { base64, width: dims.width, height: dims.height };
+    return {
+      base64,
+      width: dims.width,
+      height: dims.height,
+      stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
+    };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing

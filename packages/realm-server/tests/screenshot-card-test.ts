@@ -13,6 +13,7 @@ import {
   param,
   putMedia,
   query,
+  setScreenshotPerfSink,
 } from '@cardstack/runtime-common';
 import {
   chooseScreenshotCardCoalesceDecision,
@@ -24,7 +25,9 @@ import type {
   QueuePublishArgs,
   Job,
   PgPrimitive,
+  ScreenshotPerfEvent,
   ScreenshotPrerenderResponse,
+  ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -171,6 +174,11 @@ module(basename(import.meta.filename), function () {
         // The POST surface returns the capture in its response body rather
         // than recording it in the MediaCache ledger.
         persist: null,
+        surface: 'post',
+        // No x-boxel-logging-correlation-id on this request; the surface
+        // still records the field so the capture's telemetry is explicit
+        // about the absence.
+        loggingCorrelationId: null,
       });
     });
 
@@ -664,6 +672,42 @@ module(basename(import.meta.filename), function () {
           base64: PNG_BASE64,
         },
       ]);
+    });
+
+    test('the POST surface emits a request telemetry record whose correlation id rides the job args', async function (assert) {
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        })
+          .set('x-boxel-logging-correlation-id', 'corr-post-1')
+          .expect(201);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(request?.surface, 'post');
+      assert.strictEqual(request?.outcome, 'rendered');
+      assert.strictEqual(request?.correlationId, 'corr-post-1');
+      assert.strictEqual(request?.lane, 'on-demand');
+      assert.strictEqual(typeof request?.generationLookupMs, 'number');
+      assert.strictEqual(typeof request?.ledgerLookupMs, 'number');
+      assert.strictEqual(typeof request?.enqueueMs, 'number');
+      assert.strictEqual(typeof request?.jobWaitMs, 'number');
+      assert.strictEqual(typeof request?.jobId, 'number');
+
+      let args = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(args?.surface, 'post');
+      assert.strictEqual(args?.loggingCorrelationId, 'corr-post-1');
     });
 
     test('a non-default format shows up in the served URL', async function (assert) {

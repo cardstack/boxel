@@ -669,6 +669,7 @@ export class Prerenderer {
         result.response,
         result.timings,
         Date.now() - screenshotStart,
+        { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {

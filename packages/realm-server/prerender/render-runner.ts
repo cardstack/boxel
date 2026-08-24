@@ -634,6 +634,19 @@ export class RenderRunner {
           width: shot.width,
           height: shot.height,
           contentType: 'image/png',
+          // Step timings ride on meta.diagnostics so they survive the remote
+          // wire: `decorateRenderErrorsWithTimings` merges its own (disjoint)
+          // timing fields onto this block, and the remote prerenderer client
+          // returns `data.attributes` — meta included — while dropping the
+          // response envelope's `meta.timing`/`meta.pool`.
+          meta: {
+            diagnostics: {
+              screenshotNavMs: shot.stepTimings.navMs,
+              screenshotSettleMs: shot.stepTimings.settleMs,
+              screenshotImagePaintMs: shot.stepTimings.imagePaintMs,
+              screenshotCaptureMs: shot.stepTimings.screenshotMs,
+            },
+          },
         };
       }
 

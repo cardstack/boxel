@@ -2,19 +2,23 @@ import type Koa from 'koa';
 
 import {
   captureSpecHash,
+  emitScreenshotPerf,
   ensureTrailingSlash,
   fetchRealmPermissions,
   findLiveInstanceGeneration,
   findMediaCacheEntry,
   isCaptureFormat,
   parseScreenshotCaptureSpec,
+  sanitizeLoggingCorrelationId,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type CaptureSpec,
   type DBAdapter,
   type MediaCacheEntry,
   type MediaCacheEntryKey,
   type ScreenshotPrerenderResponse,
+  type ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import {
@@ -206,6 +210,10 @@ export default function handleScreenshotCard({
       );
     }
     let userId = token.user;
+    let requestStart = Date.now();
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
 
     try {
       // The canonical capture identity — resolvable only when the instance
@@ -221,6 +229,8 @@ export default function handleScreenshotCard({
       // fast path, no persist, no served URL. The parse normalizes an
       // all-defaults spec to null, so null exactly means canonical.
       let isCanonicalCapture = captureSpec === null;
+      let generationLookupMs: number | undefined;
+      let ledgerLookupMs: number | undefined;
       if (mediaCacheAdapter && isCanonicalCapture) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
@@ -239,10 +249,12 @@ export default function handleScreenshotCard({
           matrixClient,
         ).can(userId, 'read');
         if (mayRead) {
+          let generationLookupStart = Date.now();
           let generation = await findLiveInstanceGeneration(dbAdapter, {
             realmURL: normalizedRealmURL,
             instanceURL: sourceURL,
           });
+          generationLookupMs = Date.now() - generationLookupStart;
           if (generation !== undefined) {
             entryKey = {
               realmURL: normalizedRealmURL,
@@ -253,10 +265,35 @@ export default function handleScreenshotCard({
           }
         }
       }
+      let emitRequestPerf = (
+        outcome: ScreenshotRequestPerfEvent['outcome'],
+        fields: Partial<ScreenshotRequestPerfEvent> = {},
+      ) =>
+        emitScreenshotPerf({
+          eventType: 'request',
+          surface: 'post',
+          outcome,
+          realmURL: normalizedRealmURL,
+          sourceURL,
+          captureSpecHash: entryKey?.captureSpecHash ?? null,
+          sourceGeneration: entryKey?.sourceGeneration ?? null,
+          lane: entryKey ? 'on-demand' : null,
+          correlationId,
+          jobId: null,
+          reservationId: null,
+          hasTwin: null,
+          ...(generationLookupMs != null ? { generationLookupMs } : {}),
+          ...(ledgerLookupMs != null ? { ledgerLookupMs } : {}),
+          totalMs: Date.now() - requestStart,
+          ...fields,
+        });
 
       if (entryKey) {
+        let ledgerLookupStart = Date.now();
         let entry = await findMediaCacheEntry(dbAdapter, entryKey);
+        ledgerLookupMs = Date.now() - ledgerLookupStart;
         if (entry) {
+          let serveStart = Date.now();
           let response = await respondFromLedger({
             entry,
             withBase64,
@@ -267,6 +304,7 @@ export default function handleScreenshotCard({
             dbAdapter,
           });
           if (response) {
+            emitRequestPerf('hit', { serveMs: Date.now() - serveStart });
             return await setContextResponse(ctxt, response);
           }
           // The entry's object was reclaimed between the ledger read and
@@ -277,6 +315,7 @@ export default function handleScreenshotCard({
       // The canonical realm URL keys the per-realm serialization lane (the
       // job's default concurrency group) so this surface and the GET lane —
       // which keys off the realm's own URL — share one lane per realm.
+      let enqueueStart = Date.now();
       let job = await enqueueScreenshotCardJob(
         {
           realmURL: normalizedRealmURL,
@@ -286,11 +325,15 @@ export default function handleScreenshotCard({
           format,
           captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
+          surface: 'post',
+          loggingCorrelationId: correlationId,
         },
         queue,
         dbAdapter,
         userInitiatedPriority,
       );
+      let enqueueMs = Date.now() - enqueueStart;
+      let jobWaitStart = Date.now();
 
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const timedOut = Symbol('sync-wait-timeout');
@@ -312,6 +355,11 @@ export default function handleScreenshotCard({
         }
       }
       if (result === timedOut) {
+        emitRequestPerf('timeout', {
+          enqueueMs,
+          jobWaitMs: Date.now() - jobWaitStart,
+          jobId: job.id,
+        });
         // The job keeps running and (when persisting) lands its capture in
         // the MediaCache, so the client's retry answers from the ledger
         // with no second render. The retry hint is one average capture.
@@ -341,6 +389,12 @@ export default function handleScreenshotCard({
           }),
         );
       }
+
+      emitRequestPerf(result.status === 'ready' ? 'rendered' : 'error', {
+        enqueueMs,
+        jobWaitMs: Date.now() - jobWaitStart,
+        jobId: job.id,
+      });
 
       let attributes: Record<string, unknown> = { ...result };
       if (!withBase64) {

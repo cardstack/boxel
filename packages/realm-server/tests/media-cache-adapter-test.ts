@@ -80,13 +80,15 @@ module(basename(import.meta.filename), function () {
     });
 
     test('put is dedupe-on-write: an existing object is not rewritten', async function (assert) {
-      await adapter.put(key, bytes, { contentType: 'image/png' });
+      let first = await adapter.put(key, bytes, { contentType: 'image/png' });
+      assert.false(first.deduped, 'the first put reports a real write');
       // Scribble on the stored file, then re-put the same key. A correct
       // adapter treats key-exists as bytes-present and skips the write, so
       // the scribble survives — proof the second put was a no-op.
       let path = join(dir, key.slice(0, 2), key);
       await writeFile(path, 'scribble');
-      await adapter.put(key, bytes, { contentType: 'image/png' });
+      let second = await adapter.put(key, bytes, { contentType: 'image/png' });
+      assert.true(second.deduped, 'the second put reports the dedupe');
       assert.strictEqual(
         await readFile(path, 'utf8'),
         'scribble',
@@ -169,9 +171,10 @@ module(basename(import.meta.filename), function () {
 
     test('put is dedupe-on-write: an existing object is not re-uploaded', async function (assert) {
       headResult = () => ({ ContentLength: 2 });
-      await adapter.put('abc123', new Uint8Array([1, 2]), {
+      let result = await adapter.put('abc123', new Uint8Array([1, 2]), {
         contentType: 'image/png',
       });
+      assert.true(result.deduped, 'the skipped upload reports the dedupe');
       assert.deepEqual(
         sent.map((s) => s.name),
         ['HeadObjectCommand'],

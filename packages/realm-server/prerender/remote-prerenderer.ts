@@ -281,6 +281,7 @@ export function createRemotePrerenderer(
       format,
       captureSpec,
       priority,
+      jobId,
     }) {
       return await requestWithRetry<ScreenshotPrerenderResponse>(
         'prerender-screenshot',
@@ -294,6 +295,9 @@ export function createRemotePrerenderer(
           format,
           ...(captureSpec ? { captureSpec } : {}),
           ...(priority !== undefined ? { priority } : {}),
+          // Stripped into the x-boxel-job-id header by requestWithRetry, so
+          // manager and prerender-server logs join back to the worker job.
+          ...(jobId !== undefined ? { jobId } : {}),
         },
       );
     },
