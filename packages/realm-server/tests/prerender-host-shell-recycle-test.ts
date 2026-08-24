@@ -171,16 +171,48 @@ module(basename(import.meta.filename), function () {
       drain.fulfil();
       await drain.promise;
 
-      let settled = false;
-      let raced = raceAgainstDrain(
-        new Promise<{ result: string }>(() => {}),
-        subscribe,
-      ).then((r) => {
-        settled = true;
-        return r;
-      });
-      assert.deepEqual(await raced, { draining: true });
-      assert.true(settled, 'resolved rather than hanging');
+      // Raced against a timer so the failure being guarded against — the
+      // subscription never settling — reports as this assertion rather than
+      // as a suite timeout.
+      let result = await Promise.race([
+        raceAgainstDrain(new Promise<{ result: string }>(() => {}), subscribe),
+        new Promise((resolve) => setTimeout(() => resolve('hung'), 250)),
+      ]);
+      assert.deepEqual(result, { draining: true }, 'settled rather than hung');
+    });
+
+    // The regression this PR exists to prevent, asserted against the shipping
+    // subscriber rather than the stand-in above: a render that finishes must
+    // leave nothing behind, because what it would leave behind holds that
+    // render's output for the life of the process.
+    test('a completed render leaves nothing on the subscriber', async function (assert) {
+      let subscribe = createDrainSubscriber(new Promise<void>(() => {}));
+      for (let i = 0; i < 50; i++) {
+        await raceAgainstDrain(Promise.resolve({ result: i }), subscribe);
+      }
+      assert.strictEqual(subscribe.waiterCount(), 0, 'no waiters retained');
+    });
+
+    test('a failed render leaves nothing on the subscriber', async function (assert) {
+      let subscribe = createDrainSubscriber(new Promise<void>(() => {}));
+      await assert.rejects(
+        raceAgainstDrain(Promise.reject(new Error('boom')), subscribe),
+        /boom/,
+      );
+      assert.strictEqual(subscribe.waiterCount(), 0, 'no waiters retained');
+    });
+
+    test('a rejected shutdown signal still latches', async function (assert) {
+      let rejected = Promise.reject(new Error('shutdown failed'));
+      let subscribe = createDrainSubscriber(rejected);
+      await rejected.catch(() => undefined);
+      assert.deepEqual(
+        await raceAgainstDrain(
+          new Promise<{ result: string }>(() => {}),
+          subscribe,
+        ),
+        { draining: true },
+      );
     });
 
     test('every later render also reports draining', async function (assert) {

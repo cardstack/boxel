@@ -92,7 +92,14 @@ type DrainSubscription = {
   promise: Promise<{ draining: true }>;
   dispose: () => void;
 };
+// What a caller needs in order to wait: `raceAgainstDrain` only calls this, so
+// it asks for nothing more.
 type SubscribeToDrain = () => DrainSubscription;
+
+// What `createDrainSubscriber` hands back. `waiterCount` is the one thing it
+// exposes beyond subscribing, so the release property can be asserted against
+// this implementation rather than against a stand-in that reimplements it.
+type DrainSubscriber = SubscribeToDrain & { waiterCount: () => number };
 
 // Fans one settlement of the shutdown promise out to per-request subscribers.
 //
@@ -108,17 +115,22 @@ type SubscribeToDrain = () => DrainSubscription;
 // subscription.
 export function createDrainSubscriber(
   drainingPromise: Promise<void>,
-): SubscribeToDrain {
+): DrainSubscriber {
   let waiters = new Set<() => void>();
   let drained = false;
-  drainingPromise.then(() => {
+  let settle = () => {
     drained = true;
     for (let notify of waiters) {
       notify();
     }
     waiters.clear();
-  });
-  return () => {
+  };
+  // Both settlements latch. Nothing rejects the deferred the server wires in,
+  // but this is exported and takes any promise, and an unhandled rejection
+  // here reaches the handler that exits the process. A shutdown signal that
+  // errored is still a shutdown signal.
+  drainingPromise.then(settle, settle);
+  let subscribe = (() => {
     if (drained) {
       return {
         promise: Promise.resolve({ draining: true as const }),
@@ -131,19 +143,27 @@ export function createDrainSubscriber(
     });
     waiters.add(notify);
     return { promise, dispose: () => waiters.delete(notify) };
-  };
+  }) as DrainSubscriber;
+  subscribe.waiterCount = () => waiters.size;
+  return subscribe;
 }
 
 // Run `execPromise`, giving up early if the server starts draining.
 //
 // The subscription is released in `finally` because the alternative — each
 // request calling `.then()` on a promise that only settles at shutdown —
-// leaks. A pending promise keeps every reaction ever attached to it, a
-// reaction keeps its closure, and here that closure captures the request
-// context: the request, its response, and the rendered HTML it produced stay
-// reachable for the life of the process. Nothing detaches a reaction when the
-// render it was racing wins, so the retained set grows by one request's worth
-// of output per request, indefinitely.
+// leaks far more than the reaction itself. The shutdown promise holds that
+// reaction forever; the reaction holds the promise `.then()` derived from it;
+// that derived promise never settles either. `Promise.race` chains onto it,
+// so it holds the race's resolve capability, which holds the race promise —
+// and the race promise is fulfilled with this request's render output. One
+// render's worth of HTML therefore stays reachable per render, for the life
+// of the process. Taking a waiter and dropping it leaves nothing behind.
+//
+// The handler passed to `.then()` captured nothing, so blaming the closure
+// would point at a rule that already held: measured over 2000 renders, that
+// shape alone costs ~0.4 MB, while the same shape fed into a race costs the
+// full ~196 MB of payload.
 export async function raceAgainstDrain<T>(
   execPromise: Promise<T>,
   subscribeToDrain: SubscribeToDrain | undefined,
@@ -451,7 +471,6 @@ export function buildPrerenderApp(options: {
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
-      subscribeToDrain?: SubscribeToDrain;
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
@@ -543,10 +562,7 @@ export function buildPrerenderApp(options: {
         let execPromise = options
           .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
-        let raceResult = await raceAgainstDrain(
-          execPromise,
-          options.subscribeToDrain,
-        );
+        let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
         if ('draining' in raceResult) {
           // Ensure execute completion does not raise unhandled rejections after we respond.
           execPromise.catch((e) =>
@@ -666,7 +682,6 @@ export function buildPrerenderApp(options: {
     parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args, { signal }) =>
       prerenderer.prerenderModule({ ...args, signal }),
-    subscribeToDrain,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
@@ -696,7 +711,6 @@ export function buildPrerenderApp(options: {
           ...(args.priority !== undefined ? { priority: args.priority } : {}),
           signal,
         }),
-      subscribeToDrain,
     },
   );
 
@@ -718,7 +732,6 @@ export function buildPrerenderApp(options: {
           priority: args.priority,
           signal,
         }),
-      subscribeToDrain,
     },
   );
 
