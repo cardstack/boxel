@@ -4734,13 +4734,29 @@ html[data-gm-dragging] * {
   stroke-linecap: round;
 }
 
-/* the element NOW: the one filled thing on the mark. fill-box, because
+/* the second timeline: concentric, so the two can never cross */
+.bo-orbit {
+  fill: none;
+  stroke: rgba(139, 150, 156, 0.75);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* the elements NOW: the only filled things on the mark. fill-box, because
    without it a transform on an SVG child is measured against the viewport's
-   origin and Pop would fling the bead off the arc. */
-.bo-bead {
-  fill: var(--ember);
+   origin and Pop would fling them off their arcs. */
+.bo-bead,
+.bo-dot {
   transform-box: fill-box;
   transform-origin: 50% 50%;
+}
+
+.bo-bead {
+  fill: var(--ember);
+}
+
+.bo-dot {
+  fill: var(--ember-hot);
 }
 
 /* text: one span per glyph, grouped into words. Both groupings exist in the
@@ -5193,8 +5209,8 @@ html[data-gm-dragging] * {
   margin-top: 40px;
   padding-top: 30px;
   border-top: 1px solid var(--line);
-  font-size: 14px;
-  line-height: 1.68;
+  font-size: 15px;
+  line-height: 1.72;
 }
 
 .dive-head {
@@ -5218,16 +5234,17 @@ html[data-gm-dragging] * {
   font-family: var(--font-display);
   font-size: clamp(22px, 3.4vw, 30px);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.14;
   letter-spacing: -0.01em;
   text-wrap: balance;
+  color: #d8d0c7;
 }
 
 .dive-lede {
   margin: 0;
   font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink-dim);
+  line-height: 1.65;
+  color: #ada49a;
 }
 
 .dd {
@@ -5264,10 +5281,11 @@ html[data-gm-dragging] * {
   max-width: 30ch;
   margin: 0;
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 19px;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.22;
   text-wrap: balance;
+  color: #c9c0b5;
 }
 
 /* prose keeps a reading measure; figures and code boxes do not */
@@ -5280,12 +5298,12 @@ html[data-gm-dragging] * {
 
 .dd-col p {
   margin: 0;
-  color: var(--ink-dim);
+  color: #ada49a;
 }
 
 .dd-col strong {
   font-weight: 600;
-  color: var(--ink);
+  color: #d8d0c7;
 }
 
 .dd-col em,
@@ -5317,12 +5335,12 @@ html[data-gm-dragging] * {
 
 .dd-call p {
   margin: 0;
-  color: var(--ink-dim);
+  color: #ada49a;
 }
 
 .dd-call b {
   font-weight: 600;
-  color: var(--ink);
+  color: #d8d0c7;
 }
 
 .dd-modes {
