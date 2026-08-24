@@ -200,22 +200,34 @@ Is a yielded step component idiomatic Ember? Yes — the
 provider-and-contextual-components pattern is the ecosystem's own
 (`ember-power-select`, `ember-leaflet`'s `<layers.tile>`,
 `ember-google-maps`' `<map.marker>`: components that render nothing
-visual and register with their parent). What it is **not** is the
-ef4 lineage: ember-animated puts choreography in JavaScript generator
-functions over sprite lists, and legacy boxel-motion followed it with
-orchestration functions over behavior classes — whose names
-(`TweenBehavior`, `SpringBehavior`, `StaticBehavior`, `WaitBehavior`)
-are the direct ancestors of these steps, as choreography.md's mapping
-table records. The departure is deliberate, and the recording rule is
-the reason: a timeline declared as markup is data — co-located with
-its participants, compile-checkable (every "fails at compile, named"
-promise in this document), serializable, seekable, and legible to a
-model reading a skill. A generator that decides mid-flight is
-authorable but not recordable. The escape hatch stays where legacy
+visual and register with their parent).
+
+And the deeper lineage is single-file: both prior systems are ef4's.
+**ember-animated** is his first generation — JavaScript generator
+functions over sprite lists, deciding at runtime. **boxel-motion** is
+his second, and his own correction of the first: the changeset in, the
+render pass as the unit, behaviors (`TweenBehavior`, `SpringBehavior`,
+`StaticBehavior`, `WaitBehavior`) computing their frames ahead of time
+and handing them to the platform to play. Every load-bearing idea in
+Choreo — the changeset, sprites with before/after bounds, behaviors
+with real durations — is that second design carried forward; the
+mapping table in choreography.md is a genealogy, not a translation.
+
+So the recording rule is not a departure from ef4 — it is his own
+arrow extended. Gen 2 already traded runtime deciding for
+ahead-of-time frames; what it never grew was the thing precomputation
+makes possible: a timeline you can hold — seek, gate, record. Choreo
+is gen 3: the same model given a language (Keynote's, in the
+template), a run handle, and — in the native driver — a return to
+gen 2's own move of handing sampled frames to the platform. What
+changes generationally is only the authoring surface: markup instead
+of orchestration functions, because a timeline declared as markup is
+data — co-located, compile-checkable, serializable, seekable, and
+legible to a model reading a skill. The escape hatch stays where gen-2
 users expect it — any property may be a function of `(sprite,
-changeset)` — so the JS muscle memory has somewhere to go; the
-`c.To` rename does trade away the `TweenBehavior` name-lineage, which
-the migration table keeps.
+changeset)` — and the one thing knowingly traded is naming: `c.To`
+gives up the `TweenBehavior` name-lineage, which the migration table
+keeps.
 
 ## The seam with the binding
 
