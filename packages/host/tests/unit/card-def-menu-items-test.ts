@@ -236,7 +236,7 @@ module('Unit | CardDef menu items', function (hooks) {
     );
   });
 
-  test('code-mode-playground includes sample-data tagged items and Open in Code Mode', function (assert: Assert) {
+  test('code-mode-playground includes sample-data tagged items and omits Open in Code Mode', function (assert: Assert) {
     let card = new DummyCard(
       'https://example.com/realm/card-3',
       'Three',
@@ -255,11 +255,18 @@ module('Unit | CardDef menu items', function (hooks) {
     let hasSampleDataTagged = items.some((i: MenuItemOptions) =>
       (i.tags || []).includes('playground-sample-data'),
     );
+    let hasOpenInCodeMode = items.some(
+      (i: MenuItemOptions) => i.label === 'Open in Code Mode',
+    );
 
     assert.ok(hasCreateListing, 'contains Create Listing');
     assert.ok(
       hasSampleDataTagged,
       'contains items tagged playground-sample-data',
+    );
+    assert.notOk(
+      hasOpenInCodeMode,
+      'does not contain Open in Code Mode (already in code submode)',
     );
   });
 

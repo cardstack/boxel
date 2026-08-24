@@ -827,22 +827,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index="0"]').containsText('Jane Doe');
     });
 
-    test('can use the header context menu to open instance in code mode', async function (assert) {
+    test('header context menu omits "Open in Code Mode" (already in code submode)', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, {
         declaration: 'Author',
       });
       await click('[data-test-more-options-button]');
       assert
         .dom('[data-test-boxel-dropdown-content] [data-test-boxel-menu-item]')
-        .exists({ count: 6 });
-
-      await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
+        .exists({ count: 5 });
       assert
-        .dom(
-          `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
-        )
-        .exists();
-      assert.dom('[data-test-module-inspector-view="preview"]').doesNotExist();
+        .dom('[data-test-boxel-menu-item-text="Open in Code Mode"]')
+        .doesNotExist();
     });
 
     test('can use the header context menu to open instance in interact mode', async function (assert) {
