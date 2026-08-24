@@ -669,3 +669,68 @@ participant that no step names — one that will simply vanish — is a
 warning with the sprite's id in it. The ceiling (too many primaries) is
 taste, but a debug count of sprites moved by `Move` steps per pass makes
 the review conversation possible.
+
+## The surfaces test — boxel-labs
+
+The surfaces research (`boxel-labs`: `boxel-surface` / `boxel-grid` /
+`boxel-canvas`, mirrored into Pretui's `surfaces/` bundle; the staging
+realm copy is auth-gated) prototyped drag and drop twice, and drew its
+architectural line the same way both times: **the host owns the drag
+state machine, a component renders the visual.** The grid's `DragGhost`
+says it outright — grab-offset and axis-locking are "consumer-specific";
+the canvas vendors xyflow's drag whole. Choreo should respect that line,
+not absorb it: nothing below extracts a drag state machine. What the
+research does hand over is what happens at the seams.
+
+**Extract: `c.gesture` is a query, not a `Move` argument.** The hot
+start was specified as `@from={{c.gesture}}`. The research shows the
+same value composing everywhere a box query goes:
+
+- `c.Move @from={{c.gesture}}` — the release flight (the ghost's
+  landing, bento's fly-down).
+- `c.Tether @to={{c.gesture}}` — the canvas's connect-drag: a wire
+  drawn from a handle to the pointer until release pairs it to a real
+  sprite. Edge reconnection is the same tether re-aimed.
+- `c.Camera @follow={{c.gesture}}` — auto-pan: the viewport tracking a
+  drag near its edge (xyflow's `autoPanOnNodeDrag` / `autoPanSpeed`,
+  today a JS loop). `@follow` also takes a sprite query — a camera that
+  keeps the flying participant in frame.
+
+One query, three consumers; the gesture becomes a first-class source of
+geometry the way a beacon already is.
+
+**Extract: the damped counter-scale.** `relative-scale.ts` is finished
+research into exactly the `c.Camera` `counterScale` problem: secondary
+UI in a zooming world should scale _with_ the host but not 1:1 —
+asymmetrically damped (`pow(z, 0.30)` zoomed out so it stays readable,
+`pow(z, 0.70)` zoomed in so it doesn't feel stuck), clamped to
+`[0.85, 1.8]`. `counterScale` should be `true | 'damped' | false`, with
+these curves as the `'damped'` constants. The deck said "focus boxels
+stay the same size"; the research measured what the eye actually
+tolerates.
+
+**Extract: escalation is a crossing.** `boxel-surface`'s `<Lift>` is a
+semantic anchored surface — kind, placement (`attached` / `shadow` /
+`plane`), backdrop, elevation tier, and an escalation ladder (preview →
+plane). Today each rung enters through its own CSS keyframe
+(`bx-lift-in`, `bx-lift-plane-in`) and escalation is an unmount and a
+fresh mount — no continuity between rungs. That is a counterpart flight
+by construction: same content, two placements, one identity. The
+surfaces `Lift` should eventually _ride_ Choreo's step rather than the
+other way round. Which exposes a naming collision to settle
+deliberately: `boxel-surface` already ships `Lift` the component
+(anchored surface, elevation tiers) while this document specifies
+`c.Lift` the step (promote a sprite to the region's layer). They are
+the product and the mechanism of the same idea; if one renames, it
+should be the step (`c.Raise` is free), and the decision belongs to
+whichever lands second.
+
+**Not extracted, deliberately.** The prospective-drop state — wells
+lighting up, the drop indicator line, "what would happen if released
+here" — is host domain logic (the grid's `DropIndicator`, bento's
+`previewOp`). Choreo animates those affordances as ordinary
+participants; it does not compute them. Snap grids quantize a
+destination before the timeline sees it. And the focus ladder is the
+_trigger_ vocabulary — a focus-path change is what fires a pass — not a
+motion construct; the deck's "shifting focus" table is application
+choreography written against it.
