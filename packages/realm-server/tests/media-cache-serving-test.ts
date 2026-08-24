@@ -1,10 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { Readable } from 'node:stream';
 import type { PgAdapter } from '@cardstack/postgres';
 import type {
-  MediaCacheAdapter,
   MediaCacheEntry,
   QueuePublisher,
   Realm,
@@ -14,6 +12,7 @@ import type {
 import {
   MEDIA_CACHE_MAX_AGE_SECONDS,
   MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS,
+  MEDIA_CACHE_TOUCH_THROTTLE_MS,
   findMediaCacheEntry,
   mediaCacheMissResponse,
   putMedia,
@@ -21,42 +20,11 @@ import {
 } from '@cardstack/runtime-common';
 
 import { nodeStreamToBuffer } from '../stream.ts';
+import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { setupDB } from './helpers/index.ts';
 
 const REALM_URL = 'http://test-realm/a/';
 const BYTES = new TextEncoder().encode('png-bytes');
-
-// Minimal store: real bytes behind the interface, with a switch between the
-// two stream shapes the serving layer handles (a node Readable, which
-// streams via `nodeStream`, and a bare async iterable, which is buffered).
-class FakeMediaCacheAdapter implements MediaCacheAdapter {
-  objects = new Map<string, Uint8Array>();
-  streamShape: 'readable' | 'iterable' = 'readable';
-
-  async put(key: string, bytes: Uint8Array, _opts: { contentType: string }) {
-    this.objects.set(key, bytes);
-  }
-  async head(key: string) {
-    let bytes = this.objects.get(key);
-    return bytes ? { size: bytes.length } : undefined;
-  }
-  async getStream(key: string) {
-    let bytes = this.objects.get(key);
-    if (!bytes) {
-      return undefined;
-    }
-    if (this.streamShape === 'readable') {
-      return Readable.from(Buffer.from(bytes));
-    }
-    return (async function* () {
-      yield bytes.slice(0, 3);
-      yield bytes.slice(3);
-    })();
-  }
-  async delete(key: string) {
-    this.objects.delete(key);
-  }
-}
 
 function requestContext(
   permissions: Record<string, string[]> = {},
@@ -201,12 +169,15 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('200 and 304 both bump last_accessed_at', async function (assert) {
+  test('200 and 304 both bump last_accessed_at once the throttle window has lapsed', async function (assert) {
     let before = await lastAccessedAt();
     for (let init of [
       {},
       { headers: { 'if-none-match': `"${entry.objectKey}"` } },
     ]) {
+      // the bump gates on the in-hand entry's own stamp; age it past the
+      // throttle window so the serve writes
+      entry.lastAccessedAt = Date.now() - MEDIA_CACHE_TOUCH_THROTTLE_MS - 1;
       // ensure the clock can only move forward past the prior stamp
       await new Promise((resolve) => setTimeout(resolve, 5));
       await serve(init as any);
@@ -217,6 +188,54 @@ module(basename(import.meta.filename), function (hooks) {
       );
       before = after;
     }
+  });
+
+  test('a serve within the throttle window skips the bump', async function (assert) {
+    let before = await lastAccessedAt();
+    // findMediaCacheEntry returned a freshly-put entry, so its stamp is
+    // inside the window
+    let response = await serve();
+    assert.strictEqual(response.status, 200);
+    assert.strictEqual(
+      await lastAccessedAt(),
+      before,
+      'last_accessed_at is untouched',
+    );
+  });
+
+  test('a declared-lane entry never bumps last_accessed_at', async function (assert) {
+    // only the GC's on-demand age-out arm reads last_accessed_at — declared
+    // captures age out on generation — so serving one skips the write even
+    // past the throttle window
+    await putMedia(dbAdapter, adapter, {
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-2`,
+      captureSpecHash: 'spec-declared',
+      sourceGeneration: 1,
+      bytes: BYTES,
+      contentType: 'image/png',
+      lane: 'declared',
+    });
+    let declaredKey = {
+      realmURL: REALM_URL,
+      sourceURL: `${REALM_URL}card-2`,
+      captureSpecHash: 'spec-declared',
+    };
+    let declaredEntry = (await findMediaCacheEntry(dbAdapter, declaredKey))!;
+    let before = declaredEntry.lastAccessedAt;
+    declaredEntry.lastAccessedAt =
+      Date.now() - MEDIA_CACHE_TOUCH_THROTTLE_MS - 1;
+    let response = await serveMediaCacheEntry({
+      request: new Request(`${REALM_URL}_screenshot/card-2`),
+      requestContext: requestContext(),
+      entry: declaredEntry,
+      mediaCacheAdapter: adapter,
+      dbAdapter,
+    });
+    assert.strictEqual(response.status, 200);
+    let after = (await findMediaCacheEntry(dbAdapter, declaredKey))!
+      .lastAccessedAt;
+    assert.strictEqual(after, before, 'last_accessed_at is untouched');
   });
 
   test('the miss response carries realm visibility', async function (assert) {

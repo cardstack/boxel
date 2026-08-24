@@ -17,10 +17,16 @@ const log = logger('media-cache');
 // one. The URL is the durable reference — what rendered HTML and
 // `meta.screenshots` embed — and the content hash surfaces only as the
 // validator: a re-capture changes what the URL serves (the ETag rotates),
-// never the URL itself. So the cache policy is a short freshness window
-// with cheap revalidation: an unchanged capture revalidates as a bodyless
-// 304, a changed one arrives in the same response, and no client holds
-// stale bytes for longer than the window.
+// never the URL itself. The cache policy is a short freshness window with
+// cheap revalidation (an unchanged capture answers as a bodyless 304) plus
+// a deliberate stale-while-revalidate allowance: after freshness lapses, a
+// cache may keep serving the bytes it holds for up to the SWR window while
+// it revalidates in the background, so an image grid renders from cache
+// instead of blocking on a revalidation round-trip per image. The trade is
+// re-capture propagation — a changed capture can take up to max-age plus
+// the SWR window to reach every viewer (shared caches included, on public
+// realms) — which suits captures: derived, eventually-consistent artifacts
+// whose URL can briefly lag in freshness but never lies about identity.
 export const MEDIA_CACHE_MAX_AGE_SECONDS = 60;
 export const MEDIA_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 3600;
 
@@ -70,8 +76,9 @@ export function mediaCacheMissResponse({
 // `If-None-Match` echo of it answers as a bodyless 304, and a re-capture
 // that changed the bytes rotates the validator. Content type comes from the
 // ledger (the adapters store no metadata of their own). A hit — 200 or 304 —
-// bumps the entry's last-accessed stamp, which is what keeps a capture out
-// of the GC's on-demand age-out lane while it is in use.
+// bumps the entry's last-accessed stamp (lane-scoped and throttled; see
+// `touch`), which is what keeps a capture out of the GC's on-demand age-out
+// lane while it is in use.
 //
 // An entry whose object is gone from the store (reclaimed between this
 // request's ledger read and its stream open) is served as an uncaptured
@@ -131,10 +138,27 @@ export async function serveMediaCacheEntry({
   return response;
 }
 
-// Best-effort: a failed last-accessed bump must never fail a serve — the
-// worst case is an in-use on-demand capture looking idle to the GC one
-// sweep early, and the next successful serve re-marks it.
+// A bump within this window of the entry's own stamp is skipped: the
+// on-demand lane's idle TTL is measured in days, so per-serve precision
+// buys the GC nothing and would put an UPDATE ahead of every response body
+// on exactly the traffic this route exists for (a grid of images
+// revalidating together).
+export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
+
+// Keeps an in-use capture out of the GC's on-demand age-out lane. Only that
+// lane reads `last_accessed_at` — declared captures age out on generation —
+// so other lanes skip the write entirely, and on-demand bumps are throttled
+// to one per `MEDIA_CACHE_TOUCH_THROTTLE_MS` per entry. Best-effort: a
+// failed bump must never fail a serve — the worst case is an in-use
+// on-demand capture looking idle to the GC one sweep early, and a later
+// serve re-marks it.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
+  if (entry.lane !== 'on-demand') {
+    return;
+  }
+  if (Date.now() - entry.lastAccessedAt < MEDIA_CACHE_TOUCH_THROTTLE_MS) {
+    return;
+  }
   try {
     await touchMediaCacheEntry(dbAdapter, entry);
   } catch (e) {

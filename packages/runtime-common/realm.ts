@@ -2492,6 +2492,18 @@ export class Realm {
           return;
         }
 
+        // Same reservation `internalHandle` enforces for direct writes:
+        // the `_screenshot/` subtree is claimed by capture serving, so a
+        // file written there could never be read back.
+        if (localPath.startsWith('_screenshot/')) {
+          errors.push({
+            title: 'Reserved path',
+            detail: `Cannot write '${operation.href}': '_screenshot/' is reserved for serving captures`,
+            status: 422,
+          });
+          return;
+        }
+
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           errors.push({
@@ -3211,6 +3223,22 @@ export class Realm {
           requestContext,
           localPath.slice('_screenshot/'.length),
         );
+      }
+      // The GET dispatch above claims the whole `_screenshot/` subtree, so a
+      // realm file stored under it could never be read back — it would
+      // index, list, and answer every GET as an uncaptured miss. Refuse
+      // creation writes up front so the collision surfaces at write time
+      // (the `/_atomic` precheck enforces the same reservation for its
+      // operation hrefs). DELETE stays admitted as the recovery path for
+      // anything already stored there.
+      if (
+        ['PUT', 'PATCH', 'POST'].includes(request.method) &&
+        localPath.startsWith('_screenshot/')
+      ) {
+        return badRequest({
+          message: `'_screenshot/' is reserved for serving captures and cannot be written to`,
+          requestContext,
+        });
       }
       if (this.#router.handles(request)) {
         return this.#router.handle(request, requestContext);
@@ -4014,11 +4042,13 @@ export class Realm {
   // Beyond realm read (enforced by internalHandle before dispatch), the
   // parent instance must be live: this gives per-instance ACLs a place to
   // land, and captures of a deleted instance stop serving the moment its
-  // index tombstone appears, ahead of GC reclaiming their artifacts. Any
-  // request that resolves to no capture — instance missing, store
-  // unconfigured, addressing unresolvable — is an uncaptured miss: 404 with
-  // a short max-age so an `<img>` picks up a later capture on revalidation,
-  // never a synchronous wait inside an image load.
+  // index tombstone appears, ahead of GC reclaiming their artifacts. The
+  // gate is a narrow existence probe (`hasLiveInstance`), never an instance
+  // hydration — it runs on every request, 304 revalidations included. Any
+  // request that resolves to no capture — instance missing or errored,
+  // store unconfigured, addressing unresolvable — is an uncaptured miss:
+  // 404 with a short max-age so an `<img>` picks up a later capture on
+  // revalidation, never a synchronous wait inside an image load.
   private async serveScreenshot(
     request: Request,
     requestContext: RequestContext,
@@ -4030,8 +4060,7 @@ export class Realm {
     let instanceURL = this.paths.fileURL(
       instanceLocalPath.replace(/\.json$/, ''),
     );
-    let instance = await this.#realmIndexQueryEngine.instance(instanceURL);
-    if (instance?.type !== 'instance') {
+    if (!(await this.#realmIndexQueryEngine.hasLiveInstance(instanceURL))) {
       return mediaCacheMissResponse({ requestContext });
     }
     let entry = await this.resolveScreenshotEntry(

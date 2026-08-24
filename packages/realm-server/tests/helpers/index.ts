@@ -1400,6 +1400,7 @@ export async function runTestRealmServer({
     boxelSite: 'localhost',
   },
   prerenderer: providedPrerenderer,
+  mediaCacheAdapter,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -1422,6 +1423,7 @@ export async function runTestRealmServer({
     boxelSite?: string;
   };
   prerenderer?: Prerenderer;
+  mediaCacheAdapter?: MediaCacheAdapter;
 }) {
   stripTlsEnvVars();
   let prerenderer = providedPrerenderer ?? (await getTestPrerenderer());
@@ -1459,6 +1461,7 @@ export async function runTestRealmServer({
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   });
 
   await testRealm.logInToMatrix();
@@ -2115,6 +2118,7 @@ type InternalPermissionedRealmSetupOptions = {
   fileSizeLimitBytes?: number;
   audioSizeLimitBytes?: number;
   videoSizeLimitBytes?: number;
+  mediaCacheAdapter?: MediaCacheAdapter;
 };
 
 async function startPermissionedRealmFixture(
@@ -2133,6 +2137,7 @@ async function startPermissionedRealmFixture(
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
   testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2202,6 +2207,7 @@ async function startPermissionedRealmFixture(
     audioSizeLimitBytes,
     videoSizeLimitBytes,
     prerenderer,
+    mediaCacheAdapter,
   });
 
   let request = supertest(testRealmServer.testRealmHttpServer);
@@ -2270,6 +2276,7 @@ export function setupPermissionedRealm(
     fileSizeLimitBytes,
     audioSizeLimitBytes,
     videoSizeLimitBytes,
+    mediaCacheAdapter,
   }: {
     permissions: RealmPermissions;
     realmURL?: URL;
@@ -2298,6 +2305,7 @@ export function setupPermissionedRealm(
     fileSizeLimitBytes?: number;
     audioSizeLimitBytes?: number;
     videoSizeLimitBytes?: number;
+    mediaCacheAdapter?: MediaCacheAdapter;
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
@@ -2327,6 +2335,7 @@ export function setupPermissionedRealm(
         fileSizeLimitBytes,
         audioSizeLimitBytes,
         videoSizeLimitBytes,
+        mediaCacheAdapter,
       });
       testRealmServer = server;
 
