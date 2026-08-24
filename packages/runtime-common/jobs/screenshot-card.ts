@@ -21,12 +21,19 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // render identity, and persist target — since joining hands the incoming
 // caller the twin's result verbatim. Queued and in-flight twins both join;
 // an in-flight join just registers a late waiter on the running job.
+//
+// Only the ledger-backed GET lane coalesces. Its persist target pins the
+// source generation, so a joined caller can never be handed a capture of a
+// different revision. `POST /_screenshot-card` publishes with `persist: null`
+// — a render-now request whose identity carries no freshness axis, so an
+// in-flight twin could be up to a reservation-lease old and of a pre-edit
+// card; those always insert.
 function chooseScreenshotCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
   let incomingArgs = parseScreenshotCardArgs(incoming.args);
-  if (!incomingArgs) {
+  if (!incomingArgs || !incomingArgs.persist) {
     return { type: 'insert' };
   }
   let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
@@ -116,6 +123,11 @@ export interface ScreenshotQueueEstimate {
   // behind the realm's serialized screenshot lane before its own capture
   // even starts.
   estimatedWaitMs: number;
+  // True when a queued or in-flight job already carries this exact capture
+  // identity: the incoming request would coalesce onto it and cost no new
+  // Chrome work, so the caller skips the congestion pre-check rather than
+  // 503-ing a request the lane is about to satisfy for free.
+  hasTwin: boolean;
 }
 
 // The fail-fast congestion pre-check for a capture-triggering request:
@@ -128,26 +140,67 @@ export interface ScreenshotQueueEstimate {
 export async function estimateScreenshotQueueWait(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
+  // The persist identity of the capture about to be requested. When a queued
+  // or in-flight job already matches it, the request coalesces rather than
+  // rendering, so `hasTwin` lets the caller bypass the congestion gate.
+  twinOf?: {
+    sourceURL: string;
+    captureSpecHash: string;
+    sourceGeneration: number;
+  },
 ): Promise<ScreenshotQueueEstimate> {
   if (dbAdapter.kind !== 'pg') {
-    return { pending: 0, avgCaptureMs: 0, estimatedWaitMs: 0 };
+    return { pending: 0, avgCaptureMs: 0, estimatedWaitMs: 0, hasTwin: false };
   }
-  let [pendingRows, durationRows] = await Promise.all([
+  let [pendingRows, durationRows, twinRows] = await Promise.all([
     query(dbAdapter, [
-      `SELECT COUNT(*) AS pending FROM jobs WHERE status = 'unfulfilled' AND concurrency_group =`,
+      `SELECT COUNT(*) AS pending FROM jobs
+        WHERE status = 'unfulfilled'
+          AND job_type = 'screenshot-card'
+          AND concurrency_group =`,
       param(concurrencyGroup),
     ] as Expression) as Promise<{ pending: number | string }[]>,
     // Execution time is reservation-claim → job-finish (there is no
-    // started_at column); resolved captures only, bounded lookback so the
-    // estimate tracks current conditions.
+    // started_at column). Aggregate per job and measure from the last
+    // (winning) claim: a lease-lapsed retry leaves an earlier abandoned
+    // reservation whose completed_at is also set, and its row spans the
+    // whole expired lease — averaging that in would drag the estimate toward
+    // the lease duration and 503 a healthy queue. Realm-scoped to match the
+    // per-realm `pending` count, resolved captures only, bounded lookback.
     query(dbAdapter, [
-      `SELECT AVG(EXTRACT(EPOCH FROM (j.finished_at - jr.created_at)) * 1000) AS avg_ms
-       FROM jobs j
-       JOIN job_reservations jr ON jr.job_id = j.id AND jr.completed_at IS NOT NULL
-       WHERE j.job_type = 'screenshot-card'
-         AND j.status = 'resolved'
-         AND j.finished_at > NOW() - INTERVAL '${CAPTURE_DURATION_LOOKBACK_HOURS} hours'`,
+      `SELECT AVG(ms) AS avg_ms FROM (
+         SELECT EXTRACT(EPOCH FROM (j.finished_at - MAX(jr.created_at))) * 1000 AS ms
+           FROM jobs j
+           JOIN job_reservations jr ON jr.job_id = j.id AND jr.completed_at IS NOT NULL
+          WHERE j.job_type = 'screenshot-card'
+            AND j.status = 'resolved'
+            AND j.finished_at > NOW() - INTERVAL '${CAPTURE_DURATION_LOOKBACK_HOURS} hours'
+            AND j.concurrency_group =`,
+      param(concurrencyGroup),
+      `GROUP BY j.id, j.finished_at
+       ) t`,
     ] as Expression) as Promise<{ avg_ms: number | string | null }[]>,
+    twinOf
+      ? (query(dbAdapter, [
+          // A pending/in-flight job carrying the same persist target (jsonb
+          // extraction, so the compares are text — sourceGeneration binds as
+          // a string to match). Confined to the GET lane's identity fields;
+          // POST jobs have no persist and never appear here.
+          `SELECT EXISTS (
+             SELECT 1 FROM jobs
+              WHERE status = 'unfulfilled'
+                AND job_type = 'screenshot-card'
+                AND concurrency_group =`,
+          param(concurrencyGroup),
+          `AND args->'persist'->>'sourceURL' =`,
+          param(twinOf.sourceURL),
+          `AND args->'persist'->>'captureSpecHash' =`,
+          param(twinOf.captureSpecHash),
+          `AND args->'persist'->>'sourceGeneration' =`,
+          param(String(twinOf.sourceGeneration)),
+          `) AS has_twin`,
+        ] as Expression) as Promise<{ has_twin: boolean }[]>)
+      : Promise.resolve([{ has_twin: false }]),
   ]);
   let pending = Number(pendingRows[0]?.pending ?? 0);
   let avgRaw = durationRows[0]?.avg_ms;
@@ -157,6 +210,7 @@ export async function estimateScreenshotQueueWait(
     pending,
     avgCaptureMs,
     estimatedWaitMs: pending * avgCaptureMs,
+    hasTwin: Boolean(twinRows[0]?.has_twin),
   };
 }
 

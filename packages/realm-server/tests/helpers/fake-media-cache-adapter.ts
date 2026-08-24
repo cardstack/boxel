@@ -24,9 +24,15 @@ export class FakeMediaCacheAdapter implements MediaCacheAdapter {
     if (this.streamShape === 'readable') {
       return Readable.from(Buffer.from(bytes));
     }
+    // Yield in two chunks: a single-chunk generator can't distinguish an
+    // implementation that wraps the whole iterable from one that reads only
+    // its head, which is the bug the bare-async-iterable serving test exists
+    // to catch. Split at the midpoint (min 1) so a payload shorter than a
+    // fixed offset still crosses a real chunk boundary.
     return (async function* () {
-      yield bytes.slice(0, 3);
-      yield bytes.slice(3);
+      let mid = Math.max(1, Math.floor(bytes.length / 2));
+      yield bytes.slice(0, mid);
+      yield bytes.slice(mid);
     })();
   }
   async delete(key: string) {

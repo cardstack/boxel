@@ -180,6 +180,8 @@ import {
 import {
   mediaCacheMissResponse,
   serveMediaCacheEntry,
+  mediaCacheVisibility,
+  MEDIA_CACHE_MAX_AGE_SECONDS,
 } from './media-cache-serving.ts';
 import {
   enqueueScreenshotCardJob,
@@ -4161,21 +4163,38 @@ export class Realm {
     spec: CaptureSpec,
   ): Promise<ResponseWithNodeStream> {
     if (!(await this.allowsArbitraryScreenshots())) {
-      return responseWithError(
-        new CardError(
-          `This realm does not allow arbitrary screenshot captures: set "allowArbitraryScreenshots" to true on the realm's config card to enable them. Captures that already exist still serve.`,
-          { status: 403 },
-        ),
+      // 403 isn't heuristically cacheable, so with no explicit freshness a
+      // browser re-requests on every `<img>` load — and absent-⇒-false means
+      // every realm is gated by default. Carry the same short window the miss
+      // uses so a gated realm's image loads stop hammering the origin (and so
+      // opting the realm in surfaces images within that same window).
+      return createResponse({
+        body: `This realm does not allow arbitrary screenshot captures: set "allowArbitraryScreenshots" to true on the realm's config card to enable them. Captures that already exist still serve.`,
+        init: {
+          status: 403,
+          headers: {
+            'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+          },
+        },
         requestContext,
-      );
+      });
     }
 
     let concurrencyGroup = `screenshot:${this.url}`;
     let estimate = await estimateScreenshotQueueWait(
       this.#dbAdapter,
       concurrencyGroup,
+      entryKey,
     );
-    if (estimate.estimatedWaitMs > this.#screenshotSyncWaitMs) {
+    // A request whose capture is already queued or rendering coalesces onto
+    // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
+    // Chrome work, so the lane's depth is not its wait — only a genuinely new
+    // capture faces the congestion gate. Without this, the second viewer of a
+    // card that is mid-render is 503'd against a wait it would never incur.
+    if (
+      !estimate.hasTwin &&
+      estimate.estimatedWaitMs > this.#screenshotSyncWaitMs
+    ) {
       return this.screenshotRetryLater(
         requestContext,
         estimate.estimatedWaitMs,
@@ -4268,12 +4287,16 @@ export class Realm {
     requestContext: RequestContext,
     estimatedWaitMs: number,
   ): Response {
+    let retryAfterSeconds = Math.max(1, Math.ceil(estimatedWaitMs / 1000));
     return createResponse({
-      body: null,
+      // Every other refusal on this route names its reason (the 400s name the
+      // field, the 403 names the flag); a sync-wait caller honoring
+      // Retry-After gets one too.
+      body: `Screenshot capture is queued; retry after ${retryAfterSeconds} seconds.`,
       init: {
         status: 503,
         headers: {
-          'retry-after': String(Math.max(1, Math.ceil(estimatedWaitMs / 1000))),
+          'retry-after': String(retryAfterSeconds),
         },
       },
       requestContext,
@@ -4281,7 +4304,7 @@ export class Realm {
   }
 
   // The per-realm opt-in for GET-triggered captures, read from the realm's
-  // indexed config card on every check — so a `.realm.json` edit takes
+  // indexed config card on every check — so a `realm.json` edit takes
   // effect with its own index update, with no restart and no cache to
   // invalidate. Absent, unindexed, or anything but `true` all read as
   // gated.
