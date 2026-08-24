@@ -1,4 +1,5 @@
 import { on } from '@ember/modifier';
+import { beacon } from 'glimmer-motion';
 import { setTempo, settings, type Tempo, toggleCode } from 'test-app/lib/tempo';
 
 function choose(event: Event) {
@@ -21,6 +22,11 @@ function is(mode: string) {
  *
  * "How this works" is not a speed, so picking it opens the panel and puts the
  * control back where it was rather than pretending to be a fourth setting.
+ *
+ * The beacon is why the panel appears to come OUT of this control: it claims
+ * this box by name, and <HowPanel>'s Choreo borrows it as the start of the
+ * flight in and the end of the flight out. The select itself never animates —
+ * a beacon is a point, not a participant.
  */
 export const TempoPicker = <template>
   <label class="tempo">
@@ -28,6 +34,7 @@ export const TempoPicker = <template>
     <select
       class="tempo-select"
       aria-label="Page transition"
+      {{beacon "transition-control"}}
       {{on "change" choose}}
     >
       <option value="instant" selected={{if (is "instant") true}}>
@@ -35,9 +42,6 @@ export const TempoPicker = <template>
       </option>
       <option value="smooth" selected={{if (is "smooth") true}}>Smooth</option>
       <option value="slow" selected={{if (is "slow") true}}>Slow-mo</option>
-      <option value="crawl" selected={{if (is "crawl") true}}>
-        Super slow-mo
-      </option>
       <option value="code">{{if
           settings.showCode
           "Hide how this works"

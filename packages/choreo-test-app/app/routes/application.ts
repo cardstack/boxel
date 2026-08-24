@@ -23,8 +23,10 @@ import { factor, setCrossing } from 'test-app/lib/tempo';
  *
  * The scroll is part of it rather than something that happens before or after.
  * The update runs inside the snapshot: the route swaps, the window is put where
- * the new page wants it, and only then is the second snapshot taken. Opening
- * goes to the top; going back returns to the pixel the gallery was left at.
+ * the new page wants it, and only then is the second snapshot taken. Every
+ * arrival goes to the top — opening a demo, and stepping from one demo to the
+ * next, which can be asked for from the foot of the page. Going back is the
+ * exception: the gallery returns to the pixel it was left at.
  *
  * The grain steps aside for the duration (see `html::before`): a noise field is
  * the one thing on the page a compositor cannot carry.
@@ -95,18 +97,26 @@ export default class ApplicationRoute extends Route {
       this.galleryScroll = window.scrollY;
     }
 
+    /**
+     * Where the arriving page wants the window.
+     *
+     * Going back to the gallery is the only case with somewhere to return to.
+     * Everything else starts at the top — including demo to demo, which can be
+     * asked for from the pager at the very BOTTOM of the page: keeping the
+     * scroll there lands you at the foot of a demo you have not seen yet.
+     */
+    const scrollTo = closing ? this.galleryScroll : 0;
+
     const morph = BASE * factor();
     // Instant means instant: no snapshot, no layers, no one-frame animation
-    // pretending to be none. The route simply changes.
+    // pretending to be none. The route simply changes — but it still changes
+    // to the top of the new page, after the render, when the new page's height
+    // is what the scroll is clamped against.
     if (morph === 0) {
+      requestAnimationFrame(() => window.scrollTo(0, scrollTo));
       return;
     }
     const t = times(morph);
-    const scrollTo = opening
-      ? 0
-      : closing
-        ? this.galleryScroll
-        : window.scrollY;
 
     transition.abort();
     this.wrapping = true;

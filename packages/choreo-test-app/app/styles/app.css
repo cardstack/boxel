@@ -50,10 +50,15 @@
 html,
 body {
   min-height: 100%;
-  overflow-x: hidden;
 }
 
 html {
+  /* On <html> ALONE, never on <body>. Any element with a non-visible overflow
+     becomes the scroll box a `position: sticky` descendant is measured
+     against — and <body> is not the thing that scrolls, so putting it there
+     silently stopped the top bar from sticking. <html> IS the scroller, so
+     the clip costs nothing and the bar stays where it was told to stay. */
+  overflow-x: hidden;
   /* captured as the root layer, which is clipped to the viewport — the one
      cheap way to carry a page that is several screens tall */
   background: var(--wash);
@@ -255,10 +260,15 @@ button {
   font-weight: 700;
   /* Archivo's narrowest cut. Condensed type reads smaller at the same size, so
      it takes a little more size and a little less tracking to sit level with
-     the Syne line above it. */
+     the Syne line above it.
+
+     1.06 is measured, not chosen: at 1.02 the fifteen narrow characters set
+     611px against "Motion," at 636px, and a two-line heading whose lines do
+     not agree on a right edge reads as a mistake. Both lines take their size
+     from the same em, so the ratio holds at every width the clamp allows. */
   font-stretch: 62%;
   font-variation-settings: 'wdth' 62;
-  font-size: 1.02em;
+  font-size: 1.06em;
   letter-spacing: -0.02em;
   font-style: normal;
   color: transparent;
@@ -388,6 +398,27 @@ button {
   color: var(--ember-hot);
 }
 
+.card-badge,
+.kicker-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--copper);
+  border: 1px solid var(--copper);
+  border-radius: 3px;
+  opacity: 0.7;
+  vertical-align: middle;
+}
+
+.kicker-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
 .card-title {
   font-family: var(--font-display);
   font-weight: 700;
@@ -414,6 +445,35 @@ button {
 .demo-head .kicker::before {
   background: var(--ember);
   box-shadow: 0 0 12px var(--glow);
+}
+
+/* "all examples" and "next" on one line above the title: the pager that says
+   the same thing is at the foot of the page, past the whole code sample */
+.demo-nav {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.next-demo {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.next-demo b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+}
+
+.next-demo:hover b {
+  color: var(--copper);
 }
 
 .back {
@@ -452,6 +512,52 @@ button {
   border: 1px solid rgba(150, 103, 247, 0.3);
   border-radius: 6px;
   padding: 3px 7px;
+}
+
+/* holds the arrows over the stage's edges without changing the stage's own
+   box, which the shared-element transition measures */
+.stage-row {
+  position: relative;
+}
+
+.stage-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-top: -19px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(9, 8, 7, 0.66);
+  backdrop-filter: blur(10px);
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ink-dim);
+  /* inside the demo's space, so it stays out of the way until wanted */
+  opacity: 0.55;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.stage-arrow.is-prev {
+  left: 12px;
+}
+
+.stage-arrow.is-next {
+  right: 12px;
+}
+
+.stage-arrow:hover,
+.stage-arrow:focus-visible {
+  opacity: 1;
+  color: var(--ink);
+  border-color: var(--copper);
 }
 
 .stage-wrap {
@@ -2337,9 +2443,69 @@ html[data-gm-dragging] * {
     gap: 12px;
   }
 
+  /* The bar holds three things and only fits two. The word TRANSITION is the
+     one that can go: the control keeps saying it through its aria-label, and
+     without it the brand stops being squeezed into its own logo. */
+  .tempo-label {
+    display: none;
+  }
+
   .top-links {
     gap: 12px;
     letter-spacing: 0.08em;
+  }
+
+  /* and if it is ever squeezed anyway, it clips rather than printing itself
+     over the control next to it */
+  .brand-copy {
+    min-width: 0;
+  }
+
+  .brand-name,
+  .brand-sub {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chip {
+    padding: 9px 14px;
+  }
+
+  /* The arrows sit ON the stage, and on a touch screen the stage is the thing
+     you are trying to drag. The same two steps are a tap away at the top of
+     the page and at the bottom of it. */
+  .stage-arrow {
+    display: none;
+  }
+
+  /* a text link is a 17px-tall tap target; the padding is the target */
+  .demo-nav {
+    margin-bottom: -8px;
+  }
+
+  .back {
+    padding: 8px 0;
+  }
+
+  .next-demo {
+    gap: 6px;
+  }
+
+  .next-demo b {
+    max-width: 42vw;
+  }
+
+  .pager a {
+    max-width: 46%;
+    padding: 8px 0;
+  }
+
+  /* nine more characters a line, which on a 343px column is a whole
+     indent level */
+  .sample code,
+  .filter-code code {
+    font-size: 11px;
   }
 
   .page {
@@ -3771,6 +3937,15 @@ html[data-gm-dragging] * {
   translate: 0 0;
 }
 
+/* A tell that waits for a pointer is a tell a finger never sees. Where there
+   is no hover there is no reveal either — it is simply part of the row. */
+@media (hover: none) {
+  .filter-tell {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
 .filter-tell:hover,
 .filter-tell.is-on {
   color: var(--copper);
@@ -3871,6 +4046,12 @@ html[data-gm-dragging] * {
   border-color: var(--copper);
 }
 
+@media (max-width: 720px) {
+  .tempo-select {
+    padding: 6px 22px 6px 10px;
+  }
+}
+
 .transition-note {
   display: inline-flex;
   align-items: center;
@@ -3902,7 +4083,1447 @@ html[data-gm-dragging] * {
   color: var(--ember-hot);
 }
 
-.sample.is-transition {
-  margin: 0 0 28px;
-  border-color: rgba(255, 59, 31, 0.28);
+/* "How this works" — a panel that comes out of the control above it.
+   The REGION is the fixed frame, and it never moves or resizes: the panel is
+   an ordinary block inside it, so when the flight animates width and height
+   the box grows from a left edge that is standing still. Anchoring the panel
+   itself to `right` instead would move that edge under it, and the flight
+   would land somewhere its own arithmetic never went. */
+.how-region {
+  position: fixed;
+  top: 76px;
+  right: 24px;
+  width: min(720px, calc(100vw - 48px));
+  /* over the topbar: the first frames of the flight are inside it, and a
+     panel emerging from behind its own control is a panel you cannot see */
+  z-index: 20;
+  /* the frame is a coordinate space, not a surface — only the panel takes
+     clicks, and only while it is there */
+  pointer-events: none;
+}
+
+.how {
+  display: flex;
+  flex-direction: column;
+  max-height: min(68vh, 620px);
+  /* it arrives as a box the size of the select and unfolds; whatever does not
+     fit yet is simply not shown yet */
+  overflow: hidden;
+  border: 1px solid rgba(255, 59, 31, 0.28);
+  border-radius: 18px;
+  background: #0a0908;
+  box-shadow:
+    0 28px 70px rgba(0, 0, 0, 0.62),
+    0 2px 0 rgba(255, 255, 255, 0.03) inset;
+  pointer-events: auto;
+}
+
+.how-head,
+.how .sample-label {
+  /* never squeezed by the growing box: the chrome is the part that should
+     read as finished from the first frame */
+  flex: none;
+}
+
+.how-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.how-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.how-close {
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.how-close:hover {
+  color: var(--copper);
+  border-color: var(--copper);
+}
+
+.how pre {
+  flex: 1 1 auto;
+  /* a flex child will not scroll while it is still allowed to be as tall as
+     its content */
+  min-height: 0;
+  margin: 0;
+  padding: 12px 16px 16px;
+  overflow: auto;
+  /* the panel is shorter than the sample, so the last visible line is always
+     cut somewhere: fade it instead, so the edge reads as "there is more"
+     rather than as a glyph the browser failed to finish */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+.how code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Next to the rules it overrides, not in the block further up: this section
+   comes after that block, and at equal specificity the last one wins. */
+@media (max-width: 720px) {
+  .how-region {
+    top: 64px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .how {
+    max-height: 74vh;
+  }
+
+  .how-head {
+    padding: 12px 14px 10px;
+  }
+}
+
+/* Playhead — a scripted hand, and a timeline you can drag ------------------ */
+
+.ph-stage {
+  /* the transport and its note live at the bottom of the stage, so the app
+     centres in what is left rather than under them */
+  padding-bottom: 76px;
+  cursor: default;
+}
+
+/* one cell, two children: the receipt sits exactly over the card without
+   either of them owning a transform the way absolute centring would */
+.ph-app,
+.ph-receipt {
+  grid-area: 1 / 1;
+}
+
+.ph-app {
+  width: 288px;
+  max-width: 100%;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #17130f, #100d0b);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+
+.ph-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ph-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ph-sum {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.ph-legend {
+  margin: 12px 0 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.ph-seg {
+  position: relative;
+  display: flex;
+  width: 260px;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* the pill travels on x — 127px, the width of one half. A fixed number
+   because the sampler needs one: `valueAt` is arithmetic, not measurement. */
+.ph-pill {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 127px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember));
+  box-shadow: 0 4px 14px rgba(255, 59, 31, 0.35);
+}
+
+.ph-seg-btn {
+  position: relative;
+  flex: 1 1 0;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: color 0.18s var(--ease);
+}
+
+.ph-seg-btn.is-on {
+  color: #fff;
+}
+
+.ph-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ph-row-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.ph-row-copy small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.ph-switch {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 12px;
+  background: rgba(243, 236, 227, 0.1);
+}
+
+/* the "on" colour is its own element rather than a class, because a class is
+   a step and the playhead wants a number it can be halfway through */
+.ph-lit {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--ember-hot), var(--ember));
+}
+
+.ph-knob {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.ph-go {
+  width: 100%;
+  height: 40px;
+  margin-top: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #2b221c, #1b1512);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.ph-receipt {
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 232px;
+  max-width: 100%;
+  padding: 20px 18px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #1d1611, #120f0d);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  /* invisible until the score places the order, and not in the way until then
+     — but still measurable, which is how the hand knows where Done is */
+  pointer-events: none;
+}
+
+.ph-receipt.is-on {
+  pointer-events: auto;
+}
+
+.ph-tick {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 59, 31, 0.16);
+  color: var(--ember-hot);
+  font-size: 15px;
+}
+
+.ph-receipt b {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.ph-receipt small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.ph-done {
+  width: 100%;
+  height: 32px;
+  margin-top: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+/* the hand ---------------------------------------------------------------- */
+
+.ph-hand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  /* the arrow's tip, not its box, is what sits on the cue — and the press
+     scales about that same point so the tip does not slide while it clicks */
+  margin: -2px 0 0 -4px;
+  transform-origin: 5px 3px;
+  pointer-events: none;
+  transition: opacity 0.24s var(--ease);
+}
+
+.ph-hand svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 1.2;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
+}
+
+.ph-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border: 2px solid var(--ember-hot);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ph-hand.is-off,
+.ph-ring.is-off {
+  opacity: 0;
+}
+
+/* the transport ----------------------------------------------------------- */
+
+.ph-transport {
+  position: absolute;
+  right: 16px;
+  bottom: 34px;
+  left: 16px;
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ph-play,
+.ph-rewind {
+  display: grid;
+  flex: none;
+  place-items: center;
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font: inherit;
+  font-size: 11px;
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    opacity 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease);
+}
+
+.ph-play {
+  width: 28px;
+}
+
+.ph-rewind {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.ph-play:disabled {
+  cursor: default;
+}
+
+.ph-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 20px;
+}
+
+.ph-rail,
+.ph-fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+}
+
+.ph-rail {
+  background: var(--line-strong);
+}
+
+.ph-fill {
+  /* scaleX from a motion value, so the bar is repainted without a render */
+  transform-origin: left center;
+  background: linear-gradient(90deg, var(--ember), var(--copper));
+}
+
+.ph-mark {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--ink-faint);
+  transform: translate(-1px, -50%);
+}
+
+.ph-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.28);
+}
+
+/* the real control, invisible over the drawing */
+.ph-range {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+}
+
+.ph-range:disabled {
+  cursor: default;
+}
+
+.ph-clock {
+  flex: none;
+  min-width: 44px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink-dim);
+}
+
+/* live: the timeline is showing a position in a score that is no longer what
+   happened, so it reads as stale — not as disabled. Every control on it still
+   works, and using any of them is what makes it true again. */
+.ph-transport.is-off .ph-track,
+.ph-transport.is-off .ph-clock {
+  opacity: 0.5;
+}
+
+.ph-transport.is-off .ph-rewind {
+  border-color: var(--ember);
+  color: var(--ember-hot);
+}
+
+.ph-note {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  left: 16px;
+  margin: 0;
+  z-index: 7;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.ph-note.is-live {
+  color: var(--copper);
+}
+
+/* Build Order — a logo, and the score that assembles it -------------------- */
+
+.bo-stage {
+  /* the transport lives at the bottom of the stage, so the scene centres in
+     what is left rather than under it */
+  padding-bottom: 96px;
+  cursor: default;
+}
+
+.bo-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 224px);
+  gap: 16px;
+  align-items: center;
+  align-self: stretch;
+  justify-self: stretch;
+  width: 100%;
+  max-width: 640px;
+  min-height: 0;
+  margin: 0 auto;
+  padding-block: 12px;
+}
+
+/* the logo ---------------------------------------------------------------- */
+
+.bo-canvas {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.bo-logo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(100%, 258px);
+  padding: 20px 16px 18px;
+}
+
+/* the box that moves. A plate rather than a shadow, because Move In has to
+   have something with edges to bring on. */
+.bo-plate {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: linear-gradient(180deg, #17130f, #100d0b);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.5);
+}
+
+.bo-art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+}
+
+/* overflow is visible on purpose: Pop overshoots past 1 and Spin swings the
+   chevrons outside their own boxes on the way in */
+.bo-mark {
+  display: block;
+  width: min(104px, 27cqh);
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+}
+
+/* The comet: the measurement line, arriving. The faintness of the tail is in
+   the STROKE COLOR, not `opacity` — the cell's motion values write an inline
+   opacity every frame, and inline beats stylesheet. */
+.bo-tail {
+  fill: none;
+  stroke: rgba(228, 163, 90, 0.4);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.bo-head {
+  fill: none;
+  stroke: var(--copper);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+/* the element NOW: the one filled thing on the mark. fill-box, because
+   without it a transform on an SVG child is measured against the viewport's
+   origin and Pop would fling the bead off the arc. */
+.bo-bead {
+  fill: var(--ember);
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* text: one span per glyph, grouped into words. Both groupings exist in the
+   markup at all times, because Delivery chooses between them per frame — it
+   is which window a glyph is given, never which elements are rendered. */
+.bo-word,
+.bo-tag {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin: 0;
+}
+
+.bo-run {
+  display: inline-flex;
+}
+
+.bo-word {
+  font-family: var(--font-display);
+  font-size: clamp(16px, 6.4cqh, 26px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.bo-tag {
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 2.3cqh, 9px);
+  letter-spacing: 0.2em;
+  color: var(--ink-dim);
+}
+
+.bo-word .bo-run + .bo-run {
+  margin-left: 0.3em;
+}
+
+.bo-tag .bo-run + .bo-run {
+  margin-left: 0.6em;
+}
+
+.bo-cell {
+  display: inline-block;
+  transform-origin: 50% 80%;
+}
+
+.bo-rule-box {
+  display: block;
+  width: min(100%, 186px);
+  height: 3px;
+  overflow: visible;
+}
+
+.bo-rule {
+  fill: none;
+  stroke: var(--ember);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* the inspector ----------------------------------------------------------- */
+
+.bo-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.34);
+  overflow: hidden;
+}
+
+.bo-panel-head {
+  flex: none;
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.bo-list {
+  flex: 1 1 auto;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bo-row {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  color: var(--ink-dim);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bo-row.is-on {
+  background: var(--ember);
+  color: #fff;
+}
+
+.bo-no {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-faint);
+  text-align: right;
+}
+
+.bo-name {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bo-fx {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.bo-row.is-on .bo-no,
+.bo-row.is-on .bo-fx {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.bo-form {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 8px;
+  padding: 9px 10px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.bo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.bo-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+.bo-field > span {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.bo-field select {
+  width: 100%;
+  height: 22px;
+  padding: 0 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #0d0b0a;
+  font: inherit;
+  font-size: 10px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.bo-field select:disabled {
+  color: var(--ink-faint);
+  cursor: default;
+}
+
+.bo-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  padding: 0 2px 0 7px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #0d0b0a;
+}
+
+.bo-step b {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.bo-arrows {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+
+.bo-arrows button {
+  display: block;
+  width: 15px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-dim);
+  font-size: 7px;
+  line-height: 9px;
+  cursor: pointer;
+}
+
+.bo-arrows button:hover {
+  color: var(--ember-hot);
+}
+
+/* the transport ----------------------------------------------------------- */
+
+/* the same box as the scene above it: a timeline wider than the thing it is
+   timing reads as chrome rather than as part of the stage */
+.bo-transport {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  left: 16px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+/* one lane per build, in build order. This is not a second drawing of the
+   score — it is what schedule() returned, which is why editing Start moves it. */
+.bo-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+
+.bo-lane {
+  position: relative;
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(243, 236, 227, 0.07);
+}
+
+.bo-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 2px;
+  background: var(--steel);
+  opacity: 0.5;
+}
+
+.bo-bar.is-on {
+  background: linear-gradient(90deg, var(--ember), var(--copper));
+  opacity: 1;
+}
+
+/* a relation, drawn: `with` hangs from the previous bar's start, `after` from
+   its end. Faint on purpose — it is scaffolding, not content. */
+.bo-sync {
+  position: absolute;
+  z-index: 1;
+  width: 1px;
+  background: rgba(243, 236, 227, 0.28);
+  pointer-events: none;
+}
+
+/* moved by a motion value, so the head repaints without a render */
+.bo-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 7px rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+}
+
+.bo-playhead::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -3.5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.26);
+}
+
+/* the real control, invisible over the drawing */
+.bo-range {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  -webkit-appearance: none;
+  appearance: none;
+  background: none;
+}
+
+.bo-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bo-play {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  font: inherit;
+  font-size: 9px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.bo-clock {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.bo-spacer {
+  flex: 1 1 auto;
+}
+
+.bo-chip {
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.bo-chip.is-on {
+  border-color: var(--ember);
+  color: var(--ember-hot);
+}
+
+/* the demo page's stage is twice a gallery card's, and the logo is what the
+   room should go to — the inspector is a fixed-size instrument either way */
+@container (min-width: 620px) {
+  .bo-split,
+  .bo-transport {
+    max-width: 740px;
+  }
+
+  .bo-split {
+    grid-template-columns: minmax(0, 1fr) 244px;
+    gap: 24px;
+  }
+
+  .bo-logo {
+    width: min(100%, 340px);
+    padding: 30px 24px 26px;
+  }
+
+  .bo-art {
+    gap: 12px;
+  }
+
+  .bo-mark {
+    width: min(136px, 30cqh);
+  }
+
+  .bo-word {
+    font-size: clamp(20px, 7cqh, 34px);
+  }
+
+  .bo-rule-box {
+    width: min(100%, 240px);
+  }
+
+  .bo-tag {
+    font-size: clamp(8px, 2.4cqh, 11px);
+  }
+}
+
+/* a gallery card is half the width of the demo page, and the inspector is the
+   half that has to give: the effect column goes before the logo does */
+@container (max-width: 470px) {
+  .bo-split {
+    grid-template-columns: minmax(0, 1fr) 162px;
+    gap: 10px;
+  }
+
+  .bo-fx {
+    display: none;
+  }
+
+  .bo-logo {
+    padding: 16px 12px 14px;
+  }
+}
+
+/* Deep dive — the long half of a demo page, under the usage example -------- */
+
+/* Set smaller than the page on purpose. The sample box above says what to
+   type; this says what the machine does with it, and nobody needs the second
+   thing to get started. */
+.dive {
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.68;
+}
+
+.dive-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 62ch;
+}
+
+.dive-kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ember);
+}
+
+.dive-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 3.4vw, 30px);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.dive-lede {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+.dd {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* the eyebrow names the function the section explains — one section, one
+   function, so the label is information rather than ornament */
+.dd-fn {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ember);
+}
+
+.dd-fn::after {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  content: '';
+}
+
+.dd-fn span {
+  color: var(--ink-faint);
+}
+
+.dd h3 {
+  max-width: 30ch;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+/* prose keeps a reading measure; figures and code boxes do not */
+.dd-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 68ch;
+}
+
+.dd-col p {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+.dd-col strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dd-col em,
+.dd-call em {
+  font-style: normal;
+  color: var(--copper);
+}
+
+.dd code,
+.dd-call code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--copper);
+}
+
+/* the sample box is the same object here as it is above the dive; only its
+   spacing changes, because the column already owns the gaps */
+.dd .sample {
+  margin-top: 0;
+}
+
+.dd-call {
+  max-width: 68ch;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.dd-call p {
+  margin: 0;
+  color: var(--ink-dim);
+}
+
+.dd-call b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.dd-modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.dd-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 13px 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+
+.dd-mode b {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dd-mode p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-dim);
+}
+
+.dd-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ember);
+}
+
+.dd-fig {
+  margin: 2px 0 0;
+  padding: 16px 16px 13px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #0a0908;
+  /* a wide drawing scrolls inside its own box rather than the page */
+  overflow-x: auto;
+}
+
+.dd-fig figcaption {
+  max-width: 76ch;
+  margin-top: 13px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+
+.dd-fig figcaption b {
+  font-weight: 500;
+  color: var(--ink-dim);
+}
+
+/* the diagrams ------------------------------------------------------------ */
+
+/* SVG cannot read a custom property from a presentation attribute, so every
+   drawn part takes its colour from a class instead — same tokens as the rest
+   of the page, and the markup stays legible. */
+/* Capped, so a drawing stays subordinate to the prose it explains. At full
+   page width a 900-unit viewBox renders its 11px labels larger than the 14px
+   body text, which makes the diagram read as the main event. */
+.dg {
+  display: block;
+  width: 100%;
+  /* below this the labels collide; the figure scrolls instead of squashing */
+  min-width: 560px;
+  max-width: 760px;
+  height: auto;
+  margin: 0 auto;
+}
+
+.dg-plate {
+  fill: var(--bg);
+  stroke: var(--line);
+}
+
+.dg-box {
+  fill: var(--bg-elev);
+  stroke: var(--line-strong);
+}
+
+.dg-boxcop {
+  fill: var(--bg-elev);
+  stroke: var(--copper);
+}
+
+.dg-hot {
+  fill: rgba(255, 59, 31, 0.16);
+  stroke: var(--ember);
+}
+
+.dg-band {
+  fill: rgba(243, 236, 227, 0.04);
+}
+
+.dg-rule {
+  fill: none;
+  stroke: var(--line-strong);
+}
+
+.dg-hair {
+  fill: none;
+  stroke: var(--line);
+}
+
+.dg-cop {
+  fill: none;
+  stroke: var(--copper);
+}
+
+.dg-emberline {
+  fill: none;
+  stroke: var(--ember);
+}
+
+.dg-hotline {
+  fill: none;
+  stroke: var(--ember-hot);
+  stroke-width: 2;
+}
+
+.dg-inkline {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+}
+
+.dg-dash {
+  stroke-dasharray: 3 3;
+}
+
+.dg-dot {
+  fill: var(--ember-hot);
+}
+
+.dg-copdot {
+  fill: var(--copper);
+}
+
+.dg-faintdot {
+  fill: var(--ink-faint);
+}
+
+.dg-arrow {
+  fill: var(--ink-faint);
+}
+
+.dg-hand {
+  fill: var(--ink);
+  stroke: var(--bg);
+  stroke-width: 0.8;
+}
+
+.dg-t {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--ink);
+}
+
+.dg-t.is-dim {
+  fill: var(--ink-dim);
+}
+
+.dg-t.is-faint {
+  fill: var(--ink-faint);
+}
+
+.dg-t.is-hot {
+  fill: var(--ember-hot);
+}
+
+.dg-t.is-cop {
+  fill: var(--copper);
+}
+
+.dg-eb {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  fill: var(--ink-faint);
+}
+
+.dg-h {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+
+.dg-h.is-hot {
+  fill: var(--ember-hot);
 }

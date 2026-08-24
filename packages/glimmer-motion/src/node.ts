@@ -169,6 +169,38 @@ function makeLatestValues(
   return values;
 }
 
+/**
+ * Tell the browser which axes the page may still scroll on.
+ *
+ * A touch that lands on a draggable element is claimed by the page's own
+ * scrolling unless the element says otherwise: the gesture sees the pointerdown
+ * and then nothing, because the browser has taken the moves for a scroll. So
+ * `drag` implies `touch-action`, and a single-axis drag leaves the OTHER axis
+ * to the page — which is what lets a horizontal carousel live inside a page you
+ * can still flick up and down. React's `useHTMLProps` writes the same value
+ * into the element's style; this writes it to the element for the same reason.
+ */
+const CLAIMED = 'data-gm-touch-action';
+
+function touchAction(element: MotionEl, drag: MotionNodeOptions['drag']) {
+  if (!drag) {
+    // only ever give back what we took: an element that was never draggable
+    // may be carrying a touch-action of its own
+    if (element.hasAttribute(CLAIMED)) {
+      element.removeAttribute(CLAIMED);
+      element.style.touchAction = '';
+    }
+    return;
+  }
+  const axis = drag === true ? 'none' : drag === 'x' ? 'pan-y' : 'pan-x';
+  if (element.style.touchAction !== axis) {
+    element.style.touchAction = axis;
+  }
+  if (!element.hasAttribute(CLAIMED)) {
+    element.setAttribute(CLAIMED, '');
+  }
+}
+
 function closestVisualElement(el: MotionEl): VisualElement | undefined {
   let p = el.parentElement;
   while (p) {
@@ -402,6 +434,7 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
       (props as any).dragConstraints = { current: named.dragConstraints };
     }
     this.element = element;
+    touchAction(element, props.drag);
     this.latest = { props, ownPresence };
     // tracked reads: a presence flip re-runs modify even while the handle is inherited
     void ownPresence?.isPresent;

@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
  * could never watch the page morph over a demo running at its own speed, which
  * is the thing worth watching.
  */
-export type Tempo = 'instant' | 'smooth' | 'slow' | 'crawl';
+export type Tempo = 'instant' | 'smooth' | 'slow';
 
 class Settings {
   @tracked tempo: Tempo = 'smooth';
@@ -57,9 +57,6 @@ export function toggleCode() {
 export function factor(): number {
   if (settings.tempo === 'instant') {
     return 0;
-  }
-  if (settings.tempo === 'crawl') {
-    return 40;
   }
   return settings.tempo === 'slow' ? 10 : 1;
 }

@@ -131,7 +131,7 @@ export function ghostAt(
   t: number,
   clips: Clip[],
   place: (cue: string) => Point,
-  home: Point,
+  home: Point
 ): Ghost {
   const at = (cue?: string) => (cue ? place(cue) : home);
   let x = home.x;
@@ -200,7 +200,7 @@ export interface Moment<S> {
 export function moments<S>(
   clips: Clip[],
   initial: S,
-  step: (state: S, cue: string) => S,
+  step: (state: S, cue: string) => S
 ): Moment<S>[] {
   const out: Moment<S>[] = [{ at: 0, state: initial }];
   let state = initial;
@@ -245,7 +245,7 @@ export function poseAt<S>(
   t: number,
   list: Moment<S>[],
   posesOf: (state: S) => Poses,
-  springs: Record<string, Spring>,
+  springs: Record<string, Spring>
 ): Poses {
   const flights: Record<string, Record<string, Flight>> = {};
   for (const [name, pose] of Object.entries(posesOf(list[0]!.state))) {

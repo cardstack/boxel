@@ -8,7 +8,8 @@ import { catalog, groups } from 'test-app/lib/catalog';
 import { highlightSample } from 'test-app/lib/highlight';
 import { isCrossing } from 'test-app/lib/tempo';
 
-const filters = ['All', ...groups] as const;
+const DEEP_DIVE = 'Deep Dive';
+const filters = ['All', ...groups, DEEP_DIVE] as const;
 type Filter = (typeof filters)[number];
 
 const NO_PANEL: { id: string }[] = [];
@@ -83,6 +84,9 @@ export class Gallery extends Component {
   get demos() {
     if (this.filter === 'All') {
       return catalog;
+    }
+    if (this.filter === DEEP_DIVE) {
+      return catalog.filter((demo) => demo.notes);
     }
     return catalog.filter((demo) => demo.group === this.filter);
   }
@@ -205,7 +209,12 @@ export class Gallery extends Component {
               {{/let}}
             </div>
             <LinkTo @route="demo" @model={{demo.id}} class="card-meta">
-              <span class="card-group">{{demo.group}}</span>
+              <span class="card-group">
+                {{demo.group}}
+                {{#if demo.notes}}
+                  <span class="card-badge">Deep Dive</span>
+                {{/if}}
+              </span>
               <span class="card-title">{{demo.title}}</span>
               <span class="card-lede">{{demo.lede}}</span>
             </LinkTo>

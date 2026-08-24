@@ -1,3 +1,4 @@
+import { BuildOrder } from 'test-app/components/examples/build-order';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { FarMatch } from 'test-app/components/examples/far-match';
@@ -12,6 +13,7 @@ import { Lightbox } from 'test-app/components/examples/lightbox';
 import { Lists } from 'test-app/components/examples/lists';
 import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
+import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
@@ -24,6 +26,17 @@ import { SplitView } from 'test-app/components/examples/split-view';
 import { Stagger } from 'test-app/components/examples/stagger';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { Trail } from 'test-app/components/examples/trail';
+import { FarNotes } from 'test-app/components/notes/far';
+import { InboxNotes } from 'test-app/components/notes/inbox';
+import { InterruptNotes } from 'test-app/components/notes/interrupt';
+import { LayoutNotes } from 'test-app/components/notes/layout';
+import { LightboxNotes } from 'test-app/components/notes/lightbox';
+import { PlayheadNotes } from 'test-app/components/notes/playhead';
+import { PresenceNotes } from 'test-app/components/notes/presence';
+import { SequenceNotes } from 'test-app/components/notes/sequence';
+import { SheetNotes } from 'test-app/components/notes/sheet';
+import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
+import { TrailNotes } from 'test-app/components/notes/trail';
 
 export const groups = [
   'Animate',
@@ -41,6 +54,14 @@ export interface DemoEntry {
   group: DemoGroup;
   id: string;
   lede: string;
+  /**
+   * The long half: how the demo works, rendered under the usage example.
+   *
+   * A component rather than more prose in this file, because the ones worth
+   * writing are mostly diagrams. Optional — most demos are one idea, and the
+   * sample above says it.
+   */
+  notes?: any;
   sample: string;
   /**
    * Whether the stage honours `setMotionSpeed`, and so gets the speed control.
@@ -87,6 +108,7 @@ export const catalog: DemoEntry[] = [
     <dl {{motion presence=h initial=fade animate=fadeOn exit=fade}}></dl>
   </span>
 </Presence>`,
+    notes: LightboxNotes,
     slowmo: true,
     title: 'Lightbox',
   },
@@ -121,6 +143,7 @@ export const catalog: DemoEntry[] = [
     <c.Move @of={{c.moved 'row'}} @spring={{quick}} @size={{false}} />
   </c.Parallel>
 </Choreo>`,
+    notes: InboxNotes,
     slowmo: true,
     title: 'Beacons',
   },
@@ -176,6 +199,7 @@ export const catalog: DemoEntry[] = [
     </c.Parallel>
   </c.Sequence>
 </Choreo>`,
+    notes: SequenceNotes,
     slowmo: false,
     title: 'Sequence',
   },
@@ -321,6 +345,7 @@ export const catalog: DemoEntry[] = [
       duration means. }}
   <c.Move @of={{c.kept 'puck'}} @ms={{620}} @ease='easeInOut' @size={{false}} />
 </Choreo>`,
+    notes: InterruptNotes,
     slowmo: true,
     title: 'Interruption',
   },
@@ -373,6 +398,7 @@ export const catalog: DemoEntry[] = [
 {{/each}}
 
 const layer = (sprite) => (sprite.counterpart ? 6 : 1);`,
+    notes: FarNotes,
     slowmo: true,
     title: 'Far match',
   },
@@ -416,6 +442,7 @@ drop = () => { this.col = Math.round(this.col); };
     }}
   ></span>
 </div>`,
+    notes: SubdivisionNotes,
     slowmo: false,
     title: 'Subdivision',
   },
@@ -479,6 +506,7 @@ land = (event, info) => {
   const projected = released + info.velocity.y * 0.16;
   this.detent = nearest(projected);
 };`,
+    notes: SheetNotes,
     slowmo: false,
     title: 'Sheet',
   },
@@ -568,6 +596,7 @@ leftTo   = (_s, cs) => cs.sprite({ id: 'split-bar' }).final.parent.width;
     {{/each}}
   </div>
 </LayoutGroup>`,
+    notes: LayoutNotes,
     slowmo: true,
     title: 'Curves',
   },
@@ -664,6 +693,7 @@ const tile = {
     }}
   >{{step.label}}</span>
 </Presence>`,
+    notes: TrailNotes,
     slowmo: true,
     title: 'Trail',
   },
@@ -760,6 +790,7 @@ const core = {
 
 {{! not in the Presence — it just gets out of the way, on its own spring }}
 <div {{motion layout=true transition=restMove}}>Up next</div>`,
+    notes: PresenceNotes,
     slowmo: true,
     title: 'Presence',
   },
@@ -959,6 +990,104 @@ move = (event) => {
 <div {{motion style=(styles x=this.x y=this.y)}}></div>`,
     slowmo: false,
     title: 'Follow the pointer',
+  },
+  {
+    Example: Playhead,
+    apis: ['spring()', 'motionValue', 'jump()'],
+    group: 'Choreo',
+    id: 'playhead',
+    lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
+    notes: PlayheadNotes,
+    sample: `// A score is beats, not timecodes: walk there, press it, wait. Absolute
+// times fall out of compile(); the coordinates fall out of measuring the cue
+// when the question is asked, so the score names a BUTTON, never a pixel.
+const BEATS = [
+  { kind: 'move',  cue: 'express', ms: 620 },
+  { kind: 'press', cue: 'express', ms: 220 },
+  { kind: 'hold',                  ms: 360 },
+  …
+];
+
+// One description of what a press does. The buttons run it on click, and the
+// timeline folds it to work out what the app IS at a scrubbed time — so a
+// scrubbed state cannot drift from a clicked one.
+function press(state, cue) {
+  switch (cue) {
+    case 'express': return { ...state, speed: 'express' };
+    case 'wrap':    return { ...state, wrap: !state.wrap };
+    …
+  }
+}
+
+// PLAYING — Motion's clock. The score fires a real .click() on the real
+// control; the app's own handler runs; every {{motion}} animates as usual.
+this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
+
+// SCORED — the playhead's clock. Same springs, asked for their value at t
+// instead of run. Motion's spring() generator is closed-form in t and holds
+// no playhead of its own, so it answers about any time in any order — which
+// is exactly what dragging a scrubber backwards does.
+const gen = spring({ keyframes: [from, to], bounce: 0.3, visualDuration: 0.36 });
+const { value } = gen.next(t - since);
+
+{{! and the whole difference between the two is this one line }}
+<span {{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}} />
+
+get poses() {
+  return this.scored
+    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)   // sample
+    : posesOf(this.state);                        // play
+}
+
+// What has no score cannot be seeked: layout, layoutId and Presence are all
+// absent here on purpose. A spring is a function of time; a projection
+// animation is two measurements of a live tree. Closing that gap — valueAt(t)
+// on <Choreo> — is what this stage is a rehearsal for.`,
+    slowmo: false,
+    title: 'Playhead',
+  },
+  {
+    Example: BuildOrder,
+    apis: ['motionValue', 'jump()', 'pathLength'],
+    group: 'Choreo',
+    id: 'build-order',
+    lede: 'Keynote\u2019s build inspector, wired to the site\u2019s own logo. Retime it while it runs.',
+    sample: `// A build order, not a timeline. Nothing here is a timecode: a build says
+// WHICH part, WHAT effect, and when it goes relative to the build above it.
+const OPENING = [
+  { part: 'plate', effect: 'move', start: 'with',  delay:   0, ms: 620 },
+  { part: 'tail',  effect: 'draw', start: 'with',  delay: 140, ms: 520 },
+  { part: 'head',  effect: 'draw', start: 'after', delay:   0, ms: 520 },
+  { part: 'bead',  effect: 'pop',  start: 'after', delay:   0, ms: 380 },
+  …
+  { part: 'word',  effect: 'drift', start: 'after', delay: 60, ms: 760,
+    by: 'character' },   // ← a second timeline, inside the build
+];
+
+// The whole scheduler. The relation is always to the PREVIOUS build, which is
+// what makes the order editable: move one and everything downstream follows,
+// because nothing downstream was ever written down.
+at[i] = (build.start === 'with' ? at[i - 1] : end[i - 1]) + build.delay;
+
+// A build has an END, so an effect is an easing across a stated window —
+// never a spring. A spring has a settle, not a duration, and a bar you can
+// draw on a timeline is a promise about when the thing stops.
+pop: { ease: backOut, at: (p) => ({ opacity: min(1, p * 3), scale: p }) },
+draw: { ease: easeInAndOut, at: (p) => ({ pathLength: p }) },
+wipe: { ease: easeInAndOut, at: (p) => ({ clip: 1 - p }) },
+
+// Delivery is that same arithmetic one level down: the build keeps its stated
+// window and the glyphs divide it, last cell FINISHING on the build's end.
+const ms = cue.ms * 0.55;
+return { at: cue.at + (i * (cue.ms - ms)) / (n - 1), ms };
+
+// And because a pose is a function of t and nothing else — no DOM, no state,
+// no memory of the frame before — playing and scrubbing are one code path.
+poseAt(t, cue, slot);   // the run loop calls it. so does the scrubber.
+                        // so does an edit, at the same t, so retiming build 2
+                        // while parked at 1.4s shows you what 1.4s now is.`,
+    slowmo: false,
+    title: 'Build order',
   },
 ];
 

@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
-import { cancelFrame, type FrameData, frame, motionValue } from 'motion-dom';
+import { motionValue } from 'motion-dom';
 import { preventSelect } from 'test-app/lib/pointer';
 import {
   type Beat,
@@ -99,7 +99,7 @@ const TWEENS: Record<string, object> = Object.fromEntries(
   Object.entries(SPRINGS).map(([name, spec]) => [
     name,
     { type: 'spring', ...spec },
-  ]),
+  ])
 );
 
 /**
@@ -151,15 +151,18 @@ const MARKS = HITS.map((clip) => ({
  *
  *   playing   Motion owns it. The score fires a REAL `.click()` on the real
  *             control at each press, the app's own handler runs, and every
- *             `{{motion}}` element animates the way it always does. The
- *             playhead is a readout.
+ *             `{{motion}}` element animates the way it always does — on the
+ *             engine's clock, at the engine's pace. The playhead is a readout
+ *             of how far through the score that has got.
  *   scored    The playhead owns it. Nothing animates; every value is sampled
  *             out of the score at t and jumped there. Dragging backwards is
  *             the same operation as dragging forwards, which is what makes it
  *             a scrub and not a replay.
  *   live      You own it. Touch a control yourself and the timeline steps
  *             aside — a playhead that fights a hand is a playhead that lies
- *             about what it is showing.
+ *             about what it is showing. Nothing on the transport is disabled
+ *             while it is aside: play, reset and the scrubber all take the
+ *             scene back, because all three recompute it rather than resume.
  *
  * The hand is sampled in ALL of them, playback included, because the hand is
  * the one thing here with a score. That asymmetry is the whole demo: the app
@@ -180,14 +183,19 @@ export class Playhead extends Component {
   private ry = motionValue(0);
   private rs = motionValue(0.4);
   private ro = motionValue(0);
-  /** the scrub bar's fill, for the same reason: no re-render per frame */
+  /** the scrub bar's fill and its head, for the same reason: no re-render per frame */
   private fill = motionValue(0);
+  private hp = motionValue(0);
 
   private stage?: HTMLElement;
   private spots = new Map<string, Point>();
+  /** the scrub track's width, so the head can be placed in px like everything else */
+  private railW = 0;
   private watcher?: ResizeObserver;
-  /** performance.now() at t=0 for the run in flight */
-  private origin?: number;
+  private viewport?: IntersectionObserver;
+  /** the run in flight, and the frame it last ticked on */
+  private raf = 0;
+  private last = 0;
   /** how many presses have already been dispatched */
   private fired = 0;
   /** true while the score is clicking, so `hit` knows it is not a real hand */
@@ -198,8 +206,9 @@ export class Playhead extends Component {
 
   willDestroy() {
     super.willDestroy();
-    cancelFrame(this.advance);
+    cancelAnimationFrame(this.raf);
     this.watcher?.disconnect();
+    this.viewport?.disconnect();
   }
 
   /* — measuring — */
@@ -208,13 +217,28 @@ export class Playhead extends Component {
     this.stage = el;
     this.watcher = new ResizeObserver(() => {
       this.spots.clear();
+      this.measureRail();
       this.paint();
     });
     this.watcher.observe(el);
+    // Twenty-six of these live in the gallery at once. A run belongs to the
+    // stage it is on: scroll the card out of sight and the playhead stops
+    // rather than quietly spending the browser's frames on a scene nobody is
+    // watching. It keeps its position, so scrolling back and pressing play
+    // carries on from there.
+    this.viewport = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => !entry.isIntersecting)) {
+        this.halt();
+      }
+    });
+    this.viewport.observe(el);
+    this.measureRail();
     this.paint();
     return () => {
       this.watcher?.disconnect();
+      this.viewport?.disconnect();
       this.watcher = undefined;
+      this.viewport = undefined;
       this.stage = undefined;
     };
   });
@@ -252,6 +276,11 @@ export class Playhead extends Component {
     return spot;
   };
 
+  private measureRail() {
+    const rail = this.stage?.querySelector<HTMLElement>('.ph-track');
+    this.railW = rail?.clientWidth ?? 0;
+  }
+
   /** where the hand waits before the first beat, and where it goes home to */
   private get home(): Point {
     const el = this.stage;
@@ -279,7 +308,9 @@ export class Playhead extends Component {
     this.ry.jump(ghost.ringY);
     this.rs.jump(0.35 + 1.5 * ghost.ring);
     this.ro.jump(ghost.ring >= 1 ? 0 : 0.85 * (1 - ghost.ring) ** 2);
-    this.fill.jump(this.t / RUNTIME);
+    const progress = this.t / RUNTIME;
+    this.fill.jump(progress);
+    this.hp.jump(progress * this.railW);
   };
 
   get hand() {
@@ -292,6 +323,10 @@ export class Playhead extends Component {
 
   get bar() {
     return { scaleX: this.fill };
+  }
+
+  get head() {
+    return { x: this.hp };
   }
 
   /* — the two readings — */
@@ -328,15 +363,41 @@ export class Playhead extends Component {
 
   /* — transport — */
 
-  private advance = ({ timestamp }: FrameData) => {
-    this.origin ??= timestamp - this.t;
-    const t = Math.min(timestamp - this.origin, RUNTIME);
+  /**
+   * The playhead ticks on its own frame, and by a clamped delta.
+   *
+   * Two things had to be true, and the obvious spellings of both are wrong.
+   *
+   * NOT `t = now - startedAt`. Any gap — a background tab, a compositor over
+   * budget, a gallery painting twenty-six demos — and the next frame teleports
+   * the playhead to wherever the wall clock got to, which looks exactly like
+   * the run never played. A delta clamped to one slow frame cannot teleport;
+   * a late frame costs the score 50ms and no more.
+   *
+   * NOT `frame.update(…, true)`, Motion's own keepAlive step, tempting as it
+   * is to share the engine's clock. A press in this score dispatches a real
+   * DOM click, a click re-renders, and a re-render re-enters the frame loop —
+   * and a render step that re-enters runs its keepAlive callbacks AGAIN with
+   * the same frameData. On a quiet page that is rare enough not to show. In
+   * the gallery it happened over a hundred times in a single frame, and the
+   * whole six-second run went by before the browser painted once.
+   *
+   * The rule this leaves behind, for whatever drives a <Choreo> playhead
+   * later: a score that causes work must tick OUTSIDE the loop that work runs
+   * in. One tick per frame is a property of where the clock lives, not
+   * something you can assert from inside it.
+   */
+  private advance = (now: number) => {
+    const t = Math.min(this.t + Math.min(now - this.last, 50), RUNTIME);
+    this.last = now;
     this.t = t;
     this.dispatch(t);
     this.paint();
     if (t >= RUNTIME) {
       this.halt();
+      return;
     }
+    this.raf = requestAnimationFrame(this.advance);
   };
 
   /**
@@ -356,23 +417,29 @@ export class Playhead extends Component {
 
   private halt() {
     if (this.mode === 'playing') {
-      cancelFrame(this.advance);
-      this.origin = undefined;
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
       this.mode = 'scored';
     }
   }
 
+  /**
+   * Play is never disabled, even when a real hand has taken the scene.
+   *
+   * It does not need to be: seeking re-folds the state out of the score, so
+   * pressing play undoes whatever was clicked by hand simply by asking the
+   * score what should be true at t. The transport that cannot lie is the one
+   * that recomputes rather than resumes.
+   */
   toggle = () => {
     if (this.playing) {
       this.halt();
       return;
     }
-    if (this.t >= RUNTIME - 1) {
-      this.seek(0);
-    }
-    this.origin = undefined;
+    this.seek(this.t >= RUNTIME - 1 ? 0 : this.t);
     this.mode = 'playing';
-    frame.update(this.advance, true);
+    this.last = performance.now();
+    this.raf = requestAnimationFrame(this.advance);
   };
 
   /**
@@ -387,8 +454,19 @@ export class Playhead extends Component {
     this.paint();
   }
 
+  /**
+   * Touching the timeline is the third way back, and the same way back.
+   *
+   * Nothing is disabled while a real hand has the scene — not play, not the
+   * scrubber. It does not need to be, because seeking does not RESUME, it
+   * recomputes: the state at t is folded out of the score from zero, so
+   * whatever was clicked by hand is simply not in the answer. A transport that
+   * derives its scene can always be trusted; one that resumes from wherever it
+   * was left could not.
+   */
   scrub = (event: Event) => {
     this.halt();
+    this.mode = 'scored';
     this.seek(Number((event.target as HTMLInputElement).value));
   };
 
@@ -441,11 +519,11 @@ export class Playhead extends Component {
 
   get note() {
     if (this.isLive) {
-      return 'You have the controls — the timeline is out of the loop.';
+      return 'You have the controls — Play, Reset or the timeline takes it back.';
     }
     return this.playing
-      ? "Playing · Motion's clock · clicks dispatched"
-      : 'Scored · the playhead’s clock · values sampled';
+      ? 'Playing · the engine animates · clicks dispatched'
+      : 'Scored · sampled at t · nothing is animating';
   }
 
   <template>
@@ -546,10 +624,10 @@ export class Playhead extends Component {
       </span>
 
       <div class={{if this.isLive "ph-transport is-off" "ph-transport"}}>
+        {{! never disabled: play is the other way back }}
         <button
           type="button"
           class="ph-play"
-          disabled={{this.isLive}}
           aria-label={{if this.playing "Pause" "Play"}}
           {{on "click" this.toggle}}
         >{{if this.playing "❚❚" "▶"}}</button>
@@ -557,6 +635,7 @@ export class Playhead extends Component {
         <div class="ph-track">
           <span class="ph-rail"></span>
           <span class="ph-fill" {{motion style=this.bar}}></span>
+          <span class="ph-thumb" {{motion style=this.head}}></span>
           {{#each this.marks key="cue" as |mark|}}
             <i class="ph-mark" style={{mark.style}}></i>
           {{/each}}
@@ -569,19 +648,19 @@ export class Playhead extends Component {
             max={{this.duration}}
             step="1"
             value={{this.t}}
-            disabled={{this.isLive}}
             aria-label="Playhead"
             {{on "input" this.scrub}}
           />
         </div>
 
         <span class="ph-clock">{{this.clock}}</span>
+        {{! the one control that stays true when a real hand has taken over —
+            it is the handover back, so it says what it does }}
         <button
           type="button"
           class="ph-rewind"
-          aria-label="Rewind and take the timeline back"
           {{on "click" this.rewind}}
-        >⟲</button>
+        >Reset</button>
       </div>
 
       <p class={{if this.isLive "ph-note is-live" "ph-note"}}>{{this.note}}</p>
