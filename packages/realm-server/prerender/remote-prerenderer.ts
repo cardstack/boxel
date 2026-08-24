@@ -274,7 +274,14 @@ export function createRemotePrerenderer(
         },
       );
     },
-    async prerenderScreenshot({ realm, url, auth, format, priority }) {
+    async prerenderScreenshot({
+      realm,
+      url,
+      auth,
+      format,
+      captureSpec,
+      priority,
+    }) {
       return await requestWithRetry<ScreenshotPrerenderResponse>(
         'prerender-screenshot',
         'screenshot-request',
@@ -285,6 +292,7 @@ export function createRemotePrerenderer(
           url,
           auth,
           format,
+          ...(captureSpec ? { captureSpec } : {}),
           ...(priority !== undefined ? { priority } : {}),
         },
       );

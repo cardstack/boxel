@@ -13,6 +13,7 @@ import {
   type DBAdapter,
   type MediaCacheEntry,
   type MediaCacheEntryKey,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
@@ -85,14 +86,159 @@ interface CaptureResult {
  *       "realmURL": "https://realm.example/user/workspace/",
  *       "cardId": "https://realm.example/user/workspace/Person/fadhlan",
  *       "format": "isolated",
- *       "includeBase64": true
+ *       "includeBase64": true,
+ *       "captureSpec": {
+ *         "viewport": { "width": 1280, "height": 800 },
+ *         "deviceScaleFactor": 2,
+ *         "fullPage": true,
+ *         "clip": { "x": 0, "y": 0, "width": 400, "height": 300 }
+ *       }
  *     }
  *   }
  * }
  * ```
  *
+ * `captureSpec` is optional; every field within it is optional. It is validated
+ * here (viewport ≤ 4096×16384, deviceScaleFactor ≤ 3, clip within the viewport,
+ * `fullPage` and `clip` mutually exclusive) so the worker/prerenderer downstream
+ * can treat it as trusted. Invalid specs return a 400 naming the offending field.
+ * A non-empty `captureSpec` is capture-only: the ledger's canonical capture
+ * identity cannot represent it yet (the GET DSL reserves those params), so it
+ * always renders fresh and returns raw bytes — no ledger fast path, no
+ * MediaCache persist, no `captures` URL.
+ *
  * The `runAs` user is derived from the authenticated JWT.
  */
+
+// Chromium caps a single texture at 16384px; a viewport wider than 4096px is
+// well past any real card layout and mostly a way to force a huge capture.
+export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
+export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
+// A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
+export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
+
+// Result of validating the request's `captureSpec` attribute. On success
+// `captureSpec` is the normalized spec (or null when the attribute was absent);
+// on failure `error` names the offending field for a 400.
+type CaptureSpecParse =
+  | { captureSpec: ScreenshotCaptureSpec | null; error?: undefined }
+  | { captureSpec?: undefined; error: string };
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseCaptureSpec(raw: unknown): CaptureSpecParse {
+  if (raw === undefined || raw === null) {
+    return { captureSpec: null };
+  }
+  if (!isPlainObject(raw)) {
+    return { error: 'captureSpec must be an object' };
+  }
+
+  let spec: ScreenshotCaptureSpec = {};
+
+  if (raw.viewport !== undefined) {
+    let viewport = raw.viewport;
+    if (
+      !isPlainObject(viewport) ||
+      !isPositiveInteger(viewport.width) ||
+      !isPositiveInteger(viewport.height)
+    ) {
+      return {
+        error:
+          'captureSpec.viewport must have positive integer width and height',
+      };
+    }
+    if (viewport.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      return {
+        error: `captureSpec.viewport.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+      };
+    }
+    if (viewport.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      return {
+        error: `captureSpec.viewport.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+      };
+    }
+    spec.viewport = { width: viewport.width, height: viewport.height };
+  }
+
+  if (raw.deviceScaleFactor !== undefined) {
+    let scale = raw.deviceScaleFactor;
+    if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) {
+      return {
+        error: 'captureSpec.deviceScaleFactor must be a positive number',
+      };
+    }
+    if (scale > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR) {
+      return {
+        error: `captureSpec.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+      };
+    }
+    spec.deviceScaleFactor = scale;
+  }
+
+  if (raw.fullPage !== undefined) {
+    if (typeof raw.fullPage !== 'boolean') {
+      return { error: 'captureSpec.fullPage must be a boolean' };
+    }
+    spec.fullPage = raw.fullPage;
+  }
+
+  if (raw.clip !== undefined) {
+    let clip = raw.clip;
+    if (
+      !isPlainObject(clip) ||
+      typeof clip.x !== 'number' ||
+      typeof clip.y !== 'number' ||
+      !Number.isFinite(clip.x) ||
+      !Number.isFinite(clip.y) ||
+      clip.x < 0 ||
+      clip.y < 0 ||
+      !isPositiveInteger(clip.width) ||
+      !isPositiveInteger(clip.height)
+    ) {
+      return {
+        error:
+          'captureSpec.clip must have non-negative x/y and positive integer width/height',
+      };
+    }
+    spec.clip = {
+      x: clip.x,
+      y: clip.y,
+      width: clip.width,
+      height: clip.height,
+    };
+  }
+
+  if (spec.fullPage && spec.clip) {
+    return {
+      error: 'captureSpec cannot set both fullPage and clip',
+    };
+  }
+
+  // Clip must sit within the viewport when the caller specified both; a clip
+  // beyond the viewport would otherwise capture blank/scrolled area.
+  if (spec.clip && spec.viewport) {
+    if (spec.clip.x + spec.clip.width > spec.viewport.width) {
+      return {
+        error: 'captureSpec.clip exceeds captureSpec.viewport.width',
+      };
+    }
+    if (spec.clip.y + spec.clip.height > spec.viewport.height) {
+      return {
+        error: 'captureSpec.clip exceeds captureSpec.viewport.height',
+      };
+    }
+  }
+
+  return { captureSpec: spec };
+}
+
 export default function handleScreenshotCard({
   dbAdapter,
   queue,
@@ -162,6 +308,12 @@ export default function handleScreenshotCard({
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
+    let captureSpecParse = parseCaptureSpec(attrs.captureSpec);
+    if (captureSpecParse.error) {
+      return sendResponseForBadRequest(ctxt, captureSpecParse.error);
+    }
+    let captureSpec = captureSpecParse.captureSpec ?? null;
+
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token?.user) {
       return sendResponseForBadRequest(
@@ -177,7 +329,15 @@ export default function handleScreenshotCard({
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
-      if (mediaCacheAdapter) {
+      // A custom `captureSpec` has no representation in the ledger's
+      // canonical capture identity yet — the GET `_screenshot/` DSL reserves
+      // `viewport`/`dsf`/`fullPage`/`clip` — so persisting one under the
+      // format-only key would let a custom render serve on the canonical
+      // URL. Custom captures render fresh and return bytes only: no ledger
+      // fast path, no persist, no served URL.
+      let isCanonicalCapture =
+        !captureSpec || Object.keys(captureSpec).length === 0;
+      if (mediaCacheAdapter && isCanonicalCapture) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -240,6 +400,7 @@ export default function handleScreenshotCard({
           runAs: userId,
           cardId: normalizedCardId,
           format,
+          captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
         },
         queue,

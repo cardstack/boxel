@@ -163,10 +163,126 @@ module(basename(import.meta.filename), function () {
         runAs: '@someone:localhost',
         cardId,
         format: 'isolated',
+        captureSpec: null,
         // The POST surface returns the capture in its response body rather
         // than recording it in the MediaCache ledger.
         persist: null,
       });
+    });
+
+    test('threads a valid captureSpec into the enqueued job', async function (assert) {
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+      let captureSpec = {
+        viewport: { width: 1280, height: 800 },
+        deviceScaleFactor: 2,
+        clip: { x: 0, y: 0, width: 400, height: 300 },
+      };
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: { realmURL, cardId, format: 'isolated', captureSpec },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(published.length, 1, 'published exactly one job');
+      assert.deepEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        captureSpec,
+        'captureSpec forwarded verbatim into the job args',
+      );
+    });
+
+    async function expectCaptureSpecRejected(
+      assert: Assert,
+      captureSpec: unknown,
+      offendingField: string,
+    ) {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+
+      let response = await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL: 'http://example.test/',
+              cardId: 'http://example.test/Person/fadhlan',
+              format: 'isolated',
+              captureSpec,
+            },
+          },
+        });
+
+      assert.strictEqual(response.status, 400, '400 for invalid captureSpec');
+      assert.ok(
+        response.text.includes(offendingField),
+        `names the offending field (${offendingField}) in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    }
+
+    test('rejects oversize viewport width', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { viewport: { width: 5000, height: 800 } },
+        'viewport.width',
+      );
+    });
+
+    test('rejects oversize viewport height', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { viewport: { width: 800, height: 20000 } },
+        'viewport.height',
+      );
+    });
+
+    test('rejects deviceScaleFactor above the cap', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { deviceScaleFactor: 4 },
+        'deviceScaleFactor',
+      );
+    });
+
+    test('rejects fullPage combined with clip', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { fullPage: true, clip: { x: 0, y: 0, width: 100, height: 100 } },
+        'fullPage',
+      );
+    });
+
+    test('rejects clip that exceeds the viewport', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          viewport: { width: 400, height: 300 },
+          clip: { x: 100, y: 0, width: 400, height: 100 },
+        },
+        'clip',
+      );
     });
 
     test('rejects without auth', async function (assert) {
@@ -517,6 +633,55 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         attrs.captures[0].url,
         `${REALM_URL}_screenshot/Person/fadhlan`,
+      );
+    });
+
+    test('a custom captureSpec bypasses the ledger and never persists', async function (assert) {
+      await seedInstanceRow();
+      // A canonical (format-only) capture exists; the custom-spec request
+      // must not serve it — the ledger identity cannot represent viewport /
+      // scale / clip overrides, so a canonical entry is the wrong image for
+      // this request, and persisting the custom render under that identity
+      // would poison the canonical `_screenshot/` URL.
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+      let captureSpec = { viewport: { width: 1280, height: 800 } };
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec,
+      }).expect(201);
+
+      assert.strictEqual(
+        published.length,
+        1,
+        'renders fresh instead of answering from the canonical ledger entry',
+      );
+      assert.deepEqual(
+        (published[0]?.args as any)?.captureSpec,
+        captureSpec,
+        'the custom spec reaches the job',
+      );
+      assert.strictEqual(
+        (published[0]?.args as any)?.persist,
+        null,
+        'the custom capture is never persisted',
+      );
+      assert.false(
+        'captures' in response.body.data.attributes,
+        'no served URL for a capture the ledger cannot key',
       );
     });
 

@@ -8,6 +8,7 @@ import {
   jobIdentity,
   putMedia,
   type MediaCacheLane,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
@@ -29,6 +30,11 @@ export interface ScreenshotCardArgs extends JSONTypes.Object {
   runAs: string;
   cardId: string;
   format: 'isolated' | 'embedded';
+  // Optional per-capture overrides (viewport, scale, fullPage, clip). Typed as
+  // `| null` rather than `?:` because `JSONTypes.Object`'s index signature
+  // rejects `undefined`; the handler always sets it (to the parsed spec or
+  // null).
+  captureSpec: ScreenshotCaptureSpec | null;
   // When non-null, a successful capture is persisted to the MediaCache under
   // this ledger identity before the job resolves. This is what makes a
   // bounded-wait caller (the GET `_screenshot/` route's sync wait) safe to
@@ -51,7 +57,8 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
   mediaCacheAdapter,
 }) =>
   async function (args) {
-    let { jobInfo, realmURL, runAs, cardId, format, persist } = args;
+    let { jobInfo, realmURL, runAs, cardId, format, captureSpec, persist } =
+      args;
     log.debug(
       `${jobIdentity(jobInfo)} starting screenshot-card for job: ${JSON.stringify(
         {
@@ -59,6 +66,7 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
           runAs,
           cardId,
           format,
+          captureSpec,
         },
       )}`,
     );
@@ -104,6 +112,7 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
       url: cardId,
       auth,
       format,
+      ...(captureSpec ? { captureSpec } : {}),
       priority: jobInfo?.priority,
     });
     // The local (in-process) prerenderer resolves to `{response, timings,

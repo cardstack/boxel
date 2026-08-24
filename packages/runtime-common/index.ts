@@ -916,11 +916,35 @@ export type RunCommandResponse = {
   meta?: PrerenderResponseMeta;
 };
 
+// Optional per-capture overrides for a screenshot render. All fields are
+// JSON-serializable so this rides through the worker queue on
+// `ScreenshotCardArgs`. Bounds are enforced by the realm-server handler
+// (`handle-screenshot-card.ts`) before the job is enqueued; the capture path
+// (`captureScreenshot`) treats these as already-validated but still rejects the
+// mutually-exclusive `fullPage` + `clip` combination defensively.
+export type ScreenshotCaptureSpec = {
+  // CSS-pixel render viewport applied via `page.setViewport` before the render
+  // settles, then restored so pooled pages don't leak the size into later index
+  // prerenders.
+  viewport?: { width: number; height: number };
+  // Puppeteer device scale factor (1 = CSS px, 2 = retina). Multiplies the
+  // PNG's physical pixel dimensions without changing the reported CSS dims.
+  deviceScaleFactor?: number;
+  // Capture the full scrollable document rather than just the viewport. Mutually
+  // exclusive with `clip`.
+  fullPage?: boolean;
+  // CSS-pixel region to capture, passed straight to `page.screenshot`. Must sit
+  // within the viewport. Mutually exclusive with `fullPage`.
+  clip?: { x: number; y: number; width: number; height: number };
+};
+
 export type ScreenshotPrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
   format: 'isolated' | 'embedded';
+  // Optional per-capture overrides (viewport, scale, fullPage, clip).
+  captureSpec?: ScreenshotCaptureSpec;
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;

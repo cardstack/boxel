@@ -10,6 +10,7 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
@@ -520,6 +521,7 @@ export class RenderRunner {
     url,
     auth,
     format,
+    captureSpec,
     opts,
     priority,
     signal,
@@ -530,6 +532,7 @@ export class RenderRunner {
     url: string;
     auth: string;
     format: 'isolated' | 'embedded';
+    captureSpec?: ScreenshotCaptureSpec;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
@@ -587,6 +590,7 @@ export class RenderRunner {
         expectedNonce: nonce,
         simulateTimeoutMs: opts?.simulateTimeoutMs,
         timeoutMs: opts?.timeoutMs,
+        ...(captureSpec ? { captureSpec } : {}),
       };
 
       let capture = await withTimeout(
