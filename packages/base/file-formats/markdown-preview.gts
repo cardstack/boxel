@@ -99,8 +99,8 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
         height: 100%;
         min-height: 0;
         overflow: auto;
-        background: var(--card);
-        color: var(--foreground);
+        background: var(--md-preview-background, var(--card));
+        color: var(--md-preview-foreground, var(--card-foreground));
         text-align: left;
       }
       .md-preview--full {

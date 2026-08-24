@@ -3,9 +3,8 @@
 // imports from the `file-formats/index` barrel to render a waveform and player
 // without any shell chrome. The browser is the decoder, so the reading formats
 // mount one native `<audio controls>` — but a sound file has no picture, so the
-// visual
-// the shells hand their stage is the amplitude envelope the extract pass read
-// out of the bytes, drawn as a waveform.
+// visual the shells hand their stage is the amplitude envelope the extract pass
+// read out of the bytes, drawn as a waveform.
 //
 // The envelope arrives already resampled and bounded by `fileViewModel`
 // (`waveformBars`, 64 bars in a fitted cell, 256 in the reading formats), so
