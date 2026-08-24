@@ -38,6 +38,7 @@
  */
 import { settled } from '@ember/test-helpers';
 import { frame, visualElementStore } from 'motion-dom';
+import { rootProjectionNode } from 'motion-dom';
 
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { resetBeacons } from '../choreo/beacons.ts';
@@ -233,4 +234,22 @@ export function resetMotion() {
   setMotionSpeed(1);
   resetBeacons();
   resetBarrier();
+  unblockLayout();
+}
+
+/**
+ * Clear a layout block left behind by the test that ran before this one.
+ *
+ * `instantLayoutTransition()` blocks the ROOT projection node — one global — so
+ * that the next projection update lands without animating. It is cleared by
+ * that update. A test that blocks and then ends before the update happens
+ * leaves the block in place, and the next test's layout animations silently
+ * snap instead of running. That is a test failing because of its neighbour,
+ * which is the worst kind, and the demo that uses instantLayoutTransition is
+ * exactly the one whose test needs layout animations to work.
+ */
+function unblockLayout() {
+  const root = rootProjectionNode.current as
+    { unblockUpdate?: () => void } | undefined;
+  root?.unblockUpdate?.();
 }

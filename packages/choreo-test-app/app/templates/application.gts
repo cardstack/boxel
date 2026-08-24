@@ -2,6 +2,7 @@ import { LinkTo } from '@ember/routing';
 import { pageTitle } from 'ember-page-title';
 import { MotionConfig } from 'glimmer-motion';
 import { ChoreoMark } from 'test-app/components/choreo-mark';
+import { TempoPicker } from 'test-app/components/tempo-picker';
 
 <template>
   {{pageTitle "Choreo"}}
@@ -19,6 +20,7 @@ import { ChoreoMark } from 'test-app/components/choreo-mark';
             runner is a development URL, not a destination — anything else here
             competes with the one thing this bar is for. }}
         <nav class="top-links">
+          <TempoPicker />
           <a href="https://github.com/cardstack/glimmer-motion">GitHub</a>
         </nav>
       </header>

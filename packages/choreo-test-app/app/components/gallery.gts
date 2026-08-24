@@ -6,6 +6,7 @@ import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { catalog, groups } from 'test-app/lib/catalog';
 import { highlightSample } from 'test-app/lib/highlight';
+import { isCrossing } from 'test-app/lib/tempo';
 
 const filters = ['All', ...groups] as const;
 type Filter = (typeof filters)[number];
@@ -86,6 +87,18 @@ export class Gallery extends Component {
     return catalog.filter((demo) => demo.group === this.filter);
   }
 
+  /**
+   * Cards arriving during a route transition do not play an entrance.
+   *
+   * Coming back from a demo, all twenty-six mount at the moment the morph
+   * lands — and twenty-six springs firing at once, right as the shared element
+   * arrives, is the kink at the end of an otherwise smooth movement. They are
+   * simply already here.
+   */
+  get entrance() {
+    return isCrossing() ? cardHere : cardIn;
+  }
+
   get panel() {
     return this.code ? [{ id: 'filter-code' }] : NO_PANEL;
   }
@@ -106,7 +119,7 @@ export class Gallery extends Component {
     <section class="hero">
       {{! the repo is Choreo; the thing you install is still glimmer-motion,
           so the eyebrow is the package name and nothing else }}
-      <p class="kicker">npm: glimmer-motion</p>
+      <p class="kicker">glimmer-motion</p>
       <h1>Motion,<br /><em>Choreo-graphed.</em></h1>
       <p class="lede">
         The
@@ -176,10 +189,11 @@ export class Gallery extends Component {
         >
           <article
             class="card"
+            data-demo={{demo.id}}
             {{motion
               presence=h
               layout=true
-              initial=cardIn
+              initial=this.entrance
               animate=cardHere
               exit=cardOut
               transition=cardSpring

@@ -4,12 +4,23 @@ import { module, test } from 'qunit';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 
-function frames(n: number) {
-  return new Promise<void>((resolve) => {
-    let left = n;
-    const tick = () => (left-- > 0 ? requestAnimationFrame(tick) : resolve());
-    requestAnimationFrame(tick);
-  });
+/**
+ * Watch a value for a while and report every distinct reading.
+ *
+ * Counting frames is not safe here: under the whole suite a frame can be many
+ * times longer than it is on its own, so "three frames in" can be most of the
+ * way through a 420ms spring. Sampling over a fixed WALL-CLOCK window asks the
+ * question that is actually being asked — did this value pass through
+ * anything on its way? — and a snap passes through nothing.
+ */
+async function watch(read: () => number, ms = 260) {
+  const seen = new Set<number>();
+  const until = performance.now() + ms;
+  while (performance.now() < until) {
+    seen.add(read());
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  return [...seen];
 }
 
 function rest() {
@@ -34,17 +45,22 @@ module('Integration | motion | subdivision', function (hooks) {
     document
       .querySelector('.sub-seam.is-col')!
       .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    await frames(3);
-    const mid = tileWidth();
+    const readings = await watch(tileWidth);
     await rest();
     const after = tileWidth();
 
-    const seen = JSON.stringify({ before, mid, after });
+    const seen = JSON.stringify({ before, readings, after });
     assert.notStrictEqual(before, after, `the tile does resize: ${seen}`);
-    assert.notStrictEqual(
-      mid,
-      after,
-      `and it is still moving early on: ${seen}`
+    const between = readings.filter(
+      (v) =>
+        v !== before &&
+        v !== after &&
+        v > Math.min(before, after) &&
+        v < Math.max(before, after)
+    );
+    assert.ok(
+      between.length > 0,
+      `it passes through widths between the two: ${seen}`
     );
   });
 });

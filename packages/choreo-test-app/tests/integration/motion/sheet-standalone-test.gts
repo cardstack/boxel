@@ -5,12 +5,21 @@ import { module, test } from 'qunit';
 import { Sheet } from 'test-app/components/examples/sheet';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 
-function frames(n: number) {
-  return new Promise<void>((resolve) => {
-    let left = n;
-    const tick = () => (left-- > 0 ? requestAnimationFrame(tick) : resolve());
-    requestAnimationFrame(tick);
-  });
+/**
+ * Every distinct reading over a wall-clock window.
+ *
+ * Counting frames is not safe: under the whole suite a frame can be many times
+ * longer than it is alone, so "three frames in" can be most of the way through
+ * the spring. A tween passes through intermediate values; a snap does not.
+ */
+async function watch(read: () => number, ms = 260) {
+  const seen = new Set<number>();
+  const until = performance.now() + ms;
+  while (performance.now() < until) {
+    seen.add(read());
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  }
+  return [...seen];
 }
 
 function rest() {
@@ -33,11 +42,9 @@ function tileX() {
 async function stepAndWatch() {
   const before = tileX();
   await click('.sheet-grab');
-  const early = tileX();
-  await frames(3);
-  const mid = tileX();
+  const readings = await watch(tileX);
   await rest();
-  return { before, early, mid, after: tileX() };
+  return { before, readings, after: tileX() };
 }
 
 module('Integration | motion | sheet standalone', function (hooks) {
@@ -49,16 +56,20 @@ module('Integration | motion | sheet standalone', function (hooks) {
     await rest();
 
     const seen = await stepAndWatch();
+    const dump = JSON.stringify(seen);
     assert.notStrictEqual(
       seen.before,
       seen.after,
-      `the tile does move: ${JSON.stringify(seen)}`
+      `the tile does move: ${dump}`
     );
-    assert.notStrictEqual(
-      seen.mid,
-      seen.after,
-      `and it is still travelling three frames in: ${JSON.stringify(seen)}`
+    const between = seen.readings.filter(
+      (v) =>
+        v !== seen.before &&
+        v !== seen.after &&
+        v > Math.min(seen.before, seen.after) &&
+        v < Math.max(seen.before, seen.after)
     );
+    assert.ok(between.length > 0, `it travels rather than snapping: ${dump}`);
   });
 
   test('and the same inside a LayoutGroup, as the gallery renders it', async function (assert) {
@@ -70,15 +81,19 @@ module('Integration | motion | sheet standalone', function (hooks) {
     await rest();
 
     const seen = await stepAndWatch();
+    const dump = JSON.stringify(seen);
     assert.notStrictEqual(
       seen.before,
       seen.after,
-      `the tile does move: ${JSON.stringify(seen)}`
+      `the tile does move: ${dump}`
     );
-    assert.notStrictEqual(
-      seen.mid,
-      seen.after,
-      `and it is still travelling three frames in: ${JSON.stringify(seen)}`
+    const between = seen.readings.filter(
+      (v) =>
+        v !== seen.before &&
+        v !== seen.after &&
+        v > Math.min(seen.before, seen.after) &&
+        v < Math.max(seen.before, seen.after)
     );
+    assert.ok(between.length > 0, `it travels rather than snapping: ${dump}`);
   });
 });

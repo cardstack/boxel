@@ -54,10 +54,14 @@ body {
 }
 
 html {
-  view-transition-name: none;
+  /* captured as the root layer, which is clipped to the viewport — the one
+     cheap way to carry a page that is several screens tall */
   background: var(--wash);
 }
 
+/* On <html>, which is the one element never captured: the wash it carries and
+   the grain it draws are outside every snapshot, so the background does not
+   fade, move or reload for a transition — it simply keeps painting. */
 html::before {
   content: '';
   position: fixed;
@@ -65,6 +69,26 @@ html::before {
   pointer-events: none;
   background-image: var(--grain);
   z-index: 50;
+  opacity: 1;
+  /* A noise field is the one thing on this page a compositor cannot carry: it
+     does not scale or blend, it just changes. So it leaves before the morph
+     and returns after it, rather than being dragged through the middle.
+     
+     Promoted, so the fade is a compositor job rather than a full-viewport
+     repaint of a noise texture — and timed AGAINST THE MORPH rather than in
+     fixed milliseconds. At a fixed 140ms it was a fifth of a normal transition
+     and a fiftieth of a slow one, which is exactly how the hesitation felt:
+     obvious at speed, barely there in slow motion. */
+  will-change: opacity;
+  transition: opacity var(--gm-grain-out, 140ms) linear;
+}
+
+html.is-crossing::before {
+  opacity: 0;
+}
+
+html.is-returning::before {
+  transition: opacity var(--gm-grain-in, 260ms) ease-out;
 }
 
 body {
@@ -74,8 +98,6 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background: transparent;
-  view-transition-name: root;
-  view-transition-group: contain;
 }
 
 a {
@@ -195,6 +217,21 @@ button {
   height: 1px;
   background: var(--ember);
   box-shadow: 0 0 12px var(--glow);
+  /* drawn, not just present: the rule runs out from the left as the page
+     arrives, which is the smallest possible piece of the thing this site is
+     about */
+  transform-origin: left center;
+  animation: kicker-rule 520ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+@keyframes kicker-rule {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .hero h1 {
@@ -1143,18 +1180,42 @@ html[data-gm-dragging] * {
   color: var(--ink);
 }
 
+/* The overlay paints nothing of its own. `html` carries the wash and the grain
+   and is never captured, so it paints straight through the whole transition —
+   which is what keeps the background from moving or flashing. Give the overlay
+   a background of its own and the grain runs doubled. */
 :root::view-transition {
-  background: var(--grain), var(--wash);
+  background: none;
 }
 
-:root::view-transition-old(root),
-:root::view-transition-new(root) {
-  display: none;
+/* No wholesale page dissolve. The scene is named piece by piece in
+   routes/application.ts — what moves, what leaves, what arrives — so nothing
+   is animated twice and the html background paints straight through. */
+
+/* Magic Move's stacking: the scene that is leaving and the scene that is
+   arriving lie flat, and everything that MOVES rides over them — otherwise the
+   thing you are following passes behind the thing it is leaving. */
+::view-transition-group(.gm-scene) {
+  z-index: 1;
 }
 
-:root::view-transition-group(root),
-:root::view-transition-group-children(root) {
-  overflow: clip;
+::view-transition-group(.gm-stage) {
+  z-index: 3;
+}
+
+/* the demo travels inside its own frame, so it sits one layer above it */
+::view-transition-group(.gm-demo) {
+  z-index: 4;
+}
+
+::view-transition-group(.gm-type) {
+  z-index: 5;
+}
+
+/* the chrome is the same on both pages and never moves: it stays on top so
+   nothing crosses over it */
+::view-transition-group(.gm-steady) {
+  z-index: 6;
 }
 
 .shots {
@@ -3732,4 +3793,110 @@ html[data-gm-dragging] * {
 .filter-code .sample-label {
   margin: 0;
   padding: 14px 18px 0;
+}
+
+/* The iOS / Keynote trick, for EVERY matched element.
+ *
+ * Two renderings of the same thing cannot morph into each other — "Lightbox"
+ * is 15px display type in the card and 80px extra-wide on the page, and the
+ * demo is a small stage and a full-width one. So both images are stretched to
+ * fill the SAME box, that box interpolates from the old one to the new one,
+ * and the two cross from 0% to 100% inside it. What you read is one object
+ * growing, rather than two objects dissolving past each other at two sizes.
+ *
+ * object-fit: fill, not cover: cover crops whatever changes aspect, which is
+ * exactly what must not happen to a word or to a demo.
+ */
+::view-transition-old(.gm-move),
+::view-transition-new(.gm-move) {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+/* One clock for the whole transition.
+ *
+ * Every layer the browser makes starts on ITS default — a quarter of a second
+ * — and Motion retimes the ones it is given keyframes for. Any layer it is not
+ * given keyframes for keeps that default, so a seven-second morph had seven
+ * layers crossing at full speed in its first few frames: all the jitter, all at
+ * the beginning. This is the floor for the ones Motion does not touch; where it
+ * does, it sets timing through the Web Animations API, which wins over this.
+ *
+ * IMAGES ONLY. The group is the layer's position and size, and Motion animates
+ * that itself — give the group a duration here as well and two animations own
+ * the same transform. They do not blend, they take turns, and what you see is a
+ * layer jumping between two answers frame by frame.
+ */
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: var(--gm-morph, 250ms);
+}
+
+/* ---- the transition control, and the code it can show ---- */
+
+.tempo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.tempo-select {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 6px 26px 6px 12px;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--ink-dim) 50%)
+      calc(100% - 13px) calc(50% - 1px) / 5px 5px no-repeat,
+    rgba(9, 8, 7, 0.72);
+  color: var(--ink);
+  font: inherit;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.tempo-select:hover {
+  border-color: var(--copper);
+}
+
+.transition-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.transition-note:hover,
+.transition-note.is-on {
+  color: var(--copper);
+  border-color: var(--line-strong);
+}
+
+.transition-note-mark {
+  letter-spacing: 0;
+  color: var(--ember-hot);
+}
+
+.sample.is-transition {
+  margin: 0 0 28px;
+  border-color: rgba(255, 59, 31, 0.28);
 }

@@ -176,7 +176,7 @@ export const catalog: DemoEntry[] = [
     </c.Parallel>
   </c.Sequence>
 </Choreo>`,
-    slowmo: true,
+    slowmo: false,
     title: 'Sequence',
   },
   {
