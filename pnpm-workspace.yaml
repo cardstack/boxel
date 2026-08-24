@@ -245,6 +245,7 @@ catalog:
   tmp: ^0.2.1
   tracked-built-ins: ^4.0.0
   typescript: ~5.9.3
+  typescript-eslint: ^8.67.0
   undici: ^7.22.0
   util: ^0.12.5
   uuid: ^9.0.1
