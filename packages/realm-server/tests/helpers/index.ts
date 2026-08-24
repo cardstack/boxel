@@ -1238,6 +1238,7 @@ export async function createRealm({
   transpileCoordinator,
   fullIndexOnStartup,
   mediaCacheAdapter,
+  screenshotSyncWaitMs,
 }: {
   dir: string;
   definitionLookup: DefinitionLookup;
@@ -1274,6 +1275,9 @@ export async function createRealm({
   // MediaCache object store for the realm's `_screenshot/` route; absent
   // means every screenshot request serves as an uncaptured miss.
   mediaCacheAdapter?: MediaCacheAdapter;
+  // Shrinks the `_screenshot/` route's on-demand sync-wait budget so tests
+  // can exercise the 503 + Retry-After path without holding real time.
+  screenshotSyncWaitMs?: number;
 }): Promise<{ realm: Realm; adapter: RealmAdapter }> {
   await insertPermissions(dbAdapter, new URL(realmURL), permissions);
 
@@ -1352,7 +1356,10 @@ export async function createRealm({
       transpileCoordinator,
       mediaCacheAdapter,
     },
-    fullIndexOnStartup ? { fullIndexOnStartup: true as const } : undefined,
+    {
+      ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+      ...(screenshotSyncWaitMs !== undefined ? { screenshotSyncWaitMs } : {}),
+    },
   );
   if (worker) {
     virtualNetwork.mount(realm.handle);
@@ -3071,6 +3078,7 @@ export function realmConfigCardJSON(
     iconURL?: string;
     backgroundURL?: string;
     includePrerenderedDefaultRealmIndex?: boolean;
+    allowArbitraryScreenshots?: boolean;
   } = {},
 ): string {
   let attrs: Record<string, unknown> = {};
@@ -3086,6 +3094,9 @@ export function realmConfigCardJSON(
   if (config.includePrerenderedDefaultRealmIndex !== undefined) {
     attrs.includePrerenderedDefaultRealmIndex =
       config.includePrerenderedDefaultRealmIndex;
+  }
+  if (config.allowArbitraryScreenshots !== undefined) {
+    attrs.allowArbitraryScreenshots = config.allowArbitraryScreenshots;
   }
   return JSON.stringify({
     data: {
