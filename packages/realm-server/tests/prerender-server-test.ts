@@ -154,6 +154,23 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('heap snapshot route is off unless the flag is set', async function (assert) {
+      // The resting state, and the only one safe to assert in a suite: with
+      // the flag set this route stops the world for as long as it takes to
+      // serialise the heap. The guard returns before any of that, so this
+      // costs microseconds.
+      delete process.env.PRERENDER_HEAP_SNAPSHOT;
+      let res = await request
+        .post('/heap-snapshot')
+        .set('Accept', 'application/json');
+      assert.strictEqual(res.status, 404, 'not found while disabled');
+      assert.strictEqual(
+        res.body.status,
+        'disabled',
+        'body names why, so an operator who gets a 404 knows to set the flag',
+      );
+    });
+
     test('it handles prerender request', async function (assert) {
       let url = `${realmURL.href}1`;
       let permissions = {

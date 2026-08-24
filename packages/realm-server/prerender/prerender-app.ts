@@ -23,6 +23,7 @@ import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
 import { heapTelemetry } from './heap-telemetry.ts';
+import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
@@ -237,6 +238,39 @@ export function buildPrerenderApp(options: {
     // HEALTHCHECK discards this body, so the extra fields cost it nothing.
     ctxt.body = JSON.stringify({ ready: true, memory: heapTelemetry() });
     ctxt.status = 200;
+  });
+
+  // Dumps this process's heap to the artifact sink, for working out what is
+  // holding memory across renders. Off unless `PRERENDER_HEAP_SNAPSHOT` is
+  // set, because the write stops the world for its whole duration.
+  //
+  // The same capture also fires on its own once an instance's heap crosses
+  // the auto-capture threshold, which is how it is normally reached: a leak
+  // takes hours to develop and any deploy resets it, so waiting to be asked
+  // means usually not being asked in time. This route is the override for
+  // choosing the moment instead — at a particular heap size, or on an
+  // instance that has already spent its one automatic capture. Reach it the
+  // way any VPC-internal endpoint is reached: SSM port-forward, then POST.
+  router.post('/heap-snapshot', async (ctxt: Koa.Context) => {
+    let outcome = await captureHeapSnapshot();
+    ctxt.set('Content-Type', 'application/json');
+    ctxt.body = JSON.stringify(outcome);
+    switch (outcome.status) {
+      case 'captured':
+        ctxt.status = 200;
+        break;
+      case 'disabled':
+      case 'no-sink':
+        // Not an error in the caller's request — the capability is simply
+        // switched off on this instance, which is the resting state.
+        ctxt.status = 404;
+        break;
+      case 'busy':
+        ctxt.status = 409;
+        break;
+      default:
+        ctxt.status = 500;
+    }
   });
 
   type RouteBaseArgs = {
