@@ -1740,12 +1740,13 @@ Current date and time: 2025-06-11T11:43:00.533Z
     });
   });
 
-  test('Adds the "unable to edit cards" note only when no card is open', async () => {
-    // Interactive messages no longer inject per-card patch tools, so the
-    // access statement keys off the actual grant: an OPEN card. Cards may
-    // be attached to the message without being open — the note stays (and
-    // deliberately makes no claim about attachments); only opening a card
-    // (or attaching a file) suppresses it.
+  test('Adds the "unable to edit cards" note only when no card-patch tool is in the request', async () => {
+    // What grants card editing is a card-patch tool in the request
+    // (patch-fields from a skill, or a legacy patchCardInstance in an old
+    // room's history) — interactive messages carry no tools themselves, so
+    // neither an open card nor an attached one implies edit access. The
+    // note keys off the tools array; an attached file also suppresses it
+    // (files are editable through SEARCH/REPLACE patches).
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1818,17 +1819,16 @@ Current date and time: 2025-06-11T11:43:00.533Z
       fakeMatrixClient,
     );
 
-    let nonEditableCardsMessage =
-      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
+    let nonEditableCardsMessage = 'You are unable to edit any cards:';
 
     let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The note appears when cards are attached but none is open, and no files are attached, but was ' +
+      'The note appears when cards are attached but no card-patch tool is in the request, but was ' +
         userContextMessage?.content,
     );
 
-    // Now open a card: the grant is the user opening it, not a tool
+    // An open card grants nothing by itself — no tool, no edit path.
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
     cardMessageContent.data.context.openCardIds = [
@@ -1842,13 +1842,38 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
 
     assert.ok(
-      !messageText(messages2?.[messages2.length - 2]).includes(
+      messageText(messages2?.[messages2.length - 1]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when a card is open',
+      'The note stays when a card is open but the request still carries no card-patch tool',
     );
 
-    // Now remove cards, tools, and add an attached file
+    // A card-patch tool in the request is the grant.
+    cardMessageContent.data.context.tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'patchFields',
+          description: 'Patch fields on a card',
+          parameters: { type: 'object', properties: {} },
+        },
+      } as Tool,
+    ];
+
+    const { messages: messages3 } = await getPromptParts(
+      historyWithStringifiedData(eventList),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      !messageText(messages3?.[messages3.length - 1]).includes(
+        nonEditableCardsMessage,
+      ),
+      'The note is suppressed when the request carries a card-patch tool',
+    );
+
+    // Now remove the tool and add an attached file
     cardMessageContent.data.context.openCardIds = [];
     cardMessageContent.data.context.tools = [];
     cardMessageContent.data.attachedFiles = [
@@ -1861,17 +1886,17 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    const { messages: messages3 } = await getPromptParts(
+    const { messages: messages4 } = await getPromptParts(
       historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
 
     assert.ok(
-      !messageText(messages3?.[messages3.length - 2]).includes(
+      !messageText(messages4?.[messages4.length - 1]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when there is an attached file',
+      'The note is suppressed when there is an attached file',
     );
   });
 
@@ -6368,9 +6393,11 @@ new
   });
 
   test('image attachments produce native image_url content parts', async () => {
-    // Policy: when an image file is attached, the prompt should use
-    // native image_url content parts (for vision-capable models)
-    // instead of text-only representation.
+    // Policy: when an image file is attached to the current message, the
+    // prompt carries it as a native image_url content part (for
+    // vision-capable models) on the volatile trailing message; the history
+    // message lists it as metadata only, so its bytes never depend on the
+    // media body.
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -6419,17 +6446,14 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
-
-    // Content should be an array of content parts, not a plain string
+    let trailingContent = prompt[prompt.length - 1]?.content;
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with image attachment should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with current-turn media should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6441,13 +6465,28 @@ new
         imageParts[0].image_url.url.startsWith('data:image/png;base64,'),
         'image_url should be a base64 data URL with correct content type',
       );
+    }
 
-      let textParts = messageContent.filter(
-        (part: any) => part.type === 'text',
+    let historyContent = prompt.filter((m) => m.role === 'user')[0]?.content;
+    assert.ok(
+      Array.isArray(historyContent),
+      'History message content is normalized to parts',
+    );
+    if (Array.isArray(historyContent)) {
+      assert.ok(
+        (historyContent as any[]).every((part: any) => part.type === 'text'),
+        'History message carries no media parts',
+      );
+      let historyText = (historyContent as any[])
+        .map((part: any) => part.text)
+        .join('\n');
+      assert.ok(
+        historyText.includes('What does this image show?'),
+        'History message keeps the message body',
       );
       assert.ok(
-        textParts.length > 0,
-        'Should still include text content part with the message body',
+        historyText.includes('screenshot.png'),
+        'History message lists the media file as metadata',
       );
     }
   });
@@ -6517,14 +6556,13 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
     assert.ok(
-      Array.isArray(messageContent),
-      'User message should use content parts when fallback media URL succeeds',
+      Array.isArray(trailingContent),
+      'Trailing message should use content parts when fallback media URL succeeds',
     );
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6583,16 +6621,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with PDF should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with PDF should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let fileParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(
@@ -6660,16 +6697,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with audio should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with audio should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let audioParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let audioParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'input_audio',
       );
       assert.strictEqual(
@@ -6741,16 +6777,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with video should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with video should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let videoParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let videoParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'video_url',
       );
       assert.strictEqual(
@@ -6824,14 +6859,16 @@ new
       ['text', 'image'], // model supports text + image only
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
-    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+    assert.ok(
+      Array.isArray(trailingContent),
+      'Content should be ContentPart[]',
+    );
 
-    if (Array.isArray(messageContent)) {
+    if (Array.isArray(trailingContent)) {
       // Image should still be included
-      let imageParts = (messageContent as any[]).filter(
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6841,7 +6878,7 @@ new
       );
 
       // PDF should NOT be included as a file part
-      let fileParts = (messageContent as any[]).filter(
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(
@@ -6850,8 +6887,10 @@ new
         'PDF should be excluded when model does not support file modality',
       );
 
-      // Warning text should mention the gated file
-      let textContent = messageContent
+      // Warning text should mention the gated file — on the trailing
+      // message, not in history, so a model switch never rewrites history
+      // bytes.
+      let textContent = trailingContent
         .filter((p: any) => p.type === 'text')
         .map((p: any) => p.text)
         .join('\n');
@@ -6927,22 +6966,24 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
-    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+    assert.ok(
+      Array.isArray(trailingContent),
+      'Content should be ContentPart[]',
+    );
 
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
-      let fileParts = (messageContent as any[]).filter(
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(imageParts.length, 1, 'Image should be included');
       assert.strictEqual(fileParts.length, 1, 'PDF should be included');
 
-      let textContent = messageContent
+      let textContent = trailingContent
         .filter((p: any) => p.type === 'text')
         .map((p: any) => p.text)
         .join('\n');
@@ -6951,6 +6992,135 @@ new
         'No gating warning when inputModalities is undefined',
       );
     }
+  });
+
+  test('only the current message carries media parts; older messages keep byte-stable metadata text', async () => {
+    // Media bodies ride the volatile trailing message for the current turn
+    // only. A message that carried an image keeps the same rendered text
+    // forever — no media part appears in history and no bytes change when
+    // later turns arrive — so the cache prefix survives while the request
+    // stays bounded by the current message's media, not the room's.
+    let userImageMessage = (
+      eventId: string,
+      ts: number,
+      body: string,
+      fileName: string,
+      url: string,
+    ): DiscreteMatrixEvent =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: {
+            context: { tools: [], submode: 'code', functions: [] },
+            attachedFiles: [
+              {
+                sourceUrl: `http://test.com/my-realm/${fileName}`,
+                url,
+                name: fileName,
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    mockResponses.set('http://test.com/first-uploaded.png', {
+      ok: true,
+      text: 'Zmlyc3QtaW1hZ2U=',
+    });
+    mockResponses.set('http://test.com/second-uploaded.png', {
+      ok: true,
+      text: 'c2Vjb25kLWltYWdl',
+    });
+
+    let firstMessage = userImageMessage(
+      '1',
+      1,
+      'What does this image show?',
+      'first.png',
+      'http://test.com/first-uploaded.png',
+    );
+    let promptWhenFirstIsCurrent = await buildPromptForModel(
+      [firstMessage],
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let promptOnNextTurn = await buildPromptForModel(
+      [
+        firstMessage,
+        userImageMessage(
+          '2',
+          2,
+          'And this one?',
+          'second.png',
+          'http://test.com/second-uploaded.png',
+        ),
+      ],
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let textOf = (content: any) =>
+      Array.isArray(content)
+        ? content
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('\n')
+        : content;
+
+    let trailingContent =
+      promptOnNextTurn[promptOnNextTurn.length - 1]?.content;
+    assert.ok(Array.isArray(trailingContent), 'trailing message uses parts');
+    let mediaParts = (trailingContent as any[]).filter(
+      (p: any) => p.type === 'image_url',
+    );
+    assert.strictEqual(
+      mediaParts.length,
+      1,
+      'only the current message contributes a media part',
+    );
+    assert.strictEqual(
+      mediaParts[0].image_url.url,
+      `data:image/png;base64,${Buffer.from('c2Vjb25kLWltYWdl').toString('base64')}`,
+      'the media part is the current message image',
+    );
+
+    // Everything before the trailing message is history.
+    let historyMessages = promptOnNextTurn
+      .slice(0, -1)
+      .filter((m) => m.role === 'user');
+    for (let message of historyMessages) {
+      if (Array.isArray(message.content)) {
+        assert.ok(
+          (message.content as any[]).every((p: any) => p.type === 'text'),
+          'no history message carries media parts',
+        );
+      }
+    }
+    assert.strictEqual(
+      textOf(historyMessages[0]?.content),
+      textOf(
+        promptWhenFirstIsCurrent.filter((m) => m.role === 'user')[0]?.content,
+      ),
+      'an older message renders byte-identical text once it stops being current',
+    );
   });
 
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
@@ -8292,13 +8462,16 @@ module('markdown skill tools', (hooks) => {
     );
   });
 
-  test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {
+  test('a skill both enabled and read yields one definition: the first seen in history, whatever its source', async () => {
+    // There is no source ranking between uploaded and discovered
+    // definitions — position in history decides. Here the state event
+    // precedes the read, so the upload wins.
     const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
     eventList.push(
       readResultEvent('read-1', 2000, [
         discoveredDef('switch-submode_dd88', {
           skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
-          description: 'discovered copy that must lose to the upload',
+          description: 'discovered copy that arrives after the upload',
         }),
       ]),
     );
@@ -8316,7 +8489,40 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(
       tools[0].function.description,
       'Switch between interact and code submodes',
-      'the enabled skill uploaded definition wins the conflict',
+      'the earlier-listed uploaded definition wins',
+    );
+  });
+
+  test('a discovered definition seen before the upload wins the name', async () => {
+    // The reverse order of the test above: the bot reads a skill file
+    // first, then the host uploads a definition for the same functionName.
+    // First-seen-in-history-wins means the discovered copy keeps the name;
+    // ranking uploads above discoveries would move and rewrite the entry
+    // mid-session, resetting the cache prefix.
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    eventList.unshift(
+      readResultEvent('read-1', 500, [
+        discoveredDef('switch-submode_dd88', {
+          skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+          description: 'discovered copy that arrives before the upload',
+        }),
+      ]),
+    );
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'one definition for the shared functionName',
+    );
+    assert.strictEqual(
+      tools[0].function.description,
+      'discovered copy that arrives before the upload',
+      'the earlier-seen discovered definition wins',
     );
   });
 

@@ -143,7 +143,6 @@ import type {
   ToolResultWithNoOutputContent,
   ToolResultWithOutputContent,
   RealmEventContent,
-  Tool,
   ToolResultStatus,
 } from '@cardstack/base/matrix-event';
 import type * as SkillModule from '@cardstack/base/skill';
@@ -1981,18 +1980,6 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: BoxelContext,
   ): Promise<void> {
-    // Interactive messages no longer inject per-card patchCardInstance
-    // tools. Their definitions were generated from each open card's type,
-    // so every card open, switch, or schema edit changed the tools array —
-    // and tool definitions render ahead of all message history, so each
-    // change re-billed the whole conversation at full input price. Skills
-    // route card edits through patch-fields and SEARCH/REPLACE patches
-    // instead; the executor still honors patchCardInstance calls (old rooms
-    // carry them in history), and the programmatic
-    // SendAiAssistantMessage tool still injects it for callers that
-    // require a forced patch call.
-    let tools: Tool[] = [];
-
     await this.updateSkillsAndToolsIfNeeded(roomId);
     let contentData = await this.withContextAndAttachments(
       context,
@@ -2014,7 +2001,16 @@ export default class MatrixService extends Service {
         attachedCards: contentData.attachedCards,
         context: {
           ...contentData.context,
-          tools,
+          // Interactive messages carry no per-card patch tool: a definition
+          // generated from the open card's type changes on every card open,
+          // switch, or schema edit, and tool definitions render ahead of
+          // all message history, so each change re-bills the whole
+          // conversation at full input price. Skills route card edits
+          // through patch-fields and SEARCH/REPLACE patches; the executor
+          // still honors patchCardInstance calls (old rooms carry them in
+          // history), and the programmatic SendAiAssistantMessage tool
+          // still injects it for callers that require a forced patch call.
+          tools: [],
           debug: context?.debug,
           functions: [],
         },

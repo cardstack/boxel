@@ -105,23 +105,30 @@ function getLog() {
  * 3. **MIME type handling** (see `modality.ts` for classification):
  *    - Text-based types (text/*, application/vnd.card+json,
  *      application/vnd.card+source) → content downloaded and displayed
- *      with line numbers.
- *    - Supported images (PNG, JPEG, WEBP, GIF) → native `image_url`
- *      content parts.
- *    - PDF (application/pdf) → native `file` content parts with base64
- *      data URL in `file_data`.
- *    - Audio (audio/*) → native `input_audio` content parts with raw
- *      base64 and format string (data URL prefix stripped).
- *    - Video (video/*) → native `video_url` content parts with base64
- *      data URL.
- *    - Other types → metadata shown inline ([contentType, contentSize
- *      bytes]) without an error prefix.
+ *      with line numbers, in the history message that attached them.
+ *    - Media types are listed in history as metadata ([contentType,
+ *      contentSize bytes]); their bodies are embedded only for the
+ *      current message, as native content parts on the volatile trailing
+ *      message (after the history cache breakpoint):
+ *      - Supported images (PNG, JPEG, WEBP, GIF) → `image_url` parts.
+ *      - PDF (application/pdf) → `file` parts with base64 data URL in
+ *        `file_data`.
+ *      - Audio (audio/*) → `input_audio` parts with raw base64 and
+ *        format string (data URL prefix stripped).
+ *      - Video (video/*) → `video_url` parts with base64 data URL.
+ *      Embedding media bodies in history would grow the request by every
+ *      media file ever attached — re-downloaded and re-encoded on each
+ *      turn, with nothing bounding it — while a "newest message" gate
+ *      would rewrite an older message's bytes as history grows and reset
+ *      the cache prefix. The trailing message is rebuilt every turn, so
+ *      it can carry the current media without touching history bytes.
  *
  * 4. **Model capability gating**: When `inputModalities` is provided
- *    (from the active LLM's model configuration), multimodal parts are
- *    only included if the model supports the required modality. Gated
- *    files are listed in a warning appended to the prompt text. When
- *    `inputModalities` is undefined, all modalities pass through.
+ *    (from the active LLM's model configuration), the current message's
+ *    media parts are only included if the model supports the required
+ *    modality. Gated files are listed in a warning on the trailing
+ *    message. When `inputModalities` is undefined, all modalities pass
+ *    through.
  *
  * 5. **Read-file command scoping**: When the AI requests to read a file
  *    via a tool call, the file URL must match a sourceUrl previously
@@ -780,53 +787,13 @@ export async function getAttachedFiles(
   );
 }
 
-export async function loadCurrentlySerializedFileDefs(
-  history: DiscreteMatrixEvent[],
-  aiBotUserId: string,
-): Promise<SerializedFileDef[]> {
-  let lastMessageEventByUser = findLast(
-    history,
-    (event) =>
-      event.sender !== aiBotUserId &&
-      ((event.type === 'm.room.message' &&
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) ||
-        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE ||
-        isToolResultEventType(event.type)),
-  );
-
-  if (!lastMessageEventByUser) {
-    return [];
-  }
-
-  let attachedFiles = (lastMessageEventByUser as MatrixEventWithBoxelContext)
-    .content?.data?.attachedFiles;
-  if (!attachedFiles?.length) {
-    return [];
-  }
-
-  // The only consumer checks presence, so metadata is enough — downloading
-  // content here would be a per-turn fetch whose bytes are never sent.
-  return attachedFiles.map(toFileDefMetadata);
-}
-
 export function attachedFilesToMessage(
   attachedFiles: SerializedFileDef[],
-  options?: {
-    omitSourceUrls?: Set<string>;
-  },
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
   }
   return attachedFiles
-    .filter(
-      (f) =>
-        !(
-          f.sourceUrl &&
-          options?.omitSourceUrls &&
-          options.omitSourceUrls.has(f.sourceUrl)
-        ),
-    )
     .map((f) => {
       let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
@@ -1228,11 +1195,11 @@ async function toResultMessages(
         if (!isCheckCorrectnessRequest && failureReason) {
           content = `${content}${failureReason}\n`;
         }
-        let attachmentResult = await buildAttachmentsMessagePart(
+        let attachmentText = await buildAttachmentsMessagePart(
           client,
           toolResult,
         );
-        content = [content, attachmentResult.text].filter(Boolean).join('\n\n');
+        content = [content, attachmentText].filter(Boolean).join('\n\n');
         let toolMessage: OpenAIPromptMessage = {
           role: 'tool',
           tool_call_id: toolRequest.id,
@@ -1595,10 +1562,7 @@ function toCheckCorrectnessResultContent(
 export async function buildPromptForModel(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  // Kept positionally for the many call sites; the context message no
-  // longer derives anything from the tools array (the request carries the
-  // tools separately).
-  _tools: Tool[] = [],
+  tools: Tool[] = [],
   skillCards: EnabledSkill[] = [],
   disabledSkillIds: string[] = [],
   client: MatrixClient,
@@ -1657,33 +1621,16 @@ export async function buildPromptForModel(
       ).forEach((message) => historicalMessages.push(message));
     }
     if (event.sender !== aiBotUserId) {
-      let attachmentResult = await buildAttachmentsMessagePart(
+      let attachmentText = await buildAttachmentsMessagePart(
         client,
         event as CardMessageEvent,
-        inputModalities,
       );
-      if (attachmentResult.mediaParts.length > 0) {
-        let textContent = [body, attachmentResult.text]
-          .filter(Boolean)
-          .join('\n\n');
-        let contentParts: ContentPart[] = [];
-        if (textContent) {
-          contentParts.push({ type: 'text', text: textContent });
-        }
-        contentParts.push(...attachmentResult.mediaParts);
-        if (contentParts.length) {
-          historicalMessages.push({ role: 'user', content: contentParts });
-        }
-      } else {
-        let content = [body, attachmentResult.text]
-          .filter(Boolean)
-          .join('\n\n');
-        if (content) {
-          historicalMessages.push({
-            role: 'user',
-            content,
-          });
-        }
+      let content = [body, attachmentText].filter(Boolean).join('\n\n');
+      if (content) {
+        historicalMessages.push({
+          role: 'user',
+          content,
+        });
       }
     }
   }
@@ -1723,6 +1670,7 @@ export async function buildPromptForModel(
   let contextContent = await buildContextMessage(
     history,
     aiBotUserId,
+    tools,
     disabledSkillIds,
   );
   // The context carries the current time, so its bytes change on every
@@ -1738,13 +1686,37 @@ export async function buildPromptForModel(
   // The correctness-summary instruction applies to this request only, so it
   // rides the volatile trailing message; a history entry that vanishes on
   // the next request would both churn the history and waste the marker.
-  let trailingContent = shouldPromptCheckCorrectnessSummary(
+  let currentUserMessageEvent = findLast(
     history,
-    aiBotUserId,
-  )
-    ? `${contextContent}\n\n${CHECK_CORRECTNESS_SUMMARY_INSTRUCTION}`
-    : contextContent;
-  messages.push({ role: 'user', content: trailingContent });
+    (event) =>
+      event.sender !== aiBotUserId &&
+      event.type === 'm.room.message' &&
+      !isToolOrCodePatchResult(event),
+  ) as MatrixEventWithBoxelContext | undefined;
+  let { mediaParts, unsupportedNote } = await buildCurrentTurnMediaParts(
+    client,
+    currentUserMessageEvent,
+    inputModalities,
+  );
+  let trailingContent = [
+    contextContent,
+    unsupportedNote,
+    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
+      ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  // The current message's media parts ride here too — see
+  // buildCurrentTurnMediaParts for why they never ride in history.
+  messages.push(
+    mediaParts.length
+      ? {
+          role: 'user',
+          content: [{ type: 'text', text: trailingContent }, ...mediaParts],
+        }
+      : { role: 'user', content: trailingContent },
+  );
 
   return messages;
 }
@@ -2230,23 +2202,51 @@ function hasAppliedChanges(
   );
 }
 
-// Renders a message's attachments from that message's own snapshot alone.
-// Nothing here may depend on later history or on whether the message is the
-// current one: the rendering becomes part of the cached prompt prefix, and
-// any retroactive change re-bills everything after it (see getAttachedCards).
+// Renders a message's attachments from that message's own snapshot alone,
+// as text: text-based content in full, media as metadata lines. Nothing
+// here may depend on later history, the active model, or whether the
+// message is the current one: the rendering becomes part of the cached
+// prompt prefix, and any retroactive change re-bills everything after it
+// (see getAttachedCards). Media bodies are handled separately, by
+// buildCurrentTurnMediaParts.
 export const buildAttachmentsMessagePart = async (
   client: MatrixClient,
   matrixEvent: MatrixEventWithBoxelContext,
-  inputModalities?: string[],
-): Promise<{ text: string; mediaParts: ContentPart[] }> => {
+): Promise<string> => {
   let attachedCards = await getAttachedCards(client, matrixEvent);
   let text = '';
   if (attachedCards.length > 0) {
     text += `Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):\n${JSON.stringify(attachedCards, null, 2)}\n`;
   }
   let attachedFiles = await getAttachedFiles(client, matrixEvent);
+  if (attachedFiles.length > 0) {
+    text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
+      attachedFiles,
+    )}\n`;
+  }
+  return text;
+};
+
+// Downloads the current message's media attachments (images, PDFs, audio,
+// video) and renders them as native content parts for the volatile trailing
+// message. Media bodies never ride in history: embedding them there would
+// grow the request by every media file ever attached — re-downloaded and
+// re-encoded on each turn, with nothing bounding it — while gating on "is
+// this the newest message" would rewrite an older message's bytes as
+// history grows and reset the cache prefix. The trailing message is rebuilt
+// every turn anyway (it carries the current time), so the current media can
+// ride there without touching a single history byte; history lists the same
+// files as stable metadata (see buildAttachmentsMessagePart).
+export const buildCurrentTurnMediaParts = async (
+  client: MatrixClient,
+  matrixEvent: MatrixEventWithBoxelContext | undefined,
+  inputModalities?: string[],
+): Promise<{ mediaParts: ContentPart[]; unsupportedNote?: string }> => {
   let mediaParts: ContentPart[] = [];
-  let mediaSourceUrls = new Set<string>();
+  if (!matrixEvent) {
+    return { mediaParts };
+  }
+  let attachedFiles = await getAttachedFiles(client, matrixEvent);
   let unsupportedFiles: { name: string; contentType: string }[] = [];
   for (let f of attachedFiles) {
     if (!f.url) {
@@ -2255,7 +2255,7 @@ export const buildAttachmentsMessagePart = async (
     // Check model capability before downloading
     let modality = requiredModality(f.contentType);
     if (!modality) {
-      continue; // not a multimodal type — handled as text metadata below
+      continue; // not a multimodal type — its content rides in history
     }
     if (inputModalities && !inputModalities.includes(modality)) {
       unsupportedFiles.push({
@@ -2316,41 +2316,29 @@ export const buildAttachmentsMessagePart = async (
           video_url: { url: dataUrl },
         });
       }
-      if (f.sourceUrl) {
-        mediaSourceUrls.add(f.sourceUrl);
-      }
     } catch (e) {
+      // A failed download only affects this turn's volatile message; the
+      // file's metadata is still in history, so nothing byte-stable drifts.
       getLog().error(`Failed to download media file ${f.url}:`, e);
     }
   }
+  let unsupportedNote: string | undefined;
   if (unsupportedFiles.length > 0) {
     let fileList = unsupportedFiles
       .map((f) => `${f.name} (${f.contentType})`)
       .join(', ');
-    text += `Note: The following files were not sent to the model because it does not support their input type: ${fileList}\n`;
+    unsupportedNote = `Note: The following files were not sent to the model because it does not support their input type: ${fileList}`;
   }
-  if (attachedFiles.length > 0) {
-    text += `Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):\n${attachedFilesToMessage(
-      attachedFiles,
-      {
-        omitSourceUrls: mediaSourceUrls,
-      },
-    )}\n`;
-  }
-  return { text, mediaParts };
+  return { mediaParts, unsupportedNote };
 };
 
 export const buildContextMessage = async (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  tools: Tool[],
   disabledSkillIds: string[],
 ): Promise<string> => {
   let result = '';
-
-  let attachedFiles = await loadCurrentlySerializedFileDefs(
-    history,
-    aiBotUserId,
-  );
 
   let lastEventWithContext = findLast(history, (ev) => {
     if (ev.sender === aiBotUserId) {
@@ -2378,6 +2366,9 @@ export const buildContextMessage = async (
     }
     if (context?.realmUrl) {
       result += `Workspace: ${context.realmUrl}\n`;
+      if (context?.realmPermissions?.canWrite === false) {
+        result += `This workspace is read-only for the user: edits to its cards and files will be rejected.\n`;
+      }
     }
     if (context?.workspaces) {
       result += `Available workspaces:\n`;
@@ -2452,21 +2443,28 @@ export const buildContextMessage = async (
   }
   result += `\nCurrent date and time: ${new Date().toISOString()}\n`;
 
-  // The old wording keyed off the per-card patchCardInstance tool, which
-  // interactive messages no longer inject (its card-specific schema churned
-  // the tools array). The policy is unchanged from before this change:
-  // opening a card is what grants edit access, so with no open cards (and
-  // no attached files) the model should ask rather than guess at ids. The
-  // wording deliberately says nothing about attachments — cards may well be
-  // attached to the very message this note trails, and attachment alone was
-  // never the grant.
+  // What grants card editing is a card-patch tool in the request —
+  // patch-fields supplied by a skill, or a legacy patchCardInstance sitting
+  // in an old room's history. Interactive messages themselves carry no
+  // tools, so nothing about the UI state (open cards, attachments) implies
+  // edit access. When cards are in play but no such tool is present, say so
+  // — otherwise the model proposes patches it has no way to apply. Reading
+  // the tools array here is cache-safe: this message trails the cache
+  // breakpoint and is re-serialized every turn anyway.
+  let hasCardPatchTool = tools.some((t) =>
+    CARD_PATCH_COMMAND_NAMES.has(t.function.name),
+  );
+  let currentMessageHasAttachedFiles = Boolean(
+    (lastEventWithContext as MatrixEventWithBoxelContext | undefined)?.content
+      ?.data?.attachedFiles?.length,
+  );
   if (
-    attachedFiles.length == 0 &&
-    (context?.openCardIds?.length ?? 0) === 0 &&
+    !currentMessageHasAttachedFiles &&
+    !hasCardPatchTool &&
     hasSomeAttachedCards(history, aiBotUserId)
   ) {
     result +=
-      'You are unable to edit any cards: the user has no card open, and editing requires the card to be open. Ask them to open the card they want changed.';
+      'You are unable to edit any cards: no card-editing tool is available in this room. Editing becomes possible when the user enables a skill that provides one (such as patch-fields). Ask them to do that if they want changes made.';
   }
 
   return result;

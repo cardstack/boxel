@@ -75,72 +75,14 @@ test.describe('Commands', () => {
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-    // The card is open and shared in context — but interactive messages no
-    // longer inject the per-card patchCardInstance tool: its definition was
-    // generated from the open card's type, so every card open, switch, or
-    // schema edit changed the tools array, and tool definitions render
-    // ahead of all message history, re-billing the whole conversation on
-    // every change. Card edits go through patch-fields and SEARCH/REPLACE
-    // patches instead.
+    // The card is open and shared in context — the most favourable case for
+    // a per-card tool — yet interactive messages carry an empty tools
+    // array: a patchCardInstance definition is generated from the open
+    // card's type, so every card open, switch, or schema edit would change
+    // the tools array, and tool definitions render ahead of all message
+    // history, re-billing the whole conversation on every change. Card
+    // edits go through patch-fields and SEARCH/REPLACE patches instead.
     expect(boxelMessageData.context.openCardIds).toContain(cardId);
-    let patchCardTool = (boxelMessageData.context.tools ?? []).find(
-      (t: any) => t.function?.name === 'patchCardInstance',
-    );
-    expect(patchCardTool).toBeUndefined();
-  });
-
-  test(`it does not include patch tool in message event for an open card that is not attached`, async ({
-    page,
-  }) => {
-    const { username, password } = await createSubscribedUserAndLogin(
-      page,
-      'commands-unattached',
-      serverIndexUrl,
-    );
-    const realmName = uniqueRealmName('commands-unattached');
-    await createRealm(page, realmName);
-    const realmURL = new URL(`${username}/${realmName}/`, serverIndexUrl).href;
-    const cardId = await postNewCard(page, realmURL, {
-      data: {
-        attributes: {
-          cardInfo: {
-            title: 'Detachable Card',
-            description: 'Card for unattached patch tool test',
-          },
-        },
-        meta: {
-          adoptsFrom: {
-            module: '@cardstack/base/card-api',
-            name: 'CardDef',
-          },
-        },
-      },
-    });
-
-    await page.goto(realmURL);
-    await openAiAssistant(page);
-    let room1 = await getRoomId(page);
-    await showAllCards(page);
-    let realmCard = page.locator(`[data-test-cards-grid-item="${cardId}"]`);
-    await realmCard.waitFor();
-    await realmCard.click();
-    await expect(
-      page.locator(`[data-test-stack-card="${cardId}"]`),
-    ).toHaveCount(1);
-    await page
-      .locator(
-        `[data-test-attached-card="${cardId}"] [data-test-remove-card-btn]`,
-      )
-      .click();
-    await sendMessage(page, room1, 'please change this card');
-    let message;
-    await expect(async () => {
-      message = (await getRoomEvents(username, password, room1)).pop()!;
-      expect(message?.content?.msgtype).toStrictEqual(
-        APP_BOXEL_MESSAGE_MSGTYPE,
-      );
-    }).toPass();
-    let boxelMessageData = JSON.parse(message!.content.data);
     expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
