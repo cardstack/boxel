@@ -144,7 +144,7 @@ export default class ApplicationRoute extends Route {
     // size — everything not paired below is carried by this one layer
     view.layout(t.move);
 
-    if (id && (opening || closing) && bothEndsVisible(id, opening)) {
+    if (id && (opening || closing)) {
       pair(view, id, opening, t);
     }
 
@@ -227,34 +227,6 @@ function whenEnded(morph: number, done: () => void) {
     setTimeout(look, 250);
   };
   setTimeout(look, Math.max(250, morph * 1000 * 0.6));
-}
-
-/**
- * Is the thing we would pair actually on screen?
- *
- * A morph is only meaningful between two elements a reader can see. Leave a
- * demo page from the top — which is where the "All examples" link is — and the
- * stage and the title are right there. Leave it with the back button after
- * scrolling down to read the code, and they are hundreds of pixels above the
- * viewport: the old end of the morph is offscreen, so the shared elements fly
- * in from nowhere while the departing snapshot shows the code you were
- * actually looking at. Same transition, completely different reading.
- *
- * When the old end is not in view there is nothing to pair, and a plain
- * crossfade is the honest answer.
- */
-function bothEndsVisible(id: string, opening: boolean): boolean {
-  const selector = opening
-    ? `.card[data-demo='${id}'] .card-stage`
-    : '.stage-wrap';
-  const el = document.querySelector(selector);
-  if (!el) {
-    return false;
-  }
-  const box = el.getBoundingClientRect();
-  // some part of it, not all of it: a half-scrolled stage still reads as the
-  // thing you are travelling from
-  return box.bottom > 0 && box.top < window.innerHeight;
 }
 
 function pair(

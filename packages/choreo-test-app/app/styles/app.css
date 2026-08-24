@@ -333,13 +333,12 @@ button {
 }
 
 .card {
-  /* Twenty-six live demos is a lot to keep painting. Offscreen cards are
-     skipped entirely — their animations do not run and their pixels are not
-     produced — which is most of what the machine was doing while a transition
-     needed the frames. `auto` remembers each card's last size, so the scroll
-     bar does not jump as they come and go. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
+  /* NOT content-visibility: auto. It cut the gallery's idle cost to almost
+     nothing — 3 running animations instead of dozens — and made the transition
+     worse, not better: a skipped card is not painted, so the card the morph
+     travels to has nothing in it to capture, and cards entering and leaving
+     the skip list during the scroll restore relayout mid-transition. Measured
+     idle cost is not the thing to optimise if it breaks the capture. */
   display: flex;
   flex-direction: column;
   min-width: 0;
