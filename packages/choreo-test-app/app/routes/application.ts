@@ -88,8 +88,13 @@ function demoIdOf(info: Transition['to']): string | undefined {
 export default class ApplicationRoute extends Route {
   @service declare router: RouterService;
   private wrapping = false;
-  /** where the gallery was standing, so the back button can put it back */
-  private galleryScroll = 0;
+  /**
+   * Where the gallery was standing, so the back button can put it back.
+   * Null until the gallery has actually been left: a demo loaded standalone
+   * has no position to restore, and pretending "0" was one sends the stage
+   * flying toward a card thousands of pixels below the fold.
+   */
+  private galleryScroll: number | null = null;
 
   constructor(owner: Owner) {
     super(owner);
@@ -114,14 +119,42 @@ export default class ApplicationRoute extends Route {
     }
 
     /**
-     * Where the arriving page wants the window.
+     * Where the arriving page wants the window — applied AFTER the new page
+     * has rendered, so the value is clamped against the right height.
      *
      * Going back to the gallery is the only case with somewhere to return to.
      * Everything else starts at the top — including demo to demo, which can be
      * asked for from the pager at the very BOTTOM of the page: keeping the
      * scroll there lands you at the foot of a demo you have not seen yet.
+     *
+     * The standalone case is the subtle one. A demo opened by URL has no
+     * saved gallery position, and "top of the gallery" is wrong twice over:
+     * the card this page pairs with sits far below the fold, so the flight
+     * aims off-screen and the landing reads as a jump. With nothing to
+     * restore, the gallery is scrolled so THAT CARD is in view — the stage
+     * flies to something the eye can follow.
      */
-    const scrollTo = closing ? this.galleryScroll : 0;
+    const settle = () => {
+      if (!closing) {
+        window.scrollTo(0, 0);
+        return;
+      }
+      if (this.galleryScroll !== null) {
+        window.scrollTo(0, this.galleryScroll);
+        return;
+      }
+      const card = id
+        ? document.querySelector<HTMLElement>(`.card[data-demo='${id}']`)
+        : null;
+      if (card) {
+        const box = card.getBoundingClientRect();
+        const centred =
+          window.scrollY + box.top - (window.innerHeight - box.height) / 2;
+        window.scrollTo(0, Math.max(0, centred));
+      } else {
+        window.scrollTo(0, 0);
+      }
+    };
 
     const morph = BASE * factor();
     // Instant means instant: no snapshot, no layers, no one-frame animation
@@ -129,7 +162,7 @@ export default class ApplicationRoute extends Route {
     // to the top of the new page, after the render, when the new page's height
     // is what the scroll is clamped against.
     if (morph === 0) {
-      requestAnimationFrame(() => window.scrollTo(0, scrollTo));
+      requestAnimationFrame(settle);
       return;
     }
     const t = times(morph);
@@ -181,7 +214,7 @@ export default class ApplicationRoute extends Route {
       const view = animateView(async () => {
         await transition.retry();
         resumeArrivals = quietTheRest();
-        window.scrollTo(0, scrollTo);
+        settle();
       });
 
       view

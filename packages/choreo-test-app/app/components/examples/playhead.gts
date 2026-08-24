@@ -220,6 +220,7 @@ export class Playhead extends Component {
     this.stage = el;
     this.watcher = new ResizeObserver(() => {
       this.spots.clear();
+      this.rest = null;
       this.measureRail();
       this.paint();
     });
@@ -264,7 +265,7 @@ export class Playhead extends Component {
     const root = this.stage;
     const el = root?.querySelector<HTMLElement>(`[data-cue="${cue}"]`);
     if (!root || !el) {
-      return this.home;
+      return this.home();
     }
     let x = 0;
     let y = 0;
@@ -294,7 +295,21 @@ export class Playhead extends Component {
    * is headed anyway — clears the transport and reads as a hand waiting next
    * to the thing it is about to touch, rather than parked in dead space.
    */
-  private get home(): Point {
+  /** measured once, invalidated with the spots — see `home` */
+  private rest: Point | null = null;
+
+  private home(): Point {
+    // ONE home per layout, cached like the cue spots. The score both starts
+    // and ends on this point, and the two measurements bracket the whole run
+    // — by the final beat the card is a different shape (the order is placed)
+    // and its own springs are still settling, so a home computed live drifts
+    // between the first paint and the last and the hand "ends somewhere
+    // else". Offsets rather than getBoundingClientRect for the same reason
+    // `place` uses them: a measured rectangle is wherever the animation has
+    // got to.
+    if (this.rest) {
+      return this.rest;
+    }
     const el = this.stage;
     const w = el?.clientWidth ?? 320;
     const h = el?.clientHeight ?? 380;
@@ -311,14 +326,19 @@ export class Playhead extends Component {
     if (!card || !el) {
       return { x: w * 0.82, y: h * 0.4 };
     }
-    const box = card.getBoundingClientRect();
-    const root = el.getBoundingClientRect();
-    const left = box.left - root.left;
-    const top = box.top - root.top;
-    return {
-      x: Math.min(left + box.width + 34, w - 26),
-      y: Math.max(top + box.height * 0.32, 26),
+    let left = 0;
+    let top = 0;
+    let node: HTMLElement | null = card;
+    while (node && node !== el) {
+      left += node.offsetLeft;
+      top += node.offsetTop;
+      node = node.offsetParent as HTMLElement | null;
+    }
+    this.rest = {
+      x: Math.min(left + card.offsetWidth + 34, w - 26),
+      y: Math.max(top + card.offsetHeight * 0.32, 26),
     };
+    return this.rest;
   }
 
   /* — painting the hand — */
@@ -331,7 +351,7 @@ export class Playhead extends Component {
    * "sample, don't play" — the values exist, they are simply told where to be.
    */
   private paint = () => {
-    const ghost = ghostAt(this.t, CLIPS, this.place, this.home);
+    const ghost = ghostAt(this.t, CLIPS, this.place, this.home());
     this.hx.jump(ghost.x);
     this.hy.jump(ghost.y);
     this.hs.jump(1 - 0.26 * ghost.down);

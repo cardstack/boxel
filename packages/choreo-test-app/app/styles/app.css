@@ -3711,6 +3711,13 @@ html[data-gm-dragging] * {
   background: rgba(var(--surface-tint-rgb), 0.08);
 }
 
+/* the tap's own flash — hover is gated to hover-capable devices above, so
+   touch needs feedback of its own, one step brighter than the hover fill
+   so it reads against the rail in dark */
+.slot:active {
+  background: rgba(var(--surface-tint-rgb), 0.14);
+}
+
 @media (hover: hover) {
   .slot:hover {
     background: rgba(var(--surface-tint-rgb), 0.08);

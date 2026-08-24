@@ -85,7 +85,11 @@ export function compile(beats: Beat[]): { clips: Clip[]; duration: number } {
   for (const beat of beats) {
     clips.push({ ...beat, end: at + beat.ms, from: anchor, start: at });
     at += beat.ms;
-    if (beat.kind === 'move' && beat.cue) {
+    if (beat.kind === 'move') {
+      // a cue-less move is the walk home, so it must also CLEAR the anchor:
+      // a hold that follows it holds at home, not back at the last control —
+      // otherwise the hand walks home and then snaps to wherever it last
+      // clicked the moment the hold takes over.
       anchor = beat.cue;
     }
   }

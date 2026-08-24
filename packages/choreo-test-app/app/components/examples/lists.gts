@@ -53,8 +53,16 @@ export class Lists extends Component {
         </div>
 
         <c.Parallel>
-          {{! the names only translate — they never change size }}
-          <c.Move @of={{c.kept "name"}} @spring={{quick}} @size={{false}} />
+          {{! the names only translate — they never change size. @swap="none":
+              this demo hides the leaver itself (the Hold below) and flies the
+              new element as the one visible skin — the default crossfade
+              would fade the flight instead of showing it. }}
+          <c.Move
+            @of={{c.kept "name"}}
+            @spring={{quick}}
+            @size={{false}}
+            @swap="none"
+          />
           {{! the columns only change height — they never move }}
           <c.Move @of={{c.moved "column"}} @spring={{quick}} />
           <c.Hold @of={{c.removed "name"}} @opacity={{0}} />

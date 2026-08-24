@@ -355,6 +355,7 @@ export class ChoreoRun implements Run {
     }
     this.playing = false;
     this.setPaused(true);
+    this.scheduleRestill();
   }
 
   play() {
@@ -458,6 +459,7 @@ export class ChoreoRun implements Run {
       }
     }
     this.setPaused(true);
+    this.scheduleRestill();
     if (gate.auto !== undefined) {
       this.autoTimer = setTimeout(() => {
         if (this.parkedAt === gate && !this.cancelled) {
@@ -536,6 +538,64 @@ export class ChoreoRun implements Run {
       this.playing = true;
       this.setPaused(false);
       this.startTicking();
+      return;
+    }
+    this.scheduleRestill();
+  }
+
+  /**
+   * The one cost WAAPI acceleration charges a scrubbable run: a finished
+   * accelerated animation commits its finals asynchronously, and that
+   * commit can land AFTER a still's jump and overwrite it. So a still is
+   * re-asserted on the two frames after it is entered — by then any
+   * pending commit has landed, and the computed frame wins again.
+   */
+  private restillPending = 0;
+
+  private scheduleRestill() {
+    if (this.restillPending > 0) {
+      return;
+    }
+    this.restillPending = 2;
+    const pass = () => {
+      if (this.playing || this.cancelled) {
+        this.restillPending = 0;
+        return;
+      }
+      this.restill();
+      this.restillPending -= 1;
+      if (this.restillPending > 0) {
+        frame.postRender(pass);
+      }
+    };
+    frame.postRender(pass);
+  }
+
+  private restill() {
+    const now = this.master;
+    for (const t of this.tracks) {
+      const { cue } = t;
+      const ve = cue.sprite.node.visualElement;
+      if (!ve || cue.camera || cue.tether) {
+        continue;
+      }
+      if (!t.started && t.origin && now < t.start) {
+        // scrubbed back before its start: stand the origin up again
+        for (const key in t.origin) {
+          ve.getValue(key, t.origin[key]!)!.jump(t.origin[key]!);
+        }
+        ve.render();
+      } else if (
+        t.started &&
+        !t.controls &&
+        !t.delivery &&
+        !t.loopAnimation &&
+        (cue.target || cue.flight) &&
+        now >= t.start &&
+        now < t.end
+      ) {
+        this.sampleStill(t, now);
+      }
     }
   }
 
@@ -1068,12 +1128,13 @@ export class ChoreoRun implements Run {
       cue,
       this.options.inherit,
     );
-    // Every run-driven value stays on the main-thread driver: an
-    // accelerated (WAAPI) animation commits its finals asynchronously,
-    // which lands AFTER a scrub's origin jump and overwrites it. A handle
-    // that can seek needs values it can sample, and this is the switch
-    // motion provides for exactly that.
-    transition['onUpdate'] ??= noop;
+    // Playback rides the platform: plain tweens and springs are left free
+    // to accelerate onto WAAPI, off the main thread — a gallery of live
+    // demos cannot afford a JS driver for every value. The cost is one
+    // race: a finished accelerated animation commits its finals
+    // asynchronously, which can land AFTER a scrub's jump and overwrite
+    // it. Stills pay for the acceleration by re-asserting themselves on
+    // the frames after they are entered (scheduleRestill).
     t.controls = animateTarget(ve, {
       ...cue.target,
       transition,
