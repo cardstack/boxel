@@ -42,7 +42,7 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-unused-vars': [
       'error',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
     ],
   },
   overrides: [
@@ -89,12 +89,11 @@ module.exports = {
         '@typescript-eslint/no-empty-function': 'off',
         '@typescript-eslint/no-unused-vars': [
           'error',
-          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+          { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' },
         ],
         'prefer-const': 'off',
         '@typescript-eslint/no-explicit-any': 'off',
-        '@typescript-eslint/ban-types': 'off',
-        // The rules `ban-types` was split into, off for the same reason.
+        // `{}` and `Function` are used deliberately, mostly in type plumbing.
         '@typescript-eslint/no-empty-object-type': 'off',
         '@typescript-eslint/no-unsafe-function-type': 'off',
         '@typescript-eslint/no-wrapper-object-types': 'off',
@@ -136,7 +135,6 @@ module.exports = {
       extends: ['plugin:n/recommended'],
       rules: {
         'n/no-unpublished-require': 'off',
-        '@typescript-eslint/no-var-requires': 'off',
         // Successor to the rule above.
         '@typescript-eslint/no-require-imports': 'off',
       },
