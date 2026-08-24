@@ -1,20 +1,15 @@
 # Choreography
 
-Region-scoped, changeset-driven animation for glimmer-motion: the part of
-Cardstack's legacy `@cardstack/boxel-motion` that Motion's per-element model
-does not cover, rebuilt on the motion-dom engine. This document is
-self-contained — it records what the legacy package was, what it was reaching
-for, what we keep, what we drop, and the API this repo commits to.
+Region-scoped, changeset-driven animation: the part of the problem Motion's
+per-element model does not cover, built on the motion-dom engine. This is the
+reference for what `<Choreo>` is and what it commits to.
 
 - [Goal](#goal)
-- [Archaeology: boxel-motion](#archaeology-boxel-motion)
-- [What bento-boxel needed it for](#what-bento-boxel-needed-it-for)
-- [Keep · adapt · drop](#keep--adapt--drop)
 - [API](#api)
 - [Semantics](#semantics)
-- [Demoable capability](#demoable-capability)
 - [Tests](#tests)
-- [Phases](#phases)
+
+Nested regions and beacons: [nested-choreo.md](nested-choreo.md).
 
 ## Goal
 
@@ -30,10 +25,10 @@ elements have to be read together and moved **as one scene**:
   seat is measured, the clone flies home"
 - "this panel's `left` starts at _that_ container's measured width"
 
-Every one of those is hand-built in bento-boxel today with `setTimeout`s that
-must silently agree with a spring, `getBoundingClientRect` calls in a service,
-and z-index flags cleared in `afterRender`. The goal is a first-class way to
-say them, in the template, that rides the same engine as everything else:
+Each of those is otherwise hand-built: `setTimeout`s that must silently agree
+with a spring, `getBoundingClientRect` calls in a service, and z-index flags
+cleared in `afterRender`. The goal is a first-class way to say them, in the
+template, riding the same engine as everything else:
 
 1. **A changeset.** A region observes a render pass and hands the animation the
    elements that were inserted, removed, and kept — with their measured bounds
@@ -48,150 +43,6 @@ say them, in the template, that rides the same engine as everything else:
 5. **Bounds are values an author can read**, relative to the region, the
    parent, or the page, so one participant's motion can be computed from
    another's measurement.
-
-## Archaeology: boxel-motion
-
-`packages/boxel-motion` lived in the cardstack/boxel monorepo until commit
-`394503e3b7` ("Drop the unused boxel-motion package"); the tree is recoverable
-from `394503e3b7^`. About 4,000 lines of addon and a 12-route demo app. It was
-an unfinished research project — but every idea in it was extracted from a real
-Boxel transition, which is why it is the reference, not a curiosity.
-
-### The model
-
-```
-<AnimationContext @use={{this.transition}}>      ← region; a div; hosts the orphans
-  <div {{sprite id="card-1" role="card"}}>        ← participant: id for identity, role for grouping
-```
-
-- **`AnimationsService`** — one service. A context's render detector (a getter
-  consuming `VOLATILE_TAG`, re-evaluated on every render pass _before_ the DOM
-  is patched) snapshots every sprite's bounds and computed style, schedules
-  `maybeTransition` in `afterRender`, which snapshots again, diffs, and runs a
-  `restartableTask` (a new render interrupts and restarts).
-- **`AnimationParticipantManager`** — matches removed elements to participants
-  by element and inserted ones by `id`; an inserted sprite whose id matches a
-  removed one becomes one _kept_ sprite with a **`counterpart`** (the old
-  element) — the seed of a cross-fade / clone feature that was never finished.
-  Maintained a **`DOMRefNode`** shadow tree so a removed-but-still-animating
-  node could be pruned and grafted onto its nearest live ancestor.
-- **`Changeset`** — `insertedSprites`, `removedSprites`, `keptSprites`, plus
-  `spritesFor({ id?, role?, type? })` / `spriteFor(...)`.
-- **`Sprite`** — `id`, `role`, `type: Inserted | Removed | Kept` (an
-  `Intermediate` enum member was declared and never used), `element`,
-  `initialBounds` / `finalBounds` as **`ContextAwareBounds`** (`element`,
-  `parent`, `context` rects; `relativeToContext`, `relativeToParent`,
-  `relativeToPosition`), `boundsDelta`, `initialComputedStyle` /
-  `finalComputedStyle`, and `initial` / `final` value maps (`x`, `y`, `width`,
-  `height`, `top`… as `px` strings, plus every computed style) that steps read
-  when no explicit `from`/`to` was given. `lockStyles()` pinned a removed
-  sprite at its last bounds with `position: absolute`.
-- **Orphans** — a removed sprite's element was re-appended into the context's
-  orphan container and locked in place so it could keep animating after
-  Glimmer had taken it out of the tree. Cleared at the start of every run.
-- **Behaviors** — the _how_ of a step:
-  - `SpringBehavior` (stiffness/damping/mass, overshoot clamping, rest
-    thresholds; generated frames at 60 fps and carried velocity)
-  - `TweenBehavior` (duration + easing: linear, cosine ease-in/out)
-  - `StaticBehavior` (hold a value for a duration; **`fill: false` by default**
-    → released when its window ends; `fill: true` → stays)
-  - `WaitBehavior` (occupy a sprite's timeline with no property at all)
-- **`AnimationDefinition`** — the _what_: a timeline tree
-  `{ type: 'sequence' | 'parallel', animations: [...] }` whose leaves are
-  `{ sprites: Set<Sprite>, properties: { opacity: { from, to } | value },
-timing: { behavior, duration?, delay? } }`. Properties without `from`/`to`
-  read the sprite's measured `initial`/`final`.
-- **`OrchestrationMatrix`** — compiled the tree into one row of frames per
-  sprite, column = 1/60 s; sequences append columns, parallels overlay them;
-  a step that should not fill had its final frame's property dropped from the
-  forward-fill. Transform parts (`translateX`, `scale`…) were re-composed into
-  a `transform` string. Played through WAAPI with `easing: linear`.
-- **Debugging** — `@debugging` put a dashed border on the context and a dotted
-  one on sprites; the transition runner `console.table`d every sprite with
-  its type and bounds; the participant manager printed the DOMRef tree with
-  ➕/❌ per node.
-
-### The demos (what they proved)
-
-| Route                                                                                    | Transition                   | Idea                                                                                                                                                                                                                                                              |
-| ---------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `motion-study`                                                                           | card grid ⇄ expanded card    | **the flagship**: sequence of parallels; fade closing content → move cards + hold z-index layers (closing content 2, cards 1, _non-moving_ cards 0) + **wait** on removed cards → fade new content in. `nonAnimatingCardSprites` filtered by `boundsDelta === 0`. |
-| `split-view`                                                                             | sidebar open/close           | one sprite's `left` computed **from another sprite's measured width**; `StaticBehavior({fill:true})` to pin content width                                                                                                                                         |
-| `list`                                                                                   | names move between two lists | per-sprite sequence: translate, _then_ resize; `x`/`y` shorthand                                                                                                                                                                                                  |
-| `simple-orchestration`                                                                   | one box                      | nested sequence/parallel; spring after tweens                                                                                                                                                                                                                     |
-| `routes`                                                                                 | route swap                   | inserted slides in from its final width, removed slides out by its initial width                                                                                                                                                                                  |
-| `interruption`                                                                           | ball between targets         | spring interruption carries velocity                                                                                                                                                                                                                              |
-| `prune-and-graft` / `removed-sprite-interruption` / `nested-contexts` / `nested-sprites` | —                            | the DOMRef tree: a removed parent animating for 9 s while its child is kept and moved; `counterpart` faded out statically                                                                                                                                         |
-| `in-out`                                                                                 | toggle                       | enter / leave pairs                                                                                                                                                                                                                                               |
-
-Carried in the flagship's source:
-
-```ts
-// TODO convert to SpringBehavior when its duration can be referenced by other animations
-```
-
-They could not sequence _after_ a spring. That is why the flagship uses a
-tween where it wanted a spring.
-
-## What bento-boxel needed it for
-
-The port (`/Users/chris/Projects/bento-boxel`) builds these by hand today:
-
-| Site                                 | Shape                                                                                                                                                                                                                  | Legacy twin               |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `workspace.launchDocFlight`          | clone flies tile → page while the page stage squeezes and releases, opacity offset by 12 % / 18 % of `MORPH_MS` — written as raw `style.transition` strings because the stage and the clone could not share a timeline | `motion-study`            |
-| `workspace.closeDoc` → `finishClose` | squeeze → wait `MORPH_MS*0.55` → switch view → `afterRender` → **measure the seat** → fly home                                                                                                                         | `routes` + `motion-study` |
-| `detail-flight`                      | box magic-moves while two skins cross-fade; canvas zooms "with the same spring"                                                                                                                                        | `split-view`              |
-| `build-flight`                       | card → schema node, `bd-hero2-arrive` class held 900 ms                                                                                                                                                                | counterpart               |
-| `flight-overlay`                     | release point → shelf slot                                                                                                                                                                                             | `in-out`                  |
-| `document-view.restore`              | version comes forward → wait `RESTORE_MS` → becomes the doc → stack re-forms                                                                                                                                           | `simple-orchestration`    |
-| `document-view.fold`                 | `folding=true` + `setTimeout(DECK_MS)` purely to keep a leaver alive                                                                                                                                                   | `WaitBehavior`            |
-
-Stacking: `lib/layers.ts` is a good named scale (`ghost … flight`) and stays.
-Every _transient_ use of it is a flag plus a timer: `justDropped` cleared in
-`afterRender` (with a comment explaining that the z "lingers until the next
-render"), `bd-hero2-arrive` 900 ms, `bd-line-hot` 900 ms, `citedId` 1800 ms,
-`revealPulse` 1400 ms, `shared` 1600 ms. Measurement: 43
-`getBoundingClientRect` calls, 24 of them in the workspace service.
-
-Not choreography: the Build hero recentring, the inheritance-chain magic move,
-the shelf sheet — those are `layout=true` + `<Presence>` and stay that way.
-
-## Keep · adapt · drop
-
-**Keep (reference syntax).** Sprite identity (`id`, `role`), the three sprite
-types, `spritesFor` selection, `initial`/`final`/`boundsDelta` bounds in
-context/parent/page spaces, values defaulting to measured bounds, the
-sequence/parallel timeline tree, spring / tween / static (windowed or filled)
-/ wait behaviors, orphaning of removed participants, the render detector, the
-no-animation-on-first-render rule, restart-on-interrupt, and the debugging
-surface.
-
-**Adapt.**
-
-- `@use={{fn}}` → the timeline is declared **in the template** as a block tree
-  yielded by the region. The _structure_ of `AnimationDefinition` survives
-  exactly; only its host changes.
-- Behaviors → motion-dom transitions. A `Spring` step is the engine's spring
-  (velocity carried on interruption by `MotionValue`s, not re-measured from a
-  paused WAAPI animation); `Tween` is the engine's tween with its easings.
-- Frame matrix → a cue list. Steps compile to start offsets and durations; the
-  engine runs each value. **Spring durations are computed ahead of time with
-  `calcGeneratorDuration`**, so a sequence can follow a spring — the reference
-  gets the feature the reference lacked.
-- `counterpart` → when an inserted participant's `id` matches a removed one in
-  the same pass, the removed element is kept as the kept sprite's
-  `counterpart` (orphaned, locked at its old bounds) so a step can cross-fade
-  it. This is the legacy intent, finished.
-
-**Drop.**
-
-- The `DOMRefNode` shadow tree and prune-and-graft. Replaced by one rule:
-  only the _topmost_ removed participants are orphaned; removed participants
-  inside them stay in their subtree and remain addressable.
-- Computed-style snapshots of every property on every render. Bounds only;
-  non-geometric `from` values come from the engine's current value.
-- WAAPI-linear-easing playback, `style-value-types`, ember-concurrency.
 
 ## API
 
@@ -233,19 +84,23 @@ participant is a normal motion element.
 ```
 
 `<Choreo>` renders a `div` (`...attributes`), hosts the render detector and
-the orphan layer, and yields `c`:
+the orphan layer, and yields `c`. A `{{motion}}` joins the nearest region;
+an inner `<Choreo>` is a separate scene. How they nest, and how a beacon
+shares one measurement across that boundary:
+[nested-choreo.md](nested-choreo.md).
 
-| yield                                           | legacy                                           | meaning                                                                                                                 |
-| ----------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| `c.Sequence` / `c.Parallel`                     | `type: 'sequence' \| 'parallel'`                 | timeline blocks; nest freely                                                                                            |
-| `c.Tween`                                       | `TweenBehavior`                                  | `@ms`, `@ease`, `@delay`, `@from=(hash …)`, properties as flat args                                                     |
-| `c.Spring`                                      | `SpringBehavior`                                 | `@spring=(hash stiffness damping mass bounce visualDuration)`, `@delay`, `@from`, properties                            |
-| `c.Move`                                        | `translateX {} translateY {} width {} height {}` | FLIP every kept sprite from its initial bounds to its final; `@spring` or `@ms`/`@ease`; `@size={{false}}` to move only |
-| `c.Hold`                                        | `StaticBehavior`                                 | set properties for a window: `@ms`, or the enclosing block's span; `@fill={{true}}` keeps them after the run            |
-| `c.Wait`                                        | `WaitBehavior`                                   | `@ms`; keeps the sprites alive and occupies the sequence                                                                |
-| `c.all` / `c.kept` / `c.inserted` / `c.removed` | `spritesFor({type})`                             | optional role argument: `(c.kept 'card')`                                                                               |
-| `c.role 'card'` / `c.id 'card-1'`               | `spritesFor({role})` / `spriteFor({id})`         |                                                                                                                         |
-| `c.still 'card'` / `c.moved 'card'`             | the `boundsDelta` filter from motion-study       | kept sprites whose bounds did / did not change                                                                          |
+| yield                                           | legacy                                           | meaning                                                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.Sequence` / `c.Parallel`                     | `type: 'sequence' \| 'parallel'`                 | timeline blocks; nest freely                                                                                                                                                                                                                                                                                  |
+| `c.Tween`                                       | `TweenBehavior`                                  | `@ms`, `@ease`, `@delay`, `@from=(hash …)`, properties as flat args                                                                                                                                                                                                                                           |
+| `c.Spring`                                      | `SpringBehavior`                                 | `@spring=(hash stiffness damping mass bounce visualDuration)`, `@delay`, `@from`, properties                                                                                                                                                                                                                  |
+| `c.Move`                                        | `translateX {} translateY {} width {} height {}` | FLIP every kept sprite from its initial bounds to its final; `@spring` or `@ms`/`@ease`; `@size={{false}}` to move only                                                                                                                                                                                       |
+| `c.Hold`                                        | `StaticBehavior`                                 | set properties for a window: `@ms`, or the enclosing block's span; `@fill={{true}}` keeps them after the run                                                                                                                                                                                                  |
+| `c.Wait`                                        | `WaitBehavior`                                   | `@ms`; keeps the sprites alive and occupies the sequence                                                                                                                                                                                                                                                      |
+| `c.all` / `c.kept` / `c.inserted` / `c.removed` | `spritesFor({type})`                             | optional role argument: `(c.kept 'card')`                                                                                                                                                                                                                                                                     |
+| `c.role 'card'` / `c.id 'card-1'`               | `spritesFor({role})` / `spriteFor({id})`         |                                                                                                                                                                                                                                                                                                               |
+| `c.still 'card'` / `c.moved 'card'`             | the `boundsDelta` filter from motion-study       | kept sprites whose bounds did / did not change                                                                                                                                                                                                                                                                |
+| `c.received 'card'` / `c.counterpart 'card'`    | —                                                | the two halves of a counterpart match: kept-because-it-claimed-a-leaver, and the claimed leaver — so a flight step fires only on flight passes, never on an ordinary resize. `received` also matches a far match; `counterpart` is same-region only, since a far match's leaver is released to its own region |
 
 Any property value may be a **function** `(sprite, changeset) => value`; it is
 resolved at run time against the changeset. That is how split-view's
@@ -330,23 +185,6 @@ final place, so this is FLIP; the width/height it borrows are handed back to the
 list (sprite, step, start, duration) — the legacy `logChangeset` plus the
 timeline the legacy could only print as a matrix.
 
-## Demoable capability
-
-A new **Choreography** group in the test-app gallery:
-
-1. **Motion study** — the legacy flagship, verbatim in intent: a grid of cards;
-   tap one and it expands to the stage while the others make room; closing
-   content fades _first_, the cards move _then_ (with the non-moving ones held
-   behind and the removed card held for the fade), the new content fades in
-   _last_. With a spring on the move — the thing the legacy could not do.
-2. **Split view** — a panel whose content's `left` is computed from the
-   container's measured width; the content's width pinned by a filled hold.
-3. **Lists** — names crossing between two lists with a move-then-resize
-   sequence per sprite, orphaned leavers sliding out.
-
-Each is a catalogue entry with its template excerpt shown beside it, like the
-existing demos.
-
 ## Tests
 
 `test-app/tests/integration/choreo/`:
@@ -373,81 +211,3 @@ existing demos.
   does not strand orphans
 - **counterpart** — an inserted id matching a removed one carries the old
   element as `counterpart`
-
-## Phases
-
-1. **Framework** (this change): `id`/`role` on `{{motion}}`; `<Choreo>` with
-   snapshot, changeset, orphans, bounds; the seven step components and the
-   selectors; compilation and execution on motion-dom; Presence completion;
-   debug output; tests; the three gallery demos; README section.
-2. **bento-boxel**: convert `closeDoc`/`launchDocFlight` (the proving case —
-   it needs every feature), then `detail-flight`, `document-view.restore` /
-   `fold`, and retire the six timed z-index flags behind `Hold`s.
-3. **Later**: `counterpart` cross-fade helper step; a `c.scrub` for
-   scroll-driven timelines; per-sprite `onStart`/`onComplete` hooks.
-
-## Linear backlog coverage
-
-The Cardstack Linear workspace holds the legacy project ("Boxel Motion MVP",
-60 issues, 2021–2022) plus a handful of host-app animation tickets that were
-waiting on it. Checked on 2026-08-23 against phase 1. Issue ids are
-`linear.app/cardstack/issue/<id>`.
-
-**Covered by phase 1**
-
-| issue                                                                                                    | what it asked                                                                                    | here                                                                                         |
-| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| CS-2527 Orchestration                                                                                    | sequencing, parallel, serial behaviors per sprite                                                | `c.Sequence` / `c.Parallel`                                                                  |
-| CS-284 Update Motion API                                                                                 | behavior per property; velocity carried on interruption; keyframes from a function               | the engine's transitions; `Spring` carries velocity; property functions                      |
-| CS-265 Interrupting animations                                                                           | measure with the animation removed; initial = current spot; a removed id that comes back is kept | the engine's values; a second dirty pass restarts from live values; `counterpart`            |
-| CS-266 Nested sprites                                                                                    | orphans stay nested                                                                              | only the topmost removed element is orphaned                                                 |
-| CS-276 Removed-here / inserted-there is a kept sprite                                                    |                                                                                                  | `counterpart`                                                                                |
-| CS-4173 Interruption and a removed counterpart both mattering                                            | a phantom of the old element while the new one moves                                             | the kept sprite keeps its live values; the counterpart is a separate orphan with its own row |
-| CS-4524 (3) A card controlling its contents while a layout above moves it                                |                                                                                                  | a nested `<Choreo>` inside a moving participant measures its own pass                        |
-| CS-3957 (1, 3, 4) Variant/size changes with content revealed/hidden; same-context orchestration; "stops" |                                                                                                  | `Move` + inserted/removed content; `Wait`                                                    |
-| CS-2536 CompoundValue (translate + scale order)                                                          |                                                                                                  | the engine's transform order                                                                 |
-| CS-273 Endless `maybeTransition` under the inspector                                                     |                                                                                                  | a run starts only on a dirty changeset                                                       |
-| CS-3774 / CS-2537 README; drop the keyframe generator                                                    |                                                                                                  | this document; no generator                                                                  |
-
-**Not covered — phase 3 candidates, most important first**
-
-1. **Far matching across regions** — CS-260 (shipped in the legacy:
-   `sentSprite` / `receivedSprite` between two stable contexts), CS-261
-   (when a context is being destroyed — cross-route), CS-4091 (a _global_
-   changeset that reconciles inserted + removed across contexts and tells
-   each what it may handle), CS-4532 ("focus on cross-plane navigation"),
-   CS-2530 / CS-4066 (which context gets a sprite). Phase 1 matches
-   counterparts only inside one `<Choreo>`; a participant belongs to its
-   nearest region. This is the biggest gap and bento-boxel's own flights
-   are exactly this shape (shelf → canvas, tile → document page, row →
-   detail). Design: one pass-level reconciliation over every region, then
-   a sprite whose counterpart lives in another region is handled by their
-   nearest common ancestor region (or a designated `@scope`), with the
-   orphan locked in page space as it already is.
-2. **Stagger** — CS-3957 (3): "list items animate in sync or staggered".
-   No step has a per-sprite offset. Add `@stagger={{ms}}` (and a
-   direction / origin, as the engine's `stagger()` has) to every step.
-3. **The region as a sprite** — CS-282 (measure contexts like sprites;
-   shipped in the legacy), CS-267 (a context grows/shrinks with its
-   content). The region measures its own box already but does not expose
-   it or move itself. Expose `changeset.region` bounds, and let
-   `<Choreo @id @role>` make its root a participant of the region above.
-4. **Size by transform** — CS-4174: width/height transitions fight
-   translation when both run. Phase 1 animates width/height like the
-   legacy. Add `@via='scale'` on `Move` (scale with the engine's
-   border-radius / shadow correction), or route such sprites to
-   `layout=true` projection.
-5. **Rules** — CS-4739: match elements to animate without a modifier per
-   element. `role` selectors are half of this; a selector-by-CSS query on
-   `@of` would be the rest. Low priority.
-6. **Material recipes** — CS-3968 / CS-4000 (canceled, but the analysis is
-   good): container transform, shared axis, fade, fade-through as named
-   timelines on top of the steps. A recipe layer, after 1–4.
-
-**The host-app tickets this was for** (Miscellaneous Boxel Backlog /
-Connecting Cards Across Contexts, all still open): CS-5320 open/close card
-stack, CS-5326 add/remove a stack, CS-5319 guest ⇄ operator mode, CS-6415
-AI assistant panel, CS-6428 view-code panel, CS-6593 fade-through between
-chat sessions, CS-4744 embedded ⇄ isolated card, CS-4959 a TypeScript-
-friendly high-level API. Every one of them is a region-scoped transition;
-the stack ones need item 1.

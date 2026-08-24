@@ -4,8 +4,9 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import type { PresenceContextProps } from 'motion-dom';
 
+import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
-import type { PresenceHandle } from './presence-types.ts';
+import type { PopMeasurable, PresenceHandle } from './presence-types.ts';
 import { postRender } from './scheduler.ts';
 
 /**
@@ -48,9 +49,17 @@ class Entry<T> implements PresenceHandle {
   readonly id = `presence-${presenceId++}`;
   private children = new Map<string | number, boolean>();
   private subscribers = new Set<() => void>();
+  /** popLayout: the direct children, so they can be measured before the DOM changes */
+  private popCandidates = new Set<PopMeasurable>();
   subscribe(refresh: () => void) {
     this.subscribers.add(refresh);
     return () => this.subscribers.delete(refresh);
+  }
+  popCandidate(node: PopMeasurable) {
+    this.popCandidates.add(node);
+    return () => {
+      this.popCandidates.delete(node);
+    };
   }
   readonly key: string;
   private owner: Presence<T>;
@@ -111,6 +120,20 @@ class Entry<T> implements PresenceHandle {
   }
   /** presence flipped (PresenceChild's isPresent effects): children report again; no children → done at once */
   presenceChanged(present: boolean) {
+    if (!present && this.mode === 'popLayout') {
+      // React's PopChildMeasure measures in getSnapshotBeforeUpdate — BEFORE
+      // the DOM is patched. That timing is the whole of it. This runs from the
+      // diff in `rendered`, which is Glimmer's equivalent slot: the newcomers
+      // for this pass have not been inserted yet, so the leaver's offsetTop is
+      // still the seat it actually occupies.
+      //
+      // Measure it afterwards and you read a layout that already contains the
+      // arrivals: the container has grown, a centred one has re-centred, and
+      // the leaver gets pinned at a place it never was. On a stage that
+      // replays, every generation lands further from home than the last, and
+      // what you see is a stack of ghosts drifting away from the newcomers.
+      this.popCandidates.forEach((node) => node.measureForPop());
+    }
     this.children.forEach((_, k) => this.children.set(k, false));
     postRender(() => this.notify());
     if (!present) {
@@ -141,7 +164,7 @@ class Entry<T> implements PresenceHandle {
   }
 }
 
-export default class Presence<T> extends Component<Signature<T>> {
+export class Presence<T> extends Component<Signature<T>> {
   private entries = new Map<string, Entry<T>>();
   private order: string[] = [];
   private lastItems?: T[];
@@ -184,6 +207,20 @@ export default class Presence<T> extends Component<Signature<T>> {
       );
     }
     if (items !== this.lastItems || this.lastParentPresent !== parentPresent) {
+      // React commits every render, and MeasureLayout's getSnapshotBeforeUpdate
+      // fires for every projecting node on every commit — so a layout change
+      // caused by AnimatePresence is snapshotted like any other. Here the
+      // snapshot is explicit and someone has to ask for it, and the pass that
+      // unmounts a leaver is one nobody else was going to ask about: it is
+      // driven by this component's own bookkeeping, not by a re-render of the
+      // <LayoutGroup> above.
+      //
+      // Without this, `sync` looks broken in exactly one place. The newcomer is
+      // laid out BELOW the leaver (both are in flow — that is what sync means),
+      // animates most of the way up as the leaver fades, and then covers the
+      // last stretch in a single frame when the leaver is finally unmounted,
+      // because that frame was never measured.
+      snapshotOnRender();
       this.lastItems = items;
       this.lastParentPresent = parentPresent;
       this.pendingItems = items;
@@ -287,3 +324,5 @@ export default class Presence<T> extends Component<Signature<T>> {
     {{/each}}
   </template>
 }
+
+export default Presence;

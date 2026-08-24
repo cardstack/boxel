@@ -41,6 +41,7 @@ import {
 import { extractEventInfo } from './event-info.ts';
 import { getContextWindow } from './get-context-window.ts';
 import { isRefObject } from './is-ref-object.ts';
+import { lockTextSelect, unlockTextSelect } from './lock-select.ts';
 import { PanSession } from './pan-session.ts';
 
 type MotionProps = MotionNodeOptions & {
@@ -106,6 +107,11 @@ export class VisualElementDragControls {
    */
   private latestPanInfo: PanInfo | null = null;
 
+  /**
+   * True while a pan session has locked document text selection.
+   */
+  private selectLocked = false;
+
   constructor(visualElement: VisualElement<HTMLElement>) {
     this.visualElement = visualElement;
   }
@@ -123,6 +129,7 @@ export class VisualElementDragControls {
     }
 
     const onSessionStart = (event: PointerEvent) => {
+      this.lockSelect();
       if (snapToCursor) {
         this.snapToCursor(extractEventInfo(event).point);
       }
@@ -333,6 +340,23 @@ export class VisualElementDragControls {
   endPanSession() {
     this.panSession && this.panSession.end();
     this.panSession = undefined;
+    this.unlockSelect();
+  }
+
+  private lockSelect() {
+    if (this.selectLocked) {
+      return;
+    }
+    this.selectLocked = true;
+    lockTextSelect();
+  }
+
+  private unlockSelect() {
+    if (!this.selectLocked) {
+      return;
+    }
+    this.selectLocked = false;
+    unlockTextSelect();
   }
 
   private updateAxis(axis: DragDirection, _point: Point, offset?: Point) {

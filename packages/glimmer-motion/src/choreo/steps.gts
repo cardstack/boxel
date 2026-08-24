@@ -7,8 +7,10 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
+import type { BeaconRef } from './beacons.ts';
 import type {
   Block,
+  Easing,
   PropSource,
   Query,
   SpringSpec,
@@ -48,6 +50,8 @@ const RESERVED = new Set([
   'of',
   'size',
   'spring',
+  'stagger',
+  'to',
 ]);
 
 function propsOf(args: Record<string, unknown>): Record<string, PropSource> {
@@ -64,6 +68,8 @@ interface StepArgs {
   [prop: string]: unknown;
   delay?: number;
   of: Query | Query[];
+  /** milliseconds between one matched sprite and the next, in document order */
+  stagger?: number;
 }
 
 abstract class StepComponent<A extends StepArgs> extends Component<{
@@ -81,13 +87,13 @@ abstract class StepComponent<A extends StepArgs> extends Component<{
 
 export class Tween extends StepComponent<
   StepArgs & {
-    ease?: string | number[];
+    ease?: Easing;
     from?: Record<string, PropSource>;
     ms: number;
   }
 > {
   node(): TimelineNode {
-    const { of, ms, ease, delay, from } = this.args;
+    const { of, ms, ease, delay, from, stagger } = this.args;
     return {
       delay,
       ease,
@@ -96,6 +102,7 @@ export class Tween extends StepComponent<
       ms,
       of,
       props: propsOf(this.args),
+      stagger,
     };
   }
 }
@@ -104,7 +111,7 @@ export class Spring extends StepComponent<
   StepArgs & { from?: Record<string, PropSource>; spring?: SpringSpec }
 > {
   node(): TimelineNode {
-    const { of, spring, delay, from } = this.args;
+    const { of, spring, delay, from, stagger } = this.args;
     return {
       delay,
       from,
@@ -112,6 +119,7 @@ export class Spring extends StepComponent<
       of,
       props: propsOf(this.args),
       spring,
+      stagger,
     };
   }
 }
@@ -119,14 +127,29 @@ export class Spring extends StepComponent<
 export class Move extends StepComponent<
   StepArgs & {
     ease?: string | number[];
+    /** `{{c.beacon 'compose'}}` — fly in from that box rather than from where the sprite was */
+    from?: BeaconRef;
     ms?: number;
     size?: boolean;
     spring?: SpringSpec;
+    /** `{{c.beacon 'trash'}}` — fly out to that box rather than to where the sprite landed */
+    to?: BeaconRef;
   }
 > {
   node(): TimelineNode {
-    const { of, ms, ease, delay, spring, size } = this.args;
-    return { delay, ease, kind: 'move', ms, of, size, spring };
+    const { of, ms, ease, delay, spring, size, from, to, stagger } = this.args;
+    return {
+      delay,
+      ease,
+      from,
+      kind: 'move',
+      ms,
+      of,
+      size,
+      spring,
+      stagger,
+      to,
+    };
   }
 }
 
@@ -134,15 +157,23 @@ export class Hold extends StepComponent<
   StepArgs & { fill?: boolean; ms?: number }
 > {
   node(): TimelineNode {
-    const { of, ms, delay, fill } = this.args;
-    return { delay, fill, kind: 'hold', ms, of, props: propsOf(this.args) };
+    const { of, ms, delay, fill, stagger } = this.args;
+    return {
+      delay,
+      fill,
+      kind: 'hold',
+      ms,
+      of,
+      props: propsOf(this.args),
+      stagger,
+    };
   }
 }
 
 export class Wait extends StepComponent<StepArgs & { ms: number }> {
   node(): TimelineNode {
-    const { of, ms, delay } = this.args;
-    return { delay, kind: 'wait', ms, of };
+    const { of, ms, delay, stagger } = this.args;
+    return { delay, kind: 'wait', ms, of, stagger };
   }
 }
 

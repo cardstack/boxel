@@ -1,11 +1,13 @@
 # glimmer-motion
 
-**[Motion](https://motion.dev) for Glimmer.** Motion's `motion-dom` engine — untouched — bound to Glimmer
-rendering: `{{motion}}`, `<Presence>` (AnimatePresence), `<LayoutGroup>`, `<ReorderGroup>` /
-`<ReorderItem>`, drag. Verified by ports of Motion's own test suites (394 cases).
+The npm package of [Choreo](https://github.com/cardstack/choreo) — Cardstack.
+
+**Motion, Choreo-graphed.** The [Motion](https://motion.dev) engine for Ember — and a timeline for
+the scene. `{{motion}}`, `<Presence>`, `<LayoutGroup>`, Reorder, drag, and `<Choreo>`. Verified by
+ports of Motion's own test suites.
 
 ```gts
-import { motion, Presence, LayoutGroup } from 'glimmer-motion';
+import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
 
 <template>
   <LayoutGroup>
@@ -14,9 +16,10 @@ import { motion, Presence, LayoutGroup } from 'glimmer-motion';
         {{motion
           presence=h
           layoutId=card.id
-          initial=(hash opacity=0)
-          animate=(hash opacity=1)
-          exit=(hash opacity=0)
+          initial=(to opacity=0)
+          animate=(to opacity=1)
+          exit=(to opacity=0)
+          transition=(spring stiffness=300 damping=30)
           drag='x'
           dragSnapToOrigin=true
         }}
@@ -38,6 +41,9 @@ Peers: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glim
 `@glimmer/tracking`, `ember-source >= 5.4`. A v2 addon — Embroider and Vite apps consume it directly, with
 TypeScript types and Glint signatures.
 
+New here? The [guide](https://github.com/cardstack/choreo/blob/main/docs/guide.md) teaches this
+from a Glimmer card rather than from a React translation table.
+
 ## Features
 
 - **Animation** — `initial` / `animate` / `exit`, keyframes, springs/tweens/inertia, variants with
@@ -50,9 +56,18 @@ TypeScript types and Glint signatures.
   re-measured on resize), elastic, momentum, snap to origin, `createDragControls()`, `whileDrag`,
   drag + layout, scroll-while-drag, `correctParentTransform()` / `transformViewBoxPoint()`
 - **Gestures** — `whileHover` / `whileTap` / `whileFocus` / `whileInView` and their handlers,
-  `<MotionConfig>` tree defaults, `useScroll()` / `useInView()` helpers over Motion's `scroll()` / `inView()`
+  `<MotionConfig>` tree defaults, `scrollProgress()` / `InView` over Motion's `scroll()` / `inView()`
 - **Reorder** — `<ReorderGroup>` / `<ReorderItem>`, axis `x` / `y` / `xy` (detected), auto-scroll
-- **Glimmer** — `.gts`, Glint signatures, host hooks isolated so the engine glue can be re-hosted
+- **Choreography** — `<Choreo>`: a changeset and a timeline over a whole render pass, which Motion's
+  per-element model does not have. Sequence/parallel blocks of `Tween` / `Spring` / `Move` (FLIP) /
+  `Hold` / `Wait`; removed participants stay on screen for as long as the timeline names them;
+  `{{beacon}}` points; and far matching, so one identity can cross between two regions
+- **Glimmer** — `.gts`, Glint signatures, named exports, plain-function template helpers
+  (`to` / `spring` / `tween` / `styles` / `start`), and `prefers-reduced-motion` honoured by default
+- **Testing** — `glimmer-motion/test-support`: `animationsSettled()`, `bounds()`, `shape()`,
+  `setupMotion(hooks)`. No `sleep()` in a motion test
+- **Re-hostable** — host hooks are ~40 lines plus the components; everything above that line is
+  framework-free
 
 ## API
 
@@ -98,7 +113,7 @@ upstream commit.
 
 The full story — why the engine is untouched, how the binding was built by porting Motion's test suites and
 what that surfaced — is in the
-[repository README](https://github.com/cardstack/glimmer-motion#readme).
+[repository README](https://github.com/cardstack/choreo#readme).
 
 ## Not ported (yet)
 

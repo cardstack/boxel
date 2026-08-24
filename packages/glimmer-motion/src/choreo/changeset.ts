@@ -2,7 +2,7 @@
  * boxel-motion's Changeset: the sprites one render pass produced, and the
  * spritesFor / spriteFor queries its transitions selected them with.
  */
-import type { ChangesetLike, Query, Sprite } from './types.ts';
+import type { Bounds, ChangesetLike, Query, Sprite } from './types.ts';
 
 const isStill = (s: Sprite) =>
   !s.delta ||
@@ -11,15 +11,32 @@ const isStill = (s: Sprite) =>
     s.delta.width === 0 &&
     s.delta.height === 0);
 
-export default class Changeset implements ChangesetLike {
+export class Changeset implements ChangesetLike {
   readonly inserted: Sprite[];
   readonly kept: Sprite[];
   readonly removed: Sprite[];
 
-  constructor(inserted: Sprite[], removed: Sprite[], kept: Sprite[]) {
+  /**
+   * The box a `{{beacon}}` claimed this pass, or null if nothing claimed that
+   * name. It is a measurement, not a sprite: a beacon is never inserted, kept
+   * or removed, and a missing one is a no-op for whatever wanted to borrow it.
+   *
+   * Closed over rather than stored as a field, so this class stays structurally
+   * identical to ChangesetLike — a property function written against the
+   * concrete Changeset must still accept the interface it is handed.
+   */
+  readonly beacon: (name: string) => Bounds | null;
+
+  constructor(
+    inserted: Sprite[],
+    removed: Sprite[],
+    kept: Sprite[],
+    beacons: Map<string, Bounds> = new Map(),
+  ) {
     this.inserted = inserted;
     this.removed = removed;
     this.kept = kept;
+    this.beacon = (name) => beacons.get(name) ?? null;
   }
 
   get all(): Sprite[] {
@@ -64,6 +81,16 @@ export default class Changeset implements ChangesetLike {
       case 'moved':
         pool = this.kept.filter((s) => !isStill(s));
         break;
+      case 'received':
+        // the receiving half of a counterpart / far match: kept, but only
+        // because an arriving element claimed a leaving one's identity
+        pool = this.kept.filter((s) => s.counterpart);
+        break;
+      case 'counterpart':
+        // the removed half that was claimed — the old element, orphaned so a
+        // step can cross-fade it while its replacement flies
+        pool = this.removed.filter((s) => s.claimed);
+        break;
       default:
         pool = this.all;
     }
@@ -84,3 +111,5 @@ export default class Changeset implements ChangesetLike {
     return found[0] ?? null;
   }
 }
+
+export default Changeset;

@@ -8,6 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
 import {
+  beacon,
   type Changeset,
   Choreo,
   motion,
@@ -21,6 +22,7 @@ import { nextFrame, sleep } from '../../helpers/motion';
 
 const keyOf = (x: { key: string }) => x.key;
 const FAST = { damping: 40, stiffness: 900 };
+const SOFT = { damping: 16, stiffness: 80 };
 
 const cellStyle = (k: string, open: string) =>
   k === open ? 'grid-column: 1 / -1; height: 60px' : 'height: 30px';
@@ -396,6 +398,82 @@ module('Integration | choreo', function (hooks) {
     assert.notOk(find('#card-0'), 'and dropped after it');
   });
 
+  test('received / counterpart select only the two halves of a match, never an ordinary pass', async function (assert) {
+    // The distinction these selectors exist for: `kept` also matches a sprite
+    // whose bounds merely changed — which is every resize the region ever
+    // sees — so a flight step written on `kept` re-fires on passes that are
+    // not flights. `received` and `counterpart` fire only when an identity
+    // actually changed hands.
+    const seenReceived: Sprite[] = [];
+    const seenCounterpart: Sprite[] = [];
+    const grabReceived = (s: Sprite) => {
+      seenReceived.push(s);
+      return 1;
+    };
+    const grabCounterpart = (s: Sprite) => {
+      seenCounterpart.push(s);
+      return 0;
+    };
+    class App extends Component {
+      @tracked gen = 0;
+      @tracked wide = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      get width() {
+        return this.wide ? 'width:120px' : 'width:60px';
+      }
+      <template>
+        <Choreo as |c|>
+          {{#each (array this.gen) key="@identity" as |g|}}
+            <div
+              id="card-{{g}}"
+              style="{{this.width}};height:30px"
+              {{motion id="card" role="card"}}
+            ></div>
+          {{/each}}
+          <c.Tween
+            @of={{c.received "card"}}
+            @opacity={{grabReceived}}
+            @ms={{80}}
+          />
+          <c.Tween
+            @of={{c.counterpart "card"}}
+            @opacity={{grabCounterpart}}
+            @ms={{80}}
+          />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    app!.wide = true;
+    await settled();
+    assert.strictEqual(
+      seenReceived.length,
+      0,
+      'a resize is kept, not received'
+    );
+    assert.strictEqual(seenCounterpart.length, 0, 'and claims nothing');
+    app!.gen = 1;
+    await settled();
+    assert.strictEqual(seenReceived.length, 1, 'the arriving element');
+    assert.strictEqual(seenReceived[0]!.element.id, 'card-1');
+    assert.strictEqual(seenReceived[0]!.type, 'kept', 'is a kept sprite');
+    assert.strictEqual(seenCounterpart.length, 1, 'the claimed leaver');
+    assert.strictEqual(seenCounterpart[0]!.element.id, 'card-0');
+    assert.strictEqual(
+      seenCounterpart[0],
+      seenReceived[0]!.counterpart,
+      'and they are the two halves of one match'
+    );
+    await sleep(140);
+    await nextFrame();
+    assert.notOk(find('#card-0'), 'the counterpart is released with its row');
+  });
+
   test('an interrupted Move hands its borrowed size back, so the next pass measures a true layout', async function (assert) {
     // The failure this pins: switching the open card mid-flight left the old
     // hero frozen at its animating width, which squeezed every 1fr track
@@ -563,5 +641,338 @@ module('Integration | choreo', function (hooks) {
     await nextFrame();
     assert.notOk(find('#leaver'), 'released by the new run');
     assert.strictEqual((find('#stay') as HTMLElement).style.zIndex, '');
+  });
+
+  /**
+   * Two halves of one guarantee, both of which ember-animated gets right.
+   *
+   * Position: the release that hands borrowed values back before a re-measure
+   * has to land BEFORE the measurement, or `final` comes back with the very
+   * transform the run is undoing still applied, and the element jumps.
+   *
+   * Speed: ember-animated sums a corrective curve onto the one it interrupts,
+   * which carries velocity implicitly. A spring takes a velocity outright, so
+   * the equivalent here is to hand it over. The signature of getting it right
+   * is overshoot — a box reversed mid-flight keeps going the old way for a
+   * moment before it turns, exactly as a thrown object would.
+   */
+  test('an interrupted move keeps its place and its speed', async function (assert) {
+    class App extends Component {
+      @tracked far = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      get pad() {
+        return `padding-left:${this.far ? 240 : 0}px`;
+      }
+      <template>
+        <Choreo class="stage" style="width:400px;height:80px" as |c|>
+          <div style={{this.pad}}>
+            <div
+              id="runner"
+              style="width:40px;height:40px;background:#0af"
+              {{motion id="runner" role="box"}}
+            ></div>
+          </div>
+          <c.Move @of={{c.moved "box"}} @spring={{SOFT}} @size={{false}} />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    const x = () => (find('#runner') as HTMLElement).getBoundingClientRect().x;
+
+    app!.far = true;
+    await settled();
+    for (let i = 0; i < 14; i++) {
+      await nextFrame();
+    }
+    const flying = x();
+    assert.ok(
+      flying > 60 && flying < 220,
+      `mid-flight to the right (${Math.round(flying)})`
+    );
+
+    // reverse the destination while it is still moving
+    app!.far = false;
+    await settled();
+    assert.ok(
+      Math.abs(x() - flying) < 12,
+      `picked up where it was, not at the old destination (${Math.round(flying)} -> ${Math.round(x())})`
+    );
+
+    // two consecutive frames of the NEW run: a spring that inherited the old
+    // velocity is still travelling right; one starting from rest is already
+    // heading left toward its new target
+    await nextFrame();
+    const p1 = x();
+    await nextFrame();
+    const p2 = x();
+    assert.ok(
+      p2 > p1,
+      `still travelling the old way one frame in (${Math.round(p1)} -> ${Math.round(p2)})`
+    );
+
+    await sleep(1200);
+    await nextFrame();
+    assert.ok(Math.abs(x()) < 3, `and it still lands at rest (${x()})`);
+  });
+
+  /**
+   * A beacon is a named box that never animates. Other sprites borrow it as a
+   * fake start or a fake end. It is deliberately not `layoutId`: `layoutId`
+   * pairs two real elements and morphs one into the other, so putting it on the
+   * bin would make the bin stretch. A beacon has no identity in the changeset —
+   * it is not inserted, kept or removed, and it moving does not start a run.
+   */
+  test('a removed sprite can fly to a beacon it never occupied', async function (assert) {
+    class App extends Component {
+      @tracked show = true;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        {{! the bin lives OUTSIDE the region, as the chrome would }}
+        <div
+          id="bin"
+          style="position:absolute;left:300px;top:220px;width:40px;height:40px"
+          {{beacon "trash"}}
+        ></div>
+        <Choreo class="stage" style="width:400px;height:300px" as |c|>
+          <div style="padding:20px">
+            {{#if this.show}}
+              <div
+                id="row"
+                style="width:100px;height:30px;background:#0af"
+                {{motion id="row" role="row"}}
+              ></div>
+            {{/if}}
+          </div>
+          <c.Move
+            @of={{c.removed "row"}}
+            @to={{c.beacon "trash"}}
+            @ms={{400}}
+            @size={{false}}
+          />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    const binBox = (find('#bin') as HTMLElement).getBoundingClientRect();
+    const startBox = (find('#row') as HTMLElement).getBoundingClientRect();
+
+    app!.show = false;
+    await settled();
+    await sleep(60);
+    const row = find('#row') as HTMLElement | null;
+    assert.ok(row, 'the leaver is orphaned so it can finish the flight');
+
+    await sleep(200);
+    const mid = (find('#row') as HTMLElement).getBoundingClientRect();
+    assert.ok(
+      mid.left > startBox.left + 20,
+      `travelling toward the bin (${Math.round(startBox.left)} -> ${Math.round(mid.left)}, bin at ${Math.round(binBox.left)})`
+    );
+    assert.ok(
+      Math.abs(
+        binBox.width -
+          (find('#bin') as HTMLElement).getBoundingClientRect().width
+      ) < 0.5,
+      'the beacon itself never moved or stretched'
+    );
+
+    await sleep(500);
+    await nextFrame();
+    assert.notOk(find('#row'), 'and it is released when the row ends');
+  });
+
+  test('a beacon nothing claimed leaves the move alone', async function (assert) {
+    class App extends Component {
+      @tracked wide = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      get pad() {
+        return `padding-left:${this.wide ? 120 : 0}px`;
+      }
+      <template>
+        <Choreo class="stage" style="width:400px;height:120px" as |c|>
+          <div style={{this.pad}}>
+            <div
+              id="plain"
+              style="width:40px;height:40px"
+              {{motion id="plain" role="box"}}
+            ></div>
+          </div>
+          {{! nothing registers 'nowhere' }}
+          <c.Move
+            @of={{c.moved "box"}}
+            @to={{c.beacon "nowhere"}}
+            @ms={{200}}
+            @size={{false}}
+          />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    app!.wide = true;
+    await settled();
+    await sleep(400);
+    await nextFrame();
+    const left = (find('#plain') as HTMLElement).getBoundingClientRect().left;
+    assert.ok(
+      left > 100,
+      `fell back to the sprite's own destination (${Math.round(left)})`
+    );
+  });
+
+  /**
+   * A step gives every sprite it matched the same start. `@stagger` walks them
+   * up a ladder in the order the query returned them, which is document order.
+   * The step's own length grows by the whole ladder, so a Sequence still waits
+   * for the last one.
+   */
+  test('@stagger walks a step across the sprites it matched', async function (assert) {
+    class App extends Component {
+      @tracked wide = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      get pad() {
+        return `padding-left:${this.wide ? 120 : 0}px`;
+      }
+      <template>
+        <Choreo class="stage" style="width:400px;height:220px" as |c|>
+          <div style={{this.pad}}>
+            {{#each (array "a" "b" "c") as |k|}}
+              <div
+                id="s-{{k}}"
+                style="width:30px;height:30px;background:#0af"
+                {{motion id=k role="box"}}
+              ></div>
+            {{/each}}
+          </div>
+          <c.Move
+            @of={{c.moved "box"}}
+            @ms={{200}}
+            @stagger={{150}}
+            @size={{false}}
+          />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    const x = (k: string) =>
+      (find(`#s-${k}`) as HTMLElement).getBoundingClientRect().left;
+
+    app!.wide = true;
+    await settled();
+    await sleep(120);
+    // a is under way; c has not been let go yet
+    const [a1, b1, c1] = [x('a'), x('b'), x('c')];
+    assert.ok(a1 > c1 + 10, `the first leads the last (${a1} vs ${c1})`);
+    assert.ok(a1 >= b1, `and the second is between (${b1})`);
+
+    await sleep(900);
+    await nextFrame();
+    assert.ok(
+      Math.abs(x('a') - x('c')) < 2,
+      'and they all land together in the end'
+    );
+  });
+
+  /**
+   * Far matching: one identity, two regions.
+   *
+   * Each <Choreo> is its own scene, so an element that leaves one and appears
+   * in the other would normally read as a death here and an unrelated birth
+   * there. The barrier pairs them by id before either region compiles, and the
+   * receiving element flies from where the sender was standing.
+   *
+   * Ember Animated calls these sentSprites / receivedSprites; boxel-motion
+   * described it but never built it.
+   */
+  test('an id that leaves one region and lands in another flies between them', async function (assert) {
+    class App extends Component {
+      @tracked here = true;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        <div style="display:flex;gap:120px;align-items:flex-start">
+          <Choreo
+            @id="left"
+            class="stage"
+            style="width:150px;height:120px"
+            as |c|
+          >
+            {{#if this.here}}
+              <div
+                id="tok"
+                style="width:40px;height:40px;background:#0af"
+                {{motion id="token" role="tok"}}
+              ></div>
+            {{/if}}
+            <c.Move @of={{c.kept "tok"}} @spring={{FAST}} />
+          </Choreo>
+
+          <Choreo
+            @id="right"
+            class="stage"
+            style="width:150px;height:120px"
+            as |c|
+          >
+            {{#unless this.here}}
+              <div
+                id="tok"
+                style="width:40px;height:40px;background:#0af"
+                {{motion id="token" role="tok"}}
+              ></div>
+            {{/unless}}
+            <c.Move @of={{c.kept "tok"}} @spring={{FAST}} />
+          </Choreo>
+        </div>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    const box = () => find('#tok') as HTMLElement;
+    const from = box().getBoundingClientRect().x;
+
+    app!.here = false;
+    await settled();
+    // the element now lives in the RIGHT region, but is pinned where the left
+    // one was standing — one continuous flight, not a cut
+    const pinned = box().getBoundingClientRect().x;
+    assert.ok(
+      Math.abs(pinned - from) < 3,
+      `starts where the sender stood (${Math.round(from)} -> ${Math.round(pinned)})`
+    );
+
+    await sleep(900);
+    await nextFrame();
+    const landed = box().getBoundingClientRect().x;
+    assert.ok(
+      landed > from + 100,
+      `and lands in the other region (${Math.round(landed)})`
+    );
+    assert.strictEqual(
+      document.querySelectorAll('#tok').length,
+      1,
+      'the sender was let go, not orphaned alongside it'
+    );
   });
 });

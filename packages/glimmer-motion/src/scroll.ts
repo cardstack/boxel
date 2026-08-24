@@ -1,13 +1,17 @@
 /**
- * useScroll / useInView for Glimmer — Motion's value/use-scroll.ts and utils/use-in-view.ts over the
+ * scrollProgress / InView for Glimmer — Motion's value/use-scroll.ts and utils/use-in-view.ts over the
  * vendored scroll() / inView() (src/dom). React refs become modifiers placed on the elements:
  *
- *   s = useScroll({ offset: ['start end', 'end start'] })
+ *   s = scrollProgress({ offset: ['start end', 'end start'] })
  *   <div {{s.container}}> <section {{s.target}}> … </section> </div>   → s.scrollYProgress is a MotionValue
  *   <div {{s.track}}>                                                   → window scroll, no container/target
  *
- *   v = useInView({ once: true })
+ *   v = new InView({ once: true })
  *   <div {{v.observe}}>                                                 → v.isInView is tracked
+ *
+ * `useScroll` / `useInView` are React's names for React's rules-of-hooks; there
+ * are no hooks here, and a `use` prefix on something you call once in a class
+ * body is a translation artefact. Both names survive as deprecated aliases.
  */
 import { tracked } from '@glimmer/tracking';
 import { type FunctionBasedModifier, modifier } from 'ember-modifier';
@@ -40,7 +44,7 @@ export interface ScrollValues {
   track: ElementModifier;
 }
 
-export function useScroll(options: UseScrollOptions = {}): ScrollValues {
+export function scrollProgress(options: UseScrollOptions = {}): ScrollValues {
   const values = {
     scrollX: motionValue(0),
     scrollY: motionValue(0),
@@ -137,4 +141,8 @@ export class InView {
   });
 }
 
+/** @deprecated React's name for it. Use `scrollProgress()`. */
+export const useScroll = scrollProgress;
+
+/** @deprecated React's name for it. Use `new InView(options)`. */
 export const useInView = (options?: UseInViewOptions) => new InView(options);

@@ -48,7 +48,7 @@ const from0 = { opacity: 0 };
  *
  * The move itself is `layout=true`, not `c.Move`: these cards are grid items,
  * and animating a grid item's width/height distorts every track around it
- * (boxel-motion filed this as CS-4174). Projection animates with transforms
+ * (a known limitation of the legacy model). Projection animates with transforms
  * only. Choreo sequences the phases and holds the layers.
  */
 export class Sequence extends Component {
@@ -69,17 +69,43 @@ export class Sequence extends Component {
               "study-card is-open"
               "study-card"
             }}
-            style={{wash card}}
             {{motion
               id=card.id
               role=(roleOf card this.open)
               layout=true
               transition=soft
+              style=(cardStyle card)
             }}
             {{on "click" (fn this.toggle card)}}
           >
-            <span class="study-name">{{card.label}}</span>
+            {{! SCALE CORRECTION — not decoration, and easy to miss.
+
+                The card's geometry is projection's: it goes from a square tile
+                to a 16:9 hero by TRANSFORM, so scaleX and scaleY are wildly
+                different, and everything inside inherits that scale. Text under
+                a non-uniform scale is smeared — "Ember" comes out stretched.
+
+                A child with its own `layout` is measured in its own right, and
+                projection counteracts whatever scale its parent is applying.
+                The label then animates between its two real font sizes instead
+                of being rubber-sheeted by the box around it.
+
+                It only reads as a clean scale because the box stays in
+                proportion: same string, shrink-to-fit, so its width and height
+                both track font-size and the aspect ratio never changes. The
+                lightbox needed `width: fit-content` on BOTH members for exactly
+                this reason — two boxes of different shape cannot scale into one
+                another without distortion. }}
+            <span class="study-name" {{motion layout=true transition=soft}}>
+              {{card.label}}
+            </span>
             {{#if (isOpen card this.open)}}
+              {{! Deliberately NOT layout=true, though the smearing argument above
+                  applies here too. These details carry a Choreo id, and the id
+                  comes BACK every time the card is reopened — so a returning
+                  one counterpart-matches the copy that is still fading out and
+                  projection slides it in from that old seat instead of fading
+                  it in fresh. The fade is worth more than the correction here. }}
               <span
                 class="study-details"
                 {{motion id=(detailsId card) role="card-content"}}
@@ -142,6 +168,24 @@ function roleOf(card: Card, open: Card['id'] | null) {
 function detailsId(card: Card) {
   return `${card.id}-details`;
 }
-function wash(card: Card) {
-  return `--wash: ${card.wash}`;
+/**
+ * DECLARE WHAT YOU WANT TWEENED.
+ *
+ * `borderRadius` is here rather than in the stylesheet, and that is the whole
+ * point. A layout animation moves this card by transform, so a square tile
+ * becoming a 16:9 hero is being scaled unevenly — and a radius the engine does
+ * not know about is scaled with everything else, which turns round corners into
+ * ovals. It is worst exactly where it is most visible: a narrow viewport, a
+ * heavily curved tile.
+ *
+ * Scale correction fixes it, and it can only correct values the element
+ * actually has. A radius that lives in CSS is invisible to it. Hand the value
+ * to Motion and every frame is corrected against the scale in force.
+ *
+ * The `--wash` custom property rides along for the same reason a style
+ * attribute would be wrong here: Motion owns this element's inline style, and
+ * a bound `style=` would be rewritten by Glimmer over the top of the transform.
+ */
+function cardStyle(card: Card) {
+  return { '--wash': card.wash, borderRadius: '14px' };
 }

@@ -8,6 +8,7 @@
 import type { IProjectionNode } from 'motion-dom';
 import { microtask, rootProjectionNode } from 'motion-dom';
 
+import { registerBusyProbe } from './activity.ts';
 import { postRender } from './scheduler.ts';
 
 const nodes = new Set<IProjectionNode>();
@@ -30,6 +31,8 @@ export function setMountFlusher(fn: () => void) {
 }
 
 let settlePending = false;
+/** a render pass whose projection didUpdate() has not happened yet */
+registerBusyProbe(() => settlePending && 'projection settle pending');
 /**
  * React's componentDidUpdate timing: every projection root's didUpdate() runs once per render pass, after
  * render and after every element rendered in the pass has mounted. The engine's update then happens in a
