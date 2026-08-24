@@ -60,6 +60,104 @@ export async function matrixLogin(
   };
 }
 
+export interface LoginToken {
+  loginToken: string;
+  // How long the token is valid, in milliseconds, as reported by the server.
+  expiresInMs: number;
+}
+
+// Parse a Matrix error body, which is JSON `{ errcode, error, ... }` on a
+// standard error and additionally carries `flows` when the endpoint answers a
+// User-Interactive Auth (UIA) challenge. Tolerant of a non-JSON body.
+function parseMatrixError(text: string): {
+  errcode?: string;
+  flows?: unknown;
+} {
+  try {
+    let parsed = JSON.parse(text) as { errcode?: string; flows?: unknown };
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Mint a short-lived, single-use Matrix login token from an existing session
+ * (MSC3882 `POST /_matrix/client/v1/login/get_token`). The token can be handed
+ * to a browser to sign it in as the same user without re-entering credentials.
+ *
+ * Requires the homeserver to have `login_via_existing_session` enabled; when it
+ * doesn't, the endpoint is unrecognized and this throws a clear "not enabled"
+ * error naming the server. A rejected access token throws `MatrixAuthError`, so
+ * a caller can drive interactive re-auth and retry.
+ */
+export async function requestLoginToken(
+  matrixAuth: MatrixAuth,
+  fetchFn: typeof fetch = fetch,
+): Promise<LoginToken> {
+  let response = await fetchFn(
+    new URL('_matrix/client/v1/login/get_token', matrixAuth.matrixUrl).href,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${matrixAuth.accessToken}`,
+      },
+      body: '{}',
+    },
+  );
+
+  if (response.ok) {
+    let json = (await response.json()) as {
+      login_token?: string;
+      expires_in_ms?: number;
+    };
+    if (!json.login_token) {
+      throw new Error(
+        `Matrix login-token response from ${matrixAuth.matrixUrl} did not include a login_token`,
+      );
+    }
+    return {
+      loginToken: json.login_token,
+      expiresInMs: json.expires_in_ms ?? 0,
+    };
+  }
+
+  let text = await response.text();
+  let { errcode, flows } = parseMatrixError(text);
+
+  // A rejected access token — surface it as MatrixAuthError so the caller can
+  // re-authenticate and retry once, matching the other Matrix calls here.
+  if (response.status === 401 && errcode === 'M_UNKNOWN_TOKEN') {
+    throw new MatrixAuthError(
+      response.status,
+      `Matrix rejected the access token: ${response.status} ${text}`,
+    );
+  }
+
+  // The endpoint is unrecognized (feature off) or gated behind an interactive
+  // UIA challenge (require_ui_auth). Neither is something this non-interactive
+  // path can drive, and both mean the same thing to the user: the server isn't
+  // set up to mint login tokens from a session.
+  let featureUnavailable =
+    errcode === 'M_UNRECOGNIZED' ||
+    response.status === 404 ||
+    response.status === 400 ||
+    (response.status === 401 && Array.isArray(flows));
+  if (featureUnavailable) {
+    throw new Error(
+      `The Matrix server at ${matrixAuth.matrixUrl} does not have ` +
+        `login_via_existing_session enabled, so it cannot mint a login token ` +
+        `(${response.status} ${errcode ?? 'no errcode'}). This is expected ` +
+        `until that feature is turned on for this environment.`,
+    );
+  }
+
+  throw new Error(
+    `Matrix login-token request failed: ${response.status} ${text}`,
+  );
+}
+
 async function getOpenIdToken(
   matrixAuth: MatrixAuth,
 ): Promise<Record<string, unknown>> {
