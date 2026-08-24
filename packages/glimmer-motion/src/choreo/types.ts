@@ -41,6 +41,8 @@ export interface ChoreoNode {
 }
 
 export interface Sprite {
+  /** this removed sprite's identity was claimed by an arriving element as its counterpart */
+  claimed?: boolean;
   /** the removed element an inserted id replaced in the same pass */
   counterpart?: Sprite;
   /** final − initial, parent-relative (kept sprites) */
@@ -58,11 +60,19 @@ export interface Sprite {
   type: SpriteType;
 }
 
-/** boxel-motion's spritesFor criteria, plus the boundsDelta filter from its motion-study */
+/**
+ * boxel-motion's spritesFor criteria, plus the boundsDelta filter from its
+ * motion-study and the two halves of a counterpart pair. `received` is a kept
+ * sprite that arrived this pass carrying a counterpart — the receiving half of
+ * counterpart or far matching; `counterpart` is the removed half it claimed.
+ * Both exist so a step can address exactly the flight passes and none of the
+ * ordinary ones: a kept query also matches a sprite whose bounds merely
+ * changed, which is every resize the region ever sees.
+ */
 export interface Query {
   id?: string;
   role?: string;
-  type?: SpriteType | 'moved' | 'still';
+  type?: SpriteType | 'moved' | 'still' | 'received' | 'counterpart';
 }
 
 export type PropValue = number | string;

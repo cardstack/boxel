@@ -398,6 +398,82 @@ module('Integration | choreo', function (hooks) {
     assert.notOk(find('#card-0'), 'and dropped after it');
   });
 
+  test('received / counterpart select only the two halves of a match, never an ordinary pass', async function (assert) {
+    // The distinction these selectors exist for: `kept` also matches a sprite
+    // whose bounds merely changed — which is every resize the region ever
+    // sees — so a flight step written on `kept` re-fires on passes that are
+    // not flights. `received` and `counterpart` fire only when an identity
+    // actually changed hands.
+    const seenReceived: Sprite[] = [];
+    const seenCounterpart: Sprite[] = [];
+    const grabReceived = (s: Sprite) => {
+      seenReceived.push(s);
+      return 1;
+    };
+    const grabCounterpart = (s: Sprite) => {
+      seenCounterpart.push(s);
+      return 0;
+    };
+    class App extends Component {
+      @tracked gen = 0;
+      @tracked wide = false;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      get width() {
+        return this.wide ? 'width:120px' : 'width:60px';
+      }
+      <template>
+        <Choreo as |c|>
+          {{#each (array this.gen) key="@identity" as |g|}}
+            <div
+              id="card-{{g}}"
+              style="{{this.width}};height:30px"
+              {{motion id="card" role="card"}}
+            ></div>
+          {{/each}}
+          <c.Tween
+            @of={{c.received "card"}}
+            @opacity={{grabReceived}}
+            @ms={{80}}
+          />
+          <c.Tween
+            @of={{c.counterpart "card"}}
+            @opacity={{grabCounterpart}}
+            @ms={{80}}
+          />
+        </Choreo>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await nextFrame();
+    app!.wide = true;
+    await settled();
+    assert.strictEqual(
+      seenReceived.length,
+      0,
+      'a resize is kept, not received'
+    );
+    assert.strictEqual(seenCounterpart.length, 0, 'and claims nothing');
+    app!.gen = 1;
+    await settled();
+    assert.strictEqual(seenReceived.length, 1, 'the arriving element');
+    assert.strictEqual(seenReceived[0]!.element.id, 'card-1');
+    assert.strictEqual(seenReceived[0]!.type, 'kept', 'is a kept sprite');
+    assert.strictEqual(seenCounterpart.length, 1, 'the claimed leaver');
+    assert.strictEqual(seenCounterpart[0]!.element.id, 'card-0');
+    assert.strictEqual(
+      seenCounterpart[0],
+      seenReceived[0]!.counterpart,
+      'and they are the two halves of one match'
+    );
+    await sleep(140);
+    await nextFrame();
+    assert.notOk(find('#card-0'), 'the counterpart is released with its row');
+  });
+
   test('an interrupted Move hands its borrowed size back, so the next pass measures a true layout', async function (assert) {
     // The failure this pins: switching the open card mid-flight left the old
     // hero frozen at its animating width, which squeezed every 1fr track
@@ -825,7 +901,7 @@ module('Integration | choreo', function (hooks) {
    * receiving element flies from where the sender was standing.
    *
    * Ember Animated calls these sentSprites / receivedSprites; boxel-motion
-   * filed it as CS-260 and never built it.
+   * described it but never built it.
    */
   test('an id that leaves one region and lands in another flies between them', async function (assert) {
     class App extends Component {

@@ -80,10 +80,14 @@ export interface ChoreoContext {
   all: Selector;
   /** `{{c.beacon 'trash'}}` — a named box to borrow, for Move's @from / @to */
   beacon: (name: string) => BeaconRef;
+  /** the removed half an arriving element claimed — orphaned, ready to cross-fade */
+  counterpart: Selector;
   id: (id: string) => Query;
   inserted: Selector;
   kept: Selector;
   moved: Selector;
+  /** kept only because it claimed a leaver's identity: the receiving half of a counterpart or far match */
+  received: Selector;
   removed: Selector;
   role: (role: string) => Query;
   still: Selector;
@@ -99,10 +103,12 @@ const context: ChoreoContext = {
   Wait,
   all: selector(),
   beacon: (beacon) => ({ beacon }),
+  counterpart: selector('counterpart'),
   id: (id) => ({ id }),
   inserted: selector('inserted'),
   kept: selector('kept'),
   moved: selector('moved'),
+  received: selector('received'),
   removed: selector('removed'),
   role: (role) => ({ role }),
   still: selector('still'),
@@ -328,6 +334,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       const old = removed.find((r) => r.id === s.id && !r.counterpart);
       if (old) {
+        old.claimed = true;
         s.counterpart = old;
         s.initial = old.initial;
         s.type = 'kept';

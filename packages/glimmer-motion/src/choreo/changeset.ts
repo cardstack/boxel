@@ -81,6 +81,16 @@ export class Changeset implements ChangesetLike {
       case 'moved':
         pool = this.kept.filter((s) => !isStill(s));
         break;
+      case 'received':
+        // the receiving half of a counterpart / far match: kept, but only
+        // because an arriving element claimed a leaving one's identity
+        pool = this.kept.filter((s) => s.counterpart);
+        break;
+      case 'counterpart':
+        // the removed half that was claimed — the old element, orphaned so a
+        // step can cross-fade it while its replacement flies
+        pool = this.removed.filter((s) => s.claimed);
+        break;
       default:
         pool = this.all;
     }
