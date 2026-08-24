@@ -94,6 +94,46 @@ type DrainSubscription = {
 };
 type SubscribeToDrain = () => DrainSubscription;
 
+// Fans one settlement of the shutdown promise out to per-request subscribers.
+//
+// Latched rather than only broadcast: a subscriber taken after the broadcast
+// has happened would otherwise join a set nobody iterates again, leaving its
+// promise pending forever. The race in `raceAgainstDrain` would then quietly
+// degrade to a plain await, and the request would render on instead of
+// reporting that the server is going away — which can hold `server.close()`
+// open for the length of a render. Requests do arrive after draining starts:
+// the guard ahead of the routes only turns away POSTs to `/prerender-*`, so
+// `/run-command` and `/release-batch` reach their handlers regardless, and
+// even a guarded path can cross the line between that check and its
+// subscription.
+export function createDrainSubscriber(
+  drainingPromise: Promise<void>,
+): SubscribeToDrain {
+  let waiters = new Set<() => void>();
+  let drained = false;
+  drainingPromise.then(() => {
+    drained = true;
+    for (let notify of waiters) {
+      notify();
+    }
+    waiters.clear();
+  });
+  return () => {
+    if (drained) {
+      return {
+        promise: Promise.resolve({ draining: true as const }),
+        dispose: () => {},
+      };
+    }
+    let notify!: () => void;
+    let promise = new Promise<{ draining: true }>((resolve) => {
+      notify = () => resolve({ draining: true });
+    });
+    waiters.add(notify);
+    return { promise, dispose: () => waiters.delete(notify) };
+  };
+}
+
 // Run `execPromise`, giving up early if the server starts draining.
 //
 // The subscription is released in `finally` because the alternative — each
@@ -137,25 +177,10 @@ export function buildPrerenderApp(options: {
   });
 
   // One reaction on the shutdown promise for the whole process. Requests take
-  // a waiter from this set and drop it when they finish, so what accumulates
-  // is bounded by the number of renders in flight rather than by the number
-  // ever served.
-  let drainWaiters = new Set<() => void>();
-  options.drainingPromise?.then(() => {
-    for (let notify of drainWaiters) {
-      notify();
-    }
-    drainWaiters.clear();
-  });
+  // a waiter and drop it when they finish, so what accumulates is bounded by
+  // the number of renders in flight rather than by the number ever served.
   let subscribeToDrain: SubscribeToDrain | undefined = options.drainingPromise
-    ? () => {
-        let notify!: () => void;
-        let promise = new Promise<{ draining: true }>((resolve) => {
-          notify = () => resolve({ draining: true });
-        });
-        drainWaiters.add(notify);
-        return { promise, dispose: () => drainWaiters.delete(notify) };
-      }
+    ? createDrainSubscriber(options.drainingPromise)
     : undefined;
 
   router.head('/', (ctxt: Koa.Context) => {

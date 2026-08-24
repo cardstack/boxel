@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import {
+  createDrainSubscriber,
   decideHostShellRecycle,
   raceAgainstDrain,
 } from '../prerender/prerender-app.ts';
@@ -124,6 +125,79 @@ module(basename(import.meta.filename), function () {
         await raceAgainstDrain(Promise.resolve({ result: 'ok' }), undefined),
         { result: 'ok' },
       );
+    });
+  });
+
+  module('createDrainSubscriber', function () {
+    function deferred() {
+      let fulfil!: () => void;
+      let promise = new Promise<void>((resolve) => {
+        fulfil = resolve;
+      });
+      return { promise, fulfil };
+    }
+
+    test('a render started before draining runs to completion', async function (assert) {
+      let drain = deferred();
+      let subscribe = createDrainSubscriber(drain.promise);
+      assert.deepEqual(
+        await raceAgainstDrain(
+          Promise.resolve({ result: 'rendered' }),
+          subscribe,
+        ),
+        { result: 'rendered' },
+      );
+    });
+
+    test('a render in flight when draining begins reports draining', async function (assert) {
+      let drain = deferred();
+      let subscribe = createDrainSubscriber(drain.promise);
+      let raced = raceAgainstDrain(
+        new Promise<{ result: string }>(() => {}),
+        subscribe,
+      );
+      drain.fulfil();
+      assert.deepEqual(await raced, { draining: true });
+    });
+
+    // The regression this guards: subscribing after the notification has
+    // already gone out. A subscriber that only broadcast would hand back a
+    // promise nobody ever settles, the race would decay into a plain await,
+    // and the request would render on instead of reporting that the server is
+    // leaving — holding shutdown open for the length of that render.
+    test('a render arriving after draining reports draining rather than hanging', async function (assert) {
+      let drain = deferred();
+      let subscribe = createDrainSubscriber(drain.promise);
+      drain.fulfil();
+      await drain.promise;
+
+      let settled = false;
+      let raced = raceAgainstDrain(
+        new Promise<{ result: string }>(() => {}),
+        subscribe,
+      ).then((r) => {
+        settled = true;
+        return r;
+      });
+      assert.deepEqual(await raced, { draining: true });
+      assert.true(settled, 'resolved rather than hanging');
+    });
+
+    test('every later render also reports draining', async function (assert) {
+      let drain = deferred();
+      let subscribe = createDrainSubscriber(drain.promise);
+      drain.fulfil();
+      await drain.promise;
+      for (let i = 0; i < 3; i++) {
+        assert.deepEqual(
+          await raceAgainstDrain(
+            new Promise<{ result: number }>(() => {}),
+            subscribe,
+          ),
+          { draining: true },
+          `render ${i}`,
+        );
+      }
     });
   });
 });
