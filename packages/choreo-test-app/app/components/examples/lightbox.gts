@@ -108,7 +108,14 @@ export class Lightbox extends Component {
           @onExitComplete={{this.cleared}}
           as |photo h|
         >
-          <div class="overlay">
+          {{! `is-closing` the instant `close()` runs — not gated on the exit
+              animation finishing. `.backdrop` covers the whole stage, and
+              Presence keeps this whole tree mounted for as long as its
+              SLOWEST exiting child takes to settle: the layoutId spring on
+              `.lightbox` itself, whose numeric settle can run well past its
+              own visualDuration. Left alone, the invisible backdrop keeps
+              eating clicks on the grid underneath for that entire stretch. }}
+          <div class={{if this.open "overlay" "overlay is-closing"}}>
             <button
               type="button"
               class="backdrop"

@@ -87,7 +87,14 @@ export class Inbox extends Component {
             disabled={{this.full}}
             {{beacon "compose"}}
             {{on "click" this.compose}}
-          >Compose</button>
+          >
+            <svg
+              class="inbox-compose-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            ><path d="M12 5v14M5 12h14" /></svg>
+            Compose
+          </button>
 
           {{! Not a control — a counter that happens to be a landmark. It is
               the destination every discarded row flies to, and it holds its

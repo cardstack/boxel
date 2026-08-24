@@ -1449,6 +1449,15 @@ html[data-gm-dragging] * {
   place-items: center;
 }
 
+/* closing is instant; the exit ANIMATION is not. Presence keeps this whole
+   tree mounted until its slowest exiting child settles — the layoutId
+   spring on .lightbox can run well past its own visualDuration — and until
+   then .backdrop, full-stage and still `cursor: pointer`, would keep eating
+   clicks on the grid underneath it even though it is already invisible. */
+.overlay.is-closing {
+  pointer-events: none;
+}
+
 .backdrop {
   position: absolute;
   inset: 0;
@@ -3511,10 +3520,16 @@ html[data-gm-dragging] * {
   gap: 12px;
   padding: 10px 12px;
   border-radius: 13px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  /* a color tint rather than a neutral one — the bar is chrome the same way
+     the topbar or a card is, and everything else on the page that plays that
+     role takes its warmth from the brand rather than from plain white */
+  background: rgba(255, 59, 31, 0.05);
+  border: 1px solid rgba(255, 59, 31, 0.14);
 }
 .inbox-compose {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 0;
   cursor: pointer;
   font: inherit;
@@ -3523,12 +3538,30 @@ html[data-gm-dragging] * {
   letter-spacing: 0.01em;
   color: #0b0a09;
   background: linear-gradient(180deg, #ffd9a3, #f7ac52);
-  padding: 8px 15px;
+  padding: 8px 16px 8px 13px;
   border-radius: 9px;
+  box-shadow: 0 5px 14px rgba(247, 172, 82, 0.25);
+  transition:
+    transform 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+.inbox-compose:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 18px rgba(247, 172, 82, 0.34);
+}
+.inbox-compose-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
 }
 .inbox-compose[disabled] {
   opacity: 0.4;
   cursor: default;
+  transform: none;
+  box-shadow: none;
 }
 /* the bar is Compose on the left, the bin on the right, and nothing in
    between that can change width — a beacon that shifts is a beacon that
@@ -3536,20 +3569,20 @@ html[data-gm-dragging] * {
 .inbox-bar > .inbox-compose {
   margin-right: auto;
 }
+/* a landmark, not a control — no background or border of its own, so it
+   does not read as a second button sitting next to Compose. It is still a
+   real beacon target and still holds a fixed footprint (min-width, height)
+   so a row in flight is never chasing a target that moved because a digit
+   changed; it just does that without looking like something you could
+   press. */
 .inbox-trash {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  /* the chip must not resize as the count grows from one digit to two, or the
-     target moves mid-flight; the number below reserves its own width, and this
-     floor keeps the chip on that reserved size */
   min-width: 66px;
   height: 38px;
   padding: 0 11px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .inbox-trash b {

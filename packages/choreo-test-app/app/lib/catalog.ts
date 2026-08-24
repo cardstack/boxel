@@ -45,6 +45,7 @@ export const groups = [
   'Drag',
   'Scroll',
   'Choreo',
+  'Timeline',
 ] as const;
 
 export type DemoGroup = (typeof groups)[number];
@@ -82,7 +83,7 @@ export const catalog: DemoEntry[] = [
   {
     Example: Playhead,
     apis: ['spring()', 'motionValue', 'jump()'],
-    group: 'Choreo',
+    group: 'Timeline',
     id: 'playhead',
     lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
     notes: PlayheadNotes,
@@ -1050,7 +1051,7 @@ move = (event) => {
   {
     Example: BuildOrder,
     apis: ['motionValue', 'jump()', 'pathLength'],
-    group: 'Choreo',
+    group: 'Timeline',
     id: 'build-order',
     lede: 'Keynote\u2019s build inspector, wired to the site\u2019s own logo. Retime it while it runs.',
     notes: BuildOrderNotes,

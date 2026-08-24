@@ -146,7 +146,9 @@ export function ghostAt(
     live = clip;
   }
 
-  if (live?.kind === 'move' && live.cue) {
+  // `live.cue` may be absent: a move beat with no cue is a return to `home`,
+  // rather than every score needing an explicit "walk back" destination
+  if (live?.kind === 'move') {
     const a = at(live.from);
     const b = at(live.cue);
     const p = t >= live.end ? 1 : easeInAndOut((t - live.start) / live.ms);

@@ -129,7 +129,10 @@ const BEATS: Beat[] = [
   { kind: 'hold', ms: 900 },
   { cue: 'done', kind: 'move', ms: 560 },
   { cue: 'done', kind: 'press', ms: 220 },
-  { kind: 'hold', ms: 620 },
+  // no cue: `ghostAt` reads a cue-less move as a return to `home`, so this is
+  // the one beat in the score that is not walking TOWARD a control
+  { kind: 'move', ms: 480 },
+  { kind: 'hold', ms: 460 },
 ];
 
 const { clips: CLIPS, duration: RUNTIME } = compile(BEATS);
@@ -281,12 +284,21 @@ export class Playhead extends Component {
     this.railW = rail?.clientWidth ?? 0;
   }
 
-  /** where the hand waits before the first beat, and where it goes home to */
+  /**
+   * Where the hand waits before the first beat, and where it goes home to.
+   *
+   * Close beside the card and above it, not out in a corner: the transport
+   * lives along the BOTTOM of the stage the whole width of it, so any resting
+   * spot low enough to feel "off to the side" also sits inside the transport's
+   * own band and overlaps it. Up and to the right — near where the first beat
+   * is headed anyway — clears the transport and reads as a hand waiting next
+   * to the thing it is about to touch, rather than parked in dead space.
+   */
   private get home(): Point {
     const el = this.stage;
     return {
-      x: (el?.clientWidth ?? 320) * 0.16,
-      y: (el?.clientHeight ?? 380) * 0.86,
+      x: (el?.clientWidth ?? 320) * 0.82,
+      y: (el?.clientHeight ?? 380) * 0.4,
     };
   }
 
