@@ -71,18 +71,20 @@ Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 
 ### Steps
 
-| step         | today                                                                                         | added                                                                                                                                            |
-| ------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `c.Tween`    | ✓ `@ms` `@ease` `@delay` `@from` `@stagger`, properties as flat args, values may be functions | + keyframe-array values; `@by` `@order` `@overlap` delivery; `@repeat` for ambient loops with phase derived from the run clock, so a loop scrubs |
-| `c.Spring`   | ✓ `@spring` `@delay` `@from`                                                                  | + the same delivery args                                                                                                                         |
-| `c.Move`     | ✓ FLIP kept sprites; `@spring`/`@ms`/`@ease`, `@size`, `@from`/`@to` (beacons)                | + `@from={{c.gesture}}` hot start; `@path` + `@rotate`; `@swap='during'\|'settle'`; `@crossfade`                                                 |
-| `c.Hold`     | ✓ properties for a window; `@ms`, `@fill`                                                     |                                                                                                                                                  |
-| `c.Wait`     | ✓ `@ms`                                                                                       |                                                                                                                                                  |
-| `c.Lift`     |                                                                                               | + promote to the region's elevated layer for the block's span; `@shadow`; escapes stacking contexts and clips                                    |
-| `c.Camera`   |                                                                                               | + `@zoom` `@x` `@y` `@origin` `@follow`; per-sprite `counterScale: true \| 'damped' \| false`                                                    |
-| `c.Scroll`   |                                                                                               | + animate the sprite's scroll container to `@block`; occupies the sequence                                                                       |
-| `c.Tether`   |                                                                                               | + `@from` `@to` `@draw` — geometry continuously derived from sprites (or the gesture)                                                            |
-| `c.Crossing` |                                                                                               | + the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@crossfade` `@scroll`                                                    |
+After the cuts below: nine steps, and every animating step reads
+_who · what · how long_, with position in the block giving _when_.
+
+| step         | reads as                                                                                                                                                                                          |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.To`       | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), then either `@ms` + `@ease` or `@spring`; `@delay` `@from` `@repeat`; delivery via `@by` `@order` `@stagger` |
+| `c.Move`     | FLIP the measured delta: `@spring`/`@ms`+`@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins      |
+| `c.Hold`     | set properties for a window and release: `@ms` or the block's span, `@fill`; with no properties it is a pure wait                                                                                 |
+| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                            |
+| `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@hold={{query}}` names sprites that keep their size (damped by default)                                                               |
+| `c.Scroll`   | animate the sprite's scroll container to `@block`; occupies the sequence                                                                                                                          |
+| `c.Tether`   | `@from` `@to` `@draw` — geometry continuously derived from sprites or the gesture                                                                                                                 |
+| `c.Gate`     | park the run until `c.advance()`; `@auto`                                                                                                                                                         |
+| `c.Crossing` | the canned route transition: `@spring` `@leave` `@arrive` `@overlap` `@scroll`                                                                                                                    |
 
 ### Timing
 
@@ -95,6 +97,53 @@ anchors (+); every duration resolves through the engine's generator, so
 `c.run` (+): `play` / `pause` / `seek` / `advance` / `cancel`, tracked
 `t` / `duration` / `segment`. Two drivers: the frameloop ✓ and the
 native WAAPI/CSS target (+), same language, same assertions.
+
+## As simple as it gets? Five cuts
+
+The first draft of this language was audited the way the constructs
+were: hunt the redundancy. Five spellings were carrying no information,
+and the reference above is written with them already removed. (Earlier
+sections show the pre-cut spellings in their examples; the reference is
+authoritative.)
+
+**`c.Tween` + `c.Spring` → `c.To`.** Two step names that differ only in
+which timing argument they take is the engine's taxonomy, not the
+author's. One step: pass `@ms` + `@ease` or pass `@spring`, and the
+name reads as the sentence it is — `<c.To @of={{c.inserted 'card'}}
+@opacity={{1}} @ms={{260}} />`. Keynote never asks which interpolator;
+neither should the template.
+
+**`c.Wait` dies.** A `c.Hold` with no properties already means "occupy
+this much of the sequence and keep these sprites alive" — that IS the
+wait. One step fewer, no meaning lost.
+
+**Delivery loses `@overlap`.** Two spacing knobs — `@stagger` (ms
+between starts) and `@overlap` (window as a fraction of the span) —
+describe the same schedule from opposite ends: given the step's span
+and the slot count, either determines the other. `@stagger` survives,
+for every `@by`, because ms-between-starts is the one an author can
+hear; the 0.55-window default becomes the derived value, not a second
+argument.
+
+**`@crossfade` folds into `@swap`.** Both governed the counterpart's
+two skins. One argument, three values: `'during'` (cross mid-flight,
+the default), `'settle'` (carry the old skin whole, swap on landing),
+`'none'`.
+
+**`counterScale` moves onto the step.** A per-sprite attribute on the
+modifier was the seam rule broken in the other direction — camera
+policy leaking onto participants. `c.Camera @hold={{c.role 'focus'}}`
+names the sprites that keep their size, damped by default, and the
+timeline stays the only authority.
+
+What remains is irreducible, and each piece earns its place: the
+queries are the changeset (the model itself), the blocks exist because
+`Hold`, `Lift` and gates need a _span_ to scope to (a flat with/after
+list — Keynote's own shape, and `builds.ts`'s — cannot say "for the
+duration of these three steps"), the anchors are two helpers that read
+as English, and each remaining step names a genuinely different
+mechanism. Nine steps, two blocks, ten queries: an author who knows
+_who · what · how long_ can read all of it.
 
 ## The seam with the binding
 
@@ -126,7 +175,7 @@ entrance-suppression flag (`isCrossing()`) is what that conflict costs
 today. Every one of them has a `c.` spelling: entrances are `c.Tween
 @of={{c.inserted}}`, exits are steps over `c.removed`, `animate`-on-
 state-change is a step in an all-kept pass, variants with
-`staggerChildren` are delivery (`@by` / `@stagger` / `@overlap`), and a
+`staggerChildren` are delivery (`@by` / `@stagger`), and a
 repeating keyframe loop is `@repeat` — which is the one construct this
 section adds, because an ambient loop whose phase derives from the run
 clock scrubs and records; a self-scheduled one cannot. In `@debug`, a
