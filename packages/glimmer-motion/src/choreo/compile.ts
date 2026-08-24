@@ -500,6 +500,33 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         }
         break;
       }
+      case 'scroll': {
+        const ms = step.ms ?? 420;
+        cues.push({
+          duration: ms,
+          kind: 'scroll',
+          offset,
+          scroll: { align: step.align ?? 'center' },
+          sprite,
+        });
+        longest = Math.max(longest, offset + ms);
+        break;
+      }
+      case 'raise': {
+        cues.push({
+          duration: step.ms ?? 0,
+          kind: 'raise',
+          offset,
+          raise: { shadow: step.shadow ?? false },
+          sprite,
+        });
+        if (step.ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + step.ms);
+        }
+        break;
+      }
       case 'wait':
         cues.push({ duration: step.ms, kind: 'wait', offset, sprite });
         longest = Math.max(longest, offset + step.ms);
@@ -612,7 +639,7 @@ export default function compile(
         out.push({
           ...rest,
           duration:
-            r.open && cue.kind === 'hold'
+            r.open && (cue.kind === 'hold' || cue.kind === 'raise')
               ? Math.max(0, span - delay - offset)
               : cue.duration,
           start: base + delay + offset,

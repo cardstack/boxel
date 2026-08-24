@@ -69,6 +69,8 @@ export interface Run {
 interface RunOptions {
   inherit?: Velocities;
   onSpriteDone(sprite: Sprite): void;
+  /** the region's elevated layer, where c.Raise promotes the living */
+  raisedLayer?: HTMLElement;
   removed: Sprite[];
 }
 
@@ -175,6 +177,18 @@ interface Track {
   loopAnimation?: Animation;
   /** where each value stood when this track first started — the scrub-back frame */
   origin?: Record<string, PropValue>;
+  /** raise: how to put the element back where it was */
+  perch?: {
+    placeholder: HTMLElement;
+    prior: string;
+  };
+  /** scroll: the container being driven, and where it is headed */
+  scrolling?: {
+    cancelListener(): void;
+    container: HTMLElement;
+    from: { left: number; top: number };
+    to: { left: number; top: number };
+  };
   /** completed while playing (finals landed / hold released) */
   passed: boolean;
   start: number;
@@ -521,6 +535,36 @@ export class ChoreoRun implements Run {
         now >= t.start &&
         t.start < limit &&
         (now < t.end || cue.loop || fill);
+      if (cue.raise) {
+        if (inside && !t.started) {
+          t.started = true;
+          this.promote(t);
+        } else if (!inside && t.started) {
+          t.started = false;
+          this.restore(t);
+        }
+        continue;
+      }
+      if (cue.scroll) {
+        if (inside && !t.started) {
+          t.started = true;
+          this.startScroll(t);
+        } else if (!inside && t.started && now < t.start) {
+          t.started = false;
+          this.stopScroll(t, true);
+        }
+        if (t.started && t.scrolling) {
+          // clock-driven in every mode: a scroll has no engine animation
+          const p = this.flightlessProgress(t, now - t.start);
+          const { container, from, to } = t.scrolling;
+          container.scrollTop = from.top + (to.top - from.top) * p;
+          container.scrollLeft = from.left + (to.left - from.left) * p;
+          if (p >= 1 && this.playing) {
+            this.stopScroll(t, false);
+          }
+        }
+        continue;
+      }
       if (cue.hold) {
         if (inside && !t.started) {
           t.started = true;
@@ -599,6 +643,111 @@ export class ChoreoRun implements Run {
           this.sampleStill(t, now);
         }
       }
+    }
+  }
+
+  /** the eased progress of a plain clock-driven track */
+  private flightlessProgress(t: Track, ms: number): number {
+    const span = t.end - t.start;
+    const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
+    return easingDefinitionToFunction('easeInOut')(raw);
+  }
+
+  /* ---- c.Raise: the elevated layer (§6.3) ---- */
+
+  private promote(t: Track) {
+    const layer = this.options.raisedLayer;
+    const el = t.cue.sprite.element;
+    if (!layer || !el.isConnected || t.perch) {
+      return;
+    }
+    const box = el.getBoundingClientRect();
+    const layerBox = layer.getBoundingClientRect();
+    // the slot holds: siblings must not reflow under a lifted sprite
+    const placeholder = document.createElement(el.tagName);
+    placeholder.setAttribute('aria-hidden', 'true');
+    placeholder.style.cssText = `visibility:hidden;width:${box.width}px;height:${box.height}px;margin:0;flex:none`;
+    const prior = el.style.cssText;
+    el.parentNode?.insertBefore(placeholder, el);
+    layer.appendChild(el);
+    el.style.position = 'absolute';
+    el.style.left = `${box.left - layerBox.left}px`;
+    el.style.top = `${box.top - layerBox.top}px`;
+    el.style.width = `${box.width}px`;
+    el.style.height = `${box.height}px`;
+    el.style.margin = '0';
+    if (t.cue.raise?.shadow) {
+      el.style.filter = 'drop-shadow(0 18px 24px rgba(0,0,0,0.35))';
+    }
+    t.perch = { placeholder, prior };
+  }
+
+  private restore(t: Track) {
+    const el = t.cue.sprite.element;
+    const perch = t.perch;
+    if (!perch) {
+      return;
+    }
+    t.perch = undefined;
+    perch.placeholder.parentNode?.replaceChild(el, perch.placeholder);
+    el.style.cssText = perch.prior;
+    t.cue.sprite.node.visualElement?.scheduleRender();
+  }
+
+  /* ---- c.Scroll: the container as a step (§6.1) ---- */
+
+  private startScroll(t: Track) {
+    const el = t.cue.sprite.element;
+    let container: HTMLElement | null = el.parentElement;
+    while (container) {
+      const cs = getComputedStyle(container);
+      if (/(auto|scroll)/.test(cs.overflowY + cs.overflowX)) {
+        break;
+      }
+      container = container.parentElement;
+    }
+    if (!container) {
+      return;
+    }
+    const box = el.getBoundingClientRect();
+    const cBox = container.getBoundingClientRect();
+    const align = t.cue.scroll!.align;
+    const offsetY = box.top - cBox.top + container.scrollTop;
+    const offsetX = box.left - cBox.left + container.scrollLeft;
+    const factor = align === 'center' ? 0.5 : align === 'end' ? 1 : 0;
+    const to = {
+      left: Math.max(0, offsetX - (container.clientWidth - box.width) * factor),
+      top: Math.max(
+        0,
+        offsetY - (container.clientHeight - box.height) * factor,
+      ),
+    };
+    // the user's own wheel takes the container back: the step cancels, the
+    // run survives (§8.2)
+    const onWheel = () => this.stopScroll(t, false);
+    container.addEventListener('wheel', onWheel, { passive: true });
+    container.addEventListener('touchmove', onWheel, { passive: true });
+    t.scrolling = {
+      cancelListener: () => {
+        container.removeEventListener('wheel', onWheel);
+        container.removeEventListener('touchmove', onWheel);
+      },
+      container,
+      from: { left: container.scrollLeft, top: container.scrollTop },
+      to,
+    };
+  }
+
+  private stopScroll(t: Track, rewind: boolean) {
+    const s = t.scrolling;
+    if (!s) {
+      return;
+    }
+    t.scrolling = undefined;
+    s.cancelListener();
+    if (rewind) {
+      s.container.scrollTop = s.from.top;
+      s.container.scrollLeft = s.from.left;
     }
   }
 
@@ -1017,6 +1166,8 @@ export class ChoreoRun implements Run {
       this.stopTrack(t);
       t.delivery?.cancel();
       t.loopAnimation?.cancel();
+      this.restore(t);
+      this.stopScroll(t, false);
       const ve = t.cue.sprite.node.visualElement;
       if (t.held && ve) {
         releaseHold(ve, t.cue.sprite.element, t.held);

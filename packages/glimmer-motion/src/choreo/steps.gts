@@ -269,6 +269,52 @@ export class Wait extends StepComponent<StepArgs & { duration: number }> {
 }
 
 /**
+ * `<c.Scroll />` — animate the sprite's scroll container so the sprite lands
+ * at `@align`; occupies the sequence like any step (§6.1).
+ */
+export class Scroll extends StepComponent<
+  StepArgs & { align?: 'center' | 'end' | 'start'; duration?: number }
+> {
+  node(): TimelineNode {
+    const { of, align, duration, delay, stagger } = this.args;
+    return {
+      align,
+      at: this.args.at,
+      delay: msOf(delay),
+      kind: 'scroll',
+      ms: msOf(duration),
+      name: this.args.name,
+      of,
+      stagger: msOf(stagger),
+    };
+  }
+}
+
+/**
+ * `<c.Raise />` — promote the sprites to the region's elevated layer for the
+ * span of its block (or `@duration`): above every stacking context and clip
+ * in the region, with measured continuity both ways. `@shadow` casts on the
+ * layer below (§6.3).
+ */
+export class Raise extends StepComponent<
+  StepArgs & { duration?: number; shadow?: boolean }
+> {
+  node(): TimelineNode {
+    const { of, duration, delay, shadow, stagger } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      kind: 'raise',
+      ms: msOf(duration),
+      name: this.args.name,
+      of,
+      shadow,
+      stagger: msOf(stagger),
+    };
+  }
+}
+
+/**
  * `<c.Gate />` — park the run until `c.advance()`; `@delay` opens it by
  * itself after that many seconds (§4.1). A gate is a pause, and a pause is
  * a total order: it may only stand in a sequence that no parallel contains.

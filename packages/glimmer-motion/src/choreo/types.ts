@@ -192,7 +192,34 @@ export interface WaitStep extends StepBase {
   kind: 'wait';
   ms: number;
 }
-export type Step = HoldStep | MoveStep | SpringStep | TweenStep | WaitStep;
+/** scroll the sprite's container so the sprite lands at @align (§6.1) */
+export interface ScrollStep extends StepBase {
+  align?: 'center' | 'end' | 'start';
+  kind: 'scroll';
+  ms?: number;
+}
+
+/**
+ * Promote the sprites to the region's elevated layer for the window (§6.3):
+ * above every stacking context and overflow clip in the region. `z-index`
+ * cannot say this; a real layer can.
+ */
+export interface RaiseStep extends StepBase {
+  kind: 'raise';
+  /** the window; without it, the enclosing block's span */
+  ms?: number;
+  /** cast on the layer below — the tray's shadow on the plane beneath */
+  shadow?: boolean;
+}
+
+export type Step =
+  | HoldStep
+  | MoveStep
+  | RaiseStep
+  | ScrollStep
+  | SpringStep
+  | TweenStep
+  | WaitStep;
 
 /** park the run until advance(); `ms` opens it by itself (§4.1) */
 export interface GateNode {
@@ -232,6 +259,10 @@ export interface FlightPath {
 export interface Cue {
   /** move: travel along this sampled path instead of the straight line */
   flight?: FlightPath;
+  /** raise: promote to the elevated layer for the window */
+  raise?: { shadow: boolean };
+  /** scroll: animate the sprite's scroll container to this alignment */
+  scroll?: { align: 'center' | 'end' | 'start' };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
   duration: number;

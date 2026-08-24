@@ -44,6 +44,8 @@ import {
   Hold,
   Move,
   Parallel,
+  Raise,
+  Scroll,
   Sequence,
   Spring,
   Tween,
@@ -73,6 +75,8 @@ const selector = (type?: Query['type']): Selector =>
 export interface ChoreoContext {
   Gate: typeof Gate;
   Hold: typeof Hold;
+  Raise: typeof Raise;
+  Scroll: typeof Scroll;
   Move: typeof Move;
   Parallel: typeof Parallel;
   Sequence: typeof Sequence;
@@ -105,6 +109,8 @@ function contextFor(region: Choreo): ChoreoContext {
     Hold,
     Move,
     Parallel,
+    Raise,
+    Scroll,
     Sequence,
     Spring,
     Tween,
@@ -151,6 +157,7 @@ setBeforeMeasure(() => flushPendingMounts());
 export class Choreo extends Component<Signature> implements ChoreoHost {
   private element?: HTMLDivElement;
   private orphanLayer?: HTMLDivElement;
+  private raisedLayer?: HTMLDivElement;
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */
   private arrived = new Set<ChoreoNode>();
@@ -433,6 +440,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.log(changeset, cues);
     }
     this.run = execute(compiled, {
+      raisedLayer: this.raisedLayer,
       // ember-animated's continuity, in the terms motion-dom offers: it sums a
       // corrective curve onto the one it interrupted, which transfers velocity
       // implicitly; a spring takes a velocity outright, so the run that is
@@ -559,6 +567,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     };
   });
 
+  raised = modifier((el: HTMLDivElement) => {
+    this.raisedLayer = el;
+    return () => {
+      this.raisedLayer = undefined;
+    };
+  });
+
   <template>
     {{this.renderDetector}}
     <div data-choreo={{if @id @id ''}} {{this.host}} ...attributes>
@@ -566,6 +581,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         data-choreo-orphans
         style='position:absolute;inset:0;pointer-events:none;overflow:visible'
         {{this.layer}}
+      ></div>
+      {{! the elevated layer: where c.Raise promotes the living — above every
+          stacking context and clip in the region (§6.3) }}
+      <div
+        data-choreo-raised
+        style='position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:2147483000'
+        {{this.raised}}
       ></div>
       {{yield this.context}}
     </div>
