@@ -112,6 +112,8 @@ const BRANCH_INDEX_PATH = '.deck/branch-index';
 const CHECKPOINT_PATH = '.deck/checkpoint';
 const REVIEW_PATH = '.deck/review';
 const REVIEWS_PATH = '.deck/reviews';
+const PREFERRED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs', '.js'];
+const TRANSPILED_EXECUTABLE_EXTENSIONS = ['.gts', '.ts', '.gjs'];
 
 class DeckBranchViewPreparationError extends Error {
   constructor(cause: unknown) {
@@ -1373,8 +1375,39 @@ function projectsCardDocument(request: Request, path: string): boolean {
 function requestsExecutableModule(request: Request, path: string): boolean {
   return (
     request.headers.get('accept') !== SupportedMimeType.CardSource &&
-    ['.gts', '.gjs', '.ts'].some((extension) => path.endsWith(extension))
+    TRANSPILED_EXECUTABLE_EXTENSIONS.some((extension) =>
+      path.endsWith(extension),
+    )
   );
+}
+
+async function readExactVersionFile(
+  readVersionFile: NonNullable<DeckVersionServingDeps['readVersionFile']>,
+  storeDir: string,
+  packageName: string,
+  version: string,
+  path: string,
+): Promise<{ bytes: Buffer; storedPath: string } | undefined> {
+  let candidates = path.split('/').at(-1)?.includes('.')
+    ? [path]
+    : [
+        ...PREFERRED_EXECUTABLE_EXTENSIONS.map(
+          (extension) => `${path}${extension}`,
+        ),
+        path,
+      ];
+  for (let storedPath of candidates) {
+    let bytes = await readVersionFile(
+      storeDir,
+      packageName,
+      version,
+      storedPath,
+    );
+    if (bytes) {
+      return { bytes, storedPath };
+    }
+  }
+  return undefined;
 }
 
 function projectCardDocument(
@@ -1563,21 +1596,24 @@ export async function handleDeckVersionRequest(
   let readVersionFile = deps.readVersionFile ?? readStoredFile;
   let cardProjection = projectsCardDocument(request, path);
   let storedPath = cardProjection ? `${path}.json` : path;
-  let bytes = await readVersionFile(
+  let stored = await readExactVersionFile(
+    readVersionFile,
     storeDir,
     `${scope}/${name}`,
     version,
     storedPath,
   );
-  if (!bytes) {
+  if (!stored) {
     return notFound(identifier);
   }
+  let { bytes } = stored;
+  storedPath = stored.storedPath;
 
   if (cardProjection) {
     bytes = projectCardDocument(bytes, transportURL, mutableURL);
   }
 
-  let executableModule = requestsExecutableModule(request, path);
+  let executableModule = requestsExecutableModule(request, storedPath);
   if (executableModule) {
     bytes = Buffer.from(await transpileJS(bytes.toString(), `/${identifier}`));
   }
@@ -1590,7 +1626,7 @@ export async function handleDeckVersionRequest(
       ? SupportedMimeType.CardJson
       : executableModule
         ? 'text/javascript'
-        : inferContentType(path),
+        : inferContentType(storedPath),
     etag,
     'x-boxel-realm-url': mutableURL.href,
     'x-boxel-realm-public-readable': String(authorization.publicReadable),

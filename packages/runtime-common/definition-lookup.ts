@@ -32,7 +32,7 @@ function fmtKey(
 import {
   fetchUserPermissions,
   flattenPrerenderMeta,
-  internalKeyFor,
+  internalKeysFor,
   type Definition,
   type ErrorEntry,
   type ModuleDefinitionResult,
@@ -924,17 +924,26 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     codeRef: ResolvedCodeRef,
     canonicalModuleURL: string,
   ): ModuleDefinitionResult | ErrorEntry | undefined {
-    let entry =
-      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
-    if (!entry && canonicalModuleURL !== codeRef.module) {
-      let canonicalModuleId = internalKeyFor(
-        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
+    let entry: ModuleDefinitionResult | ErrorEntry | undefined;
+    for (let key of internalKeysFor(codeRef, undefined, this.#virtualNetwork)) {
+      entry = definitions[key];
+      if (entry) return entry;
+    }
+    if (canonicalModuleURL !== codeRef.module) {
+      let canonicalCodeRef = {
+        ...codeRef,
+        module: canonicalModuleURL as RealmResourceIdentifier,
+      };
+      for (let key of internalKeysFor(
+        canonicalCodeRef,
         undefined,
         this.#virtualNetwork,
-      );
-      entry = definitions[canonicalModuleId];
+      )) {
+        entry = definitions[key];
+        if (entry) return entry;
+      }
     }
-    return entry;
+    return undefined;
   }
 
   private async lookupDefinitionWithContext(

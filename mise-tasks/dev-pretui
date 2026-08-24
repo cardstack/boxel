@@ -17,9 +17,9 @@ export SKIP_SKILLS="${SKIP_SKILLS:-true}"
 export SKIP_OPENROUTER="${SKIP_OPENROUTER:-true}"
 export SKIP_SOFTWARE_FACTORY="${SKIP_SOFTWARE_FACTORY:-true}"
 export WORKER_USER_INDEX_COUNT="${WORKER_USER_INDEX_COUNT:-1}"
-# The pilot exercises exact branch/index jobs on demand. Re-indexing the full
-# Base realm at every restart adds minutes and is unrelated to PretUI branch
-# correctness; developers can explicitly override this when they need it.
-export REALM_SERVER_FULL_INDEX_ON_STARTUP="${REALM_SERVER_FULL_INDEX_ON_STARTUP:-false}"
+# The mutable Realm root remains the familiar default workspace view. Rebuild
+# it on startup so a previous Deck/CLI run cannot leave only its changed-file
+# delta in the live index while exact branch views remain complete.
+export REALM_SERVER_FULL_INDEX_ON_STARTUP="${REALM_SERVER_FULL_INDEX_ON_STARTUP:-true}"
 
 exec mise run dev-minimal

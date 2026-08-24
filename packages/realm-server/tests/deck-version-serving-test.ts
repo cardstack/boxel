@@ -1134,6 +1134,21 @@ module('exact Deck Version serving', function (hooks) {
     );
   });
 
+  test('resolves extensionless modules inside exact Versions', async function (assert) {
+    let response = await serve(
+      new Request('https://realms.example/acme/theme@1.1.0/status'),
+    );
+    let body = await response?.text();
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(
+      response?.headers.get('content-type'),
+      'text/javascript',
+    );
+    assert.true(body?.includes('setComponentTemplate'));
+    assert.false(body?.includes('<template'));
+  });
+
   test('projects extensionless card requests from immutable card JSON', async function (assert) {
     let response = await serve(
       new Request('https://realms.example/acme/theme@1.1.0/card', {

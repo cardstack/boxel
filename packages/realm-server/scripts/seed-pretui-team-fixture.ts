@@ -50,6 +50,8 @@ const baselineVersion = '0.9.0';
 const candidateVersion = '1.0.0-dev.1';
 const releaseVersion = '1.0.0';
 const nextVersion = '1.1.0-dev.1';
+const pretuiRealmURL =
+  process.env.PRETUI_REALM_URL ?? 'https://localhost:4201/pretui/';
 const storeVersions = [
   baselineVersion,
   candidateVersion,
@@ -403,6 +405,16 @@ export class ${artifact.className} extends CardDef {
 }
 
 function releaseTrainCard(sourceVersion: string): string {
+  let isNext = sourceVersion === nextVersion;
+  let releaseLabel = isNext ? 'NEXT DEVELOPMENT' : 'LOCKED STABLE';
+  let branchLabel = isNext ? 'develop/1.1' : 'main';
+  let versionLabel = isNext ? nextVersion : releaseVersion;
+  let statusLabel = isNext ? 'dev' : 'latest';
+  let headline = isNext
+    ? 'New focus, denser actions, same stable app.'
+    : 'The approved release remains exactly reproducible.';
+  let accent = isNext ? '#b9a7ff' : '#8fe2bb';
+  let header = isNext ? '#2a2145' : '#14241f';
   return `
 import { CardDef, Component } from '@cardstack/base/card-api';
 
@@ -414,8 +426,8 @@ export class ReleaseTrain extends CardDef {
     <template>
       <article class='train'>
         <header>
-          <div><span class='eyebrow'>PRETUI · TEAM RELEASE 1.0</span><h1>One system, four layers of work.</h1></div>
-          <div class='version'><span>main</span><strong>1.0.0</strong><small>latest</small></div>
+          <div><span class='eyebrow'>PRETUI · ${releaseLabel}</span><h1>${headline}</h1></div>
+          <div class='version'><span>${branchLabel}</span><strong>${versionLabel}</strong><small>${statusLabel}</small></div>
         </header>
         <section class='flow' aria-label='Release flow'>
           <div><b>4</b><span>branches</span></div><i>→</i><div><b>4</b><span>component Reviews</span></div><i>→</i><div><b>1</b><span>release Review</span></div><i>→</i><div class='live'><b>28</b><span>units on main</span></div>
@@ -434,7 +446,7 @@ export class ReleaseTrain extends CardDef {
       </article>
       <style scoped>
         .train { --ink: #16221e; --muted: #6d7b75; --line: #d9e3df; --mint: #b8f4d5; max-width: 70rem; overflow: hidden; border: 1px solid var(--line); border-radius: 1.4rem; background: #f6faf8; color: var(--ink); box-shadow: 0 1.5rem 4rem rgb(22 34 30 / 12%); font-family: Inter, system-ui, sans-serif; }
-        header { display: flex; justify-content: space-between; gap: 2rem; padding: 2rem; background: #14241f; color: #f8fffb; } .eyebrow { color: #8fe2bb; font: 700 .68rem/1.2 ui-monospace, monospace; letter-spacing: .15em; } h1 { margin: .45rem 0 0; font-size: clamp(1.8rem, 4vw, 3.2rem); letter-spacing: -.055em; } .version { display: grid; align-content: center; justify-items: end; min-width: 8rem; } .version span,.version small { color: #9fb1aa; font: .68rem ui-monospace, monospace; } .version strong { font-size: 1.5rem; }
+        header { display: flex; justify-content: space-between; gap: 2rem; padding: 2rem; background: ${header}; color: #f8fffb; } .eyebrow { color: ${accent}; font: 700 .68rem/1.2 ui-monospace, monospace; letter-spacing: .15em; } h1 { margin: .45rem 0 0; font-size: clamp(1.8rem, 4vw, 3.2rem); letter-spacing: -.055em; } .version { display: grid; align-content: center; justify-items: end; min-width: 8rem; } .version span,.version small { color: #b9c4c0; font: .68rem ui-monospace, monospace; } .version strong { font-size: 1.5rem; }
         .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; align-items: center; gap: .7rem; padding: 1rem 2rem; border-bottom: 1px solid var(--line); background: #fff; } .flow div { display: flex; align-items: baseline; gap: .55rem; } .flow b { font-size: 1.35rem; } .flow span { color: var(--muted); font-size: .75rem; } .flow i { color: #9aaba4; font-style: normal; } .flow .live b { color: #087a4f; }
         main { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; padding: 1rem; } .lane { min-height: 9rem; padding: 1.1rem; border: 1px solid var(--line); border-radius: 1rem; background: #fff; } .lane > span { color: #698078; font: 700 .62rem ui-monospace, monospace; letter-spacing: .13em; } .lane h2 { margin: .6rem 0 .35rem; font-size: 1rem; } .lane p { min-height: 2.5rem; margin: 0 0 .8rem; color: var(--muted); font-size: .78rem; line-height: 1.55; } code { padding: .22rem .38rem; border-radius: .35rem; background: #edf4f1; color: #335148; font: .67rem ui-monospace, monospace; }
         footer { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; border-top: 1px solid var(--line); background: var(--line); } footer div { display: grid; gap: .45rem; padding: 1rem; background: #fff; } footer span { color: var(--muted); font-size: .65rem; text-transform: uppercase; } footer code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -506,6 +518,13 @@ function stateFor(options: {
   });
   let files = new Map<string, string>();
   files.set(
+    'pretui-icon.svg',
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PretUI">
+  <rect width="64" height="64" rx="16" fill="#14241f"/>
+  <path d="M17 18h17c9 0 15 5 15 13s-6 13-15 13h-7v8H17V18Zm10 8v10h7c3 0 5-2 5-5s-2-5-5-5h-7Z" fill="#8fe2bb"/>
+</svg>\n`,
+  );
+  files.set(
     'package.json',
     json({
       name: '@cardstack/pretui',
@@ -538,7 +557,10 @@ function stateFor(options: {
     json({
       data: {
         type: 'card',
-        attributes: { cardInfo: { name: 'PretUI Team Lab' } },
+        attributes: {
+          cardInfo: { name: 'PretUI Team Lab' },
+          iconURL: new URL('pretui-icon.svg', pretuiRealmURL).href,
+        },
         meta: {
           adoptsFrom: {
             module: '@cardstack/base/realm-config',

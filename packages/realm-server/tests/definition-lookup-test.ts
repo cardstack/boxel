@@ -2648,6 +2648,48 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('RRI reader resolves a URL-keyed definition written before the Realm mapping existed', async function (assert) {
+      let workerLookup = new CachingDefinitionLookup(
+        adapter,
+        buildMockPrerenderer(),
+        createVirtualNetwork(),
+        testCreatePrerenderAuth,
+      );
+      await workerLookup.populateDefinitionCacheEntry({
+        moduleURL: `${realmURL}person.gts`,
+        realmURL,
+        resolvedRealmURL: realmURL,
+        cacheScope: 'realm-auth',
+        cacheUserId: testUserId,
+        prerenderUserId: testUserId,
+      });
+
+      let readerNetwork = createVirtualNetwork();
+      readerNetwork.addRealmMapping('@cardstack/pretui/', realmURL);
+      let readerLookup = new CachingDefinitionLookup(
+        adapter,
+        buildMockPrerenderer(),
+        readerNetwork,
+        testCreatePrerenderAuth,
+      );
+      readerLookup.registerRealm(fakeRealm);
+
+      let definition = await readerLookup.lookupDefinition({
+        module: rri(`${realmURL}person`),
+        name: 'Person',
+      });
+      assert.strictEqual(
+        definition.displayName,
+        'Person',
+        'the RRI-aware reader accepts the equivalent absolute definition key',
+      );
+      assert.strictEqual(
+        prerenderModuleCalls,
+        1,
+        'the reader used the worker-populated cache row',
+      );
+    });
+
     test('pre-warm does not persist error entries for modules that fail to prerender', async function (assert) {
       // The realm-wide `.gts`/`.gjs` sweep speculatively warms every card
       // module, so it also touches `.gts` files that aren't cards and fail
