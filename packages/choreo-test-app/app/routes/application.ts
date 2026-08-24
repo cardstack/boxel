@@ -128,57 +128,53 @@ export default class ApplicationRoute extends Route {
     // ::view-transition-* rule in the stylesheet)
     root.style.setProperty('--gm-morph', `${morph}s`);
     // and the grain's own fade, in proportion — a fixed number of milliseconds
-    // is a fifth of a normal transition and a fiftieth of a slow one
-    root.style.setProperty('--gm-grain-out', `${morph * 0.22}s`);
-    root.style.setProperty('--gm-grain-in', `${morph * 0.4}s`);
+    // is a fifth of a normal transition and a fiftieth of a slow one. Both are
+    // kept SHORT relative to the morph on purpose: the noise texture cannot be
+    // composited, so every millisecond it is visible is a millisecond spent
+    // off the clean dark stage the transition is meant to run on. The out fade
+    // only has to be quick enough that the eye reads "gone", not slow enough
+    // to be watched leaving.
+    root.style.setProperty('--gm-grain-out', `${morph * 0.08}s`);
+    root.style.setProperty('--gm-grain-in', `${morph * 0.12}s`);
 
     const resume = quietTheRest();
 
-    let resumeArrivals: (() => void) | undefined;
+    // The grain fades out BEFORE the transition starts: the noise texture
+    // cannot be composited (it does not scale or blend), so it leaves first,
+    // the transition runs on a clean dark stage, and the grain returns after
+    // the morph settles. Waiting here means the first snapshot is taken with
+    // the grain already gone — no stale noise baked into the old image. This
+    // delay has to match --gm-grain-out in milliseconds, or the snapshot is
+    // taken mid-fade and the old noise gets baked in after all.
+    const grainMs = morph * 80;
+    setTimeout(() => {
+      let resumeArrivals: (() => void) | undefined;
 
-    const view = animateView(async () => {
-      await transition.retry();
-      // Again, now that the new page has mounted.
-      //
-      // The first call quiets what was already running. The page arriving in
-      // this callback has its own demo, and it starts animating the moment it
-      // mounts — after that call, and therefore not covered by it. It then runs
-      // at full tilt for the whole morph, which is a cost spread evenly through
-      // the transition rather than at either end: measured off a screen
-      // capture, about one frame in ten dropped in the BODY of the animation
-      // rather than clustered at its start.
-      resumeArrivals = quietTheRest();
-      window.scrollTo(0, scrollTo);
-      // Scrolled HERE, inside the snapshot, and not before it.
-      //
-      //
-      // Doing it before the transition instead makes it an instantaneous jump
-      // the eye sees on its own — measured frame by frame, one 10.5-unit spike
-      // followed by three near-still frames while the route renders, and only
-      // then the morph. That reads as the hesitation at the start.
-      //
-      // Inside the snapshot it costs nothing visually: the page is not being
-      // painted, and the paired elements are positioned from where they REALLY
-      // are on each side.
-    });
+      const view = animateView(async () => {
+        await transition.retry();
+        resumeArrivals = quietTheRest();
+        window.scrollTo(0, scrollTo);
+      });
 
-    // the implicit `root` subject: the page itself, crossfading, at viewport
-    // size — everything not paired below is carried by this one layer
-    view.layout(t.move);
+      view
+        .layout(t.move)
+        .old({ opacity: [1, 0] }, t.leave)
+        .new({ opacity: [0, 1] }, t.arrive);
 
-    if (id && (opening || closing)) {
-      pair(view, id, opening, t);
-    }
+      if (id && (opening || closing)) {
+        pair(view, id, opening, t);
+      }
 
-    const done = () => {
-      this.wrapping = false;
-      setCrossing(false);
-      resume();
-      resumeArrivals?.();
-      root.classList.add('is-returning');
-      root.classList.remove('is-crossing');
-    };
-    void Promise.resolve(view).then(() => whenEnded(morph, done), done);
+      const done = () => {
+        this.wrapping = false;
+        setCrossing(false);
+        resume();
+        resumeArrivals?.();
+        root.classList.add('is-returning');
+        root.classList.remove('is-crossing');
+      };
+      void Promise.resolve(view).then(() => whenEnded(morph, done), done);
+    }, grainMs);
   };
 }
 

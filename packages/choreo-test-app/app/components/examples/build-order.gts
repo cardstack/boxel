@@ -7,7 +7,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { motion } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
-import { BEAD, HEAD, TAIL } from 'test-app/components/choreo-mark';
+import { BEAD, HEAD, ORBIT, TAIL, TIP } from 'test-app/components/choreo-mark';
 import {
   type Build,
   type Delivery,
@@ -34,16 +34,17 @@ import { preventSelect } from 'test-app/lib/pointer';
 /* ── the score, as it opens ──────────────────────────────────────────────── */
 
 /**
- * Seven builds, and not one absolute time among them.
+ * Nine builds, and not one absolute time among them.
  *
  * Read it the way you would read it aloud: the plate slides in, the comet's
- * tail draws with it, the head draws after the tail, the bead lands where the
- * sweep arrives — then the wordmark comes after, character by character, with
- * the rule drawing under it and the tagline last. Every start time on the
+ * tail draws with it, the head draws after the tail, the inner orbit sets off
+ * WITH the head — two timelines now running in phase — the outer arrival
+ * lands its bead, the inner one catches fire, then the wordmark comes after, character by character, with the
+ * rule drawing under it and the tagline last. Every start time on the
  * timeline below is derived from that sentence. It is also the library
- * reciting itself: the arc is the line the engine draws between two
- * measurements, the bead is where the element is NOW, and 'with'/'after' is
- * the score.
+ * reciting itself: an arc is the line the engine draws between two
+ * measurements, a bead is where an element is NOW, and two arcs held in
+ * phase by 'with'/'after' is the whole meaning of the word choreography.
  */
 const OPENING: Build[] = [
   {
@@ -62,8 +63,38 @@ const OPENING: Build[] = [
     part: 'tail',
     start: 'with',
   },
-  { by: 'all', delay: 0, effect: 'draw', ms: 520, part: 'head', start: 'after' },
-  { by: 'all', delay: 0, effect: 'pop', ms: 380, part: 'bead', start: 'after' },
+  {
+    by: 'all',
+    delay: 0,
+    effect: 'draw',
+    ms: 520,
+    part: 'head',
+    start: 'after',
+  },
+  {
+    by: 'all',
+    delay: 200,
+    effect: 'draw',
+    ms: 560,
+    part: 'orbit',
+    start: 'with',
+  },
+  {
+    by: 'all',
+    delay: 320,
+    effect: 'pop',
+    ms: 380,
+    part: 'bead',
+    start: 'with',
+  },
+  {
+    by: 'all',
+    delay: 240,
+    effect: 'draw',
+    ms: 240,
+    part: 'tip',
+    start: 'with',
+  },
   {
     by: 'character',
     delay: 60,
@@ -93,8 +124,8 @@ const OPENING: Build[] = [
 /** how long the finished logo is held before the loop comes round again */
 const HOLD = 900;
 
-/** the stepper's grain, in ms — Keynote's is 0.05s and it is the right size */
-const STEP = 50;
+/** the stepper's grain, in ms — 100 so a 1-decimal readout moves every click */
+const STEP = 100;
 
 /** the one slot a part with nothing to divide has */
 const WHOLE: Slot = { i: 0, n: 1 };
@@ -135,8 +166,18 @@ class Track {
     // Bound where they mean something and nowhere else. `pathLength` is a
     // stroke's whole story; `clipPath` establishes a clip on everything it
     // touches, so it goes only where a Wipe can actually be asked for.
+    //
+    // `pathSpacing` is pinned at 2, and it is a bug fix, not a preference.
+    // Motion renders a drawn path as `stroke-dasharray: length spacing`, and
+    // the default spacing of 1 makes the pattern sum to ~1 when the drawn
+    // length is near zero — which wraps a zero-length dash onto the path's
+    // terminus, inside the browser's length tolerance, and a round linecap
+    // paints that dash as a dot. The end of the line popped in the moment
+    // the draw began. A gap of 2 keeps the second dash a whole path-length
+    // away from the end at any drawn length.
     if (kind === 'stroke') {
       this.style['pathLength'] = this.path;
+      this.style['pathSpacing'] = motionValue(2);
     }
     if (kind === 'box' || kind === 'text') {
       this.style['clipPath'] = this.clip;
@@ -355,6 +396,8 @@ export class BuildOrder extends Component {
   /** the nav mark's geometry, worn here at stage size */
   tailD = TAIL;
   headD = HEAD;
+  orbitD = ORBIT;
+  tipD = TIP;
   bead = BEAD;
 
   get wordRows() {
@@ -610,11 +653,11 @@ export class BuildOrder extends Component {
   }
 
   get delayText() {
-    return `${(this.build.delay / 1000).toFixed(2)} s`;
+    return `${(this.build.delay / 1000).toFixed(1)} s`;
   }
 
   get msText() {
-    return `${(this.build.ms / 1000).toFixed(2)} s`;
+    return `${(this.build.ms / 1000).toFixed(1)} s`;
   }
 
   get clock() {
@@ -662,6 +705,18 @@ export class BuildOrder extends Component {
                   r="{{this.bead.r}}"
                   data-part="bead"
                   {{motion style=(this.sty "bead")}}
+                />
+                <path
+                  class="bo-orbit"
+                  d={{this.orbitD}}
+                  data-part="orbit"
+                  {{motion style=(this.sty "orbit")}}
+                />
+                <path
+                  class="bo-tip"
+                  d={{this.tipD}}
+                  data-part="tip"
+                  {{motion style=(this.sty "tip")}}
                 />
               </svg>
 

@@ -26,6 +26,7 @@ import { SplitView } from 'test-app/components/examples/split-view';
 import { Stagger } from 'test-app/components/examples/stagger';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { Trail } from 'test-app/components/examples/trail';
+import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { FarNotes } from 'test-app/components/notes/far';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
@@ -1052,6 +1053,7 @@ move = (event) => {
     group: 'Choreo',
     id: 'build-order',
     lede: 'Keynote\u2019s build inspector, wired to the site\u2019s own logo. Retime it while it runs.',
+    notes: BuildOrderNotes,
     sample: `// A build order, not a timeline. Nothing here is a timecode: a build says
 // WHICH part, WHAT effect, and when it goes relative to the build above it.
 const OPENING = [

@@ -61,14 +61,16 @@ export const PARTS: Part[] = [
   { kind: 'box', label: 'Plate', name: 'plate' },
   { kind: 'stroke', label: 'Tail', name: 'tail' },
   { kind: 'stroke', label: 'Head', name: 'head' },
+  { kind: 'stroke', label: 'Orbit', name: 'orbit' },
   { kind: 'shape', label: 'Bead', name: 'bead' },
-  { kind: 'text', label: 'Wordmark', name: 'word', text: 'CHOREO' },
+  { kind: 'stroke', label: 'Tip', name: 'tip' },
+  { kind: 'text', label: 'Wordmark', name: 'word', text: 'Choreo' },
   { kind: 'stroke', label: 'Rule', name: 'rule' },
   {
     kind: 'text',
     label: 'Tagline',
     name: 'tag',
-    text: 'A TIMELINE FOR THE SCENE',
+    text: 'MOTION. CHOREOGRAPHED.',
   },
 ];
 
@@ -147,9 +149,12 @@ export const EFFECTS: Record<EffectName, Effect> = {
     on: ALL,
   },
   draw: {
-    // opacity stays at 1 throughout: what makes a line draw is that there is
-    // less of it, not that it is fainter
-    at: (p) => ({ pathLength: p }),
+    // Opacity stays at 1 while drawing: what makes a line draw is that there
+    // is less of it, not that it is fainter. But at EXACTLY zero the stroke is
+    // withheld outright — a zero-length dash with round linecaps still paints
+    // its caps, which puts a stray dot at each end of a path that should not
+    // be there at all.
+    at: (p) => ({ opacity: p > 0 ? 1 : 0, pathLength: p }),
     ease: easeInAndOut,
     label: 'Line Draw',
     on: ['stroke'],

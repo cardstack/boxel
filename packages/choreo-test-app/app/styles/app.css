@@ -103,6 +103,15 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background: transparent;
+  transition: opacity var(--gm-grain-out, 140ms) linear;
+}
+
+html.is-crossing > body {
+  opacity: 0;
+}
+
+html.is-returning > body {
+  transition: opacity var(--gm-grain-in, 260ms) ease-out;
 }
 
 a {
@@ -161,10 +170,14 @@ button {
 }
 
 .brand-name {
+  /* same treatment as the wordmark in the Build Order demo: Syne at 800.
+     Nudged 1px right — the capital C's open counter reads as more space on
+     its left than its right, so set flush it looks pulled toward the mark. */
   font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: 800;
+  font-size: 17px;
   letter-spacing: -0.03em;
+  margin-left: 1px;
 }
 
 .brand-sub {
@@ -251,10 +264,10 @@ button {
   line-height: 0.95;
 }
 
-/* The one exception. 'Choreo-graphed.' is fifteen characters; in Syne at 800 it
-   sets the width of the whole heading and forces the line above it down a size
-   with it. The narrower face keeps the word intact and lets the rest stay
-   wide — which is the point of the wide face in the first place. */
+/* The one exception. 'Choreographed.' is fourteen characters; in Syne at 800
+   it sets the width of the whole heading and forces the line above it down a
+   size with it. The narrower face keeps the word intact and lets the rest
+   stay wide — which is the point of the wide face in the first place. */
 .hero h1 em {
   font-family: var(--font-display-alt);
   font-weight: 700;
@@ -262,13 +275,15 @@ button {
      it takes a little more size and a little less tracking to sit level with
      the Syne line above it.
 
-     1.06 is measured, not chosen: at 1.02 the fifteen narrow characters set
-     611px against "Motion," at 636px, and a two-line heading whose lines do
-     not agree on a right edge reads as a mistake. Both lines take their size
-     from the same em, so the ratio holds at every width the clamp allows. */
+     1.108 is measured, not chosen: at 1.06 — tuned for the old hyphenated
+     "Choreo-graphed." — the fourteen narrow characters of "Choreographed."
+     set 609px against "Motion," at 636px, and a two-line heading whose lines
+     do not agree on a right edge reads as a mistake. Both lines take their
+     size from the same em, so the ratio holds at every width the clamp
+     allows. Re-measure this if the copy changes again. */
   font-stretch: 62%;
   font-variation-settings: 'wdth' 62;
-  font-size: 1.06em;
+  font-size: 1.108em;
   letter-spacing: -0.02em;
   font-style: normal;
   color: transparent;
@@ -2431,10 +2446,9 @@ html[data-gm-dragging] * {
 }
 
 .choreo-mark {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: block;
-  color: var(--ember);
 }
 
 @media (max-width: 720px) {
