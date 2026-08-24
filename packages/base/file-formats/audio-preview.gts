@@ -1,8 +1,10 @@
 // The sampled-audio family's renderer, projected into the four format shells by
-// `FilePreviewStage`. The browser is the decoder, so the reading formats mount
-// one native `<audio controls>` — but a sound file has no picture, so the visual
-// the shells hand their stage is the amplitude envelope the extract pass read
-// out of the bytes, drawn as a waveform.
+// `FilePreviewStage` — and the content-only component an embedding author
+// imports from the `file-formats/index` barrel to render a waveform and player
+// without any shell chrome. The browser is the decoder, so the reading formats
+// mount one native `<audio controls>` — but a sound file has no picture, so the
+// visual the shells hand their stage is the amplitude envelope the extract pass
+// read out of the bytes, drawn as a waveform.
 //
 // The envelope arrives already resampled and bounded by `fileViewModel`
 // (`waveformBars`, 64 bars in a fitted cell, 256 in the reading formats), so
@@ -16,13 +18,18 @@
 // waveform and the running time, and the reading formats own playback.
 import { on } from '@ember/modifier';
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import MusicIcon from '@cardstack/boxel-icons/music';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { formatClock } from './file-presentation';
-import type { FilePreviewSignature } from './file-preview-stage';
+import type { ContentPreviewSignature } from './file-preview-stage';
+import {
+  ensureFileViewModel,
+  type FileFormat,
+  type FileViewModel,
+} from './file-view-model';
 
 // SVG clipPath ids are document-global, and a page can mount several audio
 // previews at once, so each instance takes its own serial.
@@ -38,11 +45,27 @@ interface WaveBar {
   h: number;
 }
 
-export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
+export class AudioPreview extends GlimmerComponent<ContentPreviewSignature> {
+  get mode(): FileFormat {
+    return this.args.mode ?? 'embedded';
+  }
+
+  get isFitted(): boolean {
+    return this.mode === 'fitted';
+  }
+
+  // `@model` is the FileDef instance in the content-only case and a prebuilt
+  // view model when a shell is rendering; either way the reads below see the
+  // shared projection.
+  @cached
+  get model(): FileViewModel {
+    return ensureFileViewModel(this.args.model, this.mode);
+  }
+
   // The resampled envelope, already normalized to 0–100 and capped to the
   // format's bar budget by the shared projection.
   get bars(): number[] {
-    return this.args.model?.waveformBars ?? [];
+    return this.model.waveformBars ?? [];
   }
 
   get hasWaveform(): boolean {
@@ -75,7 +98,7 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
   // Present for the `audio`/`music` families, where the shared projection routes
   // the file's own URL to the player.
   get mediaUrl(): string | undefined {
-    return this.args.model?.mediaUrl;
+    return this.model.mediaUrl;
   }
 
   // How much of the track has played, 0–1, mirrored from the mounted player.
@@ -109,7 +132,7 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
     let duration =
       Number.isFinite(el.duration) && el.duration > 0
         ? el.duration
-        : Number(this.args.model?.durationSeconds);
+        : Number(this.model.durationSeconds);
     if (!Number.isFinite(duration) || duration <= 0) {
       this.playedRatio = 0;
       return;
@@ -121,19 +144,19 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
   // loads, but that never happens in a headless prerender and may lag a slow
   // range fetch, so the figure the extractor already read is shown regardless.
   get duration(): string {
-    return formatClock(this.args.model?.durationSeconds);
+    return formatClock(this.model.durationSeconds);
   }
 
   get trackTitle(): string {
-    return this.args.model?.mediaTags?.trackTitle ?? '';
+    return this.model.mediaTags?.trackTitle ?? '';
   }
 
   get artist(): string {
-    return this.args.model?.mediaTags?.artist ?? '';
+    return this.model.mediaTags?.artist ?? '';
   }
 
   <template>
-    {{#if (eq @mode 'fitted')}}
+    {{#if this.isFitted}}
       <div class='wave-fitted' data-test-audio-fitted>
         {{#if this.hasWaveform}}
           <svg
@@ -157,7 +180,7 @@ export class AudioPreview extends GlimmerComponent<FilePreviewSignature> {
         {{/if}}
       </div>
     {{else}}
-      <div class='audio' data-mode={{@mode}} data-test-audio-preview>
+      <div class='audio' data-mode={{this.mode}} data-test-audio-preview>
         <div class='audio-visual'>
           {{#if this.hasWaveform}}
             <svg

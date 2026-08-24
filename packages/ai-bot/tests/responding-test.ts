@@ -466,10 +466,13 @@ module('Responding', (hooks) => {
         fakeMatrixClient.getSentToDeviceEvents().length;
 
       // The usage report trails the stop chunk on a chunk with no choices.
-      // It carries OpenRouter's extensions too: the prompt-cache split and
-      // the inline cost.
+      // It carries OpenRouter's extensions too: the prompt-cache split, the
+      // inline cost, the serving provider, and the generation id (`id`,
+      // present on every real chunk).
       await responder.onChunk(
         {
+          id: 'gen-abc123',
+          provider: 'Anthropic',
           choices: [],
           usage: {
             prompt_tokens: 321,
@@ -518,8 +521,10 @@ module('Responding', (hooks) => {
           completionTokens: 45,
           cachedTokens: 300,
           costUsd: 0.0123,
+          provider: 'Anthropic',
+          generationId: 'gen-abc123',
         },
-        'the token counts, cache split, and cost ride the final room event',
+        'the token counts, cache split, cost, provider, and generation id ride the final room event',
       );
       assert.deepEqual(
         last.content['m.relates_to'],

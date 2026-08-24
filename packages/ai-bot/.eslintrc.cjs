@@ -44,7 +44,13 @@ module.exports = {
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-unused-vars': [
       'error',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      // `caughtErrors` defaults to reporting; a caught error is often kept for
+      // the shape of the catch rather than to be used.
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrors: 'none',
+      },
     ],
     '@typescript-eslint/parameter-properties': [
       'error',

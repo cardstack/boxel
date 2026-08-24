@@ -64,6 +64,7 @@ module(basename(import.meta.filename), function () {
         'full-reindex',
         'incremental-index',
         'lint-source',
+        'media-cache-gc',
         'prerender-html-reconcile',
         'prerender_html',
         'run-command',

@@ -19,6 +19,12 @@ import {
   PRERENDER_HTML_RECONCILE_CRON_TZ,
   createPrerenderHtmlReconcileCronJob,
 } from './prerender-html-reconcile-config.ts';
+import { enqueueMediaCacheGc } from '../scripts/media-cache-gc.ts';
+import {
+  MEDIA_CACHE_GC_CRON_SCHEDULE,
+  MEDIA_CACHE_GC_CRON_TZ,
+  createMediaCacheGcCronJob,
+} from './media-cache-gc-config.ts';
 
 let log = logger('cron-scheduler');
 
@@ -38,6 +44,11 @@ export function startCronJobs(): void {
   let prerenderHtmlReconcileJob = startPrerenderHtmlReconcileCron();
   if (prerenderHtmlReconcileJob) {
     jobs.push(prerenderHtmlReconcileJob);
+  }
+
+  let mediaCacheGcJob = startMediaCacheGcCron();
+  if (mediaCacheGcJob) {
+    jobs.push(mediaCacheGcJob);
   }
 }
 
@@ -118,6 +129,26 @@ function startPrerenderHtmlReconcileCron(): CronJob | undefined {
   job.start();
   log.info(
     `prerender-html-reconcile cron scheduled for ${PRERENDER_HTML_RECONCILE_CRON_SCHEDULE} ${PRERENDER_HTML_RECONCILE_CRON_TZ}`,
+  );
+  return job;
+}
+
+function startMediaCacheGcCron(): CronJob | undefined {
+  let job = createMediaCacheGcCronJob(
+    async () => {
+      try {
+        await enqueueMediaCacheGc();
+      } catch (error) {
+        Sentry.captureException(error);
+        log.error('media-cache-gc cron failed to enqueue job', error);
+      }
+    },
+    { runOnInit: false },
+  );
+
+  job.start();
+  log.info(
+    `media-cache-gc cron scheduled for ${MEDIA_CACHE_GC_CRON_SCHEDULE} ${MEDIA_CACHE_GC_CRON_TZ}`,
   );
   return job;
 }

@@ -927,12 +927,15 @@ When the summary signals (Mode A's `cpuTopFrames`, Mode D) name a hot or looping
 
 ### Two tiers — pick by what you need
 
-| Tier                              | What                                                                            | Where it lands                              | Captures the hard wedge?                                                                                          |
-| --------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1 (always on for targeted realms) | Top-N self-time **summary**                                                     | `prerenderer` log: `affinity CPU profile …` | No — `Profiler.stop` needs the renderer thread                                                                    |
-| 2 — `.cpuprofile`                 | Full V8 CPU profile (whole call tree)                                           | S3 `…/<ts>.cpuprofile`                      | No — same `Profiler.stop` limit                                                                                   |
-| 2 — trace (`.trace.json`)         | CDP/Perfetto trace, **streamed** — separates JS / GC / compile / layout / paint | S3 `…/<ts>.trace.json`                      | **Yes** — buffered on browser threads, drained out-of-band; the one capture that survives a fully-pegged renderer |
-| 2 — heap (`.heapprofile`)         | Cumulative allocation-sampling profile, flushed per render                      | S3 `…/<ts>.heapprofile`                     | No — `getSamplingProfile` needs the renderer thread                                                               |
+| Tier                                | What                                                                                                                                                            | Where it lands                              | Captures the hard wedge?                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1 (always on for targeted realms)   | Top-N self-time **summary**                                                                                                                                     | `prerenderer` log: `affinity CPU profile …` | No — `Profiler.stop` needs the renderer thread                                                                    |
+| 2 — `.cpuprofile`                   | Full V8 CPU profile (whole call tree)                                                                                                                           | S3 `…/<ts>.cpuprofile`                      | No — same `Profiler.stop` limit                                                                                   |
+| 2 — trace (`.trace.json`)           | CDP/Perfetto trace, **streamed** — separates JS / GC / compile / layout / paint                                                                                 | S3 `…/<ts>.trace.json`                      | **Yes** — buffered on browser threads, drained out-of-band; the one capture that survives a fully-pegged renderer |
+| 2 — heap (`.heapprofile`)           | Cumulative allocation-sampling profile, flushed per render                                                                                                      | S3 `…/<ts>.heapprofile`                     | No — `getSamplingProfile` needs the renderer thread                                                               |
+| 2 — heap snapshot (`.heapsnapshot`) | Full retention snapshot of the **prerender server's own Node heap** — not a render, not the browser. Answers what the process still holds after renders finish. | S3 `…/<ts>.heapsnapshot`                    | N/A — nothing to do with the renderer; it stops the Node process instead                                          |
+
+The heap snapshot is the odd one out: every other row is per-render and gated on `PRERENDER_PROFILE_AFFINITY`, while this one is per-process, ignores affinity entirely, and fires by itself when the task's heap crosses a threshold. Reach for it when `heapUsedMB` on the _Node heap_ dashboard panel climbs across a task's life and does not come back down — memory the process kept, rather than memory a render used.
 
 Rule of thumb: a render that **completes but is heavy** → `.cpuprofile` (+ heap for allocation growth). A render that **fully wedges** (no `cpuTopFrames`, `scriptBusy=<unknown>`) → the **trace**, which is the only thing that comes back. If the trace returns idle (no hot frame), the wedge isn't CPU-spinning — pivot to "what is it blocked on" (Mode A's `pendingFetches`).
 
@@ -947,6 +950,8 @@ All live at `/<env>/boxel/<NAME>` (Systems Manager → Parameter Store). The buc
 | `PRERENDER_PROFILE_TRACE`             | `true` / `false`                                                                   | Capture the streaming trace for targeted renders.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `PRERENDER_PROFILE_HEAP`              | `true` / `false`                                                                   | Capture the heap allocation-sampling profile for targeted renders.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `PRERENDER_PROFILE_MAX_SESSION_BYTES` | positive integer, or `0` for the default                                           | Soft per-process byte budget across all artifacts. `0`/unset → 5 GiB. Once spent, the task declines further uploads (in-flight ones finish, so blobs are never truncated).                                                                                                                                                                                                                                                                                                                                  |
+| `PRERENDER_HEAP_SNAPSHOT`             | `true` / `false`                                                                   | Enables the Node heap snapshot: both the `POST /heap-snapshot` route and the automatic capture. **Not affinity-gated, and per-service** — every task in the service arms, and each one stops the world once, on its own, when its heap crosses the threshold below. Terraform seeds it `true` in staging and `false` in production.                                                                                                                                                                         |
+| `PRERENDER_HEAP_SNAPSHOT_MB`          | positive integer, or `0` for the default                                           | Heap size at which a task captures itself, once per process. `0`/unset → 1536 MB. Lower it to demonstrate the capture quickly; raise it and the pause grows with the heap.                                                                                                                                                                                                                                                                                                                                  |
 | `PRERENDER_V8_PROF`                   | `true` / `false`                                                                   | Arm V8's `--prof` kernel-`SIGPROF` CPU sampler at Chrome launch — **renderer-wide, NOT affinity-gated**. The capture that survives a hard CPU peg that starves the CDP captures above (kernel preemption needs no thread cooperation). On a render timeout the raw log is streamed to the artifacts bucket as a `v8log` (symbolized offline with `node --prof-process`); the timeout line reports the upload. See **Mode I**. Needs a prerender-server task **restart** (not just redeploy) to take effect. |
 
 The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDER_PROFILE_AFFINITY` is operator-managed and must already exist. The affinity key is `realm:` + the realm's canonical URL **with trailing slash** — the same value Mode A/B logs print as `affinity=…`.
@@ -965,6 +970,27 @@ The mode flags are Terraform-seeded sentinels (default `false` / `0`); `PRERENDE
 4. **Pull the artifacts** (below).
 5. **Turn it off.** Set the mode flags back to `false` (and clear `PRERENDER_PROFILE_AFFINITY` if done), then force one more deployment. Leftover artifacts auto-expire after 14 days regardless.
 
+#### Capturing a Node heap snapshot
+
+Different procedure, because this one is not per-render and not affinity-gated.
+
+1. **Turn it on.** `PRERENDER_HEAP_SNAPSHOT=true` (already `true` in staging). Optionally lower `PRERENDER_HEAP_SNAPSHOT_MB` — a fresh task passes a few hundred MB within minutes, where the 1536 default takes closer to a quarter of an hour under load.
+2. **Restart the service** so tasks pick the values up.
+3. **Wait.** Each task captures itself once, on an idle tick after its heap crosses the threshold, and logs `heap snapshot starting …`, `heap snapshot written bytes=… writeMs=…`, `heap snapshot uploaded …`. Nothing else is needed — if it never fires, check `heapUsedMB` on the dashboard against the threshold.
+4. **Pull it** from the artifacts bucket like any other artifact, and read it per _Reading each artifact_.
+
+To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id):
+
+```
+aws --profile <profile> ssm start-session \
+  --target "ecs:<cluster>_<taskId>_<container_id>" \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters '{"portNumber":["4221"],"localPortNumber":["54221"],"host":["localhost"]}' &
+curl -X POST localhost:54221/heap-snapshot
+```
+
+**What it costs.** The write stops the event loop: measured at 6.9–15.9 s for heaps of 1559–1588 MB on a staging task, producing 198–512 MB files. Cost follows object count rather than bytes, so a heap of the same size with many more, smaller objects is far slower. Two consequences worth knowing before raising the threshold: a pause beyond the manager's **30 s heartbeat** gets the instance swept as stale until it re-registers, and one file can spend a large share of the 5 GiB `PRERENDER_PROFILE_MAX_SESSION_BYTES` budget shared with the profiler artifacts. Capture at 1–2 GB; the retention reads the same and every cost is smaller.
+
 ### Pulling the artifacts
 
 The `boxel-claude-readonly` role has `s3:GetObject` + `s3:ListBucket` on `boxel-prerender-artifacts-*`, so use the `aws-access` skill's session (`mise run claude-aws`) and plain S3:
@@ -981,6 +1007,7 @@ The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — eve
 - **`.cpuprofile`** — Chrome DevTools (Performance panel → _Load profile…_) or [speedscope](https://www.speedscope.app/). Self-time flame graph of the whole render; the summary's top frames are just the peak of this.
 - **`.trace.json`** — [Perfetto UI](https://ui.perfetto.dev/) or Chrome DevTools Performance → _Load profile…_. Separate tracks for JS execution, V8 GC, compile, and layout/paint — this is how you tell a JS spin (`v8.execute` saturated) from GC thrash (`v8.gc` saturated) when the summary couldn't say.
 - **`.heapprofile`** — Chrome DevTools Memory → _Allocation sampling_ → _Load profile…_. Each upload is the cumulative profile **at that render**, so download two from different points in the session and compare to see which call sites kept allocating.
+- **`.heapsnapshot`** — Chrome DevTools Memory → _Load profile…_, which is a **different panel from `.heapprofile`'s allocation-sampling view**: this one shows retention, so sort by _Retained Size_ and follow the _Retainers_ pane from a suspiciously numerous object back to a GC root. The key's `step` segment carries the heap size at capture (`node-heap-1564mb`). Files run to hundreds of MB; they load, but give the tab a moment.
 
 ### What Mode H can't tell you
 

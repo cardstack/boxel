@@ -7,6 +7,7 @@ import {
   anyArtifactCaptureEnabled,
   shouldCaptureCpuProfile,
   shouldCaptureTrace,
+  shouldAllowHeapSnapshot,
   shouldCaptureHeap,
   uploadArtifact,
   __resetArtifactSinkSessionForTests,
@@ -97,6 +98,10 @@ module('prerender artifact-sink key', function (hooks) {
     assert.strictEqual(suffix('cpuprofile'), 'cpuprofile');
     assert.strictEqual(suffix('trace'), 'trace.json');
     assert.strictEqual(suffix('heap'), 'heapprofile');
+    // Distinct from `heap` above on purpose: that one is a browser page's
+    // allocation-sampling profile, this is a snapshot of the server's own
+    // heap, and they open in different DevTools panels.
+    assert.strictEqual(suffix('heapsnapshot'), 'heapsnapshot');
     assert.strictEqual(suffix('v8log'), 'v8log');
   });
 
@@ -135,6 +140,7 @@ module('prerender artifact-sink gates', function (hooks) {
       ['PRERENDER_PROFILE_CPUPROFILE', shouldCaptureCpuProfile],
       ['PRERENDER_PROFILE_TRACE', shouldCaptureTrace],
       ['PRERENDER_PROFILE_HEAP', shouldCaptureHeap],
+      ['PRERENDER_HEAP_SNAPSHOT', shouldAllowHeapSnapshot],
     ] as const) {
       delete process.env[flag];
       assert.false(read(), `${flag} unset → off`);

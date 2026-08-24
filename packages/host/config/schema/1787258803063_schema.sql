@@ -76,6 +76,21 @@
    PRIMARY KEY ( id ) 
 );
 
+ CREATE TABLE IF NOT EXISTS media_cache_ledger (
+   realm_url TEXT NOT NULL,
+   source_url TEXT NOT NULL,
+   capture_spec_hash TEXT NOT NULL,
+   source_generation INTEGER NOT NULL,
+   object_key TEXT NOT NULL,
+   source_content_hash TEXT,
+   lane TEXT NOT NULL,
+   content_type TEXT NOT NULL,
+   size_bytes NOT NULL,
+   created_at NOT NULL,
+   last_accessed_at NOT NULL,
+   PRIMARY KEY ( realm_url, source_url, capture_spec_hash, source_generation ) 
+);
+
  CREATE TABLE IF NOT EXISTS module_transpile_cache (
    realm_url TEXT NOT NULL,
    canonical_path TEXT NOT NULL,

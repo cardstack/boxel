@@ -40,6 +40,9 @@ import {
   ensureTrailingSlash,
   skillCardRef,
   rri,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import {
   absolutizeSkillLinks,
@@ -860,7 +863,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.equal(attachedCards.length, 0);
   });
 
-  test('downloads and includes most recent version of attached files', async () => {
+  test('each message keeps its own attached-file snapshot content', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1042,7 +1045,24 @@ Current date and time: 2025-06-11T11:43:00.533Z
       },
     ];
 
-    // Set up mock responses for file downloads
+    // Set up mock responses for file downloads — every message's snapshot
+    // is downloaded now, so each version needs a response.
+    mockResponses.set('http://test.com/spaghetti-recipe-a.gts', {
+      ok: true,
+      text: 'spaghetti content version a',
+    });
+    mockResponses.set('http://test.com/best-friends-a.txt', {
+      ok: true,
+      text: 'best friends version a',
+    });
+    mockResponses.set('http://test.com/spaghetti-recipe-b.gts', {
+      ok: true,
+      text: 'spaghetti content version b',
+    });
+    mockResponses.set('http://test.com/best-friends-b.txt', {
+      ok: true,
+      text: 'best friends version b',
+    });
     mockResponses.set('http://test.com/spaghetti-recipe-c.gts', {
       ok: true,
       text: 'this is the content of the spaghetti-recipe.gts file',
@@ -1071,33 +1091,35 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.ok(
       messageText(userMessages[0]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version a
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version a
       `.trim(),
       ),
+      'first message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[1]).includes(
         `
-Attached Files (files with newer versions don't show their content):
-[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts)
-[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt)
-[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt)
-[example.pdf](http://test.com/my-realm/example.pdf): [application/pdf]
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
+  1: spaghetti content version b
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
+  1: best friends version b
       `.trim(),
       ),
+      'second message keeps its own snapshot content',
     );
     assert.ok(
       messageText(userMessages[2]).includes(
         `
-Attached Files (files with newer versions don't show their content):
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts):
   1: this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt):
   1: this is the content of the best-friends.txt file
       `.trim(),
       ),
+      'latest message includes its content with line numbers',
     );
 
     assert.ok(
@@ -1408,9 +1430,9 @@ Attached Files (files with newer versions don't show their content):
         'http://localhost:4201/experiments/Author/1',
       ),
     );
-    assert.false(
+    assert.true(
       messageText(userMessages[0]).includes('"firstName": "Terry"'),
-      'should not include the contents of the first version of the card in the first user message',
+      'each message keeps its own snapshot of the card content',
     );
     assert.true(
       messageText(userMessages[1]).includes(
@@ -1718,7 +1740,13 @@ Attached Files (files with newer versions don't show their content):
     });
   });
 
-  test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
+  test('Adds the "unable to edit cards" note only when no card-patch tool is in the request', async () => {
+    // What grants card editing is a card-patch tool in the request
+    // (patch-fields from a skill, or a legacy patchCardInstance in an old
+    // room's history) — interactive messages carry no tools themselves, so
+    // neither an open card nor an attached one implies edit access. The
+    // note keys off the tools array; an attached file also suppresses it
+    // (files are editable through SEARCH/REPLACE patches).
     const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1729,7 +1757,7 @@ Attached Files (files with newer versions don't show their content):
           body: 'set the name to dave',
           data: {
             context: {
-              openCardIds: [rri('http://localhost:4201/drafts/Author/1')],
+              openCardIds: [],
               tools: [],
               submode: 'code',
               functions: [],
@@ -1791,23 +1819,20 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
 
-    let nonEditableCardsMessage =
-      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+    let nonEditableCardsMessage = 'You are unable to edit any cards:';
 
     let userContextMessage = messages?.[messages.length - 1];
     assert.ok(
       messageText(userContextMessage).includes(nonEditableCardsMessage),
-      'The context leading the user turn should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files, but was ' +
+      'The note appears when cards are attached but no card-patch tool is in the request, but was ' +
         userContextMessage?.content,
     );
 
-    // Now add a tool
+    // An open card grants nothing by itself — no tool, no edit path.
     let cardMessageContent = eventList[0].content as CardMessageContent;
     cardMessageContent.data.context ||= {};
-    cardMessageContent.data.context.tools = [
-      getPatchTool(rri('http://localhost:4201/drafts/Author/1'), {
-        attributes: { firstName: { type: 'string' } },
-      }),
+    cardMessageContent.data.context.openCardIds = [
+      rri('http://localhost:4201/drafts/Author/1'),
     ];
 
     const { messages: messages2 } = await getPromptParts(
@@ -1817,13 +1842,38 @@ Attached Files (files with newer versions don't show their content):
     );
 
     assert.ok(
-      !messageText(messages2?.[messages2.length - 2]).includes(
+      messageText(messages2?.[messages2.length - 1]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when there are attached cards and a tool',
+      'The note stays when a card is open but the request still carries no card-patch tool',
     );
 
-    // Now remove cards, tools, and add an attached file
+    // A card-patch tool in the request is the grant.
+    cardMessageContent.data.context.tools = [
+      {
+        type: 'function',
+        function: {
+          name: 'patchFields',
+          description: 'Patch fields on a card',
+          parameters: { type: 'object', properties: {} },
+        },
+      } as Tool,
+    ];
+
+    const { messages: messages3 } = await getPromptParts(
+      historyWithStringifiedData(eventList),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(
+      !messageText(messages3?.[messages3.length - 1]).includes(
+        nonEditableCardsMessage,
+      ),
+      'The note is suppressed when the request carries a card-patch tool',
+    );
+
+    // Now remove the tool and add an attached file
     cardMessageContent.data.context.openCardIds = [];
     cardMessageContent.data.context.tools = [];
     cardMessageContent.data.attachedFiles = [
@@ -1836,21 +1886,25 @@ Attached Files (files with newer versions don't show their content):
       },
     ];
 
-    const { messages: messages3 } = await getPromptParts(
+    const { messages: messages4 } = await getPromptParts(
       historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
 
     assert.ok(
-      !messageText(messages3?.[messages3.length - 2]).includes(
+      !messageText(messages4?.[messages4.length - 1]).includes(
         nonEditableCardsMessage,
       ),
-      'System context message should not include the "unable to edit cards" message when there is an attached file',
+      'The note is suppressed when there is an attached file',
     );
   });
 
-  test('Gets only the latest functions', async () => {
+  test('the first-seen definition of a tool wins for the life of the room', async () => {
+    // The tools array renders ahead of message history, so a definition that
+    // mutated mid-session would re-bill the whole conversation. The union is
+    // first-wins: the earlier patch tool keeps its schema even though a later
+    // message carries a same-named tool generated from a different card.
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -1932,47 +1986,16 @@ Attached Files (files with newer versions don't show their content):
       fakeMatrixClient,
     );
     assert.equal(functions.length, 1);
-    if (functions.length > 0) {
-      assert.deepEqual(functions[0], {
-        type: 'function',
-        function: {
-          name: 'patchCardInstance',
-          description:
-            'Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
-          parameters: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-              },
-              attributes: {
-                type: 'object',
-                properties: {
-                  cardId: {
-                    type: 'string',
-                    const: 'http://localhost:4201/experiments/Meeting/2',
-                  },
-                  patch: {
-                    type: 'object',
-                    properties: {
-                      attributes: {
-                        type: 'object',
-                        properties: {
-                          location: {
-                            type: 'string',
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            },
-            required: ['attributes', 'description'],
-          },
+    // Byte-for-byte the tool the FIRST message carried — regenerated with
+    // the same inputs, so the assertion stays type-safe.
+    assert.deepEqual(
+      functions[0],
+      getPatchTool(rri('http://localhost:4201/experiments/Friend/1'), {
+        attributes: {
+          firstName: { type: 'string' },
         },
-      });
-    }
+      }),
+    );
   });
 
   test('should include instructions in system prompt for skill cards', async () => {
@@ -3483,6 +3506,52 @@ Attached Files (files with newer versions don't show their content):
       ),
     );
 
+    // Disabled skills' contents are now downloaded to learn which tool
+    // names they declare — the only names removable from the tools union.
+    // The fixture's mxc URL is remapped to a fresh one: downloadFile caches
+    // by URL across tests, and an earlier test cached different content
+    // under the original.
+    for (let event of eventList) {
+      let disabled = (event as any).content?.disabledSkillCards;
+      if (disabled?.length) {
+        for (let card of disabled) {
+          card.url = 'mxc://mock-server/skill_card_editing_disabled';
+        }
+      }
+    }
+    mockResponses.set('mxc://mock-server/skill_card_editing_disabled', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: '@cardstack/base/Skill/card-editing',
+          attributes: {
+            instructions: 'Card editing skill',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/patch-card-instance',
+                },
+                requiresApproval: false,
+                functionName: 'patchCardInstance',
+              },
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Card Editing',
+          },
+          meta: { adoptsFrom: skillCardRef },
+        },
+      }),
+    });
+
     const { messages, tools } = await getPromptParts(
       eventList,
       '@aibot:localhost',
@@ -3641,9 +3710,11 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
-  test('Elides code blocks in prompt and includes results', async () => {
-    // sending older codeblocks back to the model just confuses it and wastes tokens
-    // so we need to remove them from the prompt
+  test('Keeps past code blocks verbatim in the prompt', async () => {
+    // Eliding old code blocks rewrote already-sent history (the placeholder
+    // text even changed once the patch result arrived), which broke the
+    // cache prefix — and models imitated the "[Omitting …]" placeholder in
+    // place of a real patch, stalling the session. The blocks stay verbatim.
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -3667,12 +3738,23 @@ Current date and time: 2025-06-11T11:43:00.533Z
       messageText(messages![2]),
       'Updating the file...\n' +
         'http://test.com/spaghetti-recipe.gts\n' +
-        '[Omitting previously suggested and applied code change]\n' +
+        `${SEARCH_MARKER}\n` +
+        'this is the riveting content of the spaghetti-recipe.gts file\n' +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the engaging content of the spaghetti-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n` +
         '\n' +
         'I will also create a file for rigatoni:\n' +
         '\n' +
         'http://test.com/rigatoni-recipe.gts\n' +
-        '[Omitting previously suggested code change that failed to apply]\n',
+        `${SEARCH_MARKER}\n` +
+        `${SEPARATOR_MARKER}\n` +
+        'this is the holy content of the rigatoni-recipe.gts file\n' +
+        `${REPLACE_MARKER}\n`,
+    );
+    assert.false(
+      messageText(messages![2]).includes('[Omitting'),
+      'no elision placeholder appears in the prompt',
     );
   });
 
@@ -4254,7 +4336,7 @@ Current date and time: 2025-06-11T11:43:00.533Z
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Files (files with newer versions don't show their content):
+Attached Files (each shows its content as of this message; a later attachment of the same file supersedes it):
 [postcard.gts](http://test-realm-server/user/test-realm/postcard.gts):
   1: export default Postcard extends CardDef {}
       `.trim(),
@@ -4292,7 +4374,7 @@ Attached Files (files with newer versions don't show their content):
     assert.true(
       messageText(toolCallMessage!).includes(
         `
-Attached Cards (cards with newer versions don't show their content):
+Attached Cards (each shows its content as of this message; a later attachment of the same card supersedes it):
 [
   {
     "url": "mxc://mock-server/nashville",
@@ -6050,7 +6132,7 @@ new
       'the surviving user message keeps its body',
     );
   });
-  test('only the most recent message attachments include file content in the prompt', async () => {
+  test('every message keeps its attached file content in the prompt', async () => {
     // Policy: files attached to older messages should show metadata only,
     // even if they are NOT re-attached in later messages.
     // Only the most recent user message's attachments should include content.
@@ -6150,14 +6232,15 @@ new
 
     let userMessages = prompt.filter((m) => m.role === 'user');
 
-    // Older message's unique file (config.json) should show metadata only, not content
+    // The older message keeps its own snapshot's content — re-rendering it
+    // later would change already-sent history bytes and break prompt caching.
     assert.ok(
       messageText(userMessages[0]).includes('[config.json]'),
       'First message mentions config.json',
     );
-    assert.notOk(
+    assert.ok(
       messageText(userMessages[0]).includes('"key": "value"'),
-      'First message should NOT include config.json content (not the current message)',
+      'First message keeps its config.json snapshot content',
     );
 
     // Most recent message's file (utils.ts) should include content
@@ -6419,9 +6502,11 @@ new
   });
 
   test('image attachments produce native image_url content parts', async () => {
-    // Policy: when an image file is attached, the prompt should use
-    // native image_url content parts (for vision-capable models)
-    // instead of text-only representation.
+    // Policy: when an image file is attached to the current message, the
+    // prompt carries it as a native image_url content part (for
+    // vision-capable models) on the volatile trailing message; the history
+    // message lists it as metadata only, so its bytes never depend on the
+    // media body.
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -6470,17 +6555,14 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
-
-    // Content should be an array of content parts, not a plain string
+    let trailingContent = prompt[prompt.length - 1]?.content;
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with image attachment should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with current-turn media should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6492,13 +6574,28 @@ new
         imageParts[0].image_url.url.startsWith('data:image/png;base64,'),
         'image_url should be a base64 data URL with correct content type',
       );
+    }
 
-      let textParts = messageContent.filter(
-        (part: any) => part.type === 'text',
+    let historyContent = prompt.filter((m) => m.role === 'user')[0]?.content;
+    assert.ok(
+      Array.isArray(historyContent),
+      'History message content is normalized to parts',
+    );
+    if (Array.isArray(historyContent)) {
+      assert.ok(
+        (historyContent as any[]).every((part: any) => part.type === 'text'),
+        'History message carries no media parts',
+      );
+      let historyText = (historyContent as any[])
+        .map((part: any) => part.text)
+        .join('\n');
+      assert.ok(
+        historyText.includes('What does this image show?'),
+        'History message keeps the message body',
       );
       assert.ok(
-        textParts.length > 0,
-        'Should still include text content part with the message body',
+        historyText.includes('screenshot.png'),
+        'History message lists the media file as metadata',
       );
     }
   });
@@ -6568,14 +6665,13 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
     assert.ok(
-      Array.isArray(messageContent),
-      'User message should use content parts when fallback media URL succeeds',
+      Array.isArray(trailingContent),
+      'Trailing message should use content parts when fallback media URL succeeds',
     );
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6634,16 +6730,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with PDF should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with PDF should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let fileParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(
@@ -6711,16 +6806,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with audio should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with audio should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let audioParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let audioParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'input_audio',
       );
       assert.strictEqual(
@@ -6792,16 +6886,15 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
     assert.ok(
-      Array.isArray(messageContent),
-      'User message with video should have content as ContentPart[]',
+      Array.isArray(trailingContent),
+      'Trailing message with video should have content as ContentPart[]',
     );
 
-    if (Array.isArray(messageContent)) {
-      let videoParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let videoParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'video_url',
       );
       assert.strictEqual(
@@ -6875,14 +6968,16 @@ new
       ['text', 'image'], // model supports text + image only
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
-    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+    assert.ok(
+      Array.isArray(trailingContent),
+      'Content should be ContentPart[]',
+    );
 
-    if (Array.isArray(messageContent)) {
+    if (Array.isArray(trailingContent)) {
       // Image should still be included
-      let imageParts = (messageContent as any[]).filter(
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
       assert.strictEqual(
@@ -6892,7 +6987,7 @@ new
       );
 
       // PDF should NOT be included as a file part
-      let fileParts = (messageContent as any[]).filter(
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(
@@ -6901,8 +6996,10 @@ new
         'PDF should be excluded when model does not support file modality',
       );
 
-      // Warning text should mention the gated file
-      let textContent = messageContent
+      // Warning text should mention the gated file — on the trailing
+      // message, not in history, so a model switch never rewrites history
+      // bytes.
+      let textContent = trailingContent
         .filter((p: any) => p.type === 'text')
         .map((p: any) => p.text)
         .join('\n');
@@ -6978,22 +7075,24 @@ new
       fakeMatrixClient,
     );
 
-    let userMessages = prompt.filter((m) => m.role === 'user');
-    let messageContent = userMessages[0]?.content;
+    let trailingContent = prompt[prompt.length - 1]?.content;
 
-    assert.ok(Array.isArray(messageContent), 'Content should be ContentPart[]');
+    assert.ok(
+      Array.isArray(trailingContent),
+      'Content should be ContentPart[]',
+    );
 
-    if (Array.isArray(messageContent)) {
-      let imageParts = (messageContent as any[]).filter(
+    if (Array.isArray(trailingContent)) {
+      let imageParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'image_url',
       );
-      let fileParts = (messageContent as any[]).filter(
+      let fileParts = (trailingContent as any[]).filter(
         (part: any) => part.type === 'file',
       );
       assert.strictEqual(imageParts.length, 1, 'Image should be included');
       assert.strictEqual(fileParts.length, 1, 'PDF should be included');
 
-      let textContent = messageContent
+      let textContent = trailingContent
         .filter((p: any) => p.type === 'text')
         .map((p: any) => p.text)
         .join('\n');
@@ -7002,6 +7101,135 @@ new
         'No gating warning when inputModalities is undefined',
       );
     }
+  });
+
+  test('only the current message carries media parts; older messages keep byte-stable metadata text', async () => {
+    // Media bodies ride the volatile trailing message for the current turn
+    // only. A message that carried an image keeps the same rendered text
+    // forever — no media part appears in history and no bytes change when
+    // later turns arrive — so the cache prefix survives while the request
+    // stays bounded by the current message's media, not the room's.
+    let userImageMessage = (
+      eventId: string,
+      ts: number,
+      body: string,
+      fileName: string,
+      url: string,
+    ): DiscreteMatrixEvent =>
+      ({
+        type: 'm.room.message',
+        event_id: eventId,
+        origin_server_ts: ts,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body,
+          data: {
+            context: { tools: [], submode: 'code', functions: [] },
+            attachedFiles: [
+              {
+                sourceUrl: `http://test.com/my-realm/${fileName}`,
+                url,
+                name: fileName,
+                contentType: 'image/png',
+                contentSize: 1024,
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: eventId },
+        status: EventStatus.SENT,
+      }) as unknown as DiscreteMatrixEvent;
+
+    mockResponses.set('http://test.com/first-uploaded.png', {
+      ok: true,
+      text: 'Zmlyc3QtaW1hZ2U=',
+    });
+    mockResponses.set('http://test.com/second-uploaded.png', {
+      ok: true,
+      text: 'c2Vjb25kLWltYWdl',
+    });
+
+    let firstMessage = userImageMessage(
+      '1',
+      1,
+      'What does this image show?',
+      'first.png',
+      'http://test.com/first-uploaded.png',
+    );
+    let promptWhenFirstIsCurrent = await buildPromptForModel(
+      [firstMessage],
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let promptOnNextTurn = await buildPromptForModel(
+      [
+        firstMessage,
+        userImageMessage(
+          '2',
+          2,
+          'And this one?',
+          'second.png',
+          'http://test.com/second-uploaded.png',
+        ),
+      ],
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let textOf = (content: any) =>
+      Array.isArray(content)
+        ? content
+            .filter((p: any) => p.type === 'text')
+            .map((p: any) => p.text)
+            .join('\n')
+        : content;
+
+    let trailingContent =
+      promptOnNextTurn[promptOnNextTurn.length - 1]?.content;
+    assert.ok(Array.isArray(trailingContent), 'trailing message uses parts');
+    let mediaParts = (trailingContent as any[]).filter(
+      (p: any) => p.type === 'image_url',
+    );
+    assert.strictEqual(
+      mediaParts.length,
+      1,
+      'only the current message contributes a media part',
+    );
+    assert.strictEqual(
+      mediaParts[0].image_url.url,
+      `data:image/png;base64,${Buffer.from('c2Vjb25kLWltYWdl').toString('base64')}`,
+      'the media part is the current message image',
+    );
+
+    // Everything before the trailing message is history.
+    let historyMessages = promptOnNextTurn
+      .slice(0, -1)
+      .filter((m) => m.role === 'user');
+    for (let message of historyMessages) {
+      if (Array.isArray(message.content)) {
+        assert.ok(
+          (message.content as any[]).every((p: any) => p.type === 'text'),
+          'no history message carries media parts',
+        );
+      }
+    }
+    assert.strictEqual(
+      textOf(historyMessages[0]?.content),
+      textOf(
+        promptWhenFirstIsCurrent.filter((m) => m.role === 'user')[0]?.content,
+      ),
+      'an older message renders byte-identical text once it stops being current',
+    );
   });
 
   test('read-file tool call is rejected for files not previously attached in the room', async () => {
@@ -8106,15 +8334,20 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
   });
 
-  test('the latest read of a skill replaces its earlier definitions wholesale', async () => {
+  test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {
+    // The tools array renders ahead of message history, so a later read of
+    // an edited skill file must not rewrite bytes the cache has already
+    // matched: the first-seen definition wins, and a tool the newer read no
+    // longer declares stays in the union. A room picks up the edited skill
+    // only when it is re-attached in a new room.
     const tools = await getTools(
       [
         readResultEvent('read-1', 1000, [
-          discoveredDef('plan-trip_ab12', { description: 'stale' }),
+          discoveredDef('plan-trip_ab12', { description: 'original' }),
           discoveredDef('book-hotel_cd34'),
         ]),
         readResultEvent('read-2', 2000, [
-          discoveredDef('plan-trip_ab12', { description: 'fresh' }),
+          discoveredDef('plan-trip_ab12', { description: 'edited' }),
         ]),
       ],
       [],
@@ -8123,10 +8356,54 @@ module('markdown skill tools', (hooks) => {
     );
     assert.strictEqual(
       tools.length,
-      1,
-      'a tool the skill no longer declares disappears with the newer read',
+      2,
+      'a tool the newer read no longer declares stays in the union',
     );
-    assert.strictEqual(tools[0].function.description, 'fresh');
+    assert.strictEqual(
+      tools[0].function.description,
+      'original',
+      'the first-seen definition wins over the re-read',
+    );
+    assert.strictEqual(tools[1].function.name, 'book-hotel_cd34');
+  });
+
+  test('the tools array only ever grows by appending across turns', async () => {
+    // The exact property the prompt cache bills by: each turn's serialized
+    // tools array must be a prefix-preserving extension of the previous
+    // turn's. Replay a growing history and assert every prior entry keeps
+    // its position and bytes as new discoveries arrive.
+    const history = [
+      readResultEvent('read-1', 1000, [
+        discoveredDef('plan-trip_ab12', { description: 'original' }),
+        discoveredDef('book-hotel_cd34'),
+      ]),
+      readResultEvent('read-2', 2000, [
+        discoveredDef('rent-car_ef56'),
+        discoveredDef('plan-trip_ab12', { description: 'edited' }),
+      ]),
+      readResultEvent('read-3', 3000, [discoveredDef('find-flight_gh78')]),
+    ];
+    let previous: string[] = [];
+    for (let turn = 1; turn <= history.length; turn++) {
+      const tools = await getTools(
+        history.slice(0, turn),
+        [],
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      const serialized = tools.map((t) => JSON.stringify(t));
+      assert.deepEqual(
+        serialized.slice(0, previous.length),
+        previous,
+        `turn ${turn}: every previously emitted entry keeps its bytes and position`,
+      );
+      assert.true(
+        serialized.length >= previous.length,
+        `turn ${turn}: the array never shrinks`,
+      );
+      previous = serialized;
+    }
+    assert.strictEqual(previous.length, 4, 'all four tools were emitted');
   });
 
   test('discovered tools on a non-bot result event are ignored', async () => {
@@ -8185,6 +8462,26 @@ module('markdown skill tools', (hooks) => {
   });
 
   test('a skill disabled in room state contributes no discovered tools', async () => {
+    // Disabled skills' contents are downloaded to learn which names they
+    // declare — the removable set.
+    mockResponses.set('mxc://mock-server/trip-planner', {
+      ok: true,
+      text: [
+        '---',
+        'name: "Trip Planner"',
+        'description: "plans trips"',
+        'boxel:',
+        '  kind: skill',
+        '  tools:',
+        '    - codeRef:',
+        '        module: "@cardstack/boxel-host/commands/plan-trip"',
+        '        name: "default"',
+        '      requiresApproval: false',
+        '---',
+        '',
+        'Plan trips.',
+      ].join('\n'),
+    });
     const skillsEvent = {
       type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       event_id: 'skills-1',
@@ -8218,13 +8515,72 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools.length, 0);
   });
 
-  test('a skill both enabled and read yields one definition; the uploaded one wins', async () => {
+  test('a definition survives its enabled skill being edited to no longer declare it', async () => {
+    // The removable set is what disabled skills declare — never "names the
+    // current skill contents happen to omit". An enabled skill edited
+    // mid-session to drop a tool must not shrink the array: the historical
+    // state event still carries the definition, and dropping it would
+    // rewrite the request's leading bytes and reset the cache.
+    mockResponses.set('mxc://mock-server/removed-tool-def', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          module: '@cardstack/boxel-host/commands/removed-tool',
+          name: 'default',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'removed-tool_bb22',
+            description: 'declared by an earlier version of the skill',
+            parameters: { type: 'object', properties: {} },
+          },
+        },
+      }),
+    });
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    // The host uploaded this definition when the skill still declared it;
+    // the current skill content (enabledSkills) no longer does.
+    (eventList[0] as any).content.toolDefinitions.push({
+      sourceUrl: 'https://realm/commands/removed-tool',
+      url: 'mxc://mock-server/removed-tool-def',
+      name: 'removed-tool_bb22',
+      contentType: 'text/plain',
+    });
+    const first = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      first.map((t) => t.function.name),
+      ['switch-submode_dd88', 'removed-tool_bb22'],
+      'the edited-away tool stays in the union',
+    );
+    const second = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.deepEqual(
+      second.map((t) => JSON.stringify(t)),
+      first.map((t) => JSON.stringify(t)),
+      'rebuilding yields byte-identical output',
+    );
+  });
+
+  test('a skill both enabled and read yields one definition: the first seen in history, whatever its source', async () => {
+    // There is no source ranking between uploaded and discovered
+    // definitions — position in history decides. Here the state event
+    // precedes the read, so the upload wins.
     const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
     eventList.push(
       readResultEvent('read-1', 2000, [
         discoveredDef('switch-submode_dd88', {
           skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
-          description: 'discovered copy that must lose to the upload',
+          description: 'discovered copy that arrives after the upload',
         }),
       ]),
     );
@@ -8242,7 +8598,40 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(
       tools[0].function.description,
       'Switch between interact and code submodes',
-      'the enabled skill uploaded definition wins the conflict',
+      'the earlier-listed uploaded definition wins',
+    );
+  });
+
+  test('a discovered definition seen before the upload wins the name', async () => {
+    // The reverse order of the test above: the bot reads a skill file
+    // first, then the host uploads a definition for the same functionName.
+    // First-seen-in-history-wins means the discovered copy keeps the name;
+    // ranking uploads above discoveries would move and rewrite the entry
+    // mid-session, resetting the cache prefix.
+    const { eventList, enabledSkills } = skillsRoomFixture('toolDefinitions');
+    eventList.unshift(
+      readResultEvent('read-1', 500, [
+        discoveredDef('switch-submode_dd88', {
+          skillUrl: 'https://realm/skills/boxel-environment/SKILL.md',
+          description: 'discovered copy that arrives before the upload',
+        }),
+      ]),
+    );
+    const tools = await getTools(
+      eventList,
+      enabledSkills,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      tools.length,
+      1,
+      'one definition for the shared functionName',
+    );
+    assert.strictEqual(
+      tools[0].function.description,
+      'discovered copy that arrives before the upload',
+      'the earlier-seen discovered definition wins',
     );
   });
 

@@ -130,7 +130,45 @@ module(basename(import.meta.filename), function () {
     test('liveness', async function (assert) {
       let res = await request.get('/').set('Accept', 'application/json');
       assert.strictEqual(res.status, 200, 'HTTP 200');
-      assert.deepEqual(res.body, { ready: true }, 'ready payload');
+      assert.true(res.body.ready, 'ready payload');
+
+      // The field names are pinned because they are read by name outside
+      // this codebase: the heap dashboard extracts each one out of the
+      // `prerender-heap` log line with a regex, and a rename here would
+      // leave those panels silently empty rather than failing anywhere.
+      // The values themselves vary per run, so assert only the shape and
+      // the one relationship that always has to hold.
+      let memory = res.body.memory;
+      assert.deepEqual(
+        Object.keys(memory).sort(),
+        ['externalMB', 'heapLimitMB', 'heapTotalMB', 'heapUsedMB', 'rssMB'],
+        'memory reports the expected fields',
+      );
+      for (let [field, value] of Object.entries(memory)) {
+        assert.strictEqual(typeof value, 'number', `${field} is a number`);
+      }
+      assert.true(memory.heapUsedMB > 0, 'heap in use is positive');
+      assert.true(
+        memory.heapUsedMB <= memory.heapLimitMB,
+        'heap in use is within the limit',
+      );
+    });
+
+    test('heap snapshot route is off unless the flag is set', async function (assert) {
+      // The resting state, and the only one safe to assert in a suite: with
+      // the flag set this route stops the world for as long as it takes to
+      // serialise the heap. The guard returns before any of that, so this
+      // costs microseconds.
+      delete process.env.PRERENDER_HEAP_SNAPSHOT;
+      let res = await request
+        .post('/heap-snapshot')
+        .set('Accept', 'application/json');
+      assert.strictEqual(res.status, 404, 'not found while disabled');
+      assert.strictEqual(
+        res.body.status,
+        'disabled',
+        'body names why, so an operator who gets a 404 knows to set the flag',
+      );
     });
 
     test('it handles prerender request', async function (assert) {
