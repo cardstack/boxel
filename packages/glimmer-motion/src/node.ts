@@ -797,6 +797,18 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     return this.layoutPresenceKey;
   }
 
+  /** for the region's @debug lints (§5.3) */
+  get ownAnimation(): boolean {
+    const props = this.latest?.props as
+      | { animate?: unknown; exit?: unknown; initial?: unknown }
+      | undefined;
+    return Boolean(props && (props.animate || props.exit || props.initial));
+  }
+
+  get presenceManaged(): boolean {
+    return Boolean(this.latest?.ownPresence);
+  }
+
   get isPresent(): boolean {
     const presence =
       this.latest?.ownPresence ?? (this.ve && presenceOf.get(this.ve));

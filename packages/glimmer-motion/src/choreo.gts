@@ -44,6 +44,7 @@ import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
   Camera,
   collect,
+  Crossing,
   Gate,
   Hold,
   Move,
@@ -68,6 +69,7 @@ import type {
 import { snapshotOnRender } from './layout-group.gts';
 import { flushPendingMounts } from './node.ts';
 import { postRender } from './scheduler.ts';
+import { motionSpeed } from './speed.ts';
 
 /** `{{c.kept 'card'}}` narrows by role; bare `{{c.kept}}` is handed over uncalled, so the function is a Query too */
 type Selector = ((role?: string) => Query) & Query;
@@ -80,6 +82,7 @@ const selector = (type?: Query['type']): Selector =>
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
   Camera: typeof Camera;
+  Crossing: typeof Crossing;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Raise: typeof Raise;
@@ -122,6 +125,7 @@ export interface ChoreoContext {
 function contextFor(region: Choreo): ChoreoContext {
   return {
     Camera,
+    Crossing,
     Gate,
     Hold,
     Move,
@@ -160,6 +164,16 @@ interface Signature {
     /** outline the region and its participants; console.table each run */
     debug?: boolean;
     id?: string;
+    /**
+     * Treat a subtree swap as one crossing pass (§4.7): scroll intent is
+     * applied inside the pass — after the swap renders, before final bounds
+     * are measured — and the tempo control's zero means no run at all. The
+     * region stays router-agnostic (§9): any swap qualifies, however the
+     * host caused it.
+     */
+    route?: boolean;
+    /** where the arriving scene wants the window: the top, or wherever the thunk says */
+    scroll?: 'top' | (() => number);
   };
   Blocks: { default: [ChoreoContext] };
   Element: HTMLDivElement;
@@ -237,6 +251,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.arrived.add(node);
     if (this.args.debug && node.element) {
       (node.element as HTMLElement).style.outline = '1px dotted #16a34a';
+      // the seam lints (§5.3): inside a region the timeline is the only
+      // animation authority, and Presence double-retains participants
+      if (node.ownAnimation) {
+        console.warn(
+          `choreo: participant '${node.id ?? node.role}' carries its own ` +
+            'animate/exit/initial — a second scheduler beside the timeline',
+        );
+      }
+      if (node.presenceManaged) {
+        console.warn(
+          `choreo: participant '${node.id ?? node.role}' is inside a ` +
+            '<Presence> — the region already retains its own leavers',
+        );
+      }
     }
     return () => {
       // a destroyed participant may still be claimed (below); the sets that decide that survive until drop()
@@ -301,6 +329,14 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // be the layout the stylesheet actually asks for, so put everything the
     // last run touched back to rest before measuring anything.
     this.run?.releaseForMeasure();
+    // @route: scroll is part of the move (§4.7) — the window is placed where
+    // the arriving scene wants it after the swap renders and BEFORE final
+    // bounds are measured, so every landing is measured where it will live
+    if (this.args.route && this.arrived.size && this.snapshots.size) {
+      const intent = this.args.scroll ?? 'top';
+      const y = intent === 'top' ? 0 : intent();
+      window.scrollTo(0, y);
+    }
     const before = this.rootSnapshot ?? root.getBoundingClientRect();
     const after = root.getBoundingClientRect();
     const inserted: Sprite[] = [];
@@ -428,6 +464,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
     const firstRender = !this.rendered;
     this.rendered = true;
+    // instant means instant on a crossing: no run, not a zero-length run
+    if (this.args.route && motionSpeed() === 0) {
+      for (const node of claimed) {
+        this.drop(node);
+      }
+      for (const s of removed) {
+        this.finish(s);
+      }
+      return;
+    }
     // A pass whose changeset is all-kept still runs its timeline (§3.1):
     // the share badge, the hot wire — a Hold with a lifetime fired by an
     // event that inserts, removes and moves nothing. Steps that select
@@ -464,6 +510,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     if (this.args.debug) {
+      // the hierarchy lint (§6.3): a removed participant no step names will
+      // simply vanish — the uncanny valley the deck warns about
+      for (const s of removed) {
+        if (!named.has(s)) {
+          console.warn(
+            `choreo: removed participant '${s.id ?? s.role}' is named by ` +
+              'no step — it vanishes without a frame',
+          );
+        }
+      }
       this.log(changeset, cues);
     }
     this.run = execute(compiled, {

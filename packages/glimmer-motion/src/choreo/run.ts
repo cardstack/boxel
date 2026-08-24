@@ -294,6 +294,8 @@ export class ChoreoRun implements Run {
     // keyframes pin before the browser paints the destination layout
     this.evaluate();
     this.startTicking();
+    activeRuns.add(this);
+    void this.finished.then(() => activeRuns.delete(this));
   }
 
   /* ---- the public face, in seconds at 1× ---- */
@@ -1324,6 +1326,7 @@ export class ChoreoRun implements Run {
       return;
     }
     this.cancelled = true;
+    activeRuns.delete(this);
     this.stopTicking();
     clearTimeout(this.autoTimer);
     this.options.onCamera?.({ ...this.camera });
@@ -1358,6 +1361,9 @@ export class ChoreoRun implements Run {
     this.resolveFinished();
   }
 }
+
+/** every live run, for the test helpers that drive gates and clocks */
+export const activeRuns = new Set<ChoreoRun>();
 
 export function execute(compiled: Compiled, options: RunOptions): ChoreoRun {
   return new ChoreoRun(compiled, options);

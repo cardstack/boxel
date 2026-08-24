@@ -2,7 +2,7 @@
 
 |                |                                                                           |
 | -------------- | ------------------------------------------------------------------------- |
-| **Status**     | Proposed                                                                  |
+| **Status**     | Accepted — in implementation (`choreo/constructs`)                        |
 | **Start date** | 2026-08-25                                                                |
 | **Package**    | `glimmer-motion` (the Choreo layer)                                       |
 | **Requires**   | breaking changes — accepted; pre-1.0, no-compat ethos                     |
@@ -913,20 +913,25 @@ choreography written against it.
 
 ## 7. Implementation plan
 
-| piece                           | state                                                                                                                     | depends on |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | smallest; unlocks emphasis + presets                                                                                      | —          |
-| `@name` / `@at` anchors         | compile-time only (`compile.ts` already places cues absolutely)                                                           | —          |
-| `@by` / `@order` / `@stagger`   | the demo's `windowOf`/`slotOf`, moved into the region                                                                     | —          |
-| the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof                                                              | —          |
-| `c.Gate`                        | segments over the handle                                                                                                  | the handle |
-| `@path`                         | the one engine-adjacent piece                                                                                             | —          |
-| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                                                                                    | anchors    |
-| the seconds rename              | one breaking change: `@ms` → `@duration`, ms-`@stagger` → seconds, language + gallery + contract suite converted together | —          |
+| piece                           | state                                                                                                                                  | depends on |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                                   | —          |
+| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                          | —          |
+| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                       | —          |
+| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, paused-is-settled                                                                | —          |
+| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                      | the handle |
+| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                     | —          |
+| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                            | —          |
+| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                           | —          |
+| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                      | —          |
+| `@route` + `c.Crossing`         | ✅ landed at the library — scroll inside the pass, tempo-zero no-run, the canned sequence; the app-chrome migration is the demo pass's | anchors    |
+| the seconds rename              | ✅ landed as one breaking change: language + gallery + contract suite together                                                         | —          |
+| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                               | —          |
+| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                           | —          |
 
-The Build Order demo is the acceptance test throughout: each promotion
-deletes a piece of `builds.ts`, and the demo is done being a simulation when
-`OPENING` is a `<c.Sequence>`.
+The Build Order demo remains the acceptance test for the second pass:
+each promotion deletes a piece of `builds.ts`, and the demo is done being
+a simulation when `OPENING` is a `<c.Sequence>`.
 
 ## 8. Verification plan
 

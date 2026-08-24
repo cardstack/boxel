@@ -91,6 +91,11 @@ export class Changeset implements ChangesetLike {
         // step can cross-fade it while its replacement flies
         pool = this.removed.filter((s) => s.claimed);
         break;
+      case 'departed':
+        // what only the old scene had: removed, claimed by nobody, not
+        // carried on by another region — the crossing's LEAVES
+        pool = this.removed.filter((s) => !s.claimed && !s.sent);
+        break;
       default:
         pool = this.all;
     }

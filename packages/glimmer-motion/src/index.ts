@@ -10,8 +10,12 @@ export { Choreo } from './choreo.gts';
 export type { BeaconRef } from './choreo/beacons.ts';
 export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
+export type { GestureRef } from './choreo/gesture.ts';
 export type {
   Bounds,
+  CameraState,
+  DeliveryBy,
+  DeliveryOrder,
   Easing,
   Query,
   Rect,

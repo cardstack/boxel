@@ -43,6 +43,7 @@ import { rootProjectionNode } from 'motion-dom';
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { resetBeacons } from '../choreo/beacons.ts';
 import { resetGestures } from '../choreo/gesture.ts';
+import { activeRuns } from '../choreo/run.ts';
 import { resetBarrier } from '../choreo/far.ts';
 import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
 import { setMotionSpeed } from '../speed.ts';
@@ -149,6 +150,43 @@ export async function animationsSettled({
     }
     await nextFrame();
   }
+}
+
+/* ---- driving the run from a test (§8.3) ---- */
+
+/** open every parked gate and settle the segment it releases */
+export async function advanceGate(): Promise<void> {
+  for (const run of activeRuns) {
+    if (run.parked) {
+      run.advance();
+    }
+  }
+  await animationsSettled();
+}
+
+/** set every live run's clock, in seconds — a scrubbed still */
+export async function seekTo(seconds: number): Promise<void> {
+  for (const run of activeRuns) {
+    run.pause();
+    run.time = seconds;
+  }
+  await settled();
+  await nextFrame();
+}
+
+/** how fast an element is moving, in px/s, sampled across two frames */
+export async function velocityOf(
+  el: HTMLElement,
+): Promise<{ x: number; y: number }> {
+  const a = el.getBoundingClientRect();
+  const t0 = performance.now();
+  await nextFrame();
+  await nextFrame();
+  const b = el.getBoundingClientRect();
+  const dt = (performance.now() - t0) / 1000;
+  return dt > 0
+    ? { x: (b.left - a.left) / dt, y: (b.top - a.top) / dt }
+    : { x: 0, y: 0 };
 }
 
 /* ---- Choreo invariants, shared by the contract suite and the soak ---- */

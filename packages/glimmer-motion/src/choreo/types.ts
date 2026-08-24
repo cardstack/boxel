@@ -30,6 +30,10 @@ export interface Bounds {
 /** what a choreography needs from one {{motion}} element */
 export interface ChoreoNode {
   element?: Element;
+  /** carries its own animate/exit/initial — a second scheduler (§5.3) */
+  ownAnimation?: boolean;
+  /** wrapped by a <Presence> that manages it — double retention (§5.3) */
+  presenceManaged?: boolean;
   /** the Presence it lives under has let it go, and this run is done with it */
   exitComplete(): void;
   id: string | null;
@@ -74,7 +78,14 @@ export interface Sprite {
 export interface Query {
   id?: string;
   role?: string;
-  type?: SpriteType | 'moved' | 'still' | 'received' | 'counterpart';
+  type?:
+    | SpriteType
+    | 'moved'
+    | 'still'
+    | 'received'
+    | 'counterpart'
+    /** removed and claimed by nobody: what only the old scene had */
+    | 'departed';
 }
 
 export type PropValue = number | string;

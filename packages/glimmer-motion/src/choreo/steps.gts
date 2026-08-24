@@ -394,6 +394,79 @@ export class Tether extends StepComponent<
 }
 
 /**
+ * `<c.Crossing />` — the canned scene crossing (§4.7): what only the old
+ * scene had fades first, everything paired flies (skins swapping per
+ * `@swap`), and what only the new scene has fades in near the settle.
+ * One step in the template; a whole sequence on the clock.
+ */
+export class Crossing extends StepComponent<
+  StepArgsBase & {
+    /** seconds to fade what only the new scene has */
+    arrive?: number;
+    /** the tween form of the flight */
+    duration?: number;
+    ease?: Easing;
+    /** seconds to fade what only the old scene had */
+    leave?: number;
+    /** arrivals start at this fraction of the flight — near the settle */
+    overlap?: number;
+    spring?: SpringSpec;
+    /** the counterpart-skin policy, forwarded to the flight */
+    swap?: 'during' | 'none' | 'settle';
+  }
+> {
+  node(): TimelineNode {
+    const {
+      arrive = 0.22,
+      duration,
+      ease,
+      leave = 0.18,
+      overlap = 0.7,
+      spring,
+      swap,
+    } = this.args;
+    const FLIGHT = '__crossing-flight';
+    return {
+      children: [
+        {
+          kind: 'tween',
+          ms: leave * 1000,
+          of: { type: 'departed' },
+          props: { opacity: 0 },
+        },
+        {
+          children: [
+            {
+              ease,
+              kind: 'move',
+              ms: duration === undefined ? undefined : duration * 1000,
+              name: FLIGHT,
+              of: { type: 'received' },
+              spring,
+              swap,
+            },
+            {
+              kind: 'hold',
+              of: { type: 'received' },
+              props: { zIndex: 2 },
+            },
+          ],
+          kind: 'parallel',
+        },
+        {
+          at: { anchor: FLIGHT, edge: 'start', progress: overlap },
+          kind: 'tween',
+          ms: arrive * 1000,
+          of: { type: 'inserted' },
+          props: { opacity: [0, 1] },
+        },
+      ],
+      kind: 'sequence',
+    };
+  }
+}
+
+/**
  * `<c.Gate />` — park the run until `c.advance()`; `@delay` opens it by
  * itself after that many seconds (§4.1). A gate is a pause, and a pause is
  * a total order: it may only stand in a sequence that no parallel contains.
