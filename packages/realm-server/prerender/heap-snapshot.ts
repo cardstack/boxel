@@ -115,6 +115,7 @@ export async function captureHeapSnapshot(): Promise<HeapSnapshotOutcome> {
   inFlight = true;
 
   let before = heapTelemetry();
+  let body: ReturnType<typeof createReadStream> | undefined;
   let path = join(
     tmpdir(),
     `prerender-${process.pid}-${Date.now()}.heapsnapshot`,
@@ -133,11 +134,24 @@ export async function captureHeapSnapshot(): Promise<HeapSnapshotOutcome> {
     bytes = (await stat(path)).size;
     log.info(`heap snapshot written bytes=${bytes} writeMs=${writeMs}`);
 
+    // The sink can decline before it reads a byte — its per-process budget
+    // may already be spent — so this owns the stream's lifecycle rather than
+    // handing it over and assuming it gets consumed. Without the listener, a
+    // stream whose open loses the race with the unlink below raises an
+    // unhandled `error` and takes the process down with it. Without the
+    // destroy in `finally`, a declined upload leaves the descriptor open, and
+    // an unlinked file with an open descriptor keeps its blocks — several
+    // hundred megabytes of them, in this case.
+    body = createReadStream(path);
+    body.on('error', (e: Error) =>
+      log.warn(`heap snapshot read stream failed: ${e.message}`),
+    );
+
     let uploadStartedAt = Date.now();
     let uploaded = await uploadArtifact({
       kind: 'heapsnapshot',
       step: `node-heap-${before.heapUsedMB}mb`,
-      body: createReadStream(path),
+      body,
       contentType: 'application/octet-stream',
     });
     let uploadMs = Date.now() - uploadStartedAt;
@@ -155,6 +169,10 @@ export async function captureHeapSnapshot(): Promise<HeapSnapshotOutcome> {
     log.warn(`heap snapshot failed: ${message}`);
     return { status: 'failed', message };
   } finally {
+    // Closes the descriptor on the paths that never consumed the stream. A
+    // stream the upload already drained is finished, so this is a no-op
+    // there, and it has to happen before the unlink either way.
+    body?.destroy();
     // The file is multi-gigabyte and the container's disk is shared with
     // every render, so it goes whether or not the upload worked.
     await unlink(path).catch(() => undefined);
