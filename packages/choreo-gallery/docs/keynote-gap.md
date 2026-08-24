@@ -287,3 +287,87 @@ to keep live. Same-document navigation defaults to `@route`.
 The Build Order demo is the acceptance test throughout: each promotion
 deletes a piece of `builds.ts`, and the demo is done being a simulation when
 `OPENING` is a `<c.Sequence>`.
+
+## The bento-boxel test
+
+`bento-boxel-choreo` is the phase-2 conversion target, and today it imports
+`{{motion}}` only — every scene is still a service holding measured rects, a
+portal overlay flying a clone, and `setTimeout`s that must silently agree
+with the springs. Auditing its interaction patterns against this document:
+
+**Already answered.** The shelf fly-down (release point → tray slot) is a
+far match: the card leaves the canvas region and arrives in the shelf
+region, one id, and `endDrag` is already shaped like a pass — commit, render,
+measure, fly. The staged/dragging z-index arithmetic is `c.Hold`. The
+version deck's fold-away — "has to outlive the state that raised it" — is
+what leavers are for. The row ⇄ detail transmute's two skins crossing over
+one flying box is the counterpart crossfade (`@crossfade` should therefore
+be a `Move` argument, not only `MagicMove` sugar). The `restore()` pattern —
+animate forward, `setTimeout`, then commit — inverts under Choreo: commit
+first, and the flight is the changeset's.
+
+**Four constructs it needs that nothing above provides:**
+
+### Hot start — a gesture seeds the sprite
+
+The fly-down starts from wherever the finger let go, at whatever speed it
+was moving — not from the sender's resting box. A participant that is being
+dragged when a pass fires contributes its live transform as its `initial`,
+and its pointer velocity to any spring that moves it:
+
+```gts
+<c.Move @of={{c.received 'card'}} @from={{c.gesture}} @spring={{toss}} />
+```
+
+`c.gesture` rewrites `initial` the way `c.beacon` does, from the drag
+session instead of a box; velocity flows into the spring the way Motion's
+own drag-to-`layout` handoff already works within one element. Without
+this, every drop flight keeps its measuring service.
+
+### Tethers — geometry that follows sprites per frame
+
+The ERD's wires are measured after layout and painted straight into the
+SVG, blind while anything moves, with a re-measure "once more late, after
+the springs have settled" — an 800ms constant standing in for a fact the
+timeline knows. Property functions resolve once, at cue time; a tether is
+the continuous version:
+
+```gts
+<c.Tether @from={{c.id 'orders'}} @to={{c.id 'customers'}} @draw={{curve}} />
+```
+
+Every frame of the run (and at rest), `@draw` receives both sprites'
+current boxes and returns path data / properties. This is the construct
+Boxel UI will lean on hardest: wires between cards, comment anchors,
+selection halos — anything drawn _between_ things that move.
+
+### `c.Scroll` — the scroll container as a step
+
+"Jump to the cited post" is today a 30ms timeout, a `scrollIntoView`, and
+an 1800ms timeout to drop the highlight. As a timeline:
+
+```gts
+<c.Sequence>
+  <c.Scroll @of={{c.id postId}} @block='center' @ms={{420}} />
+  <c.Hold @of={{c.id postId}} @outline='var(--cite)' @ms={{1400}} />
+</c.Sequence>
+```
+
+A `Scroll` step animates the sprite's scroll container so the sprite lands
+at `@block`; it occupies the sequence like any step, so "scroll, then
+mark" is finally an ordering statement instead of two timers.
+
+### Relative space — flying inside a moving frame
+
+The detail transmute zooms the canvas with the same spring as the flight
+"so the composite path stays straight" — a coincidence of constants doing
+the work of a coordinate system. A step should be able to say which space
+its bounds mean: `@space='parent'` resolves the sprite's motion against
+its (possibly animating) container per frame, page space remaining the
+default. This is the same requirement nested timeline sync has, met at
+the step level.
+
+**Still open, smaller:** event-only runs — the share badge and the hot
+wire are a `c.Hold` with a lifetime, but their trigger is an event that
+inserts, removes and moves nothing; the model needs to say plainly that a
+pass whose changeset is all-kept still runs its timeline.
