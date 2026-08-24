@@ -2611,6 +2611,12 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
+/* the trailing ring is a pale peach drawn for the dark stage; on cream it
+   all but disappears, so light deepens it to a copper the eye can find */
+:root[data-theme='light'] .follow-ring {
+  border-color: rgba(178, 96, 28, 0.75);
+}
+
 .follow-orb {
   width: 14px;
   height: 14px;
