@@ -1,7 +1,10 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { decideHostShellRecycle } from '../prerender/prerender-app.ts';
+import {
+  decideHostShellRecycle,
+  raceAgainstDrain,
+} from '../prerender/prerender-app.ts';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
@@ -39,6 +42,88 @@ module(basename(import.meta.filename), function () {
         recycle: true,
         nextWarmed: 'bbb',
       });
+    });
+  });
+
+  module('raceAgainstDrain', function () {
+    // Stands in for the server's drain subscription, counting how many are
+    // outstanding. The count is the whole point: a subscription that survives
+    // its request keeps the request's context, response and rendered HTML
+    // reachable, so anything that leaves one behind grows the heap by a
+    // render's worth per render.
+    function fakeSubscriber() {
+      let live = 0;
+      let notifiers = new Set<() => void>();
+      return {
+        get live() {
+          return live;
+        },
+        drain() {
+          for (let notify of notifiers) {
+            notify();
+          }
+        },
+        subscribe: () => {
+          live++;
+          let notify!: () => void;
+          let promise = new Promise<{ draining: true }>((resolve) => {
+            notify = () => resolve({ draining: true });
+          });
+          notifiers.add(notify);
+          return {
+            promise,
+            dispose: () => {
+              live--;
+              notifiers.delete(notify);
+            },
+          };
+        },
+      };
+    }
+
+    test('a completed render leaves no subscription behind', async function (assert) {
+      let subscriber = fakeSubscriber();
+      for (let i = 0; i < 50; i++) {
+        let result = await raceAgainstDrain(
+          Promise.resolve({ result: i }),
+          subscriber.subscribe,
+        );
+        assert.deepEqual(result, { result: i }, `render ${i} returned`);
+      }
+      assert.strictEqual(
+        subscriber.live,
+        0,
+        'no subscriptions outstanding after 50 renders',
+      );
+    });
+
+    test('a failed render leaves no subscription behind', async function (assert) {
+      let subscriber = fakeSubscriber();
+      await assert.rejects(
+        raceAgainstDrain(
+          Promise.reject(new Error('boom')),
+          subscriber.subscribe,
+        ),
+        /boom/,
+        'the render error propagates',
+      );
+      assert.strictEqual(subscriber.live, 0, 'subscription released');
+    });
+
+    test('draining wins the race and still releases', async function (assert) {
+      let subscriber = fakeSubscriber();
+      let never = new Promise<{ result: string }>(() => {});
+      let raced = raceAgainstDrain(never, subscriber.subscribe);
+      subscriber.drain();
+      assert.deepEqual(await raced, { draining: true }, 'reports draining');
+      assert.strictEqual(subscriber.live, 0, 'subscription released');
+    });
+
+    test('with no subscriber it just awaits the render', async function (assert) {
+      assert.deepEqual(
+        await raceAgainstDrain(Promise.resolve({ result: 'ok' }), undefined),
+        { result: 'ok' },
+      );
     });
   });
 });

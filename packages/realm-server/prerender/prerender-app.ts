@@ -86,6 +86,39 @@ export function decideHostShellRecycle(
   return { recycle: true, nextWarmed: reported };
 }
 
+// A one-shot notification that shutdown has begun, which the holder releases
+// when it no longer needs it.
+type DrainSubscription = {
+  promise: Promise<{ draining: true }>;
+  dispose: () => void;
+};
+type SubscribeToDrain = () => DrainSubscription;
+
+// Run `execPromise`, giving up early if the server starts draining.
+//
+// The subscription is released in `finally` because the alternative — each
+// request calling `.then()` on a promise that only settles at shutdown —
+// leaks. A pending promise keeps every reaction ever attached to it, a
+// reaction keeps its closure, and here that closure captures the request
+// context: the request, its response, and the rendered HTML it produced stay
+// reachable for the life of the process. Nothing detaches a reaction when the
+// render it was racing wins, so the retained set grows by one request's worth
+// of output per request, indefinitely.
+export async function raceAgainstDrain<T>(
+  execPromise: Promise<T>,
+  subscribeToDrain: SubscribeToDrain | undefined,
+): Promise<T | { draining: true }> {
+  if (!subscribeToDrain) {
+    return await execPromise;
+  }
+  let drain = subscribeToDrain();
+  try {
+    return await Promise.race([execPromise, drain.promise]);
+  } finally {
+    drain.dispose();
+  }
+}
+
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
@@ -102,6 +135,28 @@ export function buildPrerenderApp(options: {
     maxPages,
     serverURL: options.serverURL,
   });
+
+  // One reaction on the shutdown promise for the whole process. Requests take
+  // a waiter from this set and drop it when they finish, so what accumulates
+  // is bounded by the number of renders in flight rather than by the number
+  // ever served.
+  let drainWaiters = new Set<() => void>();
+  options.drainingPromise?.then(() => {
+    for (let notify of drainWaiters) {
+      notify();
+    }
+    drainWaiters.clear();
+  });
+  let subscribeToDrain: SubscribeToDrain | undefined = options.drainingPromise
+    ? () => {
+        let notify!: () => void;
+        let promise = new Promise<{ draining: true }>((resolve) => {
+          notify = () => resolve({ draining: true });
+        });
+        drainWaiters.add(notify);
+        return { promise, dispose: () => drainWaiters.delete(notify) };
+      }
+    : undefined;
 
   router.head('/', (ctxt: Koa.Context) => {
     if (options.isDraining?.()) {
@@ -371,7 +426,7 @@ export function buildPrerenderApp(options: {
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
-      drainingPromise?: Promise<void>;
+      subscribeToDrain?: SubscribeToDrain;
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
@@ -463,12 +518,10 @@ export function buildPrerenderApp(options: {
         let execPromise = options
           .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
-        let drainPromise = options.drainingPromise
-          ? options.drainingPromise.then(() => ({ draining: true as const }))
-          : null;
-        let raceResult = drainPromise
-          ? await Promise.race([execPromise, drainPromise])
-          : await execPromise;
+        let raceResult = await raceAgainstDrain(
+          execPromise,
+          options.subscribeToDrain,
+        );
         if ('draining' in raceResult) {
           // Ensure execute completion does not raise unhandled rejections after we respond.
           execPromise.catch((e) =>
@@ -588,7 +641,7 @@ export function buildPrerenderApp(options: {
     parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args, { signal }) =>
       prerenderer.prerenderModule({ ...args, signal }),
-    drainingPromise: options.drainingPromise,
+    subscribeToDrain,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
@@ -618,7 +671,7 @@ export function buildPrerenderApp(options: {
           ...(args.priority !== undefined ? { priority: args.priority } : {}),
           signal,
         }),
-      drainingPromise: options.drainingPromise,
+      subscribeToDrain,
     },
   );
 
@@ -640,7 +693,7 @@ export function buildPrerenderApp(options: {
           priority: args.priority,
           signal,
         }),
-      drainingPromise: options.drainingPromise,
+      subscribeToDrain,
     },
   );
 
@@ -818,12 +871,7 @@ export function buildPrerenderApp(options: {
           signal: ac.signal,
         })
         .then((result) => ({ result }));
-      let drainPromise = options.drainingPromise
-        ? options.drainingPromise.then(() => ({ draining: true as const }))
-        : null;
-      let raceResult = drainPromise
-        ? await Promise.race([execPromise, drainPromise])
-        : await execPromise;
+      let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
       if ('draining' in raceResult) {
         execPromise.catch((e) =>
           log.debug(
