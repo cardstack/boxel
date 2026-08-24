@@ -43,6 +43,7 @@ import { rootProjectionNode } from 'motion-dom';
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { resetBeacons } from '../choreo/beacons.ts';
 import { resetBarrier } from '../choreo/far.ts';
+import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
 import { setMotionSpeed } from '../speed.ts';
 
 export { isMotionIdle, whatIsBusy } from '../activity.ts';
@@ -219,21 +220,43 @@ function isFollower(el: HTMLElement): boolean {
  * "trash" wins the first-registration race against the next test's real one.
  */
 export function setupMotion(hooks: {
-  afterEach(fn: () => void): void;
+  afterEach(fn: (assert?: LoopAssert) => void): void;
   beforeEach(fn: () => void): void;
 }) {
   hooks.beforeEach(function () {
     resetMotion();
   });
-  hooks.afterEach(function () {
+  hooks.afterEach(function (assert?: LoopAssert) {
+    // Read BEFORE the reset, and reported rather than thrown: a layout loop is
+    // always a bug, and a test that hits one otherwise ends as a runner
+    // timeout — no stack, no assertion, no clue which test it was. The engine
+    // keeps the page alive by deferring settles to animation frames; this is
+    // what makes the suite say so out loud.
+    const looped = layoutLoopDetected();
     resetMotion();
+    if (looped) {
+      assert?.ok?.(
+        false,
+        'glimmer-motion: a layout loop ran during this test — settles kept ' +
+          'coming with no animation frame between them. Something re-renders a ' +
+          'motion element in a loop; the usual cause is a @tracked property ' +
+          'assigned unconditionally from a per-frame callback (onDrag, onScroll). ' +
+          'Assign only on change.',
+      );
+    }
   });
+}
+
+/** the sliver of QUnit's assert this module uses, so test-support needs no QUnit types */
+interface LoopAssert {
+  ok?: (state: boolean, message?: string) => void;
 }
 
 export function resetMotion() {
   setMotionSpeed(1);
   resetBeacons();
   resetBarrier();
+  resetLayoutLoopGuard();
   unblockLayout();
 }
 

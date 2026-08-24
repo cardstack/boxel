@@ -46,7 +46,9 @@ export {
   afterSettle,
   instantLayoutTransition,
   layoutChange,
+  layoutLoopDetected,
   requestSettle,
+  resetLayoutLoopGuard,
   snapshotAll,
 } from './layout.ts';
 export {
