@@ -372,3 +372,68 @@ the step level.
 wire are a `c.Hold` with a lifetime, but their trigger is an event that
 inserts, removes and moves nothing; the model needs to say plainly that a
 pass whose changeset is all-kept still runs its timeline.
+
+## The Pretui test — the realm target
+
+Pretui is the other kind of stress test. It is a Boxel realm, and realm law
+forbids `setTimeout`, `setInterval`, `requestAnimationFrame`, `Date.now`
+and `Math.random`; its motion charter states the consequence plainly —
+_every effect is a CSS animation whose schedule is computed once per
+render, and the only JavaScript is measurement inside a modifier_. Its
+four core primitives (Presence, InView, SlidingHighlight, ScrollProgress)
+and four pointer behaviors are deliberate transcriptions of rAF-engine
+components into `@starting-style`, `transition-behavior: allow-discrete`,
+scroll-driven timelines, and custom-property-fed retargeted transitions.
+
+So porting Pretui to Choreo is not blocked on choreography — it uses less
+of it than Choreo already has. It is blocked on the clock. The gaps are a
+runtime target, not constructs:
+
+### Compile to the platform
+
+`glimmer-motion`'s own source contains no `requestAnimationFrame`; every
+frame is scheduled through motion-dom's batcher, and motion-dom already
+exports the way out: `startWaapiAnimation`, `generateLinearEasing` (a
+spring sampled into a CSS `linear()` easing), `calcGeneratorDuration`,
+`supportsScrollTimeline`. And Choreo's `compile.ts` already reduces a
+timeline to absolute cues — at, duration, ease, properties — which is
+precisely WAAPI's input. The missing piece is the back half: a **native
+compile target** that turns a pass's cues into WAAPI/CSS animations at
+render time, springs pre-sampled through the generator, with JavaScript
+touching the DOM only to measure. Under that target the timer law is
+satisfied by construction: the browser owns every clock, and a busy main
+thread cannot stall a step — the same argument Pretui's charter makes for
+its own CSS.
+
+What compiles: every Tween, Spring, Move, Hold, Wait, gate segment,
+anchor, and delivery window — the entire declarative language. What a
+pass can also pre-compute: counter-scale keyframes for a `Move`'s
+children (both boxes are known, so the child's correction curve is a pure
+function of the parent's — sampled once, not corrected per frame).
+
+What never compiles, with its law-legal substitute:
+
+| per-frame feature                      | realm substitute                                                                                                                                                        |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| drag momentum, pointer springs         | Pretui's own pattern — event listeners write custom properties, retargeted CSS transitions ease (critically damped, no overshoot); Choreo should adopt it, not fight it |
+| live scale correction mid-interruption | pre-sampled counter-scale keyframes; accept the approximation                                                                                                           |
+| `c.Tether` per-frame draw              | CSS anchor positioning, when it lands; until then tethers re-measure at cue boundaries                                                                                  |
+| `@order='random'`                      | a seed argument — realms have `seedFrom`; randomness must be an input, never a clock                                                                                    |
+
+### Package for the realm
+
+Realm dependency law is "vendored, single file" — Pretui carries
+photoswipe, gridstack and floating-ui as one `index.js` each. Choreo needs
+the same: a flat build of `glimmer-motion` with motion-dom folded in, the
+native target on, and the frameloop-dependent features (drag sessions,
+`useScroll`'s JS fallback) excluded or inert. Scroll binding requires the
+native `ScrollTimeline` path — the capability check exists
+(`can-use-native-timeline`); the realm build makes it a requirement
+rather than a preference.
+
+What that buys back from Pretui's vendored shelf: the lightbox flight
+(photoswipe's open/close morph is a counterpart flight; its pinch stays
+gesture-owned), the dashboard reflow (gridstack's reflow is `Move` over a
+changeset; its drag stays a listener), and every hand-computed
+per-character `animation-delay` schedule, which is the delivery panel
+(`@by` / `@overlap` / `@order`) compiled by hand today.
