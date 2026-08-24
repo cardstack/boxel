@@ -18,7 +18,8 @@
 6. [Evidence — the audits](#6-evidence--the-audits)
 7. [Implementation plan](#7-implementation-plan)
 8. [Verification plan](#8-verification-plan)
-9. [Unresolved questions](#9-unresolved-questions)
+9. [Resolved decisions](#9-resolved-decisions)
+10. [Unresolved questions](#10-unresolved-questions)
 
 ## 1. Summary
 
@@ -85,7 +86,7 @@ semantics; this is the index.
 ### 3.1 Region
 
 `<Choreo @id @debug @route>` — hosts the participants, the orphan layer
-(leavers) and the elevated layer (`c.Lift`), watches its render passes,
+(leavers) and the elevated layer (`c.Raise`), watches its render passes,
 yields `c`. Participants are `{{motion id= role=}}` elements. A pass
 whose changeset is all-kept still runs its timeline (+). `@route` (+)
 treats a route swap inside the region as one pass.
@@ -124,7 +125,7 @@ duration in the language is **seconds**, as in Motion.
 | `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                          |
 | `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins |
 | `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                 |
-| `c.Lift`     | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                                  |
+| `c.Raise`    | promote to the region's elevated layer for the block's span; `@shadow`                                                                                                                                  |
 | `c.Camera`   | the region's frame: `@zoom` `@x` `@y` `@origin` `@follow`; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                   |
 | `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                |
 | `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites or the gesture                                                                                                                       |
@@ -357,7 +358,7 @@ the id, exactly as far matching works today. The canned form:
 | `@arrive`                         | seconds to fade what only the new page has                                                                                               | 0.22          |
 | `@overlap`                        | arrivals start at this fraction of the flight — "after settle or close to it" is `0.85`; eager is `0.5`                                  | 0.7           |
 | `@swap`                           | the counterpart-skin policy: `'during'` (cross over the flight — glyphs cannot morph; two real elements can cross), `'settle'`, `'none'` | `'during'`    |
-| `@scroll`                         | `'top'` \| `'restore'` \| `(transition) => y` — applied after the swap, before final measure                                             | `'top'`       |
+| `@scroll`                         | `'top'` \| `'restore'` \| `(() => number)` — applied after the swap, before final measure; the region stays router-agnostic (§9)         | `'top'`       |
 
 What `@route` itself must add, beyond sugar:
 
@@ -396,7 +397,7 @@ to keep live. Same-document navigation defaults to `@route`.
 
 Six additions are specified inside the audit that produced them, and
 indexed in §3: the hot start and `c.gesture` (§6.1), `c.Tether` (§6.1,
-§6.4), `c.Scroll` (§6.1), `@space` (§6.1), `c.Lift` (§6.3), `c.Camera`
+§6.4), `c.Scroll` (§6.1), `@space` (§6.1), `c.Raise` (§6.3), `c.Camera`
 with `@steady` (§6.3, §6.4), and the `@swap` policy (§6.3).
 
 ## 5. Design rationale
@@ -439,7 +440,7 @@ timeline stays the only authority.
 
 What remains is irreducible, and each piece earns its place: the
 queries are the changeset (the model itself), the blocks exist because
-`Hold`, `Lift` and gates need a _span_ to scope to (a flat with/after
+`Hold`, `Raise` and gates need a _span_ to scope to (a flat with/after
 list — Keynote's own shape, and `builds.ts`'s — cannot say "for the
 duration of these three steps"), the anchors are two helpers that read
 as English, and each remaining step names a genuinely different
@@ -566,8 +567,10 @@ participant carrying `animate` or `exit` warns.
 is redundant by design: leavers are the region's own (kept alive
 exactly as long as the timeline names them — which is also what
 `popLayout` was reaching for, done with a real layer), and a
-`<Presence>` wrapped around participants double-retains them; that
-nesting should warn. Outside any region, `<Presence>` remains the
+`<Presence>` wrapped around participants double-retains them — that
+warns, scoped precisely: only when the wrapped items are participants
+of the enclosing region. A `<Presence>` for non-participant micro UI
+that merely lives inside a region's DOM is legitimate. Outside any region, `<Presence>` remains the
 light tool for micro enter/exit — menus, toasts, tooltips, the
 surfaces `Lift`'s world — where a timeline would be ceremony. `wait`
 is a two-step `Sequence`, `sync` is a `Parallel`; if a scene grows
@@ -760,7 +763,7 @@ is a counterpart flight and the best small demo of one. The tray as "the
 physical element which carries the focused boxel between scenes" is the
 counterpart's carrier role under another name.
 
-#### `c.Lift` — planes, made of the orphan layer
+#### `c.Raise` — planes, made of the orphan layer
 
 The deck's plane stack is not vocabulary; it is the answer to a DOM
 fact. `z-index` cannot escape an ancestor's stacking context, and no
@@ -772,11 +775,11 @@ machinery that solves this: the orphan layer, a region-owned overlay
 that removed elements are reparented into with their bounds locked —
 one plane, currently reserved for the dead.
 
-`c.Lift` points the same machinery at the living:
+`c.Raise` points the same machinery at the living:
 
 ```gts
 <c.Parallel>
-  <c.Lift @of={{c.id 'card'}} @shadow={{true}} />
+  <c.Raise @of={{c.id 'card'}} @shadow={{true}} />
   <c.Move @of={{c.id 'card'}} @spring={{carry}} />
 </c.Parallel>
 ```
@@ -791,7 +794,7 @@ is beneath it is `c.Camera`; the window tint is a `Tween` on everyone
 else; a plane sliding in is a participant like any other. The acid
 test is the deck's inversion — A contains B, then B contains A — which
 is only animatable at all if both can cross the boundary on a shared
-layer and land in their new containment: `c.Lift`'s contract case.
+layer and land in their new containment: `c.Raise`'s contract case.
 
 #### `c.Camera` — the third column
 
@@ -817,8 +820,10 @@ circling: `@space='parent'` resolves a flight _inside_ a moving frame,
 `c.Camera` is what _drives_ the frame, and the Zoom demo proves them
 together. The deck's second half adds the coupling to watch: past a zoom
 threshold a boxel _transmutes_ to a smaller form — camera state feeding
-the next changeset, which is app logic riding a camera value the region
-must expose.
+the next changeset. The region exposes it as a tracked `c.camera`
+(`{ zoom, x, y }`), updated when a camera step lands or cancels —
+deliberately not per frame, so deriving app state from it cannot
+violate the recording rule (§9).
 
 #### `@swap='settle'` — the transmute's crossfade policy
 
@@ -890,13 +895,11 @@ plane). Today each rung enters through its own CSS keyframe
 fresh mount — no continuity between rungs. That is a counterpart flight
 by construction: same content, two placements, one identity. The
 surfaces `Lift` should eventually _ride_ Choreo's step rather than the
-other way round. Which exposes a naming collision to settle
-deliberately: `boxel-surface` already ships `Lift` the component
-(anchored surface, elevation tiers) while this document specifies
-`c.Lift` the step (promote a sprite to the region's layer). They are
-the product and the mechanism of the same idea; if one renames, it
-should be the step (`c.Raise` is free), and the decision belongs to
-whichever lands second.
+other way round. The naming collision this exposed — `boxel-surface`
+ships `Lift` the component while this step promotes a sprite to the
+region's layer — is settled (§9): the step is `c.Raise`, and the
+component keeps `Lift`. Product and mechanism of the same idea, one
+word each.
 
 **Not extracted, deliberately.** The prospective-drop state — wells
 lighting up, the drop indicator line, "what would happen if released
@@ -910,15 +913,16 @@ choreography written against it.
 
 ## 7. Implementation plan
 
-| piece                           | state                                                           | depends on |
-| ------------------------------- | --------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | smallest; unlocks emphasis + presets                            | —          |
-| `@name` / `@at` anchors         | compile-time only (`compile.ts` already places cues absolutely) | —          |
-| `@by` / `@order` / `@stagger`   | the demo's `windowOf`/`slotOf`, moved into the region           | —          |
-| the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof    | —          |
-| `c.Gate`                        | segments over the handle                                        | the handle |
-| `@path`                         | the one engine-adjacent piece                                   | —          |
-| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                          | anchors    |
+| piece                           | state                                                                                                                     | depends on |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | smallest; unlocks emphasis + presets                                                                                      | —          |
+| `@name` / `@at` anchors         | compile-time only (`compile.ts` already places cues absolutely)                                                           | —          |
+| `@by` / `@order` / `@stagger`   | the demo's `windowOf`/`slotOf`, moved into the region                                                                     | —          |
+| the timeline handle             | pause/seek over the cue list; the Playhead demo is the proof                                                              | —          |
+| `c.Gate`                        | segments over the handle                                                                                                  | the handle |
+| `@path`                         | the one engine-adjacent piece                                                                                             | —          |
+| `@route` + `c.Crossing`         | region + orphan-layer work, then sugar                                                                                    | anchors    |
+| the seconds rename              | one breaking change: `@ms` → `@duration`, ms-`@stagger` → seconds, language + gallery + contract suite converted together | —          |
 
 The Build Order demo is the acceptance test throughout: each promotion
 deletes a piece of `builds.ts`, and the demo is done being a simulation when
@@ -1046,27 +1050,38 @@ random advance/seek/route-cross against the live gallery, invariants
 checked after every blow — the same discipline `interruption-test.gts`
 applies today, aimed at the new surface.
 
-## 9. Unresolved questions
+## 9. Resolved decisions
 
-1. **The `Lift` name collision** (§6.4): `boxel-surface` ships `Lift`
-   the component while this proposal specifies `c.Lift` the step —
-   product and mechanism of one idea. If one renames, it should be the
-   step (`c.Raise` is free); the decision belongs to whichever lands
-   second.
-2. **The seconds migration**: `@ms` and ms-valued `@stagger` ship
-   today. Pre-1.0 the rename is clean, but the gallery and the contract
-   suite carry the old spellings and convert in the same change.
-3. **`@route` detection**: whether a route swap is recognised purely as
-   a render pass inside the region, or needs a router-service hook for
-   scroll intent and query-param suppression (§4.7 assumes the
-   latter's information is available to the region).
-4. **Camera state feeding changesets** (§6.3): past a zoom threshold a
-   boxel transmutes — application logic riding a camera value the
-   region must expose. The shape of that exposure (a tracked value on
-   `c`? a motion value?) is undecided.
-5. **Tethers under the realm driver** (§6.2): re-measure at cue
-   boundaries until CSS anchor positioning is dependable, then adopt
-   it — the crossover criterion is not set.
-6. **The `<Presence>`-inside-a-region warning** (§5.3): warn always,
-   or only when the wrapped items are participants of the enclosing
-   region?
+1. **The step is `c.Raise`.** `boxel-surface` keeps `Lift` the
+   component; this proposal's promote-to-the-region's-layer step takes
+   the free name. One word each for product and mechanism.
+2. **The seconds migration is one breaking change.** `@ms` →
+   `@duration` and ms-valued `@stagger` → seconds land in a single
+   change that converts the language, the gallery, and the contract
+   suite together — no aliases, no deprecation window, per the pre-1.0
+   no-compat ethos.
+3. **`@route` stays router-agnostic.** A route swap is recognised
+   purely as a render pass inside the region; there is no
+   router-service hook. Scroll intent is the host's to supply
+   (`@scroll` takes `'top'`, `'restore'`, or a thunk), and suppressing
+   non-animated changes (query params) is the host's job — a pass the
+   host renders identically simply produces no changeset.
+4. **Camera state is a tracked value.** `c.camera` (`{ zoom, x, y }`)
+   updates when a camera step lands or cancels — not per frame — so
+   zoom-threshold transmutes can derive from it without creating a
+   per-frame state feedback loop or violating the recording rule.
+5. **The Presence warning is scoped.** Warn only when the wrapped
+   items are participants of the enclosing region; a `<Presence>` for
+   non-participant micro UI inside a region's DOM is legitimate.
+
+## 10. Unresolved questions
+
+1. **Tethers under the realm driver** (§6.2). Restated: a tether
+   redraws a wire every frame, which needs JavaScript on every frame —
+   exactly what realm law forbids. CSS anchor positioning is the
+   platform feature that would let the browser keep the wire glued
+   without any script, but its support is still settling. Until then a
+   realm tether can only re-draw at step boundaries — wires jump to
+   their new endpoints rather than track the flight. The open call is
+   the adoption criterion: which browser support level flips realm
+   tethers from jump-at-boundaries to anchor-positioned.
