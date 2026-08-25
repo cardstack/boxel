@@ -96,10 +96,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --_boxel-scale: var(--theme-scale, var(--boxel-ratio, 1.333));
       --theme-spacing: calc(var(--spacing, 0.25rem) * 4);
       --boxel-spacing: var(--theme-spacing, var(--_boxel-spacing, 1rem));
-      --boxel-font-size: var(
-        --theme-font-size,
-        var(--theme-body-font-size, var(--_boxel-font-size, 1rem))
-      );
+      --boxel-font-size: var(--theme-font-size, var(--_boxel-font-size, 1rem));
       --boxel-radius: var(--radius, var(--_boxel-radius, 0.625rem));
       --_boxel-ff: var(--font-sans, var(--boxel-font-family));
 

@@ -2,7 +2,7 @@ import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
 
 import {
-  BoxelContainer,
+  FieldContainer,
   GridContainer,
   Swatch,
 } from '@cardstack/boxel-ui/components';
@@ -10,6 +10,7 @@ import {
   eq,
   buildCssGroups,
   generateCssVariables,
+  googleFontImportsFor,
   parseCssGroups,
   markdownEscape,
   type CssRuleMap,
@@ -30,9 +31,11 @@ import ThemeVarField, {
 } from './structured-theme-variables';
 import {
   ThemeDashboard,
+  ThemeDashboardEmptyState,
+  ThemeDashboardHeader,
   NavSection,
   ThemeVisualizer,
-  CssFieldEditor,
+  ThemeImporter,
   CardContainerCss,
   ResetButton,
   SimpleNavBar,
@@ -42,20 +45,20 @@ import {
 export const GUIDE_SECTIONS = [
   {
     id: 'card-container-css',
-    navTitle: 'Card Container',
-    title: 'Card Container CSS',
+    navTitle: 'Computed Styles',
+    title: 'Card Container Computed Styles',
     fieldName: null,
   },
   {
     id: 'import-css',
     navTitle: 'Import CSS',
-    title: 'Import CSS',
+    title: 'Import CSS Variables',
     fieldName: null,
   },
   {
     id: 'view-code',
     navTitle: 'View Code',
-    title: 'Generated CSS',
+    title: 'Generated CSS Variables',
     fieldName: 'cssVariables',
   },
 ];
@@ -113,6 +116,8 @@ const resetTypographyVariables = (
   }
 };
 
+const GOOGLE_FONTS_URL_PREFIX = 'https://fonts.googleapis.com/css2';
+
 // TODO: move to boxel-ui helpers
 export const mergeRuleMaps = (
   ...maps: (CssRuleMap | undefined)[]
@@ -137,102 +142,146 @@ export const mergeRuleMaps = (
 };
 
 class Isolated extends Component<typeof StructuredTheme> {
+  // Edit extends this template with the field editors swapped in
+  protected editMode = false;
+
   @tracked private isDarkMode = false;
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
   };
 
+  private get hasThemeCss() {
+    return Boolean(this.args.model?.cssVariables);
+  }
+
+  // In edit mode the visualizer hosts the field editors, so it renders even
+  // before a theme is imported.
+  private get showVisualizer() {
+    return this.editMode || this.hasThemeCss;
+  }
+
+  // A theme-less isolated view shows the dashboard empty state instead of
+  // any sections; importing happens in edit mode.
+  private get showEmptyState() {
+    return !this.editMode && !this.hasThemeCss;
+  }
+
+  private get visibleSections() {
+    let sections = this.args.model?.guideSections ?? [];
+    // every field stays editable in edit mode; the Card Container CSS
+    // reference is display-only and stays out of the editor
+    if (this.editMode) {
+      return sections.filter((section) => section.id !== 'card-container-css');
+    }
+    if (this.hasThemeCss) {
+      // the importer is an editing tool, so the isolated view leaves it out
+      return sections.filter((section) => section.id !== 'import-css');
+    }
+    return [];
+  }
+
   <template>
     <ThemeDashboard
       class='structured-theme-card'
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
-      @title={{@model.cardTitle}}
-      @description={{@model.cardDescription}}
       @isDarkMode={{this.isDarkMode}}
-      @version={{@model.version}}
     >
       <:header>
-        <BoxelContainer @tag='header' @display='flex' class='theme-header'>
-          <h1><@fields.cardTitle /></h1>
-          <p class='theme-description'>
-            <@fields.cardDescription />
-          </p>
-        </BoxelContainer>
+        <ThemeDashboardHeader
+          @title={{@model.cardTitle}}
+          @description={{@model.cardDescription}}
+          @version={{@model.version}}
+          @model={{@model}}
+          @fields={{@fields}}
+          @mode={{if this.editMode 'edit' 'isolated'}}
+          @metaLabel='Theme Guide'
+        />
       </:header>
       <:navBar>
-        <SimpleNavBar @items={{@model.guideSections}} />
+        {{#if this.visibleSections.length}}
+          <SimpleNavBar @items={{this.visibleSections}} />
+        {{/if}}
       </:navBar>
       <:default>
-        <GridContainer class='structured-theme-grid'>
-          <ThemeVisualizer
-            @toggleDarkMode={{this.toggleDarkMode}}
-            @isDarkMode={{this.isDarkMode}}
-          >
-            <:colorPalette>
-              {{#if this.isDarkMode}}
-                <@fields.darkModeVariables data-test-dark-vars />
-              {{else}}
-                <@fields.rootVariables data-test-root-vars />
-              {{/if}}
-            </:colorPalette>
-            <:typography>
-              <@fields.typography />
-            </:typography>
-          </ThemeVisualizer>
-          {{#each @model.guideSections as |section|}}
-            <NavSection
-              @id={{section.id}}
-              @title={{if section.title section.title section.navTitle}}
-              @hideSectionCounter={{true}}
-            >
-              {{#if (eq section.id 'card-container-css')}}
-                {{#if @model.cssVariables}}
-                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+        {{#if this.showEmptyState}}
+          <ThemeDashboardEmptyState />
+        {{else}}
+          <GridContainer class='structured-theme-grid'>
+            {{#if this.showVisualizer}}
+              <ThemeVisualizer
+                @toggleDarkMode={{this.toggleDarkMode}}
+                @isDarkMode={{this.isDarkMode}}
+                @fontStack={{@model.fontStacks}}
+                @cssImports={{@model.cssImports}}
+                @editMode={{this.editMode}}
+              >
+                <:colorPalette>
+                  {{#if this.isDarkMode}}
+                    <@fields.darkModeVariables data-test-dark-vars />
+                  {{else}}
+                    <@fields.rootVariables data-test-root-vars />
+                  {{/if}}
+                </:colorPalette>
+                <:typography>
+                  <@fields.typography />
+                </:typography>
+                <:cssImports>
+                  <FieldContainer
+                    @label='CSS Imports'
+                    @tag='label'
+                    @vertical={{true}}
+                  >
+                    <@fields.cssImports />
+                  </FieldContainer>
+                </:cssImports>
+              </ThemeVisualizer>
+            {{/if}}
+            {{#each this.visibleSections as |section|}}
+              <NavSection
+                @id={{section.id}}
+                @title={{if section.title section.title section.navTitle}}
+                @hideSectionCounter={{true}}
+              >
+                {{#if (eq section.id 'card-container-css')}}
+                  {{#if @model.cssVariables}}
+                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  {{else}}
+                    <p><em>No theme variables added</em></p>
+                  {{/if}}
+                {{else if (eq section.id 'import-css')}}
+                  {{! the cardInfo editor in the header owns the name and
+                    description, so the importer only handles CSS here }}
+                  <ThemeImporter @setCss={{@model.setCss}} />
+                {{else if section.fieldName}}
+                  {{#let (get @fields section.fieldName) as |FieldContent|}}
+                    {{! @glint-ignore }}
+                    <FieldContent />
+                  {{/let}}
                 {{else}}
-                  <p><em>No theme variables added</em></p>
+                  <p><em>No content available.</em></p>
                 {{/if}}
-              {{else if (eq section.id 'import-css')}}
-                <CssFieldEditor @setCss={{@model.setCss}} />
-              {{else if section.fieldName}}
-                {{#let (get @fields section.fieldName) as |FieldContent|}}
-                  {{! @glint-ignore }}
-                  <FieldContent />
-                {{/let}}
-              {{else}}
-                <p><em>No content available.</em></p>
-              {{/if}}
-            </NavSection>
-          {{/each}}
-          <GridContainer>
-            <h2>Reset CSS</h2>
-            <div>
-              <ResetButton @reset={{@model.resetCss}} />
-            </div>
+              </NavSection>
+            {{/each}}
+            {{#if this.editMode}}
+              <GridContainer>
+                <h2>Reset CSS</h2>
+                <div>
+                  <ResetButton @reset={{@model.resetCss}} />
+                </div>
+              </GridContainer>
+            {{/if}}
           </GridContainer>
-        </GridContainer>
+        {{/if}}
       </:default>
     </ThemeDashboard>
 
     <style scoped>
       @layer baseComponent {
-        .theme-header {
-          min-height: 20vh;
-          flex-direction: column;
-          flex-wrap: nowrap;
-          justify-content: center;
-          padding: var(--boxel-sp-4xl) var(--boxel-sp-2xl);
-          gap: var(--boxel-sp-xs);
-          text-align: center;
-          text-wrap: pretty;
-          background-color: var(--dsr-card);
-          color: var(--dsr-card-fg);
-          border-bottom: 1px solid var(--dsr-border);
-        }
         .theme-description {
           max-width: 37.5rem;
-          color: var(--dsr-muted-fg);
+          color: var(--muted-foreground);
         }
         .structured-theme-grid {
           gap: var(--boxel-sp-2xl);
@@ -240,6 +289,12 @@ class Isolated extends Component<typeof StructuredTheme> {
       }
     </style>
   </template>
+}
+
+// Same dashboard layout as Isolated; fields render as editors, the css
+// imports field appears under Font Imports, and the view-only display sections are dropped.
+class Edit extends Isolated {
+  protected editMode = true;
 }
 
 export default class StructuredTheme extends Theme {
@@ -259,6 +314,11 @@ export default class StructuredTheme extends Theme {
   });
   @field version = contains(StringField, {
     description: 'Theme document version',
+  });
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: StructuredTheme) {
+      return this.cardInfo?.name ?? 'Untitled Theme';
+    },
   });
 
   // CSS Variables computed from field entries
@@ -286,25 +346,84 @@ export default class StructuredTheme extends Theme {
 
   guideSections: SectionSignature[] = GUIDE_SECTIONS;
 
-  setCss = (content: string) => {
+  private fontStack(fieldName: 'fontSans' | 'fontSerif' | 'fontMono') {
+    return (
+      this.rootVariables?.[fieldName] ?? this.darkModeVariables?.[fieldName]
+    );
+  }
+
+  get fontSansStack() {
+    return this.fontStack('fontSans');
+  }
+
+  get fontSerifStack() {
+    return this.fontStack('fontSerif');
+  }
+
+  get fontMonoStack() {
+    return this.fontStack('fontMono');
+  }
+
+  // The rows the Theme Visualizer's Fonts section previews
+  get fontStacks() {
+    return [
+      { label: 'sans-serif', stack: this.fontSansStack },
+      { label: 'serif', stack: this.fontSerifStack },
+      { label: 'monospace', stack: this.fontMonoStack },
+    ];
+  }
+
+  setCss = (content: string): boolean => {
     if (!content || !parseCssGroups) {
-      return;
+      return false;
     }
     const groups = parseCssGroups(content);
-    if (!groups?.size) {
-      return;
+    const rootRules = groups?.get(':root');
+    const darkRules = groups?.get('.dark');
+    if (!rootRules?.size && !darkRules?.size) {
+      return false;
     }
-    applyCssRulesToField(this.rootVariables, groups.get(':root'));
-    applyCssRulesToField(this.darkModeVariables, groups.get('.dark'));
+    applyCssRulesToField(this.rootVariables, rootRules);
+    applyCssRulesToField(this.darkModeVariables, darkRules);
+    this.refreshFontImports();
+    return true;
   };
 
   resetCss = () => {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
     resetTypographyVariables(this.typography);
+    this.refreshFontImports();
+  };
+
+  // Mirrors the docs guide's theme font loading: the Google Fonts stylesheets
+  // for the theme's font stacks are kept in cssImports, which the
+  // CardContainer links wherever the theme is applied. Imports added by hand
+  // from other hosts are left alone.
+  private refreshFontImports = () => {
+    if (!googleFontImportsFor) {
+      return;
+    }
+    let fontImports = googleFontImportsFor([
+      ...[this.rootVariables, this.darkModeVariables].flatMap((field) => [
+        field?.fontSans,
+        field?.fontSerif,
+        field?.fontMono,
+      ]),
+      ...(this.typography?.cssVariableFields ?? [])
+        .filter(({ cssVariableName }) =>
+          cssVariableName.endsWith('-font-family'),
+        )
+        .map(({ value }) => value),
+    ]);
+    let otherImports = (this.cssImports ?? []).filter(
+      (url) => url && !url.startsWith(GOOGLE_FONTS_URL_PREFIX),
+    );
+    this.cssImports = [...otherImports, ...fontImports];
   };
 
   static isolated: BaseDefComponent = Isolated;
+  static edit: BaseDefComponent = Edit;
 
   // CS-10787: emit a compact structured summary of the theme — title,
   // description, version, and the sub-field renderings for typography and
@@ -403,10 +522,6 @@ export default class StructuredTheme extends Theme {
           display: grid;
           gap: var(--boxel-sp);
           padding: var(--boxel-sp-lg);
-          border: 1px solid var(--border, var(--boxel-border-color));
-          border-radius: var(--boxel-border-radius);
-          background-color: var(--background, var(--boxel-light));
-          color: var(--foreground, var(--boxel-dark));
         }
         .structured-theme-embedded__header {
           display: flex;
@@ -420,11 +535,11 @@ export default class StructuredTheme extends Theme {
         }
         .structured-theme-embedded__description {
           margin: 0;
-          color: var(--muted-foreground, var(--boxel-500));
+          color: var(--muted-foreground);
         }
         .structured-theme-embedded__version {
           font-size: var(--boxel-font-size-sm);
-          color: var(--muted-foreground, var(--boxel-500));
+          color: var(--muted-foreground);
         }
         .structured-theme-embedded__swatches {
           display: grid;

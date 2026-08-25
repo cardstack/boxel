@@ -5,16 +5,19 @@ import { GUIDE_SECTIONS } from './structured-theme';
 import { ThemeTypographyField } from './structured-theme-variables';
 import { contains, field, Component, type BaseDefComponent } from './card-api';
 import MarkdownField from './markdown';
+
 import {
   ThemeDashboard,
+  ThemeDashboardEmptyState,
+  ThemeDashboardHeader,
   NavSection,
   ThemeVisualizer,
-  CssFieldEditor,
+  ThemeImporter,
   CardContainerCss,
   ResetButton,
 } from './default-templates/theme-dashboard';
 
-import { GridContainer } from '@cardstack/boxel-ui/components';
+import { GridContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 export const STYLE_GUIDE_SECTIONS = [
@@ -86,21 +89,50 @@ export const STYLE_GUIDE_SECTIONS = [
 ];
 
 class Isolated extends Component<typeof DetailedStyleReference> {
+  // Edit extends this template with the field editors swapped in
+  protected editMode = false;
+
   @tracked private isDarkMode = false;
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
   };
 
+  private get hasThemeCss() {
+    return Boolean(this.args.model?.cssVariables);
+  }
+
+  private get showVisualizer() {
+    return this.editMode || this.hasThemeCss;
+  }
+
+  // A theme-less isolated view shows the dashboard empty state instead of
+  // any sections; importing happens in edit mode.
+  private get showEmptyState() {
+    return !this.editMode && !this.hasThemeCss;
+  }
+
   private get sectionsWithContent() {
     let sections = this.args.model?.guideSections;
     return sections?.filter((section) => {
-      if (section.id === 'import-css' || section.id === 'view-code') {
-        return true;
+      // every field stays editable in edit mode, theme or content or not;
+      // the Card Container CSS reference is display-only and stays out of
+      // the editor
+      if (this.editMode) {
+        return section.id !== 'card-container-css';
       }
 
-      if (section.id === 'card-container-css') {
-        return Boolean(this.args.model.cssVariables);
+      if (!this.hasThemeCss) {
+        return false;
+      }
+
+      // the importer is an editing tool, so the isolated view leaves it out
+      if (section.id === 'import-css') {
+        return false;
+      }
+
+      if (section.id === 'view-code' || section.id === 'card-container-css') {
+        return true;
       }
 
       if (section.id === 'visual-dna') {
@@ -144,114 +176,174 @@ class Isolated extends Component<typeof DetailedStyleReference> {
     <ThemeDashboard
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
-      @title={{@model.cardTitle}}
-      @description={{@model.cardDescription}}
       @sections={{this.sectionsWithContent}}
       @isDarkMode={{this.isDarkMode}}
     >
-      <GridContainer class='dsr-grid'>
-        <ThemeVisualizer
-          @toggleDarkMode={{this.toggleDarkMode}}
-          @isDarkMode={{this.isDarkMode}}
-        >
-          <:colorPalette>
-            {{#if this.isDarkMode}}
-              <@fields.darkModeVariables />
-            {{else}}
-              <@fields.rootVariables />
+      <:header>
+        <ThemeDashboardHeader
+          class='dsr-header'
+          @title={{@model.cardTitle}}
+          @description={{@model.cardDescription}}
+          @version={{@model.version}}
+          @model={{@model}}
+          @fields={{@fields}}
+          @mode={{if this.editMode 'edit' 'isolated'}}
+        />
+      </:header>
+      <:default>
+        {{#if this.showEmptyState}}
+          <ThemeDashboardEmptyState />
+        {{else}}
+          <GridContainer class='dsr-grid'>
+            {{#if this.showVisualizer}}
+              <ThemeVisualizer
+                @toggleDarkMode={{this.toggleDarkMode}}
+                @isDarkMode={{this.isDarkMode}}
+                @fontStack={{@model.fontStacks}}
+                @cssImports={{@model.cssImports}}
+                @editMode={{this.editMode}}
+              >
+                <:colorPalette>
+                  {{#if this.isDarkMode}}
+                    <@fields.darkModeVariables />
+                  {{else}}
+                    <@fields.rootVariables />
+                  {{/if}}
+                </:colorPalette>
+                <:typography>
+                  <@fields.typography />
+                </:typography>
+                <:cssImports>
+                  <FieldContainer
+                    @label='CSS Imports'
+                    @tag='label'
+                    @vertical={{true}}
+                  >
+                    <@fields.cssImports />
+                  </FieldContainer>
+                </:cssImports>
+              </ThemeVisualizer>
             {{/if}}
-          </:colorPalette>
-          <:typography>
-            <@fields.typography />
-          </:typography>
-        </ThemeVisualizer>
 
-        {{#each this.sectionsWithContent as |section|}}
-          <NavSection @id={{section.id}} @title={{section.title}}>
-            {{#if (eq section.id 'visual-dna')}}
-              <div class='dsr-section-content'>
-                {{#if @model.colorPalette}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Color Palette</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.colorPalette />
-                    </div>
+            {{#each this.sectionsWithContent as |section|}}
+              <NavSection @id={{section.id}} @title={{section.title}}>
+                {{#if (eq section.id 'visual-dna')}}
+                  <div class='dsr-section-content'>
+                    {{#if this.editMode}}
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Color Palette</h3>
+                        <@fields.colorPalette />
+                      </div>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Typography System</h3>
+                        <@fields.typographySystem />
+                      </div>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Geometric Language</h3>
+                        <@fields.geometricLanguage />
+                      </div>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
+                        <@fields.materialVocabulary />
+                      </div>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Visual References</h3>
+                        <@fields.wallpaperImages />
+                      </div>
+                    {{else}}
+                      {{#if @model.colorPalette}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Color Palette</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.colorPalette />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.typographySystem}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Typography System</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.typographySystem />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.geometricLanguage}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Geometric Language</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.geometricLanguage />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.materialVocabulary}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.materialVocabulary />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.wallpaperImages.length}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Visual References</h3>
+                          <div class='dsr-image-gallery'>
+                            {{#each @model.wallpaperImages as |imageUrl|}}
+                              <figure class='dsr-gallery-item'>
+                                <img
+                                  src='{{imageUrl}}'
+                                  alt='Style reference'
+                                  class='dsr-gallery-image'
+                                />
+                              </figure>
+                            {{/each}}
+                          </div>
+                        </div>
+                      {{/if}}
+                    {{/if}}
                   </div>
-                {{/if}}
-
-                {{#if @model.typographySystem}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Typography System</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.typographySystem />
-                    </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.geometricLanguage}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Geometric Language</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.geometricLanguage />
-                    </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.materialVocabulary}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
-                    <div class='dsr-content-prose'>
-                      <@fields.materialVocabulary />
-                    </div>
-                  </div>
-                {{/if}}
-
-                {{#if @model.wallpaperImages.length}}
-                  <div class='dsr-subsection'>
-                    <h3 class='dsr-subsection-title'>Visual References</h3>
-                    <div class='dsr-image-gallery'>
-                      {{#each @model.wallpaperImages as |imageUrl|}}
-                        <figure class='dsr-gallery-item'>
-                          <img
-                            src='{{imageUrl}}'
-                            alt='Style reference'
-                            class='dsr-gallery-image'
-                          />
-                        </figure>
+                {{else if (eq section.id 'card-container-css')}}
+                  {{#if @model.cssVariables}}
+                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                  {{/if}}
+                {{else if (eq section.id 'import-css')}}
+                  {{! the cardInfo editor in the header owns the name and
+                    description, so the importer only handles CSS here }}
+                  <ThemeImporter @setCss={{@model.setCss}} />
+                {{else if (eq section.id 'inspirations')}}
+                  {{#if this.editMode}}
+                    <@fields.inspirations />
+                  {{else}}
+                    <div class='dsr-inspiration-tags'>
+                      {{#each @model.inspirations as |inspiration|}}
+                        <span class='dsr-inspiration-tag'>{{inspiration}}</span>
                       {{/each}}
                     </div>
-                  </div>
+                  {{/if}}
+                {{else if section.fieldName}}
+                  {{#let (get @fields section.fieldName) as |FieldContent|}}
+                    <div class='dsr-content-prose'>
+                      {{! @glint-ignore }}
+                      <FieldContent />
+                    </div>
+                  {{/let}}
                 {{/if}}
-              </div>
-            {{else if (eq section.id 'card-container-css')}}
-              {{#if @model.cssVariables}}
-                <CardContainerCss @cssVariables={{@model.cssVariables}} />
-              {{/if}}
-            {{else if (eq section.id 'import-css')}}
-              <CssFieldEditor @setCss={{@model.setCss}} />
-            {{else if (eq section.id 'inspirations')}}
-              <div class='dsr-inspiration-tags'>
-                {{#each @model.inspirations as |inspiration|}}
-                  <span class='dsr-inspiration-tag'>{{inspiration}}</span>
-                {{/each}}
-              </div>
-            {{else if section.fieldName}}
-              {{#let (get @fields section.fieldName) as |FieldContent|}}
-                <div class='dsr-content-prose'>
-                  {{! @glint-ignore }}
-                  <FieldContent />
+              </NavSection>
+            {{/each}}
+            {{#if this.editMode}}
+              <GridContainer>
+                <h2>Reset CSS</h2>
+                <div>
+                  <ResetButton @reset={{@model.resetCss}} />
                 </div>
-              {{/let}}
+              </GridContainer>
             {{/if}}
-          </NavSection>
-        {{/each}}
-        <GridContainer>
-          <h2>Reset CSS</h2>
-          <div>
-            <ResetButton @reset={{@model.resetCss}} />
-          </div>
-        </GridContainer>
-      </GridContainer>
+          </GridContainer>
+        {{/if}}
+      </:default>
     </ThemeDashboard>
 
     <style scoped>
@@ -268,7 +360,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       }
       .dsr-subsection-title {
         margin-bottom: var(--boxel-sp);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
 
       /* Markdown */
@@ -289,9 +381,9 @@ class Isolated extends Component<typeof DetailedStyleReference> {
         aspect-ratio: 16 / 10;
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
       }
       .dsr-gallery-image {
         width: 100%;
@@ -304,13 +396,6 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       }
 
       /* Inspirations */
-      .dsr-inspirations-section {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border-radius: var(--boxel-border-radius);
-        padding: calc(var(--boxel-sp) * 2);
-        border: 1px solid var(--dsr-border);
-      }
       .dsr-inspiration-tags {
         display: flex;
         flex-wrap: wrap;
@@ -319,79 +404,15 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       .dsr-inspiration-tag {
         display: inline-block;
         padding: calc(var(--boxel-sp) * 0.375) calc(var(--boxel-sp) * 0.75);
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
         border-radius: calc(var(--boxel-border-radius) * 0.5);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
       }
       .dsr-inspiration-tag:hover {
-        border-color: var(--dsr-fg);
-      }
-
-      /* Color Swatches */
-      .dsr-color-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-        gap: var(--boxel-sp);
-      }
-      .dsr-color-swatch {
-        --swatch-height: 3.75rem;
-        display: flex;
-        flex-direction: column;
-        gap: calc(var(--boxel-sp) * 0.5);
-        font-size: var(--boxel-font-size-xs);
-        text-align: center;
-      }
-      .dsr-color-swatch :deep(.boxel-swatch-preview) {
-        order: -1;
-        box-shadow: var(--shadow-sm);
-      }
-
-      /* Chart Swatches */
-      .dsr-chart-swatches {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
-        gap: calc(var(--boxel-sp) * 0.5);
-        flex-wrap: wrap;
-      }
-      .dsr-chart-swatch {
-        --swatch-height: 5rem;
-        flex: 1;
-        transition: transform var(--boxel-transition);
-      }
-      .dsr-chart-swatch:hover {
-        transform: translateY(-4px);
-      }
-
-      /* Shadow Samples */
-      .dsr-shadow-samples {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
-        gap: calc(var(--boxel-sp) * 2);
-      }
-      .dsr-shadow-box {
-        height: 5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        border-radius: var(--boxel-border-radius);
-      }
-      .sm-shadow {
-        box-shadow: var(--shadow-sm);
-      }
-      .md-shadow {
-        box-shadow: var(--shadow-md);
-      }
-      .lg-shadow {
-        box-shadow: var(--shadow-lg);
-      }
-      .xl-shadow {
-        box-shadow: var(--shadow-xl);
+        border-color: var(--foreground);
       }
 
       /* Responsive */
@@ -399,22 +420,16 @@ class Isolated extends Component<typeof DetailedStyleReference> {
         .dsr-image-gallery {
           grid-template-columns: 1fr;
         }
-        .dsr-color-grid {
-          grid-template-columns: repeat(2, 1fr);
-        }
-        .dsr-shadow-samples {
-          grid-template-columns: repeat(2, 1fr);
-        }
-      }
-
-      @media (max-width: 400px) {
-        .dsr-theme-visualizer-header {
-          flex-direction: column;
-          align-items: stretch;
-        }
       }
     </style>
   </template>
+}
+
+// Same dashboard layout as Isolated; fields render as editors, the css
+// imports field appears under Font Imports, and the component samples and
+// Card Container CSS sections are dropped.
+class Edit extends Isolated {
+  protected editMode = true;
 }
 
 export default class DetailedStyleReference extends StyleReference {
@@ -488,4 +503,5 @@ export default class DetailedStyleReference extends StyleReference {
   guideSections = [...STYLE_GUIDE_SECTIONS, ...GUIDE_SECTIONS];
 
   static isolated: BaseDefComponent = Isolated;
+  static edit: BaseDefComponent = Edit;
 }

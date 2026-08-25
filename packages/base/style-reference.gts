@@ -13,20 +13,78 @@ import UrlField from './url';
 import {
   ThemeVisualizer,
   ThemeDashboard,
+  ThemeDashboardEmptyState,
+  ThemeDashboardHeader,
+  ThemeImporter,
   CardContainerCss,
-  CssFieldEditor,
   ResetButton,
   SimpleNavBar,
 } from './default-templates/theme-dashboard';
 
-import { BoxelTag, GridContainer } from '@cardstack/boxel-ui/components';
+import {
+  BoxelTag,
+  FieldContainer,
+  GridContainer,
+} from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof StyleReference> {
+  // Edit extends this template with the field editors swapped in
+  protected editMode = false;
+
   @tracked private isDarkMode = false;
 
   private toggleDarkMode = () => {
     this.isDarkMode = !this.isDarkMode;
   };
+
+  private get hasThemeCss() {
+    return Boolean(this.args.model?.cssVariables);
+  }
+
+  // A theme-less isolated view shows the dashboard empty state instead of
+  // any sections; every field stays reachable in edit mode.
+  private get showEmptyState() {
+    return !this.editMode && !this.hasThemeCss;
+  }
+
+  private contentSections = [
+    { id: 'visual-dna', navTitle: 'Visual DNA', title: 'Visual DNA' },
+    { id: 'inspirations', navTitle: 'Inspirations', title: 'Inspirations' },
+    { id: 'wallpapers', navTitle: 'Wallpapers', title: 'Wallpaper Gallery' },
+  ];
+
+  private get visibleSections() {
+    let guideSections = this.args.model?.guideSections ?? [];
+    // every field stays editable in edit mode, theme or content or not;
+    // the Card Container CSS reference is display-only and stays out of
+    // the editor
+    if (this.editMode) {
+      return [
+        ...this.contentSections,
+        ...guideSections.filter(
+          (section) => section.id !== 'card-container-css',
+        ),
+      ];
+    }
+    if (!this.hasThemeCss) {
+      return [];
+    }
+    let model = this.args.model;
+    let contentSections = this.contentSections.filter((section) => {
+      if (section.id === 'visual-dna') {
+        return Boolean(model?.visualDNA?.length);
+      }
+      if (section.id === 'inspirations') {
+        return Boolean(model?.inspirations?.length);
+      }
+      return Boolean(model?.wallpaperImages?.length);
+    });
+    // the importer is an editing tool, so the isolated view leaves it out
+    return [
+      ...contentSections,
+      ...guideSections.filter((section) => section.id !== 'import-css'),
+    ];
+  }
 
   <template>
     <ThemeDashboard
@@ -36,104 +94,159 @@ class Isolated extends Component<typeof StyleReference> {
       @isDarkMode={{this.isDarkMode}}
     >
       <:header>
-        <header class='style-header'>
-          <h1><@fields.cardTitle /></h1>
-          <p class='style-header-description'>
-            <@fields.cardDescription />
-          </p>
-        </header>
+        {{#if this.editMode}}
+          <ThemeDashboardHeader
+            @title={{@model.cardTitle}}
+            @description={{@model.cardDescription}}
+            @model={{@model}}
+            @fields={{@fields}}
+            @mode='edit'
+            @metaLabel='Style Reference'
+          />
+        {{else}}
+          <header class='style-header'>
+            <h1><@fields.cardTitle /></h1>
+            <p class='style-header-description'>
+              <@fields.cardDescription />
+            </p>
+          </header>
+        {{/if}}
       </:header>
       <:navBar>
-        <SimpleNavBar @items={{@model.guideSections}} />
+        {{#if this.visibleSections.length}}
+          <SimpleNavBar @items={{this.visibleSections}} />
+        {{/if}}
       </:navBar>
       <:default>
-        <ThemeVisualizer
-          class='style-ref-section'
-          @toggleDarkMode={{this.toggleDarkMode}}
-          @isDarkMode={{this.isDarkMode}}
-        >
-          <:colorPalette>
-            <@fields.rootVariables />
-          </:colorPalette>
-          <:typography>
-            <@fields.typography />
-          </:typography>
-        </ThemeVisualizer>
+        {{#if this.showEmptyState}}
+          <ThemeDashboardEmptyState />
+        {{else}}
+          <ThemeVisualizer
+            class='style-ref-section'
+            @toggleDarkMode={{this.toggleDarkMode}}
+            @isDarkMode={{this.isDarkMode}}
+            @fontStack={{@model.fontStacks}}
+            @cssImports={{@model.cssImports}}
+            @editMode={{this.editMode}}
+          >
+            <:colorPalette>
+              <@fields.rootVariables />
+            </:colorPalette>
+            <:typography>
+              <@fields.typography />
+            </:typography>
+            <:cssImports>
+              <FieldContainer
+                @label='CSS Imports'
+                @tag='label'
+                @vertical={{true}}
+              >
+                <@fields.cssImports />
+              </FieldContainer>
+            </:cssImports>
+          </ThemeVisualizer>
 
-        <GridContainer class='style-ref-grid'>
-          {{#if @model.visualDNA.length}}
-            <section class='visual-dna'>
-              <h2>Visual DNA</h2>
-              <div class='visual-dna'>
+          <GridContainer class='style-ref-grid'>
+            {{#if this.editMode}}
+              <section id='visual-dna' class='visual-dna'>
+                <h2>Visual DNA</h2>
                 <@fields.visualDNA />
-              </div>
-            </section>
-          {{/if}}
+              </section>
 
-          {{#if @model.inspirations.length}}
-            <section class='inspirations'>
-              <h2>Inspirations</h2>
-              <ul class='inspiration-list'>
-                {{#each @model.inspirations as |inspiration|}}
-                  <BoxelTag
-                    class='inspiration-tag'
-                    @ellipsize={{true}}
-                    @htmlTag='li'
-                    @name={{inspiration}}
-                  />
-                {{/each}}
-              </ul>
-            </section>
-          {{/if}}
+              <section id='inspirations' class='inspirations'>
+                <h2>Inspirations</h2>
+                <@fields.inspirations />
+              </section>
 
-          {{#if @model.wallpaperImages.length}}
-            <section class='wallpapers'>
-              <h2>Wallpaper Gallery</h2>
-              <div class='image-grid'>
-                {{#each @model.wallpaperImages as |imageUrl|}}
-                  <div class='image-container'>
-                    <img
-                      src='{{imageUrl}}'
-                      alt='Style reference wallpaper'
-                      class='wallpaper-image'
-                    />
+              <section id='wallpapers' class='wallpapers'>
+                <h2>Wallpaper Gallery</h2>
+                <@fields.wallpaperImages />
+              </section>
+            {{else}}
+              {{#if @model.visualDNA.length}}
+                <section id='visual-dna' class='visual-dna'>
+                  <h2>Visual DNA</h2>
+                  <div class='visual-dna'>
+                    <@fields.visualDNA />
                   </div>
-                {{/each}}
-              </div>
+                </section>
+              {{/if}}
+
+              {{#if @model.inspirations.length}}
+                <section id='inspirations' class='inspirations'>
+                  <h2>Inspirations</h2>
+                  <ul class='inspiration-list'>
+                    {{#each @model.inspirations as |inspiration|}}
+                      <BoxelTag
+                        class='inspiration-tag'
+                        @ellipsize={{true}}
+                        @htmlTag='li'
+                        @name={{inspiration}}
+                      />
+                    {{/each}}
+                  </ul>
+                </section>
+              {{/if}}
+
+              {{#if @model.wallpaperImages.length}}
+                <section id='wallpapers' class='wallpapers'>
+                  <h2>Wallpaper Gallery</h2>
+                  <div class='image-grid'>
+                    {{#each @model.wallpaperImages as |imageUrl|}}
+                      <div class='image-container'>
+                        <img
+                          src='{{imageUrl}}'
+                          alt='Style reference wallpaper'
+                          class='wallpaper-image'
+                        />
+                      </div>
+                    {{/each}}
+                  </div>
+                </section>
+              {{/if}}
+
+              {{#if @model.cssVariables}}
+                <section id='card-container-css'>
+                  <h2>Card Container Computed Styles</h2>
+                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                </section>
+              {{/if}}
+            {{/if}}
+
+            {{#if this.editMode}}
+              <section id='import-css'>
+                <h2>Import CSS Variables</h2>
+                {{! the cardInfo editor in the header owns the name and
+                  description, so the importer only handles CSS here }}
+                <ThemeImporter @setCss={{@model.setCss}} />
+              </section>
+            {{/if}}
+
+            <section id='view-code'>
+              <h2>Generated CSS Variables</h2>
+              <@fields.cssVariables />
             </section>
-          {{/if}}
 
-          {{#if @model.cssVariables}}
-            <section id='card-container-css'>
-              <h2>Card Container CSS</h2>
-              <CardContainerCss @cssVariables={{@model.cssVariables}} />
-            </section>
-          {{/if}}
-
-          <section id='import-css'>
-            <h2>Import Custom CSS</h2>
-            <CssFieldEditor @setCss={{@model.setCss}} />
-          </section>
-
-          <section id='view-code'>
-            <h2>Generated CSS Variables</h2>
-            <@fields.cssVariables />
-          </section>
-
-          <section>
-            <h2>Reset CSS</h2>
-            <ResetButton @reset={{@model.resetCss}} />
-          </section>
-        </GridContainer>
+            {{#if this.editMode}}
+              <section>
+                <h2>Reset CSS</h2>
+                <div>
+                  <ResetButton @reset={{@model.resetCss}} />
+                </div>
+              </section>
+            {{/if}}
+          </GridContainer>
+        {{/if}}
       </:default>
     </ThemeDashboard>
     <style scoped>
       h1 {
         margin-bottom: var(--boxel-sp-lg);
+        color: var(--foreground);
       }
       h2 {
         margin-bottom: var(--boxel-sp-lg);
-        border-bottom: 1px solid var(--dsr-border);
+        border-bottom: 1px solid var(--border);
       }
       ul {
         list-style: none;
@@ -150,14 +263,15 @@ class Isolated extends Component<typeof StyleReference> {
       .style-header {
         padding-block: var(--boxel-sp-4xl);
         padding-inline: var(--boxel-sp-2xl);
-        border-bottom: 1px solid var(--dsr-border);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        border-bottom: 1px solid var(--border);
         text-align: center;
         text-wrap: pretty;
       }
       .style-header-description {
         max-width: 37.5rem;
         margin: 0 auto;
-        color: var(--muted-foreground);
       }
       .style-ref-grid {
         gap: var(--boxel-sp-4xl);
@@ -185,9 +299,9 @@ class Isolated extends Component<typeof StyleReference> {
       }
       .image-container {
         aspect-ratio: 16/9;
-        border-radius: var(--radius, var(--boxel-border-radius-sm));
+        border-radius: var(--boxel-border-radius-sm);
         overflow: hidden;
-        box-shadow: var(--shadow, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+        box-shadow: var(--shadow);
       }
       .wallpaper-image {
         width: 100%;
@@ -200,6 +314,10 @@ class Isolated extends Component<typeof StyleReference> {
       }
     </style>
   </template>
+}
+
+class Edit extends Isolated {
+  protected editMode = true;
 }
 
 export default class StyleReference extends StructuredTheme {
@@ -218,7 +336,7 @@ export default class StyleReference extends StructuredTheme {
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: StyleReference) {
-      return this.cardInfo?.name ?? this.styleName ?? 'Untitled Style';
+      return this.cardInfo?.name ?? this.styleName ?? 'Untitled Theme';
     },
   });
 
@@ -235,4 +353,5 @@ export default class StyleReference extends StructuredTheme {
   });
 
   static isolated: BaseDefComponent = Isolated;
+  static edit: BaseDefComponent = Edit;
 }
