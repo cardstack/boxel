@@ -988,6 +988,7 @@ choreography written against it.
 | the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                    | —          |
 | `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                          | —          |
 | the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                      | —          |
+| an open step vocabulary         | ☐ designed, not built — composite steps in public, plus `c.Follow`'s derived cue; see [step-vocabulary.md](step-vocabulary.md)    | anchors    |
 
 The Build Order demo remains the acceptance test for the second pass:
 each promotion deletes a piece of `builds.ts`, and the demo is done being
