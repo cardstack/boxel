@@ -634,19 +634,35 @@ because scope classification has three outcomes: a vocabulary admitting a
 kind no producer emits gives the Host neither a rule to redeem it by nor a
 rule to refuse it against.
 
-**RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
-`describeBoxel`, `createFromSerialized(resource, doc, relativeTo, purpose)`,
+**RP-14.2** Operations (`BoxelRuntime`, per tier), declared in the protocol
+module and exactly eight: `loadBoxel`,
+`createFromSerialized(resource, doc, relativeTo, purpose)`, `describeBoxel`,
 `getFields`/`getField` (answering `ResolvedField`, whose members are named
-`fieldName` / `type` / `kind` — deliberately not RP-3.6's `fieldType`,
-which names the _kind_ string there, so one name never carries two
-meanings across these two sections),
-`getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
-`dispose`. Nothing else — mutation is not an operation on this interface
-(RP-9.8: it is a Host-granted `set` capability). The `purpose` is required,
-not optional: an indexing pass must fail loudly on a definition it cannot
-identify where an interactive surface degrades to an error card, and a
-runtime that cannot tell the two apart lets an indexing failure ride as a
-rendering failure.
+`fieldName` / `type` / `kind` — deliberately not RP-3.6's `fieldType`, which
+names the _kind_ string there, so one name never carries two meanings across
+these two sections), `projectInstance` (answering `InstanceProjection`),
+`serializeCard`, `dispose`. The interface also carries `mode`. Every argument
+and every result is a handle or a cloneable record, which is what lets one
+interface serve a local call, a call into a Compartment, and a call across a
+message port unchanged. The module proves the name list and the interface
+cannot drift.
+
+The `purpose` is required, not optional: an indexing pass must fail loudly on
+a definition it cannot identify where an interactive surface degrades to an
+error card, and a runtime that cannot tell the two apart lets an indexing
+failure ride as a rendering failure.
+
+Three things are **not** operations here. Mutation is a Host-granted `set`
+capability, re-authorized per use (RP-9.8). Producing a mountable component is
+process-local and its result is not cloneable, so it cannot be a member of a
+tier-neutral interface — a tier's adapter offers its own render entry point
+beside this one, and what crosses a boundary is the projection, not the
+component. Invoking an authored action belongs to a component instance, so it
+is the component runtime's, and its result crosses back as a `ComponentUpdate`.
+The set is closed in the sense that matters: a tier needing a _cross-boundary_
+behavior these cannot express is a spec change, while a tier-local capability
+its own Host code calls directly — source volatility (RP-18), instance sync
+(RP-20.5/20.6) — is not an operation on this interface.
 
 **RP-14.3** Version discipline: every record carries the protocol version;
 **consumers check it** and fail closed to last-known-good with one

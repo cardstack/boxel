@@ -406,17 +406,31 @@ module('Unit | rendering protocol | records and operations', function () {
       [...BOXEL_RUNTIME_OPERATIONS],
       [
         'loadBoxel',
-        'describeBoxel',
         'createFromSerialized',
+        'describeBoxel',
         'getFields',
         'getField',
-        'getRenderSlot',
-        'invokeAction',
+        'projectInstance',
         'serializeCard',
         'dispose',
       ],
-      'a tier that needs more than these needs a spec change, not an extra operation',
+      'a tier that needs another cross-boundary behavior needs a spec change, not an extra operation',
     );
+
+    // Rendering and invoking an action are absent for reasons of kind, not
+    // omission: a mountable component is not cloneable and cannot be a member
+    // of a tier-neutral interface, and an action belongs to a component
+    // instance rather than to the runtime.
+    for (let elsewhere of [
+      'getRenderSlot',
+      'buildRenderRecord',
+      'invokeAction',
+    ]) {
+      assert.false(
+        (BOXEL_RUNTIME_OPERATIONS as readonly string[]).includes(elsewhere),
+        `${elsewhere} is not a member of the tier-neutral interface`,
+      );
+    }
 
     // Mutation is a Host-granted, re-authorized-per-use capability, so it can
     // never appear here as something a tier simply calls.

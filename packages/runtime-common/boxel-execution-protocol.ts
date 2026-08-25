@@ -32,6 +32,8 @@ import type * as JSONTypes from 'json-typescript';
 
 import { isCodeRef } from './card-document-shape.ts';
 import type { CodeRef } from './code-ref.ts';
+import type { LooseSingleCardDocument } from './index.ts';
+import type { LooseCardResource } from './resource-types.ts';
 import type { Format } from './formats.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -386,33 +388,116 @@ export const MATERIALIZATION_PURPOSES = [
 export type MaterializationPurpose = (typeof MATERIALIZATION_PURPOSES)[number];
 
 /**
- * The operations a tier's runtime offers, and nothing else (RP-14.2). The set
- * is closed: a tier that cannot express a behavior through these is a spec
- * change, not a new operation on one adapter.
+ * A runtime-local identity for an object that never leaves its runtime.
  *
- * Mutation is absent on purpose. Writing is not an operation any tier may
- * perform on its own — it is a `set` capability the Host grants, revokes, and
- * re-authorizes on every use (RP-9.8).
- *
- * `getRenderSlot` is the one operation whose result is not uniformly
- * cloneable, and the tiers differ in why. Where the slot is a component
- * definition it is executable and stays with the runtime that owns it, so only
- * the request for one crosses. Where the slot names a trusted Base component
- * for the Host to resolve, it is an ordinary code ref and does cross. A tier's
- * adapter answers for its own slot; the name is shared, the shape is not.
+ * The handle is an opaque string, so it is cloneable and crosses freely; what
+ * it names — a loaded class, a materialized instance — does not. A runtime
+ * issues handles that are unguessable within it and resolves them only for the
+ * consumer it issued them to, so holding one grants nothing beyond asking that
+ * runtime to act on it.
  */
+declare const runtimeHandleBrand: unique symbol;
+declare const boxelTypeHandleBrand: unique symbol;
+declare const boxelInstanceHandleBrand: unique symbol;
+
+export type RuntimeHandle = string & {
+  readonly [runtimeHandleBrand]: true;
+};
+export type BoxelTypeHandle = RuntimeHandle & {
+  readonly [boxelTypeHandleBrand]: true;
+};
+export type BoxelInstanceHandle = RuntimeHandle & {
+  readonly [boxelInstanceHandleBrand]: true;
+};
+
+export const BOXEL_EXECUTION_MODES = ['direct', 'capsule', 'sandbox'] as const;
+export type BoxelExecutionMode = (typeof BOXEL_EXECUTION_MODES)[number];
+
+/**
+ * What every tier's runtime offers, and nothing else (RP-14.2).
+ *
+ * Every argument and every result here is either a handle or a cloneable
+ * record, which is what makes one interface serve a local call, a call into a
+ * Compartment, and a call across a message port without changing shape.
+ *
+ * Three things are deliberately absent:
+ *
+ * - **Mutation.** Writing is not an operation a tier may perform on its own;
+ *   it is a `set` capability the Host grants, revokes, and re-authorizes on
+ *   every use (RP-9.8).
+ * - **Rendering.** Producing a mountable component is process-local and its
+ *   result is not cloneable, so it cannot be a member of a tier-neutral
+ *   interface. A tier's adapter offers its own render entry point beside this
+ *   interface; what crosses is the projection, not the component.
+ * - **Invoking an authored action.** An action belongs to a component
+ *   instance, so it is the component runtime's to invoke — the result crosses
+ *   back as a `ComponentUpdate`.
+ *
+ * The set is closed in the sense that matters: a tier needing a *cross-
+ * boundary* behavior these cannot express is a spec change. A tier-local
+ * capability its own Host code calls directly — source volatility, instance
+ * sync — is not an operation on this interface and does not belong here.
+ */
+export interface BoxelRuntime {
+  readonly mode: BoxelExecutionMode;
+
+  loadBoxel(ref: CodeRef): Promise<BoxelTypeHandle>;
+
+  createFromSerialized(
+    resource: LooseCardResource,
+    document: LooseSingleCardDocument,
+    relativeTo: RealmResourceIdentifier | undefined,
+    purpose: MaterializationPurpose,
+  ): Promise<BoxelInstanceHandle>;
+
+  describeBoxel(boxel: BoxelTypeHandle): Promise<BoxelDescription>;
+
+  getFields(
+    boxel: BoxelTypeHandle | BoxelInstanceHandle,
+  ): Promise<ResolvedField[]>;
+
+  getField(
+    boxel: BoxelTypeHandle | BoxelInstanceHandle,
+    fieldName: string,
+  ): Promise<ResolvedField | undefined>;
+
+  projectInstance(instance: BoxelInstanceHandle): Promise<InstanceProjection>;
+
+  serializeCard(
+    instance: BoxelInstanceHandle,
+  ): Promise<LooseSingleCardDocument>;
+
+  dispose(handle: RuntimeHandle): Promise<void>;
+}
+
 export const BOXEL_RUNTIME_OPERATIONS = [
   'loadBoxel',
-  'describeBoxel',
   'createFromSerialized',
+  'describeBoxel',
   'getFields',
   'getField',
-  'getRenderSlot',
-  'invokeAction',
+  'projectInstance',
   'serializeCard',
   'dispose',
 ] as const;
 export type BoxelRuntimeOperation = (typeof BOXEL_RUNTIME_OPERATIONS)[number];
+
+/**
+ * The list above and the interface name the same operations, proved rather
+ * than maintained. `Exact` resolves to its first argument, so this costs
+ * nothing; instantiating it in both directions means a method added to
+ * `BoxelRuntime` without a list entry, or a list entry naming no method,
+ * fails to compile here.
+ *
+ * Without it the two drift silently, and a transport that dispatches by name
+ * off the list stops offering an operation the interface promises.
+ */
+type Exact<A extends B, B> = A;
+export type BoxelRuntimeOperationsAreExact = Exact<
+  BoxelRuntimeOperation,
+  Exclude<keyof BoxelRuntime, 'mode'>
+> &
+  Exact<Exclude<keyof BoxelRuntime, 'mode'>, BoxelRuntimeOperation>;
 
 /**
  * The child-format cascade: the formats `<@fields.x />` resolves to inside a
