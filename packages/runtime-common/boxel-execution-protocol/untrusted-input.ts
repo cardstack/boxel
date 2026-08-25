@@ -12,6 +12,7 @@
 import type * as JSONTypes from 'json-typescript';
 
 import {
+  MAX_LITERAL_VALUE_NODES,
   ProtocolRefusal,
   describeValue,
   isProtocolRefusal,
@@ -40,17 +41,6 @@ export function newNormalizationBudget(): NormalizationBudget {
     open: new Set(),
   };
 }
-
-/**
- * How many values one normalization may visit.
- *
- * Depth alone does not bound the work. `structuredClone` preserves sharing, so
- * a directed acyclic graph arrives as a handful of objects and expands
- * exponentially when walked as a tree — a 27-object payload exhausts memory
- * while sitting comfortably inside the depth limit. The memo below restores
- * the sharing, and this budget bounds what remains.
- */
-const MAX_LITERAL_VALUE_NODES = 100_000;
 
 /**
  * Runs a gate so that nothing but a `ProtocolRefusal` can come out of it.
@@ -260,7 +250,11 @@ export function normalizeJsonRecord(
   return normalized;
 }
 
-export function normalizeStringArray(value: unknown, label: string): string[] {
+export function normalizeStringArray(
+  value: unknown,
+  label: string,
+  budget: NormalizationBudget = newNormalizationBudget(),
+): string[] {
   if (!Array.isArray(value)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
@@ -276,6 +270,16 @@ export function normalizeStringArray(value: unknown, label: string): string[] {
     );
   }
   for (let index = 0; index < length; index++) {
+    // Charged per entry. A producer picks `length`, so validating it as a
+    // non-negative integer and then walking it leaves the walk uncharged —
+    // one own property over the wire buying seconds of synchronous main
+    // thread, on the first gate every record passes.
+    if (--budget.remaining < 0) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `${label} is longer than the ${MAX_LITERAL_VALUE_NODES} values one record may carry`,
+      );
+    }
     let entry = readMember(value, String(index));
     if (typeof entry !== 'string') {
       throw new ProtocolRefusal(

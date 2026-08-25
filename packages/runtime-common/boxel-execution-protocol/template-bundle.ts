@@ -10,10 +10,12 @@ import type * as JSONTypes from 'json-typescript';
 
 import type { Cloneable } from './cloneable.ts';
 import {
+  MAX_LITERAL_VALUE_NODES,
   ProtocolRefusal,
   describeValue,
   joinTokens,
   quoteToken,
+  recordOffender,
 } from './refusal.ts';
 import {
   asRefusal,
@@ -152,7 +154,7 @@ function gateTemplateBundle(
   support: ProtocolSupport,
   budget: NormalizationBudget,
 ): TemplateBundle {
-  let envelope = assertUsableExecutionRecord(bundle, support);
+  let envelope = assertUsableExecutionRecord(bundle, support, budget);
 
   let root = normalizeString(readMember(bundle, 'root'), "a bundle's root");
   let templates = readMember(bundle, 'templates');
@@ -170,7 +172,7 @@ function gateTemplateBundle(
   let keys = Object.getOwnPropertyNames(templates);
   let carried = new Set(keys);
   if (!carried.has(root)) {
-    dangling.push(`root ${quoteToken(root)}`);
+    recordOffender(dangling, `root ${quoteToken(root)}`);
   }
 
   let normalized: Record<string, TemplateDescriptor> = {};
@@ -203,6 +205,15 @@ function gateTemplateBundle(
       );
     }
     for (let index = 0; index < scopeLength; index++) {
+      // Charged before the kind is read, because an unrecognized kind
+      // `continue`s past every other charge: a producer sending millions of
+      // them buys hundreds of megabytes for a diagnostic that renders ten.
+      if (--budget.remaining < 0) {
+        throw new ProtocolRefusal(
+          'BOXEL_RECORD_MALFORMED',
+          `template ${quoteToken(key)} carries more scope entries than the ${MAX_LITERAL_VALUE_NODES} values one record may hold`,
+        );
+      }
       let entry = readMember(scope, String(index));
       if (!isPlainRecord(entry)) {
         throw new ProtocolRefusal(
@@ -221,7 +232,10 @@ function gateTemplateBundle(
         );
       }
       if (!templateDependencyKinds.has(kind)) {
-        unrecognized.push(`${quoteToken(key)}: ${quoteToken(kind)}`);
+        // Bounded at what the diagnostic will render, plus a count. Collecting
+        // more than is ever shown is the same unbounded growth in a different
+        // container.
+        recordOffender(unrecognized, `${quoteToken(key)}: ${quoteToken(kind)}`);
         continue;
       }
       let dependency = normalizeDependency(

@@ -14,9 +14,18 @@ import type { Format } from '../formats.ts';
  *
  * This is the one definition of *this* cascade for every consumer outside
  * Base's own field components, and it mirrors `defaultFieldFormats` in
- * `@cardstack/base/field-component.gts`. A second copy renders nested cards
- * in the wrong format on whichever tier holds it — a divergence invisible in
- * that tier's own tests, since they would agree with its copy.
+ * `@cardstack/base/field-component.gts`. A second copy renders nested cards in
+ * the wrong format on whichever tier holds it — a divergence invisible in that
+ * tier's own tests, since they would agree with its copy.
+ *
+ * Base cannot call through to it as things stand, and the reason is worth
+ * recording because the export map suggests otherwise. A realm module resolves
+ * `@cardstack/runtime-common/*` against the host's virtual network, which
+ * serves only what `externals.ts` explicitly shims — not the package's export
+ * map. `helpers/ai` reaches `packages/base` because it has a shim entry;
+ * without one for this file, every card render fails to fetch it. Folding the
+ * table into Base therefore means adding to the host's shimmed surface, which
+ * is a decision about what every realm module may import.
  *
  * It is the default cascade and nothing more. Three sibling rules narrow the
  * answer afterwards and are not expressible through this signature, which

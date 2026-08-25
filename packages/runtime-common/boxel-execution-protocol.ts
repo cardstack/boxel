@@ -8,11 +8,11 @@
  * 1. **No Ember imports, and nothing that pulls the Host's module graph.**
  *    The protocol is evaluated inside a SES Compartment and inside an
  *    origin-isolated iframe child, neither of which has that graph. Every
- *    import across these files is either `import type`, erased entirely, or a
- *    pure shape predicate from `card-document-shape.ts` — a module that exists
- *    precisely so a caller can recognize a shape without pulling the heavy
- *    runtime chain rooted at `code-ref.ts`.
- *    `scripts/check-protocol-import-closure.mts` holds this to it.
+ *    import across these files is `import type` and erased entirely, so the
+ *    runtime closure is these files and nothing else —
+ *    `scripts/check-protocol-import-closure.mts` holds it there, by equality
+ *    rather than by ceiling, so losing a module is as deliberate as gaining
+ *    one.
  * 2. **Inert data only.** No live object crosses a boundary — no store,
  *    loader, service, class, component instance, callback, DOM node, or
  *    browser event. Every record type is declared through `Cloneable`, which
@@ -29,6 +29,12 @@
  * `@cardstack/runtime-common` barrel would drag the barrel's own graph in,
  * which defeats property 1 for the two consumers that need it most. Import it
  * by path — `@cardstack/runtime-common/boxel-execution-protocol`.
+ *
+ * That path is the whole protocol. A consumer wanting one thing can name the
+ * file that holds it —
+ * `@cardstack/runtime-common/boxel-execution-protocol/child-formats` is one
+ * pure function and one type-only import — which is what lets the card-render
+ * path share the format cascade without taking the rest.
  */
 
 // Named rather than `export *`. A helper that crosses a file boundary has to
@@ -50,6 +56,7 @@ export * from './boxel-execution-protocol/version.ts';
 export {
   PROTOCOL_REFUSAL_CODES,
   ProtocolRefusal,
+  describesProtocolRefusal,
   isProtocolRefusal,
 } from './boxel-execution-protocol/refusal.ts';
 export type { ProtocolRefusalCode } from './boxel-execution-protocol/refusal.ts';

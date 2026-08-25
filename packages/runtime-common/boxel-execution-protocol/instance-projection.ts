@@ -8,7 +8,6 @@
 
 import type * as JSONTypes from 'json-typescript';
 
-import { isCodeRef } from '../card-document-shape.ts';
 import type { CodeRef } from '../code-ref.ts';
 import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 import type { Cloneable } from './cloneable.ts';
@@ -29,18 +28,20 @@ export type BoxelValueReference = Cloneable<{
 }>;
 
 /**
- * Whether a projected value is a link reference rather than data.
+ * Reads a projected value as a link reference, or answers `undefined`.
  *
- * Exact by design: a `$boxel` marker carrying anything beyond `id` and
- * `type`, or sitting beside sibling members, is an expanded graph wearing a
- * reference's clothes and answers `false` here rather than being accepted as
- * a reference.
+ * One read-and-return rather than a predicate beside a rebuild. Splitting them
+ * meant the check and the rebuild reached the same member through different
+ * channels — `.` for one, a property descriptor for the other — and a Proxy
+ * needs no state at all to answer them differently. What came back was a value
+ * typed `BoxelValueReference` carrying a live function, which the caller then
+ * resolved through the Store and `structuredClone` refused.
  *
- * `type` is checked as a real `CodeRef`, not merely as an object, because
- * this predicate narrows and its caller resolves that ref through the Store.
- * A structurally plausible ref — `{}`, a `{module}` with no `name`, an
- * `ancestorOf` whose `card` is garbage — would otherwise arrive there
- * carrying the authority of a check that never happened.
+ * Exact by design, at every level: a `$boxel` marker carrying anything beyond
+ * `id` and `type`, or sitting beside sibling members, is an expanded graph
+ * wearing a reference's clothes. Member names are read as own data — a
+ * non-enumerable extra is still an extra — and every value the result carries
+ * was validated as the string it claims to be, so nothing here rests on a cast.
  */
 export function readBoxelValueReference(
   value: unknown,
@@ -54,76 +55,32 @@ export function readBoxelValueReference(
       return undefined;
     }
     let id = readMember(marker, 'id');
-    let type = readMember(marker, 'type');
-    if (!(id === null || typeof id === 'string') || !isExactCodeRef(type)) {
+    if (!(id === null || typeof id === 'string')) {
       return undefined;
     }
-    // Rebuilt, because the caller resolves this ref through the Store. A
-    // predicate answers about the producer's object and then hands that same
-    // object on, so a Proxy is free to report one id to the check and another
-    // to the Store.
-    return {
-      $boxel: {
-        id: id as BoxelValueReference['$boxel']['id'],
-        type: normalizeCodeRef(type),
-      },
-    };
+    let type = readExactCodeRef(readMember(marker, 'type'));
+    if (type === undefined) {
+      return undefined;
+    }
+    return { $boxel: { id: id as RealmResourceIdentifier | null, type } };
   } catch {
+    // A predicate whose contract is to answer must not throw instead: a marker
+    // built from a throwing accessor is simply not a reference.
     return undefined;
   }
 }
 
-/** Rebuilds a validated ref from own-data reads. */
-function normalizeCodeRef(ref: unknown): CodeRef {
-  let source = ref as Record<string, unknown>;
-  let discriminator = readMember(source, 'type');
-  if (discriminator === 'ancestorOf') {
-    return {
-      type: 'ancestorOf',
-      card: normalizeCodeRef(readMember(source, 'card')),
-    };
-  }
-  if (discriminator === 'fieldOf') {
-    return {
-      type: 'fieldOf',
-      card: normalizeCodeRef(readMember(source, 'card')),
-      field: readMember(source, 'field') as string,
-    };
-  }
-  return {
-    module: readMember(source, 'module') as CodeRef extends { module: infer M }
-      ? M
-      : never,
-    name: readMember(source, 'name') as string,
-  };
-}
-
 /**
- * Whether a projected value is a link reference. Prefer
- * `readBoxelValueReference` wherever the answer is then acted on: this reports
+ * Whether a projected value is a link reference rather than data.
+ *
+ * Defined as the read succeeding, so the two can never disagree. Prefer
+ * `readBoxelValueReference` wherever the answer is acted on — this reports
  * about the caller's object and leaves the caller holding it.
  */
 export function isBoxelValueReference(
   value: unknown,
 ): value is BoxelValueReference {
-  try {
-    if (!isPlainRecord(value) || !hasExactOwnKeys(value, ['$boxel'])) {
-      return false;
-    }
-    let marker = readMember(value, '$boxel');
-    if (!isPlainRecord(marker) || !hasExactOwnKeys(marker, ['id', 'type'])) {
-      return false;
-    }
-    let id = readMember(marker, 'id');
-    return (
-      (id === null || typeof id === 'string') &&
-      isExactCodeRef(readMember(marker, 'type'))
-    );
-  } catch {
-    // A predicate whose contract is to answer must not throw instead: a
-    // marker built from a throwing accessor is simply not a reference.
-    return false;
-  }
+  return readBoxelValueReference(value) !== undefined;
 }
 
 /**
@@ -155,46 +112,60 @@ function hasExactOwnKeys(source: object, expected: string[]): boolean {
 const MAX_CODE_REF_DEPTH = 16;
 
 /**
- * A code ref carrying its own members and nothing else.
+ * Reads a code ref carrying its own members and nothing else, rebuilt.
  *
- * Stricter than `isCodeRef`, deliberately. That predicate answers "can this be
- * read as a ref", which is right for a document whose resources may carry
- * more than one reader needs; here the question is whether a value is a
- * reference *instead of* data. A ref admitting extra members lets an entire
- * card ride inside `type` — the expanded graph the marker's own exactness
- * check was written to refuse, one level further down.
+ * Stricter than `isCodeRef`, and deliberately not delegating to it. That
+ * predicate answers "can this be read as a ref", which is right for a document
+ * whose resources may carry more than one reader needs; here the question is
+ * whether a value is a reference *instead of* data, and a ref admitting extra
+ * members lets an entire card ride inside `type`. It also reads through `.`,
+ * so a value it validated is not the value a descriptor read returns — which
+ * is the whole reason this rebuilds rather than reporting.
+ *
+ * A predicate whose contract is to answer must not throw, so the traversal is
+ * bounded here: `isCodeRef` recurses without a bound of its own.
  */
-function isExactCodeRef(ref: unknown, depth = MAX_CODE_REF_DEPTH): boolean {
-  // A predicate whose contract is to answer must not throw instead. The
-  // traversal is this function's own, and `isCodeRef` is only ever handed a
-  // leaf — it recurses without a bound of its own, so a nested chain would
-  // blow the stack inside it before this guard could apply.
+function readExactCodeRef(
+  ref: unknown,
+  depth = MAX_CODE_REF_DEPTH,
+): CodeRef | undefined {
   if (depth <= 0 || !isPlainRecord(ref)) {
-    return false;
+    return undefined;
   }
-  // A ref inheriting a discriminator reads as one form here and another at
-  // the Store, so the prototype is part of the shape.
+  // A ref inheriting a discriminator reads as one form here and another at the
+  // Store, so the prototype is part of the shape.
   let prototype = Object.getPrototypeOf(ref);
   if (prototype !== Object.prototype && prototype !== null) {
-    return false;
+    return undefined;
   }
-  let type = readMember(ref, 'type');
-  if (type === 'ancestorOf') {
-    return (
-      hasExactOwnKeys(ref, ['card', 'type']) &&
-      isExactCodeRef(readMember(ref, 'card'), depth - 1)
-    );
+  let discriminator = readMember(ref, 'type');
+  if (discriminator === 'ancestorOf') {
+    if (!hasExactOwnKeys(ref, ['card', 'type'])) {
+      return undefined;
+    }
+    let card = readExactCodeRef(readMember(ref, 'card'), depth - 1);
+    return card === undefined ? undefined : { type: 'ancestorOf', card };
   }
-  if (type === 'fieldOf') {
-    return (
-      hasExactOwnKeys(ref, ['card', 'field', 'type']) &&
-      typeof readMember(ref, 'field') === 'string' &&
-      isExactCodeRef(readMember(ref, 'card'), depth - 1)
-    );
+  if (discriminator === 'fieldOf') {
+    if (!hasExactOwnKeys(ref, ['card', 'field', 'type'])) {
+      return undefined;
+    }
+    let field = readMember(ref, 'field');
+    let card = readExactCodeRef(readMember(ref, 'card'), depth - 1);
+    if (typeof field !== 'string' || card === undefined) {
+      return undefined;
+    }
+    return { type: 'fieldOf', card, field };
   }
-  // The leaf's own member types are the repo's predicate to judge, not a
-  // second opinion written here.
-  return hasExactOwnKeys(ref, ['module', 'name']) && isCodeRef(ref);
+  if (!hasExactOwnKeys(ref, ['module', 'name'])) {
+    return undefined;
+  }
+  let module = readMember(ref, 'module');
+  let name = readMember(ref, 'name');
+  if (typeof module !== 'string' || typeof name !== 'string') {
+    return undefined;
+  }
+  return { module: module as RealmResourceIdentifier, name };
 }
 
 /**

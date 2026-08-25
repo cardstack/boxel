@@ -10,6 +10,8 @@ import {
   PROJECTED_ERROR_MAX_CAUSE_DEPTH,
   PROTOCOL_REFUSAL_CODES,
   ProtocolRefusal,
+  describesProtocolRefusal,
+  isProtocolRefusal,
   SAFE_EVENT_BOOLEAN_PROPERTIES,
   SAFE_EVENT_NULLABLE_STRING_PROPERTIES,
   SAFE_EVENT_NUMBER_PROPERTIES,
@@ -1917,6 +1919,221 @@ module('Unit | rendering protocol | records and operations', function () {
       readBoxelValueReference({ title: 'Ada' }),
       undefined,
       'plain field data is not a reference',
+    );
+  });
+
+  test('RP-14.1: the check and the rebuild of a reference cannot disagree', function (assert) {
+    // Validating a member through `.` and rebuilding it through a property
+    // descriptor lets a Proxy answer the two differently with no state at all.
+    // What came back was typed BoxelValueReference and carried a live
+    // function, which the caller then resolves through the Store.
+    let live = function exfiltrate() {
+      return 'ran';
+    };
+    let twoFaced = new Proxy(
+      { module: 'http://test/person', name: 'Person' },
+      {
+        get: (target, key) =>
+          key === 'module'
+            ? 'http://test/person'
+            : key === 'name'
+              ? 'Person'
+              : Reflect.get(target, key),
+        getOwnPropertyDescriptor: (target, key) =>
+          key === 'module'
+            ? {
+                value: live,
+                writable: true,
+                enumerable: true,
+                configurable: true,
+              }
+            : Reflect.getOwnPropertyDescriptor(target, key),
+        ownKeys: () => ['module', 'name'],
+      },
+    );
+
+    let candidate = { $boxel: { id: 'http://test/x', type: twoFaced } };
+    assert.strictEqual(
+      readBoxelValueReference(candidate),
+      undefined,
+      'a ref whose members answer two ways is not a reference',
+    );
+    assert.false(
+      isBoxelValueReference(candidate),
+      'and the predicate agrees, because it is the read',
+    );
+
+    // Nothing the result carries rests on a cast.
+    for (let [label, type] of [
+      ['a non-string module', { module: 7, name: 'Person' }],
+      ['a non-string name', { module: 'http://test/person', name: 7 }],
+      [
+        'a non-string fieldOf field',
+        { type: 'fieldOf', card: testRef, field: 7 },
+      ],
+    ] as [string, unknown][]) {
+      assert.strictEqual(
+        readBoxelValueReference({ $boxel: { id: null, type } }),
+        undefined,
+        `${label} is refused`,
+      );
+    }
+
+    let valid = readBoxelValueReference({
+      $boxel: {
+        id: null,
+        type: { type: 'fieldOf', card: testRef, field: 'title' },
+      },
+    });
+    assert.deepEqual(
+      structuredClone(valid),
+      valid,
+      'and what does come back is cloneable',
+    );
+  });
+
+  test('RP-14.3: a refusal is recognized by identity, not by shape', function (assert) {
+    // The catch block that guarantees only refusals leave cannot read the
+    // caught value: reading `code` runs a getOwnPropertyDescriptor trap, which
+    // is the same trap the wrapper exists to contain. And a structural check
+    // is forgeable — a producer could mint an object it answered true for and
+    // have it re-thrown to a consumer verbatim.
+    let forged = {
+      code: 'BOXEL_RECORD_MALFORMED',
+      get message(): string {
+        throw new Error('a getter ran in the consumer');
+      },
+    };
+    assert.false(
+      isProtocolRefusal(forged),
+      'a shape a producer can mint is not a refusal',
+    );
+    assert.true(
+      describesProtocolRefusal(forged),
+      'though it still describes one, which is what a projected error carries',
+    );
+
+    let real = new ProtocolRefusal('BOXEL_RECORD_MALFORMED', 'genuine');
+    assert.true(isProtocolRefusal(real), 'a minted refusal is recognized');
+
+    // A caught value whose own traps throw must still leave as a refusal.
+    let trapBomb = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error('a trap ran inside the catch');
+        },
+        getPrototypeOf() {
+          throw new Error('a trap ran inside the catch');
+        },
+      },
+    );
+    let carried = bundle();
+    assert.throws(
+      () =>
+        acceptTemplateBundle(
+          new Proxy(carried, {
+            getOwnPropertyDescriptor(target, key) {
+              if (key === 'root') {
+                throw trapBomb;
+              }
+              return Reflect.getOwnPropertyDescriptor(target, key);
+            },
+          }),
+          support,
+        ),
+      (error: Error) => isProtocolRefusal(error),
+      'a thrown value whose every trap throws still leaves as a refusal',
+    );
+  });
+
+  test('RP-14.3: a producer-chosen length is charged for, not merely validated', function (assert) {
+    // `requiredFeatures` reaches the first gate every record passes, and an
+    // array's length is the producer's to choose: one own property over the
+    // wire buys seconds of uninterruptible main thread if the walk is free.
+    let vastArray = (length: number) =>
+      new Proxy([] as unknown[], {
+        getOwnPropertyDescriptor: (_target, key) =>
+          key === 'length'
+            ? {
+                value: length,
+                writable: true,
+                enumerable: false,
+                configurable: false,
+              }
+            : {
+                value: 'feature',
+                writable: true,
+                enumerable: true,
+                configurable: true,
+              },
+        ownKeys: () => ['length'],
+        get: (_target, key) => (key === 'length' ? length : 'feature'),
+      });
+
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          {
+            protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
+            requiredFeatures: vastArray(5_000_000),
+          } as unknown as BoxelDescription,
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'the string-array walk is charged against the same ceiling',
+    );
+  });
+
+  test('RP-14.1: an offender list is bounded, not just the diagnostic it feeds', function (assert) {
+    // Capping the message is not enough: the producer picks how many offenders
+    // there are, so an accumulator that grows past what is ever rendered is
+    // the same unbounded growth in a different container.
+    let carried = bundle();
+    let manyUnrecognized = Array.from({ length: 400_000 }, () => ({
+      kind: 'not-a-kind',
+    })) as unknown as TemplateDependency[];
+
+    try {
+      acceptTemplateBundle(
+        {
+          ...carried,
+          templates: {
+            'template-0': {
+              ...carried.templates['template-0'],
+              scope: manyUnrecognized,
+            },
+          },
+        },
+        support,
+      );
+      assert.true(false, 'expected a refusal');
+    } catch (error) {
+      assert.true(
+        isProtocolRefusal(error),
+        'a scope larger than the record ceiling is refused',
+      );
+      assert.true(
+        (error as Error).message.length < 1000,
+        'and the diagnostic stays small',
+      );
+    }
+
+    // The effect list is the twin: its recognized branch pays through the
+    // normalizer, its unrecognized branch paid nothing.
+    assert.throws(
+      () =>
+        acceptComponentUpdate(
+          update({
+            effects: Array.from({ length: 400_000 }, () => ({
+              kind: 'not-a-kind',
+            })) as unknown as ComponentUpdate['effects'],
+          }),
+          support,
+        ),
+      (error: Error) => isProtocolRefusal(error),
+      'so does an effect list larger than the ceiling',
     );
   });
 

@@ -23,6 +23,16 @@ export type ProtocolRefusalCode = (typeof PROTOCOL_REFUSAL_CODES)[number];
  * catalog, a log query, or a test can key on; the message says which record
  * and which member forced it.
  */
+/**
+ * Every refusal this module has minted.
+ *
+ * `WeakSet.prototype.has` runs no traps, answers `false` for a non-object, and
+ * cannot be forged — which is what the one catch block that must not throw
+ * needs. A structural check reads a property, and reading a property on a
+ * caught value runs the very trap that catch block exists to contain.
+ */
+const minted = new WeakSet<object>();
+
 export class ProtocolRefusal extends Error {
   readonly code: ProtocolRefusalCode;
 
@@ -49,6 +59,7 @@ export class ProtocolRefusal extends Error {
       configurable: true,
     });
     this.code = code;
+    minted.add(this);
   }
 }
 
@@ -115,22 +126,60 @@ export function describeValue(value: unknown): string {
 }
 
 /**
- * Whether a caught value is one of this module's refusals.
+ * Whether a caught value is a refusal this module minted.
  *
- * `instanceof` is not available where it matters: the value may be a Proxy
- * whose `getPrototypeOf` trap throws, and this is called from inside the one
- * catch block that must not throw. The code member is checked by reading its
- * own descriptor, which runs nothing.
+ * Membership, not shape. `instanceof` runs a Proxy's `getPrototypeOf` trap and
+ * reading `code` runs its `getOwnPropertyDescriptor` trap — both of which throw
+ * out of the one catch block whose job is that nothing else escapes — and a
+ * structural check is forgeable, so a producer could mint an object this
+ * answered `true` for and have it re-thrown to a consumer verbatim.
  */
 export function isProtocolRefusal(value: unknown): value is ProtocolRefusal {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  let descriptor = Object.getOwnPropertyDescriptor(value, 'code');
+  return typeof value === 'object' && value !== null && minted.has(value);
+}
+
+/**
+ * Whether a record *describes* a refusal — a `ProjectedError` that crossed a
+ * boundary carrying a refusal's code, where structure is all there is.
+ *
+ * Distinct from `isProtocolRefusal`, which asks whether this process minted the
+ * value in hand. Never use this on a caught value: it reads a member, and on a
+ * caught value that runs far-side code.
+ */
+export function describesProtocolRefusal(value: {
+  code?: string;
+}): value is { code: ProtocolRefusalCode } {
   return (
-    descriptor !== undefined &&
-    'value' in descriptor &&
-    typeof descriptor.value === 'string' &&
-    (PROTOCOL_REFUSAL_CODES as readonly string[]).includes(descriptor.value)
+    typeof value.code === 'string' &&
+    (PROTOCOL_REFUSAL_CODES as readonly string[]).includes(value.code)
   );
+}
+
+/**
+ * How many values one record may carry, across every member of it.
+ *
+ * Lives here rather than with the normalizer because every gate charges
+ * against it, including the loops that never reach a normalizer — a scope of
+ * unrecognized kinds, an effect list, a string array whose length a producer
+ * chose. Each of those is a container the producer sizes, so each has to pay.
+ *
+ * Counting values rather than objects is the point: `structuredClone`
+ * preserves sharing, so a directed acyclic graph arrives as a handful of
+ * objects, and an array of holes arrives as a single own property.
+ */
+export const MAX_LITERAL_VALUE_NODES = 100_000;
+
+/**
+ * Collects an offending item for a diagnostic, keeping only as many as the
+ * diagnostic will render.
+ *
+ * Capping the message is not enough on its own: the producer picks how many
+ * offenders there are, and an accumulator that grows past what `joinTokens`
+ * ever shows is the same unbounded growth in a different container. The array
+ * keeps one extra so a caller can still tell "exactly the limit" from "more".
+ */
+export function recordOffender(offenders: string[], offender: string): void {
+  if (offenders.length <= DIAGNOSTIC_LIST_LIMIT) {
+    offenders.push(offender);
+  }
 }

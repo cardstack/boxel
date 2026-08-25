@@ -10,9 +10,11 @@ import type { Cloneable } from './cloneable.ts';
 import { ProtocolRefusal, describeValue, joinTokens } from './refusal.ts';
 import {
   asRefusal,
+  newNormalizationBudget,
   normalizeStringArray,
   readMember,
 } from './untrusted-input.ts';
+import type { NormalizationBudget } from './untrusted-input.ts';
 
 // The semantic version: the meaning of the records below — what a
 // description, a projection, or a template bundle says about a card.
@@ -68,17 +70,19 @@ export interface ProtocolSupport {
 export function assertUsableExecutionRecord(
   record: ProtocolEnvelope,
   support: ProtocolSupport,
+  budget: NormalizationBudget = newNormalizationBudget(),
 ): ProtocolEnvelope {
-  return asRefusal(() => gateEnvelope(record, support));
+  return asRefusal(() => gateEnvelope(record, support, budget));
 }
 
 function gateEnvelope(
   record: ProtocolEnvelope,
   support: ProtocolSupport,
+  budget: NormalizationBudget,
 ): ProtocolEnvelope {
   // Read once, up front: the envelope is the whole basis of the decision, and
   // reading it exactly once is what makes that checkable.
-  let { protocolVersion, requiredFeatures } = readEnvelope(record);
+  let { protocolVersion, requiredFeatures } = readEnvelope(record, budget);
   if (protocolVersion !== support.protocolVersion) {
     throw new ProtocolRefusal(
       'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
@@ -110,7 +114,10 @@ function gateEnvelope(
  * output the refusal exists to protect, and skipping the one diagnostic
  * RP-14.3 asks for.
  */
-function readEnvelope(record: ProtocolEnvelope): {
+function readEnvelope(
+  record: ProtocolEnvelope,
+  budget: NormalizationBudget,
+): {
   protocolVersion: number;
   requiredFeatures: string[];
 } {
@@ -144,6 +151,7 @@ function readEnvelope(record: ProtocolEnvelope): {
     requiredFeatures: normalizeStringArray(
       requiredFeatures,
       'requiredFeatures',
+      budget,
     ),
   };
 }

@@ -9,10 +9,12 @@ import type * as JSONTypes from 'json-typescript';
 
 import type { Cloneable } from './cloneable.ts';
 import {
+  MAX_LITERAL_VALUE_NODES,
   ProtocolRefusal,
   describeValue,
   joinTokens,
   quoteToken,
+  recordOffender,
 } from './refusal.ts';
 import {
   asRefusal,
@@ -102,7 +104,7 @@ function gateComponentUpdate(
   support: ProtocolSupport,
   budget: NormalizationBudget,
 ): ComponentUpdate {
-  let envelope = assertUsableExecutionRecord(update, support);
+  let envelope = assertUsableExecutionRecord(update, support, budget);
 
   // The generation is the guard that stops superseded output being applied,
   // so a generation that cannot be compared defeats it silently.
@@ -140,6 +142,14 @@ function gateComponentUpdate(
     );
   }
   for (let index = 0; index < effectsLength; index++) {
+    // Charged before the kind is read: the recognized branch pays through
+    // `normalizeJsonData`, the `continue` branch paid nothing.
+    if (--budget.remaining < 0) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `an update carries more effects than the ${MAX_LITERAL_VALUE_NODES} values one record may hold`,
+      );
+    }
     let entry = readMember(effects, String(index));
     if (!isPlainRecord(entry)) {
       throw new ProtocolRefusal(
@@ -155,7 +165,7 @@ function gateComponentUpdate(
       );
     }
     if (!componentEffectKinds.has(kind)) {
-      unrecognized.push(quoteToken(kind));
+      recordOffender(unrecognized, quoteToken(kind));
       continue;
     }
     // A payload is the same kind of thing as a literal value — arbitrary,

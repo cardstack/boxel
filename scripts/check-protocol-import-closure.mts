@@ -27,10 +27,9 @@ const entry = join(
   'packages/runtime-common/boxel-execution-protocol.ts',
 );
 
-// Every module allowed to survive erasure, entry included.
-// `card-document-shape.ts` is admissible precisely because it exists to be:
-// it type-imports its neighbors and defines its guards inline, so it carries
-// no runtime dependency of its own.
+// Every module allowed to survive erasure, entry included — which is the
+// protocol's own files and nothing else. Every import it makes of a neighbor
+// is type-only, so nothing outside this directory survives compilation.
 const permitted = new Set([
   'packages/runtime-common/boxel-execution-protocol.ts',
   'packages/runtime-common/boxel-execution-protocol/child-formats.ts',
@@ -45,7 +44,6 @@ const permitted = new Set([
   'packages/runtime-common/boxel-execution-protocol/type-description.ts',
   'packages/runtime-common/boxel-execution-protocol/untrusted-input.ts',
   'packages/runtime-common/boxel-execution-protocol/version.ts',
-  'packages/runtime-common/card-document-shape.ts',
 ]);
 
 // A specifier survives compilation unless the whole statement is type-only.
