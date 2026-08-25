@@ -82,11 +82,14 @@ class ColorPages extends Component {
           {{motion id="stage-e" role="stage"}}
         ></div>
       {{/if}}
+      {{! roomier on purpose: the tests on this fixture read a mid-flight
+          still, and a headless CI can hand out its first animation frame
+          late enough that a 0.14s move is over before anyone looks }}
       <c.Crossing
-        @duration={{0.14}}
+        @duration={{0.4}}
         @ease="easeInOut"
-        @leave={{0.05}}
-        @arrive={{0.05}}
+        @leave={{0.34}}
+        @arrive={{0.2}}
       />
     </Choreo>
   </template>
@@ -396,9 +399,19 @@ module('Integration | choreo | crossing', function (hooks) {
     await animationsSettled();
     colors.page = 'detail';
     await settled();
-    await nextFrame();
-    await nextFrame();
-    await nextFrame();
+    // mid-flight is a STATE, not a frame count: wait for the skin to have
+    // actually left its seat (left:10) — three frames buy no progress at
+    // all if the first one arrives late, and the crossfade then reads at
+    // exactly opacity 1
+    await waitUntil(
+      () => {
+        const s = document.querySelector(
+          '[data-choreo-orphans] #tileC'
+        ) as HTMLElement | null;
+        return s !== null && bounds(s).left > 20;
+      },
+      { timeout: 2000 }
+    );
 
     const hero = find('#heroC') as HTMLElement;
     const mid = channels(getComputedStyle(hero).backgroundColor);
