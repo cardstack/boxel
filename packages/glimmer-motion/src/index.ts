@@ -5,7 +5,6 @@
 export { beacon } from './beacon.ts';
 export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
-export { getActiveChoreoRuns } from './choreo/active-runs.ts';
 export type { AnchorRef } from './choreo/anchors.ts';
 export { after, at } from './choreo/anchors.ts';
 export type { BeaconRef } from './choreo/beacons.ts';
