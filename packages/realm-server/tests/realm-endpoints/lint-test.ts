@@ -686,6 +686,46 @@ export class MyCard extends CardDef {}
       );
     });
 
+    test('the missing-import and unused-import autofixes converge on a member named like a card-api export', async function (assert) {
+      // A class member named `contains` is not a scope reference, so the
+      // import injector must not fire on it: an injected binding would
+      // have no references, the unused-import fix would delete it, and
+      // the two autofixes would ping-pong until ESLint gives up — leaving
+      // the file failing with a diagnostic no re-lint can clear.
+      let source = `import { CardDef } from '@cardstack/base/card-api';
+
+export class MyCard extends CardDef {
+  contains(other: MyCard) {
+    return other === this;
+  }
+}
+`;
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'member-named-like-export.gts')
+        .send(source);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.notOk(
+        responseJson.output.includes(`import { CardDef, contains }`),
+        'no import is injected for the member name',
+      );
+      assert.strictEqual(
+        responseJson.output,
+        source,
+        'the fix passes converge without touching the file',
+      );
+      assert.deepEqual(responseJson.messages, [], 'nothing is reported');
+      assert.true(responseJson.passed, 'lint passes');
+    });
+
     test('warns about position: fixed in card CSS', async function (assert) {
       let response = await request
         .post('/_lint')

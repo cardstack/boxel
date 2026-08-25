@@ -132,5 +132,65 @@ import 'elsewhere';
 <template><MyComponent /></template>`,
       errors: [{ messageId: 'unusedImport' }],
     },
+    // import attributes survive a partial removal — dropping them would
+    // make the JSON import throw at runtime
+    {
+      code: `import data, { thing } from './x.json' with { type: 'json' };
+export const x = thing;`,
+      options: [SIDE_EFFECT_FREE],
+      output: `import { thing } from './x.json' with { type: 'json' };
+export const x = thing;`,
+      errors: [{ messageId: 'unusedImport' }],
+    },
+    // import attributes survive the bare side-effect rewrite too
+    {
+      code: `import data from './x.json' with { type: 'json' };
+export const x = 1;`,
+      options: [SIDE_EFFECT_FREE],
+      output: `import './x.json' with { type: 'json' };
+export const x = 1;`,
+      errors: [{ messageId: 'unusedImport' }],
+    },
+    // a comment inside the specifier list survives the removal of its
+    // neighbor
+    {
+      code: `import {
+  used,
+  // keep this around, we'll need it for X
+  unused,
+} from './my-module';
+export const x = used;`,
+      options: [SIDE_EFFECT_FREE],
+      output: `import {
+  used,
+  // keep this around, we'll need it for X
+} from './my-module';
+export const x = used;`,
+      errors: [{ messageId: 'unusedImport' }],
+    },
+    // a comment directly above a deleted declaration goes with it — an
+    // eslint-disable-next-line or @ts-ignore left behind would silently
+    // re-target the next statement
+    {
+      code: `// eslint-disable-next-line no-console
+import { Unused } from 'exact-module';
+import helper from './helpers';
+export const x = helper;`,
+      options: [SIDE_EFFECT_FREE],
+      output: `import helper from './helpers';
+export const x = helper;`,
+      errors: [{ messageId: 'unusedImport' }],
+    },
+    // a comment on the previous statement's own line belongs to that
+    // statement and stays
+    {
+      code: `export const y = 1; // stays with y
+import { Unused } from 'exact-module';
+export const x = 2;`,
+      options: [SIDE_EFFECT_FREE],
+      output: `export const y = 1; // stays with y
+export const x = 2;`,
+      errors: [{ messageId: 'unusedImport' }],
+    },
   ],
 });
