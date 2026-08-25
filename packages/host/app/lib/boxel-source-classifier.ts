@@ -1,8 +1,8 @@
 import * as babel from '@babel/core';
+import { parse as parseJavaScript } from '@babel/parser';
 // @ts-ignore no upstream types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 import * as ContentTag from 'content-tag';
-import { init, parse } from 'es-module-lexer';
 
 /**
  * The cage an authored module's own code may run in. Direct is deliberately
@@ -215,21 +215,18 @@ const templateSignalNames = {
   unscopedStyle: 'unscoped-style',
 } as const;
 
-const lexerReady = init;
 const contentTagPreprocessor = new ContentTag.Preprocessor();
-// The prefilter. A regex scan is cheap and runs on every module; the Babel
-// parse that confirms what it finds is not, and runs only when it finds
-// something. A hit here is a candidate, never a decision — a token match is
-// exactly the false positive (a local variable named `document`, a DOM name in
-// a type annotation, the word in a comment) the confirmation pass discards.
-const browserGlobalPatterns = browserGlobals.map(
-  (signal) => [signal, new RegExp(`\\b${signal}\\b`)] as const,
-);
-const domOnlyMethodPatterns = domOnlyMethods.map(
-  (method) => [method, new RegExp(`\\.${method}\\s*\\(`)] as const,
-);
-const ambientGlobalObjectPattern = /\b(?:globalThis|self)\b/;
 
+// The syntax card source is written in. `typescript` is what keeps type-only
+// imports distinguishable — the parser marks them, so nothing here has to
+// recognize them from their text. `decoratorAutoAccessors` is needed for
+// `accessor` fields: without it a module using one fails to parse, and a
+// module that fails to parse is analyzed as a draft rather than as itself.
+const cardSyntaxPlugins = [
+  'typescript',
+  'decorators-legacy',
+  'decoratorAutoAccessors',
+] as const;
 // The template signals below are matched against a `<template>` block's whole
 // body — markup, text nodes, attribute values and `<style>` contents alike —
 // rather than against a parsed tree. That is why each one over-reports: a
@@ -391,20 +388,99 @@ function isBundledBrowserOnlyPackage(moduleIdentifier: string): boolean {
 }
 
 /**
- * Confirms the prefilter's candidates against a scope-aware parse, returning
- * only the signals that survive.
+ * Whether the TypeScript transform deletes this declaration outright, so that
+ * it names no module the loader will ever be asked for.
  *
- * The parse strips TypeScript first: a DOM name in an interface, a type
- * annotation, or an `as HTMLElement` assertion requests no authority and must
- * not survive into the executable form. What remains is walked for identifier
- * references that resolve to no lexical binding — the definition of reading a
- * name off the ambient global object.
+ * Read from the parser's own marking rather than from the statement's text.
+ * `importKind`/`exportKind` is `'type'` for a whole-declaration modifier
+ * (`import type { Scene }`, `import type * as T`, `import type Scene`), and
+ * each named specifier carries its own kind for the inline form
+ * (`import { type Scene }`). A declaration is erased when it introduces
+ * bindings and every one of them is type-only.
  *
- * A parse failure keeps the prefilter's unconfirmed candidates. That is the
- * conservative direction: unfamiliar or in-progress syntax cannot buy a module
- * the weaker cage by being unreadable.
+ * The two failure directions are not symmetric — missing an erased statement
+ * costs a fetch and an iframe, while reporting a live one as erased loses a
+ * signal and truncates the graph a Sandbox authorizes reads against — which is
+ * why this reads a classification the parser already made instead of matching
+ * the keyword itself. A default or namespace binding carries no kind and is
+ * always a value, so `import type from 'three'` and `import types from
+ * 'three'` are edges, and no boundary has to be got right for them to be.
  */
-function confirmBrowserSignals(source: string): {
+function isErasedDeclaration(
+  statement:
+    | babel.types.ImportDeclaration
+    | babel.types.ExportNamedDeclaration
+    | babel.types.ExportAllDeclaration,
+): boolean {
+  if (
+    ('importKind' in statement && statement.importKind === 'type') ||
+    ('exportKind' in statement && statement.exportKind === 'type')
+  ) {
+    return true;
+  }
+  let specifiers = 'specifiers' in statement ? statement.specifiers : [];
+  // No bindings at all is a side-effect import, which always runs.
+  if (specifiers.length === 0) {
+    return false;
+  }
+  return specifiers.every((specifier) => {
+    if (babel.types.isImportSpecifier(specifier)) {
+      return specifier.importKind === 'type';
+    }
+    if (babel.types.isExportSpecifier(specifier)) {
+      return specifier.exportKind === 'type';
+    }
+    // A default or namespace binding carries no kind, and is always a value.
+    return false;
+  });
+}
+
+/**
+ * The specifier of a dynamic import, when it is knowable without running
+ * anything: a string literal, or a template literal with no interpolation.
+ */
+function staticSpecifier(
+  argument: babel.types.Node | undefined,
+): string | undefined {
+  if (babel.types.isStringLiteral(argument)) {
+    return argument.value;
+  }
+  if (
+    babel.types.isTemplateLiteral(argument) &&
+    argument.expressions.length === 0 &&
+    argument.quasis.length === 1
+  ) {
+    return argument.quasis[0]!.value.cooked;
+  }
+  return undefined;
+}
+
+/**
+ * Reads one module's JavaScript: the modules it imports at runtime, and the
+ * browser authority it acquires.
+ *
+ * Both answers come from one parse of the source, because both are questions
+ * about its syntax rather than about its text. Type-only imports are marked by
+ * the parser, so nothing here has to recognize them from their spelling. And
+ * the scope-aware walk is what separates an ambient `document` from a local
+ * binding of the same name, a DOM name that survives only in a type
+ * annotation, and a `typeof window` probe.
+ *
+ * Every module pays the parse. The alternative — a regex prefilter that skips
+ * it when the text names no browser global — makes the prefilter a GATE, and a
+ * gate that mis-reads one span of a module loses a SIGNAL rather than accuracy.
+ * Deciding which spans are code means lexing JavaScript, where each
+ * approximation has an input that desynchronizes it and swallows the rest of
+ * the file. The parse cannot fail that way, and a module fetch costs more than
+ * it does.
+ */
+function analyzeJavaScript(source: string): {
+  /**
+   * Specifiers that survive to runtime, in source order. A statement the
+   * TypeScript transform erases entirely is absent: it names no module the
+   * loader will ever be asked for.
+   */
+  imports: string[];
   globals: string[];
   domMethods: string[];
   /**
@@ -415,37 +491,32 @@ function confirmBrowserSignals(source: string): {
    */
   hasEagerGlobal: boolean;
 } {
-  // Deliberately matched against the source as it is, comments and string
-  // bodies included, rather than against a version with the text spans
-  // blanked.
-  //
-  // The prefilter is a GATE: when it finds nothing, the confirmation pass
-  // never runs and the module classifies Capsule. So anything that blanks a
-  // span the source really executes turns into a lost SIGNAL, not a lost
-  // refinement — and blanking spans correctly means lexing JavaScript, where
-  // every approximation has a case that desynchronizes and swallows the rest
-  // of the file. `/['"]/` after a `}` is enough: read as division, its quote
-  // opens a string that runs to the next quote or to the end.
-  //
-  // Matching the raw source cannot fail that way. What it costs is a
-  // confirmation parse on modules whose PROSE names a browser global — a few
-  // milliseconds against a module fetch — and the parse then reports no
-  // reference, so a comment or a string still classifies Capsule. The
-  // exemption is enforced by the scope-aware pass rather than by guessing
-  // which characters were code.
-  let candidateGlobals = browserGlobalPatterns
-    .filter(([, pattern]) => pattern.test(source))
-    .map(([signal]) => signal);
-  let candidateDOMMethods = domOnlyMethodPatterns
-    .filter(([, pattern]) => pattern.test(source))
-    .map(([method]) => method);
-  let candidateGlobalObject = ambientGlobalObjectPattern.test(source);
-  if (
-    candidateGlobals.length === 0 &&
-    candidateDOMMethods.length === 0 &&
-    !candidateGlobalObject
-  ) {
-    return { globals: [], domMethods: [], hasEagerGlobal: false };
+  let ast = parseJavaScript(source, {
+    sourceType: 'module',
+    plugins: [...cardSyntaxPlugins],
+  });
+
+  // Read the import graph off the top-level statements before anything
+  // transforms them. The TypeScript transform below would answer this too, by
+  // deleting what it erases — but it also deletes an import whose only use is
+  // inside a `<template>`, because those bodies are blanked before this runs,
+  // and that is the most ordinary shape a card has. So type-ness is read from
+  // the parser's own marking, which says nothing about use.
+  let imports: string[] = [];
+  for (let statement of ast.program.body) {
+    if (
+      !babel.types.isImportDeclaration(statement) &&
+      !babel.types.isExportNamedDeclaration(statement) &&
+      !babel.types.isExportAllDeclaration(statement)
+    ) {
+      continue;
+    }
+    if (!statement.source) {
+      continue;
+    }
+    if (!isErasedDeclaration(statement)) {
+      imports.push(statement.source.value);
+    }
   }
 
   let unboundGlobals = new Set<string>();
@@ -554,6 +625,18 @@ function confirmBrowserSignals(source: string): {
       },
       CallExpression(path) {
         let callee = path.node.callee;
+        // `import('three')` joins the graph as an ordinary edge, so it
+        // promotes its importer up front rather than at runtime. A
+        // no-substitution template literal is just as knowable and counts too;
+        // anything computed cannot be statically authorized, and both cages
+        // refuse it at runtime.
+        if (babel.types.isImport(callee)) {
+          let specifier = staticSpecifier(path.node.arguments[0]);
+          if (specifier !== undefined) {
+            imports.push(specifier);
+          }
+          return;
+        }
         if (
           babel.types.isMemberExpression(callee) &&
           !callee.computed &&
@@ -596,44 +679,34 @@ function confirmBrowserSignals(source: string): {
     },
   };
 
-  try {
-    babel.transformSync(source, {
-      // `cwd`, `root` and `envName` are pinned because Babel otherwise reads
-      // them off `process`: it resolves a relative `cwd` through
-      // `process.cwd()` and defaults `envName` from `process.env.BABEL_ENV ||
-      // process.env.NODE_ENV`. An absolute cwd and root skip that resolution,
-      // and a given envName skips the lookup. A browser has no `process`
-      // unless the page shims one, and this analysis should not depend on
-      // whichever page it runs in: the fallback on a throw is the unconfirmed
-      // prefilter, which over-promotes to Sandbox rather than reporting an
-      // error, so an unmet ambient dependency here degrades silently instead
-      // of failing a test.
-      cwd: '/',
-      root: '/',
-      envName: 'production',
-      filename: 'boxel-source.ts',
-      babelrc: false,
-      configFile: false,
-      // Only the traverse is wanted. Generating code for every module that
-      // trips the prefilter — up to the graph bound, in the browser — buys
-      // nothing this pass reads.
-      code: false,
-      plugins: [
-        [typescriptPlugin, { allowDeclareFields: true }],
-        collectBrowserSignals,
-      ],
-      parserOpts: { plugins: ['decorators-legacy'] },
-    });
-  } catch {
-    return {
-      globals: candidateGlobals,
-      domMethods: candidateDOMMethods.map((method) => `dom-method:${method}`),
-      // Unread syntax cannot establish that a reference is deferred, so the
-      // conservative answer is that it is not.
-      hasEagerGlobal: true,
-    };
-  }
+  // Transformed from the AST already parsed above, so the source is read once.
+  // The TypeScript strip has to run before the walk: a DOM name in an
+  // interface, an annotation, or an `as HTMLElement` assertion acquires
+  // nothing, and must not survive into the form that gets walked.
+  babel.transformFromAstSync(ast, source, {
+    // `cwd`, `root` and `envName` are pinned because Babel otherwise reads
+    // them off `process`: it resolves a relative `cwd` through `process.cwd()`
+    // and defaults `envName` from `process.env.BABEL_ENV ||
+    // process.env.NODE_ENV`. An absolute cwd and root skip that resolution,
+    // and a given envName skips the lookup. A browser has no `process` unless
+    // the page shims one, and this analysis should not depend on whichever
+    // page it runs in.
+    cwd: '/',
+    root: '/',
+    envName: 'production',
+    filename: 'boxel-source.ts',
+    babelrc: false,
+    configFile: false,
+    // Only the traverse is wanted; nothing reads generated code.
+    code: false,
+    cloneInputAst: false,
+    plugins: [
+      [typescriptPlugin, { allowDeclareFields: true }],
+      collectBrowserSignals,
+    ],
+  });
   return {
+    imports,
     // Filtered through the declared tables rather than emitted in discovery
     // order, so the signal list — and therefore the reason string — is a
     // canonical set that does not vary with where in the file a name appears.
@@ -643,97 +716,6 @@ function confirmBrowserSignals(source: string): {
       .map((method) => `dom-method:${method}`),
     hasEagerGlobal: eagerGlobals,
   };
-}
-
-/**
- * Whether an import the lexer found is erased before the module ever runs.
- *
- * The lexer reads JavaScript, so a TypeScript type-only import reads to it as
- * an ordinary edge — which would route a card to the Sandbox for a
- * compile-time reference, and send the walk fetching modules that do not exist
- * at runtime. What counts as erased is decided by the transform the realm
- * actually applies to card source (`@babel/plugin-transform-typescript`),
- * which drops an import statement when every binding it introduces is
- * type-only:
- *
- *   import type { Scene } from 'three'     erased
- *   import type * as THREE from 'three'    erased
- *   import type Scene from 'three'         erased
- *   import { type Scene } from 'three'     erased — no value binding remains
- *   import { type Scene, Group }           KEPT: `Group` is a value
- *   import type from 'three'               KEPT: `type` is a default binding
- *   import type, { Group } from 'three'    KEPT: same, plus a named value
- *   import 'three'                         KEPT: imported for side effects
- *
- * Statement bounds come from the lexer rather than a regex over the whole
- * source, so the words inside a string or a comment cannot read as a
- * declaration.
- *
- * The two mistakes are not symmetric. Failing to recognize an erased statement
- * keeps an edge that no longer exists: the walk tries to fetch it, fails the
- * graph closed, and costs an iframe. Reporting a LIVE statement as erased
- * deletes a real edge — the module's signals are never gathered and it never
- * enters `moduleGraph`, so a browser-needing card can land in a Capsule and a
- * Sandbox can be denied a read it needs. Only the first direction is
- * affordable, so this errs toward keeping edges.
- */
-function isTypeOnlyImport(
-  source: string,
-  entry: { ss: number; se: number; d: number },
-): boolean {
-  // A dynamic import is an expression, never a type-only declaration, and its
-  // statement bounds cover the call rather than a statement.
-  if (entry.d !== -1) {
-    return false;
-  }
-  let statement = source.slice(entry.ss, entry.se);
-  // The keyword has to end here, or `type` matches the PREFIX of a binding
-  // name: `import types from './types.gts'` would read as the modifier
-  // followed by `s from …`, and its edge would be dropped.
-  //
-  // Spelled as a negated character class rather than `\b`, because `\b` is a
-  // `[A-Za-z0-9_]` boundary and `$` is a legal identifier character that is
-  // not in it — so `\b` fires between `type` and `$`, and `import type$ from
-  // 'three'` takes exactly the path `\b` was added to close. `[\w$]` is the
-  // same class the binding-name test below uses, which is what keeps the two
-  // in agreement.
-  let afterTypeKeyword =
-    /^\s*(?:import|export)\s+type(?![\w$])\s*([\s\S]*)$/.exec(statement);
-  if (afterTypeKeyword) {
-    let rest = afterTypeKeyword[1]!;
-    // `import type {…}` and `import type * as N` are unambiguous modifiers.
-    if (/^[{*]/.test(rest)) {
-      return true;
-    }
-    // `import type, {…}` binds a default named `type` and imports values.
-    if (rest.startsWith(',')) {
-      return false;
-    }
-    // `import type Scene from …` is a type-only default import; `import type
-    // from …` binds a value named `type`. The word decides which.
-    let firstWord = /^([A-Za-z_$][\w$]*)/.exec(rest);
-    return firstWord !== null && firstWord[1] !== 'from';
-  }
-  let namedList = /^\s*(?:import|export)\s*\{([^}]*)\}\s*from\b/.exec(
-    statement,
-  );
-  if (!namedList) {
-    return false;
-  }
-  let specifiers = namedList[1]!
-    .split(',')
-    .map((specifier) => specifier.trim())
-    .filter((specifier) => specifier.length > 0);
-  // Every specifier carries an inline `type`, and nothing else is bound. The
-  // second word separates `{ type Scene }` from `{ type as alias }`, which
-  // imports the export literally named `type`.
-  return (
-    specifiers.length > 0 &&
-    specifiers.every((specifier) => {
-      let marked = /^type\s+([A-Za-z_$][\w$]*)/.exec(specifier);
-      return marked !== null && marked[1] !== 'as';
-    })
-  );
 }
 
 function parsePendingAnalysis(): BoxelSourceAnalysis {
@@ -768,33 +750,18 @@ export async function classifyBoxelSource(
     return parsePendingAnalysis();
   }
 
-  await lexerReady;
-  let imports: string[];
+  let javascript: ReturnType<typeof analyzeJavaScript>;
   try {
-    // A dynamic import whose specifier is a plain string literal carries `n`
-    // exactly as a static one does, so it joins the graph as an ordinary edge
-    // and promotes its importer up front.
-    //
-    // Every other spelling carries no `n` and is dropped. Most of them cannot
-    // be statically authorized at all — `import(name)` — and both cages refuse
-    // those at runtime. One could be: the lexer declines a no-substitution
-    // template literal, `` import(`three`) ``, whose value is knowable. It is
-    // dropped with the rest, which costs a Capsule where a Sandbox was wanted
-    // for a card written that way; the runtime refusal is what makes that
-    // visible rather than silent.
-    imports = [
-      ...new Set(
-        parse(templates.javascript)[0]
-          .filter((entry) => !isTypeOnlyImport(templates.javascript, entry))
-          .map((entry) => entry.n)
-          .filter(
-            (specifier): specifier is string => typeof specifier === 'string',
-          ),
-      ),
-    ];
+    javascript = analyzeJavaScript(templates.javascript);
   } catch {
+    // Source the parser rejects establishes nothing: not its imports, not its
+    // signals. That is the same position an unclosed `<template>` leaves us
+    // in, and it takes the same answer — a draft, which the entry renders as
+    // Capsule behind its last good render, and which a DEPENDENCY fails closed
+    // on (`module-parse:`), because an unproven closure is not a Capsule.
     return parsePendingAnalysis();
   }
+  let imports = [...new Set(javascript.imports)];
 
   let importSignals = [
     ...new Set(
@@ -803,9 +770,7 @@ export async function classifyBoxelSource(
         .filter((signal): signal is string => signal !== undefined),
     ),
   ].sort();
-  let { globals, domMethods, hasEagerGlobal } = confirmBrowserSignals(
-    templates.javascript,
-  );
+  let { globals, domMethods, hasEagerGlobal } = javascript;
   let signals = [
     ...importSignals,
     ...globals,

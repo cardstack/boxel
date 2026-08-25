@@ -656,14 +656,70 @@ module('Unit | RP-6 classification', function () {
     );
     assert.strictEqual(literal.tier, 'sandbox');
 
-    let computed = await classifyBoxelSource(
-      card('static load = (name) => import(name);'),
+    let backtick = await classifyBoxelSource(
+      card('static load = () => import(`three`);'),
     );
     assert.deepEqual(
-      computed.imports,
-      ['https://cardstack.com/base/card-api'],
-      'a computed specifier cannot be statically authorized, and both cages refuse it at runtime',
+      backtick.imports,
+      ['https://cardstack.com/base/card-api', 'three'],
+      'a template literal with no interpolation is just as knowable as a string',
     );
+    assert.strictEqual(backtick.tier, 'sandbox');
+
+    for (let [shape, body] of [
+      ['an identifier', 'static load = (name) => import(name);'],
+      [
+        'an interpolated template',
+        'static load = (p) => import(`${p}/three`);',
+      ],
+      ['a concatenation', 'static load = (p) => import("./" + p);'],
+    ] as [string, string][]) {
+      let computed = await classifyBoxelSource(card(body));
+      assert.deepEqual(
+        computed.imports,
+        ['https://cardstack.com/base/card-api'],
+        `${shape} cannot be statically authorized, and both cages refuse it at runtime`,
+      );
+    }
+  });
+
+  test('RP-6.4: an import used only inside a template is still a graph edge', async function (assert) {
+    // The most ordinary shape a card has, and the one that rules out deciding
+    // erasure from the transform's output: template bodies are blanked before
+    // the JavaScript is read, so a component imported only for its template
+    // looks unused, and the TypeScript transform drops unused imports.
+    let result = await classifyBoxelSource(
+      `import Renderer from './renderer.gts';\n${card('static isolated = class { <template><Renderer /></template> };')}`,
+    );
+    assert.deepEqual(result.imports, [
+      './renderer.gts',
+      'https://cardstack.com/base/card-api',
+    ]);
+  });
+
+  test('RP-6.4: syntax the parser accepts is analyzed rather than treated as a draft', async function (assert) {
+    // A module the parse rejects establishes nothing and classifies as a
+    // draft, so the parser has to admit the syntax cards are actually written
+    // in — otherwise a real browser read goes unseen.
+    for (let [shape, body] of [
+      [
+        'an auto-accessor field',
+        'export class C { accessor x = document.title; }',
+      ],
+      ['a legacy decorator', 'export class C { @field y = document.title; }'],
+      ['a satisfies expression', 'export const v = document.title as string;'],
+      [
+        'a generic method',
+        'export class C { read<T>(v: T) { return [v, document.title]; } }',
+      ],
+    ] as [string, string][]) {
+      let result = await classifyBoxelSource(body);
+      assert.deepEqual(
+        result.signals,
+        ['document'],
+        `${shape} parses, so its read is seen`,
+      );
+    }
   });
 
   test('RP-6.4: an unparseable draft fails into Capsule rather than out of the cages', async function (assert) {
