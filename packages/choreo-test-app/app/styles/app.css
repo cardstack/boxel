@@ -2657,32 +2657,56 @@ html[data-gm-dragging] * {
 
 /* four columns on a roomy glass — a library, not a contact strip.
    Narrower glass gets fewer, bigger columns, so a dived print is always
-   tall enough to sit inside instead of spilling past the edge. */
+   tall enough to sit inside instead of spilling past the edge.
+
+   At rest the WHOLE sheet is on the glass, whatever the viewport: the
+   tile is bounded by both axes — its share of the glass's width, and the
+   width whose 4:3 stack of rows still fits the glass's height. Whichever
+   is smaller wins, so nothing ever crops at 1.00×. */
 .cam-sheet {
+  --cam-cols: 4;
+  --cam-rows: 3;
+  --cam-pad: 18px;
+  --cam-gap: 10px;
   position: absolute;
   top: 50%;
   left: 0;
   transform: translateY(-50%);
   box-sizing: border-box;
   width: 100cqw;
-  padding: 18px;
+  padding: var(--cam-pad);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(
+    var(--cam-cols),
+    min(
+      calc(
+        (100cqw - 2 * var(--cam-pad) - (var(--cam-cols) - 1) * var(--cam-gap)) /
+          var(--cam-cols)
+      ),
+      calc(
+        (100cqh - 2 * var(--cam-pad) - (var(--cam-rows) - 1) * var(--cam-gap)) /
+          var(--cam-rows) * 4 / 3
+      )
+    )
+  );
+  justify-content: center;
   grid-auto-rows: auto;
-  gap: 10px;
+  gap: var(--cam-gap);
 }
 
 @container (max-width: 640px) {
   .cam-sheet {
-    grid-template-columns: repeat(3, 1fr);
+    --cam-cols: 3;
+    --cam-rows: 4;
   }
 }
 
 @container (max-width: 420px) {
   .cam-sheet {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-    padding: 14px;
+    --cam-cols: 2;
+    --cam-rows: 6;
+    --cam-gap: 8px;
+    --cam-pad: 14px;
   }
 }
 
@@ -2843,9 +2867,12 @@ html[data-gm-dragging] * {
   box-shadow: 0 4px 14px rgba(255, 59, 31, 0.45);
 }
 
+/* an X that is ON reads reversed — ink chip, paper glyph — with the same
+   conviction as the heart's ember fill; a 12% tint read as "not pressed" */
 .cam-grade-dock .cam-pass.is-active {
-  background: rgba(var(--ink-rgb), 0.12);
-  color: var(--ink);
+  background: var(--ink);
+  border-color: transparent;
+  color: var(--bg);
 }
 
 /* heart and X: the same job as `.cam-no`, the other end of the frame.

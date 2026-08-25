@@ -28,6 +28,7 @@ import { Stagger } from 'test-app/components/examples/stagger';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { Trail } from 'test-app/components/examples/trail';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
+import { CameraNotes } from 'test-app/components/notes/camera';
 import { FarNotes } from 'test-app/components/notes/far';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
@@ -356,25 +357,25 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
   },
   {
     Example: Camera,
-    apis: ['c.Camera', '@origin', '@steady', '@zoom', '@x', '@y'],
+    apis: ['c.Camera', '@fit', '@margin', '@steady'],
     group: 'Choreo',
     id: 'camera',
     lede: 'The whole library sits on the glass. Dive in to grade a shot.',
+    notes: CameraNotes,
     sample: `{{! A photo library: the whole set sits on the glass.
     Dive IN and the camera info develops — number first, then the full
     exposure. ONE step, aimed by state — an interrupted dive simply bends.
 
-    The zoom isn't guessed: it's computed in loupe() from two real boxes —
-    the clicked frame's rest size and the glass it has to fit inside —
-    measured in LAYOUT terms (offsetWidth/offsetTop), never in screen
-    terms, so a click straight from one dive to the next tile still
-    measures the true rest geometry instead of whatever was mid-flight. }}
+    @fit is the whole dive: the library computes the zoom AND the
+    centring pan from the clicked frame's REST-layout box and the glass
+    it has to fit inside — so a click straight from one dive to the next
+    tile still measures true geometry, not whatever was mid-flight.
+    @margin is the frame's share of the glass once centred; null fits
+    nothing — back to the resting sheet. }}
 <c.Parallel>
   <c.Camera
-    @zoom={{this.zoom}}
-    @origin={{if this.aimId (c.id this.aimId)}}
-    @x={{if this.focus this.panX 0}}
-    @y={{if this.focus this.panY 0}}
+    @fit={{if this.focus (c.id this.focus) null}}
+    @margin={{0.72}}
     @spring={{carry}}
     @steady={{array (c.role 'no') (c.role 'heart') (c.role 'verdict')}}
   />
@@ -383,13 +384,11 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
   <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
 </c.Parallel>
 
-{{! @steady keeps take numbers and the other tiles' marks legible
-    while the camera flies. Heart and pass on the open frame live in
-    the dock, off the photograph. @x/@y
-    are the one thing @origin doesn't give you for free: it pins the aim
-    point at its OWN screen position while zooming, it doesn't recentre
-    it — panX/panY (computed alongside the zoom, in loupe()) are the extra
-    pan that lands the dive centred instead of in place. }}`,
+{{! @steady keeps take numbers and the other tiles' marks legible while
+    the camera flies. Heart and pass on the open frame live in the dock,
+    off the photograph. For a pinch-anchored zoom that should NOT
+    recentre, @origin/@x/@y are still there — @fit is the canned form of
+    the common case: dive on this thing, and centre it. }}`,
     slowmo: true,
     title: 'Camera',
   },
