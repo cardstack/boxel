@@ -21,11 +21,18 @@ export type ProtocolRefusalCode = (typeof PROTOCOL_REFUSAL_CODES)[number];
 /**
  * Every refusal this module has minted.
  *
- * `WeakSet.prototype.has` runs no traps, answers `false` for a non-object, and
- * is not something a producer can talk its way into — which is what the one
- * catch block that must not throw needs. A structural check reads a property,
- * and reading a property on a caught value runs the very trap that catch block
- * exists to contain.
+ * `WeakSet.prototype.has` runs no traps and answers `false` for a non-object,
+ * which is what the one catch block that must not throw needs: a structural
+ * check reads a property, and reading a property on a caught value runs the
+ * very trap that catch block exists to contain.
+ *
+ * What membership guarantees is narrower than "genuine". Nothing enters this
+ * set except through the constructor below, so a producer cannot describe its
+ * way in — but a subclass of the exported class would be admitted, and a
+ * second evaluation of this module has a second set, so a refusal minted in one
+ * copy is unrecognized by the other. Neither is reachable while the class stays
+ * inside the Host, and both constrain any design that hands caged code this
+ * module rather than data from it.
  */
 const minted = new WeakSet<object>();
 

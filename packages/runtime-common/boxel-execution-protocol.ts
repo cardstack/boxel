@@ -7,12 +7,12 @@
  *
  * 1. **No Ember imports, and nothing that pulls the Host's module graph.**
  *    The protocol is evaluated inside a SES Compartment and inside an
- *    origin-isolated iframe child, neither of which has that graph. Every
- *    import across these files is `import type` and erased entirely, so the
- *    runtime closure is these files and nothing else —
- *    `scripts/check-protocol-import-closure.mts` holds it there, by equality
- *    rather than by ceiling, so losing a module is as deliberate as gaining
- *    one.
+ *    origin-isolated iframe child, neither of which has that graph. These
+ *    files import each other at runtime; every import of anything *outside*
+ *    them is `import type` and erased entirely, so the runtime closure is this
+ *    directory and nothing else. `scripts/check-protocol-import-closure.mts`
+ *    holds it there by equality rather than by ceiling, so losing a module is
+ *    as deliberate as gaining one.
  * 2. **Inert data only.** No live object crosses a boundary — no store,
  *    loader, service, class, component instance, callback, DOM node, or
  *    browser event. Every record type is declared through `Cloneable`, which
