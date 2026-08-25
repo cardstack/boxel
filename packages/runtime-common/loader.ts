@@ -492,6 +492,17 @@ export class Loader {
       }
       this.moduleCanonicalURLs.delete(key);
     }
+    // What an evicted module's last fetch answered with is part of what is
+    // being evicted: a module that answered with a host-registered value once
+    // may answer with source next time, and `isShimmedModule` would otherwise
+    // keep routing that source away from evaluation. A shim registered here
+    // through `shimModule` is a standing registration rather than something
+    // learned from a fetch, so it survives and re-serves the next import.
+    for (let identifier of this.fetchedModuleShims) {
+      if (invalidated.has(this.moduleCacheKey(identifier))) {
+        this.fetchedModuleShims.delete(identifier);
+      }
+    }
     // Any cached dependency set that reached an evicted module is stale, and
     // deciding which ones costs the same walk as recomputing them on demand.
     this.knownDepsCache.clear();

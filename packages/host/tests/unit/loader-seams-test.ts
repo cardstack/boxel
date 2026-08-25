@@ -481,6 +481,40 @@ module('Unit | loader seams', function (hooks) {
     );
   });
 
+  test('invalidating a module forgets that its last fetch answered with a shim', async function (assert) {
+    let shim = { fromTheNetwork: () => 'shimmed' };
+    let servesShim = true;
+    let switching = new Loader(async () => {
+      if (servesShim) {
+        let response = new Response();
+        (response as any)[Symbol.for('shimmed-module')] = shim;
+        return response;
+      }
+      return new Response(`export function value() { return 'source'; }`, {
+        headers: { 'content-type': 'text/javascript' },
+      });
+    });
+
+    await switching.import(server.url('switching.gts'));
+    assert.true(switching.isShimmedModule(server.url('switching.gts')));
+
+    servesShim = false;
+    switching.invalidateModule(server.url('switching.gts'));
+    assert.false(
+      switching.isShimmedModule(server.url('switching.gts')),
+      'the eviction forgets what the last fetch answered with',
+    );
+
+    let module = await switching.import<{ value(): string }>(
+      server.url('switching.gts'),
+    );
+    assert.strictEqual(module.value(), 'source');
+    assert.false(
+      switching.isShimmedModule(server.url('switching.gts')),
+      'a module now served as source is not a shim',
+    );
+  });
+
   test('invalidateModule accepts the spellings a caller can hold', async function (assert) {
     await loader.import(server.url('leaf.js'));
     assert.strictEqual(
