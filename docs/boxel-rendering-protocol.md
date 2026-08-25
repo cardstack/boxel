@@ -590,28 +590,94 @@ isolated render) plus its scoped-CSS URLs.
 
 **RP-14.1** The protocol module is
 `packages/runtime-common/boxel-execution-protocol.ts`: cloneable, versioned,
-no Ember imports. Records (≈10): `CodeRef`; `BoxelDescription` (ref, kind,
+no Ember imports. Records: `CodeRef`; `BoxelDescription` (ref, kind,
 ancestors, fields, formats, presentation statics); `FieldDescription`
-(name, kind, field type ref, resolved configuration, computed?);
+(`fieldName`, `type` code ref, `kind`, `isComputed`) — configuration is
+**not** on the type description, because resolution takes the owning root
+instance as `this` and memoizes per `(instance, fieldName)` (RP-5.1–5.2);
+`ResolvedField` (a field's declaration plus the configuration resolved
+against one instance), which is what `getFields`/`getField` answer with and
+which carries no value, since the value lives in the projection's model;
 `InstanceProjection` (id, type ref, revision, cloneable model with linked
-values as `{$boxel:{id,type}}` **references, never expanded graphs**);
-`TemplateBundle` (validated wire templates + typed dependency union
-`trusted-component | authored-component | trusted-helper | safe-modifier |
-block`; unknown kind rejects the generation); `SafeEvent` (exported,
-versioned); `ComponentUpdate` (`{generation, changed, effects}`); the
-protocol-version/feature record.
+values as `{$boxel:{id,type}}` **references, never expanded graphs**, plus
+its presentation); `InstancePresentation` (title, summary, thumbnailURL,
+theme reference, and the Host-derived `isThemed` / `themeScope` /
+`themeCss` / `cssImports` that a themed card's trusted `CardContainer`
+invocation requires — RP-11.3 — which must cross as data because the Theme
+card itself crosses only as a reference, and resolving that reference is
+the graph walk a projection forbids); `TemplateBundle` (validated wire
+templates + typed dependency union
+`trusted-export | authored-component | literal-value`; the generation is
+rejected by an unknown kind, by a kind without the members it is redeemed
+through, by a descriptor a consumer could not reify, and by a reference —
+the bundle's root, or an `authored-component` — naming a template the
+bundle does not carry, since each of those reaches the consumer as a
+failure past every gate rather than as a refusal);
+`SafeEvent` (exported, versioned); `ComponentUpdate`
+(`{generation, changed, effects}`); `ProjectedError` (a thrown error as
+data, carrying `stack` and a `cause` chain the protocol module's own
+projector bounds, so presentation shows the root cause and not the boundary
+wrapper); `MaterializationPurpose`; the protocol-version/feature record.
 
-**RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
-`describeBoxel`, `createFromSerialized`, `getFields`/`getField`,
-`getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
-`dispose`. Nothing else — mutation is not an operation on this interface
-(RP-9.8: it is a Host-granted `set` capability).
+`isThemed` is carried and not derived: Base answers it one way for a card
+linking a Theme and another for a Theme card previewing its own CSS, and
+the second links no Theme at all — so neither the theme reference nor
+`themeCss` implies it.
 
-**RP-14.3** Version discipline: every record carries the protocol version;
-**consumers check it** and fail closed to last-known-good with one
-diagnostic. `requiredFeatures` is populated by producers and
-rejected-when-unknown by consumers. Semantic and transport versions are
-independent and both enforced.
+`trusted-export` is a single portal token — module plus export name — and
+not a per-category split. Whether that export is admissible as a component,
+a helper, or a modifier is decided where the token is redeemed, against the
+Host's vocabulary for the position it appears in; capture holds only a
+reference to the export and cannot classify it. `literal-value` is the
+plain data a template closed over, crossing as cloned JSON. Three kinds,
+because scope classification has three outcomes: a vocabulary admitting a
+kind no producer emits gives the Host neither a rule to redeem it by nor a
+rule to refuse it against.
+
+**RP-14.2** Operations (`BoxelRuntime`, per tier), declared in the protocol
+module and exactly eight: `loadBoxel`,
+`createFromSerialized(resource, doc, relativeTo, purpose)`, `describeBoxel`,
+`getFields`/`getField` (answering `ResolvedField`, whose members are named
+`fieldName` / `type` / `kind` — deliberately not RP-3.6's `fieldType`, which
+names the _kind_ string there, so one name never carries two meanings across
+these two sections), `projectInstance` (answering `InstanceProjection`),
+`serializeCard`, `dispose`. The interface also carries `mode`. Every argument
+and every result is a handle, a record the protocol module proves cloneable,
+or a JSON:API document — `LooseCardResource` and `LooseSingleCardDocument`,
+which are cloneable in practice because the format they describe is JSON but
+are not provably so while the types describing them are index-signature-less
+interfaces. That is what lets one interface serve a local call, a call into a
+Compartment, and a call across a message port unchanged. The module proves the name list and the interface
+cannot drift.
+
+The `purpose` is required, not optional: an indexing pass must fail loudly on
+a definition it cannot identify where an interactive surface degrades to an
+error card, and a runtime that cannot tell the two apart lets an indexing
+failure ride as a rendering failure.
+
+Three things are **not** operations here. Mutation is a Host-granted `set`
+capability, re-authorized per use (RP-9.8). Producing a mountable component is
+process-local and its result is not cloneable, so it cannot be a member of a
+tier-neutral interface — a tier's adapter offers its own render entry point
+beside this one, and what crosses a boundary is the projection, not the
+component. Invoking an authored action belongs to a component instance, so it
+is the component runtime's, and its result crosses back as a `ComponentUpdate`.
+The set is closed in the sense that matters: a tier needing a _cross-boundary_
+behavior these cannot express is a spec change, while a tier-local capability
+its own Host code calls directly — source volatility (RP-18), instance sync
+(RP-20.5/20.6) — is not an operation on this interface.
+
+**RP-14.3** Version discipline: every record that crosses on its own carries
+the protocol version; **consumers check it** and fail closed to
+last-known-good with one diagnostic. `requiredFeatures` is populated by
+producers and rejected-when-unknown by consumers. Semantic and transport
+versions are independent and both enforced. A consumer acts on the record a
+gate **returns**, never on the one it supplied: a producer sits across a
+trust boundary, so a check that leaves the caller holding the producer's own
+object proves nothing about what the consumer later reads — an accessor runs
+again, a proxy answers differently, a member the check skipped is still
+reachable. Each member is read once, as own data, and what the gate hands
+back is built from those reads.
 
 **RP-14.4** Record parity: Direct, Capsule, and Sandbox produce
 deep-equal `BoxelDescription`/`InstanceProjection` records for the same
