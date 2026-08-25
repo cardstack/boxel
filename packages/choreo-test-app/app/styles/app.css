@@ -8109,7 +8109,10 @@ html[data-gm-dragging] * {
 
 .esc-field {
   position: relative;
-  width: min(100%, 620px);
+  /* bounded on purpose: the bays are what the card travels between, so
+     the rail's width IS the length of the move. Left to fill a desktop it
+     became a four-hundred-pixel dash. */
+  width: min(100%, 520px);
   margin-inline: auto;
 }
 
@@ -8243,7 +8246,7 @@ html[data-gm-dragging] * {
 }
 
 .esc-note {
-  width: min(100%, 620px);
+  width: min(100%, 520px);
   margin-inline: auto;
   font-size: clamp(10px, 2.4cqw, 12.5px);
   color: var(--ink-dim);

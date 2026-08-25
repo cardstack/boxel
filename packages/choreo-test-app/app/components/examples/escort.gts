@@ -26,7 +26,15 @@ import { at, Choreo, motion, StepComponent, toMs } from 'glimmer-motion';
 
 /* ── the score's words ───────────────────────────────────────────────── */
 
-const carry: SpringSpec = { bounce: 0.28, visualDuration: 0.52 };
+/**
+ * A card crossing four hundred pixels in half a second is a smooth curve
+ * nobody can read: measured, it peaked at thirty-two pixels a frame, and
+ * what the eye gets from that is a jump with a bit of blur on it. The
+ * carry is paced for the distance instead — long enough to watch, with
+ * just enough bounce to show that the badge and the halo are following
+ * the overshoot rather than a plan.
+ */
+const carry: SpringSpec = { bounce: 0.18, visualDuration: 0.9 };
 
 /** how far the card is from its bay, as a fraction of one bay's width */
 const strayOf = (card: { width: number; x: number }, homeX: number) =>
