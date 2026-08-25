@@ -342,8 +342,50 @@ export interface TetherStep extends StepBase {
   to: Query;
 }
 
+/**
+ * What a derived value is computed FROM, handed to `@read` every frame and
+ * every scrubbed still. All geometry is region-relative, so a follower
+ * lands on its source at any camera zoom.
+ */
+export interface DeriveContext {
+  /** where the region's frame stands this frame */
+  camera: CameraState;
+  /** 0..1 across this step's own window */
+  p: number;
+  /** the driven sprite's own box */
+  self: Rect;
+  /** the boxes named by `@to`, in the order the query returned them */
+  sources: Rect[];
+  /** seconds on the run's clock */
+  t: number;
+}
+
+/**
+ * A value derived from the scene rather than interpolated between two
+ * keyframes (§4.10) — a badge that rides a flying card, a label held
+ * upright under a rotating parent, a readout that tracks a box.
+ *
+ * `@read` must be PURE: the run is scrubbable in both directions, and a
+ * derived value with memory would make a seek irreproducible. It is
+ * computed on the main thread every frame — a follower can never be
+ * handed to the compositor — and it may only write transform, opacity and
+ * filter properties, because a derived write that changed layout would
+ * fail the region's fast keep on every frame.
+ */
+export interface FollowStep extends StepBase {
+  kind: 'follow';
+  /** the window; without it, the enclosing block's span */
+  ms?: number;
+  read: (ctx: DeriveContext) => Record<string, PropValue>;
+  /** what each written property is at rest, so a measure pass can undo it */
+  rest: Record<string, PropValue>;
+  /** what to read — one query, however many sprites it returns */
+  to: Query | Query[];
+}
+
 export type Step =
   | CameraStep
+  | FollowStep
   | HoldStep
   | MoveStep
   | RaiseStep
@@ -434,6 +476,12 @@ export interface Cue {
   };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
+  /** follow: compute this sprite's values from the scene, every frame */
+  derive?: {
+    read: (ctx: DeriveContext) => Record<string, PropValue>;
+    rest: Record<string, PropValue>;
+    sources: Sprite[];
+  };
   duration: number;
   /** move: travel along this sampled path instead of the straight line */
   flight?: FlightPath;

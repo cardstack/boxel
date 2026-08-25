@@ -14,8 +14,10 @@ import type {
   Block,
   DeliveryBy,
   DeliveryOrder,
+  DeriveContext,
   Easing,
   PropSource,
+  PropValue,
   Query,
   Rect,
   SpringSpec,
@@ -66,8 +68,10 @@ const RESERVED = new Set([
   'of',
   'order',
   'path',
+  'read',
   'repeat',
   'repeatType',
+  'rest',
   'shadow',
   'size',
   'space',
@@ -557,6 +561,49 @@ export class Crossing extends StepComponent<
         },
       ],
       kind: 'parallel',
+    };
+  }
+}
+
+/**
+ * `<c.Follow />` — a value DERIVED from the scene rather than interpolated
+ * between two keyframes (§4.10). `@to` names what to read; `@read` gets
+ * both boxes every frame and returns the properties to write; `@rest`
+ * says what those properties are when nothing is driving them, so a
+ * measure pass can put the element back.
+ *
+ * ```gts
+ * <c.Follow @of={{c.id 'badge'}} @to={{c.id 'card'}}
+ *           @read={{corner}} @rest={{hash x=0 y=0}} />
+ * ```
+ *
+ * Three things it is not: it is not accelerated (a derived value is
+ * computed on the main thread, every frame — the price, and the same one
+ * `c.Tether` pays); it may not write layout, only transform, opacity and
+ * filter; and `@read` must be pure, because the run is scrubbable in both
+ * directions and a value with memory could not be sought back to.
+ */
+export class Follow extends StepComponent<
+  StepArgs & {
+    duration?: number;
+    read: (ctx: DeriveContext) => Record<string, PropValue>;
+    rest: Record<string, PropValue>;
+    to: Query | Query[];
+  }
+> {
+  node(): TimelineNode {
+    const { duration, of, read, rest, to } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(this.args.delay),
+      kind: 'follow',
+      ms: msOf(duration),
+      name: this.args.name,
+      of,
+      read,
+      rest,
+      stagger: msOf(this.args.stagger),
+      to,
     };
   }
 }

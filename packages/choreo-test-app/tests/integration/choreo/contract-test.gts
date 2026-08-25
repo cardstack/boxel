@@ -17,7 +17,13 @@
  * appears it is deliberately mid-flight, and says so.
  */
 import { array } from '@ember/helper';
-import { find, findAll, render, settled } from '@ember/test-helpers';
+import {
+  find,
+  findAll,
+  render,
+  settled,
+  setupOnerror,
+} from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
@@ -27,6 +33,7 @@ import {
   beacon,
   Choreo,
   type ChoreoContext,
+  type DeriveContext,
   motion,
   type SpringSpec,
   type StepArgs,
@@ -425,6 +432,258 @@ module('Integration | choreo | contract', function (hooks) {
         'and it is the specific step that owns it, not the composite'
       );
       await animationsSettled();
+    });
+  });
+
+  /* ------------------------------------------------------------------ *
+   * c.Follow — a value derived from the scene, every frame
+   * ------------------------------------------------------------------ */
+
+  module('follow', function () {
+    /**
+     * Hoisted, not inline: property functions print by identity, and a
+     * fresh closure per render would declare an edit on every pass.
+     * `read` pins the badge's top-left to the card's top-right.
+     */
+    const corner = ({ self, sources }: DeriveContext) => {
+      const card = sources[0]!;
+      return { x: card.x + card.width - self.x, y: card.y - self.y };
+    };
+    const REST = { x: 0, y: 0 };
+    /** deliberately illegal: width is layout, and layout is refused */
+    const WIDE = { width: 0 };
+    /** the fixture under test, for the refusal helper to drive */
+    let bad: { show: boolean } | undefined;
+
+    test('a follower tracks a live box, and stands at rest when its window closes', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          followed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card"}}
+              ></div>
+            </div>
+            <div
+              id="badge"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge"}}
+            ></div>
+            <c.Parallel>
+              <c.Move @of={{c.moved "card"}} @spring={{SLOW}} />
+              <c.Follow
+                @of={{c.id "badge"}}
+                @to={{c.id "card"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{0.6}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let followed: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+
+      followed!.far = true;
+      await settled();
+      // MID-FLIGHT, deliberately: the point of a follower is that it is
+      // right on the frames in between, not only at the ends
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      const card = bounds(el('#card'));
+      const badge = bounds(el('#badge'));
+      assert.true(
+        Math.abs(badge.left - (card.left + card.width)) < 2,
+        `the badge rides the card's right edge mid-flight (${Math.round(badge.left)} vs ${Math.round(card.left + card.width)})`
+      );
+      assert.true(
+        card.left > 5,
+        `and the card really is in motion (${Math.round(card.left)})`
+      );
+
+      await animationsSettled();
+      // the window closed: the declared rest is what stands, so a measure
+      // pass sees the element where the stylesheet puts it
+      // identity spellings — '', 'none', translateX(0px) — are all rest;
+      // what must not stand is the 280 it was holding mid-flight
+      const style = getComputedStyle(el('#badge')).transform;
+      const painted = new DOMMatrix(style === 'none' ? '' : style);
+      assert.true(
+        Math.abs(painted.e) < 1 && Math.abs(painted.f) < 1,
+        `the follower rests where it declared — got '${style}'`
+      );
+    });
+
+    test('a derived value is a still: seeking back reproduces the frame', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          sought = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card2"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card2"}}
+              ></div>
+            </div>
+            <div
+              id="badge2"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge2"}}
+            ></div>
+            <c.Parallel>
+              <c.Tween
+                @of={{c.moved "card2"}}
+                @duration={{1}}
+                @ease="linear"
+                @opacity={{array 1 1}}
+              />
+              <c.Follow
+                @of={{c.id "badge2"}}
+                @to={{c.id "card2"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{1}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let sought: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+      sought!.far = true;
+      await settled();
+
+      const run = ctx.run!;
+      run.pause();
+      run.time = 0.4;
+      await nextFrame();
+      const first = bounds(el('#badge2')).left;
+      run.time = 0.8;
+      await nextFrame();
+      run.time = 0.4;
+      await nextFrame();
+      const again = bounds(el('#badge2')).left;
+      assert.true(
+        Math.abs(first - again) < 1,
+        `the same t is the same frame (${Math.round(first)} vs ${Math.round(again)})`
+      );
+      run.cancel();
+    });
+
+    /**
+     * Both refusals are compile-time and both are load-bearing, so they are
+     * asserted the way the gate rules are: render, arm the handler, then
+     * make the pass that compiles.
+     */
+    const refusal = async (
+      make: () => object,
+      pattern: RegExp,
+      what: string,
+      assert: Assert
+    ) => {
+      let message = '';
+      setupOnerror((error) => {
+        message = String(error);
+      });
+      const App = make();
+      await render(App as never);
+      bad!.show = true;
+      await settled().catch(() => {});
+      assert.true(pattern.test(message), `${what} — got '${message}'`);
+      setupOnerror();
+    };
+
+    test('a derived value may not write layout', async function (assert) {
+      class Layout extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          bad = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:80px" as |c|>
+            {{#if this.show}}
+              <div id="l1" style="width:10px;height:10px" {{motion id="l1"}}>
+              </div>
+              <div id="l2" style="width:10px;height:10px" {{motion id="l2"}}>
+              </div>
+            {{/if}}
+            <c.Follow
+              @of={{c.id "l1"}}
+              @to={{c.id "l2"}}
+              @read={{corner}}
+              @rest={{WIDE}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      await refusal(
+        () => <template><Layout /></template>,
+        /may only write transform/,
+        'driving width is refused where the author can still read the name',
+        assert
+      );
+    });
+
+    test('a follower may not follow a follower', async function (assert) {
+      class Chain extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          bad = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:80px" as |c|>
+            {{#if this.show}}
+              <div id="c1" style="width:10px;height:10px" {{motion id="c1"}}>
+              </div>
+              <div id="c2" style="width:10px;height:10px" {{motion id="c2"}}>
+              </div>
+              <div id="c3" style="width:10px;height:10px" {{motion id="c3"}}>
+              </div>
+            {{/if}}
+            <c.Follow
+              @of={{c.id "c1"}}
+              @to={{c.id "c2"}}
+              @read={{corner}}
+              @rest={{REST}}
+              @duration={{0.2}}
+            />
+            <c.Follow
+              @of={{c.id "c2"}}
+              @to={{c.id "c3"}}
+              @read={{corner}}
+              @rest={{REST}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      await refusal(
+        () => <template><Chain /></template>,
+        /may not follow a follower/,
+        'a chain is refused rather than half-supported',
+        assert
+      );
     });
   });
 

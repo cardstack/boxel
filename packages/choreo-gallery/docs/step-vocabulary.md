@@ -1,6 +1,6 @@
 # The step vocabulary, opened
 
-> **Status: design; parts 1 and 2 landed, part 3 open.** This is the second of the
+> **Status: built — all three parts landed.** This is the second of the
 > three gaps the 2026-08-23 superset audit left standing, and the one that
 > blocks the next-generation Boxel work — the audit's line was "no custom
 > step kind, which also blocks `follow` / derived tweens (one cue reading
@@ -175,6 +175,19 @@ private escape hatch, that hatch is the actual design problem and this
 part is not done.
 
 ## Part 3 — `c.Follow` and the derived cue
+
+> **Landed.** `FollowStep`, `DeriveContext` and `Cue.derive` exist;
+> `c.Follow` is yielded by the region; the run reads the scene and writes
+> the result each frame, registering the keys it drives as moved values so
+> release and reassert already cover it. Both compile-time refusals are
+> enforced and tested — layout properties, and a follower following a
+> follower. Two corrections the tests forced, both kept in the code:
+> `self` is the follower's box with its own translation TAKEN OUT (a read
+> that saw its own output is a function of its last frame, which is the
+> memory that breaks a scrub — and in practice it oscillates), and that
+> correction must come from the RENDERED transform, not the motion value,
+> because the value can be a render ahead of the box just measured. Mixing
+> them is a doubling bug that only appears on a seek: 280, then 560, then 1120.
 
 The engine change, and the one to build last.
 

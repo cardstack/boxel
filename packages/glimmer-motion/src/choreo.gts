@@ -44,6 +44,7 @@ import {
   Camera,
   collect,
   Crossing,
+  Follow,
   Gate,
   Hold,
   Move,
@@ -82,6 +83,7 @@ const selector = (type?: Query['type']): Selector =>
 export interface ChoreoContext {
   Camera: typeof Camera;
   Crossing: typeof Crossing;
+  Follow: typeof Follow;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Move: typeof Move;
@@ -127,6 +129,7 @@ function contextFor(region: Choreo): ChoreoContext {
   return {
     Camera,
     Crossing,
+    Follow,
     Gate,
     Hold,
     Move,

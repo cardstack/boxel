@@ -20,6 +20,7 @@ export type {
   CameraState,
   DeliveryBy,
   DeliveryOrder,
+  DeriveContext,
   Easing,
   GateNode,
   PropSource,

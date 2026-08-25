@@ -42,6 +42,27 @@ const isGate = (node: TimelineNode): node is import('./types.ts').GateNode =>
 
 const DEFAULT_SPRING: SpringSpec = { damping: 30, stiffness: 300 };
 
+/**
+ * What `c.Follow` is allowed to drive: paint, never layout. See the throw
+ * in the 'follow' case for why the line is drawn exactly here.
+ */
+const DERIVABLE = new Set([
+  'filter',
+  'opacity',
+  'rotate',
+  'rotateX',
+  'rotateY',
+  'rotateZ',
+  'scale',
+  'scaleX',
+  'scaleY',
+  'skewX',
+  'skewY',
+  'x',
+  'y',
+  'z',
+]);
+
 /** the shared offstage <svg> that path geometry is sampled inside */
 let pathHost: SVGSVGElement | undefined;
 function samplePath(d: string, samples = 64): { x: number; y: number }[] {
@@ -897,6 +918,42 @@ function resolveStep(
         }
         break;
       }
+      case 'follow': {
+        // A derived write may only touch what the compositor treats as
+        // paint, never layout: the region's fast keep declines a pass by
+        // fingerprinting every participant's offsetLeft/Top/Width/Height,
+        // so a follower writing real width would fail that fingerprint on
+        // every frame and put the whole region back into release-and-
+        // reassert once per frame — the jitter the fast keep exists to
+        // prevent. Caught here, where the author can still read the name.
+        for (const key of Object.keys(step.rest)) {
+          if (!DERIVABLE.has(key)) {
+            throw new Error(
+              `choreo: c.Follow cannot drive '${key}' — a derived value is ` +
+                'computed every frame, so it may only write transform, ' +
+                'opacity and filter properties, never layout',
+            );
+          }
+        }
+        const ms = step.ms;
+        cues.push({
+          derive: {
+            read: step.read,
+            rest: step.rest,
+            sources: cs.sprites(step.to),
+          },
+          duration: ms ?? 0,
+          kind: 'follow',
+          offset,
+          sprite,
+        });
+        if (ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + ms);
+        }
+        break;
+      }
       case 'scroll': {
         const ms = step.ms ?? 420;
         cues.push({
@@ -1139,7 +1196,38 @@ export default function compile(
     place(node, 0, root);
   }
   gates.sort((a, b) => a.at - b.at);
-  return { cues: out, gates };
+  const derived = out.filter((cue) => cue.derive);
+  if (!derived.length) {
+    return { cues: out, gates };
+  }
+  // A follower reads a LIVE box, so it has to be evaluated after whatever
+  // moved that box this frame. Cues are walked in order, so derived ones
+  // sort last — stably, which keeps two followers in the order they were
+  // written.
+  const nameOf = (sprite: Sprite) => sprite.id ?? sprite.role ?? 'a sprite';
+  const drivenBy = new Map<Sprite, Cue>();
+  for (const cue of derived) {
+    drivenBy.set(cue.sprite, cue);
+  }
+  for (const cue of derived) {
+    for (const source of cue.derive!.sources) {
+      if (drivenBy.has(source)) {
+        // Chains are resolvable in principle — a topological sort would do
+        // it — but they are refused for now rather than half-supported: a
+        // cycle inside one would be a frame loop with no honest answer,
+        // and nothing yet needs the depth.
+        throw new Error(
+          `choreo: c.Follow on '${nameOf(cue.sprite)}' reads ` +
+            `'${nameOf(source)}', which is itself derived — a follower may ` +
+            'not follow a follower',
+        );
+      }
+    }
+  }
+  return {
+    cues: [...out.filter((cue) => !cue.derive), ...derived],
+    gates,
+  };
 }
 
 /* ---- score identity: is this compile the one already in flight? ---- */

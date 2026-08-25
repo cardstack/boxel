@@ -810,6 +810,28 @@ export class ChoreoRun implements Run {
         }
         continue;
       }
+      if (cue.derive) {
+        if (inside && !t.started) {
+          t.started = true;
+          // the keys this cue drives are registered as MOVED, with the
+          // rest the author declared: releaseForMeasure then jumps them
+          // back before a measurement, and reassert() puts them again —
+          // the same contract every flight already lives under
+          const ve = cue.sprite.node.visualElement;
+          if (ve) {
+            for (const [key, rest] of Object.entries(cue.derive.rest)) {
+              this.movedValues.push({ key, rest, ve });
+            }
+          }
+        } else if (!inside && t.started) {
+          t.started = false;
+          this.restDerived(t);
+        }
+        if (t.started) {
+          this.drive(t, now);
+        }
+        continue;
+      }
       if (cue.raise) {
         if (inside && !t.started) {
           t.started = true;
@@ -1152,6 +1174,102 @@ export class ChoreoRun implements Run {
         }
       }
     });
+  }
+
+  /**
+   * One frame of a derived value (§4.10). Read the scene, hand it to the
+   * author's function, write what comes back.
+   *
+   * `set`, not an animation: a derived value IS the frame, so there is
+   * nothing to interpolate toward and nothing the compositor could be
+   * given — this is the main-thread cost the step charges, and the reason
+   * it is the same cost `c.Tether` already pays.
+   */
+  private drive(t: Track, now: number) {
+    const { cue } = t;
+    const derive = cue.derive;
+    const ve = cue.sprite.node.visualElement;
+    if (!derive || !ve) {
+      return;
+    }
+    const self = this.regionRect(cue.sprite);
+    if (!self) {
+      return;
+    }
+    // `self` is the follower's box with its own translation TAKEN OUT. A
+    // read that saw its own output would be a function of its own last
+    // frame — the memory that makes a scrub irreproducible — and in
+    // practice it oscillates: pin x to a source, and next frame the read
+    // sees the pinned box and computes zero.
+    //
+    // The correction comes from the RENDERED transform, not from the
+    // motion value: the value can be a render ahead of the box that was
+    // just measured, and mixing the two is a doubling bug that only shows
+    // itself on a seek (280 becomes 560, then 1120…).
+    const painted = new DOMMatrix(
+      getComputedStyle(cue.sprite.element).transform,
+    );
+    const zoom = this.camera.zoom || 1;
+    self.x -= painted.e / zoom;
+    self.y -= painted.f / zoom;
+    const sources: Rect[] = [];
+    for (const source of derive.sources) {
+      const rect = this.regionRect(source);
+      if (!rect) {
+        return; // a source that is not on the page has no box to follow
+      }
+      sources.push(rect);
+    }
+    const span = t.end - t.start;
+    const values = derive.read({
+      camera: { ...this.camera },
+      p: span > 0 ? Math.max(0, Math.min(1, (now - t.start) / span)) : 1,
+      self,
+      sources,
+      t: now / 1000,
+    });
+    for (const [key, value] of Object.entries(values)) {
+      ve.getValue(key, value)!.set(value);
+    }
+    // setting a value the element was not already animating schedules
+    // nothing on its own — the same explicit render a hold performs
+    ve.scheduleRender();
+  }
+
+  /** the window closed (or was scrubbed out of): put the declared rest back */
+  private restDerived(t: Track) {
+    const rest = t.cue.derive?.rest;
+    const ve = t.cue.sprite.node.visualElement;
+    if (!rest || !ve) {
+      return;
+    }
+    for (const [key, value] of Object.entries(rest)) {
+      ve.getValue(key, value)!.jump(value);
+    }
+    ve.scheduleRender();
+  }
+
+  /**
+   * A sprite's box in the region's own space — the same mapping the
+   * tether draws in, so a follower and a wire agree at any camera zoom.
+   */
+  private regionRect(sprite: Sprite): Rect | null {
+    const el = sprite.element;
+    if (!el?.isConnected) {
+      return null;
+    }
+    const r = el.getBoundingClientRect();
+    const frame = this.options.cameraFrame?.getBoundingClientRect();
+    const zoom = this.camera.zoom || 1;
+    if (!frame) {
+      return { height: r.height, width: r.width, x: r.x, y: r.y };
+    }
+    return {
+      height: r.height / zoom,
+      width: r.width / zoom,
+      x: (r.x - frame.x) / zoom,
+      y: (r.y - frame.y) / zoom,
+    };
   }
 
   private drawTether(t: Track) {
