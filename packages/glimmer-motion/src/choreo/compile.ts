@@ -283,8 +283,16 @@ function resolveMove(
   const to = descale(parentSpace ? final.parent : final.page, z);
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
+  // 'scale' matches shape by transform about the centre (MoveStep.size), so
+  // position legs run centre-to-centre; layout modes run corner-to-corner
+  // with the real size animating alongside
+  const scaleMode = step.size === 'scale';
+  const dx = scaleMode
+    ? to.x + to.width / 2 - (from.x + from.width / 2)
+    : to.x - from.x;
+  const dy = scaleMode
+    ? to.y + to.height / 2 - (from.y + from.height / 2)
+    : to.y - from.y;
   /**
    * Which end the element is actually sitting on decides the sign.
    *
@@ -316,7 +324,16 @@ function resolveMove(
       pairs.push(leg(dy));
     }
   }
-  if (step.size !== false) {
+  if (scaleMode) {
+    if (from.width !== to.width) {
+      const s = from.width / (to.width || 1);
+      target['scaleX'] = holdsStart ? [1, 1 / (s || 1)] : [s, 1];
+    }
+    if (from.height !== to.height) {
+      const s = from.height / (to.height || 1);
+      target['scaleY'] = holdsStart ? [1, 1 / (s || 1)] : [s, 1];
+    }
+  } else if (step.size !== false) {
     if (from.width !== to.width) {
       target['width'] = [from.width, to.width];
       pairs.push([from.width, to.width]);
@@ -519,18 +536,37 @@ function resolveStep(
             const from = descale(cp.initial.page, cpz);
             const to = descale(sprite.final.page, cpz);
             const cpTarget: Record<string, unknown> = {};
-            if (to.x !== from.x) {
-              cpTarget['x'] = [0, to.x - from.x];
-            }
-            if (to.y !== from.y) {
-              cpTarget['y'] = [0, to.y - from.y];
-            }
-            if (step.size !== false) {
+            if (step.size === 'scale') {
+              // the old skin rides the same centre-to-centre, scale-matched
+              // flight as its receiver — transform only, layout untouched
+              const dcx = to.x + to.width / 2 - (from.x + from.width / 2);
+              const dcy = to.y + to.height / 2 - (from.y + from.height / 2);
+              if (dcx !== 0) {
+                cpTarget['x'] = [0, dcx];
+              }
+              if (dcy !== 0) {
+                cpTarget['y'] = [0, dcy];
+              }
               if (from.width !== to.width) {
-                cpTarget['width'] = [from.width, to.width];
+                cpTarget['scaleX'] = [1, to.width / (from.width || 1)];
               }
               if (from.height !== to.height) {
-                cpTarget['height'] = [from.height, to.height];
+                cpTarget['scaleY'] = [1, to.height / (from.height || 1)];
+              }
+            } else {
+              if (to.x !== from.x) {
+                cpTarget['x'] = [0, to.x - from.x];
+              }
+              if (to.y !== from.y) {
+                cpTarget['y'] = [0, to.y - from.y];
+              }
+              if (step.size !== false) {
+                if (from.width !== to.width) {
+                  cpTarget['width'] = [from.width, to.width];
+                }
+                if (from.height !== to.height) {
+                  cpTarget['height'] = [from.height, to.height];
+                }
               }
             }
             if (Object.keys(cpTarget).length) {

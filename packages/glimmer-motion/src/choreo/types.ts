@@ -228,7 +228,14 @@ export interface MoveStep extends StepBase {
   /** 'auto' orients along the tangent; a number adds a constant offset to it */
   rotate?: 'auto' | number;
   /** animate width/height as well as position (default true) */
-  size?: boolean;
+  /**
+   * `false` skips size; `'scale'` matches shape by TRANSFORM about the
+   * centre instead of animating layout width/height — a flight that must
+   * not reflow the scene around it (the crossing's receiver was
+   * stretching its whole grid row). Content distorts through the flight
+   * exactly as a Magic Move's does; the crossfade hides it.
+   */
+  size?: boolean | 'scale';
   /**
    * Which space the delta is measured in (§6.1). 'page' (default) is the
    * one space two regions agree on; 'parent' resolves the flight against

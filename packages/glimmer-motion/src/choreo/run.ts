@@ -279,7 +279,8 @@ export class ChoreoRun implements Run {
     prior: string;
     ve: VisualElement;
   }[] = [];
-  private movedValues: { key: string; ve: VisualElement }[] = [];
+  /** rest is what releaseForMeasure jumps to: 0 for translates, 1 for scales */
+  private movedValues: { key: string; rest?: number; ve: VisualElement }[] = [];
   /** what the last releaseForMeasure retired, so a kept pass can put it back */
   private retired: {
     borrowed: {
@@ -289,7 +290,12 @@ export class ChoreoRun implements Run {
       value: unknown;
       ve: VisualElement;
     }[];
-    moved: { key: string; value: unknown; ve: VisualElement }[];
+    moved: {
+      key: string;
+      rest?: number;
+      value: unknown;
+      ve: VisualElement;
+    }[];
   } = { borrowed: [], moved: [] };
   private owned: { el: HTMLElement; key: string; ve: VisualElement }[] = [];
   private cancelled = false;
@@ -1711,7 +1717,11 @@ export class ChoreoRun implements Run {
               });
             }
           } else {
-            this.movedValues.push({ key, ve });
+            this.movedValues.push({
+              key,
+              rest: key.startsWith('scale') ? 1 : 0,
+              ve,
+            });
           }
         } else if (cue.borrow && !ve.hasValue(key)) {
           // the cue only borrows this value (the crossfade's color-carry):
@@ -1775,9 +1785,14 @@ export class ChoreoRun implements Run {
       }
       touched.add(ve);
     }
-    for (const { ve, key } of this.movedValues.splice(0)) {
-      this.retired.moved.push({ key, value: ve.getValue(key)?.get(), ve });
-      ve.getValue(key)?.jump(0);
+    for (const { ve, key, rest } of this.movedValues.splice(0)) {
+      this.retired.moved.push({
+        key,
+        rest,
+        value: ve.getValue(key)?.get(),
+        ve,
+      });
+      ve.getValue(key)?.jump(rest ?? 0);
       touched.add(ve);
     }
     touched.forEach((ve) => ve.render());
@@ -1807,11 +1822,11 @@ export class ChoreoRun implements Run {
       }
       this.borrowedValues.push({ el, key, prior, ve });
     }
-    for (const { key, value, ve } of moved) {
+    for (const { key, rest, value, ve } of moved) {
       if (value !== undefined) {
         ve.getValue(key)?.jump(value as PropValue);
       }
-      this.movedValues.push({ key, ve });
+      this.movedValues.push({ key, rest, ve });
     }
     if (!this.playing) {
       // a paused run is a still, and stills re-assert themselves (restill)

@@ -94,6 +94,16 @@ module('Acceptance | crossing', function (hooks) {
       pageLayer()!.children.length >= 4,
       'the demo page is aloft on the way out'
     );
+    // the flight must not lean on the grid: a receiver animating its
+    // LAYOUT size stretches its whole row mid-crossing (the stretched-
+    // gallery screenshot). Shape-matching rides transform scale instead.
+    const midHeights = [...document.querySelectorAll<HTMLElement>('.card')].map(
+      (el) => el.offsetHeight
+    );
+    assert.true(
+      Math.max(...midHeights) - Math.min(...midHeights) < 8,
+      `no card row stretches under the flight (${Math.min(...midHeights).toFixed(0)}..${Math.max(...midHeights).toFixed(0)})`
+    );
 
     await waitUntil(() => !crossingActive(), { timeout: 8000 });
     await frames(4);
@@ -120,6 +130,63 @@ module('Acceptance | crossing', function (hooks) {
       '1',
       'the card got its stage back, solid'
     );
+    // none of the crossing's own participants wears leftover inline
+    // geometry: a stranded width/height stretches the card — and the
+    // whole grid row with it
+    const sized = [
+      ...document.querySelectorAll<HTMLElement>(
+        '.card, .card-stage, .card-title, .card-lede, .card-group, .hero'
+      ),
+    ]
+      .filter((el) => el.style.width !== '' || el.style.height !== '')
+      .map(
+        (el) =>
+          `${el.className.toString().split(' ')[0]}[w=${el.style.width};h=${el.style.height}]`
+      );
+    assert.deepEqual(sized, [], 'no inline geometry strands on participants');
+    const layoutHeights = [
+      ...document.querySelectorAll<HTMLElement>('.card-stage'),
+    ].map((el) => Math.round(el.offsetHeight));
+    assert.true(
+      Math.max(...layoutHeights) - Math.min(...layoutHeights) < 8,
+      `every stage keeps its stylesheet height (${Math.min(...layoutHeights)}..${Math.max(...layoutHeights)})`
+    );
+  });
+
+  test('two round trips in a row leave the grid exactly as it was', async function (assert) {
+    await visit('/');
+    await frames(6);
+    const rest = [...document.querySelectorAll<HTMLElement>('.card')].map(
+      (el) => Math.round(el.offsetHeight)
+    );
+
+    for (let trip = 0; trip < 2; trip++) {
+      await click(".card[data-demo='inbox'] .card-meta");
+      await waitUntil(() => !crossingActive(), { timeout: 8000 });
+      await frames(4);
+      await click('.back-all');
+      await waitUntil(() => !crossingActive(), { timeout: 8000 });
+      await frames(6);
+    }
+
+    const after = [...document.querySelectorAll<HTMLElement>('.card')].map(
+      (el) => Math.round(el.offsetHeight)
+    );
+    assert.deepEqual(
+      after,
+      rest,
+      'every card stands at its resting layout height'
+    );
+    // identity spellings (transform: none, scale(1)…) are rest — the
+    // engine writes them and they are harmless; real residue is a size
+    const stage = document.querySelector<HTMLElement>(
+      ".card[data-demo='inbox'] .card-stage"
+    )!;
+    assert.true(
+      stage.style.width === '' && stage.style.height === '',
+      `the returned stage wears no inline size — got '${(stage.getAttribute('style') ?? '').slice(0, 120)}'`
+    );
+    await frames(2);
   });
 
   test('instant means instant: no run, no orphans, and the route still changes', async function (assert) {
