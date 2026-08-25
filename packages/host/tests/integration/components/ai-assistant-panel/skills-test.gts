@@ -372,7 +372,10 @@ Instructions live in the markdown body.
       },
     );
     await waitFor('[data-test-room-settled]');
-    assert.dom('[data-test-room]').hasAttribute('data-test-room', roomId);
+    // Opening the panel starts a fresh session; enter the seeded room the way
+    // a user does when picking it from past sessions.
+    getService('ai-assistant-panel-service').enterRoom(roomId);
+    await waitFor(`[data-test-room="${roomId}"][data-test-room-settled]`);
 
     await click('[data-test-skill-menu]');
     await waitFor(`[data-test-skill-unavailable="${missingSkillId}"]`);
