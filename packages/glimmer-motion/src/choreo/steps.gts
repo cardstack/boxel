@@ -568,7 +568,9 @@ export class Crossing extends StepComponent<
 /**
  * `<c.Follow />` — a value DERIVED from the scene rather than interpolated
  * between two keyframes (§4.10). `@to` names what to read; `@read` gets
- * both boxes every frame and returns the properties to write; `@rest`
+ * the pass's measurements every frame — each source's resting boxes
+ * (`from`, `to`) and its composed position this frame (`now`), plus the
+ * follower's own `rest` — and returns the properties to write; `@rest`
  * says what those properties are when nothing is driving them, so a
  * measure pass can put the element back.
  *
@@ -577,11 +579,18 @@ export class Crossing extends StepComponent<
  *           @read={{corner}} @rest={{hash x=0 y=0}} />
  * ```
  *
+ * `@read` never sees the live page. Everything it is handed was measured
+ * by the pass or composed from the run's own values, so it cannot read
+ * back what it wrote last frame and it cannot force a style recalculation
+ * mid-move — pure by construction, and correct under interruption because
+ * a replacement pass re-measures (docs/postmortem-follow.md).
+ *
  * Three things it is not: it is not accelerated (a derived value is
  * computed on the main thread, every frame — the price, and the same one
  * `c.Tether` pays); it may not write layout, only transform, opacity and
- * filter; and `@read` must be pure, because the run is scrubbable in both
- * directions and a value with memory could not be sought back to.
+ * filter; and `@read` must still be a pure function of its context,
+ * because the run is scrubbable in both directions and a value with
+ * memory could not be sought back to.
  */
 export class Follow extends StepComponent<
   StepArgs & {

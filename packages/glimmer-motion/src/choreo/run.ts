@@ -31,6 +31,7 @@ import type {
   Compiled,
   Cue,
   Easing,
+  FollowSource,
   GateMark,
   PropValue,
   Rect,
@@ -244,14 +245,6 @@ interface Track {
     from: { left: number; top: number };
     to: { left: number; top: number };
   };
-  /**
-   * follow: the geometry this window was opened against, measured ONCE.
-   * `selfRest` is the follower's own resting box; `sourceRests` are the
-   * boxes its sources occupy with nothing driving them. Every frame after
-   * this is arithmetic — see drive().
-   */
-  selfRest?: Rect;
-  sourceRests?: Rect[];
   start: number;
   started: boolean;
   /** tether: the wire this step draws */
@@ -821,7 +814,6 @@ export class ChoreoRun implements Run {
       if (cue.derive) {
         if (inside && !t.started) {
           t.started = true;
-          this.measureFollow(t);
           // the keys this cue drives are registered as MOVED, with the
           // rest the author declared: releaseForMeasure then jumps them
           // back before a measurement, and reassert() puts them again —
@@ -1186,8 +1178,21 @@ export class ChoreoRun implements Run {
   }
 
   /**
-   * One frame of a derived value (§4.10). Read the scene, hand it to the
-   * author's function, write what comes back.
+   * One frame of a derived value (§4.10): compose the context from the
+   * pass's measurements, hand it to the author's function, write what
+   * comes back.
+   *
+   * Nothing here touches the DOM — that is the design, not an
+   * optimisation (docs/postmortem-follow.md). The resting boxes were
+   * measured by the pass with every moved value released, and a source's
+   * `now` is its resting box composed with the motion values driving it
+   * this frame: JS-side numbers, not a measurement. So a follower is pure
+   * BY CONSTRUCTION — there is no live box in reach, it cannot read back
+   * its own output, and it cannot force a style recalculation in the
+   * middle of a move. It is also correct under INTERRUPTION for free: a
+   * replacement run's pass re-measures, so a run born mid-flight computes
+   * from rests that are right immediately, with no "last frame" to
+   * disagree with.
    *
    * `set`, not an animation: a derived value IS the frame, so there is
    * nothing to interpolate toward and nothing the compositor could be
@@ -1197,33 +1202,39 @@ export class ChoreoRun implements Run {
   private drive(t: Track, now: number) {
     const derive = t.cue.derive;
     const ve = t.cue.sprite.node.visualElement;
-    const rest = t.selfRest;
-    const bases = t.sourceRests;
-    if (!derive || !ve || !rest || !bases) {
+    if (!derive || !ve) {
       return;
     }
-    // Sources are RECONSTRUCTED, not re-measured: resting box plus
-    // whatever is driving them this frame. Nothing here touches the DOM,
-    // which is the whole point — see measureFollow.
-    const sources: Rect[] = [];
-    for (const [i, source] of derive.sources.entries()) {
-      const base = bases[i];
-      if (!base) {
-        return;
-      }
-      const sv = source.node.visualElement;
-      sources.push({
-        height: base.height,
-        width: base.width,
-        x: base.x + (((sv?.getValue('x')?.get() as number) ?? 0) || 0),
-        y: base.y + (((sv?.getValue('y')?.get() as number) ?? 0) || 0),
-      });
-    }
+    const sources: FollowSource[] = derive.sources.map(
+      ({ from, sprite, to }) => {
+        const sv = sprite.node.visualElement;
+        const num = (key: string): number | undefined => {
+          const value = sv?.getValue(key)?.get();
+          return typeof value === 'number' ? value : undefined;
+        };
+        // composed about the centre (motion's default origin): a scaling
+        // source reports the box it paints, not the box it laid out
+        const sx = num('scaleX') ?? num('scale') ?? 1;
+        const sy = num('scaleY') ?? num('scale') ?? 1;
+        const width = to.width * sx;
+        const height = to.height * sy;
+        return {
+          from,
+          now: {
+            height,
+            width,
+            x: to.x + (num('x') ?? 0) + (to.width - width) / 2,
+            y: to.y + (num('y') ?? 0) + (to.height - height) / 2,
+          },
+          to,
+        };
+      },
+    );
     const span = t.end - t.start;
     const values = derive.read({
       camera: { ...this.camera },
       p: span > 0 ? Math.max(0, Math.min(1, (now - t.start) / span)) : 1,
-      self: { ...rest },
+      rest: { ...derive.restBox },
       sources,
       t: now / 1000,
     });
@@ -1234,85 +1245,6 @@ export class ChoreoRun implements Run {
     // own render step, a hop later than the synchronous pin the move it
     // follows just did, and that hop is a visible one-frame flash.
     ve.render();
-  }
-
-  /**
-   * The one measurement a follower makes: the geometry its window opens
-   * against. Everything after is arithmetic.
-   *
-   * Reading the DOM per frame is what made this step stutter, and no
-   * amount of care with the reads fixed it. The cost is not the read — it
-   * is that a read AFTER a write forces the engine to recompute layout,
-   * and a follower does both every frame, in the middle of a move that is
-   * itself on the main thread. Measured off a screen recording of the
-   * Escort demo: three of twenty-seven mid-flight frames stood perfectly
-   * still, and the step after each was nearly double the median. That is
-   * not slowness as a person experiences it; it is the card jumping.
-   *
-   * Measuring once is also what makes the step correct under
-   * INTERRUPTION, which matters more. A resting box does not care which
-   * frame it is read on, so a replacement run measures at its own start
-   * and is right immediately. The scheme this replaces compared this
-   * frame's values against last frame's, and a run that has no last frame
-   * — which is exactly what a run born mid-flight is — had nothing to
-   * compare against and leapt.
-   */
-  private measureFollow(t: Track) {
-    const derive = t.cue.derive;
-    if (!derive) {
-      return;
-    }
-    t.selfRest = this.layoutRect(t.cue.sprite) ?? undefined;
-    const bases: Rect[] = [];
-    for (const source of derive.sources) {
-      const rect = this.layoutRect(source);
-      if (!rect) {
-        t.sourceRests = undefined;
-        return;
-      }
-      bases.push(rect);
-    }
-    t.sourceRests = bases;
-  }
-
-  /**
-   * A sprite's RESTING box — where the stylesheet puts it — in the
-   * region's space, measured from offsets rather than from a rect.
-   *
-   * `offsetLeft/Top/Width/Height` cannot carry a transform: that is the
-   * whole reason to use them. A rect can, and subtracting the transform
-   * back off only works if you can name every transform on the element,
-   * which you cannot — a run born mid-flight inherits whatever the last
-   * one left, and reading a rect there put the follower a whole bay from
-   * its rest. The region's own fast keep fingerprints layout with these
-   * same four numbers, and for the same reason.
-   */
-  private layoutRect(sprite: Sprite): Rect | null {
-    const el = sprite.element;
-    if (!el?.isConnected) {
-      return null;
-    }
-    const frame = this.options.cameraFrame;
-    let x = 0;
-    let y = 0;
-    let node: HTMLElement | null = el;
-    while (node && node !== frame) {
-      x += node.offsetLeft;
-      y += node.offsetTop;
-      const parent: Element | null = node.offsetParent;
-      node = parent instanceof HTMLElement ? parent : null;
-      if (node && node !== frame) {
-        x -= node.scrollLeft;
-        y -= node.scrollTop;
-      }
-    }
-    const zoom = this.camera.zoom || 1;
-    return {
-      height: el.offsetHeight / zoom,
-      width: el.offsetWidth / zoom,
-      x: x / zoom,
-      y: y / zoom,
-    };
   }
 
   /** the window closed (or was scrubbed out of): put the declared rest back */

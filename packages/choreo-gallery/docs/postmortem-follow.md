@@ -141,6 +141,23 @@ Worth recording, because these cost more than the bugs did:
   session reverting the tree. Commit the risky refactor before chasing the
   next symptom.
 
+## Postscript: the replacement is built
+
+The design above shipped, on this same branch, the session after this
+document was written. `@read` now receives only the pass's measurements:
+each source as `{ from, to, now }` — its resting boxes on either side of
+the change, and its position this frame composed from the values the run
+is already driving — plus the follower's own box under the name `rest`,
+which cannot contain what the follower writes because it never re-enters
+the page. `measureFollow` and `layoutRect` are deleted from the run;
+nothing in the follow path touches the DOM at any point. The smeared
+shadow's exact line of demo code (`scaleX` driven from geometry) is back
+in the Escort demo, now safe by construction. A new contract test
+vandalises the page mid-window and asserts the frame at `t` does not
+change; the per-frame interruption test and the rest of the suite pass
+unchanged. The escape hatch for un-measured geometry was not needed and
+was not built.
+
 ## Where things stand
 
 - Branch **`choreo/follow`** (worktree): the offsets fix, the per-frame

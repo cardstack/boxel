@@ -20,8 +20,11 @@ import { at, Choreo, motion, StepComponent, toMs } from 'glimmer-motion';
  * would have to guess: it would need to know, in advance, the shape of the
  * spring it is meant to accompany — including its overshoot, and including
  * what happens when a second click retargets it mid-flight. A derived
- * value never guesses. It is READ from the card's live box on every frame,
- * so it is right on frames nobody planned.
+ * value never guesses. It is computed, every frame, from where the run
+ * holds the card THAT frame — so it is right on frames nobody planned.
+ * And it never reads the page to find out: the resting boxes come from
+ * the pass's own measurements, the card's position from the values the
+ * run is already driving (docs/postmortem-follow.md).
  */
 
 /* ── the score's words ───────────────────────────────────────────────── */
@@ -43,39 +46,44 @@ const strayOf = (card: { width: number; x: number }, homeX: number) =>
 /**
  * The badge rides the card's right edge.
  *
- * `self` is the badge's box with its own translation taken out — where the
- * stylesheet has already put it, which is the corner of the bay the card
- * is flying TO. Because the seat makes the badge's resting right edge the
- * card's resting right edge, this delta closes to ZERO on its own as the
- * card lands: the follower's window can end whenever it likes and nothing
- * jumps.
+ * `rest` is the badge's RESTING box — where the stylesheet has already
+ * put it, which is the corner of the bay the card is flying TO. The card
+ * is read at `now`: its resting box composed with the transform carrying
+ * it, handed over by the run. Nothing here measures the page. Because the
+ * seat makes the badge's resting right edge the card's resting right
+ * edge, this delta closes to ZERO on its own as the card lands: the
+ * follower's window can end whenever it likes and nothing jumps.
  *
  * Which is exactly why it drives x and not y. The badge deliberately sits
- * ABOVE the card's top line, so `card.y - self.y` is a constant ten pixels
- * — it would ride ten pixels low for the whole flight and snap back up the
- * moment the window closed. A derived value is only seamless where it
- * agrees with the rest it will return to; nothing needs to move vertically
- * here, so nothing does.
+ * ABOVE the card's top line, so `card.y - rest.y` is a constant ten
+ * pixels — it would ride ten pixels low for the whole flight and snap
+ * back up the moment the window closed. A derived value is only seamless
+ * where it agrees with the rest it will return to; nothing needs to move
+ * vertically here, so nothing does.
  */
-const pin = ({ self, sources }: DeriveContext) => {
-  const card = sources[0]!;
-  return { x: card.x + card.width - (self.x + self.width) };
+const pin = ({ rest, sources }: DeriveContext) => {
+  const card = sources[0]!.now;
+  return { x: card.x + card.width - (rest.x + rest.width) };
 };
 
 /**
  * The shadow reads LIFT — how far the card is from any bay — and spreads,
- * softens and fades by it. Pure: a function of where the card is, never of
- * where it was going or how fast. Interrupt the flight halfway and the
- * shadow is correct on the very next frame, with nothing to re-aim.
+ * softens and fades by it. Pure: a function of where the card is, never
+ * of where it was going or how fast. Interrupt the flight halfway and the
+ * shadow is correct on the very next frame, with nothing to re-aim. And
+ * note what it can now do safely: drive `scaleX` from geometry. When the
+ * geometry was the live page, this exact function fed its own scale back
+ * into its own width and smeared across two bays; `rest` cannot contain
+ * what the follower writes, so the runaway is unrepresentable.
  */
-const cast = ({ self, sources }: DeriveContext) => {
-  const card = sources[0]!;
-  const stray = strayOf(card, self.x + (self.width - card.width) / 2);
+const cast = ({ rest, sources }: DeriveContext) => {
+  const card = sources[0]!.now;
+  const stray = strayOf(card, rest.x + (rest.width - card.width) / 2);
   return {
     filter: `blur(${(5 + stray * 16).toFixed(2)}px)`,
     opacity: 0.72 - stray * 0.42,
     scaleX: 1 + stray * 0.75,
-    x: card.x + card.width / 2 - (self.x + self.width / 2),
+    x: card.x + card.width / 2 - (rest.x + rest.width / 2),
   };
 };
 
@@ -163,7 +171,7 @@ export class Escort extends Component {
               the card's own box, so the badge's corner and the shadow's
               centre are exact by construction rather than by arithmetic.
               Only the card is moved by the timeline; the other two are
-              READ from it, and land where the stylesheet already put
+              computed from it, and land where the stylesheet already put
               them. }}
           <span class="esc-seat" style={{this.seat}}>
             <span
@@ -188,10 +196,13 @@ export class Escort extends Component {
           </span>
         </div>
 
-        {{! The score: one composite step, and two values read from it.
+        {{! The score: one composite step, and two values computed from it.
             The follows are anchored to the carry by NAME — a block is a
             step's equal to the anchor system, which is what lets a
-            composite be pointed at as one thing. }}
+            composite be pointed at as one thing. Their window OUTLIVES the
+            spring: a follower that closes mid-tail hands the badge to rest
+            while the card is still a few pixels out, and the handover is
+            only seamless where the two agree. }}
         <c.Parallel>
           <Carry @name="carry" @of={{c.moved "card"}} @spring={{carry}} />
           <c.Follow
@@ -200,7 +211,7 @@ export class Escort extends Component {
             @to={{c.id "card"}}
             @read={{pin}}
             @rest={{PIN_REST}}
-            @duration={{1.1}}
+            @duration={{1.6}}
           />
           <c.Follow
             @at={{at "carry"}}
@@ -208,15 +219,15 @@ export class Escort extends Component {
             @to={{c.id "card"}}
             @read={{cast}}
             @rest={{CAST_REST}}
-            @duration={{1.1}}
+            @duration={{1.6}}
           />
         </c.Parallel>
       </Choreo>
 
       <p class="esc-note">
         <b>{{this.here}}</b>
-        — the badge and the shadow are read from the card's live box, not
-        animated alongside it. Click another bay mid-flight.
+        — the badge and the shadow are computed from the card, not animated
+        alongside it. Click another bay mid-flight.
       </p>
     </div>
   </template>

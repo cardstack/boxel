@@ -22,6 +22,7 @@ export type {
   DeliveryOrder,
   DeriveContext,
   Easing,
+  FollowSource,
   GateNode,
   PropSource,
   PropValue,

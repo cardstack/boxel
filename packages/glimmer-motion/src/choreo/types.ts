@@ -343,19 +343,38 @@ export interface TetherStep extends StepBase {
 }
 
 /**
- * What a derived value is computed FROM, handed to `@read` every frame and
- * every scrubbed still. All geometry is region-relative, so a follower
- * lands on its source at any camera zoom.
+ * One source of a derived value: the boxes the PASS measured, in region
+ * space, named for which box each one is — because the distinction
+ * between resting and live geometry is the whole correctness argument
+ * (docs/postmortem-follow.md). `from` and `to` are resting layout, where
+ * the stylesheet put the sprite on either side of this change; `now` is
+ * `to` composed with the transform the run is driving this frame. None
+ * of the three is read from the page while the run plays.
+ */
+export interface FollowSource {
+  /** its resting box before this change (equal to `to` when it did not move) */
+  from: Rect;
+  /** where the run holds it THIS frame — arithmetic, not a measurement */
+  now: Rect;
+  /** its resting box after the change — where the run will land it */
+  to: Rect;
+}
+
+/**
+ * What a derived value is computed FROM, handed to `@read` every frame
+ * and every scrubbed still. All geometry comes from the pass's own
+ * measurements, region-relative, so a follower lands on its source at
+ * any camera zoom — and never touches the page while it runs.
  */
 export interface DeriveContext {
   /** where the region's frame stands this frame */
   camera: CameraState;
   /** 0..1 across this step's own window */
   p: number;
-  /** the driven sprite's own box */
-  self: Rect;
-  /** the boxes named by `@to`, in the order the query returned them */
-  sources: Rect[];
+  /** the driven sprite's own RESTING box — it never contains what the follower writes */
+  rest: Rect;
+  /** the sprites named by `@to`, in the order the query returned them */
+  sources: FollowSource[];
   /** seconds on the run's clock */
   t: number;
 }
@@ -365,12 +384,16 @@ export interface DeriveContext {
  * keyframes (§4.10) — a badge that rides a flying card, a label held
  * upright under a rotating parent, a readout that tracks a box.
  *
- * `@read` must be PURE: the run is scrubbable in both directions, and a
- * derived value with memory would make a seek irreproducible. It is
- * computed on the main thread every frame — a follower can never be
- * handed to the compositor — and it may only write transform, opacity and
- * filter properties, because a derived write that changed layout would
- * fail the region's fast keep on every frame.
+ * `@read` is pure BY CONSTRUCTION: it is handed boxes the pass already
+ * measured — never the live page — so there is no way for a follower to
+ * read back what it just wrote, and nothing it does can force a style
+ * recalculation mid-move. It must still be a pure function of its
+ * context: the run is scrubbable in both directions, and a derived value
+ * with memory would make a seek irreproducible. It is computed on the
+ * main thread every frame — a follower can never be handed to the
+ * compositor — and it may only write transform, opacity and filter
+ * properties, because a derived write that changed layout would fail the
+ * region's fast keep on every frame.
  */
 export interface FollowStep extends StepBase {
   kind: 'follow';
@@ -476,11 +499,14 @@ export interface Cue {
   };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
-  /** follow: compute this sprite's values from the scene, every frame */
+  /** follow: compute this sprite's values from the pass's measurements, every frame */
   derive?: {
     read: (ctx: DeriveContext) => Record<string, PropValue>;
     rest: Record<string, PropValue>;
-    sources: Sprite[];
+    /** the follower's own resting box, region space, from the pass */
+    restBox: Rect;
+    /** each source's measured ends, with the sprite whose transform composes `now` */
+    sources: { from: Rect; sprite: Sprite; to: Rect }[];
   };
   duration: number;
   /** move: travel along this sampled path instead of the straight line */

@@ -443,11 +443,13 @@ module('Integration | choreo | contract', function (hooks) {
     /**
      * Hoisted, not inline: property functions print by identity, and a
      * fresh closure per render would declare an edit on every pass.
-     * `read` pins the badge's top-left to the card's top-right.
+     * `read` pins the badge's top-left to the card's top-right — `rest`
+     * is the badge's resting box from the pass, `now` is where the run
+     * holds the card this frame.
      */
-    const corner = ({ self, sources }: DeriveContext) => {
-      const card = sources[0]!;
-      return { x: card.x + card.width - self.x, y: card.y - self.y };
+    const corner = ({ rest, sources }: DeriveContext) => {
+      const card = sources[0]!.now;
+      return { x: card.x + card.width - rest.x, y: card.y - rest.y };
     };
     const REST = { x: 0, y: 0 };
     /** deliberately illegal: width is layout, and layout is refused */
@@ -455,7 +457,7 @@ module('Integration | choreo | contract', function (hooks) {
     /** the fixture under test, for the refusal helper to drive */
     let bad: { show: boolean } | undefined;
 
-    test('a follower tracks a live box, and stands at rest when its window closes', async function (assert) {
+    test('a follower tracks its source, and stands at rest when its window closes', async function (assert) {
       class App extends Component {
         @tracked far = false;
         constructor(o: unknown, a: object) {
@@ -501,11 +503,12 @@ module('Integration | choreo | contract', function (hooks) {
       await nextFrame();
       await nextFrame();
       await nextFrame();
-      // A follower is EXACT, not merely close: it corrects the measured
-      // box by the source's current motion values, so it reads the frame
-      // being drawn rather than the one last painted. The bound below
-      // would be a whole bay wide if it did not — on the first frame of a
-      // FLIP the source's layout has already jumped to the destination.
+      // A follower is EXACT, not merely close: `now` is the source's
+      // resting box composed with the values driving it this frame, so it
+      // reads the frame being drawn rather than the one last painted. The
+      // bound below would be a whole bay wide if it did not — on the
+      // first frame of a FLIP the source's layout has already jumped to
+      // the destination.
       const step = bounds(el('#card')).left;
       await nextFrame();
       const card = bounds(el('#card'));
@@ -593,6 +596,75 @@ module('Integration | choreo | contract', function (hooks) {
         Math.abs(first - again) < 1,
         `the same t is the same frame (${Math.round(first)} vs ${Math.round(again)})`
       );
+      run.cancel();
+    });
+
+    test('a follower computes from the pass, not the page', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          vandal = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card3"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card3" role="card3"}}
+              ></div>
+            </div>
+            <div
+              id="badge3"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge3"}}
+            ></div>
+            <c.Parallel>
+              <c.Tween
+                @of={{c.moved "card3"}}
+                @duration={{1}}
+                @ease="linear"
+                @opacity={{array 1 1}}
+              />
+              <c.Follow
+                @of={{c.id "badge3"}}
+                @to={{c.id "card3"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{1}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let vandal: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+      vandal!.far = true;
+      await settled();
+
+      const run = ctx.run!;
+      run.pause();
+      run.time = 0.4;
+      await nextFrame();
+      const first = bounds(el('#badge3')).left;
+      // Vandalise the page mid-window, with no pass to tell the region:
+      // under the API this replaces, @read was handed live boxes and a
+      // follower would chase this. Now every box it sees was measured by
+      // the pass, so the frame at t is a function of t and nothing else.
+      el('#card3').style.marginLeft = '40px';
+      run.time = 0.8;
+      await nextFrame();
+      run.time = 0.4;
+      await nextFrame();
+      const again = bounds(el('#badge3')).left;
+      assert.true(
+        Math.abs(first - again) < 1,
+        `the frame at t is untouched by a mutation the score never saw (${Math.round(first)} vs ${Math.round(again)})`
+      );
+      el('#card3').style.marginLeft = '';
       run.cancel();
     });
 
