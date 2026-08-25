@@ -744,7 +744,12 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
-            'long.json': {
+            // Named `tall`, not `long`: an instance sharing its extensionless
+            // alias with `long.gts` would make the render route's
+            // extensionless card id ambiguous — the module source wins the
+            // lookup and the render errors trying to parse it as JSON, even
+            // though indexing (which uses full URLs) stays clean.
+            'tall.json': {
               data: {
                 attributes: { name: 'Tall Card' },
                 meta: {
@@ -788,7 +793,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('fullPage captures beyond the viewport height for a long card', async function (assert) {
-      let { response } = await screenshot(`${realmURL}long`, {
+      let { response } = await screenshot(`${realmURL}tall`, {
         fullPage: true,
       });
       assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
@@ -807,7 +812,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('clip captures exactly the requested region', async function (assert) {
-      let { response } = await screenshot(`${realmURL}long`, {
+      let { response } = await screenshot(`${realmURL}tall`, {
         clip: { x: 0, y: 0, width: 400, height: 300 },
       });
       assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
