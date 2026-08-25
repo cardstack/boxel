@@ -130,6 +130,10 @@ module('Acceptance | crossing', function (hooks) {
       '1',
       'the card got its stage back, solid'
     );
+    assert.true(
+      stage.children.length > 0,
+      'the landing brings the demos alive'
+    );
     // none of the crossing's own participants wears leftover inline
     // geometry: a stranded width/height stretches the card — and the
     // whole grid row with it

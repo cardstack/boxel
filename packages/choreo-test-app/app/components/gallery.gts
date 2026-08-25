@@ -5,6 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { catalog, groups } from 'test-app/lib/catalog';
+import { crossingSettled } from 'test-app/lib/crossing';
 import { highlightSample } from 'test-app/lib/highlight';
 import { isCrossing } from 'test-app/lib/tempo';
 
@@ -79,6 +80,33 @@ select = (filter) => {
 export class Gallery extends Component {
   @tracked filter: Filter = 'All';
   @tracked code = false;
+
+  /**
+   * Mounted mid-crossing — the return trip — the stages wait for the
+   * landing: booting thirty live demos is the single heaviest render in
+   * the app, and paying it inside the pass stutters the very flight the
+   * eye is following. Until the crossing settles the cards are their
+   * chrome and type over the stage's own ground — which is exactly what
+   * the old system showed too, one way or another — and the demos come
+   * alive the moment the move lands. Released ONCE, permanently: a later
+   * OPENING crossing must fly real pixels out of the card.
+   */
+  @tracked private stagesReleased = !isCrossing();
+
+  constructor(owner: unknown, args: object) {
+    super(owner as never, args as never);
+    if (!this.stagesReleased) {
+      void crossingSettled().then(() => {
+        if (!this.isDestroying) {
+          this.stagesReleased = true;
+        }
+      });
+    }
+  }
+
+  get stagesLive() {
+    return this.stagesReleased;
+  }
 
   get demos() {
     if (this.filter === 'All') {
@@ -218,9 +246,11 @@ export class Gallery extends Component {
               class="card-stage"
               {{motion id=(concat "stage-" demo.id) role="stage"}}
             >
-              {{#let demo.Example as |Example|}}
-                <Example />
-              {{/let}}
+              {{#if this.stagesLive}}
+                {{#let demo.Example as |Example|}}
+                  <Example />
+                {{/let}}
+              {{/if}}
             </div>
             <LinkTo @route="demo" @model={{demo.id}} class="card-meta">
               <span

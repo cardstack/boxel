@@ -86,10 +86,28 @@ export function beginCrossing(transition: Transition): void {
   watchRun(++generation);
 }
 
+/** resolvers waiting on the current crossing's settle */
+let settlers: (() => void)[] = [];
+
+/**
+ * Resolves when the crossing in flight stands down — immediately if none
+ * is. The gallery uses this to bring its thirty live stages up AFTER the
+ * landing rather than booting them all inside the pass: the mount is the
+ * single heaviest render in the app, and paying it under the flight is
+ * exactly the jank the crossing exists to avoid.
+ */
+export function crossingSettled(): Promise<void> {
+  if (!state.active) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => settlers.push(resolve));
+}
+
 /** the crossing's run has finished (or never materialised): stand down */
 export function endCrossing(): void {
   state.active = false;
   setCrossing(false);
+  settlers.splice(0).forEach((resolve) => resolve());
 }
 
 /**
