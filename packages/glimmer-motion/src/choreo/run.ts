@@ -31,6 +31,7 @@ import type {
   Compiled,
   Cue,
   Easing,
+  FollowSource,
   GateMark,
   PropValue,
   Rect,
@@ -1177,8 +1178,21 @@ export class ChoreoRun implements Run {
   }
 
   /**
-   * One frame of a derived value (§4.10). Read the scene, hand it to the
-   * author's function, write what comes back.
+   * One frame of a derived value (§4.10): compose the context from the
+   * pass's measurements, hand it to the author's function, write what
+   * comes back.
+   *
+   * Nothing here touches the DOM — that is the design, not an
+   * optimisation (docs/postmortem-follow.md). The resting boxes were
+   * measured by the pass with every moved value released, and a source's
+   * `now` is its resting box composed with the motion values driving it
+   * this frame: JS-side numbers, not a measurement. So a follower is pure
+   * BY CONSTRUCTION — there is no live box in reach, it cannot read back
+   * its own output, and it cannot force a style recalculation in the
+   * middle of a move. It is also correct under INTERRUPTION for free: a
+   * replacement run's pass re-measures, so a run born mid-flight computes
+   * from rests that are right immediately, with no "last frame" to
+   * disagree with.
    *
    * `set`, not an animation: a derived value IS the frame, so there is
    * nothing to interpolate toward and nothing the compositor could be
@@ -1186,56 +1200,50 @@ export class ChoreoRun implements Run {
    * it is the same cost `c.Tether` already pays.
    */
   private drive(t: Track, now: number) {
-    const { cue } = t;
-    const derive = cue.derive;
-    const ve = cue.sprite.node.visualElement;
+    const derive = t.cue.derive;
+    const ve = t.cue.sprite.node.visualElement;
     if (!derive || !ve) {
       return;
     }
-    const self = this.regionRect(cue.sprite);
-    if (!self) {
-      return;
-    }
-    // `self` is the follower's box with its own translation TAKEN OUT. A
-    // read that saw its own output would be a function of its own last
-    // frame — the memory that makes a scrub irreproducible — and in
-    // practice it oscillates: pin x to a source, and next frame the read
-    // sees the pinned box and computes zero.
-    //
-    // The correction comes from the RENDERED transform, not from the
-    // motion value: the value can be a render ahead of the box that was
-    // just measured, and mixing the two is a doubling bug that only shows
-    // itself on a seek (280 becomes 560, then 1120…).
-    const painted = new DOMMatrix(
-      getComputedStyle(cue.sprite.element).transform,
+    const sources: FollowSource[] = derive.sources.map(
+      ({ from, sprite, to }) => {
+        const sv = sprite.node.visualElement;
+        const num = (key: string): number | undefined => {
+          const value = sv?.getValue(key)?.get();
+          return typeof value === 'number' ? value : undefined;
+        };
+        // composed about the centre (motion's default origin): a scaling
+        // source reports the box it paints, not the box it laid out
+        const sx = num('scaleX') ?? num('scale') ?? 1;
+        const sy = num('scaleY') ?? num('scale') ?? 1;
+        const width = to.width * sx;
+        const height = to.height * sy;
+        return {
+          from,
+          now: {
+            height,
+            width,
+            x: to.x + (num('x') ?? 0) + (to.width - width) / 2,
+            y: to.y + (num('y') ?? 0) + (to.height - height) / 2,
+          },
+          to,
+        };
+      },
     );
-    const zoom = this.camera.zoom || 1;
-    self.x -= painted.e / zoom;
-    self.y -= painted.f / zoom;
-    const sources: Rect[] = [];
-    for (const source of derive.sources) {
-      const rect = this.liveRect(source);
-      if (!rect) {
-        return; // a source that is not on the page has no box to follow
-      }
-      sources.push(rect);
-    }
     const span = t.end - t.start;
     const values = derive.read({
       camera: { ...this.camera },
       p: span > 0 ? Math.max(0, Math.min(1, (now - t.start) / span)) : 1,
-      self,
+      rest: { ...derive.restBox },
       sources,
       t: now / 1000,
     });
     for (const [key, value] of Object.entries(values)) {
       ve.getValue(key, value)!.set(value);
     }
-    // rendered NOW, not scheduled. A scheduled render lands in motion's
-    // own render step, which is a hop later than the synchronous pin the
-    // move it is following just did — so on the first frame of a flight
-    // the source would already be drawn at the origin while the follower
-    // was still drawn at the destination, which is a whole bay's flash.
+    // rendered NOW, not scheduled: a scheduled render lands in motion's
+    // own render step, a hop later than the synchronous pin the move it
+    // follows just did, and that hop is a visible one-frame flash.
     ve.render();
   }
 
@@ -1250,34 +1258,6 @@ export class ChoreoRun implements Run {
       ve.getValue(key, value)!.jump(value);
     }
     ve.render();
-  }
-
-  /**
-   * A source's box as it will be THIS frame, not as it was painted last
-   * frame.
-   *
-   * A measured rect carries the transform the browser last painted, which
-   * is one frame stale — and one frame of staleness is not a rounding
-   * error when the source is a FLIP. On the first frame of a move the
-   * element's layout has already jumped to the destination while its
-   * transform still has to carry it back to the origin, so a follower
-   * reading the painted box sees the card a whole bay away from where it
-   * is about to be drawn, and flashes there. Correcting the measured box
-   * by (current motion value − painted translate) removes the staleness
-   * entirely: the follower is exact, not merely close.
-   */
-  private liveRect(sprite: Sprite): Rect | null {
-    const rect = this.regionRect(sprite);
-    const el = sprite.element;
-    if (!rect || !el) {
-      return rect;
-    }
-    const ve = sprite.node.visualElement;
-    const painted = new DOMMatrix(getComputedStyle(el).transform);
-    const zoom = this.camera.zoom || 1;
-    rect.x += ((ve?.getValue('x')?.get() as number) ?? 0) - painted.e / zoom;
-    rect.y += ((ve?.getValue('y')?.get() as number) ?? 0) - painted.f / zoom;
-    return rect;
   }
 
   /**

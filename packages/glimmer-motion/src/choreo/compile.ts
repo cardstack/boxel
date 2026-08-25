@@ -935,12 +935,41 @@ function resolveStep(
             );
           }
         }
+        // The geometry a follower computes from is the PASS's, not the
+        // page's: resting boxes measured while every moved value stood
+        // released (releaseForMeasure), taken here into region space. The
+        // run never measures for a follower again — see drive(). A sprite
+        // the pass could not measure simply compiles no follow.
+        const fz = cs.measureZoom ?? 1;
+        const inZ = (r: Rect): Rect => ({
+          height: r.height / fz,
+          width: r.width / fz,
+          x: r.x / fz,
+          y: r.y / fz,
+        });
+        const restBounds = sprite.final ?? sprite.initial;
+        if (!restBounds) {
+          break;
+        }
+        const followed: { from: Rect; sprite: Sprite; to: Rect }[] = [];
+        for (const source of cs.sprites(step.to)) {
+          const toB = source.final ?? source.initial;
+          const fromB = source.initial ?? source.final;
+          if (toB && fromB) {
+            followed.push({
+              from: inZ(fromB.context),
+              sprite: source,
+              to: inZ(toB.context),
+            });
+          }
+        }
         const ms = step.ms;
         cues.push({
           derive: {
             read: step.read,
             rest: step.rest,
-            sources: cs.sprites(step.to),
+            restBox: inZ(restBounds.context),
+            sources: followed,
           },
           duration: ms ?? 0,
           kind: 'follow',
@@ -1200,10 +1229,10 @@ export default function compile(
   if (!derived.length) {
     return { cues: out, gates };
   }
-  // A follower reads a LIVE box, so it has to be evaluated after whatever
-  // moved that box this frame. Cues are walked in order, so derived ones
-  // sort last — stably, which keeps two followers in the order they were
-  // written.
+  // A follower's `now` is composed from whatever is driving its source
+  // THIS frame, so it has to be evaluated after that driver has written
+  // its frame. Cues are walked in order, so derived ones sort last —
+  // stably, which keeps two followers in the order they were written.
   const nameOf = (sprite: Sprite) => sprite.id ?? sprite.role ?? 'a sprite';
   const drivenBy = new Map<Sprite, Cue>();
   for (const cue of derived) {
@@ -1211,14 +1240,14 @@ export default function compile(
   }
   for (const cue of derived) {
     for (const source of cue.derive!.sources) {
-      if (drivenBy.has(source)) {
+      if (drivenBy.has(source.sprite)) {
         // Chains are resolvable in principle — a topological sort would do
         // it — but they are refused for now rather than half-supported: a
         // cycle inside one would be a frame loop with no honest answer,
         // and nothing yet needs the depth.
         throw new Error(
           `choreo: c.Follow on '${nameOf(cue.sprite)}' reads ` +
-            `'${nameOf(source)}', which is itself derived — a follower may ` +
+            `'${nameOf(source.sprite)}', which is itself derived — a follower may ` +
             'not follow a follower',
         );
       }

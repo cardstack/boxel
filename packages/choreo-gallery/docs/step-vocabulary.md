@@ -176,20 +176,21 @@ part is not done.
 
 ## Part 3 — `c.Follow` and the derived cue
 
-> **Landed.** `FollowStep`, `DeriveContext` and `Cue.derive` exist;
-> `c.Follow` is yielded by the region; the run reads the scene and writes
-> the result each frame, registering the keys it drives as moved values so
-> release and reassert already cover it. Both compile-time refusals are
-> enforced and tested — layout properties, and a follower following a
-> follower. Two corrections the tests forced, both kept in the code:
-> `self` is the follower's box with its own translation TAKEN OUT (a read
-> that saw its own output is a function of its last frame, which is the
-> memory that breaks a scrub — and in practice it oscillates), and that
-> correction must come from the RENDERED transform, not the motion value,
-> because the value can be a render ahead of the box just measured. Mixing
-> them is a doubling bug that only appears on a seek: 280, then 560, then 1120.
+> **Landed — twice.** The first shipped design handed `@read` live boxes
+> and paid for it five separate ways (docs/postmortem-follow.md); what
+> stands now is the postmortem's replacement: **the changeset is the
+> context**. `@read` receives only what the pass measured — each source's
+> resting boxes and its composed position this frame, plus the follower's
+> own resting box — so a follower is pure by construction: it has no live
+> box to accidentally read, no output to feed back, no way to force a
+> style recalculation mid-move, and interruption is free because a
+> replacement pass re-measures. The run registers the keys it drives as
+> moved values so release and reassert already cover it. Both
+> compile-time refusals are enforced and tested — layout properties, and
+> a follower following a follower — plus a contract test that vandalises
+> the page mid-window and asserts the frame at `t` does not change.
 
-The engine change, and the one to build last.
+The engine change, and the one built last.
 
 ```gts
 {{! the badge rides the card, wherever the card's own flight takes it }}
@@ -197,32 +198,45 @@ The engine change, and the one to build last.
 ```
 
 ```ts
-const corner = ({ self, sources: [card] }: DeriveContext) => ({
-  x: card.x + card.width - self.width - 8,
-  y: card.y - 8,
+const corner = ({ rest, sources: [card] }: DeriveContext) => ({
+  x: card!.now.x + card!.now.width - rest.width - 8,
+  y: card!.now.y - 8,
 });
 ```
 
-The cue grows one field, in the shape `tether` already has:
+The cue grows one field, in the shape `tether` already has — but where
+`tether` measures live, `derive` carries the pass's own measurements:
 
 ```ts
-/** derive: compute this sprite's values from the scene, every frame */
+/** follow: compute this sprite's values from the pass's measurements, every frame */
 derive?: {
   read: (ctx: DeriveContext) => Record<string, PropValue>;
   /** what each written property is at rest, so a measure pass can undo it */
   rest: Record<string, PropValue>;
-  sources: Sprite[];
+  /** the follower's own resting box, region space, from the pass */
+  restBox: Rect;
+  /** each source's measured ends, with the sprite whose transform composes `now` */
+  sources: { from: Rect; sprite: Sprite; to: Rect }[];
 };
 ```
 
 ```ts
+interface FollowSource {
+  /** its resting box before this change (equal to `to` when it did not move) */
+  from: Rect;
+  /** where the run holds it THIS frame — arithmetic, not a measurement */
+  now: Rect;
+  /** its resting box after the change — where the run will land it */
+  to: Rect;
+}
+
 interface DeriveContext {
   camera: CameraState;
   /** 0..1 across the cue's own window */
   p: number;
-  /** the driven sprite's rect, in the region's space */
-  self: Rect;
-  sources: Rect[];
+  /** the driven sprite's RESTING box — never contains what the follower writes */
+  rest: Rect;
+  sources: FollowSource[];
   /** seconds on the run's clock */
   t: number;
 }
@@ -252,19 +266,19 @@ the run hands to WAAPI. That is the price, and it belongs in the docs
 beside the feature, not in a footnote. Thirty followers is a budget
 decision; three is free.
 
-**But it is EXACT, not merely close.** Two corrections buy that, and both
-were found by watching a real flight rather than by reasoning. A measured
-rect carries the transform the browser last _painted_, which is a frame
-stale — and a frame of staleness is not a rounding error when the source
-is a FLIP, because on the first frame the source's layout has already
-jumped to the destination while its transform still has to carry it back.
-A follower reading that saw its card a whole bay from where it was about
-to be drawn, and flashed there. So the measured box is corrected by
-(current motion value − painted translate), which removes the staleness
-entirely. And the write is _rendered_, not scheduled: a scheduled render
-lands a hop later than the synchronous pin the move it follows just did,
-which reintroduces the same flash on frame one. Measured across a whole
-flight afterwards, the follower is within 0.1px on every frame.
+**But it is EXACT, not merely close.** A source's `now` is its resting
+box — measured by the pass, with every moved value released — composed
+with the motion values driving it this frame. That is the frame being
+drawn, not the frame last painted: a rect read from the page mid-FLIP is
+a whole bay stale on frame one, because the layout has already jumped to
+the destination while the transform still has to carry it back. The first
+design corrected for that staleness per frame and found four distinct
+ways for the correction to be wrong (docs/postmortem-follow.md); this one
+never measures, so there is nothing to correct. And the write is
+_rendered_, not scheduled: a scheduled render lands a hop later than the
+synchronous pin the move it follows just did, which is a visible
+one-frame flash. Measured across a whole flight, the follower is within
+0.1px on every frame.
 
 **It must declare a rest.** `releaseForMeasure` jumps moved values to
 `rest ?? 0` before a measure and `reassert()` puts them back. A derived
@@ -273,9 +287,9 @@ standing during the measurement — poisoning the very `final` boxes the
 next run is built from — or be guessed at zero, which is wrong for
 `scale`. Hence `rest` is required, not optional.
 
-**It must evaluate after what it reads.** A follower reading a flying
-card's live rect has to run after that card's own cue in the same frame,
-or it is always one frame stale. `evaluate()` walks `tracks` in cue order,
+**It must evaluate after what it reads.** A follower's `now` is composed
+from the values driving its source this frame, so it has to run after
+that source's own cue in the same frame, or it is always one frame stale. `evaluate()` walks `tracks` in cue order,
 so derived cues sort last — and a derived cue reading another derived
 cue's sprite is a cycle to reject at compile time, not to resolve.
 

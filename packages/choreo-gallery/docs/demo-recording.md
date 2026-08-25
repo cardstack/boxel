@@ -116,10 +116,10 @@ and nothing else.
 - **No dependence on frame count.** "After three frames" is a different
   moment on a 60fps screen and in a 30fps capture. Anchor to the
   timeline: `@at`, `@delay`, `{{after 'name'}}`.
-- **Derived values are fine, and are the good answer.** A `c.Follow`
-  reading a live box is reproducible precisely because it is a pure
-  function of the scene at that instant — and the scene at that instant
-  is a function of the run's time.
+- **Derived values are fine, and are the good answer.** A `c.Follow` is
+  reproducible precisely because it is a pure function of the pass's
+  measurements and the run's clock — it never reads the live page at all
+  (docs/postmortem-follow.md).
 
 ## Things that pause themselves
 

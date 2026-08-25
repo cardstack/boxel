@@ -3,8 +3,6 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { createChoreoPlayer } from 'choreo-player';
-import { createHyperframesChoreoAdapter } from 'choreo-player/hyperframes';
 import { modifier } from 'ember-modifier';
 import type { ChoreoRun, Query, SpringSpec } from 'glimmer-motion';
 import { at, Choreo, motion } from 'glimmer-motion';
@@ -131,44 +129,6 @@ export class Playhead extends Component {
   /** the run that IS the score — the live branch's springs are never it,
       and the transport must never seek them */
   private scoreRun: ChoreoRun | null = null;
-  /**
-   * True once an EXTERNAL clock has actually asked for a frame — every
-   * player entry point runs `prepare` first, so this is armed by the
-   * recorder's own arrival and by nothing else.
-   *
-   * It has to be, because the player's job is to pause, seek and rate-limit
-   * the runs it is handed, and that is precisely the transport this demo
-   * already owns. Handed the live run during an ordinary visit, the two
-   * share a clock and a scrub is answered by whichever wrote last.
-   */
-  private recording = false;
-  private resolveScoreReady!: () => void;
-  private scoreReady = new Promise<void>((resolve) => {
-    this.resolveScoreReady = resolve;
-  });
-  @tracked private recordingRenderGeneration = 0;
-  private recordingRenderWaiters = new Map<number, () => void>();
-
-  private recordingPlayer = createChoreoPlayer({
-    duration: 7,
-    prepare: () => {
-      this.recording = true;
-      // HyperFrames starts each parallel capture worker on a fresh page. Make
-      // the scored pass exist before that worker's first seek; otherwise its
-      // first frames are the parked opening and appear as reset flashes.
-      if (this.take === 0) {
-        this.take++;
-      }
-      if (!this.scoreRun || this.scoreRun !== this.c?.run) {
-        return this.scoreReady;
-      }
-    },
-    runs: () =>
-      this.recording && this.scoreRun && this.scoreRun === this.c?.run
-        ? [this.scoreRun]
-        : [],
-  });
-  readonly hyperframes = createHyperframesChoreoAdapter(this.recordingPlayer);
   private reseek: number | null = null;
   private scrubbing = false;
 
@@ -186,41 +146,8 @@ export class Playhead extends Component {
   private clockEl?: HTMLElement | null;
   private rangeEl?: HTMLInputElement | null;
 
-  /** Duration exposed to the external HyperFrames composition bridge. */
-  get recordingDuration() {
-    return this.recordingPlayer.duration;
-  }
-
-  /**
-   * Deterministically reconstruct the demo and stand Choreo at one frame.
-   * This is composition glue around the public run API, not a core hook.
-   */
-  async renderAt(time: number) {
-    const t = Math.max(0, Math.min(time, this.recordingDuration));
-
-    // A fresh capture worker arrives before Glimmer has necessarily compiled
-    // the score. The player's async prepare barrier waits for observeRun to
-    // publish it, so this seek cannot resolve against an empty run set.
-    this.hyperframes.seek({ time: t, suppressEvents: true });
-    await (this.hyperframes.getReadyPromise() ?? Promise.resolve());
-
-    // adopt() now knows the score's press moments. Fold application state,
-    // wait for Glimmer to paint that state, then reassert the sampled frame on
-    // the DOM that will actually be captured.
-    const rendered = this.waitForRecordingRender();
-    this.scrub({ target: { value: String(t) } } as unknown as Event);
-    await rendered;
-    await this.recordingPlayer.renderAt(t, { settle: false });
-    this.paint();
-  }
-
   willDestroy() {
     super.willDestroy();
-    this.resolveScoreReady();
-    for (const resolve of this.recordingRenderWaiters.values()) {
-      resolve();
-    }
-    this.recordingRenderWaiters.clear();
     cancelAnimationFrame(this.raf);
     this.watcher?.disconnect();
     this.viewport?.disconnect();
@@ -228,21 +155,9 @@ export class Playhead extends Component {
 
   /* — wiring — */
 
-  wire = modifier(
-    (
-      _el: Element,
-      [c, generation]: [{ run: ChoreoRun | null }, number]
-    ) => {
-      this.c = c;
-      this.observeRun(c.run);
-      for (const [pending, resolve] of this.recordingRenderWaiters) {
-        if (pending <= generation) {
-          this.recordingRenderWaiters.delete(pending);
-          resolve();
-        }
-      }
-    }
-  );
+  wire = modifier((_el: Element, [c]: [{ run: ChoreoRun | null }]) => {
+    this.c = c;
+  });
 
   register = modifier((el: HTMLElement) => {
     this.stage = el;
@@ -390,7 +305,13 @@ export class Playhead extends Component {
 
   private tick = () => {
     const run = this.c?.run ?? null;
-    this.observeRun(run);
+    if (run && run !== this.seen) {
+      this.seen = run;
+      if (this.mode !== 'live') {
+        this.scoreRun = run;
+        this.adopt(run);
+      }
+    }
     if (run && run === this.scoreRun && this.mode !== 'live') {
       this.t = run.time;
       this.paint();
@@ -408,35 +329,6 @@ export class Playhead extends Component {
     }
     this.raf = requestAnimationFrame(this.tick);
   };
-
-  private observeRun(run: ChoreoRun | null) {
-    if (!run || run === this.seen) {
-      return;
-    }
-    this.seen = run;
-    if (this.mode !== 'live') {
-      this.scoreRun = run;
-      this.adopt(run);
-      this.resolveScoreReady();
-      // A HyperFrames worker can seek immediately after Glimmer publishes
-      // the run, so a recording synchronises in this same modifier turn
-      // rather than waiting for the demo's ticker to notice on a later
-      // frame. ONLY while recording, though: sync() pauses every run it is
-      // given and seeks it to the recorder's clock, which starts at zero —
-      // done on every ordinary pass it silently reset the scene each time
-      // a new run was adopted, and a scrub afterwards stood on nothing.
-      if (this.recording) {
-        void this.recordingPlayer.sync({ settle: false });
-      }
-    }
-  }
-
-  private waitForRecordingRender(): Promise<void> {
-    const generation = ++this.recordingRenderGeneration;
-    return new Promise((resolve) => {
-      this.recordingRenderWaiters.set(generation, resolve);
-    });
-  }
 
   private paint() {
     const progress = this.runtime > 0 ? this.t / this.runtime : 0;
@@ -787,7 +679,7 @@ export class Playhead extends Component {
         class={{if this.isLive "ph-hand is-off" "ph-hand"}}
         data-take="{{this.take}}"
         {{motion id="hand"}}
-        {{this.wire c this.recordingRenderGeneration}}
+        {{this.wire c}}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path
             d="M5 2.5 19 12.2l-6.1.7-2.4 6z"
