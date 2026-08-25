@@ -66,6 +66,7 @@ import type {
   Saved,
   EntryResource,
 } from './resource-types.ts';
+import { fileMetaTimestamps } from './resource-types.ts';
 import {
   buildCssResource,
   parseUsedRenderType,
@@ -2256,11 +2257,7 @@ function fileResourceFromIndex(
     meta: {
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
-      // Canonical home for the file's timestamps, mirroring a card's `meta`, so
-      // a hydrated FileDef exposes them through `getCardMeta` / its getters (the
-      // wire also carries the legacy `attributes.lastModified`/`createdAt`).
-      lastModified,
-      resourceCreatedAt: createdAt,
+      ...fileMetaTimestamps(lastModified, createdAt),
     },
     links: { self: fileURL.href },
   };

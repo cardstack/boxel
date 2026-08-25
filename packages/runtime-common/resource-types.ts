@@ -125,6 +125,20 @@ export type FileMetaResourceResourceMeta = Meta & {
   error?: ErrorEntry;
 };
 
+// The single home for how a file's timestamps land in `meta`: the card key
+// names (`resourceCreatedAt`, not the legacy `attributes.createdAt` spelling),
+// mapped once. Every producer of a file-meta resource — the two indexed
+// builders and the filesystem fallback — spreads this so a hydrated FileDef
+// exposes them through `getCardMeta` / its getters, and a fourth producer can't
+// silently reintroduce the mapping omission. Callers resolve their own defaults
+// (the source values differ per path) and pass the two resolved values here.
+export function fileMetaTimestamps(
+  lastModified: number | undefined,
+  createdAt: number | undefined,
+): Pick<FileMetaResourceResourceMeta, 'lastModified' | 'resourceCreatedAt'> {
+  return { lastModified, resourceCreatedAt: createdAt };
+}
+
 export interface CardResource<Identity extends Unsaved = Saved> {
   id?: Identity;
   lid?: string;

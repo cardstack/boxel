@@ -134,6 +134,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
+  fileMetaTimestamps,
   type IndexedFile,
   type LooseCardResource,
   type FileMetaResource,
@@ -5095,14 +5096,12 @@ export class Realm {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
-          // Canonical home for the file's timestamps, mirroring a card's `meta`,
-          // so a hydrated FileDef exposes them through `getCardMeta` / its
-          // getters (the wire also carries the legacy
-          // `attributes.lastModified`/`createdAt`). This un-indexed fallback
-          // must stamp them too, so a file's `meta` timestamps don't hinge on
-          // whether the row is in the index yet.
-          lastModified: fileRef.lastModified,
-          resourceCreatedAt: createdAt ?? fileRef.lastModified,
+          // This un-indexed fallback must stamp the timestamps too, so a file's
+          // `meta` timestamps don't hinge on whether the row is in the index yet.
+          ...fileMetaTimestamps(
+            fileRef.lastModified,
+            createdAt ?? fileRef.lastModified,
+          ),
         },
         links: { self: fileURL },
       },
@@ -5198,12 +5197,10 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
-          // Canonical home for the file's timestamps, mirroring a card's `meta`,
-          // so a hydrated FileDef exposes them through `getCardMeta` / its
-          // getters (the wire also carries the legacy
-          // `attributes.lastModified`/`createdAt`).
-          lastModified: baseAttributes.lastModified,
-          resourceCreatedAt: baseAttributes.createdAt,
+          ...fileMetaTimestamps(
+            baseAttributes.lastModified,
+            baseAttributes.createdAt,
+          ),
           // Per-field subclass overrides for nested polymorphic fields (e.g.
           // `frontmatter` → SkillFrontmatterField). Without this the field
           // rehydrates as its declared base type when the document is read.
