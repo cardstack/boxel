@@ -157,6 +157,13 @@ export function assertUsableExecutionRecord(
   record: ProtocolEnvelope,
   support: ProtocolSupport,
 ): ProtocolEnvelope {
+  return asRefusal(() => gateEnvelope(record, support));
+}
+
+function gateEnvelope(
+  record: ProtocolEnvelope,
+  support: ProtocolSupport,
+): ProtocolEnvelope {
   // Read once, up front: the envelope is the whole basis of the decision, and
   // reading it exactly once is what makes that checkable.
   let { protocolVersion, requiredFeatures } = readEnvelope(record);
@@ -229,6 +236,67 @@ function joinTokens(items: string[], separator = ', '): string {
 const MAX_LITERAL_VALUE_DEPTH = 32;
 
 /**
+ * How many values one normalization may visit.
+ *
+ * Depth alone does not bound the work. `structuredClone` preserves sharing, so
+ * a directed acyclic graph arrives as a handful of objects and expands
+ * exponentially when walked as a tree — a 27-object payload exhausts memory
+ * while sitting comfortably inside the depth limit. The memo below restores
+ * the sharing, and this budget bounds what remains.
+ */
+const MAX_LITERAL_VALUE_NODES = 100_000;
+
+/**
+ * Assigns an own data property, whatever it is named.
+ *
+ * `normalized[key] = value` invokes the `Object.prototype.__proto__` setter
+ * for that one key: no own property is created, and the object the consumer
+ * receives answers ordinary lookups with producer-chosen values while
+ * reporting no keys at all. A legal JSON `__proto__` member would also be
+ * silently lost, which `structuredClone` — the contract this module states —
+ * does not do.
+ */
+function defineMember(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/**
+ * Runs a gate so that nothing but a `ProtocolRefusal` can come out of it.
+ *
+ * Reading through descriptors removes the accessors a gate would otherwise
+ * run, but it cannot remove every route: a `Proxy` can throw from its own
+ * `getOwnPropertyDescriptor` or `get` trap, and a value can be hostile in ways
+ * no enumeration anticipates. A consumer catches one type, so anything else
+ * escaping unhandled discards the last-known-good output the refusal exists to
+ * protect. This turns "no far-side code runs inside the gate" from an
+ * aspiration into an outcome: whatever happens in there leaves as a refusal.
+ */
+function asRefusal<T>(gate: () => T): T {
+  try {
+    return gate();
+  } catch (error) {
+    if (error instanceof ProtocolRefusal) {
+      throw error;
+    }
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `reading the record raised ${
+        error instanceof Error ? quoteToken(error.name) : describeValue(error)
+      }`,
+    );
+  }
+}
+
+/**
  * Reads one member of an untrusted record as own data.
  *
  * Plain property access is not available to a gate. It runs an accessor — far
@@ -264,6 +332,8 @@ function readMember(source: object, key: string): unknown {
 function normalizeJsonData(
   value: unknown,
   depth = MAX_LITERAL_VALUE_DEPTH,
+  budget: { remaining: number } = { remaining: MAX_LITERAL_VALUE_NODES },
+  seen: Map<object, JSONTypes.Value> = new Map(),
 ): JSONTypes.Value {
   if (value === null) {
     return null;
@@ -278,17 +348,55 @@ function normalizeJsonData(
     // them would reject a value the record's own type declares legal.
     return value;
   }
-  if (typeof value !== 'object' || depth <= 0) {
+  if (typeof value === 'undefined') {
+    // `structuredClone` carries an undefined-valued member, and `Cloneable`
+    // admits one, so refusing it here would reject a record the type declares
+    // legal — an effect with no payload, or a spread that left a member unset.
+    return undefined as unknown as JSONTypes.Value;
+  }
+  if (typeof value !== 'object') {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `not data, or nested past ${MAX_LITERAL_VALUE_DEPTH} levels: ${describeValue(value)}`,
+      `not data: ${describeValue(value)}`,
     );
+  }
+  if (depth <= 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `nested past ${MAX_LITERAL_VALUE_DEPTH} levels`,
+    );
+  }
+  if (--budget.remaining < 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `more than ${MAX_LITERAL_VALUE_NODES} values in one record`,
+    );
+  }
+  // Restores the sharing the input had. Without it a shared subgraph is walked
+  // once per path that reaches it, which is the exponential blow-up the node
+  // budget would otherwise have to absorb.
+  let memoized = seen.get(value);
+  if (memoized !== undefined) {
+    return memoized;
   }
   if (Array.isArray(value)) {
     let entries: JSONTypes.Value[] = [];
-    for (let index = 0; index < value.length; index++) {
+    seen.set(value, entries);
+    let length = readMember(value, 'length');
+    if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `an array's length must be a non-negative integer, received ${describeValue(length)}`,
+      );
+    }
+    for (let index = 0; index < length; index++) {
       entries.push(
-        normalizeJsonData(readMember(value, String(index)), depth - 1),
+        normalizeJsonData(
+          readMember(value, String(index)),
+          depth - 1,
+          budget,
+          seen,
+        ),
       );
     }
     return entries;
@@ -307,11 +415,16 @@ function normalizeJsonData(
     );
   }
   let normalized: Record<string, JSONTypes.Value> = {};
+  seen.set(value, normalized);
   // getOwnPropertyNames, not keys: a non-enumerable member is still reachable
   // by whoever holds the object, so skipping it proves nothing about what a
   // consumer would be handed.
   for (let key of Object.getOwnPropertyNames(value)) {
-    normalized[key] = normalizeJsonData(readMember(value, key), depth - 1);
+    defineMember(
+      normalized,
+      key,
+      normalizeJsonData(readMember(value, key), depth - 1, budget, seen),
+    );
   }
   return normalized;
 }
@@ -342,7 +455,14 @@ function normalizeStringArray(value: unknown, label: string): string[] {
     );
   }
   let entries: string[] = [];
-  for (let index = 0; index < value.length; index++) {
+  let length = readMember(value, 'length');
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${label} must have a non-negative integer length, received ${describeValue(length)}`,
+    );
+  }
+  for (let index = 0; index < length; index++) {
     let entry = readMember(value, String(index));
     if (typeof entry !== 'string') {
       throw new ProtocolRefusal(
@@ -788,27 +908,45 @@ export type BoxelValueReference = Cloneable<{
 export function isBoxelValueReference(
   value: unknown,
 ): value is BoxelValueReference {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+  try {
+    if (!isPlainRecord(value) || !hasExactOwnKeys(value, ['$boxel'])) {
+      return false;
+    }
+    let marker = readMember(value, '$boxel');
+    if (!isPlainRecord(marker) || !hasExactOwnKeys(marker, ['id', 'type'])) {
+      return false;
+    }
+    let id = readMember(marker, 'id');
+    return (
+      (id === null || typeof id === 'string') &&
+      isExactCodeRef(readMember(marker, 'type'))
+    );
+  } catch {
+    // A predicate whose contract is to answer must not throw instead: a
+    // marker built from a throwing accessor is simply not a reference.
     return false;
   }
-  let keys = Object.keys(value);
-  if (keys.length !== 1 || keys[0] !== '$boxel') {
+}
+
+/**
+ * Whether an object's own property names are exactly `expected` — enumerable
+ * or not.
+ *
+ * `Object.keys` would skip a non-enumerable member, and a member the check
+ * skipped is still reachable by whoever holds the object. That is how an
+ * entire card rides inside a value that answers "reference".
+ */
+function hasExactOwnKeys(source: object, expected: string[]): boolean {
+  let names = Object.getOwnPropertyNames(source);
+  if (names.length !== expected.length) {
     return false;
   }
-  let marker = (value as { $boxel: unknown }).$boxel;
-  if (typeof marker !== 'object' || marker === null || Array.isArray(marker)) {
-    return false;
-  }
-  let markerKeys = Object.keys(marker).sort();
-  if (
-    markerKeys.length !== 2 ||
-    markerKeys[0] !== 'id' ||
-    markerKeys[1] !== 'type'
-  ) {
-    return false;
-  }
-  let { id, type } = marker as { id: unknown; type: unknown };
-  return (id === null || typeof id === 'string') && isExactCodeRef(type);
+  let sorted = [...names].sort();
+  let wanted = [...expected].sort();
+  return (
+    sorted.every((name, index) => name === wanted[index]) &&
+    Object.getOwnPropertySymbols(source).length === 0
+  );
 }
 
 /**
@@ -836,38 +974,29 @@ function isExactCodeRef(ref: unknown, depth = MAX_CODE_REF_DEPTH): boolean {
   if (depth <= 0 || !isPlainRecord(ref)) {
     return false;
   }
-  let keys = Object.keys(ref).sort();
-  let { type, card, field } = ref as {
-    type?: unknown;
-    card?: unknown;
-    field?: unknown;
-  };
+  // A ref inheriting a discriminator reads as one form here and another at
+  // the Store, so the prototype is part of the shape.
+  let prototype = Object.getPrototypeOf(ref);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
+  let type = readMember(ref, 'type');
   if (type === 'ancestorOf') {
     return (
-      keys.length === 2 &&
-      keys[0] === 'card' &&
-      keys[1] === 'type' &&
-      isExactCodeRef(card, depth - 1)
+      hasExactOwnKeys(ref, ['card', 'type']) &&
+      isExactCodeRef(readMember(ref, 'card'), depth - 1)
     );
   }
   if (type === 'fieldOf') {
     return (
-      keys.length === 3 &&
-      keys[0] === 'card' &&
-      keys[1] === 'field' &&
-      keys[2] === 'type' &&
-      typeof field === 'string' &&
-      isExactCodeRef(card, depth - 1)
+      hasExactOwnKeys(ref, ['card', 'field', 'type']) &&
+      typeof readMember(ref, 'field') === 'string' &&
+      isExactCodeRef(readMember(ref, 'card'), depth - 1)
     );
   }
   // The leaf's own member types are the repo's predicate to judge, not a
   // second opinion written here.
-  return (
-    keys.length === 2 &&
-    keys[0] === 'module' &&
-    keys[1] === 'name' &&
-    isCodeRef(ref)
-  );
+  return hasExactOwnKeys(ref, ['module', 'name']) && isCodeRef(ref);
 }
 
 /**
@@ -1051,6 +1180,13 @@ export function acceptTemplateBundle(
   bundle: TemplateBundle,
   support: ProtocolSupport,
 ): TemplateBundle {
+  return asRefusal(() => gateTemplateBundle(bundle, support));
+}
+
+function gateTemplateBundle(
+  bundle: TemplateBundle,
+  support: ProtocolSupport,
+): TemplateBundle {
   let envelope = assertUsableExecutionRecord(bundle, support);
 
   let root = normalizeString(readMember(bundle, 'root'), "a bundle's root");
@@ -1090,7 +1226,14 @@ export function acceptTemplateBundle(
     }
 
     let dependencies: TemplateDependency[] = [];
-    for (let index = 0; index < scope.length; index++) {
+    let scopeLength = readMember(scope, 'length');
+    if (typeof scopeLength !== 'number' || !Number.isInteger(scopeLength)) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `template ${quoteToken(key)}'s scope must have an integer length, received ${describeValue(scopeLength)}`,
+      );
+    }
+    for (let index = 0; index < scopeLength; index++) {
       let entry = readMember(scope, String(index));
       if (!isPlainRecord(entry)) {
         throw new ProtocolRefusal(
@@ -1293,7 +1436,11 @@ export type ComponentEffectKind = (typeof COMPONENT_EFFECT_KINDS)[number];
 
 export type ComponentEffect = Cloneable<{
   kind: ComponentEffectKind;
-  payload: JSONTypes.Value;
+  /**
+   * Optional, because not every capability takes an argument — `observe` is a
+   * request with nothing to say beyond its own name.
+   */
+  payload?: JSONTypes.Value;
 }>;
 
 /**
@@ -1333,6 +1480,13 @@ export function acceptComponentUpdate(
   update: ComponentUpdate,
   support: ProtocolSupport,
 ): ComponentUpdate {
+  return asRefusal(() => gateComponentUpdate(update, support));
+}
+
+function gateComponentUpdate(
+  update: ComponentUpdate,
+  support: ProtocolSupport,
+): ComponentUpdate {
   let envelope = assertUsableExecutionRecord(update, support);
 
   // The generation is the guard that stops superseded output being applied,
@@ -1358,7 +1512,14 @@ export function acceptComponentUpdate(
   }
   let unrecognized: string[] = [];
   let normalized: ComponentEffect[] = [];
-  for (let index = 0; index < effects.length; index++) {
+  let effectsLength = readMember(effects, 'length');
+  if (typeof effectsLength !== 'number' || !Number.isInteger(effectsLength)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `an update's effects must have an integer length, received ${describeValue(effectsLength)}`,
+    );
+  }
+  for (let index = 0; index < effectsLength; index++) {
     let entry = readMember(effects, String(index));
     if (!isPlainRecord(entry)) {
       throw new ProtocolRefusal(
@@ -1454,30 +1615,36 @@ export function projectError(
   error: unknown,
   depth: number = PROJECTED_ERROR_MAX_CAUSE_DEPTH,
 ): ProjectedError {
+  // Clamped, not trusted: an exported depth a caller may raise is not a bound.
+  depth = Math.min(depth, PROJECTED_ERROR_MAX_CAUSE_DEPTH);
   // Never throws. Projection IS the clone step for a thrown value, so unlike
   // a record arriving over a port nothing has sanitized this yet — and
   // authored code can throw anything, including an object whose every member
   // is a getter that throws. A projector that fails here turns "render
   // failed" into a lane with no response on it, which its peer can only
   // discover by timing out.
+  //
+  // This is the one place the module reads THROUGH accessors rather than
+  // refusing them, and it has to: on a real `Error`, `stack` is an own
+  // accessor and `name` is inherited from the prototype, so a descriptor-only
+  // read returns neither — projecting every `TypeError` as a nameless,
+  // stackless `Error` and defeating the record's whole reason for carrying
+  // them. Reading is guarded instead; a throwing member simply goes missing.
   let read = (key: string): unknown => {
     if (typeof error !== 'object' || error === null) {
       return undefined;
     }
     try {
-      let descriptor = Object.getOwnPropertyDescriptor(error, key);
-      return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+      return (error as Record<string, unknown>)[key];
     } catch {
       return undefined;
     }
   };
-  let describe = (): string => {
-    try {
-      return String(error);
-    } catch {
-      return `a thrown ${typeof error} that could not be described`;
-    }
-  };
+  // Deliberately not `String(error)`, which dispatches to the producer's own
+  // `toString`/`Symbol.toPrimitive`. A `try/catch` would contain a throw from
+  // there but not a spin or a 200MB return, and either of those is the very
+  // no-response-on-the-lane outcome this function exists to prevent.
+  let describe = (): string => `a thrown ${typeof error}`;
 
   let name = read('name');
   let message = read('message');
@@ -1543,17 +1710,47 @@ export const SAFE_EVENT_STRING_PROPERTIES = [
 export const SAFE_EVENT_NULLABLE_STRING_PROPERTIES = ['data'] as const;
 
 /**
+ * Converts authored attribute names into the keys a `DOMStringMap` exposes.
+ *
+ * A template's wire data holds what the author wrote — `data-row-index` — and
+ * `element.dataset` answers to `rowIndex`. Without the conversion an allowlist
+ * built from the template matches nothing and silently drops every one of the
+ * author's own attributes, which fails closed but looks like data loss.
+ * Non-`data-` attributes are ignored, so a whole attribute list can be passed.
+ *
+ * Pure string work, so it lives beside the allowlist it feeds rather than in
+ * the adapter that will call it.
+ */
+export function datasetKeysFor(attributeNames: Iterable<string>): string[] {
+  let keys: string[] = [];
+  for (let name of attributeNames) {
+    if (!name.startsWith('data-')) {
+      continue;
+    }
+    keys.push(
+      name
+        .slice('data-'.length)
+        .replace(/-([a-z0-9])/g, (_, character: string) =>
+          character.toUpperCase(),
+        ),
+    );
+  }
+  return keys;
+}
+
+/**
  * The dataset an event target may hand an authored handler: the author's own
  * `data-*` attributes, and nothing else.
  *
  * An allowlist, supplied by the caller, because a denylist cannot work here.
- * Base stamps identity into this namespace — `data-boxel-card-id`,
- * `data-test-card` and `data-cards-grid-item` each carry a card's canonical
- * URL, the last one specifically because the `data-test-` spelling is pruned
- * in production — and Base emits sixteen distinct `data-*` namespaces in all.
- * Every list of "the Host's prefixes" is a list that is one Base commit from
- * being wrong, and being wrong means an authored handler is handed the
- * identity of a card it holds only a reference to.
+ * Base stamps identity into this namespace under several unrelated spellings
+ * — `data-boxel-card-id`, `data-test-card` and `data-cards-grid-item` each
+ * carry a card's canonical URL, the last one specifically because the
+ * `data-test-` spelling is pruned in production — across hundreds of `data-*`
+ * attributes in many first-segment namespaces. Every list of "the Host's
+ * prefixes" is a list that is one Base commit from being wrong, and being
+ * wrong means an authored handler is handed the identity of a card it holds
+ * only a reference to.
  *
  * The element an event lands on is frequently Host chrome the author never
  * wrote, so the question is not what the key is called but who wrote it. Only
@@ -1564,7 +1761,7 @@ export const SAFE_EVENT_NULLABLE_STRING_PROPERTIES = ['data'] as const;
  * than with the projection: it needs no `Event`, no `Element`, and no DOM.
  */
 export function projectDataset(
-  dataset: Record<string, string>,
+  dataset: Record<string, string | undefined>,
   authoredKeys: Iterable<string>,
 ): Record<string, string> {
   let authored = new Set(authoredKeys);

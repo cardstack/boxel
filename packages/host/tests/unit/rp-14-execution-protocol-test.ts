@@ -25,6 +25,7 @@ import {
   assertUsableExecutionRecord,
   childFieldFormatsFor,
   isBoxelValueReference,
+  datasetKeysFor,
   projectDataset,
   projectError,
 } from '@cardstack/runtime-common/boxel-execution-protocol';
@@ -1181,7 +1182,6 @@ module('Unit | rendering protocol | records and operations', function () {
         { kind: 'literal-value', value: { a: { b: () => 1 } } },
       ],
       ['a class instance', { kind: 'literal-value', value: new Date() }],
-      ['undefined', { kind: 'literal-value', value: undefined }],
     ] as unknown as [string, TemplateDependency][];
     for (let [label, dependency] of notData) {
       assert.throws(
@@ -1213,10 +1213,17 @@ module('Unit | rendering protocol | records and operations', function () {
         { kind: 'literal-value', value: { a: [1, 'x', null, false] } },
         { kind: 'literal-value', value: null },
         { kind: 'literal-value', value: false },
+        // structuredClone carries an undefined-valued member and `Cloneable`
+        // admits one, so refusing it would reject a record the type declares
+        // legal — a spread that left a member unset, most often.
+        {
+          kind: 'literal-value',
+          value: undefined,
+        } as unknown as TemplateDependency,
       ]),
       support,
     );
-    assert.true(true, 'ordinary JSON, null and false all cross');
+    assert.true(true, 'ordinary JSON, null, false and undefined all cross');
   });
 
   test('RP-14.3: an update whose guard members are unusable is refused', function (assert) {
@@ -1315,7 +1322,7 @@ module('Unit | rendering protocol | records and operations', function () {
         get(target, key, receiver) {
           if (key === 'kind') {
             reads += 1;
-            return reads > 4 ? 'literal-value' : 'trusted-export';
+            return reads > 1 ? 'literal-value' : 'trusted-export';
           }
           return Reflect.get(target, key, receiver);
         },
@@ -1323,7 +1330,7 @@ module('Unit | rendering protocol | records and operations', function () {
           if (key === 'kind') {
             reads += 1;
             return {
-              value: reads > 4 ? 'literal-value' : 'trusted-export',
+              value: reads > 1 ? 'literal-value' : 'trusted-export',
               writable: true,
               enumerable: true,
               configurable: true,
@@ -1334,17 +1341,28 @@ module('Unit | rendering protocol | records and operations', function () {
       },
     ) as unknown as TemplateDependency;
 
-    let accepted = acceptTemplateBundle(bundle([shifty]), support);
+    let supplied = bundle([shifty]);
+    let accepted = acceptTemplateBundle(supplied, support);
     let dependency = accepted.templates['template-0'].scope[0];
     assert.strictEqual(
       dependency.kind,
       'trusted-export',
-      'the returned dependency is a plain object whose kind cannot change under the consumer',
+      'the returned dependency carries the kind the gate checked',
     );
-    assert.strictEqual(
-      Object.getPrototypeOf(dependency),
-      Object.prototype,
-      'and it is not the proxy the gate was handed',
+    // Identity, not shape. `Object.getPrototypeOf(proxyOverAPlainObject)` is
+    // `Object.prototype`, so a prototype check cannot tell a proxy from the
+    // object it wraps — and would pass against a gate that simply returned
+    // what it was given.
+    assert.notStrictEqual(
+      dependency,
+      shifty,
+      'the consumer does not hold the object the gate was handed',
+    );
+    assert.notStrictEqual(accepted, supplied, 'nor the record it was handed');
+    assert.notStrictEqual(
+      accepted.templates,
+      supplied.templates,
+      'nor any container inside it',
     );
 
     // A non-enumerable member is still reachable by whoever holds the object,
@@ -1487,6 +1505,194 @@ module('Unit | rendering protocol | records and operations', function () {
     );
     assert.true(Number.isNaN(values[0] as number), 'NaN crosses');
     assert.strictEqual(values[1], Infinity, 'so does Infinity');
+  });
+
+  test('RP-14.1: a real Error projects with its own class name and stack', function (assert) {
+    // On a real Error, `stack` is an own ACCESSOR and `name` is inherited from
+    // the prototype — so a descriptor-only read returns neither, and every
+    // TypeError projects as a nameless, stackless `Error`. That defeats the
+    // record's whole reason for carrying them.
+    let projected = projectError(new TypeError('total is not a function'));
+    assert.strictEqual(projected.name, 'TypeError', 'the real class name');
+    assert.strictEqual(typeof projected.stack, 'string', 'and a real stack');
+    assert.true((projected.stack ?? '').length > 0, 'with content in it');
+
+    let wrapped = new Error('render failed', {
+      cause: new RangeError('index out of range'),
+    });
+    assert.strictEqual(
+      projectError(wrapped).cause?.name,
+      'RangeError',
+      'the root cause keeps its identity through the boundary wrapper',
+    );
+
+    // A caller-supplied depth is not a bound.
+    let looping: { name: string; message: string; cause?: unknown } = {
+      name: 'E',
+      message: 'm',
+    };
+    looping.cause = looping;
+    let depth = 0;
+    for (
+      let node: ProjectedError | undefined = projectError(looping, 1e6);
+      node;
+      node = node.cause
+    ) {
+      depth += 1;
+    }
+    assert.strictEqual(
+      depth,
+      PROJECTED_ERROR_MAX_CAUSE_DEPTH,
+      'the declared bound clamps a caller that asks for more',
+    );
+  });
+
+  test('RP-14.3: a __proto__ member becomes data, not a prototype', function (assert) {
+    // `normalized[key] = value` invokes the Object.prototype __proto__ setter
+    // for that one key: no own property is created, and the consumer holds a
+    // record reporting no keys while answering lookups with producer-chosen
+    // values.
+    let hostile = JSON.parse('{"__proto__":{"isAdmin":true}}') as object;
+    let accepted = acceptComponentUpdate(
+      update({ changed: hostile as unknown as ComponentUpdate['changed'] }),
+      support,
+    );
+    assert.deepEqual(
+      Object.getOwnPropertyNames(accepted.changed),
+      ['__proto__'],
+      'the member survives as data, as structuredClone would carry it',
+    );
+    assert.strictEqual(
+      (accepted.changed as Record<string, unknown>)['isAdmin'],
+      undefined,
+      'and nothing it named is reachable by lookup',
+    );
+    assert.strictEqual(
+      Object.getPrototypeOf(accepted.changed),
+      Object.prototype,
+      'the record keeps an ordinary prototype',
+    );
+  });
+
+  test('RP-14.3: a shared subgraph is normalized once, not once per path', function (assert) {
+    // structuredClone preserves sharing, so a DAG arrives as a handful of
+    // objects and expands exponentially if walked as a tree — a few dozen
+    // objects exhaust memory while sitting inside the depth bound.
+    let node: Record<string, unknown> = { leaf: 1 };
+    for (let level = 0; level < 24; level++) {
+      node = { a: node, b: node };
+    }
+    let accepted = acceptComponentUpdate(
+      update({
+        changed: { graph: node } as unknown as ComponentUpdate['changed'],
+      }),
+      support,
+    );
+    let graph = accepted.changed['graph'] as Record<string, unknown>;
+    assert.strictEqual(
+      graph['a'],
+      graph['b'],
+      'the sharing the input had is the sharing the output has',
+    );
+  });
+
+  test('RP-14.3: nothing but a refusal comes out of a gate', function (assert) {
+    // Descriptor reads remove the accessors a gate would run, but not every
+    // route: a Proxy can throw from its own traps. A consumer catches one
+    // type, so anything else escaping discards the last-known-good output.
+    let hostileArray = new Proxy([] as unknown[], {
+      get(target, key, receiver) {
+        if (key === 'length') {
+          throw new EvalError('far-side code ran');
+        }
+        return Reflect.get(target, key, receiver);
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (key === 'length') {
+          throw new EvalError('far-side code ran');
+        }
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          {
+            protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
+            requiredFeatures: hostileArray,
+          } as unknown as BoxelDescription,
+          support,
+        ),
+      (error: Error) =>
+        error instanceof ProtocolRefusal &&
+        error.code === 'BOXEL_RECORD_MALFORMED',
+      'a throwing proxy trap leaves as a refusal',
+    );
+  });
+
+  test('RP-14.1: a reference is exact through non-enumerable and inherited members', function (assert) {
+    // Object.keys skips a non-enumerable member, and a member the check
+    // skipped is still reachable by whoever holds the object — which is how a
+    // whole card rides inside something that answers "reference".
+    let smuggling = { id: 'http://test/x', type: testRef };
+    Object.defineProperty(smuggling, 'payload', {
+      value: { title: 'the entire card' },
+      enumerable: false,
+    });
+    assert.false(
+      isBoxelValueReference({ $boxel: smuggling }),
+      'a non-enumerable extra is still an extra',
+    );
+
+    let inherited = Object.create({
+      type: 'ancestorOf',
+      card: { module: 'http://test/person', name: 'Person' },
+    }) as Record<string, unknown>;
+    inherited['module'] = 'http://test/person';
+    inherited['name'] = 'Person';
+    assert.false(
+      isBoxelValueReference({ $boxel: { id: null, type: inherited } }),
+      'a ref inheriting a discriminator reads as one form here and another at the Store',
+    );
+
+    let throwing = {};
+    Object.defineProperty(throwing, '$boxel', {
+      get() {
+        throw new EvalError('far-side code ran');
+      },
+      enumerable: true,
+    });
+    assert.false(
+      isBoxelValueReference(throwing),
+      'a predicate whose contract is to answer does not throw instead',
+    );
+  });
+
+  test('RP-14.1: authored attribute names convert to the keys a dataset exposes', function (assert) {
+    // A template's wire data holds `data-row-index`; element.dataset answers
+    // to `rowIndex`. An allowlist built from the template without converting
+    // matches nothing and silently drops the author's own attributes.
+    assert.deepEqual(
+      datasetKeysFor([
+        'data-row-index',
+        'data-sku',
+        'class',
+        'data-boxel-card-id',
+      ]),
+      ['rowIndex', 'sku', 'boxelCardId'],
+      'kebab becomes camel, and non-data attributes are ignored',
+    );
+    assert.deepEqual(
+      {
+        ...projectDataset(
+          { rowIndex: '3', boxelCardId: 'x' },
+          datasetKeysFor(['data-row-index']),
+        ),
+      },
+      { rowIndex: '3' },
+      'the converted keys are what the allowlist matches',
+    );
   });
 
   test('RP-14.3: every code the catalog declares is reachable, and every reachable refusal is declared', function (assert) {
