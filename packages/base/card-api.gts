@@ -3117,6 +3117,19 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
+  // Server-managed timestamps (epoch seconds), read off the resource `meta` the
+  // store stamps at hydration — not `@field`s, so they never round-trip on a
+  // write. These mirror the names a card exposes through `getCardMeta`, so a
+  // consumer reads a file's timestamps the same way it reads a card's without
+  // reaching for `getCardMeta` on a FileDef.
+  get lastModified(): number | undefined {
+    return this[meta]?.lastModified;
+  }
+
+  get resourceCreatedAt(): number | undefined {
+    return this[meta]?.resourceCreatedAt;
+  }
+
   // The four shared format shells own identity, facts, budgets, and state for
   // every file family. What they can't know is how to draw the file itself — a
   // waveform, a page, a 3D scene — so a family supplies that one renderer here
