@@ -163,7 +163,7 @@ module('Unit | FileDef menu items', function (hooks) {
     );
   });
 
-  test('code-mode-playground includes Open in Code Mode', function (assert: Assert) {
+  test('code-mode-playground omits Open in Code Mode (already in code submode)', function (assert: Assert) {
     let file = new DummyFile(
       'https://example.com/realm/file-4.txt',
     ) as unknown as FileDef;
@@ -181,9 +181,9 @@ module('Unit | FileDef menu items', function (hooks) {
       texts.includes('Open in Interact Mode'),
       'contains Open in Interact Mode',
     );
-    assert.ok(
+    assert.notOk(
       texts.includes('Open in Code Mode'),
-      'contains Open in Code Mode',
+      'does not contain Open in Code Mode',
     );
   });
 });

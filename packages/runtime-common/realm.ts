@@ -166,6 +166,28 @@ import {
 import { parseQuery } from './query.ts';
 import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
+import {
+  captureSpecHash,
+  parseCaptureSpecParams,
+  type CaptureSpec,
+} from './capture-spec.ts';
+import {
+  findMediaCacheEntry,
+  putMedia,
+  type MediaCacheAdapter,
+  type MediaCacheEntryKey,
+} from './media-cache.ts';
+import {
+  mediaCacheMissResponse,
+  serveMediaCacheEntry,
+  mediaCacheVisibility,
+  MEDIA_CACHE_MAX_AGE_SECONDS,
+} from './media-cache-serving.ts';
+import {
+  enqueueScreenshotCardJob,
+  estimateScreenshotQueueWait,
+  SCREENSHOT_SYNC_WAIT_BUDGET_MS,
+} from './jobs/screenshot-card.ts';
 import { mergeRelationships } from './merge-relationships.ts';
 import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
@@ -841,6 +863,11 @@ interface Options {
   // removes both the startup wait and the prerender-pool contention it would
   // otherwise create with the tests.
   skipBootIndex?: true;
+  // How long a `_screenshot/` request holds its connection waiting for an
+  // on-demand capture before answering 503 + Retry-After. Defaults to
+  // SCREENSHOT_SYNC_WAIT_BUDGET_MS; tests shrink it to exercise the timeout
+  // path without holding real time.
+  screenshotSyncWaitMs?: number;
 }
 
 interface UpdateItem {
@@ -959,6 +986,8 @@ export class Realm {
   #dbAdapter: DBAdapter;
   #queue: QueuePublisher;
   #virtualNetwork: VirtualNetwork;
+  #mediaCacheAdapter: MediaCacheAdapter | undefined;
+  #screenshotSyncWaitMs: number;
   #cachedRealmInfo: RealmInfo | null = null;
   // md5 of the JSON-stringified `#cachedRealmInfo`. Folded into the
   // card+json ETag so any path that nulls `#cachedRealmInfo` (e.g.
@@ -1035,6 +1064,7 @@ export class Realm {
       audioSizeLimitBytes,
       videoSizeLimitBytes,
       transpileCoordinator,
+      mediaCacheAdapter,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -1056,6 +1086,10 @@ export class Realm {
       // in-memory deployments leave this undefined and the uncoordinated
       // CS-11029 in-process dedup is the only sharing layer.
       transpileCoordinator?: PopulateCoordinator;
+      // The MediaCache object store the `_screenshot/` route streams from.
+      // Optional — a process without one configured serves every screenshot
+      // request as an uncaptured miss.
+      mediaCacheAdapter?: MediaCacheAdapter;
     },
     opts?: Options,
   ) {
@@ -1086,6 +1120,9 @@ export class Realm {
       videoSizeLimitBytes ?? DEFAULT_VIDEO_SIZE_LIMIT_BYTES;
     this.#disableModuleCaching = Boolean(opts?.disableModuleCaching);
     this.#copiedFromRealm = opts?.copiedFromRealm;
+    this.#mediaCacheAdapter = mediaCacheAdapter;
+    this.#screenshotSyncWaitMs =
+      opts?.screenshotSyncWaitMs ?? SCREENSHOT_SYNC_WAIT_BUDGET_MS;
     let owner: string | undefined;
     let _fetch = fetcher(
       virtualNetwork.fetch,
@@ -2480,6 +2517,18 @@ export class Realm {
           return;
         }
 
+        // Same reservation `internalHandle` enforces for direct writes:
+        // the `_screenshot/` subtree is claimed by capture serving, so a
+        // file written there could never be read back.
+        if (localPath.startsWith('_screenshot/')) {
+          errors.push({
+            title: 'Reserved path',
+            detail: `Cannot write '${operation.href}': '_screenshot/' is reserved for serving captures`,
+            status: 422,
+          });
+          return;
+        }
+
         let exists = await this.#adapter.exists(localPath);
         if (operation.op === 'add' && exists) {
           errors.push({
@@ -3181,6 +3230,39 @@ export class Realm {
         return systemError({
           requestContext,
           message: 'search index is not available',
+        });
+      }
+      // Screenshot serving dispatches on the path prefix, not the router
+      // table: the router keys routes on the Accept header, and the browser
+      // requests this route must serve (`<img>` loads, og:image fetches)
+      // send `image/*`-shaped Accept values that match no supported mime
+      // type. Placed after checkPermission so the route inherits realm-read
+      // auth exactly like any realm resource. GET only — checkPermission
+      // exempts HEAD from auth realm-wide, so admitting HEAD here would
+      // hand unauthenticated callers an existence/size/content-hash oracle
+      // over a private realm's captures; no consumer of this route (image
+      // loads, crawlers) sends HEAD.
+      if (request.method === 'GET' && localPath.startsWith('_screenshot/')) {
+        return await this.serveScreenshot(
+          request,
+          requestContext,
+          localPath.slice('_screenshot/'.length),
+        );
+      }
+      // The GET dispatch above claims the whole `_screenshot/` subtree, so a
+      // realm file stored under it could never be read back — it would
+      // index, list, and answer every GET as an uncaptured miss. Refuse
+      // creation writes up front so the collision surfaces at write time
+      // (the `/_atomic` precheck enforces the same reservation for its
+      // operation hrefs). DELETE stays admitted as the recovery path for
+      // anything already stored there.
+      if (
+        ['PUT', 'PATCH', 'POST'].includes(request.method) &&
+        localPath.startsWith('_screenshot/')
+      ) {
+        return badRequest({
+          message: `'_screenshot/' is reserved for serving captures and cannot be written to`,
+          requestContext,
         });
       }
       if (this.#router.handles(request)) {
@@ -3973,6 +4055,279 @@ export class Realm {
       },
       requestContext,
     });
+  }
+
+  // The realm's screenshot-serving surface: `_screenshot/{instanceLocalPath}`
+  // resolves a capture of one instance and streams it from the MediaCache
+  // with content-hash ETags and short-max-age revalidation (see
+  // `media-cache-serving.ts` for the response contract). The durable URL is
+  // the only public reference — MediaCache hashes surface solely as ETags —
+  // so a re-capture changes what the URL serves, never the URL itself.
+  //
+  // Beyond realm read (enforced by internalHandle before dispatch), the
+  // parent instance must be live: this gives per-instance ACLs a place to
+  // land, and captures of a deleted instance stop serving the moment its
+  // index tombstone appears, ahead of GC reclaiming their artifacts. The
+  // gate is a narrow index read (`liveInstanceGeneration`) that returns the
+  // live instance's generation for the cache key, never a full hydration — it
+  // runs on every request, 304 revalidations included. Any request that
+  // resolves to no capture — instance missing or errored,
+  // store unconfigured, addressing unresolvable — is an uncaptured miss:
+  // 404 with a short max-age so an `<img>` picks up a later capture on
+  // revalidation, never a synchronous wait inside an image load.
+  private async serveScreenshot(
+    request: Request,
+    requestContext: RequestContext,
+    instanceLocalPath: string,
+  ): Promise<ResponseWithNodeStream> {
+    if (!this.#mediaCacheAdapter) {
+      return mediaCacheMissResponse({ requestContext });
+    }
+    let instanceURL = this.paths.fileURL(
+      instanceLocalPath.replace(/\.json$/, ''),
+    );
+    // One narrow read is both the liveness gate and the cache key's
+    // generation: undefined means the instance is missing, deleted, or
+    // errored — an uncaptured miss — and otherwise it pins the generation an
+    // edit bumps, without hydrating the row.
+    let sourceGeneration =
+      await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    if (sourceGeneration === undefined) {
+      return mediaCacheMissResponse({ requestContext });
+    }
+    let searchParams = new URL(request.url).searchParams;
+
+    // `name=` addresses a declared screenshot through the instance's
+    // manifest — a different addressing form from the capture-spec params,
+    // so mixing them is a request with two contradictory identities.
+    let name = searchParams.get('name');
+    if (name !== null) {
+      let extraParams = [...new Set(searchParams.keys())].filter(
+        (key) => key !== 'name',
+      );
+      if (extraParams.length > 0) {
+        return badRequest({
+          message: `name cannot be combined with capture parameters ("${extraParams[0]}")`,
+          requestContext,
+        });
+      }
+      // Declared-screenshot manifests are indexing-time artifacts; nothing
+      // publishes them, so every name is an uncaptured miss.
+      return mediaCacheMissResponse({ requestContext });
+    }
+
+    let parsed = parseCaptureSpecParams(searchParams);
+    if ('error' in parsed) {
+      return badRequest({ message: parsed.error.message, requestContext });
+    }
+
+    // The cache key pins the instance's own index generation: an edit bumps
+    // it, so an edited card can never serve a stale capture, and an
+    // unchanged card is a pure ledger hit with zero Chrome work.
+    let entryKey: MediaCacheEntryKey = {
+      realmURL: this.url,
+      sourceURL: instanceURL.href,
+      captureSpecHash: await captureSpecHash(parsed.spec),
+      sourceGeneration,
+    };
+    let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+    if (entry) {
+      // A hit costs zero Chrome work, so hits serve regardless of the
+      // realm's capture gate — however the capture came to be in the
+      // ledger.
+      return await serveMediaCacheEntry({
+        request,
+        requestContext,
+        entry,
+        mediaCacheAdapter: this.#mediaCacheAdapter,
+        dbAdapter: this.#dbAdapter,
+      });
+    }
+    return await this.captureScreenshotOnDemand(
+      request,
+      requestContext,
+      entryKey,
+      parsed.spec,
+    );
+  }
+
+  // The miss path: a capture no ledger entry satisfies. Full captureSpec
+  // power on an unauthenticated-reachable GET is an unbounded spec space, so
+  // new captures are per-realm opt-in (`allowArbitraryScreenshots` on the
+  // realm's config card — the gate blocks Chrome work, never serving), and
+  // an open realm's captures run through the same per-realm serialized
+  // screenshot queue as the POST endpoint, bounded by a sync-wait budget:
+  //   - lane already too deep for the budget → immediate 503 + Retry-After
+  //     (fail fast instead of holding a doomed connection);
+  //   - otherwise enqueue and wait up to the budget; the job persists its
+  //     capture to the MediaCache itself, so a wait that times out (503 +
+  //     Retry-After) still lands the capture and the client's retry is a
+  //     pure ledger hit.
+  private async captureScreenshotOnDemand(
+    request: Request,
+    requestContext: RequestContext,
+    entryKey: MediaCacheEntryKey,
+    spec: CaptureSpec,
+  ): Promise<ResponseWithNodeStream> {
+    if (!(await this.allowsArbitraryScreenshots())) {
+      // 403 isn't heuristically cacheable, so with no explicit freshness a
+      // browser re-requests on every `<img>` load — and absent-⇒-false means
+      // every realm is gated by default. Carry the same short window the miss
+      // uses so a gated realm's image loads stop hammering the origin (and so
+      // opting the realm in surfaces images within that same window).
+      return createResponse({
+        body: `This realm does not allow arbitrary screenshot captures: set "allowArbitraryScreenshots" to true on the realm's config card to enable them. Captures that already exist still serve.`,
+        init: {
+          status: 403,
+          headers: {
+            'cache-control': `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+          },
+        },
+        requestContext,
+      });
+    }
+
+    // Render as the realm's owner — the same identity an index pass renders
+    // under. The requester already proved realm read; the capture is a
+    // realm-derived artifact, not a per-user view. Resolved ahead of the
+    // congestion pre-check because the twin probe matches on `runAs`.
+    let owner = await this.getRealmOwnerUserId();
+
+    let concurrencyGroup = `screenshot:${this.url}`;
+    let estimate = await estimateScreenshotQueueWait(
+      this.#dbAdapter,
+      concurrencyGroup,
+      { ...entryKey, runAs: owner },
+    );
+    // A request whose capture is already queued or rendering coalesces onto
+    // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
+    // Chrome work, so the lane's depth is not its wait — only a genuinely new
+    // capture faces the congestion gate. Without this, the second viewer of a
+    // card that is mid-render is 503'd against a wait it would never incur.
+    if (
+      !estimate.hasTwin &&
+      estimate.estimatedWaitMs > this.#screenshotSyncWaitMs
+    ) {
+      return this.screenshotRetryLater(
+        requestContext,
+        estimate.estimatedWaitMs,
+      );
+    }
+
+    let job = await enqueueScreenshotCardJob(
+      {
+        realmURL: this.url,
+        realmUsername: owner,
+        runAs: owner,
+        cardId: entryKey.sourceURL,
+        format: spec.format,
+        persist: { ...entryKey, lane: 'on-demand' },
+      },
+      this.#queue,
+      this.#dbAdapter,
+      userInitiatedPriority,
+    );
+
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    // `const` so the symbol gets a unique-symbol type and the race result
+    // narrows on comparison.
+    const timedOut = Symbol('sync-wait-timeout');
+    try {
+      let outcome = await Promise.race([
+        job.done,
+        new Promise<typeof timedOut>((resolve) => {
+          timeoutHandle = setTimeout(
+            () => resolve(timedOut),
+            this.#screenshotSyncWaitMs,
+          );
+          timeoutHandle.unref?.();
+        }),
+      ]);
+      if (outcome === timedOut) {
+        // The job keeps running and persists its own capture; the retry
+        // hint is one average capture, since this request is now at the
+        // front of the lane.
+        return this.screenshotRetryLater(
+          requestContext,
+          Math.max(estimate.avgCaptureMs, 1000),
+        );
+      }
+      // Prefer the ledger entry the job persisted; fall back to persisting
+      // here from the response for a worker that has no store configured.
+      let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+      if (!entry && outcome.status === 'ready' && outcome.base64) {
+        let binary = atob(outcome.base64);
+        let bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        await putMedia(this.#dbAdapter, this.#mediaCacheAdapter!, {
+          ...entryKey,
+          bytes,
+          contentType: outcome.contentType ?? 'image/png',
+          width: outcome.width ?? null,
+          height: outcome.height ?? null,
+          lane: 'on-demand',
+        });
+        entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+      }
+      if (!entry) {
+        return systemError({
+          requestContext,
+          message: `screenshot capture failed for ${entryKey.sourceURL}`,
+          additionalError: outcome.error
+            ? new Error(String(outcome.error))
+            : undefined,
+        });
+      }
+      return await serveMediaCacheEntry({
+        request,
+        requestContext,
+        entry,
+        mediaCacheAdapter: this.#mediaCacheAdapter!,
+        dbAdapter: this.#dbAdapter,
+      });
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
+  }
+
+  private screenshotRetryLater(
+    requestContext: RequestContext,
+    estimatedWaitMs: number,
+  ): Response {
+    let retryAfterSeconds = Math.max(1, Math.ceil(estimatedWaitMs / 1000));
+    return createResponse({
+      // Every other refusal on this route names its reason (the 400s name the
+      // field, the 403 names the flag); a sync-wait caller honoring
+      // Retry-After gets one too.
+      body: `Screenshot capture is queued; retry after ${retryAfterSeconds} seconds.`,
+      init: {
+        status: 503,
+        headers: {
+          'retry-after': String(retryAfterSeconds),
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // The per-realm opt-in for GET-triggered captures, read from the realm's
+  // indexed config card on every check — so a `realm.json` edit takes
+  // effect with its own index update, with no restart and no cache to
+  // invalidate. Absent, unindexed, or anything but `true` all read as
+  // gated.
+  private async allowsArbitraryScreenshots(): Promise<boolean> {
+    let realmConfigCardURL = new URL(
+      this.paths.fileURL('realm.json').href.replace(/\.json$/, ''),
+    );
+    let entry = await this.#realmIndexQueryEngine.instance(realmConfigCardURL);
+    if (entry?.type !== 'instance') {
+      return false;
+    }
+    return entry.instance.attributes?.allowArbitraryScreenshots === true;
   }
 
   private async serveLocalFile(

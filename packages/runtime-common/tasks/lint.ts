@@ -135,6 +135,26 @@ async function initESLint(): Promise<any> {
           { importMappings },
         ],
         '@cardstack/boxel/no-duplicate-imports': 'error',
+        // Generated card code routinely carries unused imports (the import
+        // block streams before the template, so plans drift). Removing them
+        // is safe to automate: if a usage appears later, the
+        // missing-card-api-import rule re-injects the import. Unused
+        // *variables* stay reported via @typescript-eslint/no-unused-vars —
+        // deleting those would change behavior. Whole declarations are
+        // deleted only for platform module namespaces that are known
+        // side-effect-free; any other module keeps a bare side-effect
+        // import so its top-level code still runs.
+        '@cardstack/boxel/no-unused-imports': [
+          'error',
+          {
+            sideEffectFreeModules: [
+              '@cardstack/base/*',
+              'https://cardstack.com/base/*',
+              '@cardstack/boxel-ui/*',
+              '@cardstack/boxel-icons/*',
+            ],
+          },
+        ],
         '@cardstack/boxel/no-css-position-fixed': 'warn',
         '@cardstack/boxel/no-forbidden-head-tags': 'warn',
         '@cardstack/boxel/no-literal-realm-urls': 'error',

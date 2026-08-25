@@ -123,6 +123,7 @@
     "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
     "ember-elsewhere": "catalog:",
+    "ember-eslint-parser": "catalog:",
     "ember-exam": "^10.1.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "catalog:",

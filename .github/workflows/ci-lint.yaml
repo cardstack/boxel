@@ -36,6 +36,25 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      - name: Type-check repo-root scripts
+        # The root `lint` script filters to ./packages/**, so scripts/ is
+        # outside every package's tsconfig. This is what type-checks the TS
+        # tools there — including erasableSyntaxOnly, since node executes them
+        # by stripping types and would reject syntax needing runtime emit.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:scripts
+      - name: Check rendering-protocol statement/test bijection
+        # RP-0.3: a conformance test citing a statement the spec does not make
+        # fails the build. The reverse direction — a statement with no test —
+        # is a ratchet: the uncovered count may not rise. Both become hard
+        # zeros under `--strict`, which is the gate for the spec reaching
+        # NORMATIVE status.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:rp-bijection
+
+      - name: Check the execution protocol's runtime import closure
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:protocol-closure
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint

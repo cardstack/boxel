@@ -546,6 +546,186 @@ export class MyCard extends CardDef {
       );
     });
 
+    test('removes unused imports automatically instead of reporting them', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'unused-imports.gts')
+        .send(`import { CardDef, FieldDef, linksToMany } from '@cardstack/base/card-api';
+import type { Foo } from 'somewhere';
+import StringField from '@cardstack/base/string';
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { CardDef } from '@cardstack/base/card-api';
+
+export class MyCard extends CardDef {}
+`,
+        'unused named, type-only, and default imports are all removed',
+      );
+      assert.deepEqual(
+        responseJson.messages,
+        [],
+        'nothing is left to report once the unused imports are fixed away',
+      );
+      assert.true(responseJson.passed, 'lint passes after the autofix');
+    });
+
+    test('a fully-unused import of an unknown module keeps its module evaluation', async function (assert) {
+      // './register' may rely on being evaluated for its top-level side
+      // effects, so the fix drops the binding but keeps a bare import.
+      // Whole-declaration deletion is reserved for platform modules that
+      // are known side-effect-free (see the safelist in the lint task).
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'side-effect-import.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import registration from './register';
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { CardDef } from '@cardstack/base/card-api';
+import './register';
+
+export class MyCard extends CardDef {}
+`,
+        'the unused binding is removed but the import still evaluates',
+      );
+      assert.deepEqual(
+        responseJson.messages,
+        [],
+        'the rewritten side-effect import reports nothing',
+      );
+    });
+
+    test('unused local variables are still reported, not auto-removed', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'unused-variable.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+
+const leftover = 1;
+
+export class MyCard extends CardDef {}
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        responseJson.output.includes('const leftover = 1;'),
+        'the unused variable is not deleted',
+      );
+      assert.ok(
+        responseJson.messages.some(
+          (m: { ruleId: string | null; message: string }) =>
+            m.ruleId === '@typescript-eslint/no-unused-vars' &&
+            m.message.includes(`'leftover'`),
+        ),
+        `unused variable is still reported: ${JSON.stringify(
+          responseJson.messages,
+        )}`,
+      );
+    });
+
+    test('an import used only inside <template> is not treated as unused', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'template-only-usage.gts')
+        .send(`import { CardDef } from '@cardstack/base/card-api';
+import MyComponent from 'somewhere';
+
+export class MyCard extends CardDef {}
+
+<template><MyComponent /></template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.ok(
+        responseJson.output.includes(`import MyComponent from 'somewhere';`),
+        `template-only component import survives the autofix: ${responseJson.output}`,
+      );
+      assert.notOk(
+        responseJson.messages.some((m: { message: string }) =>
+          m.message.includes('MyComponent'),
+        ),
+        'template-only usage is not reported as unused',
+      );
+    });
+
+    test('the missing-import and unused-import autofixes converge on a member named like a card-api export', async function (assert) {
+      // A class member named `contains` is not a scope reference, so the
+      // import injector must not fire on it: an injected binding would
+      // have no references, the unused-import fix would delete it, and
+      // the two autofixes would ping-pong until ESLint gives up — leaving
+      // the file failing with a diagnostic no re-lint can clear.
+      let source = `import { CardDef } from '@cardstack/base/card-api';
+
+export class MyCard extends CardDef {
+  contains(other: MyCard) {
+    return other === this;
+  }
+}
+`;
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('X-Filename', 'member-named-like-export.gts')
+        .send(source);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.notOk(
+        responseJson.output.includes(`import { CardDef, contains }`),
+        'no import is injected for the member name',
+      );
+      assert.strictEqual(
+        responseJson.output,
+        source,
+        'the fix passes converge without touching the file',
+      );
+      assert.deepEqual(responseJson.messages, [], 'nothing is reported');
+      assert.true(responseJson.passed, 'lint passes');
+    });
+
     test('warns about position: fixed in card CSS', async function (assert) {
       let response = await request
         .post('/_lint')

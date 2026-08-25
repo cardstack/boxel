@@ -776,6 +776,23 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstance(url, opts);
   }
 
+  // Liveness probe matching `instance()`'s row predicate (including the
+  // effective-error channel) without hydrating the row — for gates that
+  // need only existence, not content.
+  async hasLiveInstance(url: URL, opts?: QueryOptions): Promise<boolean> {
+    return await this.#indexQueryEngine.hasLiveInstance(url, opts);
+  }
+
+  // The live instance's index generation (undefined when not live) — the
+  // liveness gate and the cache-key generation in one narrow read, without
+  // hydrating the row.
+  async liveInstanceGeneration(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<number | undefined> {
+    return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
+  }
+
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
     return await this.#indexQueryEngine.getFile(url, opts);
   }
