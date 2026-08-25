@@ -1551,6 +1551,12 @@ export class ChoreoRun implements Run {
     t.started = false;
     flushKeyframeResolvers();
     this.stopTrack(t);
+    if (t.delivery) {
+      // a delivery mid-split when the scrub crossed its end: finish it —
+      // end values land and the sprite's own text nodes come back
+      t.delivery.complete();
+      t.delivery = undefined;
+    }
     const ve = cue.sprite.node.visualElement;
     if (ve && cue.flight) {
       // the platform animation is cancelled above; land the journey inline

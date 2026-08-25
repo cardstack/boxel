@@ -261,6 +261,9 @@ export function springEasing(spec: SpringSpec | undefined): {
 
 export interface Delivery {
   cancel(): void;
+  /** finish NOW: land the end values and give the text back — a scrub past
+   *  the cue's end must not leave paused spans standing in for the sprite */
+  complete(): void;
   finished: Promise<void>;
   pause(): void;
   play(): void;
@@ -327,6 +330,16 @@ export function deliver(cue: Cue, speed: number): Delivery {
       done = true; // interrupted: original nodes back, stylesheet's values
       animations.forEach((a) => a.cancel());
       parts.restore();
+    },
+    complete() {
+      animations.forEach((a) => {
+        try {
+          a.finish();
+        } catch {
+          a.cancel();
+        }
+      });
+      land();
     },
     finished,
     pause() {

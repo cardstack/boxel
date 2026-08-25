@@ -26,7 +26,7 @@ import { registerBusyProbe } from './activity.ts';
 import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
 import { GESTURE, type GestureRef, trackGestures } from './choreo/gesture.ts';
 import Changeset from './choreo/changeset.ts';
-import compile from './choreo/compile.ts';
+import compile, { sameScore } from './choreo/compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
@@ -507,6 +507,28 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       for (const s of removed) {
         this.finish(s);
+      }
+      return;
+    }
+    // An unrelated render replays every region's pass — the detector is
+    // volatile by design, so on a busy page (the gallery: a neighbouring
+    // demo writing tracked state per frame) a region re-passes on every
+    // app render. If nothing changed — no arrivals, no leavers, and the
+    // compiled score IS the one already in flight — the run is kept:
+    // sixty noisy frames a second must not restart this region's clock.
+    // A finished run replays (§3.1's Hold re-fire is an event on a done
+    // region), and any real difference — an edit, a move, a new sprite —
+    // replays exactly as before.
+    if (
+      this.run &&
+      !this.run.isDone() &&
+      !inserted.length &&
+      !pass.removed.length &&
+      !compiled.gates.length &&
+      sameScore(this.run.cues, cues)
+    ) {
+      for (const node of claimed) {
+        this.drop(node);
       }
       return;
     }

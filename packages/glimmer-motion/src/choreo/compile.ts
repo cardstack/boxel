@@ -780,3 +780,61 @@ export default function compile(
   gates.sort((a, b) => a.at - b.at);
   return { cues: out, gates };
 }
+
+/* ---- score identity: is this compile the one already in flight? ---- */
+
+/**
+ * Whether two compiled scores are the SAME statement — used by the region
+ * to keep an in-flight run when an unrelated render replays the pass (the
+ * render detector is volatile by design, so on a busy page every region
+ * re-passes on every app render; a neighbouring demo writing tracked state
+ * per frame must not restart this region's clock).
+ *
+ * The comparison is deliberately conservative. Journeys and live geometry
+ * — flights, tethers, raises, scrolls — are measured off the page and are
+ * not comparable by value: any such cue makes the scores different, and
+ * the pass replays exactly as it always did. Values that ARE comparable
+ * (targets, transitions, delivery plans, holds, camera aims) compare
+ * structurally, so an edit that retimes or re-aims anything replays too.
+ */
+export function sameScore(a: Cue[], b: Cue[]): boolean {
+  return a.length === b.length && a.every((cue, i) => sameCue(cue, b[i]!));
+}
+
+function sameCue(a: Cue, b: Cue): boolean {
+  if (
+    a.kind !== b.kind ||
+    a.sprite.node !== b.sprite.node ||
+    a.start !== b.start ||
+    a.duration !== b.duration ||
+    (a.loop ?? false) !== (b.loop ?? false)
+  ) {
+    return false;
+  }
+  if (
+    a.flight || b.flight ||
+    a.tether || b.tether ||
+    a.raise || b.raise ||
+    a.scroll || b.scroll
+  ) {
+    return false;
+  }
+  const plain = (v: unknown) => JSON.stringify(v ?? null);
+  // steady rides Sprite objects (cyclic); its cast size stands in for it
+  const cam = (c: Cue['camera']) =>
+    c
+      ? {
+          centre: c.centre ?? null,
+          origin: c.origin ?? null,
+          steady: c.steady.length,
+          to: c.to,
+        }
+      : null;
+  return (
+    plain(a.target) === plain(b.target) &&
+    plain(a.transition) === plain(b.transition) &&
+    plain(a.delivery) === plain(b.delivery) &&
+    plain(a.hold) === plain(b.hold) &&
+    plain(cam(a.camera)) === plain(cam(b.camera))
+  );
+}
