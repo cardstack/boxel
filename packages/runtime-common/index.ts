@@ -1443,7 +1443,10 @@ export interface Store {
   // `scope` pins which rows the search returns: 'cards' (instance rows),
   // 'files' (FileDef rows), or 'all' (both). When omitted the scope is inferred
   // from the filter — an untyped query defaults to 'cards'. Prefer passing it
-  // explicitly over shaping the filter to coax a scope.
+  // explicitly over shaping the filter to coax a scope. Note: 'all' returns a
+  // card's instance row *and* its dual-indexed `.json` file row, so an untyped
+  // `scope: 'all'` search yields each card twice unless the caller dedups
+  // (e.g. `excludeCardInstanceFileRows()`).
   search(
     query: Query,
     realmURLs?: string[],
