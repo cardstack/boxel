@@ -68,14 +68,14 @@ export const executionRuntimeMirrorCohort = [
   ),
   scenario(
     'M-03',
-    'sandbox-compatibility-corpus',
+    'sandbox-compatibility-corpus-20260803',
     'NestedFieldHost/sample',
     'The default edit template, its nested FieldDef controls, validation, save, and reload all match Direct.',
     ['semantic', 'interaction', 'persistence'],
   ),
   scenario(
     'M-04',
-    'sandbox-compatibility-corpus',
+    'sandbox-compatibility-corpus-20260803',
     'MarkdownArticle/sample',
     'The trusted Rich Markdown portal, an editable body, Mermaid, and an authored card embed all survive alternating trusted/authored boundaries.',
     ['semantic', 'visual', 'interaction'],
@@ -117,7 +117,7 @@ export const executionRuntimeMirrorCohort = [
   ),
   scenario(
     'M-10',
-    'sandbox-compatibility-corpus',
+    'sandbox-compatibility-corpus-20260803',
     undefined,
     'Search, room, and markdown surfaces each mount one Capsule card and one Sandbox card: no surface bypasses to Direct, the prerender placeholder stays cheap, and nested cards are routed by their own policy rather than their parent’s.',
     ['visual', 'lifecycle'],
