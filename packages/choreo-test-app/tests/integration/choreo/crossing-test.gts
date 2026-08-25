@@ -148,6 +148,59 @@ class SubstancePages extends Component {
 }
 let substance: SubstancePages;
 
+class WidthPages extends Component {
+  @tracked page: 'detail' | 'grid' = 'grid';
+  constructor(o: unknown, a: object) {
+    super(o as never, a);
+    widths = this;
+  }
+  <template>
+    <Choreo
+      @route={{true}}
+      class="stage"
+      style="position:relative;width:400px;height:300px"
+      as |c|
+    >
+      {{#if (eq this.page "grid")}}
+        {{! a SQUARE subject leaving… }}
+        <div
+          id="tileW"
+          style="position:absolute;left:10px;top:20px;width:100px;height:80px;background:#0af"
+          {{motion id="stage-w" role="stage"}}
+        >
+          <div
+            id="tileWSub"
+            data-choreo-substance
+            style="position:absolute;left:10px;top:10px;width:40px;height:40px;background:#fff"
+          ></div>
+        </div>
+      {{else}}
+        {{! …into a WIDER-aspect subject: cover-matching would key on the
+            height and splash the width; the rule keys on WIDTH, pins the
+            TOPS, and crops the bottom }}
+        <div
+          id="heroW"
+          style="position:absolute;left:140px;top:120px;width:240px;height:160px;background:#0af"
+          {{motion id="stage-w" role="stage"}}
+        >
+          <div
+            id="heroWSub"
+            data-choreo-substance
+            style="position:absolute;left:40px;top:30px;width:160px;height:52px;background:#fff"
+          ></div>
+        </div>
+      {{/if}}
+      <c.Crossing
+        @duration={{0.4}}
+        @ease="easeInOut"
+        @leave={{0.06}}
+        @arrive={{0.06}}
+      />
+    </Choreo>
+  </template>
+}
+let widths: WidthPages;
+
 class QuietPages extends Component {
   @tracked page: 'detail' | 'grid' = 'grid';
   constructor(o: unknown, a: object) {
@@ -522,6 +575,59 @@ module('Integration | choreo | crossing', function (hooks) {
     await animationsSettled();
     const region = bounds(find('.stage') as HTMLElement);
     const rest = bounds(find('#heroS') as HTMLElement);
+    assert.true(
+      Math.abs(rest.left - (region.left + 140)) < 1.5 &&
+        Math.abs(rest.top - (region.top + 120)) < 1.5,
+      `the frame still lands exactly on its real seat (${rest.left.toFixed(0)},${rest.top.toFixed(0)})`
+    );
+    await sleep(20);
+  });
+
+  test('the superimposed subjects match by WIDTH, pin their TOPS, and crop the bottom', async function (assert) {
+    // The matching-snapshot rule: at the start the entering subject is
+    // scaled to the EXITING subject's width — never to cover — its top
+    // on the exiting subject's top, and its bottom cropped where it runs
+    // past the exiting subject's height. (Symmetric on the way out.)
+    await render(<template><WidthPages /></template>);
+    await animationsSettled();
+    const oldSub = bounds(find('#tileWSub') as HTMLElement);
+
+    widths.page = 'detail';
+    await settled();
+    await nextFrame();
+    const sub = bounds(find('#heroWSub') as HTMLElement);
+    assert.true(
+      Math.abs(sub.width - oldSub.width) < 6,
+      `the entering subject opens at the exiting subject's WIDTH ` +
+        `(${sub.width.toFixed(0)} vs ${oldSub.width.toFixed(0)})`
+    );
+    assert.true(
+      Math.abs(sub.top - oldSub.top) < 6,
+      `with its TOP on the exiting subject's top ` +
+        `(${sub.top.toFixed(0)} vs ${oldSub.top.toFixed(0)})`
+    );
+    const hero = find('#heroW') as HTMLElement;
+    const m = new DOMMatrix(getComputedStyle(hero).transform);
+    assert.true(
+      Math.abs(m.a - m.d) < 0.02,
+      `uniform scale still — width-derived, not cover (${m.a.toFixed(3)} vs ${m.d.toFixed(3)})`
+    );
+    // the entering subject is TALLER than the exiting one at this width
+    // (40/160 of 52px = 13px … the exiting is 40px — actually shorter);
+    // the crop rule is asserted from the clip's SHAPE: bottom inset only
+    const clip = getComputedStyle(hero).clipPath;
+    if (clip !== 'none') {
+      const nums = [...clip.matchAll(/([\d.]+)px/g)].map((x) => Number(x[1]));
+      const [t = 0, r = 0, , l = 0] = nums;
+      assert.true(
+        t < 1 && r < 1 && l < 1,
+        `only the bottom is ever cropped (${clip})`
+      );
+    }
+
+    await animationsSettled();
+    const region = bounds(find('.stage') as HTMLElement);
+    const rest = bounds(find('#heroW') as HTMLElement);
     assert.true(
       Math.abs(rest.left - (region.left + 140)) < 1.5 &&
         Math.abs(rest.top - (region.top + 120)) < 1.5,
