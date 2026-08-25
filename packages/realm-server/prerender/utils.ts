@@ -1333,8 +1333,8 @@ function sameViewport(a: ResolvedViewport, b: ResolvedViewport): boolean {
   );
 }
 
-// Whether an entry renders into a parent-owned envelope box (fitted/atom)
-// rather than filling the viewport (isolated/embedded).
+// Whether an entry renders into a parent-owned envelope box (fitted) rather
+// than filling the viewport (isolated/embedded).
 function entryHasEnvelope(
   entry: ScreenshotCaptureEntry,
 ): entry is ScreenshotCaptureEntry & {
@@ -1431,24 +1431,6 @@ async function waitForEnvelopeBox(
     envelope.width,
     envelope.height,
   );
-}
-
-// Cheap check for whether the current render has any images (<img> or a CSS
-// background-image). Gates whether an envelope re-transition re-runs
-// waitForImagePaint — an image-free card can skip it.
-async function pageHasImages(page: Page): Promise<boolean> {
-  return await page.evaluate(() => {
-    if (document.images.length > 0) {
-      return true;
-    }
-    for (let el of Array.from(document.querySelectorAll('*'))) {
-      let bg = getComputedStyle(el as HTMLElement).backgroundImage;
-      if (bg && bg !== 'none' && bg.includes('url(')) {
-        return true;
-      }
-    }
-    return false;
-  });
 }
 
 // Let a viewport change reflow + paint without re-running the full settle hook
@@ -1576,12 +1558,10 @@ export async function captureScreenshot(
   let currentEnvelope: { width: number; height: number } | undefined;
 
   // Transition render.html for the given envelope (undefined =
-  // viewport-filling format) and wait for the render to settle.
-  // `runImagePaint` gates the extra image/font wait. Returns a RenderError on
-  // a terminal prerender error.
+  // viewport-filling format) and wait for the render to settle. Returns a
+  // RenderError on a terminal prerender error.
   let renderFor = async (
     envelope: { width: number; height: number } | undefined,
-    runImagePaint: boolean,
   ): Promise<RenderError | undefined> => {
     let htmlParams: TransitionParam[] = [format, String(ancestorLevel)];
     if (envelope) {
@@ -1620,11 +1600,13 @@ export async function captureScreenshot(
     // Settle hook only tracks store/loader generation + animation frames; it
     // does NOT wait for `<img>` element loads, CSS background-image fetches,
     // or fonts. Without this extra wait the screenshot races those resources
-    // and produces empty avatars / missing thumbnails. Bounded by an internal
-    // timeout so a slow / 401-looping image can't hang the capture.
-    if (runImagePaint) {
-      await waitForImagePaint(page);
-    }
+    // and produces empty avatars / missing thumbnails — and a container query
+    // can reveal an image at one envelope size that a smaller one never
+    // loaded, so every re-transition waits, not just the first render.
+    // Bounded by an internal timeout so a slow / 401-looping image can't hang
+    // the capture; an image-free render pays only the fast
+    // no-pending-resources path.
+    await waitForImagePaint(page);
     return undefined;
   };
 
@@ -1639,18 +1621,10 @@ export async function captureScreenshot(
     }
     currentEnvelope = entries[0].envelope;
 
-    let firstError = await renderFor(currentEnvelope, true);
+    let firstError = await renderFor(currentEnvelope);
     if (firstError) {
       return firstError;
     }
-    // Only a card with images pays for waitForImagePaint on subsequent
-    // envelope re-transitions (the first render always ran it above). The
-    // check itself is a full-DOM walk, so skip it unless an envelope
-    // re-transition is possible (viewport-filling batches never
-    // re-transition).
-    let hasImages = entries.some(entryHasEnvelope)
-      ? await pageHasImages(page)
-      : false;
 
     let captures: ScreenshotCaptureItem[] = [];
     for (let entry of entries) {
@@ -1658,13 +1632,13 @@ export async function captureScreenshot(
       let entryViewport = viewportForEntry(entry, baseViewport);
       if (!sameEnvelope(entryEnvelope, currentEnvelope)) {
         // Envelope changed: re-lay-out the same hydrated card in the new box
-        // at the matching viewport, then re-settle (which also covers any
-        // image loads the new box triggers, gated on the card having images).
+        // at the matching viewport, then re-settle (which also waits out any
+        // image loads the new box triggers).
         if (!sameViewport(entryViewport, currentViewport)) {
           await page.setViewport(entryViewport);
           currentViewport = entryViewport;
         }
-        let stepError = await renderFor(entryEnvelope, hasImages);
+        let stepError = await renderFor(entryEnvelope);
         if (stepError) {
           return stepError;
         }
