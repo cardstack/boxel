@@ -58,10 +58,14 @@ import {
   SIGN_IN_TEXT,
 } from './execution-runtime-browser-smoke.mts';
 
+// Every flag the parser handles. A flag handled below but missing here is
+// rejected as unknown, so `parseArgumentsAcceptsEveryKnownFlag` in the test
+// suite holds the two in step.
 const KNOWN_FLAGS = [
   '--card',
   '--chromium',
   '--host',
+  '--login',
   '--out',
   '--samples',
   '--timeout-ms',

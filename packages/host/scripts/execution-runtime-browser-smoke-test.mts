@@ -553,3 +553,26 @@ test('the mirror cohort refuses a scenario with no evidence plane at all', () =>
     /at least one evidence plane/,
   );
 });
+
+test('the baseline reader accepts every flag it knows about', () => {
+  // The allowlist and the handler chain are separate lists, so one can be
+  // extended without the other. A flag the parser handles but the allowlist
+  // omits is rejected as unknown, which is silent until someone runs the
+  // command with it.
+  let sample = {
+    '--card': 'id=/path',
+    '--chromium': '/opt/chromium',
+    '--host': 'https://localhost:4200',
+    '--login': 'user:password',
+    '--out': 'out.json',
+    '--samples': '2',
+    '--timeout-ms': '1000',
+    '--warm': '2',
+  };
+  for (let [flag, value] of Object.entries(sample)) {
+    assert.doesNotThrow(
+      () => parseArguments(['--card', 'a=/b', flag, value]),
+      `${flag} is handled but not accepted`,
+    );
+  }
+});
