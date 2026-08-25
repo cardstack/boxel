@@ -9,8 +9,8 @@ import { Choreo, motion, spring } from 'glimmer-motion';
  * A light table. Every shot from the foundry roll was bracketed — three
  * frames milliseconds apart — and the work is the camera's distances: at
  * rest the glass frames ONE bracket and you pick the keeper; loupe IN
- * (1.6×) to grade a single variant; pull ALL the way back (0.25×) and the
- * whole roll fits the glass exactly, picks glowing.
+ * (1.6×) to grade a single variant; pull back (0.5×) and the whole roll —
+ * two brackets, built as two glass-heights — fits the glass exactly.
  */
 const brackets = [
   {
@@ -20,22 +20,10 @@ const brackets = [
     no: '01',
   },
   {
-    caption: 'Kiln floor',
-    exposure: 'f/4 · 1/125 · ISO 400',
-    hue: '#ffb36a 0%, #ff3b1f 48%, #4a1208 100%',
-    no: '02',
-  },
-  {
-    caption: 'Cooling rack',
-    exposure: 'f/5.6 · 1/250 · ISO 200',
-    hue: '#c5cdd0 0%, #5c6568 40%, #1a1613 100%',
-    no: '03',
-  },
-  {
     caption: 'Foundry glass',
     exposure: 'f/2 · 1/30 · ISO 1600',
     hue: '#fff4e8 0%, #e4a35a 45%, #5a3214 100%',
-    no: '04',
+    no: '02',
   },
 ];
 
@@ -71,7 +59,7 @@ export class Camera extends Component {
     if (this.focus) {
       return 1.6;
     }
-    return this.sheet ? 0.25 : 1;
+    return this.sheet ? 0.5 : 1;
   }
 
   /** where the camera aims: the graded frame, or the middle of the sheet */

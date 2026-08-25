@@ -2677,8 +2677,8 @@ html[data-gm-dragging] * {
   white-space: nowrap;
 }
 
-/* one bracket to a row, each row the height of the glass — four rows, so
-   the whole roll fits it EXACTLY at 0.25x */
+/* one bracket to a row, each row the height of the glass — two rows, so
+   the whole roll fits it EXACTLY at 0.5x */
 .cam-sheet {
   position: absolute;
   top: 0;
@@ -2693,10 +2693,10 @@ html[data-gm-dragging] * {
 }
 
 /* The point the sheet view zooms about. A zoom holds its aim point fixed,
-   so this is the FIXED POINT of "the whole roll centred at 0.25x": solving
-   (1−z)·P + z·sheetCentre = glassCentre with z = 0.25 and a sheet built as
-   four glass-heights gives P = 21px from the top, at half width —
-   independent of the container's size. */
+   so this is the FIXED POINT of "the whole roll centred at the fit zoom":
+   solving (1−z)·P + z·sheetCentre = glassCentre for a sheet built as 1/z
+   glass-heights gives P = 21px from the top at half width — independent
+   of the container's size AND of the fit zoom, by construction. */
 .cam-centre {
   position: absolute;
   top: 21px;
