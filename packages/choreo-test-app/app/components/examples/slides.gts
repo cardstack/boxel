@@ -1,8 +1,8 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { Choreo, motion, spring, start, to } from 'glimmer-motion';
+import { Choreo, motion, spring, to } from 'glimmer-motion';
 
 const slides = [0, 1, 2] as const;
 /** the one line that is not on every slide — it arrives and leaves */
@@ -68,6 +68,48 @@ export class Slides extends Component {
     this.go(((this.slide + 1) % slides.length) as Slide);
   };
 
+  back = () => {
+    this.go(((this.slide + slides.length - 1) % slides.length) as Slide);
+  };
+
+  /* -- swipe: the deck reads like a deck on touch --
+     One pointer, measured down-to-up. A horizontal throw past the threshold
+     turns the page (left = next, right = back); anything shorter falls
+     through to the tap, which advances as it always has. The browser still
+     fires a click after a swipe, so the swipe sets a flag the click eats. */
+  private downAt: { x: number; y: number } | null = null;
+  private swiped = false;
+
+  down = (event: PointerEvent) => {
+    this.downAt = { x: event.clientX, y: event.clientY };
+  };
+
+  up = (event: PointerEvent) => {
+    const from = this.downAt;
+    this.downAt = null;
+    if (!from) {
+      return;
+    }
+    const dx = event.clientX - from.x;
+    const dy = event.clientY - from.y;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy)) {
+      this.swiped = true;
+      if (dx < 0) {
+        this.advance();
+      } else {
+        this.back();
+      }
+    }
+  };
+
+  tap = () => {
+    if (this.swiped) {
+      this.swiped = false;
+      return;
+    }
+    this.advance();
+  };
+
   pick = (slide: Slide, event: Event) => {
     event.stopPropagation();
     this.go(slide);
@@ -93,7 +135,9 @@ export class Slides extends Component {
         <Choreo
           class="slide"
           data-slide={{this.slide}}
-          {{on "click" this.advance}}
+          {{on "click" this.tap}}
+          {{on "pointerdown" this.down}}
+          {{on "pointerup" this.up}}
           as |c|
         >
           {{! Every slide renders the same elements. Only the stylesheet, keyed
@@ -141,13 +185,16 @@ export class Slides extends Component {
 
             {{! The note is the only thing that comes and goes. It leaves fast
                 and arrives late, so the slide is never carrying two of them. }}
-            <c.Tween @of={{c.removed "note"}} @opacity={{0}} @ms={{140}} />
+            <c.Tween
+              @of={{c.removed "note"}}
+              @opacity={{0}}
+              @duration={{0.14}}
+            />
             <c.Tween
               @of={{c.inserted "note"}}
-              @opacity={{1}}
-              @from={{start opacity=0}}
-              @delay={{220}}
-              @ms={{260}}
+              @opacity={{array 0 1}}
+              @delay={{0.22}}
+              @duration={{0.26}}
             />
           </c.Parallel>
         </Choreo>

@@ -5,11 +5,18 @@
 export { beacon } from './beacon.ts';
 export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
+export type { AnchorRef } from './choreo/anchors.ts';
+export { after, at } from './choreo/anchors.ts';
 export type { BeaconRef } from './choreo/beacons.ts';
 export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
+export type { GestureRef } from './choreo/gesture.ts';
+export type { ChoreoRun } from './choreo/run.ts';
 export type {
   Bounds,
+  CameraState,
+  DeliveryBy,
+  DeliveryOrder,
   Easing,
   Query,
   Rect,
@@ -37,7 +44,6 @@ export {
   perValue,
   spring,
   stagger,
-  start,
   styles,
   to,
   tween,

@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -38,7 +38,6 @@ const cards = [
 type Card = (typeof cards)[number];
 
 const soft = { bounce: 0.14, visualDuration: 0.48 };
-const from0 = { opacity: 0 };
 
 /**
  * boxel-motion's motion-study, on <Choreo>: open a card and the closing card's
@@ -132,7 +131,7 @@ export class Sequence extends Component {
             <c.Tween
               @of={{c.removed "card-content"}}
               @opacity={{0}}
-              @ms={{220}}
+              @duration={{0.22}}
             />
           </c.Parallel>
 
@@ -143,13 +142,12 @@ export class Sequence extends Component {
           of that move; the new details fade in partway THROUGH it rather than
           after it, so the card arrives already carrying its content. }}
           <c.Parallel>
-            <c.Wait @of={{c.all}} @ms={{560}} />
+            <c.Wait @of={{c.all}} @duration={{0.56}} />
             <c.Tween
               @of={{c.inserted "card-content"}}
-              @opacity={{1}}
-              @from={{from0}}
-              @delay={{170}}
-              @ms={{300}}
+              @opacity={{array 0 1}}
+              @delay={{0.17}}
+              @duration={{0.3}}
             />
           </c.Parallel>
         </c.Sequence>

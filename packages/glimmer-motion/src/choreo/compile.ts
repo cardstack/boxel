@@ -10,14 +10,21 @@ import {
   spring,
 } from 'motion-dom';
 
+import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
 import type {
   Block,
   ChangesetLike,
+  Compiled,
   Cue,
+  DeliveryOrder,
+  FlightPath,
+  GateMark,
   HoldStep,
   MoveStep,
   PropSource,
+  PropTarget,
   PropValue,
+  Rect,
   SpringSpec,
   SpringStep,
   Sprite,
@@ -28,14 +35,75 @@ import type {
 
 const isBlock = (node: TimelineNode): node is Block =>
   node.kind === 'sequence' || node.kind === 'parallel';
+const isGate = (node: TimelineNode): node is import('./types.ts').GateNode =>
+  node.kind === 'gate';
 
 const DEFAULT_SPRING: SpringSpec = { damping: 30, stiffness: 300 };
+
+/** the shared offstage <svg> that path geometry is sampled inside */
+let pathHost: SVGSVGElement | undefined;
+function samplePath(d: string, samples = 64): { x: number; y: number }[] {
+  if (!pathHost) {
+    pathHost = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    pathHost.setAttribute('aria-hidden', 'true');
+    pathHost.style.cssText =
+      'position:absolute;width:0;height:0;overflow:hidden';
+    document.body.appendChild(pathHost);
+  }
+  const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  el.setAttribute('d', d);
+  pathHost.appendChild(el);
+  try {
+    const length = el.getTotalLength();
+    return Array.from({ length: samples + 1 }, (_, i) => {
+      const pt = el.getPointAtLength((length * i) / samples);
+      return { x: pt.x, y: pt.y };
+    });
+  } finally {
+    el.remove();
+  }
+}
+
+/**
+ * Similarity-map a drawn path so its start is the sprite's start and its end
+ * is the measured landing (§4.4): the path bends the journey, never the
+ * destination. Complex multiplication: m = D / v rotates and scales the
+ * author's stroke onto the real displacement.
+ */
+function mapFlight(
+  raw: { x: number; y: number }[],
+  dx: number,
+  dy: number,
+): { x: number; y: number }[] {
+  const s0 = raw[0]!;
+  const e = raw[raw.length - 1]!;
+  const vx = e.x - s0.x;
+  const vy = e.y - s0.y;
+  const mag = vx * vx + vy * vy;
+  if (mag < 1e-6) {
+    // a degenerate stroke: fall back to the straight line
+    return raw.map((_, i) => ({
+      x: (dx * i) / (raw.length - 1),
+      y: (dy * i) / (raw.length - 1),
+    }));
+  }
+  // m = (dx + i·dy) / (vx + i·vy)
+  const mr = (dx * vx + dy * vy) / mag;
+  const mi = (dy * vx - dx * vy) / mag;
+  return raw.map((pt) => {
+    const px = pt.x - s0.x;
+    const py = pt.y - s0.y;
+    return { x: px * mr - py * mi, y: px * mi + py * mr };
+  });
+}
 
 const resolve = (
   v: PropSource,
   sprite: Sprite,
   cs: ChangesetLike,
-): PropValue => (typeof v === 'function' ? v(sprite, cs) : v);
+): PropTarget => (typeof v === 'function' ? v(sprite, cs) : v);
+
+const single = (v: PropTarget): PropValue => (Array.isArray(v) ? v[0]! : v);
 
 const num = (v: unknown): number => {
   if (typeof v === 'number') {
@@ -74,6 +142,40 @@ function springDuration(from: number, to: number, spec: SpringSpec): number {
 /** a cue before it is placed on the run's clock; `offset` is its rung of the stagger ladder */
 type Unplaced = Omit<Cue, 'start'> & { offset: number };
 
+/**
+ * The rung each index takes on the stagger ladder, under a delivery order.
+ * 'center' delivers from the middle outward; 'random' shuffles per run —
+ * seeded input is the native driver's requirement, not this one's.
+ */
+export function ladder(n: number, order: DeliveryOrder): number[] {
+  const ranks = Array.from({ length: n }, (_, i) => i);
+  switch (order) {
+    case 'reverse':
+      return ranks.map((i) => n - 1 - i);
+    case 'center': {
+      const mid = (n - 1) / 2;
+      const byDistance = [...ranks].sort(
+        (a, b) => Math.abs(a - mid) - Math.abs(b - mid),
+      );
+      const out = new Array<number>(n);
+      byDistance.forEach((index, rank) => (out[index] = rank));
+      return out;
+    }
+    case 'random': {
+      const shuffled = [...ranks];
+      for (let i = n - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
+      }
+      const out = new Array<number>(n);
+      shuffled.forEach((index, rank) => (out[index] = rank));
+      return out;
+    }
+    default:
+      return ranks;
+  }
+}
+
 interface Resolved {
   cues: Unplaced[];
   /** the step's own length, delay included */
@@ -91,14 +193,24 @@ function resolveTarget(
   let longest = 0;
   for (const key in step.props) {
     const to = resolve(step.props[key]!, sprite, cs);
-    const fromSource = step.from?.[key];
-    if (fromSource !== undefined) {
-      const from = resolve(fromSource, sprite, cs);
-      target[key] = [from, to];
+    // A keyframe array is the from-and-to (and any waypoints) in one value —
+    // `@opacity={{array 0 1}}` — which is why there is no property-hash @from.
+    if (Array.isArray(to)) {
+      if (step.kind === 'spring' && to.length > 2) {
+        throw new Error(
+          'choreo: a spring animates between two keyframes; ' +
+            `\`${key}\` was given ${to.length}`,
+        );
+      }
+      target[key] = to;
       if (step.kind === 'spring') {
         longest = Math.max(
           longest,
-          springDuration(num(from), num(to), step.spring ?? DEFAULT_SPRING),
+          springDuration(
+            num(to[0]),
+            num(to[to.length - 1]),
+            step.spring ?? DEFAULT_SPRING,
+          ),
         );
       }
     } else {
@@ -118,29 +230,57 @@ function resolveTarget(
   return { longest, target };
 }
 
+/** a page-space box, divided back into local space by the measure-time zoom */
+function descale(r: Rect, z: number): Rect {
+  return z === 1
+    ? r
+    : { height: r.height / z, width: r.width / z, x: r.x / z, y: r.y / z };
+}
+
 function resolveMove(
   step: MoveStep,
   sprite: Sprite,
   cs: ChangesetLike,
-): { longest: number; target: Record<string, unknown> } | null {
-  // A beacon rewrites one end of the flight. `@from` gives an inserted sprite
-  // a start it never had (it flies out of the compose button); `@to` gives a
-  // removed one an end it never reaches (it flies into the bin). Everything
-  // after this is the ordinary FLIP — rewriting the bounds IS the whole
-  // implementation. A name nothing claimed leaves that end alone.
-  const borrowedFrom = step.from ? cs.beacon(step.from.beacon) : null;
+): {
+  flight?: FlightPath;
+  longest: number;
+  target: Record<string, unknown>;
+  velocity?: { x: number; y: number };
+} | null {
+  // A beacon — or the live gesture — rewrites one end of the flight. `@from`
+  // gives an inserted sprite a start it never had (out of the compose button,
+  // or from wherever the finger let go); `@to` gives a removed one an end it
+  // never reaches. Everything after this is the ordinary FLIP — rewriting the
+  // bounds IS the whole implementation. A name nothing claimed leaves that
+  // end alone.
+  const size = (sprite.final ?? sprite.initial)?.page ?? {
+    height: 0,
+    width: 0,
+    x: 0,
+    y: 0,
+  };
+  const hot = step.from && isGestureRef(step.from);
+  const borrowedFrom = step.from
+    ? hot
+      ? gestureBounds(size)
+      : cs.beacon((step.from as { beacon: string }).beacon)
+    : null;
   const borrowedTo = step.to ? cs.beacon(step.to.beacon) : null;
   const initial = borrowedFrom ?? sprite.initial;
   const final = borrowedTo ?? sprite.final;
   if (!initial || !final) {
     return null;
   }
-  // Page space, not parent space: the region itself can move and resize in the
-  // very pass that moves its children (a centred grid that grows re-centres),
-  // and a delta measured against a parent that moved by the same amount is
-  // zero — that element alone would sit still while its siblings flew.
-  const from = initial.page;
-  const to = final.page;
+  // Page space by default: the one space two regions agree on, and the region
+  // itself can move in the very pass that moves its children. 'parent'
+  // resolves against the sprite's own container instead (§6.1). Either way,
+  // the measurement was taken through the camera's transform and the values
+  // will be written as local inline pixels — so both boxes are divided back
+  // by the zoom the world was measured under (§6.3).
+  const z = cs.measureZoom ?? 1;
+  const parentSpace = step.space === 'parent' && !borrowedFrom && !borrowedTo;
+  const from = descale(parentSpace ? initial.parent : initial.page, z);
+  const to = descale(parentSpace ? final.parent : final.page, z);
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
   const dx = to.x - from.x;
@@ -157,13 +297,24 @@ function resolveMove(
    */
   const holdsStart = sprite.type === 'removed';
   const leg = (d: number): [number, number] => (holdsStart ? [0, d] : [-d, 0]);
-  if (dx !== 0) {
-    target['x'] = leg(dx);
-    pairs.push(leg(dx));
-  }
-  if (dy !== 0) {
-    target['y'] = leg(dy);
-    pairs.push(leg(dy));
+  let flight: FlightPath | undefined;
+  if (step.path && (dx !== 0 || dy !== 0)) {
+    // the path owns position; FLIP still owns size
+    flight = {
+      points: mapFlight(samplePath(step.path), dx, dy),
+      rest: holdsStart ? { x: 0, y: 0 } : { x: dx, y: dy },
+      rotate: step.rotate,
+    };
+    pairs.push(leg(Math.hypot(dx, dy)));
+  } else {
+    if (dx !== 0) {
+      target['x'] = leg(dx);
+      pairs.push(leg(dx));
+    }
+    if (dy !== 0) {
+      target['y'] = leg(dy);
+      pairs.push(leg(dy));
+    }
   }
   if (step.size !== false) {
     if (from.width !== to.width) {
@@ -185,7 +336,13 @@ function resolveMove(
       longest = Math.max(longest, springDuration(a, b, spec));
     }
   }
-  return { longest, target };
+  return {
+    flight,
+    longest,
+    target,
+    // a hot start leaves at the speed it was thrown (§6.1)
+    velocity: hot ? gestureVelocity() : undefined,
+  };
 }
 
 const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
@@ -203,25 +360,56 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
   const stagger = step.stagger ?? 0;
+  /** text delivery: the sprite is split and the ladder happens INSIDE the
+   *  step's span, so the sprites themselves are not laddered */
+  const splitting =
+    (step.kind === 'tween' || step.kind === 'spring') &&
+    step.by !== undefined &&
+    step.by !== 'item';
+  const order =
+    step.kind === 'tween' || step.kind === 'spring'
+      ? (step.order ?? 'forward')
+      : 'forward';
+  const ranks = splitting ? [] : ladder(sprites.length, order);
   let longest = 0;
   let open = false;
   for (const [index, sprite] of sprites.entries()) {
-    // each sprite starts one rung later than the one before it, in the order
-    // the query returned them — which is document order
-    const offset = stagger * index;
+    // a camera or tether is a statement about the scene, not a sprite:
+    // one cue regardless of what `of` matched
+    if ((step.kind === 'camera' || step.kind === 'tether') && index > 0) {
+      break;
+    }
+    // each sprite starts one rung later than the one before it — in the
+    // order the query returned them (document order), reordered by @order
+    const offset = splitting ? 0 : stagger * (ranks[index] ?? index);
     switch (step.kind) {
       case 'tween': {
         const { target } = resolveTarget(step, sprite, cs);
         if (Object.keys(target).length) {
+          // an infinite repeat is an ambient loop: it occupies one cycle of
+          // the schedule and keeps playing past the run's end
+          const loop = step.repeat === Infinity;
+          const plays = loop ? 1 : 1 + (step.repeat ?? 0);
+          const length = step.ms * plays;
+          const transition: Record<string, unknown> = tweenTransition(
+            step,
+            step.ms,
+          );
+          if (step.repeat) {
+            transition['repeat'] = step.repeat;
+            transition['repeatType'] = step.repeatType ?? 'loop';
+          }
           cues.push({
-            duration: step.ms,
+            delivery: splitting ? { by: step.by!, order, stagger } : undefined,
+            duration: length,
             kind: 'tween',
+            loop: loop || undefined,
             offset,
             sprite,
             target,
-            transition: tweenTransition(step, step.ms),
+            transition,
           });
-          longest = Math.max(longest, offset + step.ms);
+          longest = Math.max(longest, offset + (loop ? step.ms : length));
         }
         break;
       }
@@ -229,6 +417,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         const { target, longest: d } = resolveTarget(step, sprite, cs);
         if (Object.keys(target).length) {
           cues.push({
+            delivery: splitting ? { by: step.by!, order, stagger } : undefined,
             duration: d,
             kind: 'spring',
             offset,
@@ -243,31 +432,222 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       case 'move': {
         const r = resolveMove(step, sprite, cs);
         if (r) {
+          const transition: Record<string, unknown> =
+            step.ms === undefined
+              ? springTransition(step.spring)
+              : tweenTransition(step, step.ms);
+          if (r.velocity && step.ms === undefined) {
+            // the engine reads transition[key] in preference to the whole
+            if (r.target['x']) {
+              transition['x'] = { ...transition, velocity: r.velocity.x };
+            }
+            if (r.target['y']) {
+              transition['y'] = { ...transition, velocity: r.velocity.y };
+            }
+          }
           cues.push({
             duration: r.longest,
+            flight: r.flight,
             kind: 'move',
             offset,
             sprite,
             target: r.target,
-            transition:
-              step.ms === undefined
-                ? springTransition(step.spring)
-                : tweenTransition(step, step.ms),
+            transition,
           });
           longest = Math.max(longest, offset + r.longest);
+          // the counterpart-skin policy (§6.3): the claimed leaver rides the
+          // same flight, and the two skins swap during it or at its landing
+          const cp = sprite.counterpart;
+          const swap = step.swap ?? 'during';
+          // a far match's sender is released to its own region, not carried
+          // here — there is no second skin to fly (§3.2)
+          if (cp && !cp.sent && swap !== 'none' && sprite.final && cp.initial) {
+            const cpz = cs.measureZoom ?? 1;
+            const from = descale(cp.initial.page, cpz);
+            const to = descale(sprite.final.page, cpz);
+            const cpTarget: Record<string, unknown> = {};
+            if (to.x !== from.x) {
+              cpTarget['x'] = [0, to.x - from.x];
+            }
+            if (to.y !== from.y) {
+              cpTarget['y'] = [0, to.y - from.y];
+            }
+            if (step.size !== false) {
+              if (from.width !== to.width) {
+                cpTarget['width'] = [from.width, to.width];
+              }
+              if (from.height !== to.height) {
+                cpTarget['height'] = [from.height, to.height];
+              }
+            }
+            if (Object.keys(cpTarget).length) {
+              cues.push({
+                duration: r.longest,
+                kind: 'move',
+                offset,
+                sprite: cp,
+                target: cpTarget,
+                transition,
+              });
+            }
+            if (swap === 'during') {
+              // both skins cross over the one flying box
+              cues.push({
+                duration: r.longest,
+                kind: 'tween',
+                offset,
+                sprite,
+                target: { opacity: [0, 1] },
+                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+              });
+              cues.push({
+                duration: r.longest,
+                kind: 'tween',
+                offset,
+                sprite: cp,
+                target: { opacity: [1, 0] },
+                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+              });
+            } else {
+              // 'settle': the old rendering is carried whole; the swap is
+              // the landing itself — the receiver hides for the flight and
+              // the released hold reveals it as the leaver is dropped
+              cues.push({
+                duration: r.longest,
+                hold: { fill: false, values: { opacity: 0 } },
+                kind: 'hold',
+                offset,
+                sprite,
+              });
+            }
+          }
         }
         break;
       }
       case 'hold': {
         const values: Record<string, PropValue> = {};
         for (const key in (step as HoldStep).props) {
-          values[key] = resolve(step.props[key]!, sprite, cs);
+          values[key] = single(resolve(step.props[key]!, sprite, cs));
         }
         cues.push({
           duration: step.ms ?? 0,
           hold: { fill: step.fill ?? false, values },
           kind: 'hold',
           offset,
+          sprite,
+        });
+        if (step.ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + step.ms);
+        }
+        break;
+      }
+      case 'camera': {
+        const ms = step.ms ?? 600;
+        // fit mode is DECLARED, not inferred: `fit: null` (fit nothing)
+        // still means the step owns the whole pose and returns it to rest
+        const fitting = step.fit !== undefined;
+        const aimQuery = fitting ? step.fit : step.origin;
+        const originSprite = aimQuery ? cs.sprite(aimQuery) : null;
+        const box =
+          originSprite?.final?.context ?? originSprite?.initial?.context;
+        // context space carries the frame's transform (context = zoom ×
+        // local), and transform-origin is written in LOCAL pixels — divide
+        // back by the zoom the world was measured under (§6.3)
+        const oz = cs.measureZoom ?? 1;
+        const origin = box
+          ? {
+              x: (box.x + box.width / 2) / oz,
+              y: (box.y + box.height / 2) / oz,
+            }
+          : undefined;
+        let to = { x: step.x, y: step.y, zoom: step.zoom };
+        if (fitting) {
+          if (box && origin && cs.frame) {
+            // Fit-and-centre, from the same rest-layout measurement FLIP
+            // uses — never the painted box, so a click that lands mid-zoom
+            // on a DIFFERENT tile still computes against rest geometry.
+            // The margin is the sprite's share of the frame on whichever
+            // axis fits first; the pan solves x + P = centre, since the
+            // applied transform holds the aim point P at x + P (§6.3).
+            const zoom =
+              step.zoom ??
+              (step.margin ?? 0.72) *
+                Math.min(
+                  (cs.frame.width * oz) / box.width,
+                  (cs.frame.height * oz) / box.height,
+                );
+            to = {
+              x: cs.frame.width / 2 - origin.x,
+              y: cs.frame.height / 2 - origin.y,
+              zoom,
+            };
+          } else {
+            // fit nothing (null, or the sprite has left): the resting frame
+            to = { x: 0, y: 0, zoom: 1 };
+          }
+        }
+        cues.push({
+          camera: {
+            // centre and origin from the SAME final layout: the aim term
+            // (origin − centre) is frozen numbers the run lerps — a board
+            // that reflows mid-cue cannot move the camera
+            centre: cs.frame
+              ? { x: cs.frame.width / 2, y: cs.frame.height / 2 }
+              : undefined,
+            origin,
+            steady: step.steady ? cs.sprites(step.steady) : [],
+            to,
+          },
+          duration: ms,
+          kind: 'camera',
+          offset,
+          sprite,
+          transition: step.spring
+            ? springTransition(step.spring)
+            : { duration: ms / 1000, ease: step.ease ?? 'easeInOut' },
+        });
+        longest = Math.max(longest, offset + ms);
+        break;
+      }
+      case 'tether': {
+        cues.push({
+          duration: step.ms ?? 0,
+          kind: 'tether',
+          offset,
+          sprite,
+          tether: {
+            from: cs.sprites(step.from)[0] ?? null,
+            path: step.path,
+            to: cs.sprites(step.to)[0] ?? null,
+          },
+        });
+        if (step.ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + step.ms);
+        }
+        break;
+      }
+      case 'scroll': {
+        const ms = step.ms ?? 420;
+        cues.push({
+          duration: ms,
+          kind: 'scroll',
+          offset,
+          scroll: { align: step.align ?? 'center' },
+          sprite,
+        });
+        longest = Math.max(longest, offset + ms);
+        break;
+      }
+      case 'raise': {
+        cues.push({
+          duration: step.ms ?? 0,
+          kind: 'raise',
+          offset,
+          raise: { shadow: step.shadow ?? false },
           sprite,
         });
         if (step.ms === undefined) {
@@ -289,7 +669,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
 export default function compile(
   tree: TimelineNode[],
   cs: ChangesetLike,
-): Cue[] {
+): Compiled {
   const resolved = new Map<Step, Resolved>();
   const of = (step: Step) => {
     let r = resolved.get(step);
@@ -300,8 +680,13 @@ export default function compile(
     return r;
   };
   const measure = (node: TimelineNode): number => {
+    if (isGate(node)) {
+      return 0;
+    }
     if (!isBlock(node)) {
-      return of(node).duration;
+      // an anchored step is lifted out of its block's flow: it neither pushes
+      // a sequence forward nor stretches a block's span (§4.2)
+      return node.at ? 0 : of(node).duration;
     }
     if (node.kind === 'sequence') {
       return node.children.reduce((sum, c) => sum + measure(c), 0);
@@ -309,20 +694,88 @@ export default function compile(
     return node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
   };
   const out: Cue[] = [];
-  /** span: the time a hold without @ms is allowed to last from `start` */
+  // duplicate names are an authoring error, caught before anything is placed
+  const seen = new Set<string>();
+  const checkNames = (node: TimelineNode) => {
+    if (isGate(node)) {
+      return;
+    }
+    if (isBlock(node)) {
+      node.children.forEach(checkNames);
+    } else if (node.name) {
+      if (seen.has(node.name)) {
+        throw new Error(`choreo: two steps named '${node.name}'`);
+      }
+      seen.add(node.name);
+    }
+  };
+  tree.forEach(checkNames);
+  /** where each named step landed: when it starts (delay spent) and how long it plays */
+  const names = new Map<string, { duration: number; start: number }>();
+  const gates: GateMark[] = [];
+  /**
+   * A pause is a total order (§4.1): a gate may only stand in a sequence
+   * that no parallel contains — including the implicit parallel that is the
+   * region's root when it has more than one top-level node.
+   */
+  const forbidGates = (node: TimelineNode) => {
+    if (isGate(node)) {
+      throw new Error(
+        'choreo: a gate inside a parallel has no meaning — a pause is a ' +
+          'total order; only an uncontained sequence can hold one',
+      );
+    }
+    if (isBlock(node)) {
+      node.children.forEach(forbidGates);
+    }
+  };
+  /** span: the time a hold without @duration is allowed to last from `start` */
   const place = (node: TimelineNode, start: number, span: number) => {
+    if (isGate(node)) {
+      gates.push({ at: start, auto: node.ms });
+      return;
+    }
     if (!isBlock(node)) {
       const r = of(node);
       const delay = node.delay ?? 0;
+      let base = start;
+      if (node.at) {
+        const target = names.get(node.at.anchor);
+        if (!target) {
+          throw new Error(
+            `choreo: @at names '${node.at.anchor}', which is not a step ` +
+              'above this one — anchors point up the score',
+          );
+        }
+        if (r.open) {
+          throw new Error(
+            'choreo: an anchored hold needs its own @duration — lifted out ' +
+              'of its block, it has no span to borrow',
+          );
+        }
+        base =
+          node.at.edge === 'end'
+            ? target.start + target.duration + (node.at.delay ?? 0) * 1000
+            : target.start + (node.at.progress ?? 0) * target.duration;
+      }
+      if (node.name) {
+        names.set(node.name, {
+          duration: Math.max(0, r.duration - delay),
+          start: base + delay,
+        });
+      }
       for (const cue of r.cues) {
         const { offset, ...rest } = cue;
         out.push({
           ...rest,
           duration:
-            r.open && cue.kind === 'hold'
+            r.open &&
+            (cue.kind === 'hold' ||
+              cue.kind === 'raise' ||
+              cue.kind === 'tether')
               ? Math.max(0, span - delay - offset)
               : cue.duration,
-          start: start + delay + offset,
+          start: base + delay + offset,
         });
       }
       return;
@@ -336,14 +789,82 @@ export default function compile(
       }
       return;
     }
+    // a parallel: every child at once — and no gate anywhere under it
+    node.children.forEach(forbidGates);
     const total = measure(node);
     for (const child of node.children) {
       place(child, start, total);
     }
   };
   const root = measure({ children: tree, kind: 'parallel' });
+  if (tree.length > 1) {
+    tree.forEach(forbidGates);
+  }
   for (const node of tree) {
     place(node, 0, root);
   }
-  return out;
+  gates.sort((a, b) => a.at - b.at);
+  return { cues: out, gates };
+}
+
+/* ---- score identity: is this compile the one already in flight? ---- */
+
+/**
+ * Whether two compiled scores are the SAME statement — used by the region
+ * to keep an in-flight run when an unrelated render replays the pass (the
+ * render detector is volatile by design, so on a busy page every region
+ * re-passes on every app render; a neighbouring demo writing tracked state
+ * per frame must not restart this region's clock).
+ *
+ * The comparison is deliberately conservative. Journeys and live geometry
+ * — flights, tethers, raises, scrolls — are measured off the page and are
+ * not comparable by value: any such cue makes the scores different, and
+ * the pass replays exactly as it always did. Values that ARE comparable
+ * (targets, transitions, delivery plans, holds, camera aims) compare
+ * structurally, so an edit that retimes or re-aims anything replays too.
+ */
+export function sameScore(a: Cue[], b: Cue[]): boolean {
+  return a.length === b.length && a.every((cue, i) => sameCue(cue, b[i]!));
+}
+
+function sameCue(a: Cue, b: Cue): boolean {
+  if (
+    a.kind !== b.kind ||
+    a.sprite.node !== b.sprite.node ||
+    a.start !== b.start ||
+    a.duration !== b.duration ||
+    (a.loop ?? false) !== (b.loop ?? false)
+  ) {
+    return false;
+  }
+  if (
+    a.flight ||
+    b.flight ||
+    a.tether ||
+    b.tether ||
+    a.raise ||
+    b.raise ||
+    a.scroll ||
+    b.scroll
+  ) {
+    return false;
+  }
+  const plain = (v: unknown) => JSON.stringify(v ?? null);
+  // steady rides Sprite objects (cyclic); its cast size stands in for it
+  const cam = (c: Cue['camera']) =>
+    c
+      ? {
+          centre: c.centre ?? null,
+          origin: c.origin ?? null,
+          steady: c.steady.length,
+          to: c.to,
+        }
+      : null;
+  return (
+    plain(a.target) === plain(b.target) &&
+    plain(a.transition) === plain(b.transition) &&
+    plain(a.delivery) === plain(b.delivery) &&
+    plain(a.hold) === plain(b.hold) &&
+    plain(cam(a.camera)) === plain(cam(b.camera))
+  );
 }

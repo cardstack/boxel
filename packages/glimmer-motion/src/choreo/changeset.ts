@@ -27,16 +27,32 @@ export class Changeset implements ChangesetLike {
    */
   readonly beacon: (name: string) => Bounds | null;
 
+  /**
+   * The camera zoom the world was measured under (§6.3). Every box in this
+   * changeset is a page-space measurement taken through the region's frame
+   * transform, but a step's values are written in the sprite's own local
+   * space — so geometry that becomes inline pixels must be divided back by
+   * this before it is animated. 1 when the frame is at rest.
+   */
+  readonly measureZoom: number;
+
+  /** the frame's own size in local pixels, from the same final layout */
+  readonly frame?: { height: number; width: number };
+
   constructor(
     inserted: Sprite[],
     removed: Sprite[],
     kept: Sprite[],
     beacons: Map<string, Bounds> = new Map(),
+    measureZoom = 1,
+    frame?: { height: number; width: number },
   ) {
     this.inserted = inserted;
     this.removed = removed;
     this.kept = kept;
     this.beacon = (name) => beacons.get(name) ?? null;
+    this.measureZoom = measureZoom;
+    this.frame = frame;
   }
 
   get all(): Sprite[] {
@@ -90,6 +106,11 @@ export class Changeset implements ChangesetLike {
         // the removed half that was claimed — the old element, orphaned so a
         // step can cross-fade it while its replacement flies
         pool = this.removed.filter((s) => s.claimed);
+        break;
+      case 'departed':
+        // what only the old scene had: removed, claimed by nobody, not
+        // carried on by another region — the crossing's LEAVES
+        pool = this.removed.filter((s) => !s.claimed && !s.sent);
         break;
       default:
         pool = this.all;

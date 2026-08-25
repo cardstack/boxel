@@ -1,72 +1,55 @@
 import type { TOC } from '@ember/component/template-only';
 import { CodeBox } from 'test-app/components/code-box';
 
-const SCHEDULE = `builds.forEach((build, i) => {
-  const base = i === 0 ? 0
-    : build.start === 'with' ? prevAt : prevEnd;
-  const at = Math.max(0, base + build.delay);
-  cues.push({ ...build, at, end: at + build.ms, no: i + 1 });
-  prevAt = at;
-  prevEnd = at + build.ms;
-});`;
+const SCORE = `<c.Sequence>
+  <c.Tween @name='b1' @of={{c.id 'plate'}} … />
+  <c.Tween @name='b2' @at={{at 'b1'}} @delay={{0.14}} … />
+  <c.Tween @name='b3' @at={{after 'b2'}} … />
+</c.Sequence>`;
 
-const POSE_AT = `export function poseAt(t, cue, slot) {
-  const effect = EFFECTS[cue.effect];
-  const span = windowOf(cue, slot);
-  const raw = span.ms <= 0 ? (t >= span.at ? 1 : 0)
-    : (t - span.at) / span.ms;
-  const p = raw <= 0 ? 0 : raw >= 1 ? 1 : effect.ease(raw);
-  return { ...NEUTRAL, ...effect.at(p) };
-}`;
+const EFFECT = `{{! Pop: a scale through backOut, opacity leading early }}
+<c.Tween
+  @opacity={{array 0 1 1 1}}
+  @scale={{array 0 1}}
+  @ease='backOut'
+  @duration={{secondsOf build.ms}}
+/>`;
 
-const WINDOW_OF = `export function windowOf(cue, slot) {
-  if (slot.n <= 1 || cue.ms <= 0) return { at: cue.at, ms: cue.ms };
-  const ms = cue.ms * 0.55;
-  return { at: cue.at + (slot.i * (cue.ms - ms)) / (slot.n - 1), ms };
-}`;
+const DELIVERY = `<c.Tween
+  @of={{c.id 'word'}}
+  @by='character'
+  @opacity={{array 0 1 1}} @scale={{array 0.78 1}} @y={{array 18 0}}
+  @duration={{0.76}}
+/>`;
 
-const EFFECTS_SNIPPET = `draw: {
-  at: (p) => ({ opacity: p > 0 ? 1 : 0, pathLength: p }),
-  ease: easeInAndOut,
-  on: ['stroke'],
-},
-pop: {
-  at: (p) => ({ opacity: min(1, p * 3), scale: p }),
-  ease: backOut,           // overshoots past 1, settles — a curve, not physics
-  on: ['box', 'shape', 'text'],
-},`;
-
-const PAINT = `private paint = () => {
-  const t = this.t;
-  for (const cue of this.cues) {
-    const list = this.tracks.get(cue.part);
-    for (let i = 0; i < list.length; i += 1) {
-      list[i].jump(poseAt(t, cue, slotOf(flat[i], cue.by, totals)));
-    }
-  }
+const TRANSPORT = `scrub = (event) => {
+  this.held = true;          // a hand has claimed the clock
+  run.pause();
+  run.time = Number(event.target.value);
 };`;
 
-const TRACK_JUMP = `jump(pose) {
-  const was = this.was;
-  if (!was || was.opacity !== pose.opacity) this.o.jump(pose.opacity);
-  if (!was || was.scale !== pose.scale) this.sc.jump(pose.scale);
-  // …one comparison per property, and most cells sit parked at either
-  // end of their build for most of the run
-  this.was = pose;
+const ADOPT = `// any pass replaces the run; the new one resumes where the old stood
+const target = this.reseek ?? this.t;
+if (target > 0 && target < run.duration) {
+  run.time = target;
 }`;
 
-const EDIT = `private edit(patch) {
-  this.builds = this.builds.map((build, i) =>
-    i === this.pick ? { ...build, ...patch } : build
-  );
-  this.paint();   // repainted at the SAME t, against the new schedule
+const READER = `// NOT tracked, and that is load-bearing: the region's render
+// detector re-runs on EVERY render, so a tracked value written at
+// 60fps would replay the pass at 60fps — cancelling the run it is
+// trying to watch. The clock and the range are written by hand.
+private t = 0;
+private paint() {
+  this.clockEl.textContent = \`\${this.t.toFixed(2)} …\`;
+  this.rangeEl.value = String(this.t);
 }`;
 
-const PATH_SPACING = `// Motion renders a drawn path as stroke-dasharray: length spacing.
-// The default spacing of 1 makes the pattern sum to ~1 near a drawn
-// length of 0 — which wraps a zero-length dash onto the path's own
-// terminus, and a round linecap paints that dash as a dot.
-this.style['pathSpacing'] = motionValue(2);   // a whole path away, always`;
+const COSTUME = `// deliver.ts — the split is a costume, and a costume must not
+// change the body's shape: whitespace the container was COLLAPSING
+// (a template's newline and indentation are real text nodes) would
+// take width as \`pre\` spans, and a newline would become a hard break.
+const ws = getComputedStyle(el).whiteSpace;
+const collapsing = ws === 'normal' || ws === 'nowrap' || ws === 'pre-line';`;
 
 /**
  * Deep dive for the Build Order demo.
@@ -82,28 +65,33 @@ const BuildOrderNotes: TOC<object> = <template>
         <em>the ring draws</em>,
         <em>the mark pops with it</em>,
         <em>the wordmark comes after</em>. This stage takes that sentence
-        literally — every start time you see is a consequence of two words and a
-        number, resolved against the build above it. There is nowhere in the
-        code that a time is typed by hand.
+        literally — the score is written in the template, every start time you
+        see is resolved by the compiler from two words and a number, and there
+        is nowhere in the demo that a time is typed by hand.
       </p>
     </header>
 
     <section class="dd">
-      <p class="dd-fn">schedule()<span>lib/builds.ts</span></p>
-      <h3>With and after are the whole scheduler</h3>
+      <p class="dd-fn">@name · at() · after()<span>the score</span></p>
+      <h3>With and after are anchors</h3>
       <div class="dd-col">
         <p>
           A build names a part, an effect, a duration — and a relation to the
           build above it.
           <b>With</b>
-          starts it the moment that build started;
+          is
+          <code>@at={{"{{at 'b3'}}"}}</code>
+          — start where build 3 started;
           <b>after</b>
-          waits for that build to finish. A delay, in either case, is added on
-          top. Build 1 is the exception: with nothing above it, its Start is
-          Keynote’s own “On Click” — the run’s own zero.
+          is
+          <code>@at={{"{{after 'b3'}}"}}</code>
+          — start where it ended. A delay, in either case, is added on top.
+          Build 1 is the exception: with nothing above it, its Start is
+          Keynote’s own “On Click” — the sequence’s natural flow, the run’s own
+          zero.
         </p>
       </div>
-      <CodeBox @label="lib/builds.ts" @source={{SCHEDULE}} />
+      <CodeBox @label="build-order.gts" @source={{SCORE}} />
       <div class="dd-col">
         <p>
           Because the relation always points at the
@@ -111,7 +99,10 @@ const BuildOrderNotes: TOC<object> = <template>
           build, moving one build moves everything under it. Switch build 6 from
           After to With in the inspector and every start time downstream
           recomputes — nothing had to be re-typed, because nothing was ever a
-          timecode to begin with.
+          timecode to begin with. An anchored step is lifted out of the
+          sequence’s flow, and its end still counts toward the run’s length: the
+          compiler’s runtime is a
+          <code>max</code>, not a last.
         </p>
       </div>
 
@@ -155,129 +146,112 @@ const BuildOrderNotes: TOC<object> = <template>
         </svg>
         <figcaption>
           The faint vertical lines in the demo’s own transport are drawn from
-          exactly this: a tick at the moment each build was timed against.
+          exactly this: a tick at the moment each build was timed against. The
+          bars themselves are read back from
+          <code>run.cues</code>
+          — the compiler’s resolved answer, never a second copy.
         </figcaption>
       </figure>
     </section>
 
     <section class="dd">
-      <p class="dd-fn">poseAt(t, cue, slot)<span>lib/builds.ts</span></p>
-      <h3>A build is a window, not a spring</h3>
+      <p class="dd-fn">keyframe values<span>the effects</span></p>
+      <h3>An effect is keyframes and an easing</h3>
       <div class="dd-col">
         <p>
-          Give it a time and a cue and it returns a pose — opacity, scale,
-          position, blur, how much of a stroke is drawn — with no memory of the
-          frame before. Progress through the build’s window is computed, clamped
-          to 0–1, eased, and handed to the effect. Nothing is measured and
-          nothing is read off the DOM.
+          There is no effects engine. Pop is a scale through
+          <code>backOut</code>; Line Draw is
+          <code>@pathLength</code>
+          from 0 to 1; Wipe is two
+          <code>inset()</code>
+          clip frames. The leading opacity frames are Keynote’s “builds in” made
+          of arithmetic: a keyframe array’s
+          <em>first</em>
+          value is pinned onto the part from the run’s very start, so a build
+          that begins at 2.1s sits hidden — at its own first frame — until its
+          window opens.
         </p>
       </div>
-      <CodeBox @label="lib/builds.ts" @source={{POSE_AT}} />
+      <CodeBox @label="build-order.gts" @source={{EFFECT}} />
       <div class="dd-col">
         <p>
-          That is also the whole reason there are no springs on this stage. A
-          spring is defined by its physics — stiffness, damping, a settle — not
-          by a duration; asking one “where will you be at 620ms” is not a
-          question it can answer without you also telling it when to stop
-          pretending to bounce. A build has to have an
-          <em>end</em>, because the next build’s delay is measured from it, so
-          every effect here is an easing across a stated window instead. Pop’s
-          overshoot is a hand-drawn back-out curve doing a spring’s job.
+          That pin is also why every effect here states both ends of its
+          journey. An effect that only named its destination would inherit
+          whatever the part was doing before — and a build order is a statement
+          about the whole journey, not a nudge toward a target.
         </p>
       </div>
-      <CodeBox @label="lib/builds.ts" @source={{EFFECTS_SNIPPET}} />
     </section>
 
     <section class="dd">
-      <p class="dd-fn">windowOf(cue, slot)<span>lib/builds.ts</span></p>
+      <p class="dd-fn">@by='character'<span>delivery</span></p>
       <h3>Delivery is a second timeline, inside the first</h3>
       <div class="dd-col">
         <p>
           Set a text build’s Delivery to By Character and the wordmark does not
-          simply fade in as one block — every glyph gets its own turn. That turn
-          is a slice of the
-          <em>same</em>
-          window the build already owns: a build that runs 760ms still runs
-          760ms end to end, whether it has one cell or seven.
-        </p>
-        <p>
-          Each cell gets 55% of the build’s length, and the starts are spread
-          across what is left so the
+          simply fade in as one block — every glyph gets its own turn, and the
+          library does the splitting: the sprite’s own text nodes are lifted out
+          whole, stand-in spans deliver the animation, and the restore puts
+          Glimmer’s own nodes back exactly where they were. The build still owns
+          its stated window; each cell gets 55% of it, starts spread so the
           <em>last</em>
-          cell finishes exactly on the build’s own end — not starts there. Get
-          that backwards and “duration” means something different for a
-          staggered build than a plain one, and the bar drawn on the transport
-          becomes a lie about when the build actually finishes.
+          cell finishes exactly on the build’s own end.
         </p>
       </div>
-      <CodeBox @label="lib/builds.ts" @source={{WINDOW_OF}} />
+      <CodeBox @label="build-order.gts" @source={{DELIVERY}} />
       <div class="dd-col">
         <p>
-          It is the with/after arithmetic one level down, which is the honest
-          reason this demo is about
-          <em>choreography</em>
-          rather than about eight animations that happen to be numbered — a
-          build order that can schedule inside a build the same way it schedules
-          between builds.
+          The split taught this page a lesson worth keeping: a costume must not
+          change the body’s shape. A template’s newline and indentation are real
+          text nodes, and stand-in spans wear
+          <code>white-space: pre</code>
+          — so whitespace the container had been collapsing suddenly took width,
+          and the whole line jumped aside for its own delivery. The split now
+          collapses the way the element’s computed style does.
         </p>
       </div>
+      <CodeBox @label="glimmer-motion" @source={{COSTUME}} />
     </section>
 
     <section class="dd">
-      <p class="dd-fn">paint()<span>build-order.gts</span></p>
-      <h3>One pass, every frame, no re-render</h3>
+      <p class="dd-fn">c.run<span>the transport</span></p>
+      <h3>The transport holds the run</h3>
       <div class="dd-col">
         <p>
-          Every build is walked once a frame; every cell in it gets a pose from
-          <code>poseAt</code>. Nothing here triggers a Glimmer re-render — the
-          pose is written straight onto a set of Motion values, the same way the
-          Playhead demo’s hand is, because thirty-odd cells doing that sixty
-          times a second is not a re-render’s budget.
+          Play, pause and the scrubber are not three code paths — they are
+          <code>run.play()</code>,
+          <code>run.pause()</code>
+          and
+          <code>run.time = t</code>
+          on the library’s own clock.
+          <code>time</code>
+          is settable in either direction, and a scrubbed frame is a
+          <em>computed still</em>: the run retires its animations and stands
+          every value exactly where the score says t looks like, no memory of
+          the frame before.
         </p>
       </div>
-      <CodeBox @label="build-order.gts" @source={{PAINT}} />
-      <div class="dd-col">
-        <p>
-          Each value only writes when it actually changed since the last frame —
-          for most of a run, most cells are parked at either end of their own
-          build, sitting still.
-        </p>
-      </div>
-      <CodeBox @label="build-order.gts" @source={{TRACK_JUMP}} />
-    </section>
-
-    <section class="dd">
-      <p class="dd-fn">the transport<span>build-order.gts</span></p>
-      <h3>Scrubbing stops the clock it disagrees with</h3>
+      <CodeBox @label="build-order.gts" @source={{TRANSPORT}} />
       <div class="dd-modes">
         <div class="dd-mode">
           <span class="dd-tag">playing</span>
-          <b>The run loop drives</b>
-          <p>Its own frame, a delta clamped to 50ms so a slow frame costs the
-            score 50ms and not a teleport.</p>
+          <b>The run drives</b>
+          <p>Its master clock crosses cues and the platform plays them — plain
+            tweens accelerate onto WAAPI, off the main thread.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">scrubbing</span>
           <b>A hand drives</b>
-          <p>Dragging the range input halts the loop outright and marks the run
+          <p>Dragging the range pauses the run and marks it
             <em>held</em>, so scrolling the card away and back cannot quietly
             restart what a hand stopped.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">off-screen</span>
           <b>Nobody drives</b>
-          <p>An IntersectionObserver halts playback below 35% visible and
-            resumes it on return — unless a hand halted it first.</p>
+          <p>An IntersectionObserver pauses playback below 35% visible and
+            resumes it on return — unless a hand paused it first.</p>
         </div>
-      </div>
-      <div class="dd-col">
-        <p>
-          Every one of those still calls the same
-          <code>paint()</code>. There is no special “resume from here” path,
-          because there is nothing to resume — a build order is a pure function
-          of t, and asking it about an earlier t is not a different operation
-          from asking about a later one.
-        </p>
       </div>
     </section>
 
@@ -286,60 +260,52 @@ const BuildOrderNotes: TOC<object> = <template>
       <h3>The score is editable while it runs</h3>
       <div class="dd-col">
         <p>
-          The inspector on the right does not stage changes for the next play —
-          it replaces the build, which invalidates the cached schedule, which
-          repaints the current frame against the
-          <em>new</em>
-          timeline. Retiming build 2 while parked at 1.4s shows you what 1.4s
-          now looks like, immediately.
+          The inspector does not stage changes for the next play — it replaces
+          the build, the steps re-render, and the region replays its pass
+          against the new schedule. The transport then adopts the new run and
+          puts it back at the
+          <em>same</em>
+          t: retiming build 2 while parked at 1.4s shows you what 1.4s now looks
+          like, immediately.
         </p>
       </div>
-      <CodeBox @label="build-order.gts" @source={{EDIT}} />
+      <CodeBox @label="build-order.gts" @source={{ADOPT}} />
       <div class="dd-col">
         <p>
-          That is only safe because nothing is cumulative. A pose is recomputed
-          from the score every time it is asked for — equal input, equal output
-          — so there is no accumulated state anywhere for an edit to leave
-          stale.
+          Continuity is the rule, not the exception. Any pass replaces the run —
+          an edit, the loop’s next take, an unrelated render — and the new run
+          resumes where the old one stood. Only a run that had actually finished
+          starts its successor from zero, which is the loop coming round.
         </p>
       </div>
     </section>
 
     <section class="dd">
-      <p class="dd-fn">pathSpacing<span>build-order.gts</span></p>
-      <h3>A stray dot, and what it was actually made of</h3>
+      <p class="dd-fn">the reader<span>build-order.gts</span></p>
+      <h3>A transport is a reader, not a clock</h3>
       <div class="dd-col">
         <p>
-          Line Draw looked right at rest and right mid-draw, and wrong at the
-          exact instant a stroke started: a dot popped in at the far end of the
-          path a frame before any of it had drawn. The far end — not the drawing
-          end — which was the tell that nothing was misplaced. The dash pattern
-          itself was lying about where the path stopped.
+          The one real discipline in this file: the playhead readouts are
+          <em>not</em>
+          tracked state. A region re-snapshots on every render — that is what
+          makes it a region — so a tracked value written sixty times a second
+          would replay the pass sixty times a second, each pass cancelling the
+          run the transport was trying to watch. The first draft of this page
+          did exactly that, and the symptom was spectacular: a timeline whose
+          clock crawled at a fiftieth of real time while the canvas stayed
+          empty, every run dying in infancy.
         </p>
       </div>
-      <CodeBox @label="build-order.gts" @source={{PATH_SPACING}} />
+      <CodeBox @label="build-order.gts" @source={{READER}} />
       <div class="dd-col">
         <p>
-          Motion turns
-          <code>pathLength</code>
-          into a
-          <code>stroke-dasharray: length spacing</code>. With the default
-          spacing of 1, that pattern sums to roughly a whole path near a drawn
-          length of zero — close enough, inside the browser’s own length
-          tolerance, for the second dash to wrap onto the path’s own terminus. A
-          round linecap paints that phantom dash as a dot. Pinning the spacing
-          at 2 keeps the second dash a full path-length away at any drawn
-          length, so there is nothing left for a cap to sit on.
-        </p>
-      </div>
-      <div class="dd-call">
-        <p>
-          <b>Why this belongs here.</b>
-          It is not a one-off fix. It is the same lesson the Playhead demo’s
-          frame loop teaches from a different angle: a system built to answer
-          “what does this look like at t” will surface the bugs that live
-          exactly at t’s edges — 0, 1, the instant something starts — because
-          those are the values every other demo never has to sit still on.
+          So the clock text, the range’s value and the playhead’s position are
+          written imperatively on the transport’s own frame, and the only
+          tracked writes left are the rare ones — an edit, a loop take, a press
+          of play. It is the same lesson every demo with a per-frame value has
+          to learn once: Glimmer’s render loop and an animation’s frame loop are
+          different clocks, and state that belongs to the second must not be
+          phrased in the first.
         </p>
       </div>
     </section>

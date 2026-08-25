@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { ChoreoRun } from 'glimmer-motion';
 import { beacon, Choreo, motion } from 'glimmer-motion';
 
 const quick = { damping: 24, stiffness: 300 };
@@ -68,13 +69,61 @@ export class Inbox extends Component {
   @tracked binned = 0;
   /** a run is in flight; rows in the air must not offer their delete button */
   @tracked busy = false;
-  #settle?: ReturnType<typeof setTimeout>;
+  #watch = 0;
+  private c: { run: ChoreoRun | null } | null = null;
 
+  /** the yielded context, held so the flag below can read the region's run */
+  grab = (c: { run: ChoreoRun | null }) => {
+    this.c = c;
+    return '';
+  };
+
+  /**
+   * The flag follows the FLIGHT, not a clock. It used to clear itself on
+   * a 700ms timer — "a little longer than the springs" — which was a
+   * guess twice over: about the spring, and about the tempo. Under the
+   * slow-mo control the flight runs many times longer than any timer,
+   * and the delete buttons came back to rows still in the air.
+   *
+   * The run is the truth. It exists once this action's render has
+   * produced its pass (a frame from now), and `run.finished` resolves
+   * when the flight actually lands — at any tempo. A second action
+   * re-arms the watch with a fresh token; a run replaced mid-air
+   * resolves early, so the landing check re-latches whatever run is
+   * current before letting the flag go.
+   */
   private startRun() {
     this.busy = true;
-    clearTimeout(this.#settle);
-    // a little longer than the springs above, so the flag outlives the flight
-    this.#settle = setTimeout(() => (this.busy = false), 700);
+    const token = ++this.#watch;
+    const mine = () => token === this.#watch && !this.isDestroying;
+    const settle = (run: ChoreoRun) =>
+      void run.finished.then(() => {
+        if (!mine()) {
+          return;
+        }
+        const current = this.c?.run;
+        if (current && !current.isDone()) {
+          settle(current);
+        } else {
+          this.busy = false;
+        }
+      });
+    let tries = 8;
+    const latch = () => {
+      if (!mine()) {
+        return;
+      }
+      const run = this.c?.run;
+      if (run && !run.isDone()) {
+        settle(run);
+      } else if (tries-- > 0) {
+        requestAnimationFrame(latch);
+      } else {
+        // nothing took flight (reduced motion): nothing to wait out
+        this.busy = false;
+      }
+    };
+    requestAnimationFrame(latch);
   }
 
   get full() {
@@ -135,6 +184,7 @@ export class Inbox extends Component {
         </header>
 
         <Choreo class={{if this.busy "inbox-list is-busy" "inbox-list"}} as |c|>
+          {{this.grab c}}
           {{#each this.rows key="id" as |row|}}
             <article class="mail" {{motion id=row.id role="row"}}>
               <span
@@ -177,7 +227,11 @@ export class Inbox extends Component {
               @to={{c.beacon "trash"}}
               @spring={{toss}}
             />
-            <c.Tween @of={{c.removed "row"}} @opacity={{0}} @ms={{380}} />
+            <c.Tween
+              @of={{c.removed "row"}}
+              @opacity={{0}}
+              @duration={{0.38}}
+            />
             {{! everything still in the tray closes up on the same spring }}
             <c.Move @of={{c.moved "row"}} @spring={{quick}} @size={{false}} />
           </c.Parallel>

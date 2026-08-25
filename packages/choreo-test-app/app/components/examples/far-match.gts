@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -40,7 +40,6 @@ type Piece = (typeof pieces)[number];
 const carry = { damping: 23, stiffness: 260 };
 /** the bay itself growing or shrinking around what it holds */
 const settle = { damping: 26, stiffness: 330 };
-const hidden = { opacity: 0 };
 
 /**
  * Lift the piece that came from somewhere else over everything else on the
@@ -162,12 +161,15 @@ export class FarMatch extends Component {
                   continuing somewhere else) and the receiver is `kept`, not
                   `inserted`. Turn the switch off and they are the whole
                   transition. }}
-              <c.Tween @of={{c.removed "piece"}} @opacity={{0}} @ms={{200}} />
+              <c.Tween
+                @of={{c.removed "piece"}}
+                @opacity={{0}}
+                @duration={{0.2}}
+              />
               <c.Tween
                 @of={{c.inserted "piece"}}
-                @opacity={{1}}
-                @from={{hidden}}
-                @ms={{260}}
+                @opacity={{array 0 1}}
+                @duration={{0.26}}
               />
 
               {{! and the bay itself grows or shrinks around what it now holds }}

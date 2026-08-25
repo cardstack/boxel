@@ -2,43 +2,39 @@
 
 :root {
   color-scheme: dark;
-  /* one notch BELOW --bg: the groove a track or a well sinks into, for the
-     handful of demos that mock up their own device chrome (a composer bar,
-     a scrubber's channel) and want something recessed rather than merely
-     dark. */
-  --bg-well: #070605;
-  --bg: #090807;
-  --bg-elev: #12100e;
-  --bg-spot: #1a1613;
+  /* Dark surfaces are a warm charcoal ladder, not near-black. Near-black
+     punches the pupil against the already-lifted page and makes every card
+     and stage read as a hole. well < bg < page < elev < spot, so recessed
+     chrome still sinks and cards still lift, without a black floor. */
+  --bg-well: #221e1a;
+  --bg: #2a2521;
+  --bg-elev: #3a342e;
+  --bg-spot: #443c35;
 
   /* Playhead's own surfaces.
-     The light-mode sweep pointed this demo's card, button and grooves at the
-     shared --bg-spot/--bg-well ladder, which in dark is a near-black (#070605)
-     — a good page ground, and far too stark for a small UI sitting ON that
-     ground. These are the warm tones the demo carried before light mode: a
-     card a shade above the page rather than a hole cut in it, and grooves
-     that are a translucent black over the card instead of the page colour.
-     Light overrides them back to the shared ladder, where it reads right. */
-  --ph-card-top: #17130f;
-  --ph-card-bot: #100d0b;
-  --ph-go-top: #2b221c;
-  --ph-go-bot: #1b1512;
-  --ph-receipt-top: #1d1611;
-  --ph-receipt-bot: #120f0d;
-  --ph-row: rgba(0, 0, 0, 0.22);
-  --ph-groove: rgba(0, 0, 0, 0.3);
-  --ph-btn: rgba(0, 0, 0, 0.35);
-  /* the page's own resting tone — not --bg. --bg is the recessed end of the
-     surface ladder (bg < bg-elev < bg-spot) that cards and panels sit on top
-     of; the wash behind all of them used to read lighter than pure --bg
-     because a noise texture sat over it at all times. Now that the texture is
-     gone, --bg-page carries that same lift on its own, measured off an actual
-     render of the old grain composited over --bg, so removing it did not also
-     make the page a shade darker than everyone was used to. */
-  --bg-page: #191817;
+     Kept a shade above the shared ladder so the small UI sits ON the page
+     rather than cutting a hole in it. Grooves stay translucent black over
+     the card. Light overrides them back to the shared ladder. */
+  --ph-card-top: #3d362f;
+  --ph-card-bot: #322c27;
+  --ph-go-top: #4a4139;
+  --ph-go-bot: #2c2722;
+  --ph-receipt-top: #403830;
+  --ph-receipt-bot: #2e2924;
+  --ph-row: rgba(0, 0, 0, 0.16);
+  --ph-groove: rgba(0, 0, 0, 0.22);
+  --ph-btn: rgba(0, 0, 0, 0.26);
+  /* the page's own resting tone — not --bg. --bg is the recessed canvas
+     (camera stage, overlays via --bg-rgb); cards use --bg-elev, a notch
+     above this, so they lift instead of sinking. */
+  --bg-page: #2e2924;
   --ink: #f3ece3;
-  --ink-dim: #9c9287;
-  --ink-faint: #6b635b;
+  /* Secondary type was tuned against near-black. On the lifted charcoal
+     those same stones recede into the ground — labels and code comments
+     especially. These sit a step closer to --ink so they read, without
+     becoming body copy. */
+  --ink-dim: #d2c9bf;
+  --ink-faint: #b8aea3;
   --line: rgba(var(--ink-rgb), 0.09);
   --line-strong: rgba(var(--ink-rgb), 0.16);
   /* the same three colors above, as bare triplets for `rgba(var(--x-rgb), a)`
@@ -46,7 +42,7 @@
      for — a line, a scrim, a dimmed icon. Redefined alongside --bg/--ink in
      each theme block below, so those call sites repaint without knowing a
      theme exists. */
-  --bg-rgb: 9, 8, 7;
+  --bg-rgb: 42, 37, 33;
 
   /* Shadows.
      Every drop shadow here was picked against a near-black page, where a 45%
@@ -338,8 +334,10 @@ summary,
   color: var(--ink-dim);
 }
 
-.top-links a:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .top-links a:hover {
+    color: var(--ink);
+  }
 }
 
 .page {
@@ -457,9 +455,11 @@ summary,
   text-underline-offset: 3px;
 }
 
-.lede a:hover {
-  color: var(--ember-hot);
-  text-decoration-color: var(--ember-hot);
+@media (hover: hover) {
+  .lede a:hover {
+    color: var(--ember-hot);
+    text-decoration-color: var(--ember-hot);
+  }
 }
 
 .filters {
@@ -480,11 +480,18 @@ summary,
   text-transform: uppercase;
 }
 
-.chip.is-on,
-.chip:hover {
+.chip.is-on {
   color: var(--ink);
   border-color: var(--line-strong);
   background: var(--bg-spot);
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+    background: var(--bg-spot);
+  }
 }
 
 .chip.is-on {
@@ -527,8 +534,10 @@ summary,
   transition: border-color 180ms var(--ease);
 }
 
-.card:hover {
-  border-color: var(--line-strong);
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--line-strong);
+  }
 }
 
 /* the destination (or source) card of an in-flight page transition — its own
@@ -546,9 +555,8 @@ summary,
 .card-stage {
   position: relative;
   height: 400px;
-  /* a faint LIGHT tint, not a dark one — the page is already close to black,
-     so darkening further at any opacity is invisible; a light wash is what
-     actually reads as its own surface against it */
+  /* a faint LIGHT tint, not a dark one — darkening a warm-charcoal stage
+     is invisible; a light wash is what actually reads as its own surface */
   background:
     radial-gradient(
       80% 70% at 50% 40%,
@@ -601,8 +609,10 @@ summary,
   background: rgba(var(--surface-tint-rgb), 0.015);
 }
 
-.card-meta:hover .card-title {
-  color: var(--ember-hot);
+@media (hover: hover) {
+  .card-meta:hover .card-title {
+    color: var(--ember-hot);
+  }
 }
 
 .card-group {
@@ -707,8 +717,10 @@ summary,
   color: var(--ink);
 }
 
-.next-demo:hover b {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .next-demo:hover b {
+    color: var(--copper-ink);
+  }
 }
 
 .back {
@@ -720,8 +732,10 @@ summary,
   color: var(--ink-dim);
 }
 
-.back:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .back:hover {
+    color: var(--ink);
+  }
 }
 
 /* the canonical way back — brighter than a plain nav label by default, and
@@ -734,8 +748,10 @@ summary,
   color: var(--ink);
 }
 
-.back-all:hover {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .back-all:hover {
+    color: var(--copper-ink);
+  }
 }
 
 .back-arrow {
@@ -743,8 +759,10 @@ summary,
   transition: transform 0.18s var(--ease);
 }
 
-.back-all:hover .back-arrow {
-  transform: translateX(-3px);
+@media (hover: hover) {
+  .back-all:hover .back-arrow {
+    transform: translateX(-3px);
+  }
 }
 
 .demo-head h1 {
@@ -811,11 +829,18 @@ summary,
   right: 12px;
 }
 
-.stage-arrow:hover,
 .stage-arrow:focus-visible {
   opacity: 1;
   color: var(--ink);
   border-color: var(--copper);
+}
+
+@media (hover: hover) {
+  .stage-arrow:hover {
+    opacity: 1;
+    color: var(--ink);
+    border-color: var(--copper);
+  }
 }
 
 .stage-wrap {
@@ -831,6 +856,27 @@ summary,
       transparent 60%
     ),
     rgba(var(--surface-tint-rgb), 0.03);
+}
+
+/* A 4×3 library of 4:3 prints wants the site's default stage height —
+   the shorter glass was sized for two rows of film strips. */
+/* the glass's own background lives HERE, on the static wrap, not on
+   `.cam-stage` — `.cam-stage` carries the camera's own transform, so a
+   background painted on it pans and scales with the zoom, pulling away
+   from its edges at the dive and showing the plain page colour behind
+   it: two visibly different tones with a seam between them.
+
+   --bg is the recessed end of the surface ladder in both themes, so the
+   prints sit on a canvas a notch below the page rather than on a copper
+   light-table that only belonged to the film pass. */
+.stage-wrap:has(.cam) {
+  background:
+    radial-gradient(
+      70% 60% at 50% 38%,
+      rgba(255, 59, 31, 0.1),
+      transparent 62%
+    ),
+    var(--bg);
 }
 
 .sample {
@@ -930,8 +976,10 @@ summary,
   white-space: nowrap;
 }
 
-.pager a:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .pager a:hover {
+    color: var(--ink);
+  }
 }
 
 html[data-gm-dragging],
@@ -985,8 +1033,10 @@ html[data-gm-dragging] * {
   color: var(--ink-dim);
 }
 
-.replay:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .replay:hover {
+    color: var(--ink);
+  }
 }
 
 .replay.is-off {
@@ -1741,9 +1791,11 @@ html[data-gm-dragging] * {
     border-color 0.16s var(--ease);
 }
 
-.lightbox-close:hover {
-  background: rgba(8, 7, 6, 0.72);
-  border-color: rgba(255, 255, 255, 0.42);
+@media (hover: hover) {
+  .lightbox-close:hover {
+    background: rgba(8, 7, 6, 0.72);
+    border-color: rgba(255, 255, 255, 0.42);
+  }
 }
 
 .lightbox-body {
@@ -2071,17 +2123,24 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
-.covers:hover .cover::after {
-  opacity: 0.45;
-  transform: translateY(0);
+@media (hover: hover) {
+  .covers:hover .cover::after {
+    opacity: 0.45;
+    transform: translateY(0);
+  }
 }
 
-.cover:hover::after {
-  opacity: 1;
+@media (hover: hover) {
+  .cover:hover::after {
+    opacity: 1;
+  }
 }
 
-.cover:hover {
-  box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+@media (hover: hover) {
+  .cover:hover {
+    box-shadow: 0 14px 30px
+      rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+  }
 }
 
 .cover:active {
@@ -2543,6 +2602,333 @@ html[data-gm-dragging] * {
   opacity: 0.7;
 }
 
+/* ---- Camera: the photo library ---- */
+
+/* The library IS the demo container, edge to edge — no chrome around the
+   glass. Both themes get their own canvas via --bg on `.stage-wrap`. */
+.cam {
+  position: absolute;
+  inset: 0;
+}
+
+/* the photographer's hands: pinned over the table's corner, never riding
+   the camera. Same glass-pill language as `.replay`. */
+.cam-hud-dock {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cam-hud {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The glass clips: at rest the whole library sits on it.
+   The cursor is the affordance: zoom-in over a frame, zoom-out on the
+   table once you are close. */
+.cam-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.cam-stage.is-zoomed {
+  cursor: zoom-out;
+}
+
+/* four columns on a roomy glass — a library, not a contact strip.
+   Narrower glass gets fewer, bigger columns, so a dived print is always
+   tall enough to sit inside instead of spilling past the edge.
+
+   At rest the WHOLE sheet is on the glass, whatever the viewport: the
+   tile is bounded by both axes — its share of the glass's width, and the
+   width whose 4:3 stack of rows still fits the glass's height. Whichever
+   is smaller wins, so nothing ever crops at 1.00×. */
+.cam-sheet {
+  --cam-cols: 4;
+  --cam-rows: 3;
+  --cam-pad: 18px;
+  --cam-gap: 10px;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  width: 100cqw;
+  padding: var(--cam-pad);
+  display: grid;
+  grid-template-columns: repeat(
+    var(--cam-cols),
+    min(
+      calc(
+        (100cqw - 2 * var(--cam-pad) - (var(--cam-cols) - 1) * var(--cam-gap)) /
+          var(--cam-cols)
+      ),
+      calc(
+        (100cqh - 2 * var(--cam-pad) - (var(--cam-rows) - 1) * var(--cam-gap)) /
+          var(--cam-rows) * 4 / 3
+      )
+    )
+  );
+  justify-content: center;
+  grid-auto-rows: auto;
+  gap: var(--cam-gap);
+}
+
+@container (max-width: 640px) {
+  .cam-sheet {
+    --cam-cols: 3;
+    --cam-rows: 4;
+  }
+}
+
+@container (max-width: 420px) {
+  .cam-sheet {
+    --cam-cols: 2;
+    --cam-rows: 6;
+    --cam-gap: 8px;
+    --cam-pad: 14px;
+  }
+}
+
+/* the print itself: radius and shadow of a cover/shot. No selection ring —
+   the cursor and the dive already say which tile is in play. */
+.cam-frame {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  appearance: none;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.cam-frame:focus {
+  outline: none;
+}
+
+.cam-frame.is-open {
+  cursor: zoom-out;
+  z-index: 1;
+}
+
+/* the take number: a glass chip on the print, Syne like a cover title.
+   Dark glass over a photograph in BOTH themes — same reason .lightbox-body
+   names its own white instead of inheriting --ink. */
+.cam-no {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 1;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 9, 8, 0.42);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* the photograph: 4:3, filling the tile — no sprocket gutter around it */
+.cam-wash {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow:
+    0 10px 22px rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a))),
+    inset 0 0 28px rgba(0, 0, 0, 0.28);
+}
+
+@media (hover: hover) {
+  .cam-frame:hover .cam-wash {
+    box-shadow:
+      0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a))),
+      inset 0 0 28px rgba(0, 0, 0, 0.28);
+  }
+}
+
+/* the exposure dock: pinned to the table, like `.cam-hud-dock` — never a
+   child of the zoomed sheet, so the dive zooms the photograph, not the
+   reading of it. Same glass-panel language as `.cam-hud` / `.replay`. */
+.cam-grade-dock {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 12px 11px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 24px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+.cam-grade-dock.is-open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.cam-grade-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cam-caption {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ink);
+}
+
+.cam-exp {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.cam-grade-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* dock controls sit on the table, not the print — theme tokens, a
+   real hit target. Tile marks keep the dark-on-photo chips above. */
+.cam-grade-dock .cam-heart,
+.cam-grade-dock .cam-pass {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  background: rgba(var(--surface-tint-rgb), 0.08);
+  color: var(--ink-dim);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.cam-grade-dock .cam-heart svg,
+.cam-grade-dock .cam-pass svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cam-grade-dock .cam-heart.is-active {
+  background: var(--ember);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(255, 59, 31, 0.45);
+}
+
+/* an X that is ON reads reversed — ink chip, paper glyph — with the same
+   conviction as the heart's ember fill; a 12% tint read as "not pressed" */
+.cam-grade-dock .cam-pass.is-active {
+  background: var(--ink);
+  border-color: transparent;
+  color: var(--bg);
+}
+
+/* heart and X: the same job as `.cam-no`, the other end of the frame.
+   They sit. They do not grow. */
+.cam-marks {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.cam-heart,
+.cam-pass {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 9, 8, 0.42);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cam-heart svg,
+.cam-pass svg {
+  width: 10px;
+  height: 10px;
+  display: block;
+}
+
+.cam-heart.is-active {
+  color: #fff;
+  background: var(--ember);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(255, 59, 31, 0.5);
+}
+
+.cam-pass.is-active {
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(12, 9, 8, 0.55);
+}
+
+.cam-heart.is-control,
+.cam-pass.is-control {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* a passed frame on the contact sheet: the print eases back, that's all.
+   The corner X is the mark; a cross through the wash was too much. Once
+   dived, full colour so you can still grade. */
+.cam-frame.is-passed:not(.is-open) .cam-wash {
+  opacity: 0.38;
+  filter: saturate(0.35) brightness(0.78);
+}
+
 .follow-stage {
   cursor: none;
   /* the finger is the input here, so the gesture belongs to this stage and
@@ -2567,6 +2953,12 @@ html[data-gm-dragging] * {
   border-radius: 50%;
   border: 1.5px solid rgba(255, 179, 106, 0.7);
   pointer-events: none;
+}
+
+/* the trailing ring is a pale peach drawn for the dark stage; on cream it
+   all but disappears, so light deepens it to a copper the eye can find */
+:root[data-theme='light'] .follow-ring {
+  border-color: rgba(178, 96, 28, 0.75);
 }
 
 .follow-orb {
@@ -2969,11 +3361,16 @@ html[data-gm-dragging] * {
   translate: -50% -50%;
 }
 
-.sub-seam:hover::after,
-.sub-seam:hover::before,
 .sub-seam.is-live::after,
 .sub-seam.is-live::before {
   background: var(--ember-hot);
+}
+
+@media (hover: hover) {
+  .sub-seam:hover::after,
+  .sub-seam:hover::before {
+    background: var(--ember-hot);
+  }
 }
 
 /* while the pointer holds it, the grip is bigger than the seam it rides */
@@ -3160,8 +3557,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.slides-next:hover {
-  color: var(--ink);
+@media (hover: hover) {
+  .slides-next:hover {
+    color: var(--ink);
+  }
 }
 
 /* the <Choreo> region: one slide's worth of space, and a container so the type
@@ -3174,6 +3573,8 @@ html[data-gm-dragging] * {
   border-radius: 16px;
   background: var(--bg-spot);
   cursor: pointer;
+  /* horizontal swipes turn the page; vertical stays the page's scroll */
+  touch-action: pan-y;
   /* deliberately NOT a container: this element is the <Choreo> region and the
      projection ancestor for everything in it */
   position: relative;
@@ -3570,8 +3971,10 @@ html[data-gm-dragging] * {
   background: var(--wash);
 }
 
-.piece:hover {
-  border-color: var(--line-hot, var(--line-strong));
+@media (hover: hover) {
+  .piece:hover {
+    border-color: var(--line-hot, var(--line-strong));
+  }
 }
 
 .rails {
@@ -3654,9 +4057,21 @@ html[data-gm-dragging] * {
   border-radius: 0 999px 999px 0;
 }
 
-.slot:hover,
 .slot:focus-visible {
   background: rgba(var(--surface-tint-rgb), 0.08);
+}
+
+/* the tap's own flash — hover is gated to hover-capable devices above, so
+   touch needs feedback of its own, one step brighter than the hover fill
+   so it reads against the rail in dark */
+.slot:active {
+  background: rgba(var(--surface-tint-rgb), 0.14);
+}
+
+@media (hover: hover) {
+  .slot:hover {
+    background: rgba(var(--surface-tint-rgb), 0.08);
+  }
 }
 
 .puck {
@@ -3761,8 +4176,10 @@ html[data-gm-dragging] * {
     background-color 0.16s var(--ease);
 }
 
-.speed:hover {
-  color: var(--ink-dim);
+@media (hover: hover) {
+  .speed:hover {
+    color: var(--ink-dim);
+  }
 }
 
 .speed.is-on {
@@ -3808,9 +4225,11 @@ html[data-gm-dragging] * {
     transform 0.16s var(--ease),
     box-shadow 0.16s var(--ease);
 }
-.inbox-compose:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 7px 18px rgba(247, 172, 82, 0.34);
+@media (hover: hover) {
+  .inbox-compose:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 7px 18px rgba(247, 172, 82, 0.34);
+  }
 }
 .inbox-compose-icon {
   width: 15px;
@@ -3890,9 +4309,11 @@ html[data-gm-dragging] * {
   position: relative;
 }
 
-.mail:hover {
-  background: rgba(var(--surface-tint-rgb), 0.09);
-  border-color: rgba(var(--surface-tint-rgb), 0.14);
+@media (hover: hover) {
+  .mail:hover {
+    background: rgba(var(--surface-tint-rgb), 0.09);
+    border-color: rgba(var(--surface-tint-rgb), 0.14);
+  }
 }
 
 /* one letter, one of six hues picked from the sender's name — the fastest
@@ -3963,9 +4384,14 @@ html[data-gm-dragging] * {
   stroke-linejoin: round;
 }
 
-.mail:hover .mail-kill,
 .mail-kill:focus-visible {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .mail:hover .mail-kill {
+    opacity: 1;
+  }
 }
 
 /* A row entering from Compose passes straight under the pointer, which would
@@ -3976,10 +4402,12 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
-.mail-kill:hover {
-  background: rgba(255, 120, 90, 0.22);
-  border-color: rgba(255, 120, 90, 0.4);
-  color: #ffd9cf;
+@media (hover: hover) {
+  .mail-kill:hover {
+    background: rgba(255, 120, 90, 0.22);
+    border-color: rgba(255, 120, 90, 0.4);
+    color: #ffd9cf;
+  }
 }
 .mail-copy {
   display: flex;
@@ -4292,9 +4720,11 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.share-extra:hover {
-  color: var(--ink);
-  background: var(--bg-spot);
+@media (hover: hover) {
+  .share-extra:hover {
+    color: var(--ink);
+    background: var(--bg-spot);
+  }
 }
 
 .sheet-hint {
@@ -4328,8 +4758,10 @@ html[data-gm-dragging] * {
   text-decoration: none;
 }
 
-.footer a:hover {
-  color: var(--copper-ink);
+@media (hover: hover) {
+  .footer a:hover {
+    color: var(--copper-ink);
+  }
 }
 
 /* ---- the filter row is itself a View Transition demo ---- */
@@ -4365,11 +4797,17 @@ html[data-gm-dragging] * {
     border-color 160ms ease;
 }
 
-.filter-row:hover .filter-tell,
 .filter-row:focus-within .filter-tell,
 .filter-tell.is-on {
   opacity: 1;
   translate: 0 0;
+}
+
+@media (hover: hover) {
+  .filter-row:hover .filter-tell {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 /* A tell that waits for a pointer is a tell a finger never sees. Where there
@@ -4390,10 +4828,16 @@ html[data-gm-dragging] * {
   }
 }
 
-.filter-tell:hover,
 .filter-tell.is-on {
   color: var(--copper-ink);
   border-color: var(--line-strong);
+}
+
+@media (hover: hover) {
+  .filter-tell:hover {
+    color: var(--copper-ink);
+    border-color: var(--line-strong);
+  }
 }
 
 .filter-tell-mark {
@@ -4497,8 +4941,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.tempo-select:hover {
-  border-color: var(--copper);
+@media (hover: hover) {
+  .tempo-select:hover {
+    border-color: var(--copper);
+  }
 }
 
 /* only ever visible in the narrow layout below */
@@ -4583,10 +5029,16 @@ html[data-gm-dragging] * {
     border-color 0.16s var(--ease);
 }
 
-.theme-toggle:hover,
 .theme-toggle:focus-visible {
   border-color: var(--copper);
   color: var(--ink);
+}
+
+@media (hover: hover) {
+  .theme-toggle:hover {
+    border-color: var(--copper);
+    color: var(--ink);
+  }
 }
 
 .theme-toggle-icon {
@@ -4619,10 +5071,16 @@ html[data-gm-dragging] * {
     border-color 140ms ease;
 }
 
-.transition-note:hover,
 .transition-note.is-on {
   color: var(--copper-ink);
   border-color: var(--line-strong);
+}
+
+@media (hover: hover) {
+  .transition-note:hover {
+    color: var(--copper-ink);
+    border-color: var(--line-strong);
+  }
 }
 
 .transition-note-mark {
@@ -4707,9 +5165,11 @@ html[data-gm-dragging] * {
     border-color 140ms ease;
 }
 
-.how-close:hover {
-  color: var(--copper-ink);
-  border-color: var(--copper);
+@media (hover: hover) {
+  .how-close:hover {
+    color: var(--copper-ink);
+    border-color: var(--copper);
+  }
 }
 
 .how pre {
@@ -5042,21 +5502,25 @@ html[data-gm-dragging] * {
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
 }
 
+/* the ring rides INSIDE the hand now — one transform source, so the pop
+   happens wherever the hand is without a second set of position cues. It
+   centres on the arrow's hotspot and rests invisible: the score's own
+   keyframes are the only thing that ever lights it. */
 .ph-ring {
   position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 5;
+  top: 3px;
+  left: 5px;
+  z-index: -1;
   width: 38px;
   height: 38px;
   margin: -19px 0 0 -19px;
   border: 2px solid var(--ember-hot);
   border-radius: 50%;
+  opacity: 0;
   pointer-events: none;
 }
 
-.ph-hand.is-off,
-.ph-ring.is-off {
+.ph-hand.is-off {
   opacity: 0;
 }
 
@@ -5348,19 +5812,21 @@ html[data-gm-dragging] * {
   transform-origin: 50% 50%;
 }
 
-/* text: one span per glyph, grouped into words. Both groupings exist in the
-   markup at all times, because Delivery chooses between them per frame — it
-   is which window a glyph is given, never which elements are rendered. */
+/* text: whole elements. `@by` splits them into stand-in spans only for the
+   window of their build and puts Glimmer's own text nodes back after — so
+   there is nothing here but type; the spans the library makes are inline-block
+   already, and they inherit the transform-origin below so a glyph scales from
+   its baseline rather than its centre. */
 .bo-word,
 .bo-tag {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: block;
+  text-align: center;
   margin: 0;
 }
 
-.bo-run {
-  display: inline-flex;
+.bo-word > span,
+.bo-tag > span {
+  transform-origin: 50% 80%;
 }
 
 .bo-word {
@@ -5377,19 +5843,6 @@ html[data-gm-dragging] * {
   font-size: clamp(7px, 2.3cqh, 9px);
   letter-spacing: 0.2em;
   color: var(--ink-dim);
-}
-
-.bo-word .bo-run + .bo-run {
-  margin-left: 0.3em;
-}
-
-.bo-tag .bo-run + .bo-run {
-  margin-left: 0.6em;
-}
-
-.bo-cell {
-  display: inline-block;
-  transform-origin: 50% 80%;
 }
 
 .bo-rule-box {
@@ -5576,8 +6029,10 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.bo-arrows button:hover {
-  color: var(--ember-hot);
+@media (hover: hover) {
+  .bo-arrows button:hover {
+    color: var(--ember-hot);
+  }
 }
 
 /* the transport ----------------------------------------------------------- */
@@ -6172,46 +6627,46 @@ html[data-gm-dragging] * {
  */
 
 :root:not([data-theme='light']) .trail {
-  background: #14110f;
+  background: #2e2925;
 }
 
 :root:not([data-theme='light']) .banner {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #1c1815;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #3a342e;
 }
 
 :root:not([data-theme='light']) .mode-slot {
-  background: linear-gradient(180deg, #14110f, #0a0908);
+  background: linear-gradient(180deg, #2e2925, #221e1a);
 }
 
 :root:not([data-theme='light']) .toast {
-  background: #221c19;
+  background: #403830;
 }
 
 :root:not([data-theme='light']) .toast.is-fail {
-  background: #1a1c1e;
+  background: #2e3134;
 }
 
 :root:not([data-theme='light']) .toast.is-fail .toast-mark {
   background:
     radial-gradient(circle at 30% 25%, #fff4, transparent 42%),
-    linear-gradient(160deg, #8b969c, #2a211c);
+    linear-gradient(160deg, #8b969c, #3a322c);
 }
 
 :root:not([data-theme='light']) .mode-rest {
-  background: #161311;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .crop {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .track {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .scroll-well {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .chat-app {
@@ -6221,23 +6676,23 @@ html[data-gm-dragging] * {
       rgba(255, 59, 31, 0.08),
       transparent 55%
     ),
-    #100d0b;
+    #2a2521;
 }
 
 :root:not([data-theme='light']) .chat-pip {
-  box-shadow: 0 0 0 2px #100d0b;
+  box-shadow: 0 0 0 2px #2a2521;
 }
 
 :root:not([data-theme='light']) .chat-icon {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .chat-day {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .bubble {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .bubble.is-me {
@@ -6245,89 +6700,91 @@ html[data-gm-dragging] * {
 }
 
 :root:not([data-theme='light']) .clip {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .composer-add,
 :root:not([data-theme='light']) .composer-send {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .composer-field {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .sub-tile {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .sub-tile.is-on {
-  background: #1f1815;
+  background: #3d342c;
 }
 
 :root:not([data-theme='light']) .pour {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .key-pour {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .slides {
-  background: #100e0c;
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .slide {
-  background: #14110f;
+  background: #2e2925;
 }
 
 :root:not([data-theme='light']) .rail {
-  background: linear-gradient(180deg, #131110, #0b0a09);
+  background: linear-gradient(180deg, #2c2723, #241f1b);
 }
 
 :root:not([data-theme='light']) .sheet-app {
-  background: #100e0c;
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .sheet {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .share-tile {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .sheet.is-rows .share-mark,
 :root:not([data-theme='light']) .sheet.is-app .share-mark {
-  background: #221b16;
+  background: #403830;
 }
 
-:root:not([data-theme='light']) .share-extra:hover {
-  background: #221b16;
+@media (hover: hover) {
+  :root:not([data-theme='light']) .share-extra:hover {
+    background: #403830;
+  }
 }
 
 :root:not([data-theme='light']) .how {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .bo-plate {
-  background: linear-gradient(180deg, #17130f, #100d0b);
+  background: linear-gradient(180deg, #322c27, #2a2521);
 }
 
 :root:not([data-theme='light']) .bo-field select {
-  background: #0d0b0a;
+  background: #25211d;
 }
 
 :root:not([data-theme='light']) .bo-step {
-  background: #0d0b0a;
+  background: #25211d;
 }
 
 :root:not([data-theme='light']) .bo-play {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 :root:not([data-theme='light']) .bo-chip {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 /* The rest of the sweep's dark-side drift.
@@ -6368,21 +6825,21 @@ html[data-gm-dragging] * {
     ),
     radial-gradient(
       100% 100% at 50% 50%,
-      rgba(8, 7, 6, 0.5),
-      rgba(6, 5, 4, 0.9)
+      rgba(28, 24, 20, 0.42),
+      rgba(20, 17, 14, 0.78)
     );
 }
 
 :root:not([data-theme='light']) .chat-bar {
-  background: rgba(16, 13, 11, 0.82);
+  background: rgba(42, 37, 33, 0.82);
 }
 
 :root:not([data-theme='light']) .composer {
-  background: rgba(16, 13, 11, 0.94);
+  background: rgba(42, 37, 33, 0.94);
 }
 
 :root:not([data-theme='light']) .sub-seam::before {
-  border: 1px solid #16130f;
+  border: 1px solid #312c27;
 }
 
 :root:not([data-theme='light']) .inbox-trash b {
@@ -6393,8 +6850,10 @@ html[data-gm-dragging] * {
   stroke: rgba(255, 255, 255, 0.5);
 }
 
-:root:not([data-theme='light']) .mail:hover {
-  background: rgba(255, 255, 255, 0.085);
+@media (hover: hover) {
+  :root:not([data-theme='light']) .mail:hover {
+    background: rgba(255, 255, 255, 0.085);
+  }
 }
 
 :root:not([data-theme='light']) .mail-kill {
@@ -6406,41 +6865,41 @@ html[data-gm-dragging] * {
 }
 
 :root:not([data-theme='light']) .sheet-scrim {
-  background: #050403;
+  background: #1a1613;
 }
 
 :root:not([data-theme='light']) .bo-panel {
-  background: rgba(0, 0, 0, 0.34);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 :root:not([data-theme='light']) .dive-head h2 {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .dive-lede {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd h3 {
-  color: #c9c0b5;
+  color: #d4cbc2;
 }
 
 :root:not([data-theme='light']) .dd-col p {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd-col strong {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .dd-call p {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd-call b {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .syn-attr {
-  color: #cbbba8;
+  color: #d8cdb8;
 }

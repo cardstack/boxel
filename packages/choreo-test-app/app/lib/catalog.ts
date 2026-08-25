@@ -1,4 +1,5 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
+import { Camera } from 'test-app/components/examples/camera';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { FarMatch } from 'test-app/components/examples/far-match';
@@ -27,6 +28,7 @@ import { Stagger } from 'test-app/components/examples/stagger';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { Trail } from 'test-app/components/examples/trail';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
+import { CameraNotes } from 'test-app/components/notes/camera';
 import { FarNotes } from 'test-app/components/notes/far';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
@@ -82,23 +84,27 @@ export interface DemoEntry {
 export const catalog: DemoEntry[] = [
   {
     Example: Playhead,
-    apis: ['spring()', 'motionValue', 'jump()'],
+    apis: ['c.run', 'run.time', '@name', 'at()', 'c.Spring'],
     group: 'Timeline',
     id: 'playhead',
     lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
     notes: PlayheadNotes,
-    sample: `// A score is beats, not timecodes: walk there, press it, wait. Absolute
-// times fall out of compile(); the coordinates fall out of measuring the cue
-// when the question is asked, so the score names a BUTTON, never a pixel.
-const BEATS = [
-  { kind: 'move',  cue: 'express', ms: 620 },
-  { kind: 'press', cue: 'express', ms: 220 },
-  { kind: 'hold',                  ms: 360 },
+    sample: `// The score IS the template: holds and walks in sequence flow, each press
+// a NAMED dip of the hand, and the app's own value changes anchored to the
+// press by name — \`at 'press-express' 0.55\` is the moment the finger lands.
+<c.Sequence>
+  <c.Wait @of={{hand}} @duration={{0.34}} />
+  <c.Tween @of={{hand}} @x={{this.walkX 'home' 'express'}}
+    @y={{this.walkY 'home' 'express'}} @duration={{0.62}} />
+  <c.Tween @name='press-express' @of={{hand}}
+    @scale={{array 1 0.74 1}} @duration={{0.22}} />
+  <c.Spring @at={{at 'press-express' 0.55}}
+    @of={{pill}} @x={{array 0 127}} @spring={{PILL}} />
   …
-];
+</c.Sequence>
 
-// One description of what a press does. The buttons run it on click, and the
-// timeline folds it to work out what the app IS at a scrubbed time — so a
+// One description of what a press does. The buttons run it on click, and
+// the transport folds it over the presses behind the playhead — so a
 // scrubbed state cannot drift from a clicked one.
 function press(state, cue) {
   switch (cue) {
@@ -108,30 +114,24 @@ function press(state, cue) {
   }
 }
 
-// PLAYING — Motion's clock. The score fires a real .click() on the real
-// control; the app's own handler runs; every {{motion}} animates as usual.
+// PLAYING — run.play(). The transport reads run.time and fires a real
+// .click() on the real control as each press's moment goes by; the app's
+// own handler is what changes the app.
 this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
 
-// SCORED — the playhead's clock. Same springs, asked for their value at t
-// instead of run. Motion's spring() generator is closed-form in t and holds
-// no playhead of its own, so it answers about any time in any order — which
-// is exactly what dragging a scrubber backwards does.
-const gen = spring({ keyframes: [from, to], bounce: 0.3, visualDuration: 0.36 });
-const { value } = gen.next(t - since);
+// SCORED — run.pause(); run.time = t. A scrubbed frame is the library's
+// computed still: every spring stood exactly where the score says t looks
+// like, in either direction. The old private sampler — a poseAt re-running
+// Motion's generator — is deleted whole.
 
-{{! and the whole difference between the two is this one line }}
-<span {{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}} />
-
-get poses() {
-  return this.scored
-    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)   // sample
-    : posesOf(this.state);                        // play
-}
-
-// What has no score cannot be seeked: layout, layoutId and Presence are all
-// absent here on purpose. A spring is a function of time; a projection
-// animation is two measurements of a live tree. Closing that gap — valueAt(t)
-// on <Choreo> — is what this stage is a rehearsal for.`,
+// LIVE — touch a control yourself and the template swaps the score for a
+// handful of state-target springs: the app behaves like the plain app it
+// is, and Play, Reset or the scrubber take the scene back by recomputing.
+{{#if this.isLive}}
+  <c.Spring @of={{pill}} @x={{this.pillX}} @spring={{PILL}} />
+{{else}}
+  …the score…
+{{/if}}`,
     slowmo: false,
     title: 'Playhead',
   },
@@ -194,7 +194,7 @@ get poses() {
         layoutId could not do this: it pairs two REAL elements and morphs
         one into the other, so the bin itself would stretch. }}
     <c.Move @of={{c.removed 'row'}} @to={{c.beacon 'trash'}} @spring={{toss}} />
-    <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @ms={{380}} />
+    <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @duration={{0.38}} />
 
     {{! and the tray closes up around the gap }}
     <c.Move @of={{c.moved 'row'}} @spring={{quick}} @size={{false}} />
@@ -239,7 +239,7 @@ get poses() {
 
     <c.Parallel>
       <c.Hold  @of={{c.removed 'card-content'}} @zIndex={{1}} />
-      <c.Tween @of={{c.removed 'card-content'}} @opacity={{0}} @ms={{220}} />
+      <c.Tween @of={{c.removed 'card-content'}} @opacity={{0}} @duration={{0.22}} />
     </c.Parallel>
 
     {{! The geometry belongs to projection (layout=true), because animating a
@@ -248,10 +248,10 @@ get poses() {
         move, and the new details fade in partway THROUGH it — so the card
         arrives already carrying its content. }}
     <c.Parallel>
-      <c.Wait  @of={{c.all}} @ms={{560}} />
+      <c.Wait  @of={{c.all}} @duration={{0.56}} />
       <c.Tween
         @of={{c.inserted 'card-content'}}
-        @opacity={{1}} @from={{start opacity=0}} @delay={{170}} @ms={{300}}
+        @opacity={{array 0 1}} @delay={{0.17}} @duration={{0.3}}
       />
     </c.Parallel>
   </c.Sequence>
@@ -292,7 +292,7 @@ get poses() {
       can only mean starting a NEW curve from wherever it happens to be — it
       stops dead and eases away again. Nothing is broken; it is what a
       duration means. }}
-  <c.Move @of={{c.kept 'puck'}} @ms={{620}} @ease='easeInOut' @size={{false}} />
+  <c.Move @of={{c.kept 'puck'}} @duration={{0.62}} @ease='easeInOut' @size={{false}} />
 </Choreo>`,
     notes: InterruptNotes,
     slowmo: true,
@@ -339,22 +339,58 @@ get poses() {
         transitioned between, so there was nothing to interpolate, and it had
         to be carried across by hand in a pair of custom properties. On a
         timeline it is one more animated property. }}
-    <c.Tween @of={{c.all 'plate'}} @borderRadius={{radiusFor this.slide}} @ms={{420}} />
+    <c.Tween @of={{c.all 'plate'}} @borderRadius={{radiusFor this.slide}} @duration={{0.42}} />
 
     {{! the note is the only thing that comes and goes: out fast, in late, so
         a slide is never carrying two of them }}
-    <c.Tween @of={{c.removed 'note'}} @opacity={{0}} @ms={{140}} />
+    <c.Tween @of={{c.removed 'note'}} @opacity={{0}} @duration={{0.14}} />
     <c.Tween
       @of={{c.inserted 'note'}}
-      @opacity={{1}}
-      @from={{start opacity=0}}
-      @delay={{220}}
-      @ms={{260}}
+      @opacity={{array 0 1}}
+      @delay={{0.22}}
+      @duration={{0.26}}
     />
   </c.Parallel>
 </Choreo>`,
     slowmo: true,
     title: 'Slides',
+  },
+  {
+    Example: Camera,
+    apis: ['c.Camera', '@fit', '@margin', '@steady'],
+    group: 'Choreo',
+    id: 'camera',
+    lede: 'The whole library sits on the glass. Dive in to grade a shot.',
+    notes: CameraNotes,
+    sample: `{{! A photo library: the whole set sits on the glass.
+    Dive IN and the camera info develops — number first, then the full
+    exposure. ONE step, aimed by state — an interrupted dive simply bends.
+
+    @fit is the whole dive: the library computes the zoom AND the
+    centring pan from the clicked frame's REST-layout box and the glass
+    it has to fit inside — so a click straight from one dive to the next
+    tile still measures true geometry, not whatever was mid-flight.
+    @margin is the frame's share of the glass once centred; null fits
+    nothing — back to the resting sheet. }}
+<c.Parallel>
+  <c.Camera
+    @fit={{if this.focus (c.id this.focus) null}}
+    @margin={{0.72}}
+    @spring={{carry}}
+    @steady={{array (c.role 'no') (c.role 'heart') (c.role 'verdict')}}
+  />
+
+  {{! if a verdict reflows the sheet, every frame that moved tweens }}
+  <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
+</c.Parallel>
+
+{{! @steady keeps take numbers and the other tiles' marks legible while
+    the camera flies. Heart and pass on the open frame live in the dock,
+    off the photograph. For a pinch-anchored zoom that should NOT
+    recentre, @origin/@x/@y are still there — @fit is the canned form of
+    the common case: dive on this thing, and centre it. }}`,
+    slowmo: true,
+    title: 'Camera',
   },
   {
     Example: ReorderGrid,
@@ -446,8 +482,8 @@ get poses() {
 
       {{! with matching on, neither of these fires: the sender is let go
           quietly by its own region, and the receiver is kept, not inserted }}
-      <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @ms={{200}} />
-      <c.Tween @of={{c.inserted 'piece'}} @opacity={{1}} @from={{hidden}} @ms={{260}} />
+      <c.Tween @of={{c.removed 'piece'}} @opacity={{0}} @duration={{0.2}} />
+      <c.Tween @of={{c.inserted 'piece'}} @opacity={{array 0 1}} @duration={{0.26}} />
 
       <c.Move @of={{c.moved 'bay'}} @spring={{settle}} />
     </c.Parallel>
@@ -575,10 +611,12 @@ land = (event, info) => {
     lede: 'A value read off another element’s measurement.',
     sample: `// A property function is handed the sprite and the whole changeset, so one
 // element can be animated from ANOTHER element's measurement. The content's
-// left edge is not styled anywhere — it is wherever the bar was measured to
-// be, before and after.
-leftFrom = (_s, cs) => cs.sprite({ id: 'split-bar' }).initial.parent.width;
-leftTo   = (_s, cs) => cs.sprite({ id: 'split-bar' }).final.parent.width;
+// left edge is not styled anywhere — it is a keyframe pair read off wherever
+// the bar was measured to be, before and after.
+leftRange = (_s, cs) => {
+  const bar = cs.sprite({ id: 'split-bar' });
+  return [bar.initial.parent.width, bar.final.parent.width];
+};
 
 <Choreo class={{if this.split 'split is-split' 'split'}} as |c|>
   <aside {{motion id='split-bar'}} />
@@ -588,12 +626,7 @@ leftTo   = (_s, cs) => cs.sprite({ id: 'split-bar' }).final.parent.width;
       spring, so the two edges stay welded together the whole way }}
   <c.Parallel>
     <c.Move @of={{c.id 'split-bar'}} @spring={{firm}} />
-    <c.Spring
-      @of={{c.id 'split-content'}}
-      @left={{this.leftTo}}
-      @from={{start left=this.leftFrom}}
-      @spring={{firm}}
-    />
+    <c.Spring @of={{c.id 'split-content'}} @left={{this.leftRange}} @spring={{firm}} />
   </c.Parallel>
 </Choreo>`,
     slowmo: true,
@@ -1050,45 +1083,44 @@ move = (event) => {
   },
   {
     Example: BuildOrder,
-    apis: ['motionValue', 'jump()', 'pathLength'],
+    apis: ['c.Sequence', '@name', 'at()/after()', '@by', 'c.run'],
     group: 'Timeline',
     id: 'build-order',
     lede: 'Keynote\u2019s build inspector, wired to the site\u2019s own logo. Retime it while it runs.',
     notes: BuildOrderNotes,
-    sample: `// A build order, not a timeline. Nothing here is a timecode: a build says
-// WHICH part, WHAT effect, and when it goes relative to the build above it.
-const OPENING = [
-  { part: 'plate', effect: 'move', start: 'with',  delay:   0, ms: 620 },
-  { part: 'tail',  effect: 'draw', start: 'with',  delay: 140, ms: 520 },
-  { part: 'head',  effect: 'draw', start: 'after', delay:   0, ms: 520 },
-  { part: 'bead',  effect: 'pop',  start: 'after', delay:   0, ms: 380 },
+    sample: `// A build order, not a timeline. Nothing here is a timecode: a build
+// names a part, an effect, and when it goes relative to the build above
+// it — and the score is the template. \`with\` anchors on the previous
+// build's START, \`after\` on its end; the compiler resolves the rest.
+<c.Sequence>
+  <c.Tween @name='b1' @of={{c.id 'plate'}}
+    @opacity={{array 0 1 1 1}} @x={{array -38 0}}
+    @ease='easeOut' @duration={{0.62}} />
+  <c.Tween @name='b2' @at={{at 'b1'}} @delay={{0.14}}
+    @of={{c.id 'tail'}} @pathLength={{array 0 1}} @duration={{0.52}} />
+  <c.Tween @name='b3' @at={{after 'b2'}}
+    @of={{c.id 'head'}} @pathLength={{array 0 1}} @duration={{0.52}} />
   …
-  { part: 'word',  effect: 'drift', start: 'after', delay: 60, ms: 760,
-    by: 'character' },   // ← a second timeline, inside the build
-];
+  <c.Tween @name='b7' @at={{after 'b6'}} @delay={{0.06}}
+    @of={{c.id 'word'}} @by='character'  // ← a second timeline, inside
+    @opacity={{array 0 1 1}} @scale={{array 0.78 1}} @y={{array 18 0}}
+    @ease='easeOut' @duration={{0.76}} />
+</c.Sequence>
 
-// The whole scheduler. The relation is always to the PREVIOUS build, which is
-// what makes the order editable: move one and everything downstream follows,
-// because nothing downstream was ever written down.
-at[i] = (build.start === 'with' ? at[i - 1] : end[i - 1]) + build.delay;
+// An effect is nothing but keyframe values and an easing: Pop is a scale
+// through backOut, and a build-in's leading opacity frames are Keynote's
+// "builds in" — pinned hidden from the run's start until its window.
 
-// A build has an END, so an effect is an easing across a stated window —
-// never a spring. A spring has a settle, not a duration, and a bar you can
-// draw on a timeline is a promise about when the thing stops.
-pop: { ease: backOut, at: (p) => ({ opacity: min(1, p * 3), scale: p }) },
-draw: { ease: easeInAndOut, at: (p) => ({ pathLength: p }) },
-wipe: { ease: easeInAndOut, at: (p) => ({ clip: 1 - p }) },
+// The transport holds the run. Play, pause and the scrubber share one
+// clock: \`time\` is settable in either direction, and a scrubbed frame
+// is a computed still.
+c.run.pause();
+c.run.time = 1.4;   // the scrubber — and an edit replays the pass and
+c.run.play();       // puts the new run back at the SAME t, so retiming
+                    // build 2 while parked at 1.4s shows what 1.4s now is.
 
-// Delivery is that same arithmetic one level down: the build keeps its stated
-// window and the glyphs divide it, last cell FINISHING on the build's end.
-const ms = cue.ms * 0.55;
-return { at: cue.at + (i * (cue.ms - ms)) / (n - 1), ms };
-
-// And because a pose is a function of t and nothing else — no DOM, no state,
-// no memory of the frame before — playing and scrubbing are one code path.
-poseAt(t, cue, slot);   // the run loop calls it. so does the scrubber.
-                        // so does an edit, at the same t, so retiming build 2
-                        // while parked at 1.4s shows you what 1.4s now is.`,
+// The bars on the rail are read back from run.cues — the compiler's
+// resolved answer, never a second copy of the schedule.`,
     slowmo: true,
     title: 'Build order',
   },

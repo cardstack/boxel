@@ -12,7 +12,7 @@ const stations = [0, 1, 2, 3];
  */
 const carry = spring({ damping: 15, stiffness: 130 });
 /** the same journey, timed instead of simulated */
-const TIMED = 620;
+const TIMED = 0.62;
 
 /**
  * Interruption — the thing the engine does best, and the hardest to see.
@@ -72,7 +72,15 @@ export class Interrupt extends Component {
                 </button>
               {{/each}}
             </div>
-            <c.Move @of={{c.kept "puck"}} @spring={{carry}} @size={{false}} />
+            {{! @swap="none": this demo carries ONE skin. The default 'during'
+                crossfades the pair, and two identical pucks at complementary
+                opacities never sum back to solid — the flight visibly dims. }}
+            <c.Move
+              @of={{c.kept "puck"}}
+              @spring={{carry}}
+              @size={{false}}
+              @swap="none"
+            />
             {{! the old copy goes at once — its counterpart is already in the
                 air. Naming it here is also what tells the region the sprite
                 belongs to this run, so it is released when the run ends. }}
@@ -101,9 +109,10 @@ export class Interrupt extends Component {
             </div>
             <c.Move
               @of={{c.kept "puck"}}
-              @ms={{TIMED}}
+              @duration={{TIMED}}
               @ease="easeInOut"
               @size={{false}}
+              @swap="none"
             />
             <c.Hold @of={{c.removed "puck"}} @opacity={{0}} />
           </Choreo>

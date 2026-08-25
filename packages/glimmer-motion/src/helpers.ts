@@ -59,23 +59,6 @@ export function styles(
 }
 
 /**
- * The starting values for a <Choreo> step: `@from={{start opacity=0}}`.
- *
- * A map of property to value, not a target and not a transition — each entry
- * may also be a function of the sprite and the changeset, which is how one
- * element starts from another's measurement.
- *
- * Named `start` rather than `from`, which is what it fills in. A helper called
- * `from` cannot be resolved by Glimmer's strict-mode scope pass — the template
- * compiler rejects it — and it reads as an import statement everywhere it
- * appears. Glint is happy with it, so the only signal is the dev server
- * refusing to build.
- */
-export function start<T>(values: Record<string, T> = {}): Record<string, T> {
-  return values;
-}
-
-/**
  * A transition per animated value: `transition=(perValue opacity=(tween
  * duration=0.16) y=(spring bounce=0.38))`.
  *

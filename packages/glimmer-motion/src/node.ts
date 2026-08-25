@@ -500,7 +500,13 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
           return false;
         }
         for (const [key, value] of live.values) {
-          if (value.isAnimating()) {
+          // paused by a run handle is a still, not motion (§4.6): a parked
+          // gate or a held scrub must read as settled
+          if (
+            value.isAnimating() &&
+            (value.animation as { state?: string } | undefined)?.state !==
+              'paused'
+          ) {
             return `${describe(this.element)} ${key}`;
           }
         }
@@ -789,6 +795,17 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
 
   get layoutKey(): string {
     return this.layoutPresenceKey;
+  }
+
+  /** for the region's @debug lints (§5.3) */
+  get ownAnimation(): boolean {
+    const props = this.latest?.props as
+      { animate?: unknown; exit?: unknown; initial?: unknown } | undefined;
+    return Boolean(props && (props.animate || props.exit || props.initial));
+  }
+
+  get presenceManaged(): boolean {
+    return Boolean(this.latest?.ownPresence);
   }
 
   get isPresent(): boolean {

@@ -1,13 +1,7 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import {
-  type Changeset,
-  Choreo,
-  motion,
-  type Sprite,
-  start,
-} from 'glimmer-motion';
+import { type Changeset, Choreo, motion, type Sprite } from 'glimmer-motion';
 
 const firm = { damping: 34, stiffness: 420 };
 
@@ -34,11 +28,12 @@ export class SplitView extends Component {
    * every other region on the page with it, and read as the whole gallery
    * disappearing. Nothing is on screen to animate in that case, so 0 is right.
    */
-  leftFrom = (_s: Sprite, cs: Changeset) =>
-    cs.sprite({ id: 'split-bar' })?.initial?.parent.width ?? 0;
-
-  leftTo = (_s: Sprite, cs: Changeset) =>
-    cs.sprite({ id: 'split-bar' })?.final?.parent.width ?? 0;
+  /** a keyframe pair, both ends read off the bar's measurements — the
+   *  from-and-to in one value, which is how a spring states its start now */
+  leftRange = (_s: Sprite, cs: Changeset) => {
+    const bar = cs.sprite({ id: 'split-bar' });
+    return [bar?.initial?.parent.width ?? 0, bar?.final?.parent.width ?? 0];
+  };
 
   <template>
     <div class="ex">
@@ -62,8 +57,7 @@ export class SplitView extends Component {
           <c.Move @of={{c.id "split-bar"}} @spring={{firm}} />
           <c.Spring
             @of={{c.id "split-content"}}
-            @left={{this.leftTo}}
-            @from={{start left=this.leftFrom}}
+            @left={{this.leftRange}}
             @spring={{firm}}
           />
         </c.Parallel>

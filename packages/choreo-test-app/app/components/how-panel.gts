@@ -1,4 +1,4 @@
-import { hash } from '@ember/helper';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { Choreo, motion } from 'glimmer-motion';
@@ -114,11 +114,10 @@ export class HowPanel extends Component {
             the control it is returning to }}
         <c.Tween
           @of={{c.inserted "how"}}
-          @opacity={{1}}
-          @from={{hash opacity=0}}
-          @ms={{140}}
+          @opacity={{array 0 1}}
+          @duration={{0.14}}
         />
-        <c.Tween @of={{c.removed "how"}} @opacity={{0}} @ms={{200}} />
+        <c.Tween @of={{c.removed "how"}} @opacity={{0}} @duration={{0.2}} />
       </c.Parallel>
     </Choreo>
   </template>

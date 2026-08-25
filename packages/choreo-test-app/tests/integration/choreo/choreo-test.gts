@@ -53,7 +53,7 @@ module('Integration | choreo', function (hooks) {
               ></div>
             {{/if}}
           </div>
-          <c.Tween @of={{c.removed "card"}} @opacity={{0}} @ms={{120}} />
+          <c.Tween @of={{c.removed "card"}} @opacity={{0}} @duration={{0.12}} />
         </Choreo>
       </template>
     }
@@ -95,7 +95,7 @@ module('Integration | choreo', function (hooks) {
             <div id="leaver" {{motion id="leaver" role="card"}}></div>
           {{/if}}
           <div id="other" {{motion id="other" role="other"}}></div>
-          <c.Tween @of={{c.kept "other"}} @opacity={{0.5}} @ms={{100}} />
+          <c.Tween @of={{c.kept "other"}} @opacity={{0.5}} @duration={{0.1}} />
         </Choreo>
       </template>
     }
@@ -108,10 +108,18 @@ module('Integration | choreo', function (hooks) {
     assert.notOk(find('#leaver'));
   });
 
-  test('the first render never animates; a clean pass never runs', async function (assert) {
-    let runs = 0;
+  test('the first render never animates; an all-kept pass still runs its timeline', async function (assert) {
+    // docs/choreo-constructs.md §3.1: the share badge, the hot wire — a Hold
+    // with a lifetime fired by an event that inserts, removes and moves
+    // nothing. Steps that select CHANGE stay quiet on such a pass.
+    let holds = 0;
+    let changed = 0;
     const count = () => {
-      runs++;
+      holds++;
+      return 0;
+    };
+    const countChanged = () => {
+      changed++;
       return 0;
     };
     class App extends Component {
@@ -123,18 +131,26 @@ module('Integration | choreo', function (hooks) {
       <template>
         <Choreo as |c|>
           <div id="box" {{motion id="box"}}>{{this.label}}</div>
-          <c.Hold @of={{c.all}} @zIndex={{count}} @ms={{10}} />
+          <c.Parallel>
+            <c.Hold @of={{c.all}} @zIndex={{count}} @duration={{0.01}} />
+            <c.Tween
+              @of={{c.moved}}
+              @opacity={{countChanged}}
+              @duration={{0.01}}
+            />
+          </c.Parallel>
         </Choreo>
       </template>
     }
     let app: App | undefined;
     await render(<template><App /></template>);
     await nextFrame();
-    assert.strictEqual(runs, 0, 'first render');
+    assert.strictEqual(holds, 0, 'first render never animates');
     app!.label = 'b';
     await settled();
     await nextFrame();
-    assert.strictEqual(runs, 0, 'nothing moved, nothing inserted or removed');
+    assert.strictEqual(holds, 1, 'the all-kept pass ran its timeline');
+    assert.strictEqual(changed, 0, 'steps that select change stayed quiet');
   });
 
   test('Move: a kept participant animates from where it was to where it is', async function (assert) {
@@ -203,9 +219,9 @@ module('Integration | choreo', function (hooks) {
             <div id="k" {{motion id="k" role="keep"}}></div>
           </div>
           <c.Parallel>
-            <c.Hold @of={{c.role "card"}} @zIndex={{9}} @ms={{100}} />
+            <c.Hold @of={{c.role "card"}} @zIndex={{9}} @duration={{0.1}} />
             <c.Hold @of={{c.role "keep"}} @zIndex={{3}} @fill={{true}} />
-            <c.Wait @of={{c.all}} @ms={{100}} />
+            <c.Wait @of={{c.all}} @duration={{0.1}} />
           </c.Parallel>
         </Choreo>
       </template>
@@ -254,12 +270,16 @@ module('Integration | choreo', function (hooks) {
             ></div>
           </div>
           <c.Sequence>
-            <c.Tween @of={{c.kept "card"}} @opacity={{0.5}} @ms={{100}} />
+            <c.Tween @of={{c.kept "card"}} @opacity={{0.5}} @duration={{0.1}} />
             <c.Parallel>
               <c.Move @of={{c.kept "card"}} @spring={{FAST}} />
               <c.Hold @of={{c.kept "card"}} @zIndex={{7}} />
             </c.Parallel>
-            <c.Tween @of={{c.kept "card"}} @opacity={{grab}} @ms={{100}} />
+            <c.Tween
+              @of={{c.kept "card"}}
+              @opacity={{grab}}
+              @duration={{0.1}}
+            />
           </c.Sequence>
         </Choreo>
       </template>
@@ -308,7 +328,11 @@ module('Integration | choreo', function (hooks) {
         <Choreo as |c|>
           <div id="container" style={{this.w}} {{motion id="container"}}></div>
           <div id="content" {{motion id="content"}}></div>
-          <c.Tween @of={{c.id "content"}} @width={{fromContainer}} @ms={{50}} />
+          <c.Tween
+            @of={{c.id "content"}}
+            @width={{fromContainer}}
+            @duration={{0.05}}
+          />
         </Choreo>
       </template>
     }
@@ -338,7 +362,7 @@ module('Integration | choreo', function (hooks) {
               {{motion presence=h id=item.key role="card"}}
             ></div>
           </Presence>
-          <c.Tween @of={{c.removed "card"}} @opacity={{0}} @ms={{120}} />
+          <c.Tween @of={{c.removed "card"}} @opacity={{0}} @duration={{0.12}} />
         </Choreo>
       </template>
     }
@@ -376,7 +400,7 @@ module('Integration | choreo', function (hooks) {
               {{motion id="card" role="card"}}
             ></div>
           {{/each}}
-          <c.Tween @of={{c.kept "card"}} @opacity={{grab}} @ms={{80}} />
+          <c.Tween @of={{c.kept "card"}} @opacity={{grab}} @duration={{0.08}} />
         </Choreo>
       </template>
     }
@@ -436,12 +460,12 @@ module('Integration | choreo', function (hooks) {
           <c.Tween
             @of={{c.received "card"}}
             @opacity={{grabReceived}}
-            @ms={{80}}
+            @duration={{0.08}}
           />
           <c.Tween
             @of={{c.counterpart "card"}}
             @opacity={{grabCounterpart}}
-            @ms={{80}}
+            @duration={{0.08}}
           />
         </Choreo>
       </template>
@@ -497,7 +521,7 @@ module('Integration | choreo', function (hooks) {
               {{motion id=k role="cell"}}
             ></div>
           {{/each}}
-          <c.Move @of={{c.moved "cell"}} @ms={{400}} />
+          <c.Move @of={{c.moved "cell"}} @duration={{0.4}} />
         </Choreo>
       </template>
     }
@@ -571,7 +595,7 @@ module('Integration | choreo', function (hooks) {
               >{{k}}</div>
             {{/each}}
           </div>
-          <c.Move @of={{c.kept "i"}} @ms={{400}} />
+          <c.Move @of={{c.kept "i"}} @duration={{0.4}} />
         </Choreo>
       </template>
     }
@@ -618,8 +642,12 @@ module('Integration | choreo', function (hooks) {
             <div id="stay" {{motion id="stay" role="stay"}}></div>
           </div>
           <c.Parallel>
-            <c.Tween @of={{c.removed "card"}} @opacity={{0}} @ms={{400}} />
-            <c.Hold @of={{c.role "stay"}} @zIndex={{4}} @ms={{400}} />
+            <c.Tween
+              @of={{c.removed "card"}}
+              @opacity={{0}}
+              @duration={{0.4}}
+            />
+            <c.Hold @of={{c.role "stay"}} @zIndex={{4}} @duration={{0.4}} />
           </c.Parallel>
         </Choreo>
       </template>
@@ -754,7 +782,7 @@ module('Integration | choreo', function (hooks) {
           <c.Move
             @of={{c.removed "row"}}
             @to={{c.beacon "trash"}}
-            @ms={{400}}
+            @duration={{0.4}}
             @size={{false}}
           />
         </Choreo>
@@ -814,7 +842,7 @@ module('Integration | choreo', function (hooks) {
           <c.Move
             @of={{c.moved "box"}}
             @to={{c.beacon "nowhere"}}
-            @ms={{200}}
+            @duration={{0.2}}
             @size={{false}}
           />
         </Choreo>
@@ -863,8 +891,8 @@ module('Integration | choreo', function (hooks) {
           </div>
           <c.Move
             @of={{c.moved "box"}}
-            @ms={{200}}
-            @stagger={{150}}
+            @duration={{0.2}}
+            @stagger={{0.15}}
             @size={{false}}
           />
         </Choreo>
