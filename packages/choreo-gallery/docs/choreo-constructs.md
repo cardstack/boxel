@@ -387,7 +387,7 @@ keep live. Same-document navigation defaults to `@route`.
 Six constructs are specified inside the audit that produced them, and
 indexed in §3: the hot start and `c.gesture` (§6.1), `c.Tether` (§6.1,
 §6.4), `c.Scroll` (§6.1), `@space` (§6.1), `c.Raise` (§6.3), `c.Camera`
-with `@steady` (§6.3, §6.4), and the `@swap` policy (§6.3).
+with `@steady` and `@fit` (§6.3, §6.4), and the `@swap` policy (§6.3).
 
 ## 5. Design rationale
 
@@ -803,6 +803,23 @@ smaller form — camera state feeding the next changeset. The region
 exposes it as a tracked `c.camera` (`{ zoom, x, y }`), updated when a
 camera step lands or cancels — deliberately not per frame, so deriving
 app state from it cannot violate the recording rule (§9).
+
+Shipped, the construct grew two refinements the Camera demo forced. The
+applied transform is `translate(x + (1−z)·P) scale(z)` with the origin
+pinned at `0 0` — frozen numbers, no per-frame DOM reads — which makes
+`@origin` a point that HOLDS its own screen position while the zoom
+happens: right for a pinch, wrong for the far more common "dive on this
+tile and centre it". `@fit` is that case as one argument: name a sprite
+(or pass `null` for the resting identity) and the library computes the
+zoom from `@margin` — the sprite's share of the frame on whichever axis
+fits first — and the pan that solves `x + P = centre`, all from the
+changeset's rest-layout boxes divided back by `measureZoom`. That is
+the measurement space FLIP already uses, so a dive begun mid-flight on
+a different tile is correct by construction
+(`docs/camera-api-wishlist.md` is the case study). And a cue with no
+origin of its own holds the aim point in force rather than recentring —
+backing out of a dive backs straight out of its tile, instead of
+sliding across the neighbouring one mid-flight.
 
 #### `@swap='settle'` — the transmute's crossfade policy
 
