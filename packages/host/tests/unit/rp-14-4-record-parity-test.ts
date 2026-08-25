@@ -751,16 +751,39 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
     }
   });
 
-  test('RP-14.4: an exemption covering no path is reported rather than read as satisfied', function (assert) {
-    let diff = diffRecords(description(), description(), {
-      exemptPaths: ['presentaton.displayName'],
+  test('RP-14.4: an empty exemption exempts nothing rather than everything', function (assert) {
+    // Coverage is prefix-closed, and the empty path is a prefix of every path,
+    // so honoring one would silence the whole record and report parity. Nothing
+    // legitimately names it: the root of a record is not a member.
+    let reference = description();
+    let diff = diffRecords(
+      reference,
+      description({ boxelKind: 'field', ancestors: [] }),
+      { exemptPaths: [''] },
+    );
+    assert.strictEqual(diff.divergences.length, 2);
+    assert.false(recordsAgree(diff), describeRecordDiff(diff));
+  });
+
+  test('RP-14.4: a record this protocol cannot use is not compared against a peer', function (assert) {
+    // The fault says the record declares a version this consumer does not
+    // implement. Comparing it anyway would report divergences beneath a record
+    // the run has just declared unusable, and count the pair as checked.
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        tier('direct'),
+        tier('capsule', {
+          description: { ...description(), protocolVersion: 2 },
+        }),
+      ],
+      registeredModes: ['direct', 'capsule'],
     });
-    assert.deepEqual(diff.divergences, []);
-    assert.deepEqual(diff.exemptionsUnused, ['presentaton.displayName']);
-    // An exemption is a claim that a member legitimately differs between
-    // tiers. One matching nothing is a claim about a member that is not there.
-    assert.false(recordsAgree(diff));
-    assert.true(describeRecordDiff(diff).includes('covered no path'));
+    let faults = findingsOfKind(report, 'fault');
+    assert.strictEqual(faults.length, 1);
+    assert.strictEqual(faults[0].code, 'BOXEL_PROTOCOL_VERSION_UNSUPPORTED');
+    assert.strictEqual(findingsOfKind(report, 'divergence').length, 0);
+    assert.strictEqual(report.comparisons, 1);
   });
 
   test('RP-14.4: a concrete array index in an exemption names that member of every element', function (assert) {

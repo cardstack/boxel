@@ -21,10 +21,14 @@
 //
 //   1. `implements` / `satisfies` naming the interface. Neither has a reading
 //      other than "this is an implementation".
-//   2. A file that names the interface and defines most of its operations as
-//      its own members. No syntax is involved, so this covers a class
-//      expression, a decorated class, an object literal built by a factory, and
-//      whatever the next form is.
+//   2. A file defining most of the interface's operations as its own members.
+//      No syntax is involved and the interface need not be named, so this
+//      covers a class expression, a decorated class, an object literal a
+//      factory in another file returns, and whatever the next form is. Every
+//      source file is read for it rather than only those mentioning the
+//      interface: an adapter assembled by a factory elsewhere never mentions
+//      it, and skipping those files is what made the claim below false the
+//      first time it was written.
 //
 // A bare type annotation — `const x: BoxelRuntime`, or a return type — is
 // deliberately NOT a signal. Those forms read identically on an implementation
@@ -34,17 +38,20 @@
 // remedy such a failure prints — register this mode with the harness — is
 // meaningless for them, so the list would accumulate entries that are not tiers
 // until it stopped meaning anything. An adapter built by a factory is caught by
-// signal 2 instead, in the file that defines the operations.
+// signal 2 instead, in whichever file defines the operations.
 //
-// What this cannot see, and does not claim to: an implementation naming the
-// interface nowhere at all; one defining few operations of its own because it
-// inherits them from a base class that does not name the interface either; and
-// anything under a `tests` directory, which is skipped so a test double
-// implementing the interface is not mistaken for a tier. It is a tripwire on
-// how an adapter is actually written, not a proof that none exists. It also
-// holds files rather than behavior: recording an entry says someone looked, not
-// that the mode reached `checkRecordParity`. Comment detection is line-local,
-// for the reasons `check-rp-bijection.mts` gives at length.
+// What this cannot see, and does not claim to: an implementation that both
+// names the interface nowhere AND defines few operations of its own because it
+// inherits them, and anything under a `tests` directory, which is skipped so a
+// test double is not mistaken for a tier. What it over-reads: a wrapper that
+// forwards most of the interface to an inner runtime looks like an
+// implementation by signal 2, because textually it is one.
+//
+// It is a tripwire on how an adapter is actually written, not a proof that none
+// exists — and it holds files rather than behavior: recording an entry says
+// someone looked, not that the mode reached `checkRecordParity`. Comment
+// detection is line-local, for the reasons `check-rp-bijection.mts` gives at
+// length.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -175,11 +182,6 @@ for (let file of walk(scanRoot)) {
     continue;
   }
   let raw = readFileSync(file, 'utf8');
-  // The name is what makes a file worth parsing at all, and most of the repo
-  // does not carry it.
-  if (!raw.includes('BoxelRuntime')) {
-    continue;
-  }
   if (implementsRuntime(withoutComments(raw))) {
     found.push(path);
   }

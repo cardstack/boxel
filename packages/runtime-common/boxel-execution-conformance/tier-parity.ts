@@ -85,7 +85,16 @@ export type ParityFinding =
   | { kind: 'mode-unregistered'; mode: BoxelExecutionMode }
   /** The registry names a tier that produced nothing to check. */
   | { kind: 'mode-absent'; mode: BoxelExecutionMode }
-  /** A tier's record is not inert data, so it cannot be compared at all. */
+  /**
+   * A tier's record is not one this protocol can use, so it is not compared.
+   *
+   * Two questions collapse into one finding because they have one consequence.
+   * The record may not be inert data — an accessor, a function, a prototype of
+   * its own, a value containing itself. Or it may be data and still not a
+   * record of this protocol: `{}` carries no envelope, and a record declaring
+   * a version the comparing consumer does not implement is refused by RP-14.3's
+   * own gate. Either way there is nothing to hold a peer to.
+   */
   | {
       kind: 'fault';
       mode: BoxelExecutionMode;
@@ -116,17 +125,7 @@ export type ParityFinding =
       kind: 'records-shared';
       mode: BoxelExecutionMode;
       record: ParityRecordKind;
-    }
-  /**
-   * An exemption covered no path in any comparison, so it is a rule about a
-   * member no record has.
-   *
-   * Aggregated across every comparison rather than reported per comparison,
-   * because one list serves both record kinds and every tier: an exemption
-   * naming a projection member is legitimately unused by a description
-   * comparison, and reporting that would make the check fire on correct input.
-   */
-  | { kind: 'exemption-unused'; exemption: string };
+    };
 
 export interface ParityReport {
   /** What the tiers were given, so a finding can be reproduced. */
@@ -134,7 +133,10 @@ export interface ParityReport {
   referenceMode: BoxelExecutionMode;
   /** The non-reference tiers that were compared, in tier order. */
   comparedModes: BoxelExecutionMode[];
-  /** Records diffed against the reference: compared modes × record kinds. */
+  /**
+   * Record pairs actually diffed against the reference. A pair where either
+   * side is not a usable record is not counted, because it was not compared.
+   */
   comparisons: number;
   /** Records read as inert data, the reference tier's included. */
   inspections: number;
@@ -203,6 +205,7 @@ export function checkRecordParity(input: ParityInput): ParityReport {
   }
 
   let inspections = 0;
+  let unusable = new Set<string>();
   for (let mode of modes) {
     let tier = byMode.get(mode);
     if (tier === undefined) {
@@ -212,6 +215,7 @@ export function checkRecordParity(input: ParityInput): ParityReport {
       inspections += 1;
       let fault = faultInParityRecord(tier[record], support);
       if (fault !== undefined) {
+        unusable.add(`${mode}/${record}`);
         findings.push({ kind: 'fault', mode, record, ...fault });
       }
     }
@@ -232,7 +236,6 @@ export function checkRecordParity(input: ParityInput): ParityReport {
 
   let comparedModes: BoxelExecutionMode[] = [];
   let comparisons = 0;
-  let usedExemptions = new Set<string>();
   for (let mode of modes) {
     let candidate = byMode.get(mode);
     if (candidate === undefined || mode === PARITY_REFERENCE_MODE) {
@@ -243,17 +246,20 @@ export function checkRecordParity(input: ParityInput): ParityReport {
       if (isSameObject(reference[record], candidate[record])) {
         findings.push({ kind: 'records-shared', mode, record });
       }
+      // A record this protocol cannot use is not compared, and the fault above
+      // already says why. Comparing it anyway would report divergences beneath
+      // a record the run has just declared unusable, and count the pair as
+      // checked.
+      if (
+        unusable.has(`${PARITY_REFERENCE_MODE}/${record}`) ||
+        unusable.has(`${mode}/${record}`)
+      ) {
+        continue;
+      }
+      comparisons += 1;
       let diff = diffRecords(reference[record], candidate[record], {
         exemptPaths,
       });
-      // Counted per pair actually compared. A pair where either side is not a
-      // record was never compared, and a coverage line that counts it says the
-      // run checked something it did not.
-      if (diff.faults.length === 0) {
-        comparisons += 1;
-      }
-      // The faults themselves were reported per tier above; repeating them per
-      // comparison would say the same thing once per peer.
       for (let divergence of diff.divergences) {
         findings.push({ kind: 'divergence', mode, record, divergence });
       }
@@ -264,22 +270,6 @@ export function checkRecordParity(input: ParityInput): ParityReport {
           record,
           count: diff.withheld,
         });
-      }
-      for (let exemption of exemptPaths) {
-        if (!diff.exemptionsUnused.includes(exemption)) {
-          usedExemptions.add(exemption);
-        }
-      }
-    }
-  }
-
-  // Only once every comparison has had its chance to use one. An exemption no
-  // comparison used is a rule about a member no record carries, which reads as
-  // satisfied unless something says otherwise.
-  if (comparisons > 0) {
-    for (let exemption of exemptPaths) {
-      if (!usedExemptions.has(exemption)) {
-        findings.push({ kind: 'exemption-unused', exemption });
       }
     }
   }
@@ -396,7 +386,7 @@ function describeFinding(finding: ParityFinding): string {
     case 'mode-absent':
       return `the ${finding.mode} tier is registered but produced no records`;
     case 'fault':
-      return `${finding.mode} ${finding.record} is not a record: ${finding.message}`;
+      return `${finding.mode} ${finding.record} is not a usable record: ${finding.message}`;
     case 'divergence': {
       let { path, reason, reference, candidate } = finding.divergence;
       return (
@@ -408,7 +398,5 @@ function describeFinding(finding: ParityFinding): string {
       return `${finding.mode} ${finding.record}: and ${finding.count} more divergences not listed`;
     case 'records-shared':
       return `${finding.mode} was handed the reference tier's own ${finding.record}, so the comparison compared it with itself`;
-    case 'exemption-unused':
-      return `the exemption ${finding.exemption} covered no path in any comparison`;
   }
 }

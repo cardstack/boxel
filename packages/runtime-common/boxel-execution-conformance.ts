@@ -17,13 +17,12 @@
  * make the guard on that closure mean less rather than more. It reads the
  * protocol's own normalizer by path and adds nothing to what a cage carries.
  *
- * Why it lives in `runtime-common` rather than in a test suite: what counts as
- * record equality has to be one rule, and it is asked from more than one
- * package — a harness comparing one tier's record against an expected one, a
- * harness comparing two tiers, and a server-side assertion about records built
- * in another process all ask it. A rule that lives inside one suite gets a
- * second copy the first time a caller outside that suite needs it, and two
- * parity rules is how the answer starts depending on who asked.
+ * Why it lives in `runtime-common` rather than in a test suite: record equality
+ * is a rule, not a fixture. The same question is asked of one tier's record
+ * against an expected one, of two tiers against each other, and of records
+ * built in another process — askers that do not share a package, so a rule
+ * living inside one suite would be copied the first time it was asked from
+ * outside. Two parity rules is how the answer starts depending on who asked.
  * `searchable-parity.ts` is the precedent: one diff rule here, imported by a
  * realm-server script and by its tests.
  *
