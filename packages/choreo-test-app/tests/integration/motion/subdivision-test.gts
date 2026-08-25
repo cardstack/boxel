@@ -32,15 +32,39 @@ function tileWidth() {
   return tile ? Math.round(tile.getBoundingClientRect().width) : NaN;
 }
 
+function gridWidth() {
+  const grid = document.querySelector('.subdivide');
+  return grid ? Math.round(grid.getBoundingClientRect().width) : 0;
+}
+
 module('Integration | motion | subdivision', function (hooks) {
   setupRenderingTest(hooks);
   setupMotion(hooks);
 
   test('evening a seam springs the tiles rather than snapping them', async function (assert) {
-    await render(<template><Subdivision /></template>);
+    // the demo sizes itself in CONTAINER units — `.ex` is the query container
+    // and `.subdivide` is `min(92cqw, 340px)` wide — so rendered bare it
+    // inherits whatever box the ambient test container happens to have. That
+    // is not the same on a headless runner as it is here: give it a stage of
+    // its own, big enough that both the width and the height clamp to the
+    // demo's own maxima, and the geometry is the same everywhere.
+    await render(
+      <template>
+        <div style="position:relative;width:600px;height:500px">
+          <Subdivision />
+        </div>
+      </template>
+    );
     await rest();
 
     const before = tileWidth();
+    // a collapsed stage floors every percentage track at the tile's
+    // min-content, so the seam moves and nothing resizes — the failure this
+    // guard turns back into a sentence
+    assert.true(
+      gridWidth() > 100,
+      `the demo came up on a real stage (${gridWidth()}px)`
+    );
     // double-click is what the hint offers: 40% → 50%
     document
       .querySelector('.sub-seam.is-col')!
