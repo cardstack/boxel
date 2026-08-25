@@ -80,6 +80,12 @@ export interface BoxelSourceClassification extends BoxelSourceAnalysis {
    * Every module identifier the walk reached, entry first and the rest sorted.
    * This is the exact set a stronger runtime may read: a Sandbox authorizes a
    * module fetch against it before any authenticated request fires.
+   *
+   * Only meaningful as an authorization list when `reason` reports a finding.
+   * A reason that reports what could not be established — a load, parse,
+   * resolve or bound failure — comes with whatever the walk reached before it
+   * stopped, which is a partial list. Such a result is never memoized, so the
+   * caller's move is to classify again rather than to authorize against it.
    */
   moduleGraph: string[];
 }
@@ -353,12 +359,15 @@ function browserOnlyPackageSignal(
  * which would report a load failure in place of the far more useful signal the
  * importer already carries.
  *
- * A realm-hosted module is a different thing the same vocabulary matches,
- * because a vendored copy under a path segment named `three` or `paper` should
- * still promote its importer. Its dependencies are separate modules the realm
- * serves, so pruning it would leave them out of `moduleGraph` — and a Sandbox
- * authorizes reads against exactly that list, making the render fail on a
- * refused fetch rather than merely cost an iframe. Those are walked.
+ * Every other URL is walked, which is wider than the case that motivates it: a
+ * realm-hosted module under a path segment named `three` or `paper` should
+ * promote its importer AND contribute its own dependencies, because those are
+ * separate modules the realm serves and a Sandbox authorizes reads against
+ * exactly `moduleGraph` — pruning them makes the render fail on a refused
+ * fetch rather than merely cost an iframe. A bundle served from some other CDN
+ * is walked too, and costs a fetch and a parse that tell us nothing. Narrowing
+ * that means a list of CDN hosts, which is a worse thing to maintain than one
+ * redundant fetch.
  */
 function isBundledBrowserOnlyPackage(moduleIdentifier: string): boolean {
   if (browserOnlyPackageSignal(moduleIdentifier) === undefined) {
@@ -649,9 +658,15 @@ function confirmBrowserSignals(source: string): {
  *
  * Statement bounds come from the lexer rather than a regex over the whole
  * source, so the words inside a string or a comment cannot read as a
- * declaration. A spelling this does not recognize keeps its edge, which is the
- * safe direction: the walk then tries to fetch a module that may not exist and
- * fails the graph closed, costing an iframe rather than losing a signal.
+ * declaration.
+ *
+ * The two mistakes are not symmetric. Failing to recognize an erased statement
+ * keeps an edge that no longer exists: the walk tries to fetch it, fails the
+ * graph closed, and costs an iframe. Reporting a LIVE statement as erased
+ * deletes a real edge — the module's signals are never gathered and it never
+ * enters `moduleGraph`, so a browser-needing card can land in a Capsule and a
+ * Sandbox can be denied a read it needs. Only the first direction is
+ * affordable, so this errs toward keeping edges.
  */
 function isTypeOnlyImport(
   source: string,
@@ -663,7 +678,12 @@ function isTypeOnlyImport(
     return false;
   }
   let statement = source.slice(entry.ss, entry.se);
-  let afterTypeKeyword = /^\s*(?:import|export)\s+type\s*([\s\S]*)$/.exec(
+  // `\b` after the keyword is load-bearing: without it `type` matches the
+  // prefix of a binding name, so `import types from './types.gts'` reads as
+  // type-only and its edge is dropped — a lost signal and a truncated
+  // `moduleGraph`, memoized as a settled answer. The boundary still admits
+  // every real modifier spelling: `type{`, `type *`, `type,` and `type Scene`.
+  let afterTypeKeyword = /^\s*(?:import|export)\s+type\b\s*([\s\S]*)$/.exec(
     statement,
   );
   if (afterTypeKeyword) {
@@ -861,9 +881,10 @@ interface ModuleAnalysis {
  *
  * Two caches, both invalidated together:
  *
- *   - a per-MODULE memo keyed by a hash of the module's source, shared across
- *     every entry. Two cards sharing a dependency subtree analyze it once, and
- *     the second card fetches none of it.
+ *   - a per-MODULE memo keyed by module identifier, shared across every entry.
+ *     Two cards sharing a dependency subtree analyze it once, and the second
+ *     card fetches none of it. It holds only what the loader served, never a
+ *     caller's draft.
  *   - a per-ENTRY memo of the finished classification, which records the graph
  *     it was computed from so invalidating any member evicts it.
  *
@@ -1101,9 +1122,8 @@ export class BoxelModuleGraphClassifier {
    * current one.
    *
    * With no supplied source the memo is authoritative and nothing is fetched —
-   * that is what lets a second entry traverse a shared subtree for free. A
-   * supplied source is compared by hash instead, so an unchanged draft reuses
-   * the memo and a changed one replaces it.
+   * that is what lets a second entry traverse a shared subtree for free.
+   * Supplied source bypasses the memo entirely, in both directions; see below.
    */
   private async analyzeModule(
     moduleIdentifier: string,

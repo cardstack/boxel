@@ -537,6 +537,21 @@ module('Unit | RP-6 classification', function () {
     assert.deepEqual(allInlineTypes.imports, []);
     assert.strictEqual(allInlineTypes.tier, 'capsule');
 
+    // A binding whose NAME begins with `type` is not a type-only statement.
+    // Reporting one as erased deletes a live edge, which is the unaffordable
+    // direction: the module's signals are never gathered and it never enters
+    // the graph a Sandbox authorizes reads against.
+    for (let binding of ['types', 'typeMap', 'typeahead', 'typescriptPlugin']) {
+      let prefixed = await classifyBoxelSource(
+        `import ${binding} from 'three';\nexport default ${binding};`,
+      );
+      assert.deepEqual(
+        prefixed.imports,
+        ['three'],
+        `a binding named ${binding} is a value, so its edge is real`,
+      );
+    }
+
     // The words in a string are not a declaration.
     let quoted = await classifyBoxelSource(
       `export const hint = "import type { Scene } from 'three'";`,
