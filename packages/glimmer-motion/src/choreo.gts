@@ -704,6 +704,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.log(changeset, cues);
     }
     this.scorePrint = treePrint(tree);
+    // taken here, with the world released and measured: the resting layout
+    // this run is about to fly away from (see fastKeep)
+    this.layoutPrint = this.layoutOf();
     // @quiet: pause everything running RIGHT NOW — the run's own animations
     // do not exist yet, so they are exempt by construction. Accumulated,
     // not replaced: an interrupted run's replacement sweeps again, and
@@ -763,13 +766,48 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   /** the fingerprint of the tree the current run compiled from (see treePrint) */
   private scorePrint?: string;
 
+  /** the layout every participant stood in when the run compiled (see layoutPrint) */
+  private layoutPrint?: string;
+
+  /**
+   * Where the stylesheet puts each participant, as a string.
+   *
+   * `offsetLeft/Top/Width/Height` and NOT a bounding rect, because the
+   * difference is the whole point: a rect includes the transform a flight
+   * is writing, so a moving element reads as different on every frame,
+   * while offsets are the box layout asked for — steady under a transform,
+   * and different the moment something actually reflows. Integers, too,
+   * which quietly forgives the sub-pixel noise a busy page generates.
+   *
+   * A Move that animates real width/height (`@size={{true}}`) does change
+   * these, so such a run never takes the fast path. That is the honest
+   * answer rather than a missed optimisation: a run writing layout cannot
+   * be told apart from a page writing layout without measuring.
+   */
+  private layoutOf(): string {
+    const parts: string[] = [];
+    for (const node of this.participants) {
+      const el = node.element as HTMLElement | undefined | null;
+      if (!el || !el.isConnected) {
+        continue;
+      }
+      parts.push(
+        `${node.id ?? node.role ?? ''}@${el.offsetLeft},${el.offsetTop},` +
+          `${el.offsetWidth},${el.offsetHeight}`,
+      );
+    }
+    return parts.join('|');
+  }
+
   /**
    * Can this pass be declined outright? Only while a run is in flight, and
    * only when nothing the pass could discover would change it: no arrivals,
    * no retentions pending, every participant either present or already a
-   * known leaver, and the collected timeline tree fingerprints identical to
-   * the one the run compiled from (an EDIT always replays). Anything else
-   * takes the full pipeline.
+   * known leaver, the collected timeline tree fingerprints identical to the
+   * one the run compiled from (an EDIT always replays), and every
+   * participant standing in the same layout box it compiled in (a REFLOW
+   * always replays — it is what a Move is FOR). Anything else takes the
+   * full pipeline.
    */
   private fastKeep(root: HTMLElement): boolean {
     if (
@@ -793,7 +831,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         return false;
       }
     }
-    return treePrint(collect(root)) === this.scorePrint;
+    return (
+      treePrint(collect(root)) === this.scorePrint &&
+      this.layoutOf() === this.layoutPrint
+    );
   }
 
   /* ---- @quiet: the rest of the page, paused for the span of a run ---- */
