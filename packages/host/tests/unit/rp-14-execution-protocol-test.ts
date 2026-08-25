@@ -28,6 +28,7 @@ import {
   datasetKeysFor,
   projectDataset,
   projectError,
+  readBoxelValueReference,
 } from '@cardstack/runtime-common/boxel-execution-protocol';
 import type {
   BoxelDescription,
@@ -546,11 +547,16 @@ module('Unit | rendering protocol | records and operations', function () {
     }
 
     // An author cannot name a key into existence that the element does not
-    // carry, and cannot reach the Host's by declaring it.
+    // carry, and — the part an allowlist alone cannot give — cannot reach the
+    // Host's identity by declaring its name. Without the veto, writing
+    // `data-boxel-card-id` once in their own template would hand them that
+    // key from every Host container an event later landed on.
     assert.deepEqual(
-      { ...projectDataset(onTheElement, ['boxelCardId', 'absent']) },
-      { boxelCardId: 'http://test/vendors/1' },
-      'the allowlist is an intersection: declaring a key does not conjure one',
+      {
+        ...projectDataset(onTheElement, ['boxelCardId', 'testCard', 'absent']),
+      },
+      {},
+      'a declared Host name is still refused, and a declared absent key conjures nothing',
     );
     assert.deepEqual(
       { ...projectDataset({}, ['sku']) },
@@ -664,7 +670,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.3: an unrecognized template dependency kind refuses the whole generation', function (assert) {
+  test('RP-14.1: an unrecognized template dependency kind refuses the whole generation', function (assert) {
     let unrecognized = bundle([
       { kind: 'trusted-export', module: '@cardstack/boxel-ui', name: 'Pill' },
       {
@@ -944,7 +950,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.3: a bundle reaches a template only through the map own keys', function (assert) {
+  test('RP-14.1: a bundle reaches a template only through the map own keys', function (assert) {
     // `in` would resolve these against Object.prototype and report a template
     // the bundle does not carry.
     for (let inherited of ['toString', 'constructor', 'hasOwnProperty']) {
@@ -993,7 +999,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.3: a bundle a consumer could not reify is refused before it tries', function (assert) {
+  test('RP-14.1: a bundle a consumer could not reify is refused before it tries', function (assert) {
     // The kind allowlist establishes almost nothing on its own: what a
     // consumer compiles, iterates, and dereferences has to be checked too.
     let carried = bundle();
@@ -1065,7 +1071,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.3: a bundle whose container members are the wrong shape is refused', function (assert) {
+  test('RP-14.1: a bundle whose container members are the wrong shape is refused', function (assert) {
     let malformed: [string, unknown][] = [
       ['templates that is not an object', { ...bundle(), templates: [] }],
       ['a root that is not a string', { ...bundle(), root: 7 }],
@@ -1174,7 +1180,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.3: a literal value that is not data is refused before a consumer clones it', function (assert) {
+  test('RP-14.1: a literal value that is not data is refused before a consumer clones it', function (assert) {
     let notData: [string, TemplateDependency][] = [
       ['a function', { kind: 'literal-value', value: () => 'evil' }],
       [
@@ -1488,7 +1494,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
-  test('RP-14.3: a literal value the record type declares legal is not refused', function (assert) {
+  test('RP-14.1: a literal value the record type declares legal is not refused', function (assert) {
     // JSONTypes.Value types NaN and the infinities as ordinary numbers, and
     // structuredClone — the contract this module states — carries them. A gate
     // that refused them would reject a type-checking record and take the whole
@@ -1683,6 +1689,14 @@ module('Unit | rendering protocol | records and operations', function () {
       ['rowIndex', 'sku', 'boxelCardId'],
       'kebab becomes camel, and non-data attributes are ignored',
     );
+    // The HTML rule folds `-` only before an ASCII lower alpha. Folding before
+    // a digit produces a key the DOM never answers to, so the author's own
+    // attribute silently disappears from the projection.
+    assert.deepEqual(
+      datasetKeysFor(['data-item-2', 'data-x-1-y', 'data-2-a']),
+      ['item-2', 'x-1Y', '2A'],
+      'a digit segment is left alone, as a DOMStringMap leaves it',
+    );
     assert.deepEqual(
       {
         ...projectDataset(
@@ -1692,6 +1706,217 @@ module('Unit | rendering protocol | records and operations', function () {
       },
       { rowIndex: '3' },
       'the converted keys are what the allowlist matches',
+    );
+  });
+
+  test('RP-14.3: no producer-controlled value is read while building a refusal', function (assert) {
+    // The wrapper that guarantees only refusals leave a gate builds its
+    // diagnostic inside a catch. Touching the caught value there — instanceof
+    // runs a getPrototypeOf trap, `.name` runs a getter, JSON.stringify runs
+    // toJSON or throws on a BigInt — throws out of the one block whose job is
+    // that nothing else escapes.
+    let hostile = (make: () => unknown, member: string) =>
+      new Proxy(
+        {
+          protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
+          requiredFeatures: [],
+          root: 'template-0',
+          templates: {},
+          generation: 1,
+          changed: {},
+          effects: [],
+        },
+        {
+          getOwnPropertyDescriptor(target, key) {
+            if (key === member) {
+              throw make();
+            }
+            return Reflect.getOwnPropertyDescriptor(target, key);
+          },
+        },
+      );
+
+    let shapes: [string, () => unknown][] = [
+      [
+        'an error whose name getter throws',
+        () => {
+          let error = new Error('x');
+          Object.defineProperty(error, 'name', {
+            get() {
+              throw new RangeError('name');
+            },
+          });
+          return error;
+        },
+      ],
+      [
+        'an error behind a throwing getPrototypeOf trap',
+        () =>
+          new Proxy(new Error('x'), {
+            getPrototypeOf() {
+              throw new RangeError('prototype');
+            },
+          }),
+      ],
+      [
+        'an error whose name is a BigInt',
+        () => {
+          let error = new Error('x');
+          Object.defineProperty(error, 'name', { value: 10n });
+          return error;
+        },
+      ],
+    ];
+
+    for (let [label, make] of shapes) {
+      for (let [gate, run, member] of [
+        [
+          'the envelope gate',
+          (record: unknown) =>
+            assertUsableExecutionRecord(record as BoxelDescription, support),
+          'protocolVersion',
+        ],
+        [
+          'the bundle gate',
+          (record: unknown) =>
+            acceptTemplateBundle(record as TemplateBundle, support),
+          'templates',
+        ],
+        [
+          'the update gate',
+          (record: unknown) =>
+            acceptComponentUpdate(record as ComponentUpdate, support),
+          'changed',
+        ],
+      ] as [string, (record: unknown) => unknown, string][]) {
+        assert.throws(
+          () => run(hostile(make, member)),
+          (error: Error) => error instanceof ProtocolRefusal,
+          `${gate} still refuses when the thrown value is ${label}`,
+        );
+      }
+    }
+  });
+
+  test('RP-14.3: work is bounded by values visited, not by objects visited', function (assert) {
+    // structuredClone carries `new Array(2**32 - 1)` as one own property in a
+    // few hundred bytes. Counting only objects leaves every hole free, so the
+    // walk is minutes of main thread for a message that costs nothing to send.
+    assert.throws(
+      () =>
+        acceptComponentUpdate(
+          update({
+            changed: {
+              holes: new Array(20_000_000),
+            } as unknown as ComponentUpdate['changed'],
+          }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'a hole array is charged for what it would cost to walk',
+    );
+
+    // And one budget covers a whole gate invocation. Forty DISTINCT payloads,
+    // each individually affordable, must not each be granted the full
+    // allowance — forty times the budget is not the budget. (Forty effects
+    // sharing ONE graph is a different case and legitimately costs one
+    // traversal, which is what the memo is for.)
+    assert.throws(
+      () =>
+        acceptComponentUpdate(
+          update({
+            effects: Array.from({ length: 40 }, (_, effect) => ({
+              kind: 'patch' as const,
+              payload: {
+                chunk: Array.from({ length: 5_000 }, (_, i) => effect * i),
+              },
+            })),
+          }),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'the budget is spent across the whole record, not granted per member',
+    );
+
+    let shared = { chunk: Array.from({ length: 5_000 }, (_, i) => i) };
+    acceptComponentUpdate(
+      update({
+        effects: Array.from({ length: 40 }, () => ({
+          kind: 'patch' as const,
+          payload: shared,
+        })),
+      }),
+      support,
+    );
+    assert.true(
+      true,
+      'while forty effects sharing one graph cost one traversal',
+    );
+  });
+
+  test('RP-14.1: a bundle template named __proto__ cannot become the map prototype', function (assert) {
+    // JSON.parse and structuredClone both carry an own `__proto__` data key,
+    // so a producer can send one. Written with bracket assignment it invokes
+    // the Object.prototype setter: the gate would certify a root it then
+    // returns no own key for.
+    let carried = bundle();
+    let templates = JSON.parse('{"__proto__":{"smuggled":1},"real":null}');
+    templates['real'] = carried.templates['template-0'];
+    assert.throws(
+      () =>
+        acceptTemplateBundle(
+          { ...carried, root: 'real', templates } as TemplateBundle,
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'a template named __proto__ is refused rather than silently becoming a prototype',
+    );
+  });
+
+  test('RP-14.1: a reference is handed back rebuilt, not merely recognized', function (assert) {
+    // The caller resolves this ref through the Store, so a predicate that
+    // answers about the producer's object and returns a boolean leaves a Proxy
+    // free to report one id to the check and another to the Store.
+    let reads = 0;
+    let shifting = new Proxy(
+      { id: 'http://test/allowed', type: testRef },
+      {
+        getOwnPropertyDescriptor(target, key) {
+          if (key === 'id') {
+            reads += 1;
+            return {
+              value:
+                reads > 1
+                  ? 'http://test/ATTACKER-CHOSEN'
+                  : 'http://test/allowed',
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            };
+          }
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    );
+
+    let reference = readBoxelValueReference({ $boxel: shifting });
+    assert.strictEqual(
+      reference?.$boxel.id,
+      'http://test/allowed',
+      'what the consumer resolves is what the gate read',
+    );
+    assert.strictEqual(
+      Object.getPrototypeOf(reference?.$boxel as object),
+      Object.prototype,
+      'and it is a plain object, not the proxy',
+    );
+    assert.strictEqual(
+      readBoxelValueReference({ title: 'Ada' }),
+      undefined,
+      'plain field data is not a reference',
     );
   });
 

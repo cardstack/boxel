@@ -131,7 +131,9 @@ export type SafeEvent = Cloneable<
  * Converts authored attribute names into the keys a `DOMStringMap` exposes.
  *
  * A template's wire data holds what the author wrote — `data-row-index` — and
- * `element.dataset` answers to `rowIndex`. Without the conversion an allowlist
+ * `element.dataset` answers to `rowIndex`. Only a `-` before an ASCII lower
+ * alpha folds, matching the HTML rule: `data-item-2` reads back as `item-2`,
+ * not `item2`, and converting it wrongly drops the member silently. Without the conversion an allowlist
  * built from the template matches nothing and silently drops every one of the
  * author's own attributes, which fails closed but looks like data loss.
  * Non-`data-` attributes are ignored, so a whole attribute list can be passed.
@@ -148,7 +150,7 @@ export function datasetKeysFor(attributeNames: Iterable<string>): string[] {
     keys.push(
       name
         .slice('data-'.length)
-        .replace(/-([a-z0-9])/g, (_, character: string) =>
+        .replace(/-([a-z])/g, (_, character: string) =>
           character.toUpperCase(),
         ),
     );
@@ -178,6 +180,23 @@ export function datasetKeysFor(attributeNames: Iterable<string>): string[] {
  * A pure string function, so it lives here with the shape it guards rather
  * than with the projection: it needs no `Event`, no `Element`, and no DOM.
  */
+/**
+ * Namespaces Base stamps its own identity into, vetoed even when an author
+ * declares the name.
+ *
+ * The allowlist is the primary rule and this is defence in depth, because the
+ * allowlist can only ask what a key is CALLED. An author who writes
+ * `data-boxel-card-id` once in their own template would otherwise be handed
+ * that key from every Host container an event later lands on — opting
+ * themselves into the Host's identity by choosing a name. Incomplete by
+ * construction, which is why it is the second rule and not the first.
+ */
+const hostOwnedDatasetKey = /^(?:boxel|test|card|cards)(?:[A-Z]|$)/;
+
+function isHostOwnedDatasetKey(key: string): boolean {
+  return hostOwnedDatasetKey.test(key);
+}
+
 export function projectDataset(
   dataset: Record<string, string | undefined>,
   authoredKeys: Iterable<string>,
@@ -187,7 +206,7 @@ export function projectDataset(
   // ordinary object literal, or set the result's prototype outright.
   let projected: Record<string, string> = Object.create(null);
   for (let key of Object.getOwnPropertyNames(dataset)) {
-    if (authored.has(key)) {
+    if (authored.has(key) && !isHostOwnedDatasetKey(key)) {
       let value = readMember(dataset, key);
       if (typeof value === 'string') {
         projected[key] = value;

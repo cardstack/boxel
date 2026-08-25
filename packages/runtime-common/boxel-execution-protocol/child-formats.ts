@@ -30,8 +30,12 @@ import type { Format } from '../formats.ts';
  *   (`getEditorChildFormat`, `@cardstack/base/links-to-many-component.gts`),
  *   so a tier applying only the singular rule renders a stack of full field
  *   editors where main shows pills.
- * - RP-2.5: a computed field never renders `edit`; it is rewritten to
- *   `embedded` at format resolution.
+ * - RP-2.5: a computed field is rewritten from `edit` to `embedded` at format
+ *   resolution — on the `fieldDef` axis ONLY (`determineFormats`). `cardDef`
+ *   stays `edit`, so a computed `linksTo` still takes the card branch with
+ *   `cardDef: 'edit'` and seeds its children `edit`/`edit` from here. A tier
+ *   that rewrites both axes diverges from main on exactly the case this
+ *   function exists to keep aligned.
  * - RP-2.4: an explicit `@format` that is in the renderable inventory
  *   **replaces** this answer on both axes rather than narrowing it, and one
  *   outside the inventory is silently ignored rather than treated as an error

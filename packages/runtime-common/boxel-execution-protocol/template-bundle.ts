@@ -17,13 +17,16 @@ import {
 } from './refusal.ts';
 import {
   asRefusal,
+  defineMember,
   isPlainRecord,
   normalizeJsonData,
   normalizeJsonRecord,
   normalizeString,
+  newNormalizationBudget,
   normalizeStringArray,
   readMember,
 } from './untrusted-input.ts';
+import type { NormalizationBudget } from './untrusted-input.ts';
 import { assertUsableExecutionRecord } from './version.ts';
 import type { ProtocolEnvelope, ProtocolSupport } from './version.ts';
 
@@ -139,12 +142,15 @@ export function acceptTemplateBundle(
   bundle: TemplateBundle,
   support: ProtocolSupport,
 ): TemplateBundle {
-  return asRefusal(() => gateTemplateBundle(bundle, support));
+  return asRefusal(() =>
+    gateTemplateBundle(bundle, support, newNormalizationBudget()),
+  );
 }
 
 function gateTemplateBundle(
   bundle: TemplateBundle,
   support: ProtocolSupport,
+  budget: NormalizationBudget,
 ): TemplateBundle {
   let envelope = assertUsableExecutionRecord(bundle, support);
 
@@ -186,10 +192,14 @@ function gateTemplateBundle(
 
     let dependencies: TemplateDependency[] = [];
     let scopeLength = readMember(scope, 'length');
-    if (typeof scopeLength !== 'number' || !Number.isInteger(scopeLength)) {
+    if (
+      typeof scopeLength !== 'number' ||
+      !Number.isInteger(scopeLength) ||
+      scopeLength < 0
+    ) {
       throw new ProtocolRefusal(
         'BOXEL_RECORD_MALFORMED',
-        `template ${quoteToken(key)}'s scope must have an integer length, received ${describeValue(scopeLength)}`,
+        `template ${quoteToken(key)}'s scope must have a non-negative integer length, received ${describeValue(scopeLength)}`,
       );
     }
     for (let index = 0; index < scopeLength; index++) {
@@ -218,6 +228,7 @@ function gateTemplateBundle(
         key,
         kind as TemplateDependencyKind,
         entry,
+        budget,
       );
       if (
         dependency.kind === 'authored-component' &&
@@ -230,7 +241,15 @@ function gateTemplateBundle(
       dependencies.push(dependency);
     }
 
-    normalized[key] = normalizeDescriptor(key, descriptor, dependencies);
+    // `key` is producer-chosen, and `normalized[key] = …` invokes the
+    // Object.prototype `__proto__` setter for that one name — leaving the
+    // returned map with a producer-chosen prototype, no own key for the
+    // template, and a `root` this gate just certified as carried.
+    defineMember(
+      normalized,
+      key,
+      normalizeDescriptor(key, descriptor, dependencies, budget),
+    );
   }
 
   if (unrecognized.length > 0) {
@@ -261,6 +280,7 @@ function normalizeDependency(
   templateKey: string,
   kind: TemplateDependencyKind,
   entry: Record<string, unknown>,
+  budget: NormalizationBudget,
 ): TemplateDependency {
   let member = (name: string) => {
     let value = readMember(entry, name);
@@ -289,7 +309,10 @@ function normalizeDependency(
       // `structuredClone` with a bare error past every gate, or on a tier
       // that shares a heap and does not clone, reaching authored scope as
       // the live object.
-      return { kind, value: normalizeJsonData(readMember(entry, 'value')) };
+      return {
+        kind,
+        value: normalizeJsonData(readMember(entry, 'value'), budget),
+      };
   }
 }
 
@@ -307,6 +330,7 @@ function normalizeDescriptor(
   key: string,
   descriptor: Record<string, unknown>,
   scope: TemplateDependency[],
+  budget: NormalizationBudget,
 ): TemplateDescriptor {
   let where = (name: string) => `template ${quoteToken(key)}'s ${name}`;
   // Deliberately NOT `descriptor.id === key`. The map key is the bundle's own
@@ -357,6 +381,7 @@ function normalizeDescriptor(
       state: normalizeJsonRecord(
         readMember(instance, 'state'),
         where('instance.state'),
+        budget,
       ),
       getters: normalizeStringArray(
         readMember(instance, 'getters'),

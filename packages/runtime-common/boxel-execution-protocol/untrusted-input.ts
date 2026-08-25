@@ -11,15 +11,35 @@
 
 import type * as JSONTypes from 'json-typescript';
 
-import { ProtocolRefusal, describeValue, quoteToken } from './refusal.ts';
+import {
+  ProtocolRefusal,
+  describeValue,
+  isProtocolRefusal,
+  quoteToken,
+} from './refusal.ts';
 
 /**
- * How deep a literal value may nest before it is refused.
+ * One normalization's shared bookkeeping: what it has already built (so the
+ * sharing a producer sent is the sharing a consumer receives), what it is
+ * currently inside (so a value containing itself is refused rather than
+ * walked), and how much work is left.
  *
- * Doubles as the cycle guard: a value that loops back on itself runs the depth
- * down and is refused rather than walked forever.
+ * Threaded through a whole gate invocation rather than created per member: a
+ * budget granted afresh to each of forty effects is forty times the budget.
  */
-const MAX_LITERAL_VALUE_DEPTH = 32;
+export interface NormalizationBudget {
+  remaining: number;
+  seen: Map<object, JSONTypes.Value>;
+  open: Set<object>;
+}
+
+export function newNormalizationBudget(): NormalizationBudget {
+  return {
+    remaining: MAX_LITERAL_VALUE_NODES,
+    seen: new Map(),
+    open: new Set(),
+  };
+}
 
 /**
  * How many values one normalization may visit.
@@ -47,14 +67,20 @@ export function asRefusal<T>(gate: () => T): T {
   try {
     return gate();
   } catch (error) {
-    if (error instanceof ProtocolRefusal) {
+    if (isProtocolRefusal(error)) {
       throw error;
     }
+    // The caught value is producer-controlled, so the diagnostic is built
+    // WITHOUT touching it. `instanceof` runs a proxy's getPrototypeOf trap,
+    // `error.name` runs a getter, and `JSON.stringify` runs `toJSON` or throws
+    // on a BigInt — each of which throws out of the very catch block whose job
+    // is to guarantee nothing but a refusal leaves. The value rides along as
+    // `cause`, which stores without reading, so a genuine internal bug is
+    // still recoverable from a log while a hostile one costs nothing.
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `reading the record raised ${
-        error instanceof Error ? quoteToken(error.name) : describeValue(error)
-      }`,
+      'reading the record raised an error',
+      error,
     );
   }
 }
@@ -93,7 +119,7 @@ export function readMember(source: object, key: string): unknown {
  * silently lost, which `structuredClone` — the contract this module states —
  * does not do.
  */
-function defineMember(
+export function defineMember(
   target: Record<string, unknown>,
   key: string,
   value: unknown,
@@ -117,10 +143,17 @@ function defineMember(
  */
 export function normalizeJsonData(
   value: unknown,
-  depth = MAX_LITERAL_VALUE_DEPTH,
-  budget: { remaining: number } = { remaining: MAX_LITERAL_VALUE_NODES },
-  seen: Map<object, JSONTypes.Value> = new Map(),
+  budget: NormalizationBudget = newNormalizationBudget(),
 ): JSONTypes.Value {
+  // Charged for EVERY value, before any early return. Counting only objects
+  // leaves an array of holes free: `new Array(2**32 - 1)` is one own property
+  // over the wire, `structuredClone`s in no time, and walks for minutes.
+  if (--budget.remaining < 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `more than ${MAX_LITERAL_VALUE_NODES} values in one record`,
+    );
+  }
   if (value === null) {
     return null;
   }
@@ -146,28 +179,26 @@ export function normalizeJsonData(
       `not data: ${describeValue(value)}`,
     );
   }
-  if (depth <= 0) {
+  // A value reachable from itself is not JSON, and refusing it here rather
+  // than through a depth limit keeps the answer independent of the order a
+  // producer happened to lay its keys out in.
+  if (budget.open.has(value)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `nested past ${MAX_LITERAL_VALUE_DEPTH} levels`,
-    );
-  }
-  if (--budget.remaining < 0) {
-    throw new ProtocolRefusal(
-      'BOXEL_RECORD_MALFORMED',
-      `more than ${MAX_LITERAL_VALUE_NODES} values in one record`,
+      'a value that contains itself is not data',
     );
   }
   // Restores the sharing the input had. Without it a shared subgraph is walked
   // once per path that reaches it, which is the exponential blow-up the node
   // budget would otherwise have to absorb.
-  let memoized = seen.get(value);
+  let memoized = budget.seen.get(value);
   if (memoized !== undefined) {
     return memoized;
   }
+  budget.open.add(value);
   if (Array.isArray(value)) {
     let entries: JSONTypes.Value[] = [];
-    seen.set(value, entries);
+    budget.seen.set(value, entries);
     let length = readMember(value, 'length');
     if (typeof length !== 'number' || !Number.isInteger(length) || length < 0) {
       throw new ProtocolRefusal(
@@ -176,15 +207,9 @@ export function normalizeJsonData(
       );
     }
     for (let index = 0; index < length; index++) {
-      entries.push(
-        normalizeJsonData(
-          readMember(value, String(index)),
-          depth - 1,
-          budget,
-          seen,
-        ),
-      );
+      entries.push(normalizeJsonData(readMember(value, String(index)), budget));
     }
+    budget.open.delete(value);
     return entries;
   }
   let prototype = Object.getPrototypeOf(value);
@@ -201,7 +226,7 @@ export function normalizeJsonData(
     );
   }
   let normalized: Record<string, JSONTypes.Value> = {};
-  seen.set(value, normalized);
+  budget.seen.set(value, normalized);
   // getOwnPropertyNames, not keys: a non-enumerable member is still reachable
   // by whoever holds the object, so skipping it proves nothing about what a
   // consumer would be handed.
@@ -209,17 +234,19 @@ export function normalizeJsonData(
     defineMember(
       normalized,
       key,
-      normalizeJsonData(readMember(value, key), depth - 1, budget, seen),
+      normalizeJsonData(readMember(value, key), budget),
     );
   }
+  budget.open.delete(value);
   return normalized;
 }
 
 export function normalizeJsonRecord(
   value: unknown,
   label: string,
+  budget: NormalizationBudget = newNormalizationBudget(),
 ): Record<string, JSONTypes.Value> {
-  let normalized = normalizeJsonData(value);
+  let normalized = normalizeJsonData(value, budget);
   if (
     typeof normalized !== 'object' ||
     normalized === null ||

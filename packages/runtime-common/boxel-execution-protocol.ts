@@ -31,15 +31,25 @@
  * by path — `@cardstack/runtime-common/boxel-execution-protocol`.
  */
 
+// Named rather than `export *`. A helper that crosses a file boundary has to
+// be exported from its own file, and `export *` would make every one of those
+// public — including the raw reads, which by design throw whatever a producer
+// throws and so do not hold the gate contract the rest of this surface does.
+// A consumer that wants those imports them by path deliberately.
 export * from './boxel-execution-protocol/child-formats.ts';
 export * from './boxel-execution-protocol/cloneable.ts';
 export * from './boxel-execution-protocol/component-update.ts';
 export * from './boxel-execution-protocol/instance-projection.ts';
 export * from './boxel-execution-protocol/projected-error.ts';
-export * from './boxel-execution-protocol/refusal.ts';
 export * from './boxel-execution-protocol/runtime.ts';
 export * from './boxel-execution-protocol/safe-event.ts';
 export * from './boxel-execution-protocol/template-bundle.ts';
 export * from './boxel-execution-protocol/type-description.ts';
-export * from './boxel-execution-protocol/untrusted-input.ts';
 export * from './boxel-execution-protocol/version.ts';
+
+export {
+  PROTOCOL_REFUSAL_CODES,
+  ProtocolRefusal,
+  isProtocolRefusal,
+} from './boxel-execution-protocol/refusal.ts';
+export type { ProtocolRefusalCode } from './boxel-execution-protocol/refusal.ts';

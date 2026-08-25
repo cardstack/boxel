@@ -642,9 +642,12 @@ module and exactly eight: `loadBoxel`,
 names the _kind_ string there, so one name never carries two meanings across
 these two sections), `projectInstance` (answering `InstanceProjection`),
 `serializeCard`, `dispose`. The interface also carries `mode`. Every argument
-and every result is a handle or a cloneable record, which is what lets one
-interface serve a local call, a call into a Compartment, and a call across a
-message port unchanged. The module proves the name list and the interface
+and every result is a handle, a record the protocol module proves cloneable,
+or a JSON:API document — `LooseCardResource` and `LooseSingleCardDocument`,
+which are cloneable in practice because the format they describe is JSON but
+are not provably so while the types describing them are index-signature-less
+interfaces. That is what lets one interface serve a local call, a call into a
+Compartment, and a call across a message port unchanged. The module proves the name list and the interface
 cannot drift.
 
 The `purpose` is required, not optional: an indexing pass must fail loudly on

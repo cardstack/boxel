@@ -54,14 +54,30 @@ const permitted = new Set([
 const IMPORT =
   /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^'"();]*?\sfrom\s+)?['"]([^'"]+)['"]/g;
 const BARE_IMPORT = /(?:^|\n)\s*import\s+['"]([^'"]+)['"]/g;
+// A dynamic import survives compilation and pulls its whole graph at runtime,
+// in exactly the environment that has none — and it is the natural reach for
+// anyone wanting to use a helper "lazily". `require` likewise.
+const DYNAMIC = /\b(?:import|require)\s*\(\s*['"]([^'"]+)['"]/g;
 
-function runtimeSpecifiers(source: string): string[] {
+/**
+ * Blanks comments before matching, so prose naming an import — the header of
+ * this very file does — is not read as one.
+ */
+function withoutComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .split('\n')
+    .map((line) => line.replace(/\/\/.*$/, ''))
+    .join('\n');
+}
+
+function runtimeSpecifiers(rawSource: string): string[] {
+  let source = withoutComments(rawSource);
   let found = new Set<string>();
-  for (let match of source.matchAll(IMPORT)) {
-    found.add(match[1]);
-  }
-  for (let match of source.matchAll(BARE_IMPORT)) {
-    found.add(match[1]);
+  for (let pattern of [IMPORT, BARE_IMPORT, DYNAMIC]) {
+    for (let match of source.matchAll(pattern)) {
+      found.add(match[1]);
+    }
   }
   return [...found];
 }

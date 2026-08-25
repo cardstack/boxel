@@ -18,9 +18,11 @@ import {
   asRefusal,
   isPlainRecord,
   normalizeJsonData,
+  newNormalizationBudget,
   normalizeJsonRecord,
   readMember,
 } from './untrusted-input.ts';
+import type { NormalizationBudget } from './untrusted-input.ts';
 import { assertUsableExecutionRecord } from './version.ts';
 import type { ProtocolEnvelope, ProtocolSupport } from './version.ts';
 
@@ -90,12 +92,15 @@ export function acceptComponentUpdate(
   update: ComponentUpdate,
   support: ProtocolSupport,
 ): ComponentUpdate {
-  return asRefusal(() => gateComponentUpdate(update, support));
+  return asRefusal(() =>
+    gateComponentUpdate(update, support, newNormalizationBudget()),
+  );
 }
 
 function gateComponentUpdate(
   update: ComponentUpdate,
   support: ProtocolSupport,
+  budget: NormalizationBudget,
 ): ComponentUpdate {
   let envelope = assertUsableExecutionRecord(update, support);
 
@@ -111,6 +116,7 @@ function gateComponentUpdate(
   let changed = normalizeJsonRecord(
     readMember(update, 'changed'),
     "an update's changed",
+    budget,
   );
 
   let effects = readMember(update, 'effects');
@@ -123,10 +129,14 @@ function gateComponentUpdate(
   let unrecognized: string[] = [];
   let normalized: ComponentEffect[] = [];
   let effectsLength = readMember(effects, 'length');
-  if (typeof effectsLength !== 'number' || !Number.isInteger(effectsLength)) {
+  if (
+    typeof effectsLength !== 'number' ||
+    !Number.isInteger(effectsLength) ||
+    effectsLength < 0
+  ) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `an update's effects must have an integer length, received ${describeValue(effectsLength)}`,
+      `an update's effects must have a non-negative integer length, received ${describeValue(effectsLength)}`,
     );
   }
   for (let index = 0; index < effectsLength; index++) {
@@ -153,7 +163,7 @@ function gateComponentUpdate(
     // terms rather than passed through because its shape is open.
     normalized.push({
       kind: kind as ComponentEffectKind,
-      payload: normalizeJsonData(readMember(entry, 'payload')),
+      payload: normalizeJsonData(readMember(entry, 'payload'), budget),
     });
   }
   if (unrecognized.length > 0) {

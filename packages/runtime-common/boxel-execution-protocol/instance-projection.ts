@@ -42,6 +42,67 @@ export type BoxelValueReference = Cloneable<{
  * `ancestorOf` whose `card` is garbage — would otherwise arrive there
  * carrying the authority of a check that never happened.
  */
+export function readBoxelValueReference(
+  value: unknown,
+): BoxelValueReference | undefined {
+  try {
+    if (!isPlainRecord(value) || !hasExactOwnKeys(value, ['$boxel'])) {
+      return undefined;
+    }
+    let marker = readMember(value, '$boxel');
+    if (!isPlainRecord(marker) || !hasExactOwnKeys(marker, ['id', 'type'])) {
+      return undefined;
+    }
+    let id = readMember(marker, 'id');
+    let type = readMember(marker, 'type');
+    if (!(id === null || typeof id === 'string') || !isExactCodeRef(type)) {
+      return undefined;
+    }
+    // Rebuilt, because the caller resolves this ref through the Store. A
+    // predicate answers about the producer's object and then hands that same
+    // object on, so a Proxy is free to report one id to the check and another
+    // to the Store.
+    return {
+      $boxel: {
+        id: id as BoxelValueReference['$boxel']['id'],
+        type: normalizeCodeRef(type),
+      },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Rebuilds a validated ref from own-data reads. */
+function normalizeCodeRef(ref: unknown): CodeRef {
+  let source = ref as Record<string, unknown>;
+  let discriminator = readMember(source, 'type');
+  if (discriminator === 'ancestorOf') {
+    return {
+      type: 'ancestorOf',
+      card: normalizeCodeRef(readMember(source, 'card')),
+    };
+  }
+  if (discriminator === 'fieldOf') {
+    return {
+      type: 'fieldOf',
+      card: normalizeCodeRef(readMember(source, 'card')),
+      field: readMember(source, 'field') as string,
+    };
+  }
+  return {
+    module: readMember(source, 'module') as CodeRef extends { module: infer M }
+      ? M
+      : never,
+    name: readMember(source, 'name') as string,
+  };
+}
+
+/**
+ * Whether a projected value is a link reference. Prefer
+ * `readBoxelValueReference` wherever the answer is then acted on: this reports
+ * about the caller's object and leaves the caller holding it.
+ */
 export function isBoxelValueReference(
   value: unknown,
 ): value is BoxelValueReference {
