@@ -221,7 +221,7 @@ module('Acceptance | prerender | html', function (hooks) {
         'Boxed/one.json': {
           data: {
             attributes: { name: 'Boxy' },
-            meta: { adoptsFrom: { module: './boxed', name: 'Boxed' } },
+            meta: { adoptsFrom: { module: '../boxed', name: 'Boxed' } },
           },
         },
         'broken.gts': 'export const Broken = ;',
