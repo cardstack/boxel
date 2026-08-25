@@ -346,6 +346,17 @@ summary,
   color: var(--copper-ink);
 }
 
+/* The hero's eyebrow is ORANGE, not brown. --copper-ink is copper's legible
+   variant on cream, and legible it is — but a warm brown word sitting
+   directly beside the ember rule this kicker draws for itself reads as two
+   different accents. Ember for both, so the mark and the line are one
+   colour. (The demo page's kicker keeps --ember-hot: it is a paired subject
+   of the crossing, and it has to land on the card's group line, which is
+   ember-hot too.) */
+:root[data-theme='light'] .hero .kicker {
+  color: var(--ember);
+}
+
 .kicker::before {
   content: '';
   width: 18px;
@@ -7274,8 +7285,11 @@ html[data-gm-dragging] * {
   left: 0;
   z-index: 2;
   width: 1px;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 0 7px rgba(255, 255, 255, 0.35);
+  /* ember, not white: white reads on the dark card and vanishes on the
+     light one, and the head already wears an ember halo — one colour for
+     the whole playhead, legible on either ground */
+  background: var(--ember);
+  box-shadow: 0 0 7px var(--glow);
   pointer-events: none;
 }
 
@@ -7287,7 +7301,7 @@ html[data-gm-dragging] * {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--ember);
   box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.26);
 }
 
