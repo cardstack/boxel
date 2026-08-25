@@ -382,6 +382,48 @@ What `@route` adds, beyond sugar:
 cross-document transitions (MPA), and freezing a page too expensive to
 keep live. Same-document navigation defaults to `@route`.
 
+**Shipped, and the hero page grew the construct five refinements** —
+Keynote's slide rules, each one a shipped bug or a hand-rolled subtlety
+the old `animateView` orchestration carried:
+
+1. **A claimed skin is lifted out of its fading container.** Naming the
+   card that holds the flying stage is legal: the skin is extracted to
+   the orphan layer (a same-sized seat holds its place, so the doomed
+   card doesn't reflow), and the View Transitions nesting rule — never
+   name a container of named things — does not come along.
+2. **`onstage` — only what a viewport can see animates.** A query flag
+   (and `c.onstage` in templates); the canned crossing sets it on its
+   leave and arrive. Leavers are judged in the OLD scene's window (their
+   initial boxes, measured before the crossing scrolled), arrivals in
+   the new one's. Twenty-five off-screen cards cost nothing — this
+   replaces the old `quietTheRest` compositing panic, not taste.
+3. **The yield rule.** A sprite a specific step names is owned by that
+   step; the crossing's generic children surrender it. A special exit
+   that is not a dissolve is one sibling step (`c.Tween @of={{c.onstage
+(c.removed 'scene')}} @y=…`), not an exclusion syntax.
+4. **The crossfade carries color, not transparency.** A symmetric
+   opacity crossfade dips toward the ground mid-fade. When both skins
+   wear a real background, alpha becomes an actual color: the receiver
+   holds solid, tweening between the two skins' effective colors while
+   the old skin dissolves above it — and the solid is handed back to the
+   stylesheet's own alpha on landing (`Cue.borrow`). The ground can
+   never leak through the flying box.
+5. **`@quiet` on the region.** When a run starts, every animation
+   running at that moment — the run's own cannot be among them, they
+   don't exist yet — is paused, and played again when the run settles.
+   Pausing is not stopping: loops resume where they were.
+
+The canned shape is overlapped, as a Magic Move is: the leave fades as
+the flight lifts off; `@overlap` still places the arrivals. And two
+pieces of run machinery the crossing forced into honesty: a region's own
+orphans re-entering the changeset are not "dirt" (a busy page was
+cancelling its crossing into a leave-only rump every render — nothing-new
+passes keep the run, and an edited timeline is told apart by a
+fingerprint of the TREE, not the value-laden cues), and a kept run's
+picture is stood back up after the measurement that kept it
+(`run.reassert()` — releaseForMeasure's jump-to-rest stops the very
+animations it measures around).
+
 ### 4.8 Constructs specified with their evidence
 
 Six constructs are specified inside the audit that produced them, and
@@ -899,21 +941,21 @@ choreography written against it.
 
 ## 7. Implementation plan
 
-| piece                           | state                                                                                                                                  | depends on |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                                   | —          |
-| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                          | —          |
-| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                       | —          |
-| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                                | —          |
-| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                      | the handle |
-| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                     | —          |
-| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                            | —          |
-| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                           | —          |
-| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                      | —          |
-| `@route` + `c.Crossing`         | ✅ landed at the library — scroll inside the pass, tempo-zero no-run, the canned sequence; the app-chrome migration is the demo pass's | anchors    |
-| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                         | —          |
-| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                               | —          |
-| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                           | —          |
+| piece                           | state                                                                                                                             | depends on |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                              | —          |
+| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                     | —          |
+| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                  | —          |
+| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                           | —          |
+| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                 | the handle |
+| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                | —          |
+| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                       | —          |
+| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                      | —          |
+| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                 | —          |
+| `@route` + `c.Crossing`         | ✅ SHIPPED end to end — the gallery ⇄ demo transition rides the region; animateView orchestration deleted; see §4.7's refinements | anchors    |
+| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                    | —          |
+| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                          | —          |
+| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                      | —          |
 
 The Build Order demo remains the acceptance test for the second pass:
 each promotion deletes a piece of `builds.ts`, and the demo is done being
