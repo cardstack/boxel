@@ -26,6 +26,7 @@ import {
   isCardInstance,
   isFileDefInstance,
   isResolvedCodeRef,
+  rri,
   cardDefFormats,
   fileDefFormats,
   fieldDefFormats,
@@ -133,10 +134,13 @@ export default class PreviewPanel extends Component<Signature> {
   private editTemplate = () => {
     const type = identifyCard(this.args.card.constructor as any);
     if (type && isResolvedCodeRef(type)) {
-      const gtsFileUrl = type.module.endsWith('.gts')
+      // `identifyCard` reports a module in canonical form, which for a
+      // mapped realm is a prefix identifier rather than a URL — parsing it
+      // here would throw. `updateCodePath` resolves an identifier itself.
+      const gtsFile = type.module.endsWith('.gts')
         ? type.module
         : `${type.module}.gts`;
-      this.operatorModeStateService.updateCodePath(new URL(gtsFileUrl));
+      this.operatorModeStateService.updateCodePath(rri(gtsFile));
     }
   };
 
