@@ -256,10 +256,10 @@ async function measureCard(browser, card, options) {
         .map((sample) => sample.documentMs)
         .filter((value) => typeof value === 'number'),
     ),
+    errorSamples: samples.filter((sample) => sample.fatal).length,
     executionMedianMs: median(
       usable(samples).map((sample) => sample.executionMs),
     ),
-    errorSamples: samples.filter((sample) => sample.fatal).length,
     samples: samples.length,
     totalMedianMs: median(usable(samples).map((sample) => sample.totalMs)),
     unreadySamples: samples.length - usable(samples).length,
