@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import { pageTitle } from 'ember-page-title';
 import { MotionConfig } from 'glimmer-motion';
@@ -6,12 +7,25 @@ import { HowPanel } from 'test-app/components/how-panel';
 import { TempoPicker } from 'test-app/components/tempo-picker';
 import { ThemePicker } from 'test-app/components/theme-picker';
 
+/**
+ * The brand mark, clicked while already standing in the gallery. The router
+ * treats a same-route click as a no-op — LinkTo marks itself `active` on its
+ * own route — so the leftover intent is "take me back to the top". From a
+ * demo page the click is a real transition and the crossing owns the scroll;
+ * this deliberately stays out of its way.
+ */
+function scrollHome(event: Event) {
+  if ((event.currentTarget as HTMLElement).classList.contains('active')) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+}
+
 <template>
   {{pageTitle "Choreo"}}
   <MotionConfig @reducedMotion="user">
     <div class="app-shell">
       <header class="topbar">
-        <LinkTo @route="index" class="brand">
+        <LinkTo @route="index" class="brand" {{on "click" scrollHome}}>
           <ChoreoMark />
           <span class="brand-copy">
             <span class="brand-name">Choreo</span>

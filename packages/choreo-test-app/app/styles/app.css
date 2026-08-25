@@ -31,11 +31,13 @@
   /* the page's own resting tone — not --bg. --bg is the recessed end of the
      surface ladder (bg < bg-elev < bg-spot) that cards and panels sit on top
      of; the wash behind all of them used to read lighter than pure --bg
-     because a noise texture sat over it at all times. Now that the texture is
-     gone, --bg-page carries that same lift on its own, measured off an actual
-     render of the old grain composited over --bg, so removing it did not also
-     make the page a shade darker than everyone was used to. */
-  --bg-page: #211e1b;
+     because a noise texture sat over it at all times. A first pass matched
+     the measured average of the old grain composited over --bg (#211e1b) —
+     and still read blacker than memory, because the grain's bright speckle
+     lifted the PERCEIVED tone above its average. So this sits a further
+     notch up: a deep warm gray the eye reads the way the textured page
+     read, not the black the arithmetic said it was. */
+  --bg-page: #332d27;
   --ink: #f3ece3;
   --ink-dim: #9c9287;
   --ink-faint: #6b635b;
