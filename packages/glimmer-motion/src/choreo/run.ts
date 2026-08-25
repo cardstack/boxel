@@ -18,7 +18,7 @@ import {
   flushKeyframeResolvers,
   frame,
   type FrameData,
-  JSAnimation,
+  generateLinearEasing,
   spring as springGenerator,
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
@@ -97,6 +97,31 @@ function isSpring(transition: Record<string, unknown> | undefined): boolean {
     'stiffness' in transition ||
     'visualDuration' in transition
   );
+}
+
+/**
+ * A platform Animation in the controls shape the transport speaks, so
+ * setPaused / speed / stopTrack drive it exactly like an engine animation.
+ */
+function platformControls(animation: Animation): AnimationPlaybackControls {
+  return {
+    cancel: () => animation.cancel(),
+    pause: () => animation.pause(),
+    play: () => animation.play(),
+    get speed() {
+      return animation.playbackRate;
+    },
+    set speed(rate: number) {
+      animation.playbackRate = rate;
+    },
+    stop: () => animation.cancel(),
+    get time() {
+      return ((animation.currentTime as number) ?? 0) / 1000;
+    },
+    set time(seconds: number) {
+      animation.currentTime = seconds * 1000;
+    },
+  } as unknown as AnimationPlaybackControls;
 }
 
 function carryVelocity(
@@ -178,6 +203,8 @@ function releaseHold(ve: VisualElement, el: HTMLElement, held: HeldValue[]) {
 
 /** what one cue is doing right now */
 interface Track {
+  /** camera: the platform animation flying the region's frame (§6.3) */
+  cameraAnimation?: Animation;
   controls?: AnimationPlaybackControls[];
   cue: Cue;
   delivery?: Delivery;
@@ -185,6 +212,8 @@ interface Track {
   end: number;
   held?: HeldValue[];
   loopAnimation?: Animation;
+  /** flight: the platform animations this track owns — cancelled before any measure */
+  platform?: Animation[];
   /** where each value stood when this track first started — the scrub-back frame */
   origin?: Record<string, PropValue>;
   /** raise: how to put the element back where it was */
@@ -325,6 +354,9 @@ export class ChoreoRun implements Run {
       }
       if (t.loopAnimation) {
         t.loopAnimation.playbackRate = rate;
+      }
+      if (t.cameraAnimation) {
+        t.cameraAnimation.playbackRate = rate;
       }
     }
   }
@@ -515,6 +547,13 @@ export class ChoreoRun implements Run {
           t.loopAnimation.pause();
         }
       }
+      if (t.cameraAnimation) {
+        if (run) {
+          t.cameraAnimation.play();
+        } else {
+          t.cameraAnimation.pause();
+        }
+      }
     }
   }
 
@@ -619,12 +658,17 @@ export class ChoreoRun implements Run {
           t.cameraFrom = { ...this.camera };
         } else if (!inside && t.started && now < t.start) {
           t.started = false;
+          t.cameraAnimation?.cancel();
+          t.cameraAnimation = undefined;
           if (t.cameraFrom) {
             this.camera = { ...t.cameraFrom };
             this.applyCamera(t);
           }
         }
         if (t.started && (now < t.end || !t.passed)) {
+          // the SHADOW state: interpolated every evaluate regardless of who
+          // draws, so interruption, onCamera and the next run always have a
+          // current value to read without decomposing a matrix
           const p = this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
           const to = cue.camera.to;
@@ -633,6 +677,23 @@ export class ChoreoRun implements Run {
             y: from.y + ((to.y ?? from.y) - from.y) * p,
             zoom: from.zoom + ((to.zoom ?? from.zoom) - from.zoom) * p,
           };
+          // the platform draws the frame while playing (§6.3 on WAAPI): the
+          // whole scene composites off the main thread. Stills stay inline.
+          if (this.playing && now < t.end) {
+            if (!t.cameraAnimation) {
+              this.startCameraAnimation(t, now);
+            } else if (t.cameraAnimation.playState === 'paused') {
+              t.cameraAnimation.play();
+            }
+          } else if (t.cameraAnimation) {
+            if (now >= t.end) {
+              // landing: the animation ends and the inline style takes over
+              this.dropCameraAnimation(t);
+            } else {
+              t.cameraAnimation.pause();
+              t.cameraAnimation.currentTime = Math.max(0, now - t.start);
+            }
+          }
           this.applyCamera(t);
           if (now >= t.end && this.playing && !t.passed) {
             t.passed = true;
@@ -724,7 +785,7 @@ export class ChoreoRun implements Run {
         !t.controls &&
         !t.delivery &&
         !t.loopAnimation &&
-        cue.target
+        (cue.target || cue.flight)
       ) {
         // a scrub retired the animation; play re-enters the window, so a
         // fresh one carries on from wherever the scrub left the values
@@ -762,7 +823,7 @@ export class ChoreoRun implements Run {
           t.loopAnimation.pause();
           const cycle = t.end - t.start;
           t.loopAnimation.currentTime = cycle ? (now - t.start) % cycle : 0;
-        } else if (cue.target) {
+        } else if (cue.target || cue.flight) {
           // a still frame is COMPUTED, not driven: the live animation (if
           // any) is retired and every value jumped to its sampled position —
           // deterministic, and immune to animation-lifecycle races
@@ -818,22 +879,83 @@ export class ChoreoRun implements Run {
     return target / zoom;
   }
 
+  /** the frame's transform for a camera state, '' at identity */
+  private static cameraCss(state: CameraState): string {
+    const { zoom, x, y } = state;
+    return zoom === 1 && x === 0 && y === 0
+      ? ''
+      : `translate(${x}px, ${y}px) scale(${zoom})`;
+  }
+
+  /**
+   * Fly the region's frame on the platform: two transform keyframes and the
+   * eased clock pre-sampled into a linear() easing. The biggest layer in the
+   * region composites off the main thread for the whole move.
+   */
+  private startCameraAnimation(t: Track, now: number) {
+    const host = this.options.cameraFrame;
+    const from = t.cameraFrom;
+    const to = t.cue.camera?.to;
+    if (!host || !from || !to) {
+      return;
+    }
+    const final: CameraState = {
+      x: to.x ?? from.x,
+      y: to.y ?? from.y,
+      zoom: to.zoom ?? from.zoom,
+    };
+    const span = Math.max(1, t.end - t.start);
+    const anim = host.animate(
+      [
+        { transform: ChoreoRun.cameraCss(from) || 'none' },
+        { transform: ChoreoRun.cameraCss(final) || 'none' },
+      ],
+      {
+        duration: span,
+        easing: generateLinearEasing(
+          (p: number) => this.cameraProgress(t, p * span),
+          span,
+        ),
+        fill: 'both',
+      },
+    );
+    anim.playbackRate = this.rate;
+    anim.currentTime = Math.max(0, now - t.start);
+    t.cameraAnimation = anim;
+  }
+
+  /**
+   * Retire the frame's platform animation and hand the picture back to
+   * inline style, written from the shadow state — so a cancel mid-zoom
+   * freezes exactly where the eye was, and a landing holds its final.
+   */
+  private dropCameraAnimation(t: Track) {
+    if (!t.cameraAnimation) {
+      return;
+    }
+    t.cameraAnimation.cancel();
+    t.cameraAnimation = undefined;
+    this.applyCamera(t);
+  }
+
   private applyCamera(t: Track) {
     const frame = this.options.cameraFrame;
     if (!frame) {
       return;
     }
-    const { zoom, x, y } = this.camera;
+    const { zoom } = this.camera;
     const origin = t.cue.camera?.origin;
     frame.style.transformOrigin = origin
       ? `${origin.x}px ${origin.y}px`
       : '50% 50%';
     // the frame is the author's own region element: at identity, leave no
-    // trace — a resting transform would quietly become a containing block
-    frame.style.transform =
-      zoom === 1 && x === 0 && y === 0
-        ? ''
-        : `translate(${x}px, ${y}px) scale(${zoom})`;
+    // trace — a resting transform would quietly become a containing block.
+    // While a platform animation owns the frame, the inline write is
+    // skipped: the animation overrides it anyway, and the stale value would
+    // flash when the animation is cancelled.
+    if (!t.cameraAnimation) {
+      frame.style.transform = ChoreoRun.cameraCss(this.camera);
+    }
     for (const sprite of t.cue.camera?.steady ?? []) {
       const ve = sprite.node.visualElement;
       if (ve) {
@@ -1006,6 +1128,8 @@ export class ChoreoRun implements Run {
   private stopTrack(t: Track) {
     t.controls?.forEach((c) => c.stop());
     t.controls = undefined;
+    t.platform?.forEach((a) => a.cancel());
+    t.platform = undefined;
     const ve = t.cue.sprite.node.visualElement;
     if (ve && t.cue.target) {
       for (const key in t.cue.target) {
@@ -1018,8 +1142,17 @@ export class ChoreoRun implements Run {
   private jumpFinals(t: Track) {
     const { cue } = t;
     const ve = cue.sprite.node.visualElement;
-    if (!ve || !cue.target) {
+    if (!ve || (!cue.target && !cue.flight)) {
       return;
+    }
+    if (cue.flight) {
+      // the platform owned the journey; the landing is written inline
+      this.applyFlight(t, 1);
+      ve.render();
+      if (!cue.target) {
+        t.passed = true;
+        return;
+      }
     }
     if (!t.origin) {
       // capture where things stood first, so a scrub back can undo this
@@ -1192,6 +1325,31 @@ export class ChoreoRun implements Run {
     );
   }
 
+  /**
+   * The sampled path as platform keyframes: each point becomes a transform,
+   * uniformly spaced (the points were sampled uniformly in progress), and
+   * the eased clock rides the animation's easing instead of per-frame JS.
+   */
+  private flightKeyframes(t: Track): Keyframe[] {
+    const flight = t.cue.flight!;
+    const pts = flight.points;
+    const frames: Keyframe[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i]!;
+      let transform = `translate(${p.x - flight.rest.x}px, ${p.y - flight.rest.y}px)`;
+      if (flight.rotate !== undefined) {
+        const a = pts[Math.max(0, i - 1)]!;
+        const b = pts[Math.min(pts.length - 1, i + 1)]!;
+        const angle =
+          (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI +
+          (typeof flight.rotate === 'number' ? flight.rotate : 0);
+        transform += ` rotate(${angle}deg)`;
+      }
+      frames.push({ transform });
+    }
+    return frames;
+  }
+
   private startFlight(t: Track) {
     const { cue } = t;
     const ve = cue.sprite.node.visualElement;
@@ -1199,11 +1357,28 @@ export class ChoreoRun implements Run {
       return;
     }
     if (!this.playing) {
+      // born inside a still: computed, never driven, like every other cue
       this.sampleStill(t, this.master);
       return;
     }
-    const span = (t.end - t.start) / 1000;
+    const span = Math.max(1, t.end - t.start);
     const controls: AnimationPlaybackControls[] = [];
+    // The journey rides the platform (§6.2's move, made early): the
+    // pre-sampled path IS a keyframe list, and the eased clock — spring or
+    // tween — pre-samples into a linear() easing, so the compositor flies
+    // the box while the main thread stays free.
+    const anim = cue.sprite.element.animate(this.flightKeyframes(t), {
+      duration: span,
+      easing: generateLinearEasing(
+        (p: number) => this.flightProgress(t, p * span),
+        span,
+      ),
+      fill: 'both',
+    });
+    anim.playbackRate = this.rate;
+    anim.currentTime = Math.min(span, Math.max(0, this.master - t.start));
+    (t.platform ??= []).push(anim);
+    controls.push(platformControls(anim));
     // size pairs still ride the engine; position rides the sampled path
     if (cue.target && Object.keys(cue.target).length) {
       const transition = scaleTransition(
@@ -1214,14 +1389,6 @@ export class ChoreoRun implements Run {
         ...animateTarget(ve, { ...cue.target, transition } as never),
       );
     }
-    const anim = new JSAnimation({
-      duration: span,
-      ease: (p: number) => p,
-      keyframes: [0, 1],
-      onUpdate: (p: number) =>
-        this.applyFlight(t, this.flightProgress(t, p * (t.end - t.start))),
-    });
-    controls.push(anim as unknown as AnimationPlaybackControls);
     for (const c of controls) {
       c.speed = this.rate;
     }
@@ -1304,6 +1471,11 @@ export class ChoreoRun implements Run {
     flushKeyframeResolvers();
     this.stopTrack(t);
     const ve = cue.sprite.node.visualElement;
+    if (ve && cue.flight) {
+      // the platform animation is cancelled above; land the journey inline
+      this.applyFlight(t, 1);
+      ve.render();
+    }
     if (ve && cue.target) {
       for (const key in cue.target) {
         const raw = cue.target[key];
@@ -1387,6 +1559,13 @@ export class ChoreoRun implements Run {
 
   releaseForMeasure() {
     this.sampleVelocities();
+    // platform animations override inline style, and a measurement must see
+    // the resting layout — every native is cancelled before anything reads
+    for (const t of this.tracks) {
+      t.platform?.forEach((a) => a.cancel());
+      t.platform = undefined;
+      this.dropCameraAnimation(t);
+    }
     const touched = new Set<VisualElement>();
     for (const { ve, el, key } of this.borrowedValues.splice(0)) {
       ve.removeValue(key);
@@ -1418,6 +1597,7 @@ export class ChoreoRun implements Run {
       this.stopTrack(t);
       t.delivery?.cancel();
       t.loopAnimation?.cancel();
+      this.dropCameraAnimation(t);
       this.restore(t);
       this.stopScroll(t, false);
       t.wire?.remove();
