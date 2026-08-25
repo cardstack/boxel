@@ -5,7 +5,7 @@
  * snapshotted.
  */
 import { array } from '@ember/helper';
-import { find, render, settled } from '@ember/test-helpers';
+import { find, render, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
@@ -324,11 +324,15 @@ class NestedPages extends Component {
           {{motion id="stage-b" role="stage"}}
         ></div>
       {{/if}}
+      {{! roomier than the fixtures above on purpose: this test reads a
+          mid-flight still, and a headless CI can hand out its first
+          animation frame late enough that a 0.12s move is over — or has
+          not started — by the time two frames have passed }}
       <c.Crossing
-        @duration={{0.12}}
+        @duration={{0.4}}
         @ease="easeInOut"
-        @leave={{0.1}}
-        @arrive={{0.06}}
+        @leave={{0.34}}
+        @arrive={{0.2}}
       />
     </Choreo>
   </template>
@@ -620,8 +624,22 @@ module('Integration | choreo | crossing', function (hooks) {
     await animationsSettled();
     nested.page = 'detail';
     await settled();
-    await nextFrame();
-    await nextFrame();
+    // mid-flight is a STATE, not a frame count. Wait for the skin to have
+    // actually left its seat rather than assuming two frames bought any
+    // progress — on a busy CI machine the first frame can arrive late.
+    await waitUntil(
+      () => {
+        const s = find('[data-choreo-orphans] #tile2') as HTMLElement | null;
+        const w = find('[data-choreo-orphans] #wrap2') as HTMLElement | null;
+        return (
+          s !== null &&
+          w !== null &&
+          bounds(s).left > 25 &&
+          parseFloat(getComputedStyle(w).opacity) < 1
+        );
+      },
+      { timeout: 2000 }
+    );
 
     const layer = find('[data-choreo-orphans]') as HTMLElement;
     const wrap = layer.querySelector('#wrap2');
