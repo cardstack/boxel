@@ -118,18 +118,18 @@ descend from boxel-motion's behaviors (§5.1). Every animating step
 reads _who · what · how long_, position in the block gives _when_, and
 every duration in the language is **seconds**, as in Motion.
 
-| step         | reads as                                                                                                                                                                                                          |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c.Tween`    | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), `@duration` + `@ease`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger`                           |
-| `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                                    |
-| `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@space`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins |
-| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                           |
-| `c.Raise`    | promote to the region's elevated layer for the block's span (or `@duration`); `@shadow`                                                                                                                           |
-| `c.Camera`   | the region's frame: `@zoom` `@x` `@y`, `@origin` aiming at a sprite; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                   |
-| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                          |
-| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites, redrawn every frame and every still                                                                                                           |
-| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                                     |
-| `c.Crossing` | the canned route transition: `@spring` (or `@duration` + `@ease`), `@leave`, `@arrive`, `@overlap`, `@swap`                                                                                                       |
+| step         | reads as                                                                                                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.Tween`    | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), `@duration` + `@ease`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger`                                                                  |
+| `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                                                                           |
+| `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size={{true}} \| false \| 'scale' \| 'crop'`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@space`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins |
+| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                                                                  |
+| `c.Raise`    | promote to the region's elevated layer for the block's span (or `@duration`); `@shadow`                                                                                                                                                                  |
+| `c.Camera`   | the region's frame: `@zoom` `@x` `@y`, `@origin` aiming at a sprite; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                                                          |
+| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                                                                 |
+| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites, redrawn every frame and every still                                                                                                                                                  |
+| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                                                                            |
+| `c.Crossing` | the canned route transition: `@spring` (or `@duration` + `@ease`), `@leave`, `@arrive`, `@overlap`, `@swap`                                                                                                                                              |
 
 ### 3.5 Timing
 
@@ -381,6 +381,80 @@ What `@route` adds, beyond sugar:
 `animateView` remains the right tool where snapshotting is the point:
 cross-document transitions (MPA), and freezing a page too expensive to
 keep live. Same-document navigation defaults to `@route`.
+
+**Shipped, and the hero page grew the construct seven refinements** —
+Keynote's slide rules, each one a shipped bug or a hand-rolled subtlety
+the old `animateView` orchestration carried:
+
+1. **A claimed skin is lifted out of its fading container.** Naming the
+   card that holds the flying stage is legal: the skin is extracted to
+   the orphan layer (a same-sized seat holds its place, so the doomed
+   card doesn't reflow), and the View Transitions nesting rule — never
+   name a container of named things — does not come along.
+2. **`onstage` — only what a viewport can see animates.** A query flag
+   (and `c.onstage` in templates); the canned crossing sets it on its
+   leave and arrive. Leavers are judged in the OLD scene's window (their
+   initial boxes, measured before the crossing scrolled), arrivals in
+   the new one's. Twenty-five off-screen cards cost nothing — this
+   replaces the old `quietTheRest` compositing panic, not taste.
+3. **The yield rule.** A sprite a specific step names is owned by that
+   step; the crossing's generic children surrender it. A special exit
+   that is not a dissolve is one sibling step (`c.Tween @of={{c.onstage
+(c.removed 'scene')}} @y=…`), not an exclusion syntax.
+4. **The crossfade carries color, not transparency.** A symmetric
+   opacity crossfade dips toward the ground mid-fade. When both skins
+   wear a real background, alpha becomes an actual color: the receiver
+   holds solid, tweening between the two skins' effective colors while
+   the old skin dissolves above it — and the solid is handed back to the
+   stylesheet's own alpha on landing (`Cue.borrow`). The ground can
+   never leak through the flying box.
+5. **`@quiet` on the region.** When a run starts, every animation
+   running at that moment — the run's own cannot be among them, they
+   don't exist yet — is paused, and played again when the run settles.
+   Pausing is not stopping: loops resume where they were.
+6. **The flight matches the SUBSTANCE, not the frame.** A card's stage
+   and a page's stage are both mostly padding, and matching their outer
+   boxes lands the thing you can actually see in the wrong place. Mark
+   the real subject with `data-choreo-substance` on a descendant; the
+   measurement carries that box alongside the frame, and the shape match
+   is computed between the two subjects. Declare it on either end and
+   the other is derived by the same fraction.
+7. **Nothing distorts: `@size='crop'`, which is iOS's rule.** The default
+   `@size={{true}}` animates real width and height, which stretches
+   whatever the two ends do not agree about and — inside a grid — drags
+   the whole row with it. `@size='scale'` matches by transform alone
+   (centre to centre, `scaleX`/`scaleY`): layout is never written, so a
+   row can never stretch, but a mismatched aspect still squashes.
+   `@size='crop'` is the honest one and the crossing's default: a single
+   uniform scale `s = max(Wf/Wt, Hf/Ht)` covers the target, and the
+   overflow is cut off by a `clipPath` window — the OTHER end's frame,
+   pulled back through the inverse transform (`p = C + (W − C − d)/s`)
+   so it travels with the box and opens to nothing at the landing. One
+   side of the pair crops the other, and neither is stretched.
+
+The canned shape is overlapped, as a Magic Move is: the leave fades as
+the flight lifts off; `@overlap` still places the arrivals. And two
+pieces of run machinery the crossing forced into honesty: a region's own
+orphans re-entering the changeset are not "dirt" (a busy page was
+cancelling its crossing into a leave-only rump every render — nothing-new
+passes keep the run, and an edited timeline is told apart by a
+fingerprint of the TREE, not the value-laden cues), and a kept run's
+picture is stood back up after the measurement that kept it
+(`run.reassert()` — releaseForMeasure's jump-to-rest stops the very
+animations it measures around).
+
+The cheapest keep is the one that never measures. A pass with no
+arrivals, no retentions, every participant still present, the same
+timeline fingerprint AND every participant standing in the same layout
+box is declined outright — before the release, before the measure. That
+last clause is load-bearing and was learned the hard way: the fingerprint
+says the SCORE is unchanged, and a run mid-flight prints the same score
+on every frame, so without it a genuine reflow (the very thing a Move
+exists to answer) was declined as noise and the run flew on to a
+destination that had moved. The layout is fingerprinted with
+`offsetLeft/Top/Width/Height` rather than a bounding rect, because
+offsets ignore the transform a flight is writing and change only when
+something really reflows — the one distinction the fast path needs.
 
 ### 4.8 Constructs specified with their evidence
 
@@ -899,21 +973,21 @@ choreography written against it.
 
 ## 7. Implementation plan
 
-| piece                           | state                                                                                                                                  | depends on |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                                   | —          |
-| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                          | —          |
-| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                       | —          |
-| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                                | —          |
-| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                      | the handle |
-| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                     | —          |
-| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                            | —          |
-| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                           | —          |
-| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                      | —          |
-| `@route` + `c.Crossing`         | ✅ landed at the library — scroll inside the pass, tempo-zero no-run, the canned sequence; the app-chrome migration is the demo pass's | anchors    |
-| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                         | —          |
-| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                               | —          |
-| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                           | —          |
+| piece                           | state                                                                                                                             | depends on |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                              | —          |
+| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                     | —          |
+| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                  | —          |
+| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                           | —          |
+| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                 | the handle |
+| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                | —          |
+| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                       | —          |
+| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                      | —          |
+| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                 | —          |
+| `@route` + `c.Crossing`         | ✅ SHIPPED end to end — the gallery ⇄ demo transition rides the region; animateView orchestration deleted; see §4.7's refinements | anchors    |
+| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                    | —          |
+| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                          | —          |
+| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                      | —          |
 
 The Build Order demo remains the acceptance test for the second pass:
 each promotion deletes a piece of `builds.ts`, and the demo is done being
@@ -945,19 +1019,19 @@ cancelling a parked run, crossing a route mid-morph.
 Three upgrades and five new pages — each demo is the acceptance test for
 exactly the construct it wears:
 
-| demo                                        | construct proven                   | done when                                                                                                                         |
-| ------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                                        |
-| **Playhead** (upgrade)                      | the timeline handle                | the scrubber sets `c.run.time`; the private sampled score deleted                                                                 |
-| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                                        |
-| **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes a self-opening `@delay` gate and a click-through mid-build |
-| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                                    |
-| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity                            |
-| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                              |
-| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component                            |
+| demo                                        | construct proven                   | done when                                                                                                                |
+| ------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | ✅ `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                            |
+| **Playhead** (upgrade)                      | the timeline handle                | ✅ the scrubber sets `c.run.time`; the private sampled score deleted                                                     |
+| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | ✅ the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                            |
+| **Presentation** (new)                      | gates                              | ✅ shipped as a five-slide deck, ten clicks end to end; a self-opening `@delay` gate and a click-through mid-build       |
+| **Wires** (new)                             | `c.Tether`                         | ✅ shipped as a morning note in three drafts: marks and margin comments, every wire redrawn per frame through the reflow |
+| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity                   |
+| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                     |
+| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component                   |
 
-`@path` and emphasis need no page of their own: Deck's builds use a path
-move and a pulse, which is also how Keynote would.
+`@path` and emphasis need no page of their own: Presentation's builds use a
+path move and a pulse, which is also how Keynote would.
 
 ### 8.2 Contract cases — the sharp ones
 

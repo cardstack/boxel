@@ -1,6 +1,8 @@
+import { concat } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { pageTitle } from 'ember-page-title';
+import { motion } from 'glimmer-motion';
 import { SpeedPicker } from 'test-app/components/speed-picker';
 import { type DemoEntry, neighbors } from 'test-app/lib/catalog';
 import { highlightSample } from 'test-app/lib/highlight';
@@ -25,7 +27,7 @@ export class DemoPage extends Component<{
         {{! the pager is at the foot of the page, past the code — which is a
             long way to scroll to say "next". The same link, where you are
             already looking. }}
-        <div class="demo-nav">
+        <div class="demo-nav" {{motion role="furniture"}}>
           <LinkTo @route="index" class="back back-all">
             <span class="back-arrow" aria-hidden="true">←</span>
             All examples
@@ -47,17 +49,30 @@ export class DemoPage extends Component<{
             trip has a SECOND box to tween into, the same shape the gallery
             already has, rather than one box (the stage) doing all the work
             while the metadata just appears }}
+        {{! the same ids the gallery card's pieces carry: the crossing pairs
+            them and each pair is one flight — the stage, and the same three
+            lines of type, set twice }}
         <div class="demo-meta">
-          <p class="kicker">
+          <p
+            class="kicker"
+            {{motion id=(concat "group-" @model.id) role="type"}}
+          >
             {{@model.group}}
             {{#if @model.notes}}
               <span class="kicker-badge">Deep Dive</span>
             {{/if}}
           </p>
-          <h1>{{@model.title}}</h1>
-          <p class="lede">{{@model.lede}}</p>
+          <h1 {{motion id=(concat "title-" @model.id) role="type"}}>
+            {{@model.title}}
+          </h1>
+          <p class="lede" {{motion id=(concat "lede-" @model.id) role="type"}}>
+            {{@model.lede}}
+          </p>
         </div>
-        <div class="apis">
+        {{! one id on every demo page: between two demos the pills pair and
+            the crossfade of identical content is invisible — the old
+            "conditionally steady" special case, said as an ordinary pair }}
+        <div class="apis" {{motion id="apis" role="chrome"}}>
           {{#each @model.apis as |api|}}
             <code class="api">{{api}}</code>
           {{/each}}
@@ -74,13 +89,18 @@ export class DemoPage extends Component<{
         <SpeedPicker />
       {{/if}}
       <div class="stage-row">
-        <div class="stage-wrap">
+        <div
+          class="stage-wrap"
+          {{motion id=(concat "stage-" @model.id) role="stage"}}
+        >
           {{#let @model.Example as |Example|}}
             <Example />
           {{/let}}
         </div>
       </div>
-      <section class="sample" aria-label="Code">
+      {{! role='late': the code can wait for the move to land — the crossing
+          fades it in after the flight, and only if a viewport can see it }}
+      <section class="sample" aria-label="Code" {{motion role="late"}}>
         <p class="sample-label">Glimmer</p>
         <pre><code>{{this.sample}}</code></pre>
       </section>
@@ -92,7 +112,7 @@ export class DemoPage extends Component<{
           <Notes />
         {{/let}}
       {{/if}}
-      <nav class="pager">
+      <nav class="pager" {{motion role="late"}}>
         {{#if this.near.prev}}
           <LinkTo @route="demo" @model={{this.near.prev.id}}>
             ←

@@ -1,7 +1,5 @@
 import Route from '@ember/routing/route';
 import type RouterService from '@ember/routing/router-service';
-import type Transition from '@ember/routing/transition';
-import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import { setMotionSpeed } from 'glimmer-motion';
 import { findDemo } from 'test-app/lib/catalog';
@@ -19,22 +17,15 @@ export default class DemoRoute extends Route {
   }
 
   /**
-   * The pager keeps you in this route, so nothing resets the scroll: a new
-   * demo starts at the top rather than wherever the last one was.
-   *
-   * Arriving from the gallery is the exception — the shared-element transition
-   * in routes/application.ts owns the scroll for that, because it has to
-   * happen INSIDE the snapshot. Scrolling here as well would move the page
-   * under a transition that has already measured it.
+   * The scroll belongs to the crossing now: the <Choreo @route> region
+   * places the window INSIDE the pass — after the swap renders, before
+   * final bounds are measured — for every arrival, the pager's included,
+   * and it does so even at tempo zero. Scrolling here as well would move
+   * the page under a crossing that has already measured it.
    */
-  afterModel(_model: unknown, transition: Transition) {
+  afterModel() {
     // the clock is global, so it goes back to normal with every demo — a stage
     // with no speed control must never be left mysteriously slow
     setMotionSpeed(1);
-    if (transition.from?.name === 'index') {
-      return;
-    }
-    // eslint-disable-next-line ember/no-runloop -- see the import
-    schedule('afterRender', () => window.scrollTo(0, 0));
   }
 }

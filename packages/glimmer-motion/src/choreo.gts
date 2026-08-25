@@ -112,6 +112,8 @@ export interface ChoreoContext {
   inserted: Selector;
   kept: Selector;
   moved: Selector;
+  /** narrow any query to sprites a viewport can actually see (§4.7) */
+  onstage: (query: Query) => Query;
   /** kept only because it claimed a leaver's identity: the receiving half of a counterpart or far match */
   received: Selector;
   removed: Selector;
@@ -145,6 +147,7 @@ function contextFor(region: Choreo): ChoreoContext {
     inserted: selector('inserted'),
     kept: selector('kept'),
     moved: selector('moved'),
+    onstage: (query) => ({ ...query, onstage: true }),
     received: selector('received'),
     removed: selector('removed'),
     role: (role) => ({ role }),
@@ -164,6 +167,18 @@ interface Signature {
     debug?: boolean;
     id?: string;
     /**
+     * Freeze the rest of the page for the span of each run (§4.7): when a
+     * run starts, every animation in the document that is running AT THAT
+     * MOMENT — and that the run itself does not own — is paused, and played
+     * again when the run lands or is cancelled. The run's own animations
+     * are exempt by construction: the sweep happens before they exist.
+     * Pausing is not stopping — a loop resumes exactly where it was, which
+     * is what makes this safe to do to work the region did not write.
+     * Animations that START during the run are not caught; gating those is
+     * the host's job (the crossing flag the gallery's entrances check).
+     */
+    quiet?: boolean;
+    /**
      * Treat a subtree swap as one crossing pass (§4.7): scroll intent is
      * applied inside the pass — after the swap renders, before final bounds
      * are measured — and the tempo control's zero means no run at all. The
@@ -179,6 +194,73 @@ interface Signature {
 }
 
 let debugStyle: HTMLStyleElement | undefined;
+
+/**
+ * One rule every region shares: an orphaned skin flies with its
+ * backdrop-filters OFF. A backdrop-filter can never be cached — it
+ * re-samples and re-blurs whatever is behind it on every frame — and
+ * inside a scaling, fading leaver that is paid at full price for the
+ * whole flight (the camera demo's four glass panels, over its gradient
+ * washes, was the return trip's jank). It is also the wrong picture: a
+ * skin is a memory of the OLD scene, and its glass sampling the new
+ * scene behind it shows the wrong world. The panels keep their own
+ * translucent grounds, so they still read as glass in the crossfade.
+ */
+let orphanStyle: HTMLStyleElement | undefined;
+function ensureOrphanStyle() {
+  if (orphanStyle) {
+    return;
+  }
+  orphanStyle = document.createElement('style');
+  orphanStyle.setAttribute('data-choreo-style', '');
+  orphanStyle.textContent =
+    '[data-choreo-orphans] *{backdrop-filter:none!important;' +
+    '-webkit-backdrop-filter:none!important;}';
+  document.head.appendChild(orphanStyle);
+}
+
+/**
+ * A fingerprint of the collected timeline tree, for telling an EDIT from
+ * noise while a run's own orphans are aloft. Mid-flight, compiled cues are
+ * value-laden (every re-measure shifts them), so sameScore cannot answer
+ * "did the author change the timeline?" — but the tree can: it is template
+ * state, identical under noise, different under any real edit. Functions
+ * (property sources) print by identity: a fresh function is a change we
+ * cannot disprove, and recompiling is the safe answer.
+ */
+const fnIds = new WeakMap<object, number>();
+let nextFnId = 0;
+function treePrint(tree: unknown): string {
+  return JSON.stringify(tree, (_key, value: unknown) => {
+    if (typeof value === 'function') {
+      let id = fnIds.get(value);
+      if (id === undefined) {
+        fnIds.set(value, (id = ++nextFnId));
+      }
+      return `fn#${id}`;
+    }
+    return value;
+  });
+}
+
+/**
+ * The color the page actually shows behind this region — the nearest
+ * ancestor (the region itself included) wearing a background with any
+ * alpha at all. What a crossing blends a semi-transparent skin against
+ * when it turns opacity into an actual color (§4.7). Undefined when the
+ * whole chain is transparent; the crossfade then stays a plain dissolve.
+ */
+function groundOf(root: Element): string | undefined {
+  let el: Element | null = root;
+  while (el) {
+    const bg = getComputedStyle(el).backgroundColor;
+    if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) {
+      return bg;
+    }
+    el = el.parentElement;
+  }
+  return undefined;
+}
 
 /**
  * The barrier books one post-render callback for every region taking part in a
@@ -243,6 +325,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       leavePass(this);
       this.run?.cancel();
       this.run = undefined;
+      // a quiet region must not take its pause to the grave
+      this.unquiet();
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -327,6 +411,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.passPending = false;
     const root = this.element;
     if (!root) {
+      return undefined;
+    }
+    // THE FAST PATH: a volatile re-pass that cannot change the run. On a
+    // busy page every app render replays every region's pass, and the full
+    // pipeline is destructive even when its verdict is "keep" — release
+    // puts the world at rest (stopping the very animations it measures
+    // around), and standing them back up once per frame IS the jitter the
+    // keep exists to prevent. So a pass with no arrivals, no new leavers
+    // and the same timeline tree is declined before anything is touched:
+    // the run plays on, undisturbed.
+    if (this.fastKeep(root)) {
       return undefined;
     }
     // `initial` was captured before the DOM changed, with any in-flight Move's
@@ -475,6 +570,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         height: after.height / measureZoom,
         width: after.width / measureZoom,
       },
+      groundOf(root),
     );
     this.changeset = changeset;
 
@@ -505,6 +601,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         this.drop(node);
       }
       for (const s of removed) {
+        // §5.3, from the other side of the seam: on a pass this region
+        // declines to animate, a <Presence>-managed leaver still mid-exit
+        // belongs to its Presence — calling exitComplete here would cut
+        // that animation short. The region stands aside; when the exit
+        // ends, Presence unmounts the element and it leaves for real.
+        if (
+          s.node.presenceManaged &&
+          !s.node.isPresent &&
+          s.element.isConnected &&
+          !this.orphans.has(s.node)
+        ) {
+          this.leaving.delete(s.node);
+          continue;
+        }
         this.finish(s);
       }
       return;
@@ -512,12 +622,44 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // An unrelated render replays every region's pass — the detector is
     // volatile by design, so on a busy page (the gallery: a neighbouring
     // demo writing tracked state per frame) a region re-passes on every
-    // app render. If nothing changed — no arrivals, no leavers, and the
-    // compiled score IS the one already in flight — the run is kept:
-    // sixty noisy frames a second must not restart this region's clock.
-    // A finished run replays (§3.1's Hold re-fire is an event on a done
-    // region), and any real difference — an edit, a move, a new sprite —
-    // replays exactly as before.
+    // app render. A finished run replays (§3.1's Hold re-fire). An
+    // all-still pass — no arrivals, leavers, or moved boxes — is noise
+    // (a parent writing `hot`, a neighbour ticking at 60fps) and must
+    // not restart the clock. Gates and path-moves make a freshly compiled
+    // cue list incomparable (zero-delta Moves drop; flights exist), so
+    // sameScore cannot be the only detector.
+    //
+    // A removed sprite that is one of this region's own ORPHANS is not a
+    // new leaver: it re-enters every changeset on purpose (addressable
+    // again), and while one is aloft a recompiled score is NOT
+    // authoritative — the pairing that produced the run's flights lived
+    // in the pass that removed and inserted together, and a later pass
+    // sees only the orphan half. Counting orphans as dirt meant a
+    // crossing on a busy page was cancelled into a leave-only rump by
+    // its own neighbours' renders, every frame.
+    const nothingNew =
+      !inserted.length &&
+      pass.removed.every((s) => this.orphans.has(s.node)) &&
+      // A sprite mid-flight reads as "moved" on every re-pass — its initial
+      // is the painted box, by design — so while this run's own orphans are
+      // aloft, kept-motion cannot justify a recompile either: the score it
+      // would produce is the degraded one above.
+      (this.orphans.size > 0 || !changeset.sprites({ type: 'moved' }).length) &&
+      // …but an EDITED timeline is never noise: a changed tree replays,
+      // exactly as it would with no orphans aloft (the build-order
+      // transport's delay nudge, made while a leaver is frozen mid-park)
+      treePrint(tree) === this.scorePrint;
+    if (this.run && !this.run.isDone() && nothingNew) {
+      for (const node of claimed) {
+        this.drop(node);
+      }
+      // the measurement above put the run's world at rest; a keep must be
+      // invisible, so the run stands its picture back up (see reassert)
+      this.run.reassert();
+      return;
+    }
+    // dirty but the compiled score is the one already in flight (tween-only
+    // measurement jitter): keep that run too.
     if (
       this.run &&
       !this.run.isDone() &&
@@ -529,6 +671,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       for (const node of claimed) {
         this.drop(node);
       }
+      this.run.reassert();
       return;
     }
     // the removed participants the run names stay; the rest go now
@@ -544,7 +687,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (!named.has(s)) {
         this.finish(s);
       } else if (!s.element.isConnected || claimed.includes(s.node)) {
-        this.orphan(s, removed);
+        this.orphan(s, removed, s.claimed === true);
       }
     }
     if (this.args.debug) {
@@ -559,6 +702,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         }
       }
       this.log(changeset, cues);
+    }
+    this.scorePrint = treePrint(tree);
+    // taken here, with the world released and measured: the resting layout
+    // this run is about to fly away from (see fastKeep)
+    this.layoutPrint = this.layoutOf();
+    // @quiet: pause everything running RIGHT NOW — the run's own animations
+    // do not exist yet, so they are exempt by construction. Accumulated,
+    // not replaced: an interrupted run's replacement sweeps again, and
+    // everything resumes together when the run that survives settles.
+    if (this.args.quiet) {
+      this.quiet();
     }
     this.run = execute(compiled, {
       camera: { ...this.restingCamera },
@@ -593,25 +747,149 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
     });
+    if (this.args.quiet) {
+      const run = this.run;
+      void run.finished.then(() => {
+        // only the run still in charge hands the page back — a cancelled
+        // one was replaced, and its replacement holds the pause
+        if (this.run === run) {
+          this.unquiet();
+        }
+      });
+    }
   }
 
   /* ---- orphans: a removed participant kept alive, locked where it was ---- */
 
   private orphanBounds = new Map<ChoreoNode, Bounds>();
 
-  private orphan(s: Sprite, removed: Sprite[]) {
-    // only the topmost removed element is moved; what it contains comes with it
+  /** the fingerprint of the tree the current run compiled from (see treePrint) */
+  private scorePrint?: string;
+
+  /** the layout every participant stood in when the run compiled (see layoutPrint) */
+  private layoutPrint?: string;
+
+  /**
+   * Where the stylesheet puts each participant, as a string.
+   *
+   * `offsetLeft/Top/Width/Height` and NOT a bounding rect, because the
+   * difference is the whole point: a rect includes the transform a flight
+   * is writing, so a moving element reads as different on every frame,
+   * while offsets are the box layout asked for — steady under a transform,
+   * and different the moment something actually reflows. Integers, too,
+   * which quietly forgives the sub-pixel noise a busy page generates.
+   *
+   * A Move that animates real width/height (`@size={{true}}`) does change
+   * these, so such a run never takes the fast path. That is the honest
+   * answer rather than a missed optimisation: a run writing layout cannot
+   * be told apart from a page writing layout without measuring.
+   */
+  private layoutOf(): string {
+    const parts: string[] = [];
+    for (const node of this.participants) {
+      const el = node.element as HTMLElement | undefined | null;
+      if (!el || !el.isConnected) {
+        continue;
+      }
+      parts.push(
+        `${node.id ?? node.role ?? ''}@${el.offsetLeft},${el.offsetTop},` +
+          `${el.offsetWidth},${el.offsetHeight}`,
+      );
+    }
+    return parts.join('|');
+  }
+
+  /**
+   * Can this pass be declined outright? Only while a run is in flight, and
+   * only when nothing the pass could discover would change it: no arrivals,
+   * no retentions pending, every participant either present or already a
+   * known leaver, the collected timeline tree fingerprints identical to the
+   * one the run compiled from (an EDIT always replays), and every
+   * participant standing in the same layout box it compiled in (a REFLOW
+   * always replays — it is what a Move is FOR). Anything else takes the
+   * full pipeline.
+   */
+  private fastKeep(root: HTMLElement): boolean {
+    if (
+      !this.run ||
+      this.run.isDone() ||
+      this.claimed.size ||
+      this.arrived.size
+    ) {
+      return false;
+    }
+    for (const node of this.participants) {
+      const el = node.element;
+      if (!el || !el.isConnected) {
+        return false;
+      }
+      if (
+        !node.isPresent &&
+        !this.leaving.has(node) &&
+        !this.orphans.has(node)
+      ) {
+        return false;
+      }
+    }
+    return (
+      treePrint(collect(root)) === this.scorePrint &&
+      this.layoutOf() === this.layoutPrint
+    );
+  }
+
+  /* ---- @quiet: the rest of the page, paused for the span of a run ---- */
+
+  /** what quiet() paused, accumulated across replaced runs, resumed as one */
+  private quieted: Animation[] = [];
+
+  private quiet() {
+    for (const animation of document.getAnimations()) {
+      if (animation.playState === 'running') {
+        animation.pause();
+        this.quieted.push(animation);
+      }
+    }
+  }
+
+  private unquiet() {
+    for (const animation of this.quieted.splice(0)) {
+      try {
+        animation.play();
+      } catch {
+        // an animation whose element left with the old scene: nothing to resume
+      }
+    }
+  }
+
+  private orphan(s: Sprite, removed: Sprite[], extract = false) {
+    // Only the topmost removed element is moved; what it contains comes with
+    // it — EXCEPT a claimed skin. Its whole job is to cross inside the flight,
+    // and riding a fading ancestor instead is the View Transitions nesting
+    // rule (never name a container of named things) sneaking back in. A
+    // claimed sprite is lifted out of the doomed subtree; both end up locked
+    // to the same page coordinates in the same layer, so the lift is
+    // invisible — all it leaves behind is a hole in the ancestor, which is
+    // exactly where the eye expects one while the skin is elsewhere.
     const inside = removed.some(
       (o) =>
         o !== s && o.element !== s.element && o.element.contains(s.element),
     );
-    if (inside || !s.initial) {
+    if ((inside && !extract) || !s.initial) {
       return;
     }
     const layer = this.orphanLayer;
     const root = this.element;
     if (!layer || !root) {
       return;
+    }
+    if (inside) {
+      // hold the seat: the ancestor is itself a leaver, and without this its
+      // remaining children reflow into the gap mid-fade. The placeholder
+      // lives only inside that doomed subtree, so it leaves with it.
+      const seat = document.createElement('div');
+      seat.style.width = `${s.initial.page.width}px`;
+      seat.style.height = `${s.initial.page.height}px`;
+      s.element.parentElement?.insertBefore(seat, s.element);
     }
     // locked where it was ON THE PAGE: the region itself may have moved in the same pass
     const { page } = s.initial;
@@ -625,6 +903,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     el.style.boxSizing = 'border-box';
     el.style.margin = '0';
     el.style.pointerEvents = 'none';
+    // one texture, transformed — not a subtree re-rastered per frame
+    el.style.willChange = 'transform, opacity';
     layer.appendChild(el);
     this.orphans.add(s.node);
     this.orphanBounds.set(s.node, s.initial);
@@ -686,6 +966,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   host = modifier((el: HTMLDivElement) => {
     this.element = el;
     setChoreoHost(el, this);
+    ensureOrphanStyle();
     if (getComputedStyle(el).position === 'static') {
       el.style.position = 'relative';
     }

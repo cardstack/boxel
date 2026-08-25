@@ -193,40 +193,12 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background: transparent;
-  /* Veiled for the span of a page transition — opacity to 0 and back — so the
-     ROOT snapshot a transition captures is blank rather than a photograph of
-     whatever the old or new page happened to be showing underneath the pieces
-     that actually move. `--gm-veil-out` must stay short enough that the veil
-     is fully down before the snapshot is taken (see routes/application.ts,
-     VEIL_OUT_MS); `--gm-veil-in` just has to feel like an arrival.
-
-     `color` is a second, unrelated transition riding the same declaration —
-     the theme switch's, easing body text between --ink's two values. */
-  transition:
-    opacity var(--gm-veil-out, 20ms) linear,
-    color 220ms var(--ease);
-}
-
-html.is-crossing > body {
-  opacity: 0;
-}
-
-/* ...but only where the ground behind it is dark.
- *
- * The veil works by letting <html>'s own background show through for the
- * length of the morph, and in dark that background is very nearly black, so
- * "the page is not there" reads as "the pieces are flying over a dark stage".
- * In light the same background is cream, and the identical rule reads as the
- * whole screen flashing white — most obvious on Parallax, Reveal and Build
- * Order, whose stages are dark enough to make the blank frame jump. There is
- * nothing to hide behind on a light ground, so light keeps its page and lets
- * the root snapshot do the ordinary thing. */
-html[data-theme='light'].is-crossing > body {
-  opacity: 1;
-}
-
-html.is-returning > body {
-  transition: opacity var(--gm-veil-in, 180ms) ease-out;
+  /* The veil that used to live here is gone with the View Transition that
+     needed it: a Choreo crossing moves real elements over the live page, so
+     there is no root snapshot to keep blank — and no light-mode exception,
+     because there is nothing to flash. What remains is the theme switch's
+     transition, easing body text between --ink's two values. */
+  transition: color 220ms var(--ease);
 }
 
 a {
@@ -340,6 +312,14 @@ summary,
   }
 }
 
+/* the <main> now wraps the <Choreo> region that IS .page: the shell keeps
+   the footer at the foot, the region keeps the page's own measure */
+.page-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
 .page {
   width: min(var(--page), calc(100% - 48px));
   margin: 0 auto;
@@ -364,6 +344,17 @@ summary,
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--copper-ink);
+}
+
+/* The hero's eyebrow is ORANGE, not brown. --copper-ink is copper's legible
+   variant on cream, and legible it is — but a warm brown word sitting
+   directly beside the ember rule this kicker draws for itself reads as two
+   different accents. Ember for both, so the mark and the line are one
+   colour. (The demo page's kicker keeps --ember-hot: it is a paired subject
+   of the crossing, and it has to land on the card's group line, which is
+   ember-hot too.) */
+:root[data-theme='light'] .hero .kicker {
+  color: var(--ember);
 }
 
 .kicker::before {
@@ -540,12 +531,10 @@ summary,
   }
 }
 
-/* the destination (or source) card of an in-flight page transition — its own
-   background and border are ordinary live DOM, never extracted into the
-   transition the way .card-stage/.card-title/.card-lede/.card-group are, so
-   left alone they sit fully rendered in the grid for the whole flight: the
-   shell arrives before its contents do. `transition: none` on entry keeps
-   this instant rather than a 180ms fade nobody asked to see. */
+/* the counterpart card of a return crossing: its contents ARE the flight,
+   so its own background and border hide for exactly that long — empty
+   space where the card would be. No transition in either direction: the
+   unveil lands on the same frame the crossing settles. */
 .card.is-veiled {
   background: transparent;
   border-color: transparent;
@@ -555,15 +544,17 @@ summary,
 .card-stage {
   position: relative;
   height: 400px;
-  /* a faint LIGHT tint, not a dark one — darkening a warm-charcoal stage
-     is invisible; a light wash is what actually reads as its own surface */
+  /* Recessed to --bg, a notch below the page and well below the card's
+     --bg-elev, so the demo UI lifts off the tile and the metadata chin
+     (.card-meta, still on the card's own surface) reads as a distinct bar
+     rather than more of the same wash. The ember radial stays as atmosphere. */
   background:
     radial-gradient(
       80% 70% at 50% 40%,
       rgba(255, 59, 31, 0.08),
       transparent 62%
     ),
-    rgba(var(--surface-tint-rgb), 0.03);
+    var(--bg);
 }
 
 /* these three need a stage with a little more presence than the default —
@@ -684,11 +675,10 @@ summary,
   background: var(--ember);
   box-shadow: 0 0 12px var(--glow);
   /* NOT the draw-in animation the base rule gets. This kicker is one of the
-     page transition's own named/paired subjects (see gm-type in pair()) — it
-     is already fading in on the transition's own clock, carried across with
-     everything else. The browser only hands the real, live element back
-     once that flight lands, so a second animation starting from THERE reads
-     as arriving twice: once with the page, then a beat later on its own. */
+     crossing's own paired subjects — it is already crossfading over from the
+     card's group line on the timeline's clock, so a second animation
+     starting on arrival reads as arriving twice: once with the flight, then
+     a beat later on its own. */
   animation: none;
 }
 
@@ -849,13 +839,15 @@ summary,
   border: 1px solid var(--line);
   border-radius: 22px;
   overflow: hidden;
+  /* same recessed well as .card-stage — the demo sits on --bg, not a lifted
+     tint of the page, so its own chrome (and a presentation's chin) can pop */
   background:
     radial-gradient(
       70% 60% at 50% 40%,
       rgba(255, 59, 31, 0.1),
       transparent 60%
     ),
-    rgba(var(--surface-tint-rgb), 0.03);
+    var(--bg);
 }
 
 /* A 4×3 library of 4:3 prints wants the site's default stage height —
@@ -1621,40 +1613,6 @@ html[data-gm-dragging] * {
 /* The overlay paints nothing of its own. `html` carries the wash and is never
    captured, so it paints straight through the whole transition — which is
    what keeps the background from moving or flashing. */
-:root::view-transition {
-  background: none;
-}
-
-/* No wholesale page dissolve. The scene is named piece by piece in
-   routes/application.ts — what moves, what leaves, what arrives — so nothing
-   is animated twice and the html background paints straight through. */
-
-/* Magic Move's stacking: the scene that is leaving and the scene that is
-   arriving lie flat, and everything that MOVES rides over them — otherwise the
-   thing you are following passes behind the thing it is leaving. */
-::view-transition-group(.gm-scene) {
-  z-index: 1;
-}
-
-::view-transition-group(.gm-stage) {
-  z-index: 3;
-}
-
-/* the demo travels inside its own frame, so it sits one layer above it */
-::view-transition-group(.gm-demo) {
-  z-index: 4;
-}
-
-::view-transition-group(.gm-type) {
-  z-index: 5;
-}
-
-/* the chrome is the same on both pages and never moves: it stays on top so
-   nothing crosses over it */
-::view-transition-group(.gm-steady) {
-  z-index: 6;
-}
-
 .shots {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3721,6 +3679,1279 @@ html[data-gm-dragging] * {
   background: var(--ember-hot);
 }
 
+/* ---- Presentation: a run that parks ---- */
+
+/* An engraved atlas plate, not a poster.
+ *
+ * This deck used to be the largest object on the site — 760px, against a
+ * vocabulary that runs 300-440 everywhere else and 320 for Slides, which is
+ * the same idea at a quarter of the area. At that width every clamp in this
+ * section sat pinned to its own maximum, so the fluid middle term never ran
+ * at the size anyone actually looks at the thing: a 224px ghost numeral over
+ * a 10px mono label, 20:1, set as though it were a billboard.
+ *
+ * It is 560 x 315 now — 16:9, the shape a deck is actually cut to — and
+ * because the ratio is FIXED the slide is a true scale model: every position,
+ * measure and step is in `cqw` against the plate, so the whole composition
+ * is one drawing that resolves at any size rather than a set of percentages
+ * that drift apart from a set of pixel type sizes. The only clamps left are
+ * legibility floors on the type, and they engage below ~440 only.
+ *
+ * The chrome does NOT scale with it: the imprint is UI, so it stays at the
+ * site's fixed 10px mono, same as .replay and .wires-bar button.
+ */
+.ex:has(.pres) {
+  padding-block: 16px;
+}
+
+.pres {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* ONE rounded rect: a 16:9 stage with the transport welded under it, the
+     way a deck actually presents itself. The bar is not chrome floating near
+     the slide, it is the bottom 46px of the same object. */
+  width: min(94cqw, calc((92cqh - 46px) * 1.7778), 560px);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--bg-well);
+  box-shadow: 0 12px 30px rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a)));
+  container-type: inline-size;
+}
+
+/* The type scale — five steps on ~1.42, in cqw so they ride the plate.
+ *
+ * Declared on .pres-stage rather than on .pres itself: an element that
+ * ESTABLISHES a container resolves its own cqw against its ANCESTOR
+ * container, so a `cqw` written on .pres would silently measure the stage
+ * around it instead of the plate. One level in, it measures the plate.
+ *
+ * The floors are legibility, not layout — below about 440px the type stops
+ * shrinking with the plate so a phone-width tile stays readable. The caps sit
+ * just above the 560 values, so they never bind at the sizes we ship. */
+.pres-stage {
+  --pres-1: clamp(8px, 1.8cqw, 11px); /* mono labels, folio, ticks, caption */
+  --pres-2: clamp(10.5px, 2.55cqw, 15px); /* body copy */
+  --pres-3: clamp(14px, 3.6cqw, 21px); /* the system's card titles */
+  --pres-4: clamp(18px, 5.15cqw, 30px); /* slide heads */
+  --pres-5: clamp(24px, 7.3cqw, 42px); /* the deck title, and the close */
+  /* the plate's margin, and the one measure every slide is set against */
+  --pres-m: 7cqw;
+}
+
+/* Shown on :focus (not only :focus-visible) because a click is how you
+   take the deck. A hairline drawn just INSIDE the plate edge — the ring
+   used to be a 2.5px copper band at inset -8px with a second shadow ring
+   outside it, which is a lot of chrome to say "focused". */
+.pres:focus,
+.pres:focus-visible {
+  outline: none;
+}
+
+.pres-ring {
+  position: absolute;
+  /* the deck is one object, so the focus mark is one hairline around all of
+     it — drawn INSIDE the edge, where it cannot be clipped by the stage */
+  inset: 0;
+  border: 1.5px solid var(--copper-ink);
+  border-radius: 16px;
+  pointer-events: none;
+  z-index: 8;
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+
+.pres.is-hot > .pres-ring,
+.pres:focus > .pres-ring,
+.pres:focus-visible > .pres-ring {
+  opacity: 1;
+}
+
+/* the plate: one surface, all four corners, a shadow that lifts it off the
+   stage the way .slide-plate and the Camera prints do */
+.pres-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  /* top corners only: the bottom two belong to the bar below it */
+  border-radius: 15px 15px 0 0;
+  border-bottom: 1px solid var(--line-strong);
+  background: var(--bg-well);
+}
+
+/* ---- the four grounds ----
+ *
+ * Atlas, Ember, Flux and Halo — the brand's four gradients, plus paper. A
+ * deck that paints every slide the same colour is a document; the change of
+ * ground is the punctuation, so the deck runs Atlas, paper, a split, Flux,
+ * Ember, and Halo does the accent work throughout.
+ *
+ * Each ground sets four tokens — --sl-ink, --sl-dim, --sl-faint, --sl-accent
+ * — and every element on the slide reads those instead of naming a hue, so
+ * one line here re-colours a whole slide and no rule below has to know which
+ * ground it is standing on.
+ *
+ * No ground bottoms out in black. Flux is the dark one and it lands on a
+ * steel #262b2e, because black type on a black field is not contrast, it is
+ * just two absences. */
+.pres-slide {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: pan-y;
+  color: var(--sl-ink);
+  --sl-ink: var(--ink);
+  --sl-dim: var(--ink-dim);
+  --sl-faint: var(--ink-faint);
+  --sl-accent: #edce9e;
+  --sl-rule: rgba(var(--ink-rgb), 0.16);
+  background: var(--bg-spot);
+}
+
+/* ATLAS — burnt sienna into a deep red-brown. The deck opens on it. */
+.pres-slide.is-atlas {
+  --sl-ink: #fdf2ea;
+  --sl-dim: #e8c3ac;
+  --sl-faint: #c1917a;
+  --sl-accent: #edce9e;
+  --sl-rule: rgba(253, 242, 234, 0.26);
+  background: linear-gradient(152deg, #c2482b 0%, #7e2413 46%, #3a1008 100%);
+}
+
+/* EMBER — orange into red. The close. */
+.pres-slide.is-ember {
+  --sl-ink: #fff6f0;
+  --sl-dim: #ffd9c4;
+  --sl-faint: #f0ad91;
+  --sl-accent: #3a1008;
+  --sl-rule: rgba(255, 246, 240, 0.32);
+  background: linear-gradient(152deg, #f2843e 0%, #e8502a 46%, #d6301c 100%);
+}
+
+/* FLUX — steel. The stack sits here, and this is the deck's dark slide:
+   a grey that still has light in it, never a black hole. */
+.pres-slide.is-flux {
+  --sl-ink: #f4f6f7;
+  --sl-dim: #c3cace;
+  --sl-faint: #939ba1;
+  --sl-accent: #edce9e;
+  --sl-rule: rgba(244, 246, 247, 0.2);
+  background: linear-gradient(152deg, #9aa2a8 0%, #5a6268 46%, #262b2e 100%);
+}
+
+/* PAPER — the one genuinely light slide. A deck is printed, and print has a
+   white page in it somewhere. */
+.pres-slide.is-paper {
+  --sl-ink: #1b1712;
+  --sl-dim: #6b6255;
+  --sl-faint: #9a9082;
+  --sl-accent: #d6301c;
+  --sl-rule: rgba(27, 23, 18, 0.18);
+  background:
+    radial-gradient(80% 90% at 92% 8%, #d6301c0d 0%, transparent 58%), #f7f3ec;
+}
+
+/* SPLIT — paper on the left, Flux on the right, cut at 62%. The figure
+   straddles the cut, which is the whole point of the slide. */
+.pres-slide.is-split {
+  --sl-ink: #1b1712;
+  --sl-dim: #6b6255;
+  --sl-faint: #9a9082;
+  --sl-accent: #d6301c;
+  --sl-rule: rgba(27, 23, 18, 0.18);
+  background: linear-gradient(100deg, #f7f3ec 0 62%, #4a5157 62%, #262b2e 100%);
+}
+
+.pres-leaf {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.pres-leaf.is-leaving {
+  z-index: 0;
+  pointer-events: none;
+}
+
+.pres-hold {
+  position: absolute;
+  inset: 0;
+}
+
+.pres-inner {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pres-inner .pres-verse,
+.pres-inner .pres-sys {
+  pointer-events: auto;
+}
+
+/* ---- the imprint ----
+ *
+ * Not a bar. The footer used to be welded to the plate — its own fill, a
+ * border-top, two mitred corners — carrying six species of control, where
+ * no other stage on the site carries more than two and none welds anything.
+ * What is left is margin: a rule, then one line of mono.
+ *
+ * This is UI, not slide, so it does NOT ride the plate's cqw scale: 10px
+ * mono at 0.12em, the same chrome as .replay and .wires-bar button. */
+.pres-bar {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  height: 46px;
+  padding: 0 10px 8px;
+  border-radius: 0 0 15px 15px;
+}
+
+/* the rail sits hard against the stage's bottom edge — a progress rule for
+   the slide above it, not a control floating in the bar */
+.pres-segs {
+  display: flex;
+  gap: 2px;
+  margin: 0 -10px;
+}
+
+/* The rule is a hairline; the BUTTON around it is not. A 2px-tall control is
+   a 2px-tall pointer target, and on a finger it may as well not be there —
+   so the hit area is a proper 16px band and the mark inside it stays a line. */
+.pres-seg {
+  display: block;
+  position: relative;
+  height: 16px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pres-seg::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  transition: background 140ms var(--ease);
+}
+
+.pres-seg.is-seen::before {
+  background: color-mix(in srgb, var(--copper) 58%, transparent);
+}
+
+.pres-seg.is-on::before {
+  background: var(--ember-hot);
+}
+
+@media (hover: hover) {
+  .pres-seg:hover::before {
+    background: var(--ink-dim);
+  }
+}
+
+.pres-foot {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Same grid cell so swapping folio ⇄ keys cannot resize the imprint — a
+   reflow here moves every sprite and would restart a gated run. */
+.pres-meta {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  justify-items: start;
+  align-items: center;
+}
+
+.pres-keys,
+.pres-folio {
+  grid-area: 1 / 1;
+}
+
+.pres-keys {
+  display: flex;
+  visibility: hidden;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pres.is-hot .pres-keys {
+  visibility: visible;
+}
+
+.pres.is-hot .pres-folio {
+  visibility: hidden;
+}
+
+.pres-keys span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pres-keys kbd {
+  display: inline-block;
+  padding: 1px 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  font: inherit;
+  letter-spacing: 0.08em;
+  color: var(--copper-ink);
+}
+
+.pres-folio {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* the crossfade control and the two arrows, in the site's one control
+   idiom — the same pill .replay, .wires-bar button and .slides-next are */
+/* the transition picker: a real <select>, so the four kinds are a list you
+   read rather than a word you have to press four times to see */
+.pres-xfade {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.pres-xfade-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pres-xfade select {
+  appearance: none;
+  padding: 4px 20px 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background:
+    /* the chevron, drawn rather than typed */
+    linear-gradient(45deg, transparent 50%, currentcolor 50%) calc(100% - 11px)
+      calc(50% - 1px) / 4px 4px no-repeat,
+    linear-gradient(-45deg, currentcolor 50%, transparent 50%) calc(100% - 7px)
+      calc(50% - 1px) / 4px 4px no-repeat;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .pres-xfade:hover select {
+    color: var(--ink);
+    border-color: var(--copper);
+  }
+}
+
+/* Start over — the same pill as the arrows, wearing a word instead of a
+   glyph. It reads as part of the transport rather than a fifth species. */
+.pres-restart {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+@media (hover: hover) {
+  .pres-restart:hover {
+    color: var(--ink);
+    border-color: var(--copper);
+  }
+}
+
+.pres-arr {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 10px;
+  line-height: 1;
+}
+
+@media (hover: hover) {
+  .pres-arr:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: var(--copper);
+  }
+}
+
+.pres-arr.is-off,
+.pres-arr:disabled {
+  opacity: 0.28;
+  cursor: default;
+}
+
+/* builds start invisible; the timeline writes them. Back-arrive skips the
+   timeline and shows the still — the previous slide, already built. */
+.pres-slide .is-build {
+  opacity: 0;
+}
+
+.pres-slide[data-arrive='back'] .is-build {
+  opacity: 1;
+  transform: none;
+}
+
+.pres-eye,
+.pres-title,
+.pres-kicker,
+.pres-stamp,
+.pres-fairway,
+.pres-num,
+.pres-plate,
+.pres-hed,
+.pres-line,
+.pres-idx,
+.pres-plot,
+.pres-cap,
+.pres-sys,
+.pres-close,
+.pres-seal {
+  position: absolute;
+}
+
+.pres-eye,
+.pres-idx {
+  top: 5.5cqw;
+  left: var(--pres-m);
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--sl-accent);
+}
+
+/* 01 — the title.
+ *
+ * No figure on this slide: the contrast IS the design. One word solid, the
+ * word under it outlined in Halo, at a step nothing else in the deck gets
+ * near — 13cqw against a 1.8cqw eyebrow is better than 7:1, and that gap is
+ * what makes a title slide read as a title rather than as a big heading. */
+.pres-title {
+  top: 14cqw;
+  left: var(--pres-m);
+  margin: 0;
+  font-family: var(--font-display-alt);
+  font-weight: 700;
+  font-stretch: 62%;
+  font-variation-settings: 'wdth' 62;
+  font-size: clamp(30px, 13cqw, 76px);
+  letter-spacing: -0.045em;
+  line-height: 0.84;
+  text-transform: uppercase;
+}
+
+/* the counter-word: the same cut, drawn rather than filled */
+.pres-title.is-out {
+  top: 25cqw;
+  color: transparent;
+  -webkit-text-stroke: 1.4px var(--sl-accent);
+}
+
+/* the rule that wipes out under the pair, on the same press */
+.pres-swipe {
+  position: absolute;
+  top: 38.5cqw;
+  left: var(--pres-m);
+  display: block;
+  width: 32cqw;
+  height: 2px;
+  background: var(--sl-accent);
+  transform-origin: 0 50%;
+}
+
+.pres-slide.is-title .pres-kicker {
+  top: 43cqw;
+}
+
+.pres-kicker {
+  top: 26cqw;
+  left: var(--pres-m);
+  margin: 0;
+  width: fit-content;
+  font-size: var(--pres-2);
+  font-style: italic;
+  color: var(--sl-dim);
+  letter-spacing: -0.01em;
+}
+
+/* The orbit is a SQUARE drawing (240x240 viewBox) and an svg letterboxes
+   itself inside whatever box it is given — a wide short box shrank it to a
+   coin in the middle. Square box, square figure, and it sits opposite the
+   type instead of under it. */
+.pres-fairway {
+  top: 11cqw;
+  right: 5cqw;
+  left: auto;
+  width: 34cqw;
+  height: 34cqw;
+}
+
+/* the mesh is 320x110 — a band. Its box carries the same ratio so the drawing
+   fills it rather than floating in the middle of it. */
+.pres-plot {
+  top: 25cqw;
+  left: var(--pres-m);
+  width: 86cqw;
+  height: 29.6cqw;
+}
+
+/* on the split ground the head sits in the paper half and the figure runs
+   across the cut, so the type gets the left 58% and nothing overhangs */
+.pres-slide.is-split .pres-hed {
+  right: 44cqw;
+}
+
+/* The split is the one ground where a single ink cannot serve the slide: the
+   figure runs across the cut, so anything derived from --sl-ink (dark, for
+   the paper half) disappears into the steel half — black on black, the exact
+   trap. These take a MID tone instead, which holds on cream and on steel. */
+.pres-slide.is-split .pres-ghost,
+.pres-slide.is-split .pres-chord,
+.pres-slide.is-split .pres-node-ring {
+  stroke: rgba(140, 138, 134, 0.62);
+}
+
+/* the station labels cross the cut too, so the ones that land on steel take
+   their contrast from that half rather than from the paper half's --sl-faint */
+.pres-slide.is-split .pres-stations li:nth-child(n + 4) {
+  color: rgba(244, 246, 247, 0.78);
+}
+
+/* ---- the figures ---- */
+
+.pres-fig,
+.pres-coast {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pres-ghost,
+.pres-stroke {
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* the path not yet drawn: the same line, at a whisper */
+.pres-ghost {
+  stroke: color-mix(in srgb, var(--sl-ink) 16%, transparent);
+}
+
+/* the one line the timeline pulls on with @pathLength */
+.pres-stroke {
+  stroke: var(--sl-accent);
+  filter: drop-shadow(
+    0 0 6px color-mix(in srgb, var(--sl-accent) 45%, transparent)
+  );
+}
+
+/* ORBIT — three rotated ellipses, a lit core, three coloured nodes */
+.pres-orbit {
+  fill: none;
+  stroke: color-mix(in srgb, var(--sl-ink) 14%, transparent);
+  stroke-width: 1;
+}
+
+.pres-core {
+  fill: var(--sl-accent);
+}
+
+.pres-core.is-halo {
+  fill: none;
+  stroke: color-mix(in srgb, var(--sl-accent) 40%, transparent);
+  stroke-width: 1.2;
+}
+
+/* MESH — the chords are the routes NOT taken */
+.pres-chord {
+  fill: none;
+  stroke: color-mix(in srgb, var(--sl-ink) 10%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.pres-node-ring {
+  fill: none;
+  stroke: color-mix(in srgb, var(--sl-ink) 18%, transparent);
+  stroke-width: 1;
+}
+
+/* the accent set — Halo, Flux and Ember as marks. The deck's one place for
+   more than a single hue, and all three come from the brand's own ramps. */
+.pres-node.is-halo,
+.pres-marks .is-halo {
+  fill: #edce9e;
+}
+
+.pres-node.is-flux,
+.pres-marks .is-flux {
+  fill: #9aa2a8;
+}
+
+.pres-node.is-ember,
+.pres-marks .is-ember {
+  fill: #f2843e;
+}
+
+.pres-marks {
+  fill: var(--sl-accent);
+}
+
+/* the two ends of the ride. Positioned in % of the CHART, which is itself a
+   cqw box — so the bead sits on the same point of the curve at every size. */
+.pres-origin,
+.pres-hull {
+  position: absolute;
+  width: 1.3cqw;
+  height: 1.3cqw;
+  min-width: 6px;
+  min-height: 6px;
+}
+
+.pres-origin {
+  left: 3.75%;
+  top: 65%;
+  margin-top: -0.65cqw;
+}
+
+.pres-hull {
+  left: 96.25%;
+  top: 57.5%;
+  margin-top: -0.65cqw;
+  border-radius: 999px;
+  background: var(--sl-accent);
+  box-shadow:
+    0 0 0 0.55cqw color-mix(in srgb, var(--sl-accent) 24%, transparent),
+    0 0 12px color-mix(in srgb, var(--sl-accent) 60%, transparent);
+}
+
+.pres-stamp,
+.pres-seal {
+  margin: 0;
+  width: fit-content;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--pres-1);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sl-accent);
+}
+
+.pres-stamp {
+  right: var(--pres-m);
+  bottom: 5cqw;
+}
+
+.pres-seal {
+  right: var(--pres-m);
+  bottom: 6cqw;
+  padding: 1.4cqw 1.8cqw 1.2cqw;
+  border: 1px solid var(--sl-accent);
+  border-radius: 999px;
+}
+
+/* 02 — the idea: a cropped numeral, a copper plate, one sentence.
+   The numeral is not on the type scale: it is a graphic at 10% ink, cropped
+   by two edges, and it is sized against the plate rather than the ladder. */
+.pres-num {
+  right: -1cqw;
+  top: -4cqw;
+  margin: 0;
+  font-family: var(--font-display-alt);
+  font-weight: 700;
+  font-stretch: 62%;
+  font-variation-settings: 'wdth' 62;
+  font-size: 17cqw;
+  line-height: 0.8;
+  letter-spacing: -0.06em;
+  color: color-mix(in srgb, var(--ink) 10%, transparent);
+  pointer-events: none;
+}
+
+.pres-plate {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 26cqw;
+  background: linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%);
+  box-shadow: -8px 0 24px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+}
+
+.pres-hed,
+.pres-close {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.94;
+}
+
+.pres-hed {
+  top: 13cqw;
+  left: var(--pres-m);
+  right: 34cqw;
+  font-size: var(--pres-4);
+}
+
+.pres-hed.is-tight {
+  top: 11cqw;
+  right: 9cqw;
+}
+
+/* Plex Sans italic sets optically larger than Syne 800 at the same body
+   size, so the counter-voice steps down to sit level with the display line
+   instead of over-reaching it. */
+.pres-hed em,
+.pres-close em {
+  display: block;
+  font-family: var(--font);
+  font-weight: 400;
+  font-style: italic;
+  font-size: 0.88em;
+  letter-spacing: -0.02em;
+  color: var(--sl-dim);
+}
+
+.pres-line {
+  left: var(--pres-m);
+  margin: 0;
+  font-size: var(--pres-2);
+  color: var(--sl-ink);
+  letter-spacing: -0.01em;
+}
+
+.pres-verse {
+  position: absolute;
+  top: 28cqw;
+  left: var(--pres-m);
+  right: 34cqw;
+  bottom: 5cqw;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.2cqw;
+  margin: 0;
+}
+
+.pres-cell {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 1.6cqw;
+  row-gap: 0.6cqw;
+  min-height: 0;
+}
+
+.pres-tick {
+  grid-row: 1 / -1;
+  align-self: start;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  color: var(--sl-accent);
+}
+
+.pres-cell p {
+  margin: 0;
+  font-size: var(--pres-2);
+  letter-spacing: -0.01em;
+}
+
+.pres-rule {
+  grid-column: 2;
+  display: block;
+  height: 1px;
+  width: 100%;
+  max-width: 11em;
+  margin: 0;
+  background: var(--sl-accent);
+  transform-origin: 0 50%;
+  opacity: 0;
+}
+
+.pres-rule.is-on {
+  opacity: 1;
+}
+
+.pres-inner .pres-tick,
+.pres-inner .pres-cell p,
+.pres-inner .pres-rule,
+.pres-inner .pres-sys-item,
+.pres-inner .pres-sys-item b,
+.pres-inner .pres-sys-item h3,
+.pres-inner .pres-sys-item p {
+  opacity: 0;
+}
+
+.pres-stations {
+  position: absolute;
+  left: 2%;
+  right: 2%;
+  bottom: -14%;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-faint);
+}
+
+.pres-cap {
+  right: var(--pres-m);
+  bottom: 5cqw;
+  left: auto;
+  margin: 0;
+  width: fit-content;
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-accent);
+}
+
+/* 04 — the system.
+   A band, not the whole plate: the cards used to sit in a box running to the
+   bottom margin, which left the lower third empty because every card's
+   content is top-aligned inside it. */
+.pres-sys {
+  top: 15cqw;
+  left: var(--pres-m);
+  right: var(--pres-m);
+  bottom: 7cqw;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4cqw;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pres-sys-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7cqw;
+  min-width: 0;
+  padding-top: 1.6cqw;
+  border-top: 1px solid var(--sl-rule);
+}
+
+.pres-sys-item b {
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  color: var(--sl-accent);
+}
+
+.pres-sys-item h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: var(--pres-3);
+  letter-spacing: -0.035em;
+}
+
+/* number, title and rule hold the top of the band; the descriptions drop to
+   a shared baseline at the bottom of it, the way a spec plate sets them */
+.pres-sys-item p {
+  margin: auto 0 0;
+  font-size: var(--pres-2);
+  line-height: 1.35;
+  color: var(--sl-dim);
+}
+
+/* 05 — the close */
+.pres-close {
+  top: 14cqw;
+  left: var(--pres-m);
+  /* "The system" needs the full measure; a tighter inset breaks the line
+     after "The", which is not a line break anyone chose */
+  right: 16cqw;
+  font-size: var(--pres-5);
+}
+
+.pres-slide[data-slide='4'] .pres-line {
+  top: 38cqw;
+  font-family: var(--font-mono);
+  font-size: var(--pres-1);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-faint);
+}
+
+/* ---- Wires: comments that keep their hold ---- */
+
+.ex:has(.wires) {
+  padding-block: 20px;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.wires-bar {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 4px 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  transform: translateX(-50%);
+}
+
+.wires-bar-label {
+  margin-right: 6px;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink-faint);
+}
+
+.wires-bar button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  min-width: 26px;
+  padding: 4px 9px;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+@media (hover: hover) {
+  .wires-bar button:hover {
+    color: var(--ink);
+  }
+}
+
+.wires-bar button.is-on {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+.wires {
+  position: relative;
+  width: min(90cqw, 640px);
+  padding: 44px 6px 8px;
+  overflow: visible;
+  /* inline-size only: a size container with auto height reports 0 block
+     size, so the compact query would always match on the demo page. */
+  container-type: inline-size;
+}
+
+.wires-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(148px, 0.68fr);
+  grid-template-rows: auto 1fr;
+  column-gap: 24px;
+}
+
+.wires-board::before {
+  content: '';
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg-spot);
+  pointer-events: none;
+}
+
+.wires-paper {
+  display: contents;
+}
+
+.wires-head {
+  grid-column: 1;
+  grid-row: 1;
+  z-index: 1;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(14px, 4cqw, 26px) clamp(16px, 4.7cqw, 30px)
+    clamp(8px, 2.2cqw, 14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.wires-kicker {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 10px;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.wires-hed {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 4.8cqw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+  color: var(--ink);
+}
+
+.wires-copy {
+  grid-column: 1;
+  grid-row: 2;
+  z-index: 1;
+  min-width: 0;
+  margin: 0;
+  padding: clamp(12px, 3.2cqw, 20px) clamp(16px, 4.7cqw, 30px)
+    clamp(16px, 5cqw, 32px);
+  max-width: none;
+  font-family: var(--font);
+  font-size: clamp(0.8rem, 3.3cqw, 1.24rem);
+  font-weight: 400;
+  line-height: 1.8;
+  letter-spacing: -0.006em;
+  color: var(--ink);
+}
+
+.wires-rest {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.wires [data-choreo-tethers] {
+  z-index: 2;
+  overflow: visible;
+}
+
+/* Live tethers still run — tests read them — but the ink you see is the
+   resting path, retargeted every frame. Hiding rest here replayed a fade. */
+.wires [data-choreo-tether] {
+  visibility: hidden;
+}
+
+.wires [data-choreo-tether],
+.wires-thread {
+  fill: none;
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wires-thread {
+  opacity: 0;
+  transition: opacity 0.18s var(--ease);
+}
+
+.wires[data-hot='gauge'] .wires-thread[data-thread='gauge'],
+.wires[data-hot='edition'] .wires-thread[data-thread='edition'],
+.wires[data-hot='hed'] .wires-thread[data-thread='hed'] {
+  opacity: 1;
+}
+
+.wires [data-thread='gauge'] {
+  --wires-ink: var(--copper-ink);
+  --wires-wash: var(--copper);
+}
+
+.wires [data-thread='edition'] {
+  --wires-ink: var(--iris);
+  --wires-wash: var(--iris);
+}
+
+.wires [data-thread='hed'] {
+  --wires-ink: var(--teal);
+  --wires-wash: var(--teal);
+}
+
+.wires [data-choreo-tether],
+.wires-thread {
+  stroke: var(--wires-ink);
+}
+
+.wires-mark {
+  padding: 0.02em 0.1em;
+  background: color-mix(in srgb, var(--wires-wash) 14%, transparent);
+  color: inherit;
+  font-style: normal;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+  outline: none;
+}
+
+.wires[data-hot='gauge'] .wires-mark[data-thread='gauge'],
+.wires[data-hot='edition'] .wires-mark[data-thread='edition'],
+.wires[data-hot='hed'] .wires-mark[data-thread='hed'] {
+  background: color-mix(in srgb, var(--wires-wash) 24%, transparent);
+}
+
+.wires-margin {
+  grid-column: 2;
+  grid-row: 2;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(8px, 2.2cqw, 14px);
+  margin: 0;
+  padding: clamp(12px, 3.2cqw, 20px) 0 8px;
+  list-style: none;
+}
+
+.wires-note {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 2px 2px 2px 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+}
+
+.wires-hue {
+  width: 3px;
+  flex: none;
+  align-self: stretch;
+  min-height: 22px;
+  border-radius: 2px;
+  background: var(--wires-ink);
+  opacity: 0.45;
+  transition: opacity 0.16s var(--ease);
+}
+
+.wires-note-copy {
+  min-width: 0;
+  flex: 1;
+  padding: 1px 0 2px;
+  opacity: 0.58;
+  transition: opacity 0.16s var(--ease);
+}
+
+.wires[data-hot='gauge'] .wires-note[data-thread='gauge'] .wires-hue,
+.wires[data-hot='edition'] .wires-note[data-thread='edition'] .wires-hue,
+.wires[data-hot='hed'] .wires-note[data-thread='hed'] .wires-hue,
+.wires[data-hot='gauge'] .wires-note[data-thread='gauge'] .wires-note-copy,
+.wires[data-hot='edition'] .wires-note[data-thread='edition'] .wires-note-copy,
+.wires[data-hot='hed'] .wires-note[data-thread='hed'] .wires-note-copy {
+  opacity: 1;
+}
+
+.wires-who {
+  display: block;
+  font-family: var(--font);
+  font-size: clamp(10px, 2cqw, 13px);
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.wires-note p {
+  margin: 4px 0 0;
+  font-family: var(--font);
+  font-size: clamp(10.5px, 2.2cqw, 14px);
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+.wires[data-hot='gauge'] .wires-note[data-thread='gauge'] p,
+.wires[data-hot='edition'] .wires-note[data-thread='edition'] p,
+.wires[data-hot='hed'] .wires-note[data-thread='hed'] p {
+  color: var(--ink);
+}
+
+@container (max-height: 240px) {
+  .wires-head,
+  .wires-bar-label {
+    display: none;
+  }
+
+  .wires-copy {
+    padding: 12px 14px;
+    font-size: 0.78rem;
+    line-height: 1.55;
+  }
+
+  .wires-margin {
+    padding-top: 12px;
+    gap: 6px;
+  }
+
+  .wires-note p {
+    display: none;
+  }
+}
+
 /* ---- Choreo demos ---- */
 
 .study {
@@ -4862,55 +6093,6 @@ html[data-gm-dragging] * {
 .filter-code .sample-label {
   margin: 0;
   padding: 14px 18px 0;
-}
-
-/* The iOS / Keynote trick, for EVERY matched element.
- *
- * Two renderings of the same thing cannot morph into each other — "Lightbox"
- * is 15px display type in the card and 80px extra-wide on the page, and the
- * demo is a small stage and a full-width one. So both images are stretched to
- * fill the SAME box, that box interpolates from the old one to the new one,
- * and the two cross from 0% to 100% inside it. What you read is one object
- * growing, rather than two objects dissolving past each other at two sizes.
- *
- * object-fit: fill, not cover: cover crops whatever changes aspect, which is
- * exactly what must not happen to a word or to a demo.
- */
-::view-transition-old(.gm-move),
-::view-transition-new(.gm-move) {
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-}
-
-/* One clock for the whole transition.
- *
- * Every layer the browser makes starts on ITS default — a quarter of a second
- * — and Motion retimes the ones it is given keyframes for. Any layer it is not
- * given keyframes for keeps that default, so a seven-second morph had seven
- * layers crossing at full speed in its first few frames: all the jitter, all at
- * the beginning. This is the floor for the ones Motion does not touch; where it
- * does, it sets timing through the Web Animations API, which wins over this.
- *
- * IMAGES ONLY. The group is the layer's position and size, and Motion animates
- * that itself — give the group a duration here as well and two animations own
- * the same transform. They do not blend, they take turns, and what you see is a
- * layer jumping between two answers frame by frame.
- */
-::view-transition-old(*),
-::view-transition-new(*) {
-  animation-duration: var(--gm-morph, 250ms);
-}
-
-/* the OLD image gets less of the clock and a curve that front-loads the
-   fade — the UA default (ease-out, the full duration) still has it visibly
-   present past the halfway point, fading underneath whatever the incoming
-   page is doing on top of it. Cut short and weighted early, it is gone
-   well before the new image finishes arriving, instead of the two
-   crossfading through each other for the whole transition. */
-::view-transition-old(*) {
-  animation-duration: calc(var(--gm-morph, 250ms) * 0.6);
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ---- the transition control, and the code it can show ---- */
@@ -6103,8 +7285,11 @@ html[data-gm-dragging] * {
   left: 0;
   z-index: 2;
   width: 1px;
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 0 7px rgba(255, 255, 255, 0.35);
+  /* ember, not white: white reads on the dark card and vanishes on the
+     light one, and the head already wears an ember halo — one colour for
+     the whole playhead, legible on either ground */
+  background: var(--ember);
+  box-shadow: 0 0 7px var(--glow);
   pointer-events: none;
 }
 
@@ -6116,7 +7301,7 @@ html[data-gm-dragging] * {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--ember);
   box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.26);
 }
 
@@ -6734,6 +7919,10 @@ html[data-gm-dragging] * {
 
 :root:not([data-theme='light']) .slide {
   background: #2e2925;
+}
+
+:root:not([data-theme='light']) .pres-stage {
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .rail {

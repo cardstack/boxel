@@ -3,7 +3,7 @@
  * (docs/choreo-constructs.md §4.4, §6.3).
  */
 import { array } from '@ember/helper';
-import { find, render, settled } from '@ember/test-helpers';
+import { find, render, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
@@ -92,9 +92,12 @@ module('Integration | choreo | move extras', function (hooks) {
               {{motion id="card" role="card"}}
             ></div>
           {{/each}}
+          {{! roomy on purpose: this test reads a mid-crossfade still, and
+              a headless CI can hand out its first animation frame late
+              enough that a tenth-of-a-second move has not begun }}
           <c.Move
             @of={{c.received "card"}}
-            @duration={{0.12}}
+            @duration={{0.4}}
             @ease="easeInOut"
           />
         </Choreo>
@@ -105,14 +108,35 @@ module('Integration | choreo | move extras', function (hooks) {
     await animationsSettled();
     app!.gen = 1;
     await settled();
-    await nextFrame();
-    await nextFrame();
+    // mid-flight is a STATE, not a frame count: wait until the crossfade
+    // is genuinely underway — the old skin off its seat AND dissolving —
+    // then read that still. Counting frames asserts the CI machine's
+    // frame budget, which is nobody's subject.
+    await waitUntil(
+      () => {
+        const el = find('#skin-0') as HTMLElement | null;
+        return (
+          el !== null &&
+          bounds(el).left > 10 &&
+          parseFloat(getComputedStyle(el).opacity) < 1
+        );
+      },
+      { timeout: 2000 }
+    );
     const receiver = find('#skin-1') as HTMLElement;
     const leaver = find('#skin-0') as HTMLElement;
     assert.ok(leaver, 'the old skin is aloft with the new');
+    // both skins wear a real background, so the crossfade carries color
+    // (§4.7): the receiver holds SOLID — the ground can never leak through
+    // the flying box — while the old skin dissolves above it
     const rOp = parseFloat(getComputedStyle(receiver).opacity);
     const lOp = parseFloat(getComputedStyle(leaver).opacity);
-    assert.true(rOp < 1, `the new skin is fading in (${rOp})`);
+    assert.strictEqual(rOp, 1, 'the new skin holds solid under the dissolve');
+    assert.strictEqual(
+      getComputedStyle(receiver).backgroundColor,
+      'rgb(0, 170, 255)',
+      'the flying box wears its effective color, full alpha'
+    );
     assert.true(lOp < 1, `the old skin is fading out (${lOp})`);
     const lb = bounds(leaver);
     assert.true(lb.left > 10, `the old skin flies too (${lb.left})`);

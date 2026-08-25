@@ -117,8 +117,9 @@ const shots = brackets.flatMap((bracket, row) =>
   }))
 );
 
-/** a camera has weight: it carries the whole table, so it never snaps */
-const carry = spring({ bounce: 0.12, visualDuration: 0.62 });
+/** a camera has weight: it carries the whole table, so it never snaps —
+    but 0.62s with bounce made the dive linger. Shorter, quieter settle. */
+const carry = spring({ bounce: 0.05, visualDuration: 0.36 });
 
 /** the frames' own boxes, if a pass reflows the sheet */
 const settle = spring({ bounce: 0.22, visualDuration: 0.42 });
@@ -260,7 +261,9 @@ export class Camera extends Component {
         {{! the cursor is the affordance: zoom-in over a frame, zoom-out on
             the table once you are close — no toolbar, the world explains }}
         <Choreo class={{this.stageClass}} {{on "click" this.clear}} as |c|>
-          <div class="cam-sheet" {{this.wire c}}>
+          {{! the sheet of prints is the demo's SUBSTANCE: the crossing
+              matches this box, not the stage frame around it }}
+          <div class="cam-sheet" data-choreo-substance {{this.wire c}}>
             {{#each shots as |shot|}}
               <button
                 type="button"

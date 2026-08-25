@@ -1,10 +1,15 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { catalog, groups } from 'test-app/lib/catalog';
+import {
+  counterpartId,
+  crossingActive,
+  crossingSettled,
+} from 'test-app/lib/crossing';
 import { highlightSample } from 'test-app/lib/highlight';
 import { isCrossing } from 'test-app/lib/tempo';
 
@@ -80,6 +85,39 @@ export class Gallery extends Component {
   @tracked filter: Filter = 'All';
   @tracked code = false;
 
+  /**
+   * Mounted mid-crossing — the return trip — the stages wait for the
+   * landing: booting thirty live demos is the single heaviest render in
+   * the app, and paying it inside the pass stutters the very flight the
+   * eye is following. Until the crossing settles the cards are their
+   * chrome and type over the stage's own ground — which is exactly what
+   * the old system showed too, one way or another — and the demos come
+   * alive the moment the move lands. Released ONCE, permanently: a later
+   * OPENING crossing must fly real pixels out of the card.
+   */
+  @tracked private stagesReleased = !isCrossing();
+
+  constructor(owner: unknown, args: object) {
+    super(owner as never, args as never);
+    if (!this.stagesReleased) {
+      void crossingSettled().then(() => {
+        if (!this.isDestroying) {
+          this.stagesReleased = true;
+        }
+      });
+    }
+  }
+
+  /**
+   * …with ONE exception: the counterpart's own stage boards DURING the
+   * crossing. The old skin dissolves [1 -> 0] over the receiving tile,
+   * and a dissolve needs something real underneath — the live demo
+   * reaches full presence exactly as the snapshot reaches none. One
+   * demo booting inside the pass is the price of the crossfade; the
+   * other twenty-nine still wait for the landing.
+   */
+  stageLive = (id: string) => this.stagesReleased || id === counterpartId();
+
   get demos() {
     if (this.filter === 'All') {
       return catalog;
@@ -91,16 +129,22 @@ export class Gallery extends Component {
   }
 
   /**
-   * Cards arriving during a route transition do not play an entrance.
-   *
-   * Coming back from a demo, all twenty-six mount at the moment the morph
-   * lands — and twenty-six springs firing at once, right as the shared element
-   * arrives, is the kink at the end of an otherwise smooth movement. They are
-   * simply already here.
+   * The unmatched tiles are not the crossing's to fade. During the trip
+   * home only ONE card is part of the Magic Move — the one the flight
+   * lands on; it stands ready from the first frame (veiled shell, visible
+   * contents). Every other tile holds dark for the span and springs in
+   * once the crossing settles, so nothing competes with the move for
+   * animation frames while it is telling its story.
    */
-  get entrance() {
-    return isCrossing() ? cardHere : cardIn;
-  }
+  cardInitial = (id: string) =>
+    isCrossing() && id === counterpartId() ? cardHere : cardIn;
+
+  cardAnimate = (id: string) =>
+    this.stagesReleased || id === counterpartId() ? cardHere : cardIn;
+
+  /** the counterpart's shell hides while its contents are the flight —
+   *  empty space where the card would be, exactly as long as needed */
+  veiled = (id: string) => crossingActive() && id === counterpartId();
 
   get panel() {
     return this.code ? [{ id: 'filter-code' }] : NO_PANEL;
@@ -119,7 +163,9 @@ export class Gallery extends Component {
   };
 
   <template>
-    <section class="hero">
+    {{! role='scene': the crossing gives the hero its own exit — it rises
+        out — and fades it back in on the way home }}
+    <section class="hero" {{motion role="scene"}}>
       {{! the repo is Choreo; the thing you install is still glimmer-motion,
           so the eyebrow credits the package by name }}
       <p class="kicker">Includes glimmer-motion</p>
@@ -190,32 +236,56 @@ export class Gallery extends Component {
               once on load is the cheaper price. }}
           as |demo h|
         >
+          {{! The card and its pieces are the crossing's participants. The
+              card itself (role='card') is a leaver the crossing dissolves —
+              naming a container of named things is LEGAL here: the claimed
+              stage and type are lifted out of it into the flight, leaving
+              holes where the eye expects them. The ids pair with the demo
+              page's own stage and type lines, exactly as far matching
+              already pairs ids. On a FILTER pass the timeline is not
+              rendered, so the region compiles nothing and <Presence> keeps
+              owning these same elements' exits. }}
           <article
-            class="card"
+            class="card{{if (this.veiled demo.id) ' is-veiled'}}"
             data-demo={{demo.id}}
             {{motion
+              role="card"
               presence=h
               layout=true
-              initial=this.entrance
-              animate=cardHere
+              initial=(this.cardInitial demo.id)
+              animate=(this.cardAnimate demo.id)
               exit=cardOut
               transition=cardSpring
             }}
           >
-            <div class="card-stage">
-              {{#let demo.Example as |Example|}}
-                <Example />
-              {{/let}}
+            <div
+              class="card-stage"
+              {{motion id=(concat "stage-" demo.id) role="stage"}}
+            >
+              {{#if (this.stageLive demo.id)}}
+                {{#let demo.Example as |Example|}}
+                  <Example />
+                {{/let}}
+              {{/if}}
             </div>
             <LinkTo @route="demo" @model={{demo.id}} class="card-meta">
-              <span class="card-group">
+              <span
+                class="card-group"
+                {{motion id=(concat "group-" demo.id) role="type"}}
+              >
                 {{demo.group}}
                 {{#if demo.notes}}
                   <span class="card-badge">Deep Dive</span>
                 {{/if}}
               </span>
-              <span class="card-title">{{demo.title}}</span>
-              <span class="card-lede">{{demo.lede}}</span>
+              <span
+                class="card-title"
+                {{motion id=(concat "title-" demo.id) role="type"}}
+              >{{demo.title}}</span>
+              <span
+                class="card-lede"
+                {{motion id=(concat "lede-" demo.id) role="type"}}
+              >{{demo.lede}}</span>
             </LinkTo>
           </article>
         </Presence>

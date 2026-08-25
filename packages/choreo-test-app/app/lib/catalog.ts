@@ -16,6 +16,7 @@ import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
 import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
+import { Presentation } from 'test-app/components/examples/presentation';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
 import { Reveal } from 'test-app/components/examples/reveal';
@@ -27,6 +28,7 @@ import { SplitView } from 'test-app/components/examples/split-view';
 import { Stagger } from 'test-app/components/examples/stagger';
 import { Subdivision } from 'test-app/components/examples/subdivision';
 import { Trail } from 'test-app/components/examples/trail';
+import { Wires } from 'test-app/components/examples/wires';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
 import { FarNotes } from 'test-app/components/notes/far';
@@ -36,10 +38,12 @@ import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
+import { PresentationNotes } from 'test-app/components/notes/presentation';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
 import { TrailNotes } from 'test-app/components/notes/trail';
+import { WiresNotes } from 'test-app/components/notes/wires';
 
 export const groups = [
   'Animate',
@@ -391,6 +395,66 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
     the common case: dive on this thing, and centre it. }}`,
     slowmo: true,
     title: 'Camera',
+  },
+  {
+    Example: Presentation,
+    apis: ['c.Gate', 'c.advance', 'Presence', 'nested Choreo'],
+    group: 'Timeline',
+    id: 'presentation',
+    lede: 'The clock waits for you.',
+    notes: PresentationNotes,
+    sample: `// A presentation is a run that parks. The click does not start an
+// animation — it opens a gate in a score that is already compiled.
+// Linger and the next beat has not begun. Mash mid-build and the
+// segment completes instantly (Keynote's click-through), then parks.
+<c.Sequence>
+  <c.Tween @of={{c.id 'title'}} @opacity={{array 0 1}}
+    @x={{array -18 0}} @duration={{0.48}} @ease='easeOut' />
+  <c.Gate @delay={{0.72}} />   {{! the kicker writes itself — you did not click }}
+  <c.Tween @of={{c.id 'kicker'}} @opacity={{array 0 1}} @duration={{0.36}} />
+  <c.Gate />
+  <c.Parallel>
+    <c.Move @of={{c.id 'hull'}} @from={{c.beacon 'approach'}}
+      @path={{APPROACH}} @rotate='auto' @duration={{1.28}} />
+    <c.Tween @of={{c.id 'fairway'}} @pathLength={{array 0 1}} @duration={{1.28}} />
+  </c.Parallel>
+  <c.Gate />
+  <c.Tween @of={{c.id 'stamp'}}
+    @opacity={{array 0 1 1}} @scale={{array 0.86 1.08 1}} @duration={{0.46}} />
+</c.Sequence>
+
+// advance() is the only verb. play() would unpause a paused clock;
+// a gate is a named still. Replay is the only reverse — the cursor
+// only ever moves forward through one pass.`,
+    slowmo: true,
+    title: 'Presentation',
+  },
+  {
+    Example: Wires,
+    apis: ['c.Tether', '@path', 'c.Move', 'c.inserted'],
+    group: 'Timeline',
+    id: 'wires',
+    lede: 'Hover a mark. The comment still has hold.',
+    notes: WiresNotes,
+    sample: `// A wire is not a tween from A to B. @path is asked every frame (and
+// every still) with both sprites' current boxes. One function: a cubic.
+// Hover a highlight or a comment to see it. Step V1 → V2 → V3 and the
+// draft grows — marks walk, comments update, threads stay attached.
+<c.Parallel>
+  <c.Move @of={{c.moved}} @spring={{GLIDE}} />
+  <c.Tween @of={{c.inserted 'note'}} @opacity={{array 0 1}} @duration={{0.32}} />
+  <c.Tether @from={{c.id 'm-gauge'}} @to={{c.id 'c-gauge'}}
+    @path={{PATH_GAUGE}} />
+  <c.Tether @from={{c.id 'm-edition'}} @to={{c.id 'c-edition'}}
+    @path={{PATH_EDITION}} />
+  <c.Tether @from={{c.id 'm-hed'}} @to={{c.id 'c-hed'}}
+    @path={{PATH_HED}} />
+</c.Parallel>
+
+// Maya's comment keeps its name as the highlight walks down the draft.
+// Jo's is inserted at V2. Step back and that tether follows the leaver.`,
+    slowmo: true,
+    title: 'Wires',
   },
   {
     Example: ReorderGrid,

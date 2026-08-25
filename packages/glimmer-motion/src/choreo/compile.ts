@@ -13,6 +13,7 @@ import {
 import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
 import type {
   Block,
+  Bounds,
   ChangesetLike,
   Compiled,
   Cue,
@@ -230,6 +231,43 @@ function resolveTarget(
   return { longest, target };
 }
 
+/**
+ * The two boxes a shape-matched flight aligns: the declared subjects
+ * ([data-choreo-substance]) when either end has one — Keynote matches
+ * OBJECTS, not slide frames — with the undeclared end derived by fraction
+ * (content laid out proportionally keeps one fraction at both scales; the
+ * return trip's card, whose demo has not boarded yet, has nothing to
+ * measure). Neither end declared: the frames themselves.
+ */
+function matchBoxes(
+  initial: Bounds,
+  final: Bounds,
+  from: Rect,
+  to: Rect,
+  z: number,
+): { from: Rect; to: Rect } {
+  const subI = initial.substance && descale(initial.substance, z);
+  const subF = final.substance && descale(final.substance, z);
+  if (!subI && !subF) {
+    return { from, to };
+  }
+  const map = (s: Rect, a: Rect, b: Rect): Rect => ({
+    height: (s.height / (a.height || 1)) * b.height,
+    width: (s.width / (a.width || 1)) * b.width,
+    x: b.x + ((s.x - a.x) / (a.width || 1)) * b.width,
+    y: b.y + ((s.y - a.y) / (a.height || 1)) * b.height,
+  });
+  return {
+    from: subI ?? map(subF!, to, from),
+    to: subF ?? map(subI!, from, to),
+  };
+}
+
+const centreOf = (r: Rect) => ({
+  x: r.x + r.width / 2,
+  y: r.y + r.height / 2,
+});
+
 /** a page-space box, divided back into local space by the measure-time zoom */
 function descale(r: Rect, z: number): Rect {
   return z === 1
@@ -283,8 +321,14 @@ function resolveMove(
   const to = descale(parentSpace ? final.parent : final.page, z);
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
-  const dx = to.x - from.x;
-  const dy = to.y - from.y;
+  // 'scale' matches shape by transform (MoveStep.size): position runs
+  // centre-to-centre over the MATCH boxes — the declared subjects when
+  // either end has one, the frames otherwise. Layout modes run
+  // corner-to-corner with the real size animating alongside.
+  const scaleMode = step.size === 'scale' || step.size === 'crop';
+  const m = scaleMode ? matchBoxes(initial, final, from, to, z) : null;
+  const dx = m ? centreOf(m.to).x - centreOf(m.from).x : to.x - from.x;
+  const dy = m ? centreOf(m.to).y - centreOf(m.from).y : to.y - from.y;
   /**
    * Which end the element is actually sitting on decides the sign.
    *
@@ -306,6 +350,78 @@ function resolveMove(
       rotate: step.rotate,
     };
     pairs.push(leg(Math.hypot(dx, dy)));
+  } else if (m) {
+    // The transform scales about the element's own centre, so an
+    // off-centre match box needs a correction on the translate: the
+    // flight pins the MATCH box — the subject — through the move, and
+    // the frame simply comes along. With frame-matching the correction
+    // is zero and this is the plain centre-to-centre leg.
+    //
+    // 'crop' (iOS's rule): the scale is UNIFORM, matched by cover, and
+    // the aspect mismatch is carried by an animated crop window — the
+    // other end's box at the far pose, the element's own at rest — so
+    // nothing ever stretches. 'scale' stretches per axis instead, and
+    // the crossfade hides it.
+    const crop = step.size === 'crop';
+    const rx = m.from.width / (m.to.width || 1) || 1;
+    const ry = m.from.height / (m.to.height || 1) || 1;
+    const su = Math.max(rx, ry);
+    const sx = crop ? su : rx;
+    const sy = crop ? su : ry;
+    const fx = holdsStart ? 1 / sx : sx;
+    const fy = holdsStart ? 1 / sy : sy;
+    const anchor = centreOf(holdsStart ? from : to);
+    const pinned = centreOf(holdsStart ? m.from : m.to);
+    const cx = (1 - fx) * (pinned.x - anchor.x);
+    const cy = (1 - fy) * (pinned.y - anchor.y);
+    const x = holdsStart ? dx + cx : -dx + cx;
+    const y = holdsStart ? dy + cy : -dy + cy;
+    if (x !== 0) {
+      target['x'] = holdsStart ? [0, x] : [x, 0];
+      pairs.push(holdsStart ? [0, x] : [x, 0]);
+    }
+    if (y !== 0) {
+      target['y'] = holdsStart ? [0, y] : [y, 0];
+      pairs.push(holdsStart ? [0, y] : [y, 0]);
+    }
+    if (crop) {
+      if (fx !== 1) {
+        target['scale'] = holdsStart ? [1, fx] : [fx, 1];
+      }
+      // the crop window at the FAR pose: the other end's frame, pulled
+      // back through the transform into this element's own space
+      const frame = holdsStart ? from : to;
+      const window = holdsStart ? to : from;
+      const f = holdsStart ? fx : sx;
+      const d = holdsStart ? { x, y } : { x, y };
+      const pre = (edge: number, axis: 'x' | 'y') =>
+        (axis === 'x' ? anchor.x : anchor.y) +
+        (edge -
+          (axis === 'x' ? anchor.x : anchor.y) -
+          (axis === 'x' ? d.x : d.y)) /
+          f;
+      const clamp = (v: number) => Math.max(0, v);
+      const t = clamp(pre(window.y, 'y') - frame.y);
+      const r = clamp(
+        frame.x + frame.width - pre(window.x + window.width, 'x'),
+      );
+      const b = clamp(
+        frame.y + frame.height - pre(window.y + window.height, 'y'),
+      );
+      const l = clamp(pre(window.x, 'x') - frame.x);
+      if (Math.max(t, r, b, l) > 0.5) {
+        const far = `inset(${t.toFixed(2)}px ${r.toFixed(2)}px ${b.toFixed(2)}px ${l.toFixed(2)}px)`;
+        const rest = 'inset(0px 0px 0px 0px)';
+        target['clipPath'] = holdsStart ? [rest, far] : [far, rest];
+      }
+    } else {
+      if (fx !== 1) {
+        target['scaleX'] = holdsStart ? [1, fx] : [fx, 1];
+      }
+      if (fy !== 1) {
+        target['scaleY'] = holdsStart ? [1, fy] : [fy, 1];
+      }
+    }
   } else {
     if (dx !== 0) {
       target['x'] = leg(dx);
@@ -316,7 +432,9 @@ function resolveMove(
       pairs.push(leg(dy));
     }
   }
-  if (step.size !== false) {
+  if (scaleMode) {
+    // handled above: the match block owns both translation and scale
+  } else if (step.size !== false) {
     if (from.width !== to.width) {
       target['width'] = [from.width, to.width];
       pairs.push([from.width, to.width]);
@@ -345,6 +463,53 @@ function resolveMove(
   };
 }
 
+/** parse a computed rgb()/rgba() color into channels, or null */
+function rgbOf(
+  css: string | undefined,
+): { a: number; b: number; g: number; r: number } | null {
+  if (!css) {
+    return null;
+  }
+  const m = /^rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)$/.exec(
+    css,
+  );
+  if (!m) {
+    return null;
+  }
+  return {
+    a: m[4] === undefined ? 1 : parseFloat(m[4]),
+    b: parseFloat(m[3]!),
+    g: parseFloat(m[2]!),
+    r: parseFloat(m[1]!),
+  };
+}
+
+/**
+ * A skin's EFFECTIVE color: its background alpha-blended against the ground
+ * it stood on — opacity turned into an actual color (§4.7). Null when the
+ * skin has no visible background (type over transparency crossfades as
+ * opacity, there is nothing to solidify) or wears a color this parser does
+ * not speak, in which case the crossfade stays a plain dissolve.
+ */
+function effective(
+  paint: string | undefined,
+  ground: string | undefined,
+): string | null {
+  const src = rgbOf(paint);
+  if (!src || src.a === 0) {
+    return null;
+  }
+  if (src.a === 1) {
+    return `rgb(${src.r}, ${src.g}, ${src.b})`;
+  }
+  const dst = rgbOf(ground);
+  if (!dst) {
+    return null;
+  }
+  const mix = (s: number, d: number) => Math.round(s * src.a + d * (1 - src.a));
+  return `rgb(${mix(src.r, dst.r)}, ${mix(src.g, dst.g)}, ${mix(src.b, dst.b)})`;
+}
+
 const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
   duration: ms / 1000,
   ease: step.ease ?? 'easeInOut',
@@ -355,8 +520,14 @@ const springTransition = (spec: SpringSpec | undefined) => ({
   type: 'spring',
 });
 
-function resolveStep(step: Step, cs: ChangesetLike): Resolved {
-  const sprites = cs.sprites(step.of);
+function resolveStep(
+  step: Step,
+  cs: ChangesetLike,
+  exclude?: ReadonlySet<Sprite>,
+): Resolved {
+  const sprites = cs
+    .sprites(step.of)
+    .filter((s) => !exclude || !exclude.has(s));
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
   const stagger = step.stagger ?? 0;
@@ -466,18 +637,79 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
             const from = descale(cp.initial.page, cpz);
             const to = descale(sprite.final.page, cpz);
             const cpTarget: Record<string, unknown> = {};
-            if (to.x !== from.x) {
-              cpTarget['x'] = [0, to.x - from.x];
-            }
-            if (to.y !== from.y) {
-              cpTarget['y'] = [0, to.y - from.y];
-            }
-            if (step.size !== false) {
-              if (from.width !== to.width) {
-                cpTarget['width'] = [from.width, to.width];
+            if (step.size === 'scale' || step.size === 'crop') {
+              // the old skin rides the same match-box flight as its
+              // receiver, mirrored: identity at its own seat, landing with
+              // its SUBJECT on the receiver's — transform only, layout
+              // untouched, and the same off-centre correction (see the
+              // receiver's match block). Under 'crop' the scale is
+              // uniform and its own crop window closes to the receiver's
+              // frame as it lands.
+              const crop = step.size === 'crop';
+              const cpm = matchBoxes(cp.initial, sprite.final, from, to, cpz);
+              const mf = centreOf(cpm.from);
+              const mt = centreOf(cpm.to);
+              const anchor = centreOf(from);
+              const rx = cpm.to.width / (cpm.from.width || 1) || 1;
+              const ry = cpm.to.height / (cpm.from.height || 1) || 1;
+              const eu = Math.max(rx, ry);
+              const ex = crop ? eu : rx;
+              const ey = crop ? eu : ry;
+              const dxe = mt.x - anchor.x - ex * (mf.x - anchor.x);
+              const dye = mt.y - anchor.y - ey * (mf.y - anchor.y);
+              if (dxe !== 0) {
+                cpTarget['x'] = [0, dxe];
               }
-              if (from.height !== to.height) {
-                cpTarget['height'] = [from.height, to.height];
+              if (dye !== 0) {
+                cpTarget['y'] = [0, dye];
+              }
+              if (crop) {
+                if (ex !== 1) {
+                  cpTarget['scale'] = [1, ex];
+                }
+                const pre = (edge: number, axis: 'x' | 'y') =>
+                  (axis === 'x' ? anchor.x : anchor.y) +
+                  (edge -
+                    (axis === 'x' ? anchor.x : anchor.y) -
+                    (axis === 'x' ? dxe : dye)) /
+                    ex;
+                const clamp = (v: number) => Math.max(0, v);
+                const ct = clamp(pre(to.y, 'y') - from.y);
+                const cr = clamp(
+                  from.x + from.width - pre(to.x + to.width, 'x'),
+                );
+                const cb = clamp(
+                  from.y + from.height - pre(to.y + to.height, 'y'),
+                );
+                const cl = clamp(pre(to.x, 'x') - from.x);
+                if (Math.max(ct, cr, cb, cl) > 0.5) {
+                  cpTarget['clipPath'] = [
+                    'inset(0px 0px 0px 0px)',
+                    `inset(${ct.toFixed(2)}px ${cr.toFixed(2)}px ${cb.toFixed(2)}px ${cl.toFixed(2)}px)`,
+                  ];
+                }
+              } else {
+                if (ex !== 1) {
+                  cpTarget['scaleX'] = [1, ex];
+                }
+                if (ey !== 1) {
+                  cpTarget['scaleY'] = [1, ey];
+                }
+              }
+            } else {
+              if (to.x !== from.x) {
+                cpTarget['x'] = [0, to.x - from.x];
+              }
+              if (to.y !== from.y) {
+                cpTarget['y'] = [0, to.y - from.y];
+              }
+              if (step.size !== false) {
+                if (from.width !== to.width) {
+                  cpTarget['width'] = [from.width, to.width];
+                }
+                if (from.height !== to.height) {
+                  cpTarget['height'] = [from.height, to.height];
+                }
               }
             }
             if (Object.keys(cpTarget).length) {
@@ -491,22 +723,55 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
               });
             }
             if (swap === 'during') {
-              // both skins cross over the one flying box
-              cues.push({
-                duration: r.longest,
-                kind: 'tween',
-                offset,
-                sprite,
-                target: { opacity: [0, 1] },
-                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
-              });
+              // Both skins cross over the one flying box. A symmetric
+              // opacity crossfade composites each against whatever stands
+              // behind it, and mid-fade the pair sums short of solid — the
+              // ground leaks through and the box visibly dips. So when both
+              // skins wore a real background, alpha is turned into an
+              // actual color (§4.7): the receiver holds opacity 1 wearing a
+              // SOLID that tweens between the two skins' effective colors,
+              // the old skin dissolves ABOVE it, and on landing the solid
+              // is handed back to the stylesheet's own alpha (Cue.borrow).
+              const oldSkin = effective(cp.initial?.paint, cs.ground);
+              const newSkin = effective(sprite.final?.paint, cs.ground);
+              const fade = {
+                duration: r.longest / 1000,
+                ease: 'easeInOut',
+              };
+              if (oldSkin && newSkin) {
+                cues.push({
+                  borrow: true,
+                  duration: r.longest,
+                  kind: 'tween',
+                  offset,
+                  sprite,
+                  target: { backgroundColor: [oldSkin, newSkin] },
+                  transition: fade,
+                });
+                cues.push({
+                  duration: r.longest,
+                  hold: { fill: false, values: { zIndex: 3 } },
+                  kind: 'hold',
+                  offset,
+                  sprite: cp,
+                });
+              } else {
+                cues.push({
+                  duration: r.longest,
+                  kind: 'tween',
+                  offset,
+                  sprite,
+                  target: { opacity: [0, 1] },
+                  transition: fade,
+                });
+              }
               cues.push({
                 duration: r.longest,
                 kind: 'tween',
                 offset,
                 sprite: cp,
                 target: { opacity: [1, 0] },
-                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+                transition: fade,
               });
             } else {
               // 'settle': the old rendering is carried whole; the swap is
@@ -619,6 +884,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
           sprite,
           tether: {
             from: cs.sprites(step.from)[0] ?? null,
+            name: step.name,
             path: step.path,
             to: cs.sprites(step.to)[0] ?? null,
           },
@@ -670,11 +936,48 @@ export default function compile(
   tree: TimelineNode[],
   cs: ChangesetLike,
 ): Compiled {
+  // The yield rule (§4.7): a sprite a SPECIFIC step names belongs to that
+  // step — the canned crossing's generic children surrender it, so "a
+  // special exit that is not just a dissolve" is one sibling step, not a
+  // query-exclusion syntax. Only property steps with a selective query
+  // claim: a camera or a scroll is a statement about the scene, and an
+  // unqualified `of` (match everything) is not a choice of sprite.
+  const explicit = new Set<Sprite>();
+  const claim = (node: TimelineNode) => {
+    if (isGate(node)) {
+      return;
+    }
+    if (isBlock(node)) {
+      node.children.forEach(claim);
+      return;
+    }
+    if (
+      node.generic ||
+      (node.kind !== 'tween' &&
+        node.kind !== 'spring' &&
+        node.kind !== 'move' &&
+        node.kind !== 'hold')
+    ) {
+      return;
+    }
+    const q = node.of;
+    const selective = Array.isArray(q)
+      ? q.length > 0
+      : q.id !== undefined || q.role !== undefined || q.type !== undefined;
+    if (!selective) {
+      return;
+    }
+    for (const s of cs.sprites(q)) {
+      explicit.add(s);
+    }
+  };
+  tree.forEach(claim);
+
   const resolved = new Map<Step, Resolved>();
   const of = (step: Step) => {
     let r = resolved.get(step);
     if (!r) {
-      r = resolveStep(step, cs);
+      r = resolveStep(step, cs, step.generic ? explicit : undefined);
       resolved.set(step, r);
     }
     return r;
