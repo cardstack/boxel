@@ -240,9 +240,12 @@ export interface MoveStep extends StepBase {
    * centre instead of animating layout width/height — a flight that must
    * not reflow the scene around it (the crossing's receiver was
    * stretching its whole grid row). Content distorts through the flight
-   * exactly as a Magic Move's does; the crossfade hides it.
+   * exactly as a Magic Move's does; the crossfade hides it. `'crop'` is
+   * iOS's rule instead: UNIFORM scale, matched by cover, with the aspect
+   * mismatch carried by an animated crop window — the old box at liftoff,
+   * the element's own at landing — so nothing ever stretches.
    */
-  size?: boolean | 'scale';
+  size?: boolean | 'crop' | 'scale';
   /**
    * Which space the delta is measured in (§6.1). 'page' (default) is the
    * one space two regions agree on; 'parent' resolves the flight against

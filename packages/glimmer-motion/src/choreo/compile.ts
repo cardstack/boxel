@@ -325,7 +325,7 @@ function resolveMove(
   // centre-to-centre over the MATCH boxes — the declared subjects when
   // either end has one, the frames otherwise. Layout modes run
   // corner-to-corner with the real size animating alongside.
-  const scaleMode = step.size === 'scale';
+  const scaleMode = step.size === 'scale' || step.size === 'crop';
   const m = scaleMode ? matchBoxes(initial, final, from, to, z) : null;
   const dx = m ? centreOf(m.to).x - centreOf(m.from).x : to.x - from.x;
   const dy = m ? centreOf(m.to).y - centreOf(m.from).y : to.y - from.y;
@@ -356,8 +356,18 @@ function resolveMove(
     // flight pins the MATCH box — the subject — through the move, and
     // the frame simply comes along. With frame-matching the correction
     // is zero and this is the plain centre-to-centre leg.
-    const sx = m.from.width / (m.to.width || 1) || 1;
-    const sy = m.from.height / (m.to.height || 1) || 1;
+    //
+    // 'crop' (iOS's rule): the scale is UNIFORM, matched by cover, and
+    // the aspect mismatch is carried by an animated crop window — the
+    // other end's box at the far pose, the element's own at rest — so
+    // nothing ever stretches. 'scale' stretches per axis instead, and
+    // the crossfade hides it.
+    const crop = step.size === 'crop';
+    const rx = m.from.width / (m.to.width || 1) || 1;
+    const ry = m.from.height / (m.to.height || 1) || 1;
+    const su = Math.max(rx, ry);
+    const sx = crop ? su : rx;
+    const sy = crop ? su : ry;
     const fx = holdsStart ? 1 / sx : sx;
     const fy = holdsStart ? 1 / sy : sy;
     const anchor = centreOf(holdsStart ? from : to);
@@ -374,11 +384,43 @@ function resolveMove(
       target['y'] = holdsStart ? [0, y] : [y, 0];
       pairs.push(holdsStart ? [0, y] : [y, 0]);
     }
-    if (fx !== 1) {
-      target['scaleX'] = holdsStart ? [1, fx] : [fx, 1];
-    }
-    if (fy !== 1) {
-      target['scaleY'] = holdsStart ? [1, fy] : [fy, 1];
+    if (crop) {
+      if (fx !== 1) {
+        target['scale'] = holdsStart ? [1, fx] : [fx, 1];
+      }
+      // the crop window at the FAR pose: the other end's frame, pulled
+      // back through the transform into this element's own space
+      const frame = holdsStart ? from : to;
+      const window = holdsStart ? to : from;
+      const f = holdsStart ? fx : sx;
+      const d = holdsStart ? { x, y } : { x, y };
+      const pre = (edge: number, axis: 'x' | 'y') =>
+        (axis === 'x' ? anchor.x : anchor.y) +
+        (edge -
+          (axis === 'x' ? anchor.x : anchor.y) -
+          (axis === 'x' ? d.x : d.y)) /
+          f;
+      const clamp = (v: number) => Math.max(0, v);
+      const t = clamp(pre(window.y, 'y') - frame.y);
+      const r = clamp(
+        frame.x + frame.width - pre(window.x + window.width, 'x'),
+      );
+      const b = clamp(
+        frame.y + frame.height - pre(window.y + window.height, 'y'),
+      );
+      const l = clamp(pre(window.x, 'x') - frame.x);
+      if (Math.max(t, r, b, l) > 0.5) {
+        const far = `inset(${t.toFixed(2)}px ${r.toFixed(2)}px ${b.toFixed(2)}px ${l.toFixed(2)}px)`;
+        const rest = 'inset(0px 0px 0px 0px)';
+        target['clipPath'] = holdsStart ? [rest, far] : [far, rest];
+      }
+    } else {
+      if (fx !== 1) {
+        target['scaleX'] = holdsStart ? [1, fx] : [fx, 1];
+      }
+      if (fy !== 1) {
+        target['scaleY'] = holdsStart ? [1, fy] : [fy, 1];
+      }
     }
   } else {
     if (dx !== 0) {
@@ -595,18 +637,24 @@ function resolveStep(
             const from = descale(cp.initial.page, cpz);
             const to = descale(sprite.final.page, cpz);
             const cpTarget: Record<string, unknown> = {};
-            if (step.size === 'scale') {
+            if (step.size === 'scale' || step.size === 'crop') {
               // the old skin rides the same match-box flight as its
               // receiver, mirrored: identity at its own seat, landing with
               // its SUBJECT on the receiver's — transform only, layout
               // untouched, and the same off-centre correction (see the
-              // receiver's match block)
+              // receiver's match block). Under 'crop' the scale is
+              // uniform and its own crop window closes to the receiver's
+              // frame as it lands.
+              const crop = step.size === 'crop';
               const cpm = matchBoxes(cp.initial, sprite.final, from, to, cpz);
               const mf = centreOf(cpm.from);
               const mt = centreOf(cpm.to);
               const anchor = centreOf(from);
-              const ex = cpm.to.width / (cpm.from.width || 1) || 1;
-              const ey = cpm.to.height / (cpm.from.height || 1) || 1;
+              const rx = cpm.to.width / (cpm.from.width || 1) || 1;
+              const ry = cpm.to.height / (cpm.from.height || 1) || 1;
+              const eu = Math.max(rx, ry);
+              const ex = crop ? eu : rx;
+              const ey = crop ? eu : ry;
               const dxe = mt.x - anchor.x - ex * (mf.x - anchor.x);
               const dye = mt.y - anchor.y - ey * (mf.y - anchor.y);
               if (dxe !== 0) {
@@ -615,11 +663,38 @@ function resolveStep(
               if (dye !== 0) {
                 cpTarget['y'] = [0, dye];
               }
-              if (ex !== 1) {
-                cpTarget['scaleX'] = [1, ex];
-              }
-              if (ey !== 1) {
-                cpTarget['scaleY'] = [1, ey];
+              if (crop) {
+                if (ex !== 1) {
+                  cpTarget['scale'] = [1, ex];
+                }
+                const pre = (edge: number, axis: 'x' | 'y') =>
+                  (axis === 'x' ? anchor.x : anchor.y) +
+                  (edge -
+                    (axis === 'x' ? anchor.x : anchor.y) -
+                    (axis === 'x' ? dxe : dye)) /
+                    ex;
+                const clamp = (v: number) => Math.max(0, v);
+                const ct = clamp(pre(to.y, 'y') - from.y);
+                const cr = clamp(
+                  from.x + from.width - pre(to.x + to.width, 'x'),
+                );
+                const cb = clamp(
+                  from.y + from.height - pre(to.y + to.height, 'y'),
+                );
+                const cl = clamp(pre(to.x, 'x') - from.x);
+                if (Math.max(ct, cr, cb, cl) > 0.5) {
+                  cpTarget['clipPath'] = [
+                    'inset(0px 0px 0px 0px)',
+                    `inset(${ct.toFixed(2)}px ${cr.toFixed(2)}px ${cb.toFixed(2)}px ${cl.toFixed(2)}px)`,
+                  ];
+                }
+              } else {
+                if (ex !== 1) {
+                  cpTarget['scaleX'] = [1, ex];
+                }
+                if (ey !== 1) {
+                  cpTarget['scaleY'] = [1, ey];
+                }
               }
             } else {
               if (to.x !== from.x) {

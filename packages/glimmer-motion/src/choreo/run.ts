@@ -279,8 +279,12 @@ export class ChoreoRun implements Run {
     prior: string;
     ve: VisualElement;
   }[] = [];
-  /** rest is what releaseForMeasure jumps to: 0 for translates, 1 for scales */
-  private movedValues: { key: string; rest?: number; ve: VisualElement }[] = [];
+  /** rest is what releaseForMeasure jumps to: 0 for translates, 1 for scales, 'none' for clips */
+  private movedValues: {
+    key: string;
+    rest?: PropValue;
+    ve: VisualElement;
+  }[] = [];
   /** what the last releaseForMeasure retired, so a kept pass can put it back */
   private retired: {
     borrowed: {
@@ -292,7 +296,7 @@ export class ChoreoRun implements Run {
     }[];
     moved: {
       key: string;
-      rest?: number;
+      rest?: PropValue;
       value: unknown;
       ve: VisualElement;
     }[];
@@ -1719,7 +1723,11 @@ export class ChoreoRun implements Run {
           } else {
             this.movedValues.push({
               key,
-              rest: key.startsWith('scale') ? 1 : 0,
+              rest: key.startsWith('scale')
+                ? 1
+                : key === 'clipPath'
+                  ? 'none'
+                  : 0,
               ve,
             });
           }

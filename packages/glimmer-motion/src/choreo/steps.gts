@@ -199,7 +199,7 @@ export class Move extends StepComponent<
     path?: string;
     /** 'auto' orients along the tangent; a number adds a constant offset */
     rotate?: 'auto' | number;
-    size?: boolean | 'scale';
+    size?: boolean | 'crop' | 'scale';
     /** measure the delta in 'page' (default) or the sprite's 'parent' space */
     space?: 'page' | 'parent';
     spring?: SpringSpec;
@@ -455,9 +455,11 @@ export class Crossing extends StepComponent<
           ms: duration === undefined ? undefined : duration * 1000,
           name: FLIGHT,
           of: { type: 'received' },
-          // shape-match by transform, never by layout: a receiver animating
-          // its real width/height reflows its whole row for the flight
-          size: 'scale',
+          // iOS's rule: uniform scale matched by cover, the aspect mismatch
+          // cropped by the interpolating window — never a stretch, and
+          // never layout (a receiver animating real width/height reflows
+          // its whole row for the flight)
+          size: 'crop',
           spring,
           swap,
         },

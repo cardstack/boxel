@@ -439,6 +439,46 @@ module('Integration | choreo | crossing', function (hooks) {
     await sleep(20);
   });
 
+  test('the flight never distorts: uniform scale, the mismatch cropped', async function (assert) {
+    // Pages' tile (60x40, 3:2) flies into a hero of a DIFFERENT aspect —
+    // iOS's rule: match by cover, never stretch; the crop window carries
+    // the difference
+    await render(<template><ColorPages /></template>);
+    await animationsSettled();
+    colors.page = 'detail';
+    await settled();
+    await nextFrame();
+    await nextFrame();
+
+    const hero = find('#heroC') as HTMLElement;
+    const m = new DOMMatrix(getComputedStyle(hero).transform);
+    assert.true(
+      Math.abs(m.a - m.d) < 0.02,
+      `the receiver scales UNIFORMLY — no stretch (${m.a.toFixed(3)} vs ${m.d.toFixed(3)})`
+    );
+    assert.notStrictEqual(
+      getComputedStyle(hero).clipPath,
+      'none',
+      'the aspect mismatch is carried by a crop window instead'
+    );
+    const skin = document.querySelector(
+      '[data-choreo-orphans] #tileC'
+    ) as HTMLElement;
+    const sm = new DOMMatrix(getComputedStyle(skin).transform);
+    assert.true(
+      Math.abs(sm.a - sm.d) < 0.02,
+      `the old skin scales uniformly too (${sm.a.toFixed(3)} vs ${sm.d.toFixed(3)})`
+    );
+
+    await animationsSettled();
+    const clip = getComputedStyle(find('#heroC') as HTMLElement).clipPath;
+    assert.true(
+      clip === 'none' || /inset\(0px(?: 0px)*\)/.test(clip),
+      `the landing wears no crop (${clip})`
+    );
+    await sleep(20);
+  });
+
   test('the flight matches the SUBSTANCE, not the frame', async function (assert) {
     await render(<template><SubstancePages /></template>);
     await animationsSettled();
