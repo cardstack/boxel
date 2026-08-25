@@ -12,7 +12,7 @@ the same data through two Hosts:
 - **Candidate** — a local Host connected to the same staging realm server.
 
 The executable source of truth is
-[`execution-runtime-wild-corpus.mjs`](../packages/host/scripts/execution-runtime-wild-corpus.mjs).
+[`execution-runtime-wild-corpus.mts`](../packages/host/scripts/execution-runtime-wild-corpus.mts).
 The runner consumes that list directly and the table below is rendered from it,
 so this document and the automated smoke input cannot become different lists.
 
@@ -23,7 +23,7 @@ never the fix — if a tier's adapter cannot express a behavior, that is a spec
 change, not a special case.
 
 This lane is breadth. The completion gate is the ten-scenario mirror cohort in
-[`execution-runtime-mirror-cohort.mjs`](../packages/host/scripts/execution-runtime-mirror-cohort.mjs);
+[`execution-runtime-mirror-cohort.mts`](../packages/host/scripts/execution-runtime-mirror-cohort.mts);
 the staging execution-runtime suite realm and the sandbox-compatibility corpus
 realm are exploratory oracles for individual mechanisms. None of the three
 replaces the others.
@@ -134,11 +134,11 @@ Every row declares `expectedExecution: 'discover'`. The matrix does not infer a
 passing tier from source inspection; the first successful candidate run records
 the tier that was actually selected.
 
-## What the runner must do to be trustworthy here
+## What makes the runner trustworthy over fifty cards
 
 Fifty real cards behave nothing like a test suite, and three runner properties
-follow from that. They are enforced by
-[the runner's tests](../packages/host/scripts/execution-runtime-smoke-runner-test.mjs).
+follow from that. Each is enforced by
+[the runner's tests](../packages/host/scripts/execution-runtime-smoke-runner-test.mts).
 
 **Persist each case as it completes.** A single long in-memory batch can exceed
 the browser control deadline and take already-collected evidence with it. The
@@ -148,9 +148,11 @@ the result.
 
 **Bound cancellation per case.** One card that never settles must not consume
 the budget for every card behind it. `caseTimeoutMs` cuts a case loose and the
-batch continues. The abandoned page work is detached with a blank navigation
-first: the tab is shared, so an in-flight render left running would otherwise
-contribute DOM, images, and iframes to the next card's observations.
+batch continues. Cutting loose is not the same as cancelling: the abandoned
+work still holds the shared tab and resumes at its next step, which in an
+interaction is a click or a form fill. Each case therefore holds a revocable
+lease on the tab, and revoking it makes every later operation from that case
+throw, so it unwinds instead of driving the next card's page.
 
 **Record application/auth readiness separately from execution readiness.** A
 full navigation reboots Host and Matrix work, which dominates the total. A
@@ -169,9 +171,9 @@ mismatch sends the reader to the wrong place.
 
 ```js
 let smoke =
-  await import('./packages/host/scripts/execution-runtime-browser-smoke.mjs');
+  await import('./packages/host/scripts/execution-runtime-browser-smoke.mts');
 let wild =
-  await import('./packages/host/scripts/execution-runtime-wild-corpus.mjs');
+  await import('./packages/host/scripts/execution-runtime-wild-corpus.mts');
 let result = await smoke.runExecutionRuntimeBrowserSmoke({
   browser,
   candidateOrigin: 'https://localhost:4200',
@@ -186,6 +188,10 @@ let matrix = smoke.summarizeExecutionRuntimeSmokeRun(result);
 itself broken: that row is dropped from the candidate set and reported as
 `reference-drift` rather than failing the run. Passing `onCaseComplete` is what
 makes a partial run useful, so a batch this size should always pass one.
+
+`performanceRepeats` adds warm samples per case. Each one leaves the card and
+returns, so it measures a warm navigation rather than a re-read of the document
+already on screen.
 
 ## Rotating rounds
 

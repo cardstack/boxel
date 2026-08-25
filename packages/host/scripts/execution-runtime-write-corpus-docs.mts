@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import {
   wildCorpusDocPath,
   withRenderedWildCorpusTable,
-} from './execution-runtime-wild-corpus.mjs';
+} from './execution-runtime-wild-corpus.mts';
 
 const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),

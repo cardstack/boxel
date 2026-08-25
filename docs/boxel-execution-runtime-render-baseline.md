@@ -8,7 +8,7 @@ measured against. This document is that reference point: the method, the
 environment, and the numbers a run of that method produces.
 
 The instrument is
-[`execution-runtime-render-baseline.mjs`](../packages/host/scripts/execution-runtime-render-baseline.mjs).
+[`execution-runtime-render-baseline.mts`](../packages/host/scripts/execution-runtime-render-baseline.mts).
 It is a script rather than a described procedure because a baseline nobody can
 re-run is not a baseline: whoever disputes a number has to be able to produce
 their own.
@@ -52,9 +52,10 @@ once before any sample and the captured session is replayed into each context,
 so the login round trip is never inside a measured number while every sample
 still arrives authenticated.
 
-Each reported figure is a median. Samples that never reached a rendered card
-are excluded from the medians and counted separately, so a card that failed to
-settle cannot quietly lower an average.
+Each reported figure is a median. A sample that never reached a rendered card
+is excluded from the medians and counted separately, and so is one that landed
+on an error card — an error occupies the same surface as a card, so "a surface
+appeared" is not on its own evidence that anything rendered.
 
 ## Environment
 
@@ -118,7 +119,7 @@ samples per card is not one.
 Start the stack, then:
 
 ```sh
-pnpm --dir packages/host exec node scripts/execution-runtime-render-baseline.mjs \
+pnpm --dir packages/host exec node scripts/execution-runtime-render-baseline.mts \
   --host https://localhost:4200 \
   --login <user>:<password> \
   --card 'base-index=/base/index' \

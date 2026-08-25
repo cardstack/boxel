@@ -29,6 +29,284 @@
  * lead to different work; collapsing them into red/green destroys that.
  */
 
+/**
+ * The browser surface this runner needs from whatever supplies its handle.
+ *
+ * Written as an interface rather than taken from a browser library on purpose:
+ * the handle comes from an agent-driven in-app browser, and this is the
+ * contract that browser has to satisfy. Anything absent from these types is
+ * something the runner does not use, so a host can supply the minimum.
+ */
+export interface SmokeLocator {
+  allTextContents(options?: { timeoutMs?: number }): Promise<string[]>;
+  click(options?: { force?: boolean; timeoutMs?: number }): Promise<void>;
+  count(): Promise<number>;
+  evaluate<Result, El extends Element = Element, Argument = undefined>(
+    fn: (element: El, argument: Argument) => Result,
+    argument?: Argument,
+  ): Promise<Result>;
+  evaluateAll<Result, El extends Element = Element, Argument = undefined>(
+    fn: (elements: El[], argument: Argument) => Result,
+    argument?: Argument,
+  ): Promise<Result>;
+  fill(value: string, options?: { timeoutMs?: number }): Promise<void>;
+  first(): SmokeLocator;
+  innerText(options?: { timeoutMs?: number }): Promise<string>;
+  isVisible(): Promise<boolean>;
+  locator(selector: string): SmokeLocator;
+  nth(index: number): SmokeLocator;
+  waitFor(options: { state: string; timeoutMs: number }): Promise<void>;
+}
+
+export interface SmokeFrame {
+  getByRole(role: string, options?: SmokeRoleOptions): SmokeLocator;
+  locator(selector: string): SmokeLocator;
+}
+
+export interface SmokeRoleOptions {
+  exact?: boolean;
+  name?: string;
+}
+
+export interface SmokePage {
+  evaluate<Result, Argument = undefined>(
+    fn: (argument: Argument) => Result,
+    argument?: Argument,
+  ): Promise<Result>;
+  frameLocator(selector: string): SmokeFrame;
+  getByRole(role: string, options?: SmokeRoleOptions): SmokeLocator;
+  locator(selector: string): SmokeLocator;
+  waitForLoadState(options: {
+    state: string;
+    timeoutMs: number;
+  }): Promise<void>;
+  waitForTimeout(ms: number): Promise<void>;
+}
+
+export interface SmokeTab {
+  close?(): Promise<void>;
+  /** Coarse pointer/wheel input, which exercises paths a synthetic scroll does not. */
+  cua?: {
+    scroll(options: {
+      scrollX: number;
+      scrollY: number;
+      x: number;
+      y: number;
+    }): Promise<void>;
+  };
+  dev?: { logs(): Promise<unknown[]> };
+  goto(url: string): Promise<void>;
+  playwright: SmokePage;
+  url(): Promise<string>;
+}
+
+export interface SmokeBrowser {
+  tabs: { new: () => Promise<SmokeTab> };
+}
+
+declare global {
+  interface Window {
+    /** Present only while the Host is asked to record execution diagnostics. */
+    __boxelExecutionPerformance?: {
+      enable(): void;
+      reset(): void;
+      snapshot(): ExecutionPerformanceSnapshot | null;
+    };
+  }
+}
+
+/** `discover` means the tier is recorded from the run, not asserted against. */
+export type ExecutionTier = 'discover' | 'direct' | 'capsule' | 'sandbox';
+
+export interface SmokeInteraction {
+  expectedExecution?: ExecutionTier;
+  expectedValues?: string[];
+  kind: 'default-edit' | 'edit-scroll' | 'media-play';
+  pauseName?: string;
+  playName?: string;
+  requireProgress?: boolean;
+  textEntryValue?: string;
+}
+
+export interface SmokeCase {
+  category?: string;
+  expectedExecution: ExecutionTier;
+  id: string;
+  interaction?: SmokeInteraction;
+  minimumHeadings?: number;
+  minimumHealthyImages?: number;
+  minimumInputs?: number;
+  mustContain: string[];
+  path: string;
+  purpose: string;
+  referenceParity?: boolean;
+  requiredSelectors?: string[];
+  signature?: string;
+  sourceUrl?: string;
+  visual?: boolean;
+}
+
+export interface SmokeImage {
+  alt?: string;
+  complete: boolean;
+  height: number;
+  /**
+   * Whether the element named a source at all, which separates an image the
+   * page never asked for from one it asked for and did not get.
+   */
+  source?: boolean;
+  width: number;
+}
+
+export interface SmokeReadiness {
+  applicationMs: number;
+  executionMs: number;
+  sandboxHandoffMs?: number;
+}
+
+export interface SmokeSandboxHandoff {
+  booting: boolean;
+  elapsedMs: number;
+  fatal: boolean;
+  signIn: boolean;
+}
+
+export interface ExecutionPerformanceRecord {
+  durationMs: number;
+  stage: string;
+  status: string;
+  tier?: string;
+}
+
+export interface ExecutionPerformanceSnapshot {
+  droppedRecords?: number;
+  records?: ExecutionPerformanceRecord[];
+}
+
+/** What one navigation observed. Every field is present once a probe ran. */
+export interface SmokeProbeResult {
+  applicationReady: boolean;
+  cardRect: { height: number; width: number } | null;
+  elapsedMs: number;
+  executionPerformance?: ExecutionPerformanceSnapshot | null;
+  executionReasons: string[];
+  executions: string[];
+  fatalText: string[];
+  headingCount: number;
+  headings: string[];
+  hostChrome: {
+    newFileBackground: string | null;
+    submodeBackground: string | null;
+  };
+  imageCount: number;
+  images: SmokeImage[];
+  inputCount: number;
+  mediaSettled: boolean;
+  missingRequiredSelectors: string[];
+  missingText: string[];
+  readiness: SmokeReadiness;
+  ready: boolean;
+  sandboxBooting: boolean;
+  sandboxHandoff?: SmokeSandboxHandoff;
+  semanticTokens: string[];
+  signIn: boolean;
+  textSample: string;
+  title: string;
+  url: string;
+  warmElapsedMs?: number;
+  warmExecutionPerformance?: ExecutionPerformanceSnapshot[];
+  warmReadiness?: {
+    applicationMs?: number;
+    executionMs?: number;
+    sandboxHandoffMs?: number;
+  };
+  warmSamplesMs?: number[];
+  warmSandboxHandoffMs?: number;
+}
+
+/**
+ * What a case that never reached a probe leaves behind.
+ *
+ * Kept distinct from a probe result so that code reading an observation
+ * cannot forget that some cases have none: a bounded or thrown case has a
+ * reason and a null elapsed time, and nothing else.
+ */
+export interface UnrunPageResult {
+  caseTimeoutMs?: number;
+  elapsedMs: null;
+  runnerError?: string;
+  url?: string;
+}
+
+export type SmokePageResult = SmokeProbeResult | UnrunPageResult;
+
+/** The observations reference parity compares; nothing else is read. */
+export type ParityView = Pick<
+  SmokeProbeResult,
+  'headingCount' | 'images' | 'inputCount' | 'semanticTokens'
+>;
+
+export interface SmokeInteractionResult {
+  actionElapsedMs?: number;
+  error?: string;
+  executions?: string[];
+  kind?: string;
+  missingValues?: string[];
+  pass: boolean;
+  pauseVisible?: boolean;
+  progress?: number;
+  readyElapsedMs?: number;
+  scroll?: unknown;
+  skipped?: boolean;
+  textEntry?: { accepted: boolean; restored: boolean };
+  values?: string[];
+}
+
+export interface SmokeAssessment {
+  failures: string[];
+  pass: boolean;
+  status: string;
+}
+
+export interface SmokeReferenceParity {
+  candidateHealthyImages?: number;
+  failures: string[];
+  matchedTokens?: number;
+  reason?: string;
+  referenceHealthyImages?: number;
+  referenceTokens?: number;
+  skipped: boolean;
+  tokenCoverage?: number;
+}
+
+export interface SmokeCaseResult {
+  assessment: SmokeAssessment;
+  id: string;
+  interaction: SmokeInteractionResult;
+  page: SmokePageResult;
+  referenceParity?: SmokeReferenceParity;
+}
+
+export interface SmokeOriginRun {
+  origin: string;
+  persistenceErrors: { error: string; id: string }[];
+  results: SmokeCaseResult[];
+  tab: SmokeTab;
+}
+
+interface RunOriginOptions {
+  caseTimeoutMs?: number;
+  checkExecution: boolean;
+  collectPerformance: boolean;
+  onCaseComplete?: (
+    result: SmokeCaseResult,
+    context: { origin: string },
+  ) => unknown;
+  performanceRepeats: number;
+  tab?: SmokeTab;
+  timeoutMs: number;
+}
+
 const DEFAULT_REFERENCE_ORIGIN = 'https://realms-staging.stack.cards';
 
 // Readiness is defined by these selectors and nothing else. They are exported
@@ -60,7 +338,7 @@ const FATAL_SANDBOX_LOG_TEXT = [
   'render acked but produced no visible output',
 ];
 
-export function normalizeVisibleText(value) {
+export function normalizeVisibleText(value: string) {
   return value
     .normalize('NFKC')
     .replace(/\s+/g, ' ')
@@ -68,7 +346,7 @@ export function normalizeVisibleText(value) {
     .toLocaleLowerCase();
 }
 
-export const executionRuntimeSmokeCases = [
+export const executionRuntimeSmokeCases: SmokeCase[] = [
   {
     id: 'release-composition',
     path: '/ctse/execution-runtime-suite/Release/opening-night',
@@ -188,7 +466,7 @@ export const executionRuntimeSmokeCases = [
 // which makes a single navigation exercise 35 delegated render boundaries.
 // Keep this lane cheap enough to run before CI while retaining substantially
 // more format/composition pressure than the commit cohort alone.
-export const executionRuntimeBroadCorpusCases = [
+export const executionRuntimeBroadCorpusCases: SmokeCase[] = [
   {
     id: 'format-preview-batch-one',
     path: '/ctse/sandbox-compatibility-corpus-20260803/FormatPreviewBatchOne/sample',
@@ -213,7 +491,7 @@ export const executionRuntimeBroadCorpusCases = [
 // variety. Each card contributes a boundary behavior that is not already
 // isolated by the six-card cohort or the 35-slot format gauntlet. It remains
 // small enough for regular local runs while exercising real workspace code.
-export const executionRuntimeExtendedCorpusCases = [
+export const executionRuntimeExtendedCorpusCases: SmokeCase[] = [
   {
     id: 'activity-timeline',
     path: '/ctse/sandbox-compatibility-corpus-20260803/ActivityTimeline/sample',
@@ -355,7 +633,14 @@ export const executionRuntimeExtendedCorpusCases = [
 // page.goto() for every sample. That distinction is essential: hard document
 // navigation would discard the app-lifetime runtimes and hide the leaks this
 // soak is intended to expose.
-export const executionRuntimeNavigationSoakCases = [
+export interface NavigationSoakCase {
+  buttonName: string;
+  expectedExecution: ExecutionTier;
+  mustContain: string[];
+  requiredSelectors?: string[];
+}
+
+export const executionRuntimeNavigationSoakCases: NavigationSoakCase[] = [
   {
     buttonName: '01 Primitive Profile',
     expectedExecution: 'capsule',
@@ -394,7 +679,7 @@ export const executionRuntimeNavigationSoakCases = [
   },
 ];
 
-function urlFor(origin, path, collectPerformance = false) {
+function urlFor(origin: string, path: string, collectPerformance = false) {
   let url = new URL(path, `${origin.replace(/\/$/, '')}/`);
   if (collectPerformance) {
     url.searchParams.set('boxelExecutionPerformance', '1');
@@ -402,7 +687,11 @@ function urlFor(origin, path, collectPerformance = false) {
   return url.href;
 }
 
-async function settle(tab, expectedText, timeoutMs) {
+async function settle(
+  tab: SmokeTab,
+  expectedText: string[],
+  timeoutMs: number,
+) {
   let normalizedExpectedText = expectedText.map(normalizeVisibleText);
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -461,7 +750,7 @@ async function settle(tab, expectedText, timeoutMs) {
  * still showing "Loading card" here has not reached routing at all, which is a
  * pre-routing environment finding rather than a runtime one.
  */
-async function settleApplication(tab, timeoutMs) {
+async function settleApplication(tab: SmokeTab, timeoutMs: number) {
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     let state = await tab.playwright.evaluate(
@@ -487,7 +776,7 @@ async function settleApplication(tab, timeoutMs) {
   return { fatal: false, mounted: false, ready: false, signIn: false };
 }
 
-async function settlePageImages(tab, timeoutMs) {
+async function settlePageImages(tab: SmokeTab, timeoutMs: number) {
   let deadline = Date.now() + Math.min(timeoutMs, 8_000);
   let lastPrimedSignature;
   let previousSignature;
@@ -522,7 +811,7 @@ async function settlePageImages(tab, timeoutMs) {
   return false;
 }
 
-async function primePageLazyImages(tab) {
+async function primePageLazyImages(tab: SmokeTab) {
   let viewport = await tab.playwright.evaluate(() => ({
     height: window.innerHeight,
     maximum: Math.max(
@@ -540,7 +829,7 @@ async function primePageLazyImages(tab) {
   await tab.playwright.evaluate(({ x, y }) => window.scrollTo(x, y), viewport);
 }
 
-async function settleFrameImages(tab, timeoutMs) {
+async function settleFrameImages(tab: SmokeTab, timeoutMs: number) {
   let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
   let deadline = Date.now() + Math.min(timeoutMs, 8_000);
   let lastPrimedSignature;
@@ -548,17 +837,19 @@ async function settleFrameImages(tab, timeoutMs) {
   let stableSince = Date.now();
   do {
     try {
-      let state = await frame.locator('img').evaluateAll((candidates) => {
-        let images = candidates.filter(
-          (image) => image.currentSrc.length > 0 || image.hasAttribute('src'),
-        );
-        let complete = images.filter((image) => image.complete).length;
-        return {
-          complete,
-          pending: images.length - complete,
-          signature: `${images.length}:${complete}`,
-        };
-      });
+      let state = await frame
+        .locator('img')
+        .evaluateAll((candidates: HTMLImageElement[]) => {
+          let images = candidates.filter(
+            (image) => image.currentSrc.length > 0 || image.hasAttribute('src'),
+          );
+          let complete = images.filter((image) => image.complete).length;
+          return {
+            complete,
+            pending: images.length - complete,
+            signature: `${images.length}:${complete}`,
+          };
+        });
       if (state.signature !== previousSignature) {
         previousSignature = state.signature;
         stableSince = Date.now();
@@ -580,7 +871,7 @@ async function settleFrameImages(tab, timeoutMs) {
   return false;
 }
 
-async function primeFrameLazyImages(frame) {
+async function primeFrameLazyImages(frame: SmokeFrame) {
   let body = frame.locator('body');
   let viewport = await body.evaluate(() => ({
     height: window.innerHeight,
@@ -599,7 +890,7 @@ async function primeFrameLazyImages(frame) {
   await body.evaluate((_element, { x, y }) => window.scrollTo(x, y), viewport);
 }
 
-async function settleSandboxHandoff(tab, timeoutMs) {
+async function settleSandboxHandoff(tab: SmokeTab, timeoutMs: number) {
   let startedAt = performance.now();
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -636,10 +927,10 @@ async function settleSandboxHandoff(tab, timeoutMs) {
 }
 
 async function settleSandboxFrame(
-  tab,
-  expectedText,
-  timeoutMs,
-  requiredSelectors = [],
+  tab: SmokeTab,
+  expectedText: string[],
+  timeoutMs: number,
+  requiredSelectors: string[] = [],
 ) {
   try {
     let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
@@ -667,13 +958,13 @@ async function settleSandboxFrame(
 }
 
 async function probe(
-  tab,
-  smokeCase,
-  origin,
-  timeoutMs,
-  checkExecution,
+  tab: SmokeTab,
+  smokeCase: SmokeCase,
+  origin: string,
+  timeoutMs: number,
+  checkExecution: boolean,
   collectPerformance = false,
-) {
+): Promise<SmokeProbeResult> {
   let url = urlFor(origin, smokeCase.path, collectPerformance);
   if (collectPerformance) {
     // A same-document transition keeps the diagnostics singleton alive.
@@ -852,15 +1143,17 @@ async function probe(
     let frameHeadings = await frame
       .locator('h1,h2,h3')
       .allTextContents({ timeoutMs });
-    let frameImages = await frame.locator('img').evaluateAll((images) =>
-      images.map((image) => ({
-        alt: image.alt,
-        complete: image.complete,
-        height: image.naturalHeight,
-        source: Boolean(image.currentSrc || image.getAttribute('src')),
-        width: image.naturalWidth,
-      })),
-    );
+    let frameImages = await frame
+      .locator('img')
+      .evaluateAll((images: HTMLImageElement[]) =>
+        images.map((image) => ({
+          alt: image.alt,
+          complete: image.complete,
+          height: image.naturalHeight,
+          source: Boolean(image.currentSrc || image.getAttribute('src')),
+          width: image.naturalWidth,
+        })),
+      );
     let frameCardRect = await frame
       .locator('[data-boxel-sandbox-runtime]')
       .first()
@@ -922,7 +1215,12 @@ async function probe(
   };
 }
 
-async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
+async function runInteraction(
+  tab: SmokeTab,
+  smokeCase: SmokeCase,
+  timeoutMs: number,
+  checkExecution: boolean,
+): Promise<SmokeInteractionResult> {
   if (!smokeCase.interaction) {
     return { pass: true, skipped: true };
   }
@@ -950,7 +1248,11 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
   if (smokeCase.interaction.kind === 'default-edit') {
     let readyElapsedMs = await enterEdit();
     let values = await tab.playwright.evaluate(() =>
-      [...document.querySelectorAll('input, textarea')]
+      [
+        ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+          'input, textarea',
+        ),
+      ]
         .map((element) => element.value)
         .filter(Boolean),
     );
@@ -962,7 +1264,7 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
       let original = smokeCase.interaction.textEntryValue;
       let inputs = tab.playwright.locator('input, textarea');
       let inputIndex = await inputs.evaluateAll(
-        (elements, expected) =>
+        (elements: (HTMLInputElement | HTMLTextAreaElement)[], expected) =>
           elements.findIndex((element) => element.value === expected),
         original,
       );
@@ -977,12 +1279,16 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
         let restored;
         try {
           await input.fill(sentinel, { timeoutMs });
-          accepted = await input.evaluate((element) => element.value);
+          accepted = await input.evaluate(
+            (element: HTMLInputElement | HTMLTextAreaElement) => element.value,
+          );
           await tab.playwright.waitForTimeout(2500);
         } finally {
           await input.fill(original, { timeoutMs });
           await tab.playwright.waitForTimeout(5000);
-          restored = await input.evaluate((element) => element.value);
+          restored = await input.evaluate(
+            (element: HTMLInputElement | HTMLTextAreaElement) => element.value,
+          );
         }
         textEntry = {
           accepted: accepted === sentinel,
@@ -1100,7 +1406,9 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
       let slider = interactionRoot.getByRole('slider').first();
       let progressDeadline = performance.now() + Math.min(timeoutMs, 3_000);
       do {
-        progress = Number(await slider.evaluate((element) => element.value));
+        progress = Number(
+          await slider.evaluate((element: HTMLInputElement) => element.value),
+        );
         if (progress > 0) break;
         await tab.playwright.waitForTimeout(250);
       } while (performance.now() < progressDeadline);
@@ -1171,7 +1479,7 @@ const STATUS_BUCKETS = [
 // counted as a regression.
 const SLOW_EXECUTION_MS = 15_000;
 
-export function classifySmokeOutcome(failures, executionMs) {
+export function classifySmokeOutcome(failures: string[], executionMs?: number) {
   for (let [status, members] of STATUS_BUCKETS) {
     if (failures.some((failure) => members.includes(failure))) {
       return status;
@@ -1184,7 +1492,12 @@ export function classifySmokeOutcome(failures, executionMs) {
   return 'pass';
 }
 
-function assess(probeResult, interaction, smokeCase, checkExecution) {
+function assess(
+  probeResult: SmokeProbeResult,
+  interaction: SmokeInteractionResult,
+  smokeCase: SmokeCase,
+  checkExecution: boolean,
+): SmokeAssessment {
   let healthyImages = (probeResult.images ?? []).filter(
     (image) => image.complete && image.width > 0 && image.height > 0,
   ).length;
@@ -1257,7 +1570,11 @@ function assess(probeResult, interaction, smokeCase, checkExecution) {
   };
 }
 
-export function assessReferenceParity(candidate, reference, smokeCase) {
+export function assessReferenceParity(
+  candidate: Partial<ParityView>,
+  reference: Partial<ParityView>,
+  smokeCase: Pick<SmokeCase, 'referenceParity'>,
+): SmokeReferenceParity {
   if (!smokeCase.referenceParity) {
     return { failures: [], skipped: true };
   }
@@ -1323,7 +1640,10 @@ export function assessReferenceParity(candidate, reference, smokeCase) {
   };
 }
 
-export function summarizeExecutionRuntimeSmokeRun(run) {
+export function summarizeExecutionRuntimeSmokeRun(run: {
+  candidate?: { results: SmokeCaseResult[] } | null;
+  reference: { results: SmokeCaseResult[] };
+}) {
   let candidateById = new Map(
     (run.candidate?.results ?? []).map((result) => [result.id, result]),
   );
@@ -1373,7 +1693,7 @@ export function summarizeExecutionRuntimeSmokeRun(run) {
   });
 }
 
-async function auditSandboxLifecycle(tab, smokeCases) {
+async function auditSandboxLifecycle(tab: SmokeTab, smokeCases: SmokeCase[]) {
   if (
     !smokeCases.some((smokeCase) => smokeCase.expectedExecution === 'sandbox')
   ) {
@@ -1391,7 +1711,12 @@ async function auditSandboxLifecycle(tab, smokeCases) {
   };
 }
 
-async function auditSandboxTeardown(tab, origin, smokeCases, timeoutMs) {
+async function auditSandboxTeardown(
+  tab: SmokeTab,
+  origin: string,
+  smokeCases: SmokeCase[],
+  timeoutMs: number,
+) {
   if (
     !smokeCases.some((smokeCase) => smokeCase.expectedExecution === 'sandbox')
   ) {
@@ -1447,7 +1772,12 @@ async function auditSandboxTeardown(tab, origin, smokeCases, timeoutMs) {
  * evidence it collected; a persistence failure is recorded against the run and
  * never discards a result.
  */
-async function runOrigin(browser, origin, smokeCases, options) {
+async function runOrigin(
+  browser: SmokeBrowser,
+  origin: string,
+  smokeCases: SmokeCase[],
+  options: RunOriginOptions,
+): Promise<SmokeOriginRun> {
   // The in-app browser can deliberately isolate authentication between tabs.
   // Reuse an explicitly supplied signed-in tab for the candidate when the
   // caller has one; otherwise create an owned scratch tab.
@@ -1503,13 +1833,16 @@ async function runOrigin(browser, origin, smokeCases, options) {
   return { origin, persistenceErrors, results, tab };
 }
 
-function defaultCaseTimeoutMs({ performanceRepeats = 0, timeoutMs }) {
+function defaultCaseTimeoutMs({
+  performanceRepeats = 0,
+  timeoutMs,
+}: Pick<RunOriginOptions, 'performanceRepeats' | 'timeoutMs'>) {
   // One case can navigate, settle, interact, and repeat for warm samples. The
   // bound covers all of those with headroom rather than the single settle.
   return timeoutMs * (4 + 2 * performanceRepeats);
 }
 
-function describeError(error) {
+function describeError(error: unknown) {
   return error instanceof Error ? (error.stack ?? error.message) : `${error}`;
 }
 
@@ -1538,7 +1871,7 @@ class CaseAbandonedError extends Error {
  * refused. Methods are bound to their real target, so private fields inside
  * the browser client keep working.
  */
-export function leaseTab(tab) {
+export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
   let live = true;
   let wrap = (value) => {
     if (value === null) return value;
@@ -1564,7 +1897,14 @@ export function leaseTab(tab) {
   };
 }
 
-async function withCaseDeadline(caseTimeoutMs, run) {
+async function withCaseDeadline(
+  caseTimeoutMs: number,
+  run: () => Promise<SmokeCaseResult>,
+): Promise<{
+  thrown?: unknown;
+  timedOut: boolean;
+  value?: SmokeCaseResult;
+}> {
   let timer;
   let expired = Symbol('case-deadline');
   try {
@@ -1585,7 +1925,7 @@ async function withCaseDeadline(caseTimeoutMs, run) {
   }
 }
 
-async function detachAbandonedCase(tab) {
+async function detachAbandonedCase(tab: SmokeTab) {
   // Best effort: the tab may itself be why the case timed out.
   try {
     await tab.goto('about:blank');
@@ -1594,7 +1934,12 @@ async function detachAbandonedCase(tab) {
   }
 }
 
-async function runCase(tab, smokeCase, origin, options) {
+async function runCase(
+  tab: SmokeTab,
+  smokeCase: SmokeCase,
+  origin: string,
+  options: RunOriginOptions,
+): Promise<SmokeCaseResult> {
   let page;
   try {
     page = await probe(
@@ -1708,13 +2053,16 @@ async function runCase(tab, smokeCase, origin, options) {
   };
 }
 
-function median(values) {
+function median(values: (number | undefined)[]): number | undefined {
   if (!values.length) return undefined;
   let sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-function summarizePerformance(run, smokeCases) {
+function summarizePerformance(
+  run: SmokeOriginRun | null,
+  smokeCases: SmokeCase[],
+) {
   if (!run) return null;
   let casesById = new Map(
     smokeCases.map((smokeCase) => [smokeCase.id, smokeCase]),
@@ -1785,7 +2133,9 @@ function summarizePerformance(run, smokeCases) {
   };
 }
 
-export function summarizeExecutionStages(results) {
+export function summarizeExecutionStages(
+  results: Pick<SmokeCaseResult, 'page'>[],
+) {
   let values = new Map();
   for (let result of results) {
     let snapshots = [
@@ -1816,7 +2166,7 @@ export function summarizeExecutionStages(results) {
   );
 }
 
-function percentile(values, percentile) {
+function percentile(values: number[], percentile: number) {
   if (!values.length) return undefined;
   let sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.ceil((sorted.length - 1) * percentile)];
@@ -2202,7 +2552,7 @@ export async function runExecutionRuntimeNavigationSoak({
   };
 }
 
-async function navigationSoakSnapshot(tab) {
+async function navigationSoakSnapshot(tab: SmokeTab) {
   return tab.playwright.evaluate(() => ({
     domNodes: document.querySelectorAll('*').length,
     executions: [...document.querySelectorAll('[data-boxel-execution]')]

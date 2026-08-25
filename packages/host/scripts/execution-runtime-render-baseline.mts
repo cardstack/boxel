@@ -51,7 +51,7 @@ import {
   CARD_SURFACE_SELECTOR,
   FATAL_CARD_TEXT,
   SIGN_IN_TEXT,
-} from './execution-runtime-browser-smoke.mjs';
+} from './execution-runtime-browser-smoke.mts';
 
 const DEFAULTS = {
   host: 'https://localhost:4200',

@@ -10,24 +10,24 @@ import {
   normalizeVisibleText,
   summarizeExecutionStages,
   summarizeExecutionRuntimeSmokeRun,
-} from './execution-runtime-browser-smoke.mjs';
+} from './execution-runtime-browser-smoke.mts';
 import {
   median as baselineMedian,
   parseArguments,
   renderBaselineTable,
-} from './execution-runtime-render-baseline.mjs';
+} from './execution-runtime-render-baseline.mts';
 import {
   executionRuntimeMirrorCohort,
   mirrorCohortPlanes,
   validateMirrorCohort,
-} from './execution-runtime-mirror-cohort.mjs';
+} from './execution-runtime-mirror-cohort.mts';
 import {
   executionRuntimeWildCorpusCases,
   executionRuntimeWildUrlMatrix,
   parseWildCorpusTable,
   validateWildCorpus,
   wildCorpusDocPath,
-} from './execution-runtime-wild-corpus.mjs';
+} from './execution-runtime-wild-corpus.mts';
 
 const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),

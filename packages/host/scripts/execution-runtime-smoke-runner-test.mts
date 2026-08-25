@@ -15,7 +15,7 @@ import {
   CARD_SURFACE_SELECTOR,
   leaseTab,
   runExecutionRuntimeCandidateSmoke,
-} from './execution-runtime-browser-smoke.mjs';
+} from './execution-runtime-browser-smoke.mts';
 
 const HOST_CHROME = {
   '.new-file-dropdown-trigger': 'rgb(0, 255, 186)',
