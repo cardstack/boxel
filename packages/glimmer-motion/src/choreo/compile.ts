@@ -884,6 +884,7 @@ function resolveStep(
           sprite,
           tether: {
             from: cs.sprites(step.from)[0] ?? null,
+            name: step.name,
             path: step.path,
             to: cs.sprites(step.to)[0] ?? null,
           },

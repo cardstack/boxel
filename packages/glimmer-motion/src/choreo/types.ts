@@ -428,6 +428,8 @@ export interface Cue {
   /** tether: draw between these two, every frame */
   tether?: {
     from: Sprite | null;
+    /** the step's @name, forwarded so the path can be styled per wire */
+    name?: string;
     path: (from: Rect, to: Rect) => string;
     to: Sprite | null;
   };

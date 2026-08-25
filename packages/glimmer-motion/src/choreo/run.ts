@@ -793,6 +793,9 @@ export class ChoreoRun implements Run {
               'path',
             );
             t.wire.setAttribute('data-choreo-tether', '');
+            if (t.cue.tether?.name) {
+              t.wire.setAttribute('data-thread', t.cue.tether.name);
+            }
             layer.appendChild(t.wire);
           }
         } else if (!inside && t.started) {

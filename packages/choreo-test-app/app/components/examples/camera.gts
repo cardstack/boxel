@@ -117,8 +117,9 @@ const shots = brackets.flatMap((bracket, row) =>
   }))
 );
 
-/** a camera has weight: it carries the whole table, so it never snaps */
-const carry = spring({ bounce: 0.12, visualDuration: 0.62 });
+/** a camera has weight: it carries the whole table, so it never snaps —
+    but 0.62s with bounce made the dive linger. Shorter, quieter settle. */
+const carry = spring({ bounce: 0.05, visualDuration: 0.36 });
 
 /** the frames' own boxes, if a pass reflows the sheet */
 const settle = spring({ bounce: 0.22, visualDuration: 0.42 });

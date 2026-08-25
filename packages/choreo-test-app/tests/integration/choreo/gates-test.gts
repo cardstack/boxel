@@ -77,6 +77,31 @@ module('Integration | choreo | gates', function (hooks) {
     assert.true(run.isDone());
   });
 
+  test('a tracked parent write does not restart a gated run', async function (assert) {
+    await render(<template><Fixture /></template>);
+    await animationsSettled();
+    app.bump();
+    await settled();
+    await nextFrame();
+    const flying = ctx.run!;
+    assert.false(flying.parked, 'first segment in flight');
+    app.bump();
+    await settled();
+    assert.strictEqual(
+      ctx.run,
+      flying,
+      'an all-still pass keeps the in-flight run — hot, noise, a neighbour'
+    );
+
+    await animationsSettled();
+    const parked = ctx.run!;
+    assert.true(parked.parked, 'parked at the gate');
+    app.bump();
+    await settled();
+    assert.strictEqual(ctx.run, parked, 'and a parked run stays parked');
+    assert.strictEqual(opacityOf('#a'), 0.5, 'the next segment has not begun');
+  });
+
   test('advancing mid-segment completes it instantly — every value on its segment-end', async function (assert) {
     await render(<template><Fixture /></template>);
     await animationsSettled();

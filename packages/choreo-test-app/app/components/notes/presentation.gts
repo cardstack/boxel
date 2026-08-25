@@ -9,6 +9,8 @@ const SCORE = `<c.Sequence>
   <c.Move @of={{c.id 'hull'}} @from={{c.beacon 'approach'}}
     @path={{APPROACH}} @rotate='auto' … />
   <c.Gate />
+  <c.Tween @of={{c.id 'marks'}} @opacity={{array 0 1}} … />
+  <c.Gate />
   <c.Tween @of={{c.id 'stamp'}} @scale={{array 0.86 1.08 1}} … />
 </c.Sequence>`;
 
@@ -127,7 +129,17 @@ const PresentationNotes: TOC<object> = <template>
         </p>
         <p>
           Build Order is the inspector. Playhead is the clock in your hand.
-          Presentation is the clock that waits for the room.
+          Presentation is the clock that waits for the room. Slides 02 and 04
+          keep a nested
+          <code>&lt;Choreo&gt;</code>
+          — an inner region the outer score cannot see — so a click that opens a
+          gate can hand the rest of the slide to a second timeline (word
+          delivery, a rule that grows, a pulse). Slide 03 clicks each station in
+          after the line has drawn — one gate, one point. Between slides,
+          <code>Presence</code>
+          crossfades in
+          <code>sync</code>
+          : fade, rise, scale, or push, from the control in the bar.
         </p>
       </div>
     </section>
