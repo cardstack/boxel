@@ -40,6 +40,8 @@ import {
   baseCardRef,
   baseRealmRRI,
   isCardInstance,
+  isFileDefInstance,
+  excludeCardInstanceFileRows,
   SupportedMimeType,
   subscribeToRealm,
   codeRefFromInternalKey,
@@ -70,6 +72,7 @@ import {
   StringField,
   type BaseDef,
   type BoxComponent,
+  type FileDef,
 } from './card-api';
 import { MarkdownDef } from './markdown-file-def'; // realm README
 import type { RealmEventContent } from './matrix-event';
@@ -1026,7 +1029,7 @@ class Isolated extends Component<typeof Workspace> {
                         type='button'
                         class='tile-open'
                         aria-label='Open {{if item.title item.title "card"}}'
-                        {{on 'click' (this.openCard item.card)}}
+                        {{on 'click' (this.openFeedItem item)}}
                       ></button>
                     </div>
                     <div class='feed-note'>
@@ -2962,6 +2965,19 @@ class Isolated extends Component<typeof Workspace> {
     }
   };
 
+  // The feed mixes cards and files; a file opens through `viewCard`'s
+  // `type: 'file'` path (keyed by its URL) rather than as a card on the stack.
+  openFeedItem =
+    (item: { card: CardDef | FileDef; kind: 'card' | 'file' }) => () => {
+      if (item.kind === 'file') {
+        this.args.viewCard?.((item.card as FileDef).id, undefined, {
+          type: 'file',
+        });
+      } else {
+        this.args.viewCard?.(item.card as CardDef);
+      }
+    };
+
   moreSites = (sites: unknown[]) => (sites.length > 1 ? sites.length - 1 : 0);
 
   jumpToFilter = (option: FilterOption | undefined) => () => {
@@ -3447,10 +3463,11 @@ class Isolated extends Component<typeof Workspace> {
     }
   });
 
-  // The Activity log: everything in the realm, reverse-chron by
-  // lastModified. Each row carries when / what / why: timestamp rail,
-  // the card, and a change note (`cardInfo.notes` — the convention slot a
-  // human or AI fills in when saving a change).
+  // The Activity log: everything in the realm — cards and uploaded files —
+  // reverse-chron by lastModified. Each row carries when / what / why:
+  // timestamp rail, the card or file preview, and a change note
+  // (`cardInfo.notes` — the convention slot a human or AI fills in when saving
+  // a change; files carry none).
   private feedItems: {
     id: string;
     component: BoxComponent;
@@ -3460,10 +3477,13 @@ class Isolated extends Component<typeof Workspace> {
     verb: ActivityVerb;
     dayLabel: string;
     showDay: boolean;
-    title: string | undefined; // card identity for the log line
+    title: string | undefined; // card / file identity for the log line
     typeName: string;
     typeIcon: typeof CardDef.icon;
-    card: CardDef; // for the tile-open overlay
+    // The instance behind the tile-open overlay. A file row opens through
+    // `viewCard`'s `type: 'file'` path, so the two kinds are distinguished.
+    card: CardDef | FileDef;
+    kind: 'card' | 'file';
   }[] = new TrackedArray();
 
   // Reveal-on-scroll pagination over the fetched window.
@@ -3487,12 +3507,15 @@ class Isolated extends Component<typeof Workspace> {
   // and tracks). Undefined for non-remix rows and remixes with no source set.
   remixSourceTitle = (item: {
     verb: ActivityVerb;
-    card: CardDef;
+    card: CardDef | FileDef;
   }): string | undefined => {
     if (item.verb !== 'Remixed') {
       return undefined;
     }
-    return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
+    // Only a card is ever classified 'Remixed', so the cast is safe here.
+    return (
+      (item.card as unknown as RemixCardLike).remixedFrom?.cardTitle ?? undefined
+    );
   };
 
   watchFeedEnd = modifier((element: Element) => {
@@ -3525,46 +3548,88 @@ class Isolated extends Component<typeof Workspace> {
     }
     let instances = await store.search(
       {
+        // The feed mixes cards and uploaded files. The self-referential
+        // exclusion is qualified to card rows (`on: baseCardRef`) on purpose:
+        // it filters on `_cardType`, a search-doc key only card rows carry, and
+        // a top-level negated match against a key a file row lacks is SQL NULL
+        // (not true), which would silently drop every file. Qualified by `on`,
+        // the negation wraps a type gate a file row fails, so files survive.
+        // `excludeCardInstanceFileRows()` drops a card's dual-indexed `.json`
+        // file row so each card shows once (via its instance row) — still
+        // required alongside `scope: 'all'`.
         filter: {
-          every: [...excludeSelfReferentialCards()],
+          every: [
+            ...excludeSelfReferentialCards(baseCardRef),
+            excludeCardInstanceFileRows(),
+          ],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
         // Bound server results before instance hydration.
         page: { size: ACTIVITY_FEED_CAP },
       } as Query,
       [realm],
+      // Opt into the mixed instance + file scope; the loop discriminates each
+      // row by kind. An untyped query would otherwise be pinned to cards only.
+      { scope: 'all' },
     ); // Search only the Card Grid instance's realm.
     this.feedItems.splice(0, this.feedItems.length);
     let seen = new Set<string>();
     let prevDay: string | undefined;
     for (let instance of instances ?? []) {
       // build the full fetched window (≤100); the template reveals in 20s
-      if (!isCardInstance(instance) || !instance.id || seen.has(instance.id)) {
+      let card = isCardInstance(instance) ? instance : undefined;
+      let file = !card && isFileDefInstance(instance) ? instance : undefined;
+      let entry = card ?? file;
+      if (!entry || !entry.id || seen.has(entry.id)) {
         continue;
       }
-      seen.add(instance.id);
-      let card = instance as CardDef;
-      let modMs = toMs(getCardMeta(card, 'lastModified'));
-      let createdMs = toMs(getCardMeta(card, 'resourceCreatedAt'));
-      let ctor = card.constructor as typeof CardDef; // type identity for the log line
-      let verb = activityVerbFor(ctor.displayName, modMs, createdMs);
-      let day = modMs !== undefined ? dayLabelFor(modMs) : '';
-      this.feedItems.push({
-        id: card.id!,
-        component: (card.constructor as typeof BaseDef).getComponent(card),
-        when: modMs !== undefined ? relativeTime(modMs) : undefined,
-        absolute:
-          modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,
-        note: card.cardInfo?.notes ?? undefined,
-        verb,
-        dayLabel: day,
-        showDay: Boolean(day) && day !== prevDay,
-        title: card.cardTitle ?? undefined,
-        typeName: ctor.displayName,
-        typeIcon: ctor.icon,
-        card,
-      });
-      prevDay = day || prevDay;
+      seen.add(entry.id);
+      // A single malformed row (a file whose preview can't build, a card
+      // missing metadata) must not blank the whole feed — skip it and keep
+      // going. The restartable task would otherwise swallow the throw and leave
+      // the log truncated at the failing row.
+      try {
+        // Timestamps read the same way for both kinds: a file carries its
+        // `lastModified` / `resourceCreatedAt` on `meta` from the serialization
+        // source (FileDef's first-class getters), so `getCardMeta` answers
+        // uniformly for cards and files.
+        let modMs = toMs(getCardMeta(entry, 'lastModified'));
+        let createdMs = toMs(getCardMeta(entry, 'resourceCreatedAt'));
+        let ctor = entry.constructor as typeof BaseDef; // type identity for the log line
+        // A file is a Created/Updated event by write timing; only a card can be
+        // a first-class Remix.
+        let verb = card
+          ? activityVerbFor(
+              (ctor as typeof CardDef).displayName,
+              modMs,
+              createdMs,
+            )
+          : classifyActivityVerb(modMs, createdMs);
+        let day = modMs !== undefined ? dayLabelFor(modMs) : '';
+        this.feedItems.push({
+          id: entry.id,
+          component: ctor.getComponent(entry),
+          when: modMs !== undefined ? relativeTime(modMs) : undefined,
+          absolute:
+            modMs !== undefined ? new Date(modMs).toLocaleString() : undefined,
+          note: card?.cardInfo?.notes ?? undefined,
+          verb,
+          dayLabel: day,
+          showDay: Boolean(day) && day !== prevDay,
+          title: card ? (card.cardTitle ?? undefined) : (file!.name ?? undefined),
+          typeName: (ctor as typeof CardDef).displayName,
+          typeIcon: (ctor as typeof CardDef).icon,
+          card: entry,
+          kind: card ? 'card' : 'file',
+        });
+        prevDay = day || prevDay;
+      } catch (err) {
+        console.warn(
+          `workspace activity feed: skipping ${entry.id} — ${
+            (err as Error)?.message ?? err
+          }`,
+        );
+      }
     }
   });
 }

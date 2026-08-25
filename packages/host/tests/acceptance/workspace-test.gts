@@ -61,6 +61,10 @@ module('Acceptance | workspace card', function (hooks) {
         'note.gts': { Note },
         'index.json': new Workspace(),
         'Note/1.json': new Note({ cardTitle: 'First Note' }),
+        // A plain uploaded file (not a card). It indexes as a `file` row, so it
+        // only reaches the Activity feed if the feed query surfaces files
+        // alongside cards (CS-12476).
+        'welcome-song.mp3': 'ID3 fake audio bytes',
         // A remix cloned from Note/1 — its own indexed instance is the record
         // of the clone that the Activity feed surfaces as a "Remixed" event.
         'Remix/1.json': {
@@ -226,5 +230,22 @@ module('Acceptance | workspace card', function (hooks) {
         'from First Note',
         'the event names the source it was cloned from',
       );
+  });
+
+  test('an uploaded file surfaces in the Activity feed alongside cards', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
+    await waitFor(`${STACK} .feed-row`);
+
+    let titles = [...document.querySelectorAll(`${STACK} .feed-title`)].map(
+      (el) => el.textContent?.trim(),
+    );
+    assert.ok(
+      titles.includes('welcome-song.mp3'),
+      `the uploaded audio file appears in the feed (saw: ${titles.join(', ')})`,
+    );
   });
 });
