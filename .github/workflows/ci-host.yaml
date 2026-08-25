@@ -829,6 +829,51 @@ jobs:
         if: ${{ !cancelled() }}
         run: test -s junit/host-${{ matrix.shardIndex }}.xml
 
+      # Percy can lose a snapshot without anything turning red. The test
+      # helper races each upload against a 25s budget and, on expiry, lets the
+      # test carry on so it can finish inside QUnit's own budget — the right
+      # call for the test, but the snapshot may never reach the CLI. The build
+      # then finalises looking complete and, on `main`, is auto-approved into
+      # the baseline; every snapshot it dropped resurfaces as a 100% "new
+      # snapshot" diff on later builds and unrelated PRs.
+      #
+      # Abandonment on its own is far too blunt to gate on — it is common, and
+      # the CLI usually does finish the upload after the test moved on. What
+      # distinguishes a real loss is that the CLI never received the snapshot
+      # at all, so tally both counts here and let the finalize job compare
+      # them. `test-output.log` holds the retry's output when a shard retried
+      # (the retry `mv`s over it), so these counts describe the attempt that
+      # actually contributed snapshots.
+      - name: Tally Percy snapshots for this shard
+        if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+        run: |
+          set -uo pipefail
+          # `grep -c` exits 1 on zero matches while still printing 0, and
+          # prints nothing at all if the log is missing — default both so the
+          # comparison below can't be handed an empty string.
+          attempted=$(grep -c '\[percy-snapshot\] attempted ' /tmp/test-output.log || true)
+          taken=$(grep -c '\[percy:core\] Snapshot taken: ' /tmp/test-output.log || true)
+          attempted=${attempted:-0}
+          taken=${taken:-0}
+          printf 'shard=%s\nattempted=%s\ntaken=%s\n' \
+            "${{ matrix.shardIndex }}" "$attempted" "$taken" > /tmp/percy-tally.txt
+          cat /tmp/percy-tally.txt
+          if [ "$taken" -lt "$attempted" ]; then
+            echo "::warning::Shard ${{ matrix.shardIndex }} attempted $attempted Percy snapshot(s) but the CLI received $taken. The finalize job will reject this build so it cannot become a baseline."
+            echo "::group::Snapshots this shard abandoned"
+            grep '\[percy-snapshot\]' /tmp/test-output.log | grep 'abandoned after' || true
+            echo "::endgroup::"
+          fi
+
+      - name: Upload Percy snapshot tally
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
+        with:
+          name: percy-tally-${{ matrix.shardIndex }}
+          path: /tmp/percy-tally.txt
+          retention-days: 30
+          if-no-files-found: ignore
+
       - name: Upload junit report to GitHub Actions Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
@@ -963,6 +1008,46 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
+      # Per-shard counts of snapshots attempted vs snapshots the Percy CLI
+      # actually received. Any shortfall means this build is missing a
+      # snapshot it was supposed to carry — see the tally step in host-test.
+      - name: Download Percy snapshot tallies
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        continue-on-error: true
+        with:
+          pattern: percy-tally-*
+          path: /tmp/percy-tallies
+
+      - name: Total the Percy snapshot tallies
+        id: tally
+        run: |
+          set -uo pipefail
+          attempted=0
+          taken=0
+          shards=0
+          for f in /tmp/percy-tallies/*/percy-tally.txt; do
+            [ -f "$f" ] || continue
+            shards=$((shards + 1))
+            a=$(sed -n 's/^attempted=//p' "$f")
+            t=$(sed -n 's/^taken=//p' "$f")
+            attempted=$((attempted + ${a:-0}))
+            taken=$((taken + ${t:-0}))
+          done
+          lost=$((attempted - taken))
+          # The CLI can report more than the suite attempted only if the
+          # markers ever drift; clamp so a miscount can't read as negative.
+          if [ "$lost" -lt 0 ]; then lost=0; fi
+          echo "shards=$shards attempted=$attempted taken=$taken lost=$lost"
+          echo "lost=$lost" >> "$GITHUB_OUTPUT"
+          echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
+          echo "taken=$taken" >> "$GITHUB_OUTPUT"
+          # No tallies at all means the shards never got far enough to write
+          # them; that is the host-test failure the reject step already
+          # covers, so say so rather than reading it as a clean run.
+          if [ "$shards" -eq 0 ]; then
+            echo "::notice::No Percy snapshot tallies were uploaded, so snapshot loss could not be assessed for this build."
+          fi
+
       - name: Finalise Percy
         id: finalize
         run: |
@@ -990,6 +1075,11 @@ jobs:
       # shard would have produced resurface as diffs on unrelated PRs.
       # Rejecting the build keeps it from becoming a baseline.
       #
+      # A shard need not die to cost the build a snapshot: it can pass while
+      # abandoning an upload the CLI never received, which is why the tally
+      # shortfall rejects too. Both conditions describe the same defect — a
+      # build whose snapshot set is smaller than the run produced.
+      #
       # `percy build:reject` authenticates with BrowserStack account
       # credentials rather than the project token: @percy/cli-build reads
       # BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY (see
@@ -997,16 +1087,19 @@ jobs:
       # exits non-zero when either is missing — so the step runs only when
       # both are present and otherwise skips itself rather than failing the
       # job.
-      - name: Reject the Percy build when a host shard failed
+      - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
-          needs.host-test.result != 'success'
+          (
+            needs.host-test.result != 'success'
+            || steps.tally.outputs.lost != '0'
+          )
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
           && env.BROWSERSTACK_ACCESS_KEY != ''
         run: |
           set -eo pipefail
           npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
-          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — host-test finished as '${{ needs.host-test.result }}', so its snapshot set is incomplete and must not become a baseline."
+          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — host-test finished as '${{ needs.host-test.result }}' and the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}. An incomplete snapshot set must not become a baseline."
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
@@ -1015,14 +1108,17 @@ jobs:
       # build never passes through both silently.
       - name: Note that an incomplete build was left unrejected
         if: >-
-          needs.host-test.result != 'success'
+          (
+            needs.host-test.result != 'success'
+            || steps.tally.outputs.lost != '0'
+          )
           && (
             steps.finalize.outputs.build_id == ''
             || env.BROWSERSTACK_USERNAME == ''
             || env.BROWSERSTACK_ACCESS_KEY == ''
           )
         run: |
-          echo "::warning::host-test finished as '${{ needs.host-test.result }}', so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
+          echo "::warning::host-test finished as '${{ needs.host-test.result }}' and the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}, so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
