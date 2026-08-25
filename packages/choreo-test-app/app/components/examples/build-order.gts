@@ -318,9 +318,23 @@ export class BuildOrder extends Component {
     if (this.clockEl && this.clockEl.textContent !== text) {
       this.clockEl.textContent = text;
     }
-    if (this.rangeEl) {
-      this.rangeEl.max = String(this.runtime);
-      this.rangeEl.value = String(this.t);
+    // While a hand is ON the thumb, the range belongs to the hand: a
+    // programmatic value write during an active drag detaches WebKit's
+    // pointer tracking outright — the scrubber reads as dead in Safari.
+    if (this.rangeEl && !this.scrubbing) {
+      const max = String(this.runtime);
+      if (this.rangeEl.max !== max) {
+        this.rangeEl.max = max;
+      }
+      // a parked thumb is corrected, never nudged: the run's clock returns
+      // a float round-trip of what was set, and rewriting "1.79" as
+      // "1.7900000000000003" would clobber a keyboard step mid-press
+      if (
+        this.playing ||
+        Math.abs(Number(this.rangeEl.value) - this.t) > 0.02
+      ) {
+        this.rangeEl.value = String(this.t);
+      }
     }
   }
 
@@ -376,6 +390,25 @@ export class BuildOrder extends Component {
     }
     run.play();
   };
+
+  /**
+   * The hand lands BEFORE it moves: pointerdown claims the clock — pause
+   * now, or the still-playing run crawls the thumb out from under the
+   * finger before the first `input` ever fires. `scrubbing` also stops
+   * `paint` from touching the range for the whole drag (see paint).
+   */
+  grab = () => {
+    this.scrubbing = true;
+    this.held = true;
+    this.playing = false;
+    this.c?.run?.pause();
+  };
+
+  release = () => {
+    this.scrubbing = false;
+  };
+
+  private scrubbing = false;
 
   /**
    * Scrubbing pauses — not because it has to, but because a hand on the
@@ -933,6 +966,9 @@ export class BuildOrder extends Component {
             step="0.01"
             value="0"
             aria-label="Playhead"
+            {{on "pointerdown" this.grab}}
+            {{on "pointerup" this.release}}
+            {{on "pointercancel" this.release}}
             {{on "input" this.scrub}}
           />
         </div>

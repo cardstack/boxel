@@ -136,4 +136,60 @@ module('Integration | choreo | build-order transport', function (hooks) {
     );
     await windDown();
   });
+
+  /**
+   * A real drag is not one synthetic input: it is pointerdown, THEN moves.
+   * Two contracts, both learned in Safari: the moment the hand lands the
+   * clock must stop (or the playing run crawls the thumb out from under the
+   * finger before the first `input` fires), and for the whole drag nothing
+   * may write the range's value programmatically — WebKit detaches its
+   * pointer tracking when that happens, and the scrubber reads as dead.
+   */
+  test('a drag owns the thumb: nothing repaints the range under a hand', async function (assert) {
+    await render(<template><BuildOrder /></template>);
+    await waitUntil(() => handle().c?.run != null, { timeout: 4000 });
+    await frames(15); // playing, mid-take
+
+    const range = document.querySelector<HTMLInputElement>('.bo-range')!;
+    range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await frames(2);
+    const landed = range.value;
+    await frames(6);
+    assert.strictEqual(
+      range.value,
+      landed,
+      'the thumb does not crawl under the finger while the hand holds it'
+    );
+
+    for (const v of ['1.3', '2.4', '3.4']) {
+      range.value = v;
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      await frames(3);
+      assert.strictEqual(
+        range.value,
+        v,
+        `the dragged value ${v} is not clobbered between input events`
+      );
+    }
+    assert.true(
+      styleOf('.bo-plate').includes('opacity: 1'),
+      `the stage tracked the drag — plate landed at 3.4, got '${styleOf('.bo-plate')}'`
+    );
+
+    range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await frames(4);
+    assert.strictEqual(
+      range.value,
+      '3.4',
+      'the released thumb is corrected only, never float-nudged'
+    );
+
+    document.querySelector<HTMLButtonElement>('.bo-play')!.click();
+    await frames(10);
+    assert.true(
+      Number(range.value) > 3.4,
+      `play resumes from where the hand left it — range at ${range.value}`
+    );
+    await windDown();
+  });
 });
