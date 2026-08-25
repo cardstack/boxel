@@ -260,7 +260,9 @@ export class Camera extends Component {
         {{! the cursor is the affordance: zoom-in over a frame, zoom-out on
             the table once you are close — no toolbar, the world explains }}
         <Choreo class={{this.stageClass}} {{on "click" this.clear}} as |c|>
-          <div class="cam-sheet" {{this.wire c}}>
+          {{! the sheet of prints is the demo's SUBSTANCE: the crossing
+              matches this box, not the stage frame around it }}
+          <div class="cam-sheet" data-choreo-substance {{this.wire c}}>
             {{#each shots as |shot|}}
               <button
                 type="button"
