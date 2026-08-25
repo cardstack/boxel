@@ -356,8 +356,28 @@ export interface GateNode {
 }
 
 export interface Block {
+  /**
+   * Start against a named step or block instead of this block's place in
+   * its own block's flow. An anchored block lifts out exactly as an
+   * anchored step does (§4.2): it neither pushes a sequence forward nor
+   * stretches its parent's span.
+   */
+  at?: AnchorRef;
   children: TimelineNode[];
+  /**
+   * Milliseconds before the block's contents start, inside its slot. The
+   * template speaks seconds; the block component converts at the boundary.
+   */
+  delay?: number;
   kind: 'parallel' | 'sequence';
+  /**
+   * A label other steps may anchor against — the block's span is its
+   * contents, so `{{after 'intro'}}` means after the LONGEST thing in it.
+   * This is what makes a composite step (a `node()` that returns a block —
+   * `c.Crossing`, and anything an author writes) something the rest of the
+   * score can point at, rather than an opaque lump.
+   */
+  name?: string;
 }
 export type TimelineNode = Block | GateNode | Step;
 

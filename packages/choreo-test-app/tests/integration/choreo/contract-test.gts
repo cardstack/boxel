@@ -16,11 +16,20 @@
  * There is no `sleep()` used as "it is probably done by now" — where a sleep
  * appears it is deliberately mid-flight, and says so.
  */
+import { array } from '@ember/helper';
 import { find, findAll, render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { beacon, Choreo, motion, type SpringSpec } from 'glimmer-motion';
+import {
+  after,
+  at,
+  beacon,
+  Choreo,
+  type ChoreoContext,
+  motion,
+  type SpringSpec,
+} from 'glimmer-motion';
 import {
   animationsSettled,
   bounds,
@@ -39,10 +48,218 @@ const SLOW: SpringSpec = { damping: 26, stiffness: 60 };
 
 const el = (sel: string) => find(sel) as HTMLElement;
 
+/** the region's yielded context, for tests that read the compiled cues */
+let ctx: ChoreoContext;
+const grabCtx = (c: ChoreoContext) => {
+  ctx = c;
+  return '';
+};
+
 module('Integration | choreo | contract', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
   setupMotion(hooks);
+
+  /* ------------------------------------------------------------------ *
+   * Anchors — a block is a step's equal
+   * ------------------------------------------------------------------ */
+
+  module('anchors', function () {
+    /**
+     * A composite step (c.Crossing, and anything an author writes) returns a
+     * BLOCK, so everything the anchor system offers a step has to be offered
+     * to a block too — or a composite is a thing you cannot point at. The
+     * crossing works around this today by naming a child `__crossing-flight`
+     * and anchoring against that, which is a private string an author reaches
+     * only by accident.
+     *
+     * Start times are read from the compiled cues, in ms: what the compiler
+     * resolved, not what the DOM happens to be showing.
+     */
+    const startOf = (id: string) =>
+      ctx.run!.cues.filter((cue) => cue.sprite.id === id).map((c) => c.start);
+
+    test('a named block can be anchored against, and its span is its content', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          anchored = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+              <div
+                id="c"
+                style="width:10px;height:10px"
+                {{motion id="c"}}
+              ></div>
+              <div
+                id="d"
+                style="width:10px;height:10px"
+                {{motion id="d"}}
+              ></div>
+            {{/if}}
+            {{! the composite: two tweens at once, the longer one 0.5s }}
+            <c.Parallel @name="intro">
+              <c.Tween
+                @of={{c.id "a"}}
+                @opacity={{array 0 1}}
+                @duration={{0.2}}
+              />
+              <c.Tween
+                @of={{c.id "b"}}
+                @opacity={{array 0 1}}
+                @duration={{0.5}}
+              />
+            </c.Parallel>
+            {{! after the WHOLE block, not after either child }}
+            <c.Tween
+              @at={{after "intro"}}
+              @of={{c.id "c"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+            {{! and halfway into it }}
+            <c.Tween
+              @at={{at "intro" 0.5}}
+              @of={{c.id "d"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      let anchored: App | undefined;
+      await render(<template><App /></template>);
+      anchored!.show = true;
+      await settled();
+
+      assert.deepEqual(startOf('a'), [0], 'the block starts at the top');
+      assert.deepEqual(startOf('b'), [0], 'its children are parallel');
+      assert.deepEqual(
+        startOf('c'),
+        [500],
+        'after the block is after its LONGEST child, not its first'
+      );
+      assert.deepEqual(
+        startOf('d'),
+        [250],
+        'a fraction of a block is a fraction of its span'
+      );
+      await animationsSettled();
+    });
+
+    test('a block takes a delay, and an anchored block lifts out of the flow', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          delayed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+              <div
+                id="c"
+                style="width:10px;height:10px"
+                {{motion id="c"}}
+              ></div>
+              <div
+                id="e"
+                style="width:10px;height:10px"
+                {{motion id="e"}}
+              ></div>
+            {{/if}}
+            <c.Sequence>
+              <c.Tween
+                @name="first"
+                @of={{c.id "a"}}
+                @opacity={{array 0 1}}
+                @duration={{0.2}}
+              />
+              {{! a delayed block: the delay is inside its slot, and it still
+                  pushes the sequence forward by delay + content }}
+              <c.Parallel @delay={{0.1}}>
+                <c.Tween
+                  @of={{c.id "b"}}
+                  @opacity={{array 0 1}}
+                  @duration={{0.3}}
+                />
+              </c.Parallel>
+              {{! an ANCHORED block neither pushes the sequence nor stretches
+                  it — §4.2's rule, one level up }}
+              <c.Parallel @at={{at "first"}}>
+                <c.Tween
+                  @of={{c.id "c"}}
+                  @opacity={{array 0 1}}
+                  @duration={{0.9}}
+                />
+              </c.Parallel>
+              {{! the step after it: this is where "lifts out of the flow"
+                  is actually observable }}
+              <c.Tween
+                @of={{c.id "e"}}
+                @opacity={{array 0 1}}
+                @duration={{0.1}}
+              />
+            </c.Sequence>
+          </Choreo>
+        </template>
+      }
+      let delayed: App | undefined;
+      await render(<template><App /></template>);
+      delayed!.show = true;
+      await settled();
+
+      assert.deepEqual(startOf('a'), [0], 'the first step is at the top');
+      assert.deepEqual(
+        startOf('b'),
+        [300],
+        "the block's delay is spent inside its own slot"
+      );
+      assert.deepEqual(
+        startOf('c'),
+        [0],
+        'the anchored block starts where it points, not where it sits'
+      );
+      assert.deepEqual(
+        startOf('e'),
+        [600],
+        'the anchored block did not push the sequence forward (0.2 + 0.1 + 0.3)'
+      );
+      // it does still lengthen the RUN — a lifted block is out of the flow,
+      // not out of the score, and a run is as long as its longest cue
+      assert.strictEqual(
+        Math.round(ctx.run!.duration * 1000),
+        900,
+        'the run still spans the anchored block it holds'
+      );
+      await animationsSettled();
+    });
+  });
 
   /* ------------------------------------------------------------------ *
    * Nesting — an inner region is another scene

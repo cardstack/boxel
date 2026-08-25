@@ -10,6 +10,7 @@ import {
   spring,
 } from 'motion-dom';
 
+import type { AnchorRef } from './anchors.ts';
 import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
 import type {
   Block,
@@ -982,19 +983,35 @@ export default function compile(
     }
     return r;
   };
-  const measure = (node: TimelineNode): number => {
+  /**
+   * A node's own length, anchoring aside — for a block, the span its
+   * children occupy, which is what a `@name` on it promises to anyone who
+   * anchors against it.
+   */
+  const extent = (node: TimelineNode): number => {
     if (isGate(node)) {
       return 0;
     }
     if (!isBlock(node)) {
-      // an anchored step is lifted out of its block's flow: it neither pushes
-      // a sequence forward nor stretches a block's span (§4.2)
-      return node.at ? 0 : of(node).duration;
+      return of(node).duration;
     }
-    if (node.kind === 'sequence') {
-      return node.children.reduce((sum, c) => sum + measure(c), 0);
+    return node.kind === 'sequence'
+      ? node.children.reduce((sum, c) => sum + measure(c), 0)
+      : node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
+  };
+  /** what a node contributes to its parent's flow */
+  const measure = (node: TimelineNode): number => {
+    if (isGate(node)) {
+      return 0;
     }
-    return node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
+    // an anchored step or BLOCK is lifted out of its parent's flow: it
+    // neither pushes a sequence forward nor stretches a block's span (§4.2)
+    if (node.at) {
+      return 0;
+    }
+    // a step's own duration already counts its delay; a block's does not,
+    // because the delay is spent before its children begin
+    return isBlock(node) ? (node.delay ?? 0) + extent(node) : of(node).duration;
   };
   const out: Cue[] = [];
   // duplicate names are an authoring error, caught before anything is placed
@@ -1003,13 +1020,16 @@ export default function compile(
     if (isGate(node)) {
       return;
     }
-    if (isBlock(node)) {
-      node.children.forEach(checkNames);
-    } else if (node.name) {
+    // one namespace: a block and a step cannot share a name, or `@at` would
+    // have two answers
+    if (node.name) {
       if (seen.has(node.name)) {
         throw new Error(`choreo: two steps named '${node.name}'`);
       }
       seen.add(node.name);
+    }
+    if (isBlock(node)) {
+      node.children.forEach(checkNames);
     }
   };
   tree.forEach(checkNames);
@@ -1038,28 +1058,31 @@ export default function compile(
       gates.push({ at: start, auto: node.ms });
       return;
     }
+    /** where an anchored node begins — the same arithmetic for a step and a block */
+    const anchored = (ref: AnchorRef) => {
+      const target = names.get(ref.anchor);
+      if (!target) {
+        throw new Error(
+          `choreo: @at names '${ref.anchor}', which is not a step ` +
+            'above this one — anchors point up the score',
+        );
+      }
+      return ref.edge === 'end'
+        ? target.start + target.duration + (ref.delay ?? 0) * 1000
+        : target.start + (ref.progress ?? 0) * target.duration;
+    };
     if (!isBlock(node)) {
       const r = of(node);
       const delay = node.delay ?? 0;
       let base = start;
       if (node.at) {
-        const target = names.get(node.at.anchor);
-        if (!target) {
-          throw new Error(
-            `choreo: @at names '${node.at.anchor}', which is not a step ` +
-              'above this one — anchors point up the score',
-          );
-        }
         if (r.open) {
           throw new Error(
             'choreo: an anchored hold needs its own @duration — lifted out ' +
               'of its block, it has no span to borrow',
           );
         }
-        base =
-          node.at.edge === 'end'
-            ? target.start + target.duration + (node.at.delay ?? 0) * 1000
-            : target.start + (node.at.progress ?? 0) * target.duration;
+        base = anchored(node.at);
       }
       if (node.name) {
         names.set(node.name, {
@@ -1083,20 +1106,29 @@ export default function compile(
       }
       return;
     }
+    // a block answers to the anchor system on a step's terms: it can be
+    // pointed at (`@name`), it can point (`@at`), and its delay is spent
+    // inside its own slot before its children begin
+    const total = extent(node);
+    const from = (node.at ? anchored(node.at) : start) + (node.delay ?? 0);
+    if (node.name) {
+      // recorded BEFORE the children are placed, so a child may anchor
+      // against the block it is in — `@at={{at 'intro' 0.5}}` reads the
+      // same from inside as from outside
+      names.set(node.name, { duration: total, start: from });
+    }
     if (node.kind === 'sequence') {
-      const total = measure(node);
       let offset = 0;
       for (const child of node.children) {
-        place(child, start + offset, total - offset);
+        place(child, from + offset, total - offset);
         offset += measure(child);
       }
       return;
     }
     // a parallel: every child at once — and no gate anywhere under it
     node.children.forEach(forbidGates);
-    const total = measure(node);
     for (const child of node.children) {
-      place(child, start, total);
+      place(child, from, total);
     }
   };
   const root = measure({ children: tree, kind: 'parallel' });

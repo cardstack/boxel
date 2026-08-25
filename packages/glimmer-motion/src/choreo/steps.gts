@@ -503,13 +503,32 @@ export class Gate extends Component<{
   </template>
 }
 
+/**
+ * A block is a step's equal to the anchor system: it takes `@name`, `@at`
+ * and `@delay` on the same terms, so a composite step — a `node()` that
+ * returns a block — is something the rest of the score can point at.
+ */
 abstract class BlockComponent extends Component<{
+  Args: {
+    /** `{{at 'name' 0.4}}` / `{{after 'name'}}` — start against a named step or block */
+    at?: AnchorRef;
+    /** seconds before the block's contents start, inside its slot */
+    delay?: number;
+    /** a label other steps may anchor against; the block's span is its contents */
+    name?: string;
+  };
   Blocks: { default: [] };
 }> {
   abstract readonly kind: Block['kind'];
   private el?: Element;
   node(): Block {
-    return { children: this.el ? collect(this.el) : [], kind: this.kind };
+    return {
+      at: this.args.at,
+      children: this.el ? collect(this.el) : [],
+      delay: msOf(this.args.delay),
+      kind: this.kind,
+      name: this.args.name,
+    };
   }
   mark = modifier((el: Element) => {
     this.el = el;

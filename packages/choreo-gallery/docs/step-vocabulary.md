@@ -1,6 +1,6 @@
 # The step vocabulary, opened
 
-> **Status: design.** Nothing here is built. This is the second of the
+> **Status: design, part 1 landed.** This is the second of the
 > three gaps the 2026-08-23 superset audit left standing, and the one that
 > blocks the next-generation Boxel work — the audit's line was "no custom
 > step kind, which also blocks `follow` / derived tweens (one cue reading
@@ -68,6 +68,15 @@ Conflating them is what makes the gap look bigger than it is. Most of the
 value is in the macro layer, and almost all of the risk is in the other.
 
 ## Part 1 — a block can be named
+
+> **Landed.** `Block` carries `name`, `at` and `delay`; `c.Sequence` and
+> `c.Parallel` take them as args; `measure` splits into
+> `extent` (a node's own length) and `measure` (what it contributes to its
+> parent's flow), and `place` resolves a block's anchor with the same
+> arithmetic a step uses. Two contract tests pin it. One correction the
+> tests produced: an anchored block lifts out of the FLOW, not out of the
+> score — it still lengthens the run if it is the longest thing in it,
+> exactly as an anchored step does.
 
 The smallest change, and the one that makes composites first-class.
 

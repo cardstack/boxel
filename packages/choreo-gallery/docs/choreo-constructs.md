@@ -111,6 +111,16 @@ Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 advanced by `c.advance()`; splits the run into segments; a compile
 error inside `Parallel`).
 
+`c.Sequence` and `c.Parallel` take `@name`, `@at` and `@delay` on a
+step's exact terms: a block can be pointed at (its span is its contents,
+so `{{after 'intro'}}` is after the longest thing in it), can point
+(`@at` lifts it out of its parent's flow, §4.2, one level up), and its
+delay is spent inside its own slot before its children begin. Names are
+one namespace — a block and a step cannot share one. This is what makes
+a composite step, a `node()` that returns a block, something the rest of
+the score can address rather than an opaque lump; see
+[step-vocabulary.md](step-vocabulary.md).
+
 ### 3.4 Steps
 
 Ten steps, keeping ef4's names — `Tween`, `Spring`, `Hold`, `Wait`
@@ -973,22 +983,22 @@ choreography written against it.
 
 ## 7. Implementation plan
 
-| piece                           | state                                                                                                                             | depends on |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                              | —          |
-| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                     | —          |
-| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                  | —          |
-| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                           | —          |
-| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                 | the handle |
-| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                | —          |
-| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                       | —          |
-| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                      | —          |
-| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                 | —          |
-| `@route` + `c.Crossing`         | ✅ SHIPPED end to end — the gallery ⇄ demo transition rides the region; animateView orchestration deleted; see §4.7's refinements | anchors    |
-| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                    | —          |
-| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                          | —          |
-| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                      | —          |
-| an open step vocabulary         | ☐ designed, not built — composite steps in public, plus `c.Follow`'s derived cue; see [step-vocabulary.md](step-vocabulary.md)    | anchors    |
+| piece                           | state                                                                                                                                                                 | depends on |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| keyframe values in `PropSource` | ✅ landed — springs take exactly two                                                                                                                                  | —          |
+| `@name` / `@at` anchors         | ✅ landed, with the compile-time errors named                                                                                                                         | —          |
+| `@by` / `@order` / `@stagger`   | ✅ landed — text splits restore byte-identical; slots ride WAAPI                                                                                                      | —          |
+| the timeline handle             | ✅ landed — settable `time`/`speed`, computed stills, parked-is-settled                                                                                               | —          |
+| `c.Gate`                        | ✅ landed — exclusive boundary, click-through, `@delay` self-open                                                                                                     | the handle |
+| `@path`                         | ✅ landed — similarity-mapped, closure by construction; `@rotate`, `@swap` with it                                                                                    | —          |
+| `c.gesture` / `@space`          | ✅ landed — hot starts with thrown velocity                                                                                                                           | —          |
+| `c.Raise` / `c.Scroll`          | ✅ landed — the elevated layer with a slot-holding placeholder; wheel yields                                                                                          | —          |
+| `c.Camera` / `c.Tether`         | ✅ landed — damped `@steady`, tracked `c.camera` at boundaries, post-render wires                                                                                     | —          |
+| `@route` + `c.Crossing`         | ✅ SHIPPED end to end — the gallery ⇄ demo transition rides the region; animateView orchestration deleted; see §4.7's refinements                                     | anchors    |
+| the seconds unit                | ✅ landed — the language, the gallery and the contract suite all speak seconds                                                                                        | —          |
+| `@debug` lints / test helpers   | ✅ landed — unclaimed-leaver, own-animation, Presence-in-region; `advanceGate` / `seekTo` / `velocityOf`                                                              | —          |
+| the native (realm) driver       | ☐ separate effort (§6.2) — the language compiles to cues either driver plays                                                                                          | —          |
+| an open step vocabulary         | ◐ part 1 landed — blocks take `@name` / `@at` / `@delay`; composite steps in public and `c.Follow`'s derived cue remain; see [step-vocabulary.md](step-vocabulary.md) | anchors    |
 
 The Build Order demo remains the acceptance test for the second pass:
 each promotion deletes a piece of `builds.ts`, and the demo is done being
