@@ -143,6 +143,7 @@ catalog:
   ember-set-body-class: ^1.0.3
   ember-source: ~6.10.0
   ember-template-lint: ^7.8.1
+  es-module-lexer: ^1.7.0
   esbuild: ^0.24.0
   eslint: ^8.57.1
   eslint-config-prettier: ^9.1.2

@@ -1,0 +1,947 @@
+import { module, test } from 'qunit';
+
+import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
+
+import {
+  BoxelModuleGraphClassifier,
+  CLASSIFICATION_REASON_KINDS,
+  classifyBoxelSource,
+} from '@cardstack/host/lib/boxel-source-classifier';
+import {
+  isTrustedImport,
+  isTrustedModule,
+} from '@cardstack/host/lib/trusted-modules';
+
+// A card module around whatever the case under test is, so every row of the
+// truth table differs only in the fragment being classified.
+function card(body: string): string {
+  return `
+    import { CardDef } from 'https://cardstack.com/base/card-api';
+    export class Example extends CardDef {
+      ${body}
+    }
+  `;
+}
+
+function isolatedTemplate(markup: string): string {
+  return card(`static isolated = class {
+    <template>${markup}</template>
+  };`);
+}
+
+// A loader over a fixed source table that records what it was asked for, so a
+// test can assert on fetches not made as well as on classifications reached.
+function graphFixture(
+  sources: Record<string, string>,
+  options: { maxModules?: number } = {},
+) {
+  let loads: string[] = [];
+  let resolutions: string[] = [];
+  let classifier = new BoxelModuleGraphClassifier({
+    loadSource: async (identifier) => {
+      loads.push(identifier);
+      let source = sources[identifier];
+      if (source === undefined) {
+        throw new Error(`no such module: ${identifier}`);
+      }
+      return source;
+    },
+    resolveImport: (specifier, relativeTo) => {
+      resolutions.push(specifier);
+      if (specifier.startsWith('.')) {
+        return new URL(specifier, relativeTo).href;
+      }
+      // A bare specifier resolves to itself, standing in for the loader's
+      // package resolution. `unresolvable` is the fixture's one spelling that
+      // no resolution exists for.
+      if (specifier.startsWith('unresolvable')) {
+        throw new Error(`unresolvable specifier: ${specifier}`);
+      }
+      return specifier;
+    },
+    isTrustedModule: (identifier) =>
+      identifier.startsWith('https://cardstack.com/base/'),
+    ...options,
+  });
+  return { classifier, loads, resolutions, sources };
+}
+
+module('Unit | RP-6 classification', function () {
+  test('RP-6.4: every browser-only package in the vocabulary promotes its importer', async function (assert) {
+    for (let specifier of [
+      '@babylonjs/core',
+      '@google/model-viewer',
+      '@react-three/fiber',
+      '@tweenjs/tween.js',
+      'aframe',
+      'babylonjs',
+      'cesium',
+      'deck.gl',
+      'ember-modifier',
+      'konva',
+      'leaflet',
+      'mapbox-gl',
+      'maplibre-gl',
+      'p5',
+      'paper',
+      'pixi.js',
+      'potree',
+      'three',
+      'three-bvh-csg',
+      'vtk.js',
+    ]) {
+      let result = await classifyBoxelSource(
+        `import renderer from '${specifier}';\n${card('static renderer = renderer;')}`,
+      );
+      assert.strictEqual(
+        result.tier,
+        'sandbox',
+        `importing ${specifier} requires a browser`,
+      );
+      assert.true(
+        result.propagatesToImporters,
+        `${specifier} is part of an exported render surface, so it promotes importers`,
+      );
+    }
+  });
+
+  test('RP-6.4: a browser-only package is recognized through every spelling that reaches it', async function (assert) {
+    for (let specifier of [
+      'three',
+      'three/examples/jsm/loaders/GLTFLoader.js',
+      'https://esm.sh/three@0.160.0',
+      'https://esm.sh/three',
+      'https://my-realm.example/vendor/three/index.js',
+      'https://my-realm.example/vendor/three@0.160.0.js',
+    ]) {
+      let result = await classifyBoxelSource(
+        `import * as THREE from '${specifier}';\n${card('static scene = THREE.Scene;')}`,
+      );
+      assert.deepEqual(
+        result.signals,
+        ['three'],
+        `${specifier} reports the package signal, not the spelling`,
+      );
+    }
+  });
+
+  test('RP-6.4: a package whose name merely contains a vocabulary entry is not a signal', async function (assert) {
+    for (let specifier of [
+      'threescore',
+      'not-three',
+      'https://esm.sh/leaflet-lookalike',
+    ]) {
+      let result = await classifyBoxelSource(
+        `import x from '${specifier}';\n${card('static x = x;')}`,
+      );
+      assert.strictEqual(
+        result.tier,
+        'capsule',
+        `${specifier} is an ordinary authored dependency`,
+      );
+    }
+  });
+
+  test('RP-6.4: every browser global in the vocabulary is a signal when its reference is unbound', async function (assert) {
+    for (let [global, body] of [
+      ['CanvasRenderingContext2D', 'static c = CanvasRenderingContext2D;'],
+      ['HTMLCanvasElement', 'static c = HTMLCanvasElement;'],
+      ['HTMLElement', 'static c = HTMLElement;'],
+      ['MutationObserver', 'static c = new MutationObserver(() => {});'],
+      ['ResizeObserver', 'static c = new ResizeObserver(() => {});'],
+      ['WebGL2RenderingContext', 'static c = WebGL2RenderingContext;'],
+      ['WebGLRenderingContext', 'static c = WebGLRenderingContext;'],
+      ['customElements', 'static c = customElements.get("x");'],
+      ['document', 'static c = document.title;'],
+      ['localStorage', 'static c = localStorage.getItem("x");'],
+      ['navigator', 'static c = navigator.language;'],
+      ['sessionStorage', 'static c = sessionStorage.getItem("x");'],
+      ['window', 'static c = window.name;'],
+    ] as [string, string][]) {
+      let result = await classifyBoxelSource(card(body));
+      assert.deepEqual(
+        result.signals,
+        [global],
+        `an unbound ${global} reference is a browser-global signal`,
+      );
+      assert.strictEqual(result.tier, 'sandbox', `${global} routes to Sandbox`);
+      assert.false(
+        result.propagatesToImporters,
+        `a ${global} mention may be dormant, so it does not promote importers`,
+      );
+    }
+  });
+
+  test('RP-6.4: every DOM-only method call in the vocabulary is a signal independent of its receiver', async function (assert) {
+    for (let method of [
+      'getContext',
+      'requestPointerLock',
+      'setPointerCapture',
+      'showModal',
+      'toBlob',
+      'toDataURL',
+    ]) {
+      let result = await classifyBoxelSource(
+        card(`static probe = (surface) => surface.${method}();`),
+      );
+      assert.deepEqual(
+        result.signals,
+        [`dom-method:${method}`],
+        `.${method}() acquires browser authority whatever the receiver is annotated as`,
+      );
+      assert.true(
+        result.propagatesToImporters,
+        `.${method}() is part of an exported render surface`,
+      );
+    }
+  });
+
+  test('RP-6.4: every template signal in the vocabulary promotes its module', async function (assert) {
+    for (let [signal, markup] of [
+      ['dynamic-inline-style', '<section style={{@model.tone}}></section>'],
+      [
+        'dynamic-inline-style',
+        `<section style='background: {{@model.tone}}'></section>`,
+      ],
+      [
+        'document-global-style',
+        '<i></i><style scoped>@font-face { font-family: CardFont; }</style>',
+      ],
+      [
+        'network-bearing-style',
+        '<i></i><style scoped>@import "https://fonts.example/inter.css";</style>',
+      ],
+      [
+        'network-bearing-style',
+        '<i></i><style scoped>.t { background: url(https://images.example/bg.png); }</style>',
+      ],
+      [
+        'global-style-selector',
+        '<i></i><style scoped>:global(.operator-mode) { font-size: 8rem; }</style>',
+      ],
+      ['top-layer-markup', '<div popover>Hint</div>'],
+      ['unscoped-style', '<i></i><style>.t { color: red; }</style>'],
+    ] as [string, string][]) {
+      let result = await classifyBoxelSource(isolatedTemplate(markup));
+      assert.strictEqual(
+        result.tier,
+        'sandbox',
+        `${signal} needs a document of its own`,
+      );
+      assert.true(
+        result.signals.includes(signal),
+        `${markup} reports ${signal}`,
+      );
+      assert.true(
+        result.propagatesToImporters,
+        `${signal} is part of an exported render surface`,
+      );
+    }
+  });
+
+  test('RP-6.4: an ordinary authored card with no browser evidence classifies Capsule', async function (assert) {
+    let result = await classifyBoxelSource(
+      isolatedTemplate(
+        '<h1>{{@model.title}}</h1><style scoped>h1 { color: red; }</style>',
+      ),
+    );
+    assert.deepEqual(result, {
+      tier: 'capsule',
+      reason: 'default-user-card',
+      imports: ['https://cardstack.com/base/card-api'],
+      signals: [],
+      propagatesToImporters: false,
+    });
+  });
+
+  test('RP-6.4: the trusted custom-property helper is the one admitted dynamic style expression', async function (assert) {
+    let helper = await classifyBoxelSource(
+      `import { cssVar } from 'https://cardstack.com/base/boxel-ui/helpers';\n${isolatedTemplate(
+        '<section style={{cssVar example-accent=@model.accent}}></section>',
+      )}`,
+    );
+    assert.strictEqual(
+      helper.tier,
+      'capsule',
+      'a declaration-only custom-property helper needs no browser global',
+    );
+
+    let otherHelper = await classifyBoxelSource(
+      isolatedTemplate('<section style={{styleFor @model}}></section>'),
+    );
+    assert.true(
+      otherHelper.signals.includes('dynamic-inline-style'),
+      'any other style expression computes a declaration at render time',
+    );
+  });
+
+  test('RP-6.4: an anonymous @layer block is scoped like any other rule, while a named one is document-global', async function (assert) {
+    let anonymous = await classifyBoxelSource(
+      isolatedTemplate(
+        '<i></i><style scoped>@layer { i { color: red; } }</style>',
+      ),
+    );
+    assert.strictEqual(anonymous.tier, 'capsule');
+
+    let named = await classifyBoxelSource(
+      isolatedTemplate(
+        '<i></i><style scoped>@layer cards { i { color: red; } }</style>',
+      ),
+    );
+    assert.true(named.signals.includes('document-global-style'));
+  });
+
+  test('RP-6.4: a DOM name reachable only through TypeScript syntax requests no authority', async function (assert) {
+    for (let body of [
+      'element?: HTMLElement;',
+      'declare surface: HTMLCanvasElement;',
+      'static read = (value: unknown) => value as HTMLElement;',
+      'static widen = (value: HTMLElement): HTMLElement => value;',
+    ]) {
+      let result = await classifyBoxelSource(card(body));
+      assert.strictEqual(
+        result.tier,
+        'capsule',
+        `an annotation-only DOM name is erased before evaluation: ${body}`,
+      );
+    }
+  });
+
+  test('RP-6.4: a typeof probe is exempt, and any other reference to the same name is not', async function (assert) {
+    let probe = await classifyBoxelSource(
+      card(`static hasDOM = typeof window !== 'undefined';`),
+    );
+    assert.strictEqual(
+      probe.tier,
+      'capsule',
+      'typeof on an unresolvable name evaluates without throwing, so the isomorphic guard runs inside a Compartment',
+    );
+
+    let guarded = await classifyBoxelSource(
+      card(
+        `static width = typeof window !== 'undefined' ? window.innerWidth : 0;`,
+      ),
+    );
+    assert.deepEqual(
+      guarded.signals,
+      ['window'],
+      'the guarded branch still reads the ambient global',
+    );
+  });
+
+  test('RP-6.4: a lexically bound name that shadows a browser global is ordinary authored data', async function (assert) {
+    for (let body of [
+      'static read = (document) => document.title;',
+      'static read = () => { let document = { title: "x" }; return document.title; };',
+      'static read = ({ document }) => document.title;',
+      'static read = () => { const { navigator } = { navigator: "x" }; return navigator; };',
+    ]) {
+      let result = await classifyBoxelSource(card(body));
+      assert.strictEqual(
+        result.tier,
+        'capsule',
+        `a bound reference is not an ambient one: ${body}`,
+      );
+    }
+  });
+
+  test('RP-6.4: a browser global named in a comment or a string is not a reference', async function (assert) {
+    for (let body of [
+      '// this card deliberately avoids document and window\nstatic title = "x";',
+      '/* document.createElement is what the Sandbox tier is for */\nstatic title = "x";',
+      'static hint = "call document.querySelector to find it";',
+      'static hint = `navigator.language decides the format`;',
+      `static hint = 'surface.getContext("2d")';`,
+    ]) {
+      let result = await classifyBoxelSource(card(body));
+      assert.strictEqual(
+        result.tier,
+        'capsule',
+        `prose is not authority: ${body}`,
+      );
+    }
+  });
+
+  test('RP-6.4: the ambient global object cannot hide a browser global behind a spelling', async function (assert) {
+    for (let expression of [
+      'globalThis.document.title',
+      'self.document.title',
+      'globalThis["document"].title',
+      '(() => { let { document } = globalThis; return document.title; })()',
+    ]) {
+      let named = await classifyBoxelSource(card(`static c = ${expression};`));
+      assert.deepEqual(
+        named.signals,
+        ['document'],
+        `${expression} is a reference to document`,
+      );
+    }
+
+    for (let expression of [
+      'globalThis["doc" + "ument"].title',
+      'globalThis.crypto.getRandomValues(new Uint8Array(1))',
+      '(() => { let { ...rest } = globalThis; return rest; })()',
+    ]) {
+      let unnamed = await classifyBoxelSource(
+        card(`static c = ${expression};`),
+      );
+      assert.deepEqual(
+        unnamed.signals,
+        ['window'],
+        `${expression} acquires authority this pass cannot name, and is attributed to the global object itself`,
+      );
+    }
+
+    let shadowed = await classifyBoxelSource(
+      card(
+        `static c = ((globalThis: { document: string }) => globalThis.document)({ document: 'data' });`,
+      ),
+    );
+    assert.strictEqual(
+      shadowed.tier,
+      'capsule',
+      'a lexically bound globalThis is ordinary authored data',
+    );
+  });
+
+  test('RP-6.4: a reason string names every signal behind it, in a canonical order', async function (assert) {
+    let result = await classifyBoxelSource(
+      `import * as THREE from 'three';\n${isolatedTemplate(
+        '<canvas style={{@model.tone}}></canvas>',
+      ).replace(
+        'static isolated',
+        'static probe = document.createElement("canvas").getContext("2d");\n      static isolated',
+      )}`,
+    );
+    assert.deepEqual(result.signals, [
+      'three',
+      'document',
+      'dom-method:getContext',
+      'dynamic-inline-style',
+    ]);
+    assert.strictEqual(
+      result.reason,
+      'browser-runtime:three,document,dom-method:getContext,dynamic-inline-style',
+      'the reason is machine-readable: a kind, then its comma-separated signals',
+    );
+  });
+
+  test('RP-6.4: a literal dynamic import joins the graph as an ordinary edge, and a computed one is dropped', async function (assert) {
+    let literal = await classifyBoxelSource(
+      card('static load = () => import("three");'),
+    );
+    assert.deepEqual(
+      literal.imports,
+      ['https://cardstack.com/base/card-api', 'three'],
+      'a literal specifier is statically visible, so it promotes up front',
+    );
+    assert.strictEqual(literal.tier, 'sandbox');
+
+    let computed = await classifyBoxelSource(
+      card('static load = (name) => import(name);'),
+    );
+    assert.deepEqual(
+      computed.imports,
+      ['https://cardstack.com/base/card-api'],
+      'a computed specifier cannot be statically authorized, and both cages refuse it at runtime',
+    );
+  });
+
+  test('RP-6.4: an unparseable draft fails into Capsule rather than out of the cages', async function (assert) {
+    let result = await classifyBoxelSource(
+      card('static isolated = class { <template><h1>unclosed'),
+    );
+    assert.deepEqual(result, {
+      tier: 'capsule',
+      reason: 'source-parse-pending',
+      imports: [],
+      signals: [],
+      propagatesToImporters: false,
+    });
+  });
+
+  test('RP-6.1: the trusted boundary admits Cardstack packages and rejects every traversal spelling', function (assert) {
+    assert.true(isTrustedModule('@cardstack/base/card-api'));
+    assert.true(isTrustedModule('@cardstack/boxel-ui/components'));
+    assert.true(isTrustedModule(`${PACKAGES_FAKE_ORIGIN}@cardstack/boxel-ui`));
+
+    for (let identifier of [
+      '@cardstack/base/../private/card',
+      '@cardstack/base/./card',
+      '@cardstack/base/%2e%2e/private/card',
+      '@cardstack/base/%252e%252e/private/card',
+      '@cardstack/base/..%2fprivate/card',
+      '@cardstack/base\\..\\private\\card',
+      '@cardstack/base/card?../private',
+      '@cardstack/base/card#/../private',
+      '@cardstack/',
+      '@cardstackish/base/card-api',
+    ]) {
+      assert.false(
+        isTrustedModule(identifier),
+        `${identifier} is not a trusted package spelling`,
+      );
+      assert.false(
+        isTrustedImport(identifier),
+        `${identifier} is not a Host-provided import either`,
+      );
+    }
+  });
+
+  test('RP-6.1: URL trust is origin-scoped and path-bounded', function (assert) {
+    assert.true(
+      isTrustedModule('https://cardstack.com/base/card-api'),
+      'the canonical Base realm is trusted',
+    );
+    assert.true(
+      isTrustedModule('https://cardstack.com/base'),
+      'the boundary directory itself is inside the boundary',
+    );
+    for (let identifier of [
+      'https://cardstack.com/base-evil/card-api',
+      'https://cardstack.com/basement/card-api',
+      'https://cardstack.com/base/../private/card',
+      'https://cardstack.com.evil.example/base/card-api',
+      'http://cardstack.com/base/card-api',
+      './card-api',
+    ]) {
+      assert.false(
+        isTrustedModule(identifier),
+        `${identifier} is outside the trusted Base root`,
+      );
+    }
+  });
+
+  test('RP-6.1: a Host-provided import is not a grant of Direct execution', function (assert) {
+    assert.true(isTrustedImport('@glimmer/component'));
+    assert.true(
+      isTrustedImport(`${PACKAGES_FAKE_ORIGIN}ember-provide-consume-context`),
+      'the resolved package facade is Host-provided too',
+    );
+    assert.false(
+      isTrustedModule('@glimmer/component'),
+      'a framework stand-in is handed to a cage without making its importer Direct',
+    );
+    assert.false(
+      isTrustedImport('@glimmer/component-extras'),
+      'a bare specifier is matched exactly, so a longer name is not admitted by prefix',
+    );
+  });
+
+  test('RP-6.4: a dependency in the graph promotes the entry, and a trusted import is a leaf', async function (assert) {
+    let { classifier, loads, resolutions } = graphFixture({
+      'https://example.test/entry.gts': `
+        import Renderer from './renderer.gts';
+        import { CardDef } from 'https://cardstack.com/base/card-api';
+        export class Example extends CardDef { static isolated = Renderer; }
+      `,
+      'https://example.test/renderer.gts': `
+        import * as THREE from 'three';
+        export default THREE.Scene;
+      `,
+    });
+
+    let result = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(result.tier, 'sandbox');
+    assert.strictEqual(
+      result.reason,
+      'dependency-runtime:https://example.test/renderer.gts',
+      'the diagnostic names the dependency that carries the evidence',
+    );
+    assert.deepEqual(result.signals, ['three']);
+    assert.deepEqual(
+      result.moduleGraph,
+      [
+        'https://example.test/entry.gts',
+        'https://cardstack.com/base/card-api',
+        'https://example.test/renderer.gts',
+        'three',
+      ],
+      'the graph is the exact read authorization a stronger runtime gets: entry first, the rest sorted',
+    );
+    assert.false(
+      loads.includes('https://cardstack.com/base/card-api'),
+      'a trusted import is a semantic leaf and is never fetched as authored source',
+    );
+    assert.false(
+      resolutions.includes('https://cardstack.com/base/card-api'),
+      'nor resolved, which would evaluate the trusted module merely to learn its URL',
+    );
+  });
+
+  test('RP-6.4: a recognized browser-only package is a graph leaf, and evidence outranks a failure in the same graph', async function (assert) {
+    let { classifier, loads } = graphFixture({
+      'https://example.test/entry.gts': `
+        import * as THREE from 'three';
+        import Missing from './missing.gts';
+        export default [THREE.Scene, Missing];
+      `,
+    });
+    let result = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.false(
+      loads.includes('three'),
+      'a package the vocabulary already decides is never fetched as authored source',
+    );
+    assert.strictEqual(
+      result.reason,
+      'browser-runtime:three',
+      'the actionable signal is reported, not the unrelated load failure that is also true of this graph',
+    );
+    assert.true(
+      result.moduleGraph.includes('three'),
+      'the package is still a module the Sandbox may read',
+    );
+  });
+
+  test('RP-6.4: a dormant browser-global mention inside a dependency does not promote its importer', async function (assert) {
+    let { classifier } = graphFixture({
+      'https://example.test/entry.gts': `
+        import formatted from './library.gts';
+        export default formatted;
+      `,
+      'https://example.test/library.gts': `
+        export default function formatted(value) {
+          return typeof document === 'undefined' ? value : document.title + value;
+        }
+      `,
+    });
+
+    let dependency = await classifier.classifyModuleGraph(
+      'https://example.test/library.gts',
+    );
+    assert.strictEqual(
+      dependency.tier,
+      'sandbox',
+      'the module that would evaluate the reference is promoted',
+    );
+
+    let entry = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(
+      entry.tier,
+      'capsule',
+      'an importer does not inherit a browser adapter that may never run',
+    );
+  });
+
+  test('RP-6.4: promotion is computed from the finished graph, so import order and cycles cannot change it', async function (assert) {
+    let { classifier } = graphFixture({
+      'https://example.test/left.gts': `import Shared from './shared.gts'; export default Shared;`,
+      'https://example.test/right.gts': `import Shared from './shared.gts'; export default Shared;`,
+      'https://example.test/shared.gts': `import * as THREE from 'three'; export default THREE.Scene;`,
+      'https://example.test/cycle-a.gts': `import B from './cycle-b.gts'; export default B;`,
+      'https://example.test/cycle-b.gts': `import A from './cycle-a.gts'; import * as THREE from 'three'; export default A || THREE.Scene;`,
+    });
+    let diamond = (imports: string) =>
+      `${imports}\nexport default [Left, Right];`;
+
+    let leftFirst = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+      diamond(
+        `import Left from './left.gts'; import Right from './right.gts';`,
+      ),
+    );
+    let rightFirst = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+      diamond(
+        `import Right from './right.gts'; import Left from './left.gts';`,
+      ),
+    );
+    assert.strictEqual(leftFirst.tier, 'sandbox');
+    assert.deepEqual(
+      { tier: rightFirst.tier, reason: rightFirst.reason },
+      { tier: leftFirst.tier, reason: leftFirst.reason },
+      'a diamond reached from either side yields the same tier and the same diagnostic',
+    );
+    assert.deepEqual(rightFirst.signals, leftFirst.signals);
+    assert.deepEqual(rightFirst.moduleGraph, leftFirst.moduleGraph);
+
+    let cycle = await classifier.classifyModuleGraph(
+      'https://example.test/cycle-a.gts',
+    );
+    assert.strictEqual(
+      cycle.tier,
+      'sandbox',
+      'evidence survives a cycle without recursion or order dependence',
+    );
+  });
+
+  test('RP-6.4: the per-module memo is shared across entries, so a second card re-fetches and re-analyzes nothing it shares', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/first.gts': `
+        import a from './shared-a.gts';
+        import b from './shared-b.gts';
+        export default [a, b];
+      `,
+      'https://example.test/second.gts': `
+        import a from './shared-a.gts';
+        import b from './shared-b.gts';
+        export default { a, b };
+      `,
+      'https://example.test/shared-a.gts': `export default 'a';`,
+      'https://example.test/shared-b.gts': `export default 'b';`,
+    };
+    let { classifier, loads } = graphFixture(sources);
+
+    let first = await classifier.classifyModuleGraph(
+      'https://example.test/first.gts',
+    );
+    assert.strictEqual(first.tier, 'capsule');
+    assert.deepEqual(
+      [...loads].sort(),
+      [
+        'https://example.test/first.gts',
+        'https://example.test/shared-a.gts',
+        'https://example.test/shared-b.gts',
+      ],
+      'the first entry pays for its whole graph',
+    );
+
+    // Whatever the loader would now serve for the shared modules is a
+    // different classification, so reaching them again would be visible in the
+    // result as well as in the load log.
+    sources['https://example.test/shared-a.gts'] =
+      `import * as THREE from 'three'; export default THREE.Scene;`;
+    sources['https://example.test/shared-b.gts'] =
+      `import * as THREE from 'three'; export default THREE.Scene;`;
+    loads.length = 0;
+
+    let second = await classifier.classifyModuleGraph(
+      'https://example.test/second.gts',
+    );
+    assert.deepEqual(
+      loads,
+      ['https://example.test/second.gts'],
+      'the second entry fetches only the module it does not share',
+    );
+    assert.strictEqual(
+      second.tier,
+      'capsule',
+      'and re-analyzes nothing: the shared subtree keeps its memoized classification',
+    );
+    assert.deepEqual(second.moduleGraph, [
+      'https://example.test/second.gts',
+      'https://example.test/shared-a.gts',
+      'https://example.test/shared-b.gts',
+    ]);
+  });
+
+  test('RP-6.4: an unchanged draft reuses its whole result, and a changed one re-decides the entry without re-fetching the graph below it', async function (assert) {
+    let { classifier, loads } = graphFixture({
+      'https://example.test/dependency.gts': `export default class Dependency {}`,
+    });
+    let entry = 'https://example.test/entry.gts';
+    let source = `
+      import Dependency from './dependency.gts';
+      export class Example extends Dependency {}
+    `;
+
+    let first = classifier.classifyModuleGraph(entry, source);
+    let second = classifier.classifyModuleGraph(entry, source);
+    assert.strictEqual(
+      first,
+      second,
+      'an identical draft hashes to the entry memo and does no work at all',
+    );
+    await second;
+    assert.deepEqual(loads, ['https://example.test/dependency.gts']);
+
+    let changed = await classifier.classifyModuleGraph(
+      entry,
+      `${source}\nimport * as THREE from 'three';`,
+    );
+    assert.strictEqual(
+      changed.tier,
+      'sandbox',
+      'a changed draft is re-analyzed rather than answered from the memo',
+    );
+    assert.deepEqual(
+      loads,
+      ['https://example.test/dependency.gts'],
+      'and the unchanged modules below it are still not re-fetched: the module memo is keyed per module, not per entry revision',
+    );
+  });
+
+  test('RP-6.4: invalidating a module evicts it and every entry whose graph reached it', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/entry.gts': `import Shared from './shared.gts'; export default Shared;`,
+      'https://example.test/shared.gts': `export default 'plain';`,
+    };
+    let { classifier } = graphFixture(sources);
+    let entry = 'https://example.test/entry.gts';
+    let shared = 'https://example.test/shared.gts';
+
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).tier,
+      'capsule',
+    );
+
+    sources[shared] =
+      `import * as THREE from 'three'; export default THREE.Scene;`;
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).tier,
+      'capsule',
+      'an entry keeps its answer until something says the graph moved',
+    );
+
+    classifier.invalidate(shared);
+    let promoted = await classifier.classifyModuleGraph(entry);
+    assert.strictEqual(
+      promoted.reason,
+      `dependency-runtime:${shared}`,
+      'invalidating a dependency re-decides every importer of it, not only the dependency',
+    );
+  });
+
+  test('RP-6.1: an unresolvable import fails the graph closed, with a diagnostic that does not depend on traversal order', async function (assert) {
+    let unresolvable = (imports: string) => ({
+      'https://example.test/entry.gts': `${imports}\nexport default [a, b];`,
+    });
+
+    for (let imports of [
+      `import a from 'unresolvable-alpha'; import b from 'unresolvable-beta';`,
+      `import b from 'unresolvable-beta'; import a from 'unresolvable-alpha';`,
+    ]) {
+      let { classifier } = graphFixture(unresolvable(imports));
+      let result = await classifier.classifyModuleGraph(
+        'https://example.test/entry.gts',
+      );
+      assert.strictEqual(
+        result.tier,
+        'sandbox',
+        'a graph we cannot establish gets the strongest cage',
+      );
+      assert.strictEqual(
+        result.reason,
+        'module-resolve:unresolvable-alpha',
+        'the reported failure is a property of the graph, not of the order its imports appear in',
+      );
+    }
+  });
+
+  test('RP-6.1: a dependency whose source cannot be loaded fails the graph closed', async function (assert) {
+    let { classifier } = graphFixture({
+      'https://example.test/entry.gts': `import Missing from './missing.gts'; export default Missing;`,
+    });
+    let result = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(result.tier, 'sandbox');
+    assert.strictEqual(
+      result.reason,
+      'module-load:https://example.test/missing.gts',
+    );
+    assert.deepEqual(
+      result.moduleGraph,
+      ['https://example.test/entry.gts', 'https://example.test/missing.gts'],
+      'the graph still reports what it reached, so the diagnostic can be read against it',
+    );
+  });
+
+  test('RP-6.1: a failed classification is not memoized, so the next request retries it', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/entry.gts': `import Late from './late.gts'; export default Late;`,
+    };
+    let { classifier } = graphFixture(sources);
+    let entry = 'https://example.test/entry.gts';
+
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).reason,
+      'module-load:https://example.test/late.gts',
+    );
+
+    sources['https://example.test/late.gts'] = `export default 'now here';`;
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).tier,
+      'capsule',
+      'a transient fetch failure is not pinned into the cache',
+    );
+  });
+
+  test('RP-6.4: a graph larger than its bound fails closed, and the bound is reported ahead of any other failure', async function (assert) {
+    // `aa-missing` fails to load before the bound is reached, so both a
+    // per-module failure and the bound are in play at once.
+    let { classifier } = graphFixture(
+      {
+        'https://example.test/a.gts': `import m from './aa-missing.gts'; import b from './zz-b.gts'; export default [m, b];`,
+        'https://example.test/zz-b.gts': `import c from './zz-c.gts'; export default c;`,
+        'https://example.test/zz-c.gts': `export default 'c';`,
+      },
+      { maxModules: 2 },
+    );
+    let result = await classifier.classifyModuleGraph(
+      'https://example.test/a.gts',
+    );
+    assert.strictEqual(result.tier, 'sandbox');
+    assert.strictEqual(
+      result.reason,
+      'module-graph-limit',
+      'once the walk stops early, which other modules failed is an artifact of where it stopped',
+    );
+  });
+
+  test('RP-6.4: a graph that exactly fits its bound is not a failure', async function (assert) {
+    let { classifier } = graphFixture(
+      {
+        'https://example.test/a.gts': `import b from './b.gts'; export default b;`,
+        'https://example.test/b.gts': `export default 'b';`,
+      },
+      { maxModules: 2 },
+    );
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph('https://example.test/a.gts')).tier,
+      'capsule',
+    );
+  });
+
+  test('RP-6.4: every declared reason kind is reachable, so the diagnostics catalog has no dead entries', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/plain.gts': `export default 'plain';`,
+      'https://example.test/own.gts': `export default document.title;`,
+      'https://example.test/importer.gts': `import x from './renderer.gts'; export default x;`,
+      'https://example.test/renderer.gts': `import * as THREE from 'three'; export default THREE.Scene;`,
+      'https://example.test/missing-dep.gts': `import x from './nowhere.gts'; export default x;`,
+      'https://example.test/bad-specifier.gts': `import x from 'unresolvable'; export default x;`,
+      'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
+      'https://example.test/deep.gts': `import x from './importer.gts'; export default x;`,
+    };
+    let { classifier } = graphFixture(sources);
+    let bounded = graphFixture(sources, { maxModules: 1 }).classifier;
+
+    let reasonFor = async (
+      entry: string,
+      using = classifier,
+    ): Promise<string> =>
+      (await using.classifyModuleGraph(`https://example.test/${entry}`)).reason;
+
+    let observed = new Set([
+      await reasonFor('plain.gts'),
+      await reasonFor('own.gts'),
+      await reasonFor('importer.gts'),
+      await reasonFor('missing-dep.gts'),
+      await reasonFor('bad-specifier.gts'),
+      await reasonFor('draft.gts'),
+      await reasonFor('deep.gts', bounded),
+    ]);
+    let observedKinds = new Set(
+      [...observed].map((reason) => reason.split(':')[0]),
+    );
+
+    assert.deepEqual(
+      [...CLASSIFICATION_REASON_KINDS]
+        .filter((kind) => kind !== 'module-analysis')
+        .filter((kind) => !observedKinds.has(kind)),
+      [],
+      'every reason kind a graph walk can produce is produced here',
+    );
+    assert.true(
+      CLASSIFICATION_REASON_KINDS.includes('module-analysis'),
+      'the analysis-threw kind stays declared: it is the fallback for a failure with no more specific cause, so nothing can construct it on purpose',
+    );
+  });
+});

@@ -390,6 +390,9 @@ catalogs:
     ember-template-lint:
       specifier: ^7.8.1
       version: 7.9.3
+    es-module-lexer:
+      specifier: ^1.7.0
+      version: 1.7.0
     esbuild:
       specifier: ^0.24.0
       version: 0.24.2
@@ -2208,6 +2211,9 @@ importers:
       '@sqlite.org/sqlite-wasm':
         specifier: 'catalog:'
         version: 3.45.1-build1
+      '@types/babel__core':
+        specifier: 'catalog:'
+        version: 7.20.5
       '@types/flat':
         specifier: 'catalog:'
         version: 5.0.5
@@ -2400,6 +2406,9 @@ importers:
       ember-window-mock:
         specifier: ^1.0.1
         version: 1.0.2(@babel/core@7.29.7)(@glint/template@1.7.7)
+      es-module-lexer:
+        specifier: 'catalog:'
+        version: 1.7.0
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
