@@ -151,11 +151,12 @@ export class Camera extends Component {
                   class="cam-no"
                   {{motion id=(labelId shot) role="no"}}
                 >{{shot.label}}</span>
+                {{! the editor's mark: a grease-pencil ring around the keeper }}
                 {{#if (this.isPicked shot)}}
                   <span
-                    class="cam-star"
+                    class="cam-ring"
                     {{motion id=(starId shot) role="badge"}}
-                  >★</span>
+                  ></span>
                 {{/if}}
                 <span class="cam-wash" style={{washOf shot.wash}}></span>
                 {{! the grade rides the SAME pass as the dive: the panel

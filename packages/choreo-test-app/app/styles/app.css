@@ -2706,83 +2706,118 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
+/* Film is film in either theme: a near-black base the backlight can't
+   quite reach, sprocket holes punched through to the glass, and the
+   frame data printed on the edge in the developer's amber. */
 .cam-frame {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--bg-elev);
+  padding: 15px 10px 16px;
+  border: 0;
+  border-radius: 4px;
+  background: #191410;
   cursor: zoom-in;
-  transition:
-    border-color 200ms var(--ease),
-    box-shadow 200ms var(--ease);
+  transition: box-shadow 200ms var(--ease);
+}
+
+/* the sprockets: holes, so they are the glass showing through */
+.cam-frame::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  right: 8px;
+  height: 7px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--bg-well) 0 8px,
+    transparent 8px 19px
+  );
+}
+
+/* the stock's own brand, printed along the bottom edge */
+.cam-frame::after {
+  content: 'G·400 ▸▸';
+  position: absolute;
+  bottom: 3px;
+  right: 10px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: rgba(228, 163, 90, 0.55);
 }
 
 @media (hover: hover) {
   .cam-frame:hover {
-    border-color: var(--copper);
-    box-shadow: 0 8px 22px rgba(var(--shadow-rgb), calc(0.28 * var(--shadow-a)));
+    box-shadow:
+      0 0 0 1px rgba(228, 163, 90, 0.5),
+      0 10px 26px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
   }
 }
 
 .cam-frame.is-open {
-  border-color: var(--copper);
+  box-shadow:
+    0 0 0 2px var(--copper),
+    0 10px 26px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
   cursor: zoom-out;
 }
 
+/* the frame number, edge-printed */
 .cam-no {
   position: absolute;
-  top: 6px;
-  left: 6px;
+  bottom: 3px;
+  left: 10px;
   z-index: 1;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(var(--bg-rgb), 0.75);
   font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  color: var(--copper-ink);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(228, 163, 90, 0.9);
 }
 
-.cam-star {
+/* the editor's mark: a grease-pencil ring around the keeper */
+.cam-ring {
   position: absolute;
-  top: 4px;
-  right: 8px;
+  inset: 6px 6px 10px;
   z-index: 1;
-  font-size: 13px;
-  color: #ffb36a;
-  text-shadow: 0 0 8px rgba(255, 122, 69, 0.8);
+  border: 3px solid rgba(255, 59, 31, 0.75);
+  border-radius: 52% 46% 50% 47% / 46% 52% 44% 51%;
+  filter: drop-shadow(0 0 6px rgba(255, 59, 31, 0.35));
+  pointer-events: none;
 }
 
 .cam-wash {
   flex: 1;
   min-height: 0;
-  border-radius: 6px;
+  border-radius: 2px;
+  /* the exposure's own vignette — light falls off toward the frame */
+  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.4);
 }
 
 /* the grade floats over the frame's foot — arriving with the loupe, it
    never reflows the bracket under it */
+/* the loupe's data strip: constant dark, because it sits on film */
 .cam-grade {
   position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  left: 10px;
+  right: 10px;
+  bottom: 16px;
   z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(var(--bg-rgb), 0.85);
+  border-radius: 6px;
+  border: 1px solid rgba(228, 163, 90, 0.35);
+  background: rgba(12, 9, 7, 0.9);
 }
 
 .cam-exp {
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.04em;
-  color: var(--ink);
+  color: #f3ece3;
 }
 
 .cam-verdict {
@@ -2808,8 +2843,8 @@ html[data-gm-dragging] * {
 }
 
 .cam-pass {
-  border: 1px solid var(--line-strong);
-  color: var(--ink-dim);
+  border: 1px solid rgba(243, 236, 227, 0.3);
+  color: rgba(243, 236, 227, 0.75);
 }
 
 @media (hover: hover) {
@@ -2818,7 +2853,7 @@ html[data-gm-dragging] * {
   }
 
   .cam-pass:hover {
-    color: var(--ink);
+    color: #f3ece3;
   }
 }
 
