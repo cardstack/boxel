@@ -2442,25 +2442,10 @@ export default class StoreService extends Service implements StoreInterface {
       store: this.store,
       dependencyTrackingContext,
     })) as unknown as FileDef;
-    // A file-meta resource carries its timestamps as `attributes.lastModified`
-    // / `attributes.createdAt` — a different location and a different "created"
-    // key than a card resource, which puts `lastModified` / `resourceCreatedAt`
-    // in `meta`. FileDef declares neither as a field, so they'd be dropped on
-    // hydration. Normalize them onto `meta` under the card key names so
-    // FileDef's `lastModified` / `resourceCreatedAt` getters (and `getCardMeta`)
-    // answer uniformly for cards and files.
-    let lastModified = resource.attributes?.lastModified;
-    let resourceCreatedAt = resource.attributes?.createdAt;
-    if (
-      typeof lastModified === 'number' ||
-      typeof resourceCreatedAt === 'number'
-    ) {
-      (instance as any)[meta] = {
-        ...(instance as any)[meta],
-        ...(typeof lastModified === 'number' ? { lastModified } : {}),
-        ...(typeof resourceCreatedAt === 'number' ? { resourceCreatedAt } : {}),
-      };
-    }
+    // The file's timestamps ride in the resource `meta` (stamped at
+    // serialization, mirroring a card), so `createFromSerialized` copies them
+    // onto `instance[meta]` — FileDef's `lastModified` / `resourceCreatedAt`
+    // getters and `getCardMeta` read them with no store-side normalization.
     this.setIdentityContext(instance, 'file-meta');
     return instance;
   }

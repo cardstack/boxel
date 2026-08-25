@@ -3117,11 +3117,12 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
-  // Server-managed timestamps (epoch seconds), read off the resource `meta` the
-  // store stamps at hydration — not `@field`s, so they never round-trip on a
-  // write. These mirror the names a card exposes through `getCardMeta`, so a
-  // consumer reads a file's timestamps the same way it reads a card's without
-  // reaching for `getCardMeta` on a FileDef.
+  // Server-managed timestamps (epoch seconds), read off the resource `meta`
+  // (stamped at serialization under the same key names a card uses, so
+  // `createFromSerialized` carries them onto `this[meta]`) — not `@field`s, so
+  // they never round-trip on a write. These mirror the names a card exposes
+  // through `getCardMeta`, so a consumer reads a file's timestamps the same way
+  // it reads a card's without reaching for `getCardMeta` on a FileDef.
   get lastModified(): number | undefined {
     return this[meta]?.lastModified;
   }

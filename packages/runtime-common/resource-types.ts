@@ -107,6 +107,13 @@ export type CardResourceMeta = Meta & {
 };
 
 export type FileMetaResourceResourceMeta = Meta & {
+  // A file's server-managed timestamps (epoch seconds), stamped here at
+  // serialization under the same key names a card uses (see CardResourceMeta),
+  // so `getCardMeta` / FileDef's getters read them uniformly for both kinds.
+  // The legacy `attributes.lastModified` / `attributes.createdAt` spelling is
+  // still carried on the wire for back-compat; `meta` is the canonical home.
+  lastModified?: number;
+  resourceCreatedAt?: number;
   realmInfo?: RealmInfo;
   realmURL?: RealmIdentifier;
   queryFieldDefs?: Record<string, QueryFieldMeta>;
