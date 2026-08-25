@@ -2382,7 +2382,7 @@ function summarizePerformance(
   };
 }
 
-export function summarizeExecutionStages(pages: SmokeProbeResult[]) {
+export function summarizeExecutionStages(pages: ExecutionStageView[]) {
   let values = new Map<string, number[]>();
   for (let page of pages) {
     let snapshots = [

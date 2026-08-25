@@ -10,6 +10,13 @@ import {
   normalizeVisibleText,
   summarizeExecutionStages,
   summarizeExecutionRuntimeSmokeRun,
+  type ExecutionStageView,
+  type ParityView,
+  type SmokeCaseResult,
+  type SmokePageResult,
+  type SmokeProbeResult,
+  type SmokeReferenceParity,
+  type UnrunPageResult,
 } from './execution-runtime-browser-smoke.mts';
 import {
   median as baselineMedian,
@@ -37,7 +44,7 @@ const repoRoot = join(
   '..',
 );
 
-function page(overrides = {}) {
+function page(overrides: Partial<ParityView> = {}): ParityView {
   return {
     headingCount: 2,
     images: [
@@ -48,6 +55,30 @@ function page(overrides = {}) {
     semanticTokens: ['alpha', 'beta', 'gamma', 'workspace'],
     ...overrides,
   };
+}
+
+/**
+ * A case result carrying only the fields a summary reads.
+ *
+ * Summarizing is defined over a named few of a result's fields; a fixture
+ * that filled in the rest would not show which ones. The single widening
+ * lives here so every call site stays checked against what is read.
+ */
+function summarizedCase(
+  result: Partial<Omit<SmokeCaseResult, 'page' | 'referenceParity'>> & {
+    id: string;
+    page: Partial<SmokeProbeResult> | SmokePageResult;
+    referenceParity?: Partial<SmokeReferenceParity>;
+  },
+): SmokeCaseResult {
+  return result as unknown as SmokeCaseResult;
+}
+
+/** The corpus case with this id, or a failure naming the id that is absent. */
+function wildCase(id: string) {
+  let found = executionRuntimeWildCorpusCases.find((entry) => entry.id === id);
+  assert.ok(found, `the wild corpus has no case named ${id}`);
+  return found;
 }
 
 test('the wild corpus remains fifty unique, intentional CTSE cards', () => {
@@ -76,16 +107,8 @@ test('the wild corpus remains fifty unique, intentional CTSE cards', () => {
     assert.ok(entry.category);
     assert.ok(entry.sourceUrl);
   }
-  assert.equal(
-    executionRuntimeWildCorpusCases.find(({ id }) => id === 'tier-fast-food')
-      .minimumHealthyImages,
-    20,
-  );
-  assert.equal(
-    executionRuntimeWildCorpusCases.find(({ id }) => id === 'adorn-showcase')
-      .minimumHealthyImages,
-    51,
-  );
+  assert.equal(wildCase('tier-fast-food').minimumHealthyImages, 20);
+  assert.equal(wildCase('adorn-showcase').minimumHealthyImages, 51);
 });
 
 test('every wild corpus row shares one candidate origin so a port change is one edit', () => {
@@ -318,7 +341,7 @@ test('correct but slow output is its own status, distinct from passing', () => {
 });
 
 test('the smoke summary preserves reference, execution, readiness, and diagnosis', () => {
-  let referenceResult = {
+  let referenceResult = summarizedCase({
     assessment: { failures: [], pass: true, status: 'pass' },
     id: 'alpha',
     page: {
@@ -327,8 +350,8 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
       missingText: [],
       readiness: { applicationMs: 90, executionMs: 30 },
     },
-  };
-  let candidateResult = {
+  });
+  let candidateResult = summarizedCase({
     assessment: { failures: [], pass: true, status: 'pass' },
     id: 'alpha',
     page: {
@@ -339,7 +362,7 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
       warmReadiness: { applicationMs: 30, executionMs: 10 },
     },
     referenceParity: { failures: [], tokenCoverage: 1 },
-  };
+  });
 
   assert.deepEqual(
     summarizeExecutionRuntimeSmokeRun({
@@ -377,18 +400,17 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
 test('execution stage summaries preserve tiers and calculate median and p95', () => {
   // The summarizer takes the observations it reads, not the case wrapping
   // them, so a case that observed nothing cannot be handed to it at all.
-  let page = (samples: number[]) =>
-    ({
-      executionPerformance: {
-        droppedRecords: 0,
-        records: samples.map((durationMs) => ({
-          durationMs,
-          stage: 'runtime-create',
-          status: 'ok',
-          tier: 'sandbox',
-        })),
-      },
-    }) as unknown as Parameters<typeof summarizeExecutionStages>[0][number];
+  let page = (samples: number[]): ExecutionStageView => ({
+    executionPerformance: {
+      droppedRecords: 0,
+      records: samples.map((durationMs) => ({
+        durationMs,
+        stage: 'runtime-create',
+        status: 'ok',
+        tier: 'sandbox',
+      })),
+    },
+  });
 
   assert.deepEqual(summarizeExecutionStages([page([5, 10, 20, 40])]), {
     'sandbox:runtime-create': {
@@ -470,16 +492,17 @@ test('the summary reports a case that never ran instead of throwing on it', () =
   // Per-case cancellation makes an observation-free record routine, and the
   // summarizer is how a run is read. Throwing here would make a batch's
   // evidence unreadable through the tool that ships with it.
-  let unrun = (id, page) => ({
-    assessment: {
-      failures: ['case-deadline-exceeded'],
-      pass: false,
-      status: 'pre-routing-failure',
-    },
-    id,
-    interaction: { pass: false, skipped: true },
-    page,
-  });
+  let unrun = (id: string, page: UnrunPageResult) =>
+    summarizedCase({
+      assessment: {
+        failures: ['case-deadline-exceeded'],
+        pass: false,
+        status: 'pre-routing-failure',
+      },
+      id,
+      interaction: { pass: false, skipped: true },
+      page,
+    });
 
   let summary = summarizeExecutionRuntimeSmokeRun({
     candidate: {
@@ -491,13 +514,18 @@ test('the summary reports a case that never ran instead of throwing on it', () =
   });
 
   assert.equal(summary.length, 1);
+  let [only] = summary;
+  assert.ok(only);
+  // The candidate side is reported, not dropped: a case that observed
+  // nothing still has a row on both origins.
+  assert.ok(only.candidate);
   // Absent, not zero and not true: the case made no observation either way.
-  assert.equal(summary[0].reference.signatureReady, null);
-  assert.equal(summary[0].reference.healthyImages, null);
-  assert.equal(summary[0].candidate.healthyImages, null);
-  assert.equal(summary[0].candidate.readiness, null);
-  assert.equal(summary[0].candidate.executions, null);
-  assert.equal(summary[0].diagnosis, 'reference-drift');
+  assert.equal(only.reference.signatureReady, null);
+  assert.equal(only.reference.healthyImages, null);
+  assert.equal(only.candidate.healthyImages, null);
+  assert.equal(only.candidate.readiness, null);
+  assert.equal(only.candidate.executions, null);
+  assert.equal(only.diagnosis, 'reference-drift');
 });
 
 test('the baseline reader refuses a flag with no value or a nonsense count', () => {

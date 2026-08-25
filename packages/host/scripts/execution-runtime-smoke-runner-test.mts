@@ -13,14 +13,47 @@ import { test } from 'node:test';
 import {
   APPLICATION_READY_SELECTOR,
   CARD_SURFACE_SELECTOR,
+  hasProbeResult,
   leaseTab,
   runExecutionRuntimeCandidateSmoke,
+  type SmokeBrowser,
+  type SmokeCase,
+  type SmokeCaseResult,
+  type SmokeRoleOptions,
+  type SmokeTab,
 } from './execution-runtime-browser-smoke.mts';
 
-const HOST_CHROME = {
+const HOST_CHROME: Record<string, string> = {
   '.new-file-dropdown-trigger': 'rgb(0, 255, 186)',
   '.submode-switcher-dropdown-trigger': 'rgb(0, 0, 0)',
 };
+
+/**
+ * A browser stand-in for a run that is handed its tab.
+ *
+ * Such a run never opens one, so the only honest handle is one that fails if
+ * it is asked to.
+ */
+const NO_BROWSER: SmokeBrowser = {
+  tabs: {
+    new: () => {
+      throw new Error('a fake run was asked to open a tab it does not have');
+    },
+  },
+};
+
+/**
+ * A browser-side stand-in, narrower than the interface it stands in for.
+ *
+ * Each fake answers only what the runner asks it, so a runner change that
+ * reaches for something new fails loudly rather than reading a stub's
+ * default. Filling in the rest of `Document`, `Window`, a computed style, or
+ * a tab handle would claim the opposite. The gap is recorded here so every
+ * fake stays checked against its own declared surface.
+ */
+function asBrowserSide<Target>(stub: unknown) {
+  return stub as Target;
+}
 
 /**
  * A DOM stand-in answering only the selectors the runner actually asks for.
@@ -30,8 +63,12 @@ const HOST_CHROME = {
  * that asks a new question fails loudly here instead of silently reading a
  * default.
  */
-function fakeDocument({ text = '', headings = [], mounted = true } = {}) {
-  let element = (name) => ({
+function fakeDocument({
+  text = '',
+  headings = [] as string[],
+  mounted = true,
+} = {}) {
+  let element = (name: string) => ({
     getAttribute: () => null,
     getBoundingClientRect: () => ({ height: 400, width: 800 }),
     textContent: name,
@@ -59,26 +96,62 @@ function fakeDocument({ text = '', headings = [], mounted = true } = {}) {
     body: { innerText: text },
     documentElement: { scrollHeight: 400 },
     images: [],
-    querySelector: (selector) => bySelector.get(selector)?.[0] ?? null,
-    querySelectorAll: (selector) => bySelector.get(selector) ?? [],
+    querySelector: (selector: string) => bySelector.get(selector)?.[0] ?? null,
+    querySelectorAll: (selector: string) => bySelector.get(selector) ?? [],
     title: 'fake',
   };
 }
 
+type FakeDocument = ReturnType<typeof fakeDocument>;
+
 /**
- * @param {object} options
- * @param {(caseIndex: number) => object} options.documentFor page state per case
- * @param {number} [options.hangOnCase] index whose page work stalls
- * @param {number} [options.stallMs] how long that stall lasts; omit for forever.
- *   A finite stall models the case the deadline exists for: work that outlives
- *   its bound and then wakes up while a later case owns the tab.
+ * The tab surface the fake offers.
+ *
+ * `startCase` and `navigations` are the test's own handles on the fake, not
+ * part of any browser interface: they let a test say which page each case
+ * sees and read back where the runner went.
  */
-function fakeTab({ documentFor, hangOnCase, stallMs }) {
-  let navigations = [];
+interface FakeTab {
+  dev: { logs(): Promise<unknown[]> };
+  goto(url: string): Promise<void>;
+  navigations: string[];
+  playwright: {
+    evaluate<Result, Argument = undefined>(
+      fn: (argument: Argument) => Result,
+      argument?: Argument,
+    ): Promise<Result>;
+    getByRole?: (role: string, options?: SmokeRoleOptions) => unknown;
+    locator?: (selector: string) => unknown;
+    waitForLoadState(): Promise<void>;
+    waitForTimeout(ms: number): Promise<void>;
+  };
+  startCase(index: number): void;
+  url(): Promise<string>;
+}
+
+interface FakeTabOptions {
+  /** The page state each case sees, keyed by the case's index in the batch. */
+  documentFor: (caseIndex: number) => FakeDocument;
+  /** The index whose page work stalls. */
+  hangOnCase?: number;
+  /**
+   * How long that stall lasts; omit for forever. A finite stall models the
+   * case the deadline exists for: work that outlives its bound and then wakes
+   * up while a later case owns the tab.
+   */
+  stallMs?: number;
+}
+
+function fakeTab({
+  documentFor,
+  hangOnCase,
+  stallMs,
+}: FakeTabOptions): FakeTab {
+  let navigations: string[] = [];
   let currentUrl = 'about:blank';
   let caseIndex = -1;
 
-  async function withGlobals(run) {
+  async function withGlobals<Result>(run: () => Result): Promise<Result> {
     if (caseIndex === hangOnCase) {
       await new Promise((resolve) =>
         stallMs === undefined ? undefined : setTimeout(resolve, stallMs),
@@ -89,15 +162,21 @@ function fakeTab({ documentFor, hangOnCase, stallMs }) {
       getComputedStyle: globalThis.getComputedStyle,
       window: globalThis.window,
     };
-    globalThis.document = documentFor(caseIndex);
+    globalThis.document = asBrowserSide<Document>(documentFor(caseIndex));
     // The runner reads the page's performance diagnostics through `window`
     // when a caller asks for warm samples. A page that carries no diagnostics
     // is the ordinary case, so the stub simply has none.
-    globalThis.window = { innerHeight: 800, scrollX: 0, scrollY: 0 };
-    globalThis.getComputedStyle = (target) => ({
-      backgroundColor: HOST_CHROME[target.textContent] ?? 'rgb(1, 1, 1)',
-      overflowY: 'auto',
+    globalThis.window = asBrowserSide<Window & typeof globalThis>({
+      innerHeight: 800,
+      scrollX: 0,
+      scrollY: 0,
     });
+    globalThis.getComputedStyle = (target: Element) =>
+      asBrowserSide<CSSStyleDeclaration>({
+        backgroundColor:
+          HOST_CHROME[target.textContent ?? ''] ?? 'rgb(1, 1, 1)',
+        overflowY: 'auto',
+      });
     try {
       return await run();
     } finally {
@@ -121,14 +200,16 @@ function fakeTab({ documentFor, hangOnCase, stallMs }) {
     },
     dev: { logs: async () => [] },
     playwright: {
-      evaluate: (fn, argument) => withGlobals(() => fn(argument)),
+      evaluate: (fn, argument) =>
+        withGlobals(() => fn(argument as Parameters<typeof fn>[0])),
       waitForLoadState: async () => {},
-      waitForTimeout: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      waitForTimeout: (ms) =>
+        new Promise((resolve) => setTimeout(resolve, ms)) as Promise<void>,
     },
   };
 }
 
-function smokeCase(id, signature) {
+function smokeCase(id: string, signature: string): SmokeCase {
   return {
     id,
     path: `/example-account/example-realm/Example/${id}`,
@@ -138,6 +219,12 @@ function smokeCase(id, signature) {
   };
 }
 
+interface FakeRunOptions extends FakeTabOptions {
+  caseTimeoutMs?: number;
+  cases: SmokeCase[];
+  performanceRepeats?: number;
+}
+
 async function runFake({
   cases,
   documentFor,
@@ -145,16 +232,16 @@ async function runFake({
   caseTimeoutMs,
   performanceRepeats,
   stallMs,
-}) {
+}: FakeRunOptions) {
   let tab = fakeTab({ documentFor, hangOnCase, stallMs });
-  let persisted = [];
+  let persisted: SmokeCaseResult[] = [];
   // The runner does not know about case indices; the fake follows along by
   // watching which case each persisted result belongs to.
   let index = 0;
   tab.startCase(index);
   let run = await runExecutionRuntimeCandidateSmoke({
-    browser: {},
-    candidateTab: tab,
+    browser: NO_BROWSER,
+    candidateTab: asBrowserSide<SmokeTab>(tab),
     candidateOrigin: 'https://localhost:4200',
     caseTimeoutMs,
     cases,
@@ -196,8 +283,8 @@ test('a persistence failure is recorded against the run and never discards a res
     documentFor: () => fakeDocument({ headings: ['h'], text: 'Alpha' }),
   });
   let run = await runExecutionRuntimeCandidateSmoke({
-    browser: {},
-    candidateTab: tab,
+    browser: NO_BROWSER,
+    candidateTab: asBrowserSide<SmokeTab>(tab),
     candidateOrigin: 'https://localhost:4200',
     cases: [smokeCase('one', 'Alpha')],
     onCaseComplete: () => {
@@ -261,7 +348,9 @@ test('readiness is recorded as application and execution parts, not one total', 
     documentFor: () => fakeDocument({ headings: ['h'], text: 'Alpha' }),
   });
 
-  let { readiness, elapsedMs } = run.candidate.results[0].page;
+  let { page } = run.candidate.results[0];
+  assert.ok(hasProbeResult(page));
+  let { readiness, elapsedMs } = page;
   assert.equal(typeof readiness.applicationMs, 'number');
   assert.equal(typeof readiness.executionMs, 'number');
   // Both parts are measured inside the navigation, so neither can exceed it.
@@ -293,10 +382,10 @@ test('a case that throws in an unexpected place does not take the batch with it'
     }
     return originalGoto(url);
   };
-  let persisted = [];
+  let persisted: string[] = [];
   let run = await runExecutionRuntimeCandidateSmoke({
-    browser: {},
-    candidateTab: tab,
+    browser: NO_BROWSER,
+    candidateTab: asBrowserSide<SmokeTab>(tab),
     candidateOrigin: 'https://localhost:4200',
     cases: [smokeCase('boom', 'Alpha'), smokeCase('fine', 'Beta')],
     onCaseComplete: (result) => persisted.push(result.id),
@@ -307,28 +396,32 @@ test('a case that throws in an unexpected place does not take the batch with it'
   assert.deepEqual(run.candidate.results[0].assessment.failures, [
     'browser-probe-error',
   ]);
-  assert.match(
-    run.candidate.results[0].page.runnerError,
-    /navigation exploded/,
-  );
+  // A case that threw before probing has no observations, only the reason.
+  let { page } = run.candidate.results[0];
+  assert.ok(!hasProbeResult(page));
+  assert.match(page.runnerError ?? '', /navigation exploded/);
   assert.equal(run.candidate.results[1].assessment.pass, true);
 });
 
 test('a revoked lease refuses every further operation, however deeply reached', async () => {
-  let clicks = [];
+  let clicks: string[] = [];
   let realTab = {
-    goto: async (url) => clicks.push(`goto:${url}`),
+    goto: async (url: string) => {
+      clicks.push(`goto:${url}`);
+    },
     playwright: {
       evaluate: async () => 'read',
-      getByRole: (role) => ({
-        click: async () => clicks.push(`click:${role}`),
+      getByRole: (role: string) => ({
+        click: async () => {
+          clicks.push(`click:${role}`);
+        },
       }),
     },
   };
-  let { revoke, tab } = leaseTab(realTab);
+  let { revoke, tab } = leaseTab(asBrowserSide<SmokeTab>(realTab));
 
   // Before revocation the lease is transparent.
-  assert.equal(await tab.playwright.evaluate(), 'read');
+  assert.equal(await tab.playwright.evaluate(() => 'read'), 'read');
   // A handle taken before revocation is the dangerous case: the abandoned
   // coroutine is usually already holding one.
   let buttonHeldFromBefore = tab.playwright.getByRole('button');
@@ -341,7 +434,10 @@ test('a revoked lease refuses every further operation, however deeply reached', 
     async () => tab.goto('https://localhost:4200/anything'),
     /cut loose/,
   );
-  await assert.rejects(async () => tab.playwright.evaluate(), /cut loose/);
+  await assert.rejects(
+    async () => tab.playwright.evaluate(() => 'read'),
+    /cut loose/,
+  );
   await assert.rejects(async () => buttonHeldFromBefore.click(), /cut loose/);
   assert.deepEqual(
     clicks,
@@ -388,7 +484,7 @@ test('each warm sample is a real navigation, not a re-read of the same document'
     performanceRepeats: 2,
   });
 
-  let cardUrl = (url) => new URL(url).pathname.endsWith('/one');
+  let cardUrl = (url: string) => new URL(url).pathname.endsWith('/one');
   // One cold navigation plus one per warm repeat. A warm sample that skipped
   // the navigation would measure re-reading an already-rendered document.
   assert.equal(
@@ -396,7 +492,9 @@ test('each warm sample is a real navigation, not a re-read of the same document'
     3,
     `expected 3 navigations to the card, saw: ${tab.navigations.join(', ')}`,
   );
-  assert.equal(run.candidate.results[0].page.warmSamplesMs.length, 2);
+  let { page } = run.candidate.results[0];
+  assert.ok(hasProbeResult(page));
+  assert.equal(page.warmSamplesMs?.length, 2);
 });
 
 test('a case cut loose mid-write still names the card it left mutated', async () => {
@@ -423,10 +521,10 @@ test('a case cut loose mid-write still names the card it left mutated', async ()
     waitFor: async () => {},
   });
 
-  let persisted: any[] = [];
+  let persisted: SmokeCaseResult[] = [];
   let run = await runExecutionRuntimeCandidateSmoke({
-    browser: {},
-    candidateTab: tab,
+    browser: NO_BROWSER,
+    candidateTab: asBrowserSide<SmokeTab>(tab),
     candidateOrigin: 'https://localhost:4200',
     caseTimeoutMs: 1_200,
     cases: [
@@ -439,7 +537,7 @@ test('a case cut loose mid-write still names the card it left mutated', async ()
         },
       },
     ],
-    onCaseComplete: (result: any) => persisted.push(result),
+    onCaseComplete: (result) => persisted.push(result),
     timeoutMs: 2_000,
   });
 
@@ -448,15 +546,15 @@ test('a case cut loose mid-write still names the card it left mutated', async ()
   assert.equal(filled[filled.length - 1], 'Alpha [browser smoke]');
 
   let [record] = persisted;
+  assert.ok(record);
   assert.ok(
     record.assessment.failures.includes('corpus-card-left-mutated'),
     `expected the mutated card to be named, got: ${record.assessment.failures.join(', ')}`,
   );
   assert.equal(record.assessment.status, 'corpus-left-mutated');
-  assert.equal(
-    record.interaction.unrestoredWrite.value,
-    'Alpha [browser smoke]',
-  );
-  assert.match(record.interaction.unrestoredWrite.path, /Example\/writes$/);
+  let { unrestoredWrite } = record.interaction;
+  assert.ok(unrestoredWrite);
+  assert.equal(unrestoredWrite.value, 'Alpha [browser smoke]');
+  assert.match(unrestoredWrite.path, /Example\/writes$/);
   assert.equal(run.candidate.results.length, 1);
 });
