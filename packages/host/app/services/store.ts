@@ -1152,6 +1152,7 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta?: false;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
+      scope?: SearchEntryScope;
     },
   ): Promise<T[]>;
   async search<T extends CardDef | FileDef = CardDef>(
@@ -1161,6 +1162,7 @@ export default class StoreService extends Service implements StoreInterface {
       includeMeta: true;
       dependencyTrackingContext?: RuntimeDependencyTrackingContext;
       cardInitiated?: boolean;
+      scope?: SearchEntryScope;
     },
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }>;
   async search<T extends CardDef | FileDef = CardDef>(
@@ -1174,6 +1176,11 @@ export default class StoreService extends Service implements StoreInterface {
       // page size, realms fan-out, and the concurrency throttle — none of which
       // constrain the host app's own direct search calls.
       cardInitiated?: boolean;
+      // Pin which index rows the search returns: 'cards' (instance rows),
+      // 'files' (FileDef rows), or 'all' (both). When omitted, the scope is
+      // inferred from the filter — an untyped query defaults to 'cards'. Prefer
+      // passing this explicitly over shaping the filter to coax a scope.
+      scope?: SearchEntryScope;
     },
   ): Promise<T[] | { instances: T[]; meta: QueryResultsMeta }> {
     if ('asData' in query && query.asData) {
@@ -1207,6 +1214,7 @@ export default class StoreService extends Service implements StoreInterface {
         query,
         searchRealms,
         opts?.dependencyTrackingContext,
+        opts?.scope,
       );
     let result = opts?.cardInitiated
       ? await this.performThrottledSearch(run)
@@ -1308,10 +1316,17 @@ export default class StoreService extends Service implements StoreInterface {
     return new Proxy(store, {
       get(target, prop) {
         if (prop === 'search') {
-          return (query: Query, realmURLs?: string[]) => {
+          return (
+            query: Query,
+            realmURLs?: string[],
+            opts?: { scope?: SearchEntryScope },
+          ) => {
             let current = getCurrentRealm();
             let realms = realmURLs ?? (current ? [current] : ([] as string[]));
-            return target.search(query, realms, { cardInitiated: true });
+            return target.search(query, realms, {
+              cardInitiated: true,
+              scope: opts?.scope,
+            });
           };
         }
         let value = Reflect.get(target, prop, target);
@@ -1326,8 +1341,9 @@ export default class StoreService extends Service implements StoreInterface {
     query: Query,
     realms: string[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
+    scope?: SearchEntryScope,
   ): Promise<{ instances: T[]; meta: QueryResultsMeta }> {
-    let collectionDoc = await this.fetchSearchDoc(query, realms);
+    let collectionDoc = await this.fetchSearchDoc(query, realms, scope);
 
     // Hydrate each result into the store. The data-only entry doc
     // carries one full `item` (`card`/`file-meta`) serialization per entry in
@@ -1378,6 +1394,7 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDoc(
     query: Query,
     realms: string[],
+    scope?: SearchEntryScope,
   ): Promise<SearchEntryResults> {
     let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
     let jobId = inPrerender
@@ -1406,7 +1423,7 @@ export default class StoreService extends Service implements StoreInterface {
       realms.length === 1 &&
       realms[0] === consumingRealm
     ) {
-      cacheKey = searchCacheKey(jobId, consumingRealm, query);
+      cacheKey = searchCacheKey(jobId, consumingRealm, query, scope);
       if (cacheKey !== undefined) {
         let cached = this.searchCache.get(cacheKey);
         if (cached !== undefined) {
@@ -1421,7 +1438,7 @@ export default class StoreService extends Service implements StoreInterface {
     let captureGeneration = this.searchCacheGeneration;
 
     let inflightKey = inPrerender
-      ? searchInFlightKey(realms, query)
+      ? searchInFlightKey(realms, query, scope)
       : undefined;
     let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
@@ -1429,23 +1446,25 @@ export default class StoreService extends Service implements StoreInterface {
       if (existing) {
         doc = await existing;
       } else {
-        let pending = this.fetchSearchDocUncoalesced(query, realms).finally(
-          () => {
-            // Identity-check before deletion: a concurrent
-            // `clearInFlightSearch()` could in principle have removed
-            // (and a later caller re-set) this slot while we were
-            // in-flight. Only clean up if the map still points at *this*
-            // pending promise.
-            if (this.inflightSearch.get(inflightKey) === pending) {
-              this.inflightSearch.delete(inflightKey);
-            }
-          },
-        );
+        let pending = this.fetchSearchDocUncoalesced(
+          query,
+          realms,
+          scope,
+        ).finally(() => {
+          // Identity-check before deletion: a concurrent
+          // `clearInFlightSearch()` could in principle have removed
+          // (and a later caller re-set) this slot while we were
+          // in-flight. Only clean up if the map still points at *this*
+          // pending promise.
+          if (this.inflightSearch.get(inflightKey) === pending) {
+            this.inflightSearch.delete(inflightKey);
+          }
+        });
         this.inflightSearch.set(inflightKey, pending);
         doc = await pending;
       }
     } else {
-      doc = await this.fetchSearchDocUncoalesced(query, realms);
+      doc = await this.fetchSearchDocUncoalesced(query, realms, scope);
     }
 
     // Populate only if the cache generation hasn't moved under us. A
@@ -1466,7 +1485,12 @@ export default class StoreService extends Service implements StoreInterface {
   private async fetchSearchDocUncoalesced(
     query: Query,
     realms: string[],
+    explicitScope?: SearchEntryScope,
   ): Promise<SearchEntryResults> {
+    // An explicit scope from the caller always wins — it is the sanctioned way
+    // to ask for cards, files, or both, rather than shaping the filter to coax
+    // the inference below.
+    //
     // Search spans card instances and files. A query with a positive
     // *concrete* type ref already selects a kind (a card type -> instances, a
     // FileDef type -> files), so it passes through with the default 'all'
@@ -1487,9 +1511,16 @@ export default class StoreService extends Service implements StoreInterface {
       : undefined;
     let hasPositiveType =
       typeRefs?.some((r) => !r.negated && !isEqual(r.ref, baseRef)) ?? false;
-    let scope: SearchEntryScope | undefined = hasPositiveType
-      ? undefined
-      : 'cards';
+    // 'all' is the wire default (undefined scope), so an explicit 'all' maps to
+    // undefined just like the inferred positive-type case.
+    let scope: SearchEntryScope | undefined =
+      explicitScope !== undefined
+        ? explicitScope === 'all'
+          ? undefined
+          : explicitScope
+        : hasPositiveType
+          ? undefined
+          : 'cards';
     return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, {
         fields: ['item'],

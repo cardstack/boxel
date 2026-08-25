@@ -1033,6 +1033,7 @@ export interface RealmCards {
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
+import type { SearchEntryScope } from './search-entry.ts';
 import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './http-range.ts';
@@ -1439,7 +1440,15 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
+  // `scope` pins which rows the search returns: 'cards' (instance rows),
+  // 'files' (FileDef rows), or 'all' (both). When omitted the scope is inferred
+  // from the filter — an untyped query defaults to 'cards'. Prefer passing it
+  // explicitly over shaping the filter to coax a scope.
+  search(
+    query: Query,
+    realmURLs?: string[],
+    opts?: { scope?: SearchEntryScope },
+  ): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

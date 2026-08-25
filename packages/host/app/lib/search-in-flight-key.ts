@@ -19,9 +19,16 @@ import {
 export function searchInFlightKey(
   realms: string[],
   query: Query,
+  // Two otherwise-identical requests that differ only by scope resolve to
+  // different result sets, so scope is part of the key.
+  scope?: string,
 ): string | undefined {
   try {
-    return JSON.stringify([realms, normalizeQueryForSignature(query)]);
+    return JSON.stringify([
+      realms,
+      normalizeQueryForSignature(query),
+      scope ?? null,
+    ]);
   } catch {
     return undefined;
   }

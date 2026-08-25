@@ -20,12 +20,16 @@ export function searchCacheKey(
   jobId: string,
   consumingRealm: string,
   query: Query,
+  // Two otherwise-identical queries that differ only by scope resolve to
+  // different result sets, so scope is part of the key.
+  scope?: string,
 ): string | undefined {
   try {
     return JSON.stringify([
       jobId,
       consumingRealm,
       normalizeQueryForSignature(query),
+      scope ?? null,
     ]);
   } catch {
     return undefined;
