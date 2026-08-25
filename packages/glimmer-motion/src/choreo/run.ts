@@ -244,6 +244,14 @@ interface Track {
     from: { left: number; top: number };
     to: { left: number; top: number };
   };
+  /**
+   * follow: the geometry this window was opened against, measured ONCE.
+   * `selfRest` is the follower's own resting box; `sourceRests` are the
+   * boxes its sources occupy with nothing driving them. Every frame after
+   * this is arithmetic — see drive().
+   */
+  selfRest?: Rect;
+  sourceRests?: Rect[];
   start: number;
   started: boolean;
   /** tether: the wire this step draws */
@@ -813,6 +821,7 @@ export class ChoreoRun implements Run {
       if (cue.derive) {
         if (inside && !t.started) {
           t.started = true;
+          this.measureFollow(t);
           // the keys this cue drives are registered as MOVED, with the
           // rest the author declared: releaseForMeasure then jumps them
           // back before a measurement, and reassert() puts them again —
@@ -1186,57 +1195,124 @@ export class ChoreoRun implements Run {
    * it is the same cost `c.Tether` already pays.
    */
   private drive(t: Track, now: number) {
-    const { cue } = t;
-    const derive = cue.derive;
-    const ve = cue.sprite.node.visualElement;
-    if (!derive || !ve) {
+    const derive = t.cue.derive;
+    const ve = t.cue.sprite.node.visualElement;
+    const rest = t.selfRest;
+    const bases = t.sourceRests;
+    if (!derive || !ve || !rest || !bases) {
       return;
     }
-    const self = this.regionRect(cue.sprite);
-    if (!self) {
-      return;
-    }
-    // `self` is the follower's box with its own translation TAKEN OUT. A
-    // read that saw its own output would be a function of its own last
-    // frame — the memory that makes a scrub irreproducible — and in
-    // practice it oscillates: pin x to a source, and next frame the read
-    // sees the pinned box and computes zero.
-    //
-    // The correction comes from the RENDERED transform, not from the
-    // motion value: the value can be a render ahead of the box that was
-    // just measured, and mixing the two is a doubling bug that only shows
-    // itself on a seek (280 becomes 560, then 1120…).
-    const painted = new DOMMatrix(
-      getComputedStyle(cue.sprite.element).transform,
-    );
-    const zoom = this.camera.zoom || 1;
-    self.x -= painted.e / zoom;
-    self.y -= painted.f / zoom;
+    // Sources are RECONSTRUCTED, not re-measured: resting box plus
+    // whatever is driving them this frame. Nothing here touches the DOM,
+    // which is the whole point — see measureFollow.
     const sources: Rect[] = [];
-    for (const source of derive.sources) {
-      const rect = this.liveRect(source);
-      if (!rect) {
-        return; // a source that is not on the page has no box to follow
+    for (const [i, source] of derive.sources.entries()) {
+      const base = bases[i];
+      if (!base) {
+        return;
       }
-      sources.push(rect);
+      const sv = source.node.visualElement;
+      sources.push({
+        height: base.height,
+        width: base.width,
+        x: base.x + (((sv?.getValue('x')?.get() as number) ?? 0) || 0),
+        y: base.y + (((sv?.getValue('y')?.get() as number) ?? 0) || 0),
+      });
     }
     const span = t.end - t.start;
     const values = derive.read({
       camera: { ...this.camera },
       p: span > 0 ? Math.max(0, Math.min(1, (now - t.start) / span)) : 1,
-      self,
+      self: { ...rest },
       sources,
       t: now / 1000,
     });
     for (const [key, value] of Object.entries(values)) {
       ve.getValue(key, value)!.set(value);
     }
-    // rendered NOW, not scheduled. A scheduled render lands in motion's
-    // own render step, which is a hop later than the synchronous pin the
-    // move it is following just did — so on the first frame of a flight
-    // the source would already be drawn at the origin while the follower
-    // was still drawn at the destination, which is a whole bay's flash.
+    // rendered NOW, not scheduled: a scheduled render lands in motion's
+    // own render step, a hop later than the synchronous pin the move it
+    // follows just did, and that hop is a visible one-frame flash.
     ve.render();
+  }
+
+  /**
+   * The one measurement a follower makes: the geometry its window opens
+   * against. Everything after is arithmetic.
+   *
+   * Reading the DOM per frame is what made this step stutter, and no
+   * amount of care with the reads fixed it. The cost is not the read — it
+   * is that a read AFTER a write forces the engine to recompute layout,
+   * and a follower does both every frame, in the middle of a move that is
+   * itself on the main thread. Measured off a screen recording of the
+   * Escort demo: three of twenty-seven mid-flight frames stood perfectly
+   * still, and the step after each was nearly double the median. That is
+   * not slowness as a person experiences it; it is the card jumping.
+   *
+   * Measuring once is also what makes the step correct under
+   * INTERRUPTION, which matters more. A resting box does not care which
+   * frame it is read on, so a replacement run measures at its own start
+   * and is right immediately. The scheme this replaces compared this
+   * frame's values against last frame's, and a run that has no last frame
+   * — which is exactly what a run born mid-flight is — had nothing to
+   * compare against and leapt.
+   */
+  private measureFollow(t: Track) {
+    const derive = t.cue.derive;
+    if (!derive) {
+      return;
+    }
+    t.selfRest = this.layoutRect(t.cue.sprite) ?? undefined;
+    const bases: Rect[] = [];
+    for (const source of derive.sources) {
+      const rect = this.layoutRect(source);
+      if (!rect) {
+        t.sourceRests = undefined;
+        return;
+      }
+      bases.push(rect);
+    }
+    t.sourceRests = bases;
+  }
+
+  /**
+   * A sprite's RESTING box — where the stylesheet puts it — in the
+   * region's space, measured from offsets rather than from a rect.
+   *
+   * `offsetLeft/Top/Width/Height` cannot carry a transform: that is the
+   * whole reason to use them. A rect can, and subtracting the transform
+   * back off only works if you can name every transform on the element,
+   * which you cannot — a run born mid-flight inherits whatever the last
+   * one left, and reading a rect there put the follower a whole bay from
+   * its rest. The region's own fast keep fingerprints layout with these
+   * same four numbers, and for the same reason.
+   */
+  private layoutRect(sprite: Sprite): Rect | null {
+    const el = sprite.element;
+    if (!el?.isConnected) {
+      return null;
+    }
+    const frame = this.options.cameraFrame;
+    let x = 0;
+    let y = 0;
+    let node: HTMLElement | null = el;
+    while (node && node !== frame) {
+      x += node.offsetLeft;
+      y += node.offsetTop;
+      const parent: Element | null = node.offsetParent;
+      node = parent instanceof HTMLElement ? parent : null;
+      if (node && node !== frame) {
+        x -= node.scrollLeft;
+        y -= node.scrollTop;
+      }
+    }
+    const zoom = this.camera.zoom || 1;
+    return {
+      height: el.offsetHeight / zoom,
+      width: el.offsetWidth / zoom,
+      x: x / zoom,
+      y: y / zoom,
+    };
   }
 
   /** the window closed (or was scrubbed out of): put the declared rest back */
@@ -1250,34 +1326,6 @@ export class ChoreoRun implements Run {
       ve.getValue(key, value)!.jump(value);
     }
     ve.render();
-  }
-
-  /**
-   * A source's box as it will be THIS frame, not as it was painted last
-   * frame.
-   *
-   * A measured rect carries the transform the browser last painted, which
-   * is one frame stale — and one frame of staleness is not a rounding
-   * error when the source is a FLIP. On the first frame of a move the
-   * element's layout has already jumped to the destination while its
-   * transform still has to carry it back to the origin, so a follower
-   * reading the painted box sees the card a whole bay away from where it
-   * is about to be drawn, and flashes there. Correcting the measured box
-   * by (current motion value − painted translate) removes the staleness
-   * entirely: the follower is exact, not merely close.
-   */
-  private liveRect(sprite: Sprite): Rect | null {
-    const rect = this.regionRect(sprite);
-    const el = sprite.element;
-    if (!rect || !el) {
-      return rect;
-    }
-    const ve = sprite.node.visualElement;
-    const painted = new DOMMatrix(getComputedStyle(el).transform);
-    const zoom = this.camera.zoom || 1;
-    rect.x += ((ve?.getValue('x')?.get() as number) ?? 0) - painted.e / zoom;
-    rect.y += ((ve?.getValue('y')?.get() as number) ?? 0) - painted.f / zoom;
-    return rect;
   }
 
   /**

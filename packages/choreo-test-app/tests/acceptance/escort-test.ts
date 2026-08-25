@@ -51,7 +51,12 @@ module('Acceptance | escort', function (hooks) {
   test('the badge is pinned mid-flight, not only at the ends', async function (assert) {
     await visit('/escort');
     await frames(6);
-    assert.true(pinError() < 2, `pinned at rest (${pinError().toFixed(1)}px)`);
+    const seatEl = find('.esc-seat') as HTMLElement;
+    const b = find('[data-test-escort-badge]') as HTMLElement;
+    assert.true(
+      pinError() < 2,
+      `AT REST off ${pinError().toFixed(1)} | seat ${JSON.stringify({ x: +seatEl.getBoundingClientRect().x.toFixed(1), w: +seatEl.getBoundingClientRect().width.toFixed(1) })} card ${JSON.stringify({ x: +card().x.toFixed(1), w: +card().width.toFixed(1) })} badge ${JSON.stringify({ x: +badge().x.toFixed(1), w: +badge().width.toFixed(1) })} badgeParent ${b.offsetParent?.className} badgeStyle '${b.getAttribute('style')}'`
+    );
 
     await click('[data-test-bay="2"]');
     await frames(3);
@@ -111,25 +116,52 @@ module('Acceptance | escort', function (hooks) {
     await visit('/escort');
     await frames(6);
 
+    // Sample EVERY frame across the interruption, not the state after it.
+    // The bug this guards was invisible to an after-the-fact check: the
+    // replacement run's first frame had no previous frame to compare
+    // against, so the followers leapt a flight's width away and walked
+    // back — long over by the time anything settled, and the whole of
+    // what a person actually sees.
+    const errors: number[] = [];
+    let stop = false;
+    const watch = () => {
+      if (stop) {
+        return;
+      }
+      if (find('[data-test-escort-card]') && find('[data-test-escort-badge]')) {
+        errors.push(pinError());
+      }
+      requestAnimationFrame(watch);
+    };
+
     await click('[data-test-bay="2"]');
-    await frames(3);
+    await frames(4);
+    requestAnimationFrame(watch);
     // change the destination while the spring is still travelling: a tween
     // accompanying the move would now be aimed at a place the card is no
     // longer going, and a derived value has nothing to re-aim
     await click('[data-test-bay="1"]');
-    await frames(3);
-    const step = card().left;
-    await frames(1);
-    const perFrame = Math.abs(card().left - step);
-    assert.true(
-      pinError() < 2,
-      `still on the corner through the retarget (${pinError().toFixed(1)}px off, a frame of travel is ${perFrame.toFixed(1)}px)`
-    );
+    await frames(4);
+    const midway = pinError();
+    await frames(70);
+    stop = true;
 
-    await frames(60);
+    assert.true(
+      midway < 2,
+      `on the corner through the retarget (${midway.toFixed(1)}px off)`
+    );
+    assert.true(
+      errors.length > 20,
+      `the whole interruption was watched (${errors.length} frames)`
+    );
+    const worst = Math.max(...errors);
+    assert.true(
+      worst < 4,
+      `no single frame of the interruption broke the pin (worst ${worst.toFixed(1)}px over ${errors.length} frames)`
+    );
     assert.true(
       pinError() < 2,
-      `and lands on the new bay's corner (${pinError().toFixed(1)}px off)`
+      `lands on the new bay's corner (${pinError().toFixed(1)}px off)`
     );
   });
 });
