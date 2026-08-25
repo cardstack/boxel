@@ -358,50 +358,46 @@ get poses() {
   },
   {
     Example: Camera,
-    apis: ['c.Camera', '@origin', '@steady', '@zoom'],
+    apis: ['c.Camera', '@origin', '@steady', '@zoom', '@x', '@y'],
     group: 'Choreo',
     id: 'camera',
-    lede: 'Loupe in to grade a frame. Pull back to read the whole roll.',
-    sample: `{{! A light table, and the camera is the work: loupe IN (1.6x) to grade
-    one frame, pull the sheet ALL the way back (0.25x) to read the roll.
-    At rest the glass shows one corner; the camera is what reveals the
-    rest. ONE step, aimed by state — an interrupted dive simply bends. }}
+    lede: 'The whole roll sits on the glass. Loupe in to grade a frame.',
+    sample: `{{! A light table: the whole roll sits on the glass, unlabelled film.
+    Loupe IN and the camera info develops — number first, then the full
+    exposure. ONE step, aimed by state — an interrupted dive simply bends.
+
+    The zoom isn't guessed: it's computed in loupe() from two real boxes —
+    the clicked frame's rest size and the glass it has to fit inside —
+    measured in LAYOUT terms (offsetWidth/offsetTop), never in screen
+    terms, so a click straight from one loupe to the next tile still
+    measures the true rest geometry instead of whatever was mid-flight. }}
 <c.Parallel>
   <c.Camera
     @zoom={{this.zoom}}
     @origin={{if this.aimId (c.id this.aimId)}}
+    @x={{if this.focus this.panX 0}}
+    @y={{if this.focus this.panY 0}}
     @spring={{carry}}
-    @steady={{array (c.role 'no') (c.role 'badge')}}
+    @steady={{array (c.role 'no') (c.role 'verdict')}}
   />
 
-  {{! the grade rides the SAME pass as the dive: the panel arrives, the
-      frame grows and the loupe drops together — one changeset, one
-      timeline. Every frame the panel reflowed tweens on its own spring. }}
+  {{! if a verdict reflows the sheet, every frame that moved tweens }}
   <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
 
-  {{! the readout and the verdicts climb in as a short ladder;
-      everything leaves at once on the way out }}
-  <c.Tween
-    @of={{c.inserted 'grade'}}
-    @opacity={{array 0 1}}
-    @stagger={{0.07}}
-    @duration={{0.2}}
-  />
-  <c.Tween @of={{c.removed 'grade'}} @opacity={{0}} @duration={{0.14}} />
-
-  {{! a pick lands as the camera pulls back: the star pops on the sheet —
-      a keyframe round trip through 1.25 that settles at full size }}
-  <c.Tween
-    @of={{c.inserted 'badge'}}
-    @opacity={{array 0 1}}
-    @scale={{array 0.4 1.25 1}}
-    @duration={{0.45}}
-  />
+  {{! the verdict control arrives with the loupe — a plain fade, no
+      overshoot, since @steady is already busy correcting its scale
+      against the camera's own move }}
+  <c.Tween @of={{c.inserted 'verdict'}} @opacity={{array 0 1}} @duration={{0.18}} />
+  <c.Tween @of={{c.removed 'verdict'}} @opacity={{0}} @duration={{0.12}} />
 </c.Parallel>
 
-{{! @steady names what must stay legible from ANY distance: the frame
-    numbers and the pick stars scale with the sheet, damped back toward
-    their own size — from 0.25x you can still read which frames you kept }}`,
+{{! @steady names what must stay legible at any distance: the frame
+    number and the verdict control scale against the camera, damped back
+    toward their own size — the loupe's zoom never blows them up. @x/@y
+    are the one thing @origin doesn't give you for free: it pins the aim
+    point at its OWN screen position while zooming, it doesn't recentre
+    it — panX/panY (computed alongside the zoom, in loupe()) are the extra
+    pan that lands the dive centred instead of in place. }}`,
     slowmo: true,
     title: 'Camera',
   },
