@@ -535,15 +535,16 @@ function confirmBrowserSignals(source: string): {
 
   try {
     babel.transformSync(source, {
-      // Every option that would otherwise be discovered from the environment
-      // is pinned, so this call reads nothing outside its arguments. Babel
-      // resolves a relative `cwd` through `process.cwd()` and defaults
-      // `envName` from `process.env`, and neither exists in a browser without
-      // a shim — an absolute cwd and root skip the resolution entirely.
-      // Classification has to hold wherever it runs, and its fallback on a
-      // throw is the unconfirmed prefilter, which over-promotes to Sandbox
-      // rather than reporting an error, so a dependency on ambient globals
-      // here would degrade silently.
+      // `cwd`, `root` and `envName` are pinned because Babel otherwise reads
+      // them off `process`: it resolves a relative `cwd` through
+      // `process.cwd()` and defaults `envName` from `process.env.BABEL_ENV ||
+      // process.env.NODE_ENV`. An absolute cwd and root skip that resolution,
+      // and a given envName skips the lookup. A browser has no `process`
+      // unless the page shims one, and this analysis should not depend on
+      // whichever page it runs in: the fallback on a throw is the unconfirmed
+      // prefilter, which over-promotes to Sandbox rather than reporting an
+      // error, so an unmet ambient dependency here degrades silently instead
+      // of failing a test.
       cwd: '/',
       root: '/',
       envName: 'production',
