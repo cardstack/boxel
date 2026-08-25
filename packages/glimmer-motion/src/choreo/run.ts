@@ -60,6 +60,15 @@ export interface Run {
   reassert(): void;
   /** put every element this run has touched back to its resting layout NOW */
   releaseForMeasure(): void;
+  /**
+   * One build backwards — Keynote's rule. Land PARKED at the previous
+   * gate with everything ahead re-closed, and HOLD: a retreat never
+   * plays, never self-opens a @delay gate, and the next advance() replays
+   * the un-built segment forward. False when nothing stands behind the
+   * clock (the caller falls through to whatever "back" means one level
+   * out — an outer run, the previous slide).
+   */
+  retreat(): boolean;
   /** which gate-bounded segment the clock is in */
   readonly segment: number;
   /** playback rate: 1 is normal, 0.5 half, as Motion's controls */
@@ -464,6 +473,44 @@ export class ChoreoRun implements Run {
     }
   }
 
+  retreat(): boolean {
+    if (this.cancelled) {
+      return false;
+    }
+    // the boundary behind the clock: parked AT a gate, the build behind
+    // is the previous one; mid-segment, it is the start of this segment
+    const eps = 1e-6;
+    const behind = this.gates.filter((g) => g.at < this.master - eps);
+    const target = behind[behind.length - 1];
+    if (!target) {
+      return false;
+    }
+    clearTimeout(this.autoTimer);
+    // everything at or ahead of the landing replays forward from here —
+    // an opened gate left open would let the next advance() sail PAST
+    // the un-built segment instead of playing it
+    for (const g of this.gates) {
+      if (g.at >= target.at) {
+        g.opened = false;
+      }
+    }
+    // a finished run has state behind it too: un-end so advance() works.
+    // (Leavers a finish released stay released — a retreat un-builds the
+    // score, not the exits the region already settled.)
+    this.ended = false;
+    // Land a half-millisecond SHY of the gate, not on it: a backward
+    // still restores a cleared cue's committed finals only when the
+    // playhead stands strictly before its start, and half a millisecond
+    // is invisible while advance() — which opens the gate first — plays
+    // straight through it.
+    this.master = Math.max(0, target.at - 0.5);
+    this.playing = false;
+    this.setPaused(true);
+    this.evaluate();
+    this.park(target, false);
+    return true;
+  }
+
   /* ---- the clock ---- */
 
   private startTicking() {
@@ -515,7 +562,7 @@ export class ChoreoRun implements Run {
     }
   };
 
-  private park(gate: GateMark & { opened?: boolean }) {
+  private park(gate: GateMark & { opened?: boolean }, auto = true) {
     (gate as { opened: boolean }).opened = false;
     this.parkedAt = gate as GateMark & { opened: boolean };
     this.playing = false;
@@ -530,7 +577,11 @@ export class ChoreoRun implements Run {
     }
     this.setPaused(true);
     this.scheduleRestill();
-    if (gate.auto !== undefined) {
+    // a @delay gate opens itself only when the clock ARRIVES forward: a
+    // park reached by stepping back holds until the user advances — the
+    // Keynote rule. Without this, backing onto a self-opening gate
+    // replayed the build on its own a beat later.
+    if (auto && gate.auto !== undefined) {
       this.autoTimer = setTimeout(() => {
         if (this.parkedAt === gate && !this.cancelled) {
           this.advance();

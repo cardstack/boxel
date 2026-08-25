@@ -11,7 +11,6 @@ import {
   triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
-import Component from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
@@ -70,15 +69,13 @@ module('Integration | choreo | wires', function (hooks) {
     // the follow loop repaints — subtracting raw client rects baked that
     // scale into the ink and every thread stood off its mark for the
     // whole flight. The fixture is the flight reduced to one wrapper.
-    class Carried extends Component {
-      <template>
-        <div
-          style="transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0"
-        >
-          <Wires />
-        </div>
-      </template>
-    }
+    const Carried = <template>
+      <div
+        style="transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0"
+      >
+        <Wires />
+      </div>
+    </template>;
     await render(<template><Carried /></template>);
     await animationsSettled();
     await restingCount(2);

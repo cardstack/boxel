@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import type { ChoreoContext, ChoreoRun } from 'glimmer-motion';
+import type { ChoreoContext } from 'glimmer-motion';
 import { beacon, Choreo, motion, Presence } from 'glimmer-motion';
 
 const IN = 0.32;
@@ -369,40 +369,6 @@ export class Presentation extends Component {
     this.fwd();
   };
 
-  /**
-   * One build backwards.
-   *
-   * advance() is the run's only verb — the cursor moves forward through one
-   * pass and `Replay` is the only reverse. But `time` IS settable in either
-   * direction, and setting it across a gate parks there, so a step back is a
-   * scrub: find the latest moment that still reads as the previous segment
-   * and land on it. Binary search rather than a 1/60 walk, because a scrub
-   * renders and a long segment would be seventy of them; twenty-two halvings
-   * put us inside a millisecond of the gate, and only the last one paints.
-   *
-   * Returns false when this run has nothing behind it — the caller then falls
-   * through to the run one level out, and finally to the previous slide.
-   */
-  private rewind(run: ChoreoRun): boolean {
-    const target = run.segment - 1;
-    if (target < 0) {
-      return false;
-    }
-    let lo = 0;
-    let hi = run.time;
-    for (let i = 0; i < 22; i++) {
-      const mid = (lo + hi) / 2;
-      run.time = mid;
-      if (run.segment > target) {
-        hi = mid;
-      } else {
-        lo = mid;
-      }
-    }
-    run.time = lo;
-    return true;
-  }
-
   /** `>` — the same verb the plate has: open the next gate, or turn the page */
   stepFwd = (event?: Event) => {
     event?.stopPropagation();
@@ -420,11 +386,18 @@ export class Presentation extends Component {
     this.deck?.focus({ preventScroll: true });
     const plate = this.plate();
     const inner = plate?.innerCtx?.run ?? this.inner?.run ?? null;
-    if (inner && this.rewind(inner)) {
+    // retreat() is the engine's Keynote rule: land parked at the previous
+    // gate, everything ahead re-closed, and HOLD — no self-open, nothing
+    // plays until the next advance replays the segment forward. The
+    // binary-search scrub this replaces landed a millisecond shy of the
+    // gate with the gate still open and the transport still willing: a
+    // @delay gate re-opened itself, and a forward step skipped the
+    // un-built segment instead of playing it.
+    if (inner?.retreat()) {
       return;
     }
     const outer = plate?.choreoCtx?.run ?? this.c?.run ?? null;
-    if (outer && this.rewind(outer)) {
+    if (outer?.retreat()) {
       return;
     }
     this.back(event);
