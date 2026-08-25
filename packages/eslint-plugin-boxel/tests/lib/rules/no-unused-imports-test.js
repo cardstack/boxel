@@ -168,9 +168,9 @@ export const x = used;`,
 export const x = used;`,
       errors: [{ messageId: 'unusedImport' }],
     },
-    // a comment directly above a deleted declaration goes with it — an
-    // eslint-disable-next-line or @ts-ignore left behind would silently
-    // re-target the next statement
+    // a comment directly above a deleted declaration goes with it — a
+    // stranded disable directive or @ts-ignore would silently re-target
+    // the next statement
     {
       code: `// eslint-disable-next-line no-console
 import { Unused } from 'exact-module';
