@@ -1,3 +1,6 @@
+import * as babel from '@babel/core';
+// @ts-ignore no upstream types are available
+import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { module, test } from 'qunit';
 
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
@@ -11,6 +14,25 @@ import {
   isTrustedImport,
   isTrustedModule,
 } from '@cardstack/host/lib/trusted-modules';
+
+// The erasure half of what the realm does to card source: the TypeScript
+// transform, with the options `packages/runtime-common/transpile.ts` passes it.
+// Whether a module name survives this is the fact the classifier's import
+// collection has to agree with.
+function transformedByRealm(source: string): string {
+  return (
+    babel.transformSync(source, {
+      cwd: '/',
+      root: '/',
+      envName: 'production',
+      filename: 'card.ts',
+      babelrc: false,
+      configFile: false,
+      compact: true,
+      plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+    })?.code ?? ''
+  );
+}
 
 // A card module around whatever the case under test is, so every row of the
 // truth table differs only in the fragment being classified.
@@ -683,6 +705,60 @@ module('Unit | RP-6 classification', function () {
     }
   });
 
+  test('RP-6.4: which import statements are edges is held to what the realm erases', async function (assert) {
+    // A differential check rather than a table of expected values: each
+    // spelling is put through the transform the realm applies to card source,
+    // and the classifier has to agree about whether the module survives. A
+    // table would encode today's belief; this encodes the realm's behavior, so
+    // it also catches the transform changing under us.
+    //
+    // Each binding is USED on purpose. The transform also drops an import
+    // whose bindings are unused, which is a different question from type-ness
+    // and one classification deliberately does not model: an unused import
+    // that reaches the graph costs a fetch, never a missed signal.
+    for (let [statement, use] of [
+      [`import type { Scene } from 'three';`, `export class C { s?: Scene; }`],
+      [`import type * as T from 'three';`, `export class C { s?: T.Scene; }`],
+      [`import type Scene from 'three';`, `export class C { s?: Scene; }`],
+      [`import type $Scene from 'three';`, `export class C { s?: $Scene; }`],
+      [`import { type Scene } from 'three';`, `export class C { s?: Scene; }`],
+      [
+        `import { type Scene, Group } from 'three';`,
+        `export class C { s?: Scene; g = Group; }`,
+      ],
+      [`import { type as alias } from 'three';`, `export const x = alias;`],
+      [`import { type type } from 'three';`, `export class C { s?: type; }`],
+      [`import { type$ } from 'three';`, `export const x = type$;`],
+      [`import type from 'three';`, `export const x = type;`],
+      [
+        `import type, { Group } from 'three';`,
+        `export const x = [type, Group];`,
+      ],
+      [`import type$ from 'three';`, `export const x = type$;`],
+      [`import type_ from 'three';`, `export const x = type_;`],
+      [`import types from 'three';`, `export const x = types;`],
+      [`import 'three';`, `export const x = 1;`],
+      [`import {} from 'three';`, `export const x = 1;`],
+      [`import type{Scene} from 'three';`, `export class C { s?: Scene; }`],
+      [`export type { Scene } from 'three';`, ``],
+      [`export { type Scene } from 'three';`, ``],
+      [`export type * as ns from 'three';`, ``],
+      [`export { types } from 'three';`, ``],
+      [`export * from 'three';`, ``],
+    ] as [string, string][]) {
+      let body = `${statement}\n${use}`;
+      let survives = transformedByRealm(body).includes(`'three'`);
+      let classified = (await classifyBoxelSource(body)).imports.includes(
+        'three',
+      );
+      assert.strictEqual(
+        classified,
+        survives,
+        `${statement} — the realm ${survives ? 'keeps' : 'erases'} it`,
+      );
+    }
+  });
+
   test('RP-6.4: an import used only inside a template is still a graph edge', async function (assert) {
     // The most ordinary shape a card has, and the one that rules out deciding
     // erasure from the transform's output: template bodies are blanked before
@@ -697,17 +773,45 @@ module('Unit | RP-6 classification', function () {
     ]);
   });
 
-  test('RP-6.4: syntax the parser accepts is analyzed rather than treated as a draft', async function (assert) {
-    // A module the parse rejects establishes nothing and classifies as a
-    // draft, so the parser has to admit the syntax cards are actually written
-    // in — otherwise a real browser read goes unseen.
+  test('RP-6.4: syntax the realm serves is analyzed, not mistaken for a draft', async function (assert) {
+    // The front-end here is the realm's: content-tag, then Babel's own parser
+    // with the same TypeScript plugin. A module the realm can compile has to be
+    // analyzed as itself — reading it as an unparseable draft classifies it
+    // Capsule and loses whatever it needed.
+    //
+    // The expression form of `<template>` is the case that matters most,
+    // because it is the dominant idiom and because blanking the block — which
+    // works for a class member — leaves a hole where an expression belongs.
     for (let [shape, body] of [
       [
-        'an auto-accessor field',
-        'export class C { accessor x = document.title; }',
+        'a template in expression position',
+        'const Row = <template>hi</template>;\nexport const t = [Row, document.title];',
+      ],
+      [
+        'a template followed by satisfies',
+        'export default <template>hi</template> satisfies unknown;\nexport const t = document.title;',
+      ],
+      [
+        'a template as a default export',
+        'export default <template>hi</template>;\nexport const t = document.title;',
+      ],
+      [
+        'an import attribute clause',
+        `import data from './data.json' with { type: 'json' };\nexport const t = [data, document.title];`,
+      ],
+      [
+        'a decorator ahead of export',
+        'const dec = () => {};\nexport @dec class A { x = document.title; }',
+      ],
+      [
+        'a using declaration',
+        'using r = { [Symbol.dispose]() {} };\nexport const t = document.title;',
+      ],
+      [
+        'an await using declaration',
+        'export async function f() { await using r = {}; return document.title; }',
       ],
       ['a legacy decorator', 'export class C { @field y = document.title; }'],
-      ['a satisfies expression', 'export const v = document.title as string;'],
       [
         'a generic method',
         'export class C { read<T>(v: T) { return [v, document.title]; } }',
@@ -717,22 +821,25 @@ module('Unit | RP-6 classification', function () {
       assert.deepEqual(
         result.signals,
         ['document'],
-        `${shape} parses, so its read is seen`,
+        `${shape} is analyzed, so its read is seen`,
       );
     }
   });
 
-  test('RP-6.4: an unparseable draft fails into Capsule rather than out of the cages', async function (assert) {
+  test('RP-6.4: the import content-tag adds to compile a template is not a graph edge', async function (assert) {
+    // content-tag rewrites every `<template>` into a call and imports the
+    // compiler to make that call. That import is not something the card's
+    // author wrote, so it is not a module the card's graph contains — and a
+    // content-tag upgrade that renames it should fail here rather than quietly
+    // add a module to every card's graph.
     let result = await classifyBoxelSource(
-      card('static isolated = class { <template><h1>unclosed'),
+      `import Renderer from './renderer.gts';\nconst Row = <template><Renderer /></template>;\nexport default Row;`,
     );
-    assert.deepEqual(result, {
-      tier: 'capsule',
-      reason: 'source-parse-pending',
-      imports: [],
-      signals: [],
-      propagatesToImporters: false,
-    });
+    assert.deepEqual(
+      result.imports,
+      ['./renderer.gts'],
+      'the authored edge survives and the injected one does not',
+    );
   });
 
   test('RP-6.1: the trusted boundary admits Cardstack packages and rejects every traversal spelling', function (assert) {

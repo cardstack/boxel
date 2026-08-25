@@ -32,7 +32,6 @@
   },
   "devDependencies": {
     "@babel/core": "catalog:",
-    "@babel/parser": "catalog:",
     "@babel/plugin-proposal-decorators": "catalog:",
     "@babel/plugin-syntax-class-properties": "catalog:",
     "@babel/plugin-syntax-decorators": "catalog:",

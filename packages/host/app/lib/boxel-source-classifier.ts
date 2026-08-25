@@ -1,5 +1,4 @@
 import * as babel from '@babel/core';
-import { parse as parseJavaScript } from '@babel/parser';
 // @ts-ignore no upstream types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 import * as ContentTag from 'content-tag';
@@ -217,16 +216,29 @@ const templateSignalNames = {
 
 const contentTagPreprocessor = new ContentTag.Preprocessor();
 
-// The syntax card source is written in. `typescript` is what keeps type-only
-// imports distinguishable — the parser marks them, so nothing here has to
-// recognize them from their text. `decoratorAutoAccessors` is needed for
-// `accessor` fields: without it a module using one fails to parse, and a
-// module that fails to parse is analyzed as a draft rather than as itself.
-const cardSyntaxPlugins = [
-  'typescript',
-  'decorators-legacy',
-  'decoratorAutoAccessors',
-] as const;
+// Shared by the parse and the transform, so the two cannot drift apart.
+//
+// `cwd`, `root` and `envName` are pinned because Babel otherwise reads them off
+// `process`: it resolves a relative `cwd` through `process.cwd()` and defaults
+// `envName` from `process.env.BABEL_ENV || process.env.NODE_ENV`. An absolute
+// cwd and root skip that resolution, and a given envName skips the lookup. A
+// browser has no `process` unless the page shims one, and this analysis should
+// not depend on whichever page it runs in.
+const pinnedBabelOptions = {
+  cwd: '/',
+  root: '/',
+  envName: 'production',
+  filename: 'boxel-source.gts',
+  babelrc: false,
+  configFile: false,
+} as const;
+
+// The one import content-tag adds to every module it processes, to compile the
+// `<template>` blocks it replaced. It is not an authored edge, so it is not a
+// graph member — and it is named here rather than pattern-matched so a
+// content-tag upgrade that renames it fails a test instead of quietly adding a
+// module to every card's graph.
+const templateCompilerModule = '@ember/template-compiler';
 // The template signals below are matched against a `<template>` block's whole
 // body — markup, text nodes, attribute values and `<style>` contents alike —
 // rather than against a parsed tree. That is why each one over-reports: a
@@ -236,25 +248,17 @@ const cardSyntaxPlugins = [
 // direction; narrowing them means parsing the template here, which is the
 // admission check's job rather than the router's.
 interface TemplateAnalysis {
-  /** The source with every `<template>` body blanked, ready for the JS passes. */
-  javascript: string;
   signals: string[];
 }
 
 /**
- * Reads the `<template>` blocks out of authored source and blanks their bodies,
- * so the JavaScript passes that follow see only JavaScript. Template syntax is
- * not JavaScript, and leaving it in place makes every module with a template
- * an unparseable draft.
+ * Reads the signals carried by the `<template>` blocks in authored source.
  *
- * Blanking preserves character offsets and newlines because later passes index
- * into this text: the lexer's statement bounds are sliced out of it to decide
- * which imports TypeScript erases, and the prefilter's patterns are
- * word-anchored against it. Collapsing a block would move every offset after
- * it and join the characters on either side into a word the source never had.
+ * Only the blocks' own text is examined here. The surrounding JavaScript is
+ * read separately, from the form content-tag compiles this source into, so
+ * nothing in this function has to leave behind something that parses.
  */
 function analyzeTemplates(source: string): TemplateAnalysis {
-  let characters = Array.from(source);
   let found = new Set<string>();
   for (let match of contentTagPreprocessor.parse(source)) {
     let contents = match.contents;
@@ -298,18 +302,8 @@ function analyzeTemplates(source: string): TemplateAnalysis {
     if (networkBearingCSS.test(contents)) {
       found.add(templateSignalNames.networkBearingStyle);
     }
-    for (
-      let index = match.range.startChar;
-      index < match.range.endChar;
-      index++
-    ) {
-      if (characters[index] !== '\n' && characters[index] !== '\r') {
-        characters[index] = ' ';
-      }
-    }
   }
   return {
-    javascript: characters.join(''),
     signals: Object.values(templateSignalNames).filter((name) =>
       found.has(name),
     ),
@@ -471,8 +465,15 @@ function staticSpecifier(
  * gate that mis-reads one span of a module loses a SIGNAL rather than accuracy.
  * Deciding which spans are code means lexing JavaScript, where each
  * approximation has an input that desynchronizes it and swallows the rest of
- * the file. The parse cannot fail that way, and a module fetch costs more than
- * it does.
+ * the file. A parse cannot fail that way, and a module fetch costs more than it
+ * does.
+ *
+ * A parse has its own total-loss mode, though, which is why the caller feeds it
+ * the same front-end the realm compiles with: everything is lost when the parse
+ * is refused, so its accept-set has to be the realm's. Anything narrower reads
+ * a servable module as a draft and classifies it Capsule with no signals at
+ * all — worse than the desynchronization it replaced, because it takes the
+ * template signals with it.
  */
 function analyzeJavaScript(source: string): {
   /**
@@ -491,10 +492,14 @@ function analyzeJavaScript(source: string): {
    */
   hasEagerGlobal: boolean;
 } {
-  let ast = parseJavaScript(source, {
-    sourceType: 'module',
-    plugins: [...cardSyntaxPlugins],
+  let ast = babel.parseSync(source, {
+    ...pinnedBabelOptions,
+    plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+    parserOpts: { plugins: ['decorators-legacy'] },
   });
+  if (!ast) {
+    throw new Error('the parser returned no AST');
+  }
 
   // Read the import graph off the top-level statements before anything
   // transforms them. The TypeScript transform below would answer this too, by
@@ -514,7 +519,10 @@ function analyzeJavaScript(source: string): {
     if (!statement.source) {
       continue;
     }
-    if (!isErasedDeclaration(statement)) {
+    if (
+      statement.source.value !== templateCompilerModule &&
+      !isErasedDeclaration(statement)
+    ) {
       imports.push(statement.source.value);
     }
   }
@@ -684,19 +692,7 @@ function analyzeJavaScript(source: string): {
   // interface, an annotation, or an `as HTMLElement` assertion acquires
   // nothing, and must not survive into the form that gets walked.
   babel.transformFromAstSync(ast, source, {
-    // `cwd`, `root` and `envName` are pinned because Babel otherwise reads
-    // them off `process`: it resolves a relative `cwd` through `process.cwd()`
-    // and defaults `envName` from `process.env.BABEL_ENV ||
-    // process.env.NODE_ENV`. An absolute cwd and root skip that resolution,
-    // and a given envName skips the lookup. A browser has no `process` unless
-    // the page shims one, and this analysis should not depend on whichever
-    // page it runs in.
-    cwd: '/',
-    root: '/',
-    envName: 'production',
-    filename: 'boxel-source.ts',
-    babelrc: false,
-    configFile: false,
+    ...pinnedBabelOptions,
     // Only the traverse is wanted; nothing reads generated code.
     code: false,
     cloneInputAst: false,
@@ -705,6 +701,7 @@ function analyzeJavaScript(source: string): {
       collectBrowserSignals,
     ],
   });
+
   return {
     imports,
     // Filtered through the declared tables rather than emitted in discovery
@@ -744,21 +741,31 @@ export async function classifyBoxelSource(
   source: string,
 ): Promise<BoxelSourceAnalysis> {
   let templates: TemplateAnalysis;
-  try {
-    templates = analyzeTemplates(source);
-  } catch {
-    return parsePendingAnalysis();
-  }
-
   let javascript: ReturnType<typeof analyzeJavaScript>;
   try {
-    javascript = analyzeJavaScript(templates.javascript);
+    templates = analyzeTemplates(source);
+    // The JavaScript that gets analyzed is the JavaScript the REALM compiles:
+    // content-tag's output, parsed by Babel's own parser with the same
+    // TypeScript plugin (`transpile.ts`). Matching that front-end is what makes
+    // "the parser rejected this" mean "a draft" rather than "syntax the realm
+    // serves and this file cannot read".
+    //
+    // Blanking the `<template>` spans instead would be shorter and is wrong: it
+    // leaves valid JavaScript only where a template is a class member. In
+    // expression position — `const Row = <template>…</template>;`, the dominant
+    // idiom — it leaves a hole where an expression has to be, so a finished,
+    // servable module reads as unparseable. content-tag replaces each block
+    // with a compiler call, which parses in both positions, and keeps the
+    // components a template references live in its scope argument.
+    javascript = analyzeJavaScript(
+      contentTagPreprocessor.process(source, { filename: 'boxel-source.gts' })
+        .code,
+    );
   } catch {
-    // Source the parser rejects establishes nothing: not its imports, not its
-    // signals. That is the same position an unclosed `<template>` leaves us
-    // in, and it takes the same answer — a draft, which the entry renders as
-    // Capsule behind its last good render, and which a DEPENDENCY fails closed
-    // on (`module-parse:`), because an unproven closure is not a Capsule.
+    // Source this front-end rejects is source the realm cannot serve either,
+    // which makes it a draft: the entry renders Capsule behind its last good
+    // render, and a DEPENDENCY fails closed on `module-parse:`, because an
+    // unproven closure is not a Capsule.
     return parsePendingAnalysis();
   }
   let imports = [...new Set(javascript.imports)];
@@ -1015,12 +1022,15 @@ export class BoxelModuleGraphClassifier {
       // The entry's own draft may sit mid-edit and still classify Capsule — a
       // dependency's may not. Nothing established that module's imports or its
       // signals, so its closure is unproven, which RP-6.1 R2 fails closed.
-      if (
-        identifier !== moduleIdentifier &&
-        analysis.analysis.reason === 'source-parse-pending'
-      ) {
-        failures.push(`module-parse:${identifier}`);
+      //
+      // Either way the walk did not establish the graph, so the result is not
+      // an authorization list and is not kept: an entry that did not parse
+      // reached none of its own dependencies.
+      if (analysis.analysis.reason === 'source-parse-pending') {
         walk.incomplete = true;
+        if (identifier !== moduleIdentifier) {
+          failures.push(`module-parse:${identifier}`);
+        }
       }
       for (let dependency of analysis.dependencies) {
         graph.add(dependency);

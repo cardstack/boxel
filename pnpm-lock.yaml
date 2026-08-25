@@ -2070,9 +2070,6 @@ importers:
       '@babel/core':
         specifier: 'catalog:'
         version: 7.29.7
-      '@babel/parser':
-        specifier: 'catalog:'
-        version: 7.27.0
       '@babel/plugin-proposal-decorators':
         specifier: 'catalog:'
         version: 7.29.7(@babel/core@7.29.7)
