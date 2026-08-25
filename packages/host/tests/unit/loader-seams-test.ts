@@ -15,6 +15,9 @@ const origin = 'https://loader-seams.test/';
 class SourceServer {
   sources: Map<string, string>;
   fetchCounts = new Map<string, number>();
+  // Path a realm names a module by when it differs from the one requested,
+  // served as `X-Boxel-Canonical-Path`.
+  canonicalPaths = new Map<string, string>();
   #parkedURLs = new Set<string>();
   #parked: Array<{ url: string; release: (fail: boolean) => void }> = [];
 
@@ -54,8 +57,12 @@ class SourceServer {
     if (source == null) {
       return new Response(`no such module ${url}`, { status: 404 });
     }
+    let canonicalPath = this.canonicalPaths.get(url);
     return new Response(source, {
-      headers: { 'content-type': 'text/javascript' },
+      headers: {
+        'content-type': 'text/javascript',
+        ...(canonicalPath ? { 'X-Boxel-Canonical-Path': canonicalPath } : {}),
+      },
     });
   };
 
@@ -114,6 +121,11 @@ const fixtures = {
     export function metaLoader() { return import.meta.loader; }
   `,
   'gen.js': `export function value() { return 'v1'; }`,
+  'throws-on-eval.js': `
+    import { leaf } from './leaf';
+    export const usesLeaf = leaf;
+    throw new Error('intentional evaluation failure');
+  `,
   // `./race-b` before `./race-slow`, and a two-module cycle through race-b,
   // is what leaves race-a's dependency list frozen with both edges still
   // completing — see the concurrent-completion test below.
@@ -250,7 +262,12 @@ module('Unit | loader seams', function (hooks) {
   test('a registration the loader cannot use fails the module by name', async function (assert) {
     let unusable: Record<string, unknown> = {
       'nothing at all': undefined,
-      'a dependency list that is not a list': { dependencyList: 'not a list' },
+      // Carries a usable implementation, so only the dependency-list arm can
+      // refuse it.
+      'a dependency list that is not a list': {
+        dependencyList: 'not a list',
+        implementation: () => {},
+      },
       'an implementation that is not callable': {
         dependencyList: [],
         implementation: 'not callable',
@@ -333,12 +350,16 @@ module('Unit | loader seams', function (hooks) {
   });
 
   test('moduleMeta decides what import.meta exposes to a module', async function (assert) {
+    // Served under a canonical path that differs from the URL it was reached
+    // by, so "the module's URL" and "the identifier the caller used" are two
+    // distinguishable strings here.
+    server.canonicalPaths.set(server.url('meta.js'), '/canonical-meta.js');
     let denial = { denied: 'the real loader never crosses this boundary' };
     let seen: string[] = [];
     let stubLoader = makeLoader({
-      moduleMeta: (moduleIdentifier) => {
-        seen.push(moduleIdentifier);
-        return { url: moduleIdentifier, loader: denial };
+      moduleMeta: (moduleURL) => {
+        seen.push(moduleURL);
+        return { url: moduleURL, loader: denial };
       },
     });
 
@@ -349,10 +370,10 @@ module('Unit | loader seams', function (hooks) {
 
     assert.deepEqual(
       seen,
-      [server.url('meta.js')],
-      'moduleMeta is asked for the module by its canonical URL',
+      [server.url('canonical-meta.js')],
+      'moduleMeta is asked by the URL the module is canonically known by',
     );
-    assert.strictEqual(module.metaURL(), server.url('meta.js'));
+    assert.strictEqual(module.metaURL(), server.url('canonical-meta.js'));
     assert.strictEqual(
       module.metaLoader(),
       denial,
@@ -712,18 +733,35 @@ module('Unit | loader seams', function (hooks) {
   });
 
   test('invalidateModule accepts the spellings a caller can hold', async function (assert) {
-    await loader.import(server.url('leaf.js'));
+    let spellings = {
+      'an extensionless identifier': server.url('leaf'),
+      'the identifier with its extension': server.url('leaf.js'),
+      'a path that only resolves once normalized': server.url('sub/../leaf.js'),
+      'a URL carrying its default port': `https://loader-seams.test:443/leaf.js`,
+    };
+
+    for (let [description, spelling] of Object.entries(spellings)) {
+      await loader.import(server.url('leaf.js'));
+      assert.strictEqual(
+        loader.invalidateModule(spelling),
+        1,
+        `${description} names the module`,
+      );
+    }
+  });
+
+  test('invalidateModule evicts an importer that broke while evaluating', async function (assert) {
+    await assert.rejects(loader.import(server.url('throws-on-eval.js')));
+    assert.true(loader.isModuleLoaded(server.url('throws-on-eval.js')));
+
     assert.strictEqual(
       loader.invalidateModule(server.url('leaf')),
-      1,
-      'an extensionless identifier names the module',
+      2,
+      'a module cached broken still names what it imported',
     );
-
-    await loader.import(server.url('leaf.js'));
-    assert.strictEqual(
-      loader.invalidateModule(server.url('leaf.js')),
-      1,
-      'so does the identifier with its extension',
+    assert.false(
+      loader.isModuleLoaded(server.url('throws-on-eval.js')),
+      'the failure is not pinned past the replacement of its dependency',
     );
   });
 
