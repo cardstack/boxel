@@ -833,9 +833,18 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace-chooser-toggle]');
 
     assert.dom('[data-test-workspace-chooser]').exists();
+    // Wait for a workspace to actually render, not merely for the spinner to
+    // be gone: `doesNotExist` on the loading indicator is equally satisfied by
+    // a list that finished loading and one that never started, and the second
+    // reading is what let a Percy snapshot of an entirely empty chooser
+    // through with the test still green.
+    await waitFor(`[data-test-workspace="Test Workspace B"]`);
     assert
       .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
       .doesNotExist();
+    assert
+      .dom(`[data-test-workspace="Test Workspace B"]`)
+      .exists('the workspace list has rendered its workspaces');
 
     url = currentURL().split('?')[1].replace(/^\/\?/, '') ?? '';
     urlParameters = new URLSearchParams(url);
