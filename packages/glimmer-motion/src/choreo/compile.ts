@@ -1261,6 +1261,45 @@ export default function compile(
   };
 }
 
+/**
+ * A replacement pass's continuity cue (§3.1): the prior run was driving
+ * this sprite through space and the new score does not name it. Unnamed
+ * it would be released to its rest in one frame — the whole-bay snap —
+ * so the region completes the score: one shape-matched move from the
+ * painted box (which is what a mid-flight sprite's `initial` IS, by
+ * design) to its rest. Transform-only, so a continuation can never
+ * reflow the scene it is tidying; on the interrupted cue's own spring
+ * when it had one, so the carry-on keeps the flight's character.
+ */
+export function continuation(
+  sprite: Sprite,
+  cs: ChangesetLike,
+  inherited?: Record<string, unknown>,
+): Cue | null {
+  const step: MoveStep = { kind: 'move', of: {}, size: 'scale' };
+  const r = resolveMove(step, sprite, cs);
+  if (!r) {
+    return null;
+  }
+  // inherit only a spring's character: a tween's fixed duration was cut
+  // for a different distance and would land wrong on this one
+  const springy =
+    inherited &&
+    (inherited['type'] === 'spring' ||
+      'stiffness' in inherited ||
+      'visualDuration' in inherited ||
+      'bounce' in inherited);
+  return {
+    duration: r.longest,
+    flight: r.flight,
+    kind: 'move',
+    sprite,
+    start: 0,
+    target: r.target,
+    transition: springy ? inherited : springTransition(undefined),
+  };
+}
+
 /* ---- score identity: is this compile the one already in flight? ---- */
 
 /**

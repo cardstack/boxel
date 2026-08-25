@@ -24,7 +24,7 @@ import { modifier } from 'ember-modifier';
 import { registerBusyProbe } from './activity.ts';
 import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
 import Changeset from './choreo/changeset.ts';
-import compile, { sameScore } from './choreo/compile.ts';
+import compile, { continuation, sameScore } from './choreo/compile.ts';
 import {
   join as joinPass,
   leave as leavePass,
@@ -598,6 +598,33 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       ? compile(tree, changeset)
       : { cues: [], gates: [] };
     const cues = compiled.cues;
+    // CONTINUITY (§3.1): sprites the prior run is still driving through
+    // space, which this new score does not name, would be dropped to
+    // rest in ONE FRAME — the whole-bay snap every conditional timeline
+    // had to hand-patch with a `c.moved` twin. The changeset already
+    // reads a flying sprite as kept-and-moved (its initial is the painted
+    // box, by design), so the score is completed rather than overridden:
+    // each gets a continuation move from where it is painted to its rest.
+    // Before the empty-score bail on purpose — a timeline that un-renders
+    // mid-flight compiles NOTHING, and that bail neither cancels the run
+    // nor reasserts the world: the release itself was the snap. A sprite
+    // that merely REFLOWED is untouched — it was never driven.
+    if (this.run && !this.run.isDone()) {
+      const scored = new Set(cues.map((c) => c.sprite.node));
+      for (const [node, transition] of this.run.midflight()) {
+        if (scored.has(node)) {
+          continue;
+        }
+        const s = changeset.kept.find((k) => k.node === node);
+        if (!s) {
+          continue;
+        }
+        const cue = continuation(s, changeset, transition);
+        if (cue) {
+          cues.push(cue);
+        }
+      }
+    }
     if (!cues.length) {
       // nothing to play: let every leaver go now
       for (const node of claimed) {

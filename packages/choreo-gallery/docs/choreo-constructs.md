@@ -91,6 +91,17 @@ elements. A pass whose changeset is all-kept still runs its timeline.
 (`'top'` or a thunk returning a scroll position) is applied inside
 that pass, before final bounds are measured.
 
+**Continuity.** A replacement pass may not drop a flight: a sprite the
+prior run was driving through space, which the new score does not name —
+the timeline that launched it was conditional and un-rendered, or the
+new score names other things — gets a continuation move from its painted
+box to its rest, synthesized by the region (transform-only, on the
+interrupted cue's own spring where it had one). Without this, every
+conditional timeline needed a hand-written `c.moved` twin, and forgetting
+it was an intermittent whole-bay snap. The boundary is deliberate: an
+unnamed sprite that merely REFLOWED was never being driven, and stays
+instant — "unnamed means no animation" still holds for layout.
+
 ### 3.2 Queries — every geometry source a step can name
 
 Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
