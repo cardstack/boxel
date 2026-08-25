@@ -114,13 +114,22 @@ module('Acceptance | crossing', function (hooks) {
       '1',
       'the hero is back at full opacity — its custom exit did not strand it'
     );
+    // the unmatched tiles enter AFTER the landing, by design — a spring
+    // each — so give the entrances their moment, then demand full opacity
+    await waitUntil(
+      () =>
+        [...document.querySelectorAll<HTMLElement>('.card')].every(
+          (card) => getComputedStyle(card).opacity === '1'
+        ),
+      { timeout: 4000 }
+    );
     const faded = [...document.querySelectorAll<HTMLElement>('.card')].filter(
       (card) => getComputedStyle(card).opacity !== '1'
     );
     assert.deepEqual(
       faded.map((card) => card.dataset['demo']),
       [],
-      'no card is left stranded below full opacity'
+      'every tile has entered — none left stranded below full opacity'
     );
     const stage = document.querySelector<HTMLElement>(
       ".card[data-demo='playhead'] .card-stage"

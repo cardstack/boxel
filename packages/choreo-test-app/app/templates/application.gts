@@ -10,6 +10,7 @@ import { TempoPicker } from 'test-app/components/tempo-picker';
 import { ThemePicker } from 'test-app/components/theme-picker';
 import {
   crossingActive,
+  returningHome,
   scrollIntent,
   wireRegion,
 } from 'test-app/lib/crossing';
@@ -133,6 +134,22 @@ const wire = modifier((_el: Element, [c]: [ChoreoContext]) => {
                   @duration={{tt.late}}
                   @ease={{EASE}}
                 />
+                {{#if (returningHome)}}
+                  {{! The unmatched tiles are the gallery's own to bring in
+                      AFTER the landing (see cardAnimate): this hold claims
+                      them — the yield rule — so the canned arrive leaves
+                      them alone and nothing competes with the move for
+                      frames. z-index at its resting value is a no-op worn
+                      only for the claim. }}
+                  <c.Hold
+                    @of={{array
+                      (c.onstage (c.inserted "card"))
+                      (c.onstage (c.inserted "stage"))
+                      (c.onstage (c.inserted "type"))
+                    }}
+                    @zIndex={{0}}
+                  />
+                {{/if}}
               </c.Parallel>
             {{/let}}
           {{/if}}

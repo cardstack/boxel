@@ -5,7 +5,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { catalog, groups } from 'test-app/lib/catalog';
-import { crossingSettled } from 'test-app/lib/crossing';
+import {
+  counterpartId,
+  crossingActive,
+  crossingSettled,
+} from 'test-app/lib/crossing';
 import { highlightSample } from 'test-app/lib/highlight';
 import { isCrossing } from 'test-app/lib/tempo';
 
@@ -119,16 +123,22 @@ export class Gallery extends Component {
   }
 
   /**
-   * Cards arriving during a route transition do not play an entrance.
-   *
-   * Coming back from a demo, all twenty-six mount at the moment the morph
-   * lands — and twenty-six springs firing at once, right as the shared element
-   * arrives, is the kink at the end of an otherwise smooth movement. They are
-   * simply already here.
+   * The unmatched tiles are not the crossing's to fade. During the trip
+   * home only ONE card is part of the Magic Move — the one the flight
+   * lands on; it stands ready from the first frame (veiled shell, visible
+   * contents). Every other tile holds dark for the span and springs in
+   * once the crossing settles, so nothing competes with the move for
+   * animation frames while it is telling its story.
    */
-  get entrance() {
-    return isCrossing() ? cardHere : cardIn;
-  }
+  cardInitial = (id: string) =>
+    isCrossing() && id === counterpartId() ? cardHere : cardIn;
+
+  cardAnimate = (id: string) =>
+    this.stagesReleased || id === counterpartId() ? cardHere : cardIn;
+
+  /** the counterpart's shell hides while its contents are the flight —
+   *  empty space where the card would be, exactly as long as needed */
+  veiled = (id: string) => crossingActive() && id === counterpartId();
 
   get panel() {
     return this.code ? [{ id: 'filter-code' }] : NO_PANEL;
@@ -230,14 +240,14 @@ export class Gallery extends Component {
               rendered, so the region compiles nothing and <Presence> keeps
               owning these same elements' exits. }}
           <article
-            class="card"
+            class="card{{if (this.veiled demo.id) ' is-veiled'}}"
             data-demo={{demo.id}}
             {{motion
               role="card"
               presence=h
               layout=true
-              initial=this.entrance
-              animate=cardHere
+              initial=(this.cardInitial demo.id)
+              animate=(this.cardAnimate demo.id)
               exit=cardOut
               transition=cardSpring
             }}

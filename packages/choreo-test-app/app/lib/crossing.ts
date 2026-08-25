@@ -23,6 +23,8 @@ const DEMO_ROUTE = 'demo';
 
 class State {
   @tracked active = false;
+  /** the card a RETURN crossing lands on, null any other time */
+  @tracked closingId: string | null = null;
 }
 const state = new State();
 
@@ -55,6 +57,20 @@ export function crossingActive(): boolean {
   return state.active;
 }
 
+/** a crossing is in flight AND it is the trip home to the gallery */
+export function returningHome(): boolean {
+  return state.active && state.closingId !== null;
+}
+
+/**
+ * The card the return flight lands on — the one tile that is PART of the
+ * crossing. Every other tile is unmatched: the crossing never touches it,
+ * and it enters on its own once the move has landed.
+ */
+export function counterpartId(): string | null {
+  return state.closingId;
+}
+
 /** the application template hands the region's context over once, on mount */
 export function wireRegion(c: ChoreoContext): void {
   region = c;
@@ -79,6 +95,7 @@ export function beginCrossing(transition: Transition): void {
   if (factor() === 0) {
     return;
   }
+  state.closingId = closing ? (landing.id ?? null) : null;
   state.active = true;
   // cards mounting mid-crossing skip their entrance: twenty-six springs
   // firing as the flight lands is a kink at the end of a smooth move
@@ -106,6 +123,7 @@ export function crossingSettled(): Promise<void> {
 /** the crossing's run has finished (or never materialised): stand down */
 export function endCrossing(): void {
   state.active = false;
+  state.closingId = null;
   setCrossing(false);
   settlers.splice(0).forEach((resolve) => resolve());
 }

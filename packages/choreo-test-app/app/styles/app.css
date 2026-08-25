@@ -520,6 +520,16 @@ summary,
   }
 }
 
+/* the counterpart card of a return crossing: its contents ARE the flight,
+   so its own background and border hide for exactly that long — empty
+   space where the card would be. No transition in either direction: the
+   unveil lands on the same frame the crossing settles. */
+.card.is-veiled {
+  background: transparent;
+  border-color: transparent;
+  transition: none;
+}
+
 .card-stage {
   position: relative;
   height: 400px;
