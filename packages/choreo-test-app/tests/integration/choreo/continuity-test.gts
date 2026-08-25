@@ -18,19 +18,12 @@ import { render, settled } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { Choreo, type ChoreoContext, motion } from 'glimmer-motion';
+import { Choreo, motion } from 'glimmer-motion';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
 import { setupFixtureViewport } from '../../helpers/layout-fixture';
 import { nextFrame } from '../../helpers/motion';
-
-let ctx: ChoreoContext;
-const grab = (c: ChoreoContext) => {
-  ctx = c;
-  return '';
-};
-void ctx;
 
 const SLOW = { damping: 30, stiffness: 120 };
 
@@ -54,7 +47,6 @@ module('Integration | choreo | continuity', function (hooks) {
           style="position:relative;width:400px;height:200px"
           as |c|
         >
-          {{grab c}}
           <div style="padding-left:{{if this.far '260px' '0px'}}">
             <div
               id="cc-card"
@@ -141,7 +133,6 @@ module('Integration | choreo | continuity', function (hooks) {
           style="position:relative;width:400px;height:200px"
           as |c|
         >
-          {{grab c}}
           <div style="padding-left:{{if this.far '260px' '0px'}}">
             <div
               id="cc-still"
