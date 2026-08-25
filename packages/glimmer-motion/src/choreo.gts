@@ -197,6 +197,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   private tetherLayer?: SVGSVGElement;
   /** tracked mirror of the frame's resting state — see ChoreoContext.camera */
   @tracked cameraState: CameraState = { x: 0, y: 0, zoom: 1 };
+  /**
+   * The same state, untracked, for the pass pipeline itself. A pass runs
+   * inside computations that must not CONSUME the tracked mirror — a pass
+   * that read it would be invalidated by the very landing it causes, and
+   * the region would render forever.
+   */
+  private restingCamera: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */
   private arrived = new Set<ChoreoNode>();
@@ -458,6 +465,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // measured in the same window as `final`, and re-measured every pass: a
       // beacon can move without this region rendering at all
       measureBeacons(after),
+      // the zoom every one of those boxes was measured under (§6.3): the
+      // prior run's live camera if a run was in flight, the resting state
+      // otherwise — geometry that becomes inline pixels divides back by it
+      this.run?.camera.zoom ?? this.restingCamera.zoom,
     );
     this.changeset = changeset;
 
@@ -522,14 +533,15 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.log(changeset, cues);
     }
     this.run = execute(compiled, {
-      camera: { ...this.cameraState },
+      camera: { ...this.restingCamera },
       cameraFrame: this.element,
       // updated at step boundaries only — a still value app logic can
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an
       // unguarded set would revalidate forever.
       onCamera: (state) => {
-        const prior = this.cameraState;
+        const prior = this.restingCamera;
+        this.restingCamera = state;
         if (
           prior.zoom !== state.zoom ||
           prior.x !== state.x ||

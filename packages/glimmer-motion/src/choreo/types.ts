@@ -103,6 +103,12 @@ export interface ChangesetLike {
   dirty: boolean;
   inserted: Sprite[];
   kept: Sprite[];
+  /**
+   * The camera zoom the world was measured under (§6.3): page-space boxes
+   * carry the frame's transform, local inline values do not, and this is
+   * the ratio between the two spaces. Absent means 1 — the frame at rest.
+   */
+  measureZoom?: number;
   removed: Sprite[];
   sprite(query: Query | Query[]): Sprite | null;
   sprites(query: Query | Query[]): Sprite[];

@@ -27,16 +27,27 @@ export class Changeset implements ChangesetLike {
    */
   readonly beacon: (name: string) => Bounds | null;
 
+  /**
+   * The camera zoom the world was measured under (§6.3). Every box in this
+   * changeset is a page-space measurement taken through the region's frame
+   * transform, but a step's values are written in the sprite's own local
+   * space — so geometry that becomes inline pixels must be divided back by
+   * this before it is animated. 1 when the frame is at rest.
+   */
+  readonly measureZoom: number;
+
   constructor(
     inserted: Sprite[],
     removed: Sprite[],
     kept: Sprite[],
     beacons: Map<string, Bounds> = new Map(),
+    measureZoom = 1,
   ) {
     this.inserted = inserted;
     this.removed = removed;
     this.kept = kept;
     this.beacon = (name) => beacons.get(name) ?? null;
+    this.measureZoom = measureZoom;
   }
 
   get all(): Sprite[] {

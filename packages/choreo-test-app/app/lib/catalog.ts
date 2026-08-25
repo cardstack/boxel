@@ -1,4 +1,5 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
+import { Camera } from 'test-app/components/examples/camera';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { FarMatch } from 'test-app/components/examples/far-match';
@@ -354,6 +355,42 @@ get poses() {
 </Choreo>`,
     slowmo: true,
     title: 'Slides',
+  },
+  {
+    Example: Camera,
+    apis: ['c.Camera', '@origin', '@steady', 'c.camera'],
+    group: 'Choreo',
+    id: 'camera',
+    lede: 'Zoom out to arrange, in to edit. The frame is a participant.',
+    sample: `{{! ONE camera step, aimed by state. Every pass replays it toward wherever
+    the app now stands, so an interrupted zoom simply bends — and the spring
+    has weight, because it carries the whole scene. }}
+<c.Parallel>
+  <c.Camera
+    @zoom={{this.zoom}}
+    @origin={{if this.focus (c.id this.focus)}}
+    @spring={{carry}}
+    @steady={{c.role 'hud'}}
+  />
+  {{! the edit form arrives only after the camera has landed — it is the
+      landing that renders it (below) — and leaves as the camera pulls back }}
+  <c.Tween @of={{c.inserted 'edit'}} @opacity={{array 0 1}} @duration={{0.24}} />
+  <c.Tween @of={{c.removed 'edit'}} @opacity={{0}} @duration={{0.16}} />
+</c.Parallel>
+
+{{! The deck's rule, made safe: past a zoom threshold a boxel TRANSMUTES.
+    c.camera is TRACKED and lands at step boundaries — never per frame — so
+    deriving the form from it cannot feed back into the move. Camera state
+    feeds the next changeset; the changeset never drives the camera. }}
+{{#if (this.transmuted boxel.id c.camera)}}
+  <span class='cam-edit' {{motion id='edit' role='edit'}}>…</span>
+{{/if}}
+
+{{! @steady names what must stay legible: the readout scales WITH the scene
+    but is damped back toward its own size — never pinned, never lost }}
+<span class='cam-hud' {{motion id='hud' role='hud'}}>{{zoomLabel c.camera}}</span>`,
+    slowmo: true,
+    title: 'Camera',
   },
   {
     Example: ReorderGrid,

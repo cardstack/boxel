@@ -25,6 +25,7 @@ import type {
   PropSource,
   PropTarget,
   PropValue,
+  Rect,
   SpringSpec,
   SpringStep,
   Sprite,
@@ -230,6 +231,13 @@ function resolveTarget(
   return { longest, target };
 }
 
+/** a page-space box, divided back into local space by the measure-time zoom */
+function descale(r: Rect, z: number): Rect {
+  return z === 1
+    ? r
+    : { height: r.height / z, width: r.width / z, x: r.x / z, y: r.y / z };
+}
+
 function resolveMove(
   step: MoveStep,
   sprite: Sprite,
@@ -266,10 +274,14 @@ function resolveMove(
   }
   // Page space by default: the one space two regions agree on, and the region
   // itself can move in the very pass that moves its children. 'parent'
-  // resolves against the sprite's own container instead (§6.1).
+  // resolves against the sprite's own container instead (§6.1). Either way,
+  // the measurement was taken through the camera's transform and the values
+  // will be written as local inline pixels — so both boxes are divided back
+  // by the zoom the world was measured under (§6.3).
+  const z = cs.measureZoom ?? 1;
   const parentSpace = step.space === 'parent' && !borrowedFrom && !borrowedTo;
-  const from = parentSpace ? initial.parent : initial.page;
-  const to = parentSpace ? final.parent : final.page;
+  const from = descale(parentSpace ? initial.parent : initial.page, z);
+  const to = descale(parentSpace ? final.parent : final.page, z);
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
   const dx = to.x - from.x;
@@ -455,8 +467,9 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
           // a far match's sender is released to its own region, not carried
           // here — there is no second skin to fly (§3.2)
           if (cp && !cp.sent && swap !== 'none' && sprite.final && cp.initial) {
-            const from = cp.initial.page;
-            const to = sprite.final.page;
+            const cpz = cs.measureZoom ?? 1;
+            const from = descale(cp.initial.page, cpz);
+            const to = descale(sprite.final.page, cpz);
             const cpTarget: Record<string, unknown> = {};
             if (to.x !== from.x) {
               cpTarget['x'] = [0, to.x - from.x];

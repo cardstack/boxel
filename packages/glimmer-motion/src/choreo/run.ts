@@ -668,8 +668,14 @@ export class ChoreoRun implements Run {
         if (t.started && (now < t.end || !t.passed)) {
           // the SHADOW state: interpolated every evaluate regardless of who
           // draws, so interruption, onCamera and the next run always have a
-          // current value to read without decomposing a matrix
-          const p = this.cameraProgress(t, now - t.start);
+          // current value to read without decomposing a matrix. Past the
+          // end, progress is EXACTLY 1 — a spring sampled at its end time is
+          // 0.99998 of the way there, and a camera that lands beside its
+          // target instead of on it re-arms every subsequent pass: the
+          // landing renders, the replay chases the miss, and the equality
+          // guard downstream never sees the same state twice.
+          const p =
+            now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
           const to = cue.camera.to;
           this.camera = {
