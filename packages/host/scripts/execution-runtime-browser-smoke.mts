@@ -85,9 +85,9 @@ export interface SmokePage {
 }
 
 export interface SmokeTab {
-  close?(): Promise<void>;
+  close(): Promise<void>;
   /** Coarse pointer/wheel input, which exercises paths a synthetic scroll does not. */
-  cua?: {
+  cua: {
     scroll(options: {
       scrollX: number;
       scrollY: number;
@@ -95,7 +95,7 @@ export interface SmokeTab {
       y: number;
     }): Promise<void>;
   };
-  dev?: { logs(): Promise<unknown[]> };
+  dev: { logs(): Promise<unknown[]> };
   goto(url: string): Promise<void>;
   playwright: SmokePage;
   url(): Promise<string>;
@@ -261,6 +261,12 @@ export type ParityView = Pick<
   'headingCount' | 'images' | 'inputCount' | 'semanticTokens'
 >;
 
+/** The diagnostics stage summaries read; nothing else is looked at. */
+export type ExecutionStageView = Pick<
+  SmokeProbeResult,
+  'executionPerformance' | 'warmExecutionPerformance'
+>;
+
 export interface SmokeInteractionResult {
   actionElapsedMs?: number;
   /**
@@ -307,6 +313,18 @@ export interface SmokeCaseResult {
   referenceParity?: SmokeReferenceParity;
 }
 
+/** A case result whose page carries observations. */
+export interface ProbedCaseResult extends SmokeCaseResult {
+  page: SmokeProbeResult;
+}
+
+/** Whether a case result's page carries observations. */
+export function hasProbedPage(
+  result: SmokeCaseResult,
+): result is ProbedCaseResult {
+  return hasProbeResult(result.page);
+}
+
 export interface SmokeOriginRun {
   origin: string;
   persistenceErrors: { error: string; id: string }[];
@@ -314,17 +332,45 @@ export interface SmokeOriginRun {
   tab: SmokeTab;
 }
 
+/** Called with every case as it completes, before the next one starts. */
+export type SmokeCaseListener = (
+  result: SmokeCaseResult,
+  context: { origin: string },
+) => unknown;
+
 interface RunOriginOptions {
   caseTimeoutMs?: number;
   checkExecution: boolean;
   collectPerformance: boolean;
-  onCaseComplete?: (
-    result: SmokeCaseResult,
-    context: { origin: string },
-  ) => unknown;
+  onCaseComplete?: SmokeCaseListener;
   performanceRepeats: number;
   tab?: SmokeTab;
   timeoutMs: number;
+}
+
+export interface CandidateSmokeOptions {
+  browser: SmokeBrowser;
+  candidateOrigin: string;
+  candidateTab?: SmokeTab;
+  caseTimeoutMs?: number;
+  cases?: SmokeCase[];
+  onCaseComplete?: SmokeCaseListener;
+  performanceRepeats?: number;
+  timeoutMs?: number;
+}
+
+export interface BrowserSmokeOptions extends CandidateSmokeOptions {
+  continueOnReferenceDrift?: boolean;
+  referenceOrigin?: string;
+  referenceTab?: SmokeTab;
+}
+
+export interface NavigationSoakOptions {
+  cases?: NavigationSoakCase[];
+  checkExecution?: boolean;
+  cycles?: number;
+  origin: string;
+  tab: SmokeTab;
 }
 
 const DEFAULT_REFERENCE_ORIGIN = 'https://realms-staging.stack.cards';
@@ -1075,7 +1121,7 @@ async function probe(
         .toLocaleLowerCase();
       let headings = [...document.querySelectorAll('h1,h2,h3')]
         .map((element) => element.textContent?.trim())
-        .filter(Boolean);
+        .filter((heading): heading is string => Boolean(heading));
       let images = [...document.images].map((image) => ({
         alt: image.alt,
         complete: image.complete,
@@ -1104,10 +1150,18 @@ async function probe(
           ? { height: cardRect.height, width: cardRect.width }
           : null,
         executionReasons: [
-          ...new Set(executionSlots.map((slot) => slot.reason).filter(Boolean)),
+          ...new Set(
+            executionSlots
+              .map((slot) => slot.reason)
+              .filter((reason): reason is string => Boolean(reason)),
+          ),
         ],
         executions: [
-          ...new Set(executionSlots.map((slot) => slot.mode).filter(Boolean)),
+          ...new Set(
+            executionSlots
+              .map((slot) => slot.mode)
+              .filter((mode): mode is string => Boolean(mode)),
+          ),
         ],
         fatalText: fatalText.filter((value) => text.includes(value)),
         headingCount: headings.length,
@@ -1265,7 +1319,9 @@ async function runInteraction(
       ...new Set(
         [...document.querySelectorAll('[data-boxel-execution]')]
           .map((element) => element.getAttribute('data-boxel-execution'))
-          .filter((value) => value && value !== 'prerender'),
+          .filter(
+            (value): value is string => Boolean(value) && value !== 'prerender',
+          ),
       ),
     ]);
   }
@@ -1475,7 +1531,7 @@ async function runInteraction(
 // wins, because a card that never reached routing cannot also be said to have
 // the wrong semantics. Correct-but-slow is not among them; it is its own
 // status below, since it is not a defect.
-const STATUS_BUCKETS = [
+const STATUS_BUCKETS: [status: string, members: string[]][] = [
   [
     'pre-routing-failure',
     [

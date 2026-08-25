@@ -47,6 +47,7 @@ import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { Browser, BrowserContextOptions, Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 
 import {
@@ -64,8 +65,84 @@ const DEFAULTS = {
   warm: 3,
 };
 
-export function parseArguments(argv) {
-  let options = { ...DEFAULTS, cards: [] };
+// Which option each flag writes. Keeping the mapping as data rather than as a
+// slice of the flag name is what lets the write be checked against the option
+// it lands in.
+const TEXT_FLAGS: Record<string, 'chromium' | 'host' | 'out'> = {
+  '--chromium': 'chromium',
+  '--host': 'host',
+  '--out': 'out',
+};
+
+const NUMBER_FLAGS: Record<string, 'samples' | 'timeoutMs' | 'warm'> = {
+  '--samples': 'samples',
+  '--timeout-ms': 'timeoutMs',
+  '--warm': 'warm',
+};
+
+export interface BaselineCard {
+  id: string;
+  path: string;
+}
+
+export interface BaselineLogin {
+  password: string;
+  username: string;
+}
+
+export interface BaselineOptions {
+  cards: BaselineCard[];
+  chromium?: string;
+  host: string;
+  login?: BaselineLogin;
+  out?: string;
+  samples: number;
+  timeoutMs: number;
+  warm: number;
+}
+
+/** One timed navigation. */
+export interface RenderSample {
+  applicationMs: number;
+  documentMs: number | null;
+  executionMs: number;
+  fatal: boolean;
+  ready: boolean;
+  signIn: boolean;
+  totalMs: number;
+}
+
+/** The medians the table prints; a card with no usable sample has none. */
+export interface BaselineTableSummary {
+  applicationMedianMs?: number;
+  documentMedianMs?: number;
+  executionMedianMs?: number;
+  totalMedianMs?: number;
+}
+
+export interface BaselineSummary extends BaselineTableSummary {
+  errorSamples: number;
+  samples: number;
+  unreadySamples: number;
+}
+
+/** The columns the table reads; nothing else is printed. */
+export interface BaselineTableCard {
+  cold: BaselineTableSummary;
+  id: string;
+  warm: BaselineTableSummary;
+}
+
+export interface BaselineCardReport extends BaselineTableCard {
+  cold: BaselineSummary;
+  coldSamples: RenderSample[];
+  url: string;
+  warm: BaselineSummary;
+  warmSamples: RenderSample[];
+}
+
+export function parseArguments(argv: string[]): BaselineOptions {
+  let options: BaselineOptions = { ...DEFAULTS, cards: [] };
   for (let index = 0; index < argv.length; index++) {
     let flag = argv[index];
     let value = argv[index + 1];
@@ -96,11 +173,11 @@ export function parseArguments(argv) {
         username: value.slice(0, separator),
       };
       index++;
-    } else if (['--chromium', '--host', '--out'].includes(flag)) {
-      options[flag.slice(2)] = value;
+    } else if (TEXT_FLAGS[flag]) {
+      options[TEXT_FLAGS[flag]] = value;
       index++;
-    } else if (['--samples', '--warm', '--timeout-ms'].includes(flag)) {
-      let key = flag === '--timeout-ms' ? 'timeoutMs' : flag.slice(2);
+    } else if (NUMBER_FLAGS[flag]) {
+      let key = NUMBER_FLAGS[flag];
       let count = Number(value);
       // A non-number silently became NaN, and a NaN sample count runs no
       // samples at all — the instrument then prints an empty table and exits
@@ -122,13 +199,34 @@ export function parseArguments(argv) {
   return options;
 }
 
-export function median(values) {
+export function median(values: number[]) {
   if (!values.length) return undefined;
   let sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-async function waitFor(page, predicate, timeoutMs) {
+/** The selectors and text a readiness predicate is handed in the page. */
+interface ReadinessSelectors {
+  applicationReadySelector: string;
+  cardLoadingSelector: string;
+  cardSurfaceSelector: string;
+  fatalText: readonly string[];
+  signInText: string;
+}
+
+/** What a readiness predicate reports back out of the page. */
+interface ReadinessState {
+  done: boolean;
+  fatal?: boolean;
+  signIn?: boolean;
+  timedOut?: boolean;
+}
+
+async function waitFor(
+  page: Page,
+  predicate: (selectors: ReadinessSelectors) => ReadinessState,
+  timeoutMs: number,
+): Promise<ReadinessState> {
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     let state = await page.evaluate(predicate, {
@@ -144,7 +242,10 @@ async function waitFor(page, predicate, timeoutMs) {
   return { done: false, timedOut: true };
 }
 
-const applicationReady = ({ applicationReadySelector, signInText }) => {
+const applicationReady = ({
+  applicationReadySelector,
+  signInText,
+}: ReadinessSelectors): ReadinessState => {
   let signIn = (document.body?.innerText ?? '').includes(signInText);
   return {
     done: Boolean(document.querySelector(applicationReadySelector)) || signIn,
@@ -159,7 +260,7 @@ const executionReady = ({
   cardLoadingSelector,
   cardSurfaceSelector,
   fatalText,
-}) => {
+}: ReadinessSelectors): ReadinessState => {
   let text = document.body?.innerText ?? '';
   let fatal = fatalText.some((value) => text.includes(value));
   return {
@@ -177,13 +278,17 @@ const executionReady = ({
  * `performance.now()` is read in this process rather than in the page, so the
  * clock is continuous across a navigation that replaces the document.
  */
-export async function sampleRender(page, url, timeoutMs) {
+export async function sampleRender(
+  page: Page,
+  url: string,
+  timeoutMs: number,
+): Promise<RenderSample> {
   let startedAt = performance.now();
   await page.goto(url, { timeout: timeoutMs, waitUntil: 'commit' });
   let application = await waitFor(page, applicationReady, timeoutMs);
   let applicationMs = Math.round(performance.now() - startedAt);
   let executionStartedAt = performance.now();
-  let execution = application.signIn
+  let execution: ReadinessState = application.signIn
     ? { done: false }
     : await waitFor(page, executionReady, timeoutMs);
   let executionMs = Math.round(performance.now() - executionStartedAt);
@@ -193,7 +298,11 @@ export async function sampleRender(page, url, timeoutMs) {
   // is the one part of the cost the Host does not own.
   let documentMs = await page
     .evaluate(() => {
-      let [entry] = performance.getEntriesByType('navigation');
+      // Every entry of type 'navigation' is a PerformanceNavigationTiming;
+      // the DOM lib types the lookup by its generic entry type only.
+      let [entry] = performance.getEntriesByType(
+        'navigation',
+      ) as PerformanceNavigationTiming[];
       return entry ? Math.round(entry.domContentLoadedEventEnd) : null;
     })
     .catch(() => null);
@@ -217,7 +326,16 @@ export async function sampleRender(page, url, timeoutMs) {
  * HTTP cache — which is what makes it cold — while still arriving
  * authenticated, as a returning user does.
  */
-async function captureSignedInState(browser, options) {
+function hasLogin(
+  options: BaselineOptions,
+): options is BaselineOptions & { login: BaselineLogin } {
+  return Boolean(options.login);
+}
+
+async function captureSignedInState(
+  browser: Browser,
+  options: BaselineOptions & { login: BaselineLogin },
+) {
   let context = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     let page = await context.newPage();
@@ -240,10 +358,18 @@ async function captureSignedInState(browser, options) {
   }
 }
 
-async function measureCard(browser, card, options) {
+interface MeasureOptions extends BaselineOptions {
+  storageState?: BrowserContextOptions['storageState'];
+}
+
+async function measureCard(
+  browser: Browser,
+  card: BaselineCard,
+  options: MeasureOptions,
+): Promise<BaselineCardReport> {
   let url = new URL(card.path, options.host).href;
-  let cold = [];
-  let warm = [];
+  let cold: RenderSample[] = [];
+  let warm: RenderSample[] = [];
   for (let sample = 0; sample < options.samples; sample++) {
     // A fresh context is what makes a cold sample cold: no HTTP cache, no
     // storage, no service worker carried over from the sample before it.
@@ -264,8 +390,9 @@ async function measureCard(browser, card, options) {
       await context.close();
     }
   }
-  let usable = (samples) => samples.filter((sample) => sample.ready);
-  let summarize = (samples) => ({
+  let usable = (samples: RenderSample[]) =>
+    samples.filter((sample) => sample.ready);
+  let summarize = (samples: RenderSample[]): BaselineSummary => ({
     applicationMedianMs: median(
       usable(samples).map((sample) => sample.applicationMs),
     ),
@@ -295,8 +422,8 @@ async function measureCard(browser, card, options) {
   };
 }
 
-export function renderBaselineTable(report) {
-  let cell = (value) =>
+export function renderBaselineTable(report: { cards: BaselineTableCard[] }) {
+  let cell = (value: number | undefined) =>
     typeof value === 'number' ? `${value.toLocaleString('en-US')} ms` : '—';
   let rows = report.cards.map((card) => [
     card.id,
@@ -323,7 +450,7 @@ export function renderBaselineTable(report) {
   let widths = columns.map((column, index) =>
     Math.max(column.length, ...rows.map((row) => row[index].length)),
   );
-  let line = (cells) =>
+  let line = (cells: string[]) =>
     `| ${cells.map((value, index) => value.padEnd(widths[index])).join(' | ')} |`;
 
   return [
@@ -333,7 +460,7 @@ export function renderBaselineTable(report) {
   ].join('\n');
 }
 
-export async function recordRenderBaseline(options) {
+export async function recordRenderBaseline(options: BaselineOptions) {
   // `--chromium` names the browser binary to measure with. Which build was
   // used belongs in the report: a baseline compared against a different
   // browser is not a comparison.
@@ -342,10 +469,10 @@ export async function recordRenderBaseline(options) {
     executablePath: options.chromium,
   });
   try {
-    let storageState = options.login
+    let storageState = hasLogin(options)
       ? await captureSignedInState(browser, options)
       : undefined;
-    let cards = [];
+    let cards: BaselineCardReport[] = [];
     for (let card of options.cards) {
       cards.push(
         await measureCard(browser, { ...card }, { ...options, storageState }),

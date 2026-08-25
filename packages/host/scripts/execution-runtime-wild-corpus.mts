@@ -21,7 +21,27 @@
 const referenceOrigin = 'https://realms-staging.stack.cards';
 const candidateOrigin = 'https://localhost:4200';
 
-export const executionRuntimeWildUrlMatrix = [
+/** One row of the URL matrix: the same card at both origins. */
+export interface WildCorpusRow {
+  candidateUrl: string;
+  category: string;
+  id: string;
+  minimumHealthyImages: number;
+  purpose: string;
+  referenceUrl: string;
+  signature: string;
+  sourceUrl: string;
+}
+
+/** A matrix row read as a smoke case, which is what the runner consumes. */
+export interface WildCorpusCase extends WildCorpusRow {
+  expectedExecution: string;
+  mustContain: string[];
+  path: string;
+  referenceParity: boolean;
+}
+
+export const executionRuntimeWildUrlMatrix: WildCorpusRow[] = [
   // Format delegation, rich content, FileDef, and browser transitions.
   row(
     'format-preview-news',
@@ -485,7 +505,7 @@ export const executionRuntimeWildUrlMatrix = [
   ),
 ];
 
-export const executionRuntimeWildCorpusCases =
+export const executionRuntimeWildCorpusCases: WildCorpusCase[] =
   executionRuntimeWildUrlMatrix.map((entry) => ({
     ...entry,
     expectedExecution: 'discover',
@@ -498,15 +518,15 @@ export const executionRuntimeWildCorpusCases =
 validateWildCorpus(executionRuntimeWildCorpusCases);
 
 function row(
-  id,
-  category,
-  realm,
-  cardPath,
-  sourceModule,
-  signature,
-  purpose,
+  id: string,
+  category: string,
+  realm: string,
+  cardPath: string,
+  sourceModule: string,
+  signature: string,
+  purpose: string,
   minimumHealthyImages = 0,
-) {
+): WildCorpusRow {
   let path = `/ctse/${realm}/${cardPath}`;
   let sourceUrl = sourceModule.startsWith('https://')
     ? sourceModule
@@ -553,7 +573,9 @@ function tableCell(value: string, column: string, id: string) {
   return value;
 }
 
-export function renderWildCorpusTable(cases = executionRuntimeWildCorpusCases) {
+export function renderWildCorpusTable(
+  cases: WildCorpusCase[] = executionRuntimeWildCorpusCases,
+) {
   let columns = ['#', 'Area', 'Case', 'Card path', 'What it exercises'];
   let rows = cases.map((smokeCase, index) => [
     String(index + 1),
@@ -592,7 +614,7 @@ export function renderWildCorpusTable(cases = executionRuntimeWildCorpusCases) {
  * fail on whitespace the formatter is entitled to change. What must not drift
  * is the list itself.
  */
-export function parseWildCorpusTable(documentText) {
+export function parseWildCorpusTable(documentText: string) {
   let begin = documentText.indexOf(wildCorpusTableBegin);
   let end = documentText.indexOf(wildCorpusTableEnd);
   if (begin === -1 || end === -1 || end < begin) {
@@ -600,7 +622,7 @@ export function parseWildCorpusTable(documentText) {
       `${wildCorpusDocPath} must contain ${wildCorpusTableBegin} and ${wildCorpusTableEnd} around its generated table`,
     );
   }
-  let cells = (line) =>
+  let cells = (line: string) =>
     line
       .replace(/^\s*\|/, '')
       .replace(/\|\s*$/, '')
@@ -635,7 +657,7 @@ export function parseWildCorpusTable(documentText) {
  * belongs to whoever wrote it and is left untouched.
  */
 export function withRenderedWildCorpusTable(
-  documentText,
+  documentText: string,
   table = renderWildCorpusTable(),
 ) {
   let begin = documentText.indexOf(wildCorpusTableBegin);
@@ -655,7 +677,7 @@ export function withRenderedWildCorpusTable(
   ].join('');
 }
 
-export function validateWildCorpus(cases) {
+export function validateWildCorpus(cases: WildCorpusCase[]) {
   if (cases.length !== 50) {
     throw new Error(
       `The in-the-wild compatibility lane must contain exactly 50 cards; found ${cases.length}`,

@@ -44,7 +44,24 @@
 const realmOrigin = 'https://realms-staging.stack.cards';
 const account = 'ctse';
 
-export const mirrorCohortPlanes = [
+/**
+ * A scenario as authored, before the manifest has vouched for it.
+ *
+ * `planes` is a plain string list rather than a union of the known planes
+ * because naming an unknown plane is one of the things validation exists to
+ * catch; a type that made it unrepresentable would move that check out of the
+ * manifest and into whoever happened to be compiling.
+ */
+export interface MirrorCohortScenario {
+  id: string;
+  planes: string[];
+  realm: string;
+  realmUrl: string;
+  requiredProof: string;
+  subjectUrl?: string;
+}
+
+export const mirrorCohortPlanes: string[] = [
   'semantic',
   'visual',
   'interaction',
@@ -52,7 +69,7 @@ export const mirrorCohortPlanes = [
   'lifecycle',
 ];
 
-export const executionRuntimeMirrorCohort = [
+export const executionRuntimeMirrorCohort: MirrorCohortScenario[] = [
   scenario(
     'M-01',
     'execution-runtime-suite',
@@ -127,7 +144,13 @@ export const executionRuntimeMirrorCohort = [
 
 validateMirrorCohort(executionRuntimeMirrorCohort);
 
-function scenario(id, realm, cardPath, requiredProof, planes) {
+function scenario(
+  id: string,
+  realm: string,
+  cardPath: string | undefined,
+  requiredProof: string,
+  planes: string[],
+): MirrorCohortScenario {
   let realmUrl = `${realmOrigin}/${account}/${realm}/`;
 
   return {
@@ -140,7 +163,7 @@ function scenario(id, realm, cardPath, requiredProof, planes) {
   };
 }
 
-export function validateMirrorCohort(scenarios) {
+export function validateMirrorCohort(scenarios: MirrorCohortScenario[]) {
   if (scenarios.length !== 10) {
     throw new Error(
       `The mirror cohort must contain exactly ten scenarios; found ${scenarios.length}`,
