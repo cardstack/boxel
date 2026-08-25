@@ -202,6 +202,8 @@ export class BuildOrder extends Component {
   private reseek: number | null = null;
   /** true once a hand has stopped the run, after which it stays stopped */
   private held = false;
+  /** whether the stage is being looked at — the transport's other gate */
+  private onstage = false;
 
   /** the transport's own value, painted on the same frame as the scene */
   private headX = motionValue(0);
@@ -245,16 +247,21 @@ export class BuildOrder extends Component {
     // screen it carries on, unless a hand has paused it since.
     this.viewport = new IntersectionObserver(
       (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
+        this.onstage = entries.some((entry) => entry.isIntersecting);
+        if (this.onstage) {
           this.raf ||= requestAnimationFrame(this.tick);
           if (this.seen === null && this.take === 0) {
             // the opening's first take: the region deliberately plays
             // nothing on its very first render (page loads do not animate),
             // so being seen is what starts the show
             this.take++;
-          } else if (this.playing && !this.held) {
-            this.c?.run?.play();
           }
+          // playing is `tick`'s business now, every frame — see the
+          // assertion there. Deciding it here once, on the edge, is what
+          // left this demo dark: a run can be born while the stage is off
+          // screen, get paused by the branch below, and then meet a
+          // scroll-in that takes the first-take branch instead of the
+          // resume — the logo sits at t≈0 forever, which is blank.
         } else {
           cancelAnimationFrame(this.raf);
           this.raf = 0;
@@ -289,6 +296,16 @@ export class BuildOrder extends Component {
       this.adopt(run);
     }
     if (run) {
+      // The transport is ASSERTED, not merely set. Every other way a run
+      // can end up paused — born off screen, kept across a pass that had
+      // stopped it, quieted by a crossing overhead — is invisible from
+      // here, and this demo is the gallery's last tile: a wordmark drawing
+      // itself, which nobody watches start. `play()` is a no-op on a run
+      // already playing (and on one parked at a gate), so a per-frame call
+      // is an invariant, not work.
+      if (this.onstage && this.playing && !this.held) {
+        run.play();
+      }
       const t = run.time;
       this.t = t;
       this.paint();
