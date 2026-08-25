@@ -165,9 +165,52 @@ module('Unit | RP-6 classification', function () {
         `an unbound ${global} reference is a browser-global signal`,
       );
       assert.strictEqual(result.tier, 'sandbox', `${global} routes to Sandbox`);
-      assert.false(
+      // A static class field is evaluated when the class is defined, which for
+      // a top-level class is when the module is initialized — so importing it
+      // performs this read.
+      assert.true(
         result.propagatesToImporters,
-        `a ${global} mention may be dormant, so it does not promote importers`,
+        `a ${global} read at module initialization promotes importers`,
+      );
+    }
+  });
+
+  test('RP-6.4: a global read splits on whether importing the module performs it', async function (assert) {
+    for (let [shape, body] of [
+      ['a top-level binding', 'export const title = document.title;'],
+      ['a top-level statement', 'document.title = "set at import";'],
+      [
+        'a static class field',
+        'export class A { static title = document.title; }',
+      ],
+      ['a static block', 'export class A { static { document.title = "x"; } }'],
+    ] as [string, string][]) {
+      let eager = await classifyBoxelSource(body);
+      assert.true(
+        eager.propagatesToImporters,
+        `${shape} runs on import, so its importer needs the same authority`,
+      );
+    }
+
+    for (let [shape, body] of [
+      ['a function body', 'export function read() { return document.title; }'],
+      ['a method body', 'export class A { read() { return document.title; } }'],
+      ['a getter', 'export class A { get title() { return document.title; } }'],
+      ['an instance field', 'export class A { title = document.title; }'],
+      [
+        'an arrow inside an export',
+        'export const read = () => document.title;',
+      ],
+    ] as [string, string][]) {
+      let deferred = await classifyBoxelSource(body);
+      assert.strictEqual(
+        deferred.tier,
+        'sandbox',
+        `${shape} still promotes the module that would evaluate it`,
+      );
+      assert.false(
+        deferred.propagatesToImporters,
+        `${shape} may never run, so it does not promote importers`,
       );
     }
   });
@@ -360,6 +403,115 @@ module('Unit | RP-6 classification', function () {
         `prose is not authority: ${body}`,
       );
     }
+  });
+
+  test('RP-6.4: a browser global inside executable text is a reference, however that text is quoted', async function (assert) {
+    // A template literal's text is prose, but its interpolations are code. The
+    // prefilter decides whether the confirmation pass runs at all, so blanking
+    // an interpolation loses the signal outright rather than costing accuracy.
+    for (let [shape, body, global] of [
+      [
+        'a template interpolation',
+        'export const l = `${document.title}`;',
+        'document',
+      ],
+      [
+        'a nested template interpolation',
+        'export const l = `${`${navigator.language}`}`;',
+        'navigator',
+      ],
+      [
+        'an interpolation holding an object literal',
+        'export const l = `${ { t: document.title }.t }`;',
+        'document',
+      ],
+      [
+        'an interpolation after a masked one',
+        'export const l = `${"quoted"} ${document.title}`;',
+        'document',
+      ],
+      [
+        'code following a regex literal that holds a quote',
+        `const apostrophe = /'/;\nexport const t = document.title;`,
+        'document',
+      ],
+      [
+        'code following a regex literal that holds a comment opener',
+        'const slashes = /\\/\\//;\nexport const t = document.title;',
+        'document',
+      ],
+      [
+        'code following a division',
+        'export const half = 10 / 2, t = document.title;',
+        'document',
+      ],
+    ] as [string, string, string][]) {
+      let result = await classifyBoxelSource(body);
+      assert.strictEqual(
+        result.tier,
+        'sandbox',
+        `${shape} reaches the confirmation pass`,
+      );
+      assert.deepEqual(
+        result.signals,
+        [global],
+        `${shape} reports the global it reads`,
+      );
+    }
+
+    // The other direction: the masker must still hide genuine prose, or the
+    // prefilter stops being a prefilter.
+    for (let [shape, body] of [
+      ['a template literal holding prose', 'export const l = `see document`;'],
+      ['a regex matching the word', 'export const r = /document/;'],
+      [
+        'a comment inside a template interpolation',
+        'export const l = `${ /* document */ 1 }`;',
+      ],
+      [
+        'a string inside a template interpolation',
+        'export const l = `${ "document" }`;',
+      ],
+    ] as [string, string][]) {
+      let result = await classifyBoxelSource(body);
+      assert.strictEqual(
+        result.tier,
+        'capsule',
+        `${shape} is text, not a reference`,
+      );
+    }
+  });
+
+  test('RP-6.4: a type-only import is erased before the module runs, so it is not a graph edge', async function (assert) {
+    for (let [shape, body] of [
+      [
+        'an import type declaration',
+        `import type { Scene } from 'three';\nexport const s: Scene | undefined = undefined;`,
+      ],
+      ['an export type declaration', `export type { Scene } from 'three';`],
+    ] as [string, string][]) {
+      let erased = await classifyBoxelSource(body);
+      assert.deepEqual(erased.imports, [], `${shape} names no runtime module`);
+      assert.strictEqual(
+        erased.tier,
+        'capsule',
+        `${shape} does not route a card to Sandbox for a compile-time reference`,
+      );
+    }
+
+    // An inline type specifier is NOT erased: the statement still emits the
+    // module for its side effects, so the edge is real.
+    let inlineSpecifier = await classifyBoxelSource(
+      `import { type Scene } from 'three';\nexport const s: Scene | undefined = undefined;`,
+    );
+    assert.deepEqual(inlineSpecifier.imports, ['three']);
+    assert.strictEqual(inlineSpecifier.tier, 'sandbox');
+
+    // The words in a string are not a declaration.
+    let quoted = await classifyBoxelSource(
+      `export const hint = "import type { Scene } from 'three'";`,
+    );
+    assert.deepEqual(quoted.imports, []);
   });
 
   test('RP-6.4: the ambient global object cannot hide a browser global behind a spelling', async function (assert) {
@@ -626,6 +778,77 @@ module('Unit | RP-6 classification', function () {
       entry.tier,
       'capsule',
       'an importer does not inherit a browser adapter that may never run',
+    );
+  });
+
+  test('RP-6.4: a dependency that reads a browser global on import does promote its importer', async function (assert) {
+    let { classifier } = graphFixture({
+      'https://example.test/entry.gts': `
+        import { title } from './library.gts';
+        export default title;
+      `,
+      // Not dormant: loading the importer evaluates this read, so an importer
+      // in a Capsule would break on the very import.
+      'https://example.test/library.gts': `export const title = document.title;`,
+    });
+
+    let entry = await classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(entry.tier, 'sandbox');
+    assert.strictEqual(
+      entry.reason,
+      'dependency-runtime:https://example.test/library.gts',
+    );
+    assert.deepEqual(entry.signals, ['document']);
+  });
+
+  test('RP-6.4: a module whose source did not parse is re-read rather than pinned to the draft', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
+    };
+    let { classifier, loads } = graphFixture(sources);
+    let entry = 'https://example.test/draft.gts';
+
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).reason,
+      'source-parse-pending',
+      'an unparseable draft fails into Capsule',
+    );
+
+    sources[entry] =
+      `import * as THREE from 'three'; export default THREE.Scene;`;
+    let settled = await classifier.classifyModuleGraph(entry);
+    assert.strictEqual(
+      settled.reason,
+      'browser-runtime:three',
+      'and the next classification re-reads it instead of reusing the draft result',
+    );
+    assert.deepEqual(loads, [entry, entry]);
+  });
+
+  test('RP-6.4: an entry whose graph contained an unparseable module is not kept either', async function (assert) {
+    let sources: Record<string, string> = {
+      'https://example.test/entry.gts': `import Draft from './draft.gts'; export default Draft;`,
+      'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
+    };
+    let { classifier } = graphFixture(sources);
+    let entry = 'https://example.test/entry.gts';
+
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).tier,
+      'capsule',
+      'an unparseable dependency contributes no signals, so the entry reads as clean',
+    );
+
+    // That Capsule was drawn over a hole: the dependency's imports and signals
+    // were never established. Once it parses, the entry has to be re-decided
+    // without anything invalidating the dependency by name.
+    sources['https://example.test/draft.gts'] =
+      `import * as THREE from 'three'; export default THREE.Scene;`;
+    assert.strictEqual(
+      (await classifier.classifyModuleGraph(entry)).reason,
+      'dependency-runtime:https://example.test/draft.gts',
     );
   });
 

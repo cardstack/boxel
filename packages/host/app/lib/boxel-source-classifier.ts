@@ -58,12 +58,16 @@ export interface BoxelSourceAnalysis {
    *
    * A browser-only package import, a DOM-only method call, and a template
    * signal are all part of an exported render surface: an importer renders
-   * that surface, so it needs the same browser authority. An ambient global
-   * MENTION is different — a library routinely carries a browser adapter that
-   * never runs in this graph, and promoting every importer for a dormant
-   * `document` reference costs an iframe to cards that would otherwise render
-   * in a Capsule. The mention still promotes the module that contains it,
-   * where the reference would actually be evaluated.
+   * that surface, so it needs the same browser authority.
+   *
+   * A global REFERENCE splits on when it is evaluated. One read at module
+   * initialization — `export const title = document.title` — runs the moment
+   * an importer loads the module, so the importer needs the same authority and
+   * is promoted. One inside a function body may never run at all: a library
+   * routinely carries a browser adapter this graph never calls, and promoting
+   * every importer for a dormant reference costs an iframe to cards that would
+   * otherwise render in a Capsule. A dormant reference still promotes the
+   * module that contains it, where the read would be evaluated.
    */
   propagatesToImporters: boolean;
 }
@@ -285,64 +289,173 @@ function analyzeTemplates(source: string): TemplateAnalysis {
 }
 
 /**
- * Blanks string and comment bodies, preserving offsets and line breaks, so the
- * prefilter reads code rather than prose. A module documenting `document` in a
- * comment, or holding the string `'window'`, requests no browser authority —
- * and without this the prefilter would trigger the confirmation parse on
- * nearly every module, giving up the reason the prefilter exists.
+ * Blanks the parts of the source that hold text rather than code — string
+ * bodies, comments, regex bodies, and the literal spans of a template — so the
+ * prefilter reads code. A module documenting `document` in a comment, or
+ * holding the string `'window'`, requests no browser authority, and without
+ * this the prefilter would trigger the confirmation parse on nearly every
+ * module and give up the reason it exists.
+ *
+ * Two spans that LOOK like text are deliberately kept, because they hold
+ * executable code: a template literal's `${…}` interpolations (nested to any
+ * depth), and nothing else. Blanking an interpolation is not a missed
+ * optimization but a missed SIGNAL — `` `${document.title}` `` would read as
+ * signal-free, skip the confirmation parse, and classify Capsule — so the
+ * distinction is load-bearing rather than cosmetic.
+ *
+ * Offsets and line breaks are preserved, so a parse error reported against the
+ * result still names the authored line.
  */
 function maskStringsAndComments(source: string): string {
   let output = Array.from(source);
-  let quote: "'" | '"' | '`' | undefined;
-  let lineComment = false;
-  let blockComment = false;
-  let escaped = false;
+  // One frame per template literal currently open, innermost last. A frame is
+  // reading that literal's text until an interpolation opens, and counts the
+  // interpolation's braces so a nested object or block does not read as its
+  // closing `}`.
+  let templates: { inInterpolation: boolean; braces: number }[] = [];
+  let innermost = ():
+    | { inInterpolation: boolean; braces: number }
+    | undefined => templates[templates.length - 1];
+  // Whether a `/` here opens a regex or divides. Decided from the previous
+  // significant character, which is the standard approximation: after a value
+  // (an identifier, a literal, a closing bracket) it divides, and anywhere
+  // else a regex may start. `}` is read as ending a value, so the rare
+  // `if (x) {} /re/.test(y)` is masked as division — leaving MORE text
+  // visible to the prefilter, which costs a confirmation parse rather than a
+  // signal.
+  let lastSignificant = '';
+  let regexMayStart = (): boolean =>
+    lastSignificant === '' || !/[\w$)\]}'"`]/.test(lastSignificant);
+  let blank = (index: number) => {
+    if (output[index] !== '\n' && output[index] !== '\r') {
+      output[index] = ' ';
+    }
+  };
 
   for (let index = 0; index < output.length; index++) {
     let current = output[index]!;
     let next = output[index + 1];
-    if (lineComment) {
-      if (current === '\n') {
-        lineComment = false;
-      } else {
-        output[index] = ' ';
-      }
-      continue;
-    }
-    if (blockComment) {
-      if (current === '*' && next === '/') {
-        output[index] = output[index + 1] = ' ';
+    let frame = innermost();
+
+    // Inside a template literal's text, not one of its interpolations.
+    if (frame && !frame.inInterpolation) {
+      if (current === '\\') {
+        blank(index);
+        blank(index + 1);
         index++;
-        blockComment = false;
-      } else if (current !== '\n' && current !== '\r') {
-        output[index] = ' ';
+        continue;
       }
+      if (current === '`') {
+        templates.pop();
+        blank(index);
+        continue;
+      }
+      if (current === '$' && next === '{') {
+        frame.inInterpolation = true;
+        frame.braces = 0;
+        blank(index);
+        blank(index + 1);
+        index++;
+        lastSignificant = '';
+        continue;
+      }
+      blank(index);
       continue;
     }
-    if (quote) {
-      if (escaped) {
-        escaped = false;
-      } else if (current === '\\') {
-        escaped = true;
-      } else if (current === quote) {
-        quote = undefined;
-      }
-      if (current !== '\n' && current !== '\r') {
-        output[index] = ' ';
-      }
-      continue;
-    }
+
     if (current === '/' && next === '/') {
-      output[index] = output[index + 1] = ' ';
+      blank(index);
+      blank(index + 1);
+      index += 2;
+      while (index < output.length && output[index] !== '\n') {
+        blank(index);
+        index++;
+      }
+      index--;
+      continue;
+    }
+    if (current === '/' && next === '*') {
+      blank(index);
+      blank(index + 1);
+      index += 2;
+      while (index < output.length) {
+        if (output[index] === '*' && output[index + 1] === '/') {
+          blank(index);
+          blank(index + 1);
+          index++;
+          break;
+        }
+        blank(index);
+        index++;
+      }
+      continue;
+    }
+    if (current === "'" || current === '"') {
+      blank(index);
       index++;
-      lineComment = true;
-    } else if (current === '/' && next === '*') {
-      output[index] = output[index + 1] = ' ';
+      while (index < output.length) {
+        if (output[index] === '\\') {
+          blank(index);
+          blank(index + 1);
+          index += 2;
+          continue;
+        }
+        if (output[index] === current) {
+          blank(index);
+          break;
+        }
+        blank(index);
+        index++;
+      }
+      lastSignificant = current;
+      continue;
+    }
+    if (current === '`') {
+      templates.push({ inInterpolation: false, braces: 0 });
+      blank(index);
+      continue;
+    }
+    if (current === '/' && regexMayStart()) {
+      blank(index);
       index++;
-      blockComment = true;
-    } else if (current === "'" || current === '"' || current === '`') {
-      quote = current;
-      output[index] = ' ';
+      let inCharacterClass = false;
+      while (index < output.length && output[index] !== '\n') {
+        let character = output[index];
+        if (character === '\\') {
+          blank(index);
+          blank(index + 1);
+          index += 2;
+          continue;
+        }
+        if (character === '[') {
+          inCharacterClass = true;
+        } else if (character === ']') {
+          inCharacterClass = false;
+        } else if (character === '/' && !inCharacterClass) {
+          blank(index);
+          break;
+        }
+        blank(index);
+        index++;
+      }
+      lastSignificant = ')';
+      continue;
+    }
+    if (frame?.inInterpolation) {
+      if (current === '{') {
+        frame.braces++;
+      } else if (current === '}') {
+        if (frame.braces === 0) {
+          frame.inInterpolation = false;
+          blank(index);
+          lastSignificant = '`';
+          continue;
+        }
+        frame.braces--;
+      }
+    }
+    if (!/\s/.test(current)) {
+      lastSignificant = current;
     }
   }
   return output.join('');
@@ -417,6 +530,13 @@ export function isBrowserOnlyPackage(moduleIdentifier: string): boolean {
 function confirmBrowserSignals(source: string): {
   globals: string[];
   domMethods: string[];
+  /**
+   * Whether any confirmed global reference is evaluated when the module is
+   * initialized, rather than inside a function body that may never be called.
+   * An eager read is what makes a dependency's requirement its importer's
+   * requirement: importing the module runs it.
+   */
+  hasEagerGlobal: boolean;
 } {
   let masked = maskStringsAndComments(source);
   let candidateGlobals = browserGlobalPatterns
@@ -431,10 +551,29 @@ function confirmBrowserSignals(source: string): {
     candidateDOMMethods.length === 0 &&
     !candidateGlobalObject
   ) {
-    return { globals: [], domMethods: [] };
+    return { globals: [], domMethods: [], hasEagerGlobal: false };
   }
 
   let unboundGlobals = new Set<string>();
+  let eagerGlobals = false;
+  // A reference is evaluated at module initialization unless it sits inside a
+  // function body or a non-static class field. Both of those run only when
+  // something calls or constructs them, which importing the module does not.
+  //
+  // The approximation is deliberate and errs toward "deferred" in one shape:
+  // an immediately-invoked function expression at the top level does run on
+  // import, but reads as deferred here. Recognizing it means deciding which
+  // functions are called immediately, which is not a question static analysis
+  // answers in general — and the cost of being wrong is the module's importer
+  // staying in a Capsule that the module then needs a browser inside, which
+  // fails visibly there.
+  let isEager = (path: babel.NodePath): boolean =>
+    path.find(
+      (ancestor) =>
+        ancestor.isFunction() ||
+        ((ancestor.isClassProperty() || ancestor.isClassPrivateProperty()) &&
+          !ancestor.node.static),
+    ) === null;
   let domMethodCalls = new Set<string>();
   let isBrowserGlobal = (name: string): boolean =>
     browserGlobals.includes(name as (typeof browserGlobals)[number]);
@@ -444,8 +583,12 @@ function confirmBrowserSignals(source: string): {
   // Attributing rather than ignoring is what closes the computed spellings
   // (`globalThis['doc' + 'ument']`, a rest element in a destructure) without
   // trying to evaluate every JavaScript constant expression.
-  let recordAmbientProperty = (name: string | undefined) => {
+  let recordAmbientProperty = (
+    name: string | undefined,
+    path: babel.NodePath,
+  ) => {
     unboundGlobals.add(name && isBrowserGlobal(name) ? name : 'window');
+    eagerGlobals ||= isEager(path);
   };
   let isAmbientGlobalObject = (
     node: babel.types.Node,
@@ -490,6 +633,7 @@ function confirmBrowserSignals(source: string): {
           return;
         }
         unboundGlobals.add(name);
+        eagerGlobals ||= isEager(path);
       },
       CallExpression(path) {
         let callee = path.node.callee;
@@ -510,6 +654,7 @@ function confirmBrowserSignals(source: string): {
         }
         recordAmbientProperty(
           staticPropertyName(path.node.property, path.node.computed),
+          path,
         );
       },
       VariableDeclarator(path) {
@@ -522,10 +667,11 @@ function confirmBrowserSignals(source: string): {
         }
         for (let property of path.node.id.properties) {
           if (babel.types.isRestElement(property)) {
-            recordAmbientProperty(undefined);
+            recordAmbientProperty(undefined, path);
           } else if (babel.types.isObjectProperty(property)) {
             recordAmbientProperty(
               staticPropertyName(property.key, property.computed),
+              path,
             );
           }
         }
@@ -562,6 +708,9 @@ function confirmBrowserSignals(source: string): {
     return {
       globals: candidateGlobals,
       domMethods: candidateDOMMethods.map((method) => `dom-method:${method}`),
+      // Unread syntax cannot establish that a reference is deferred, so the
+      // conservative answer is that it is not.
+      hasEagerGlobal: true,
     };
   }
   return {
@@ -572,7 +721,37 @@ function confirmBrowserSignals(source: string): {
     domMethods: domOnlyMethods
       .filter((method) => domMethodCalls.has(method))
       .map((method) => `dom-method:${method}`),
+    hasEagerGlobal: eagerGlobals,
   };
+}
+
+/**
+ * Whether an import the lexer found is erased before the module ever runs.
+ *
+ * The lexer reads JavaScript, so `import type { Scene } from 'three'` reads to
+ * it as an ordinary edge to `three` — which would route a card to the Sandbox
+ * for a compile-time type reference, and would send the walk fetching modules
+ * that no longer exist at runtime. Only a statement whose ERASURE is total
+ * counts: a leading `import type` / `export type`. `import { type Scene }` is
+ * not one of them, because that statement still emits the module for its side
+ * effects.
+ *
+ * The statement bounds come from the lexer rather than from a regex over the
+ * whole source, so a string or comment containing the words cannot be mistaken
+ * for a declaration.
+ */
+function isTypeOnlyImport(
+  source: string,
+  entry: { ss: number; se: number; d: number },
+): boolean {
+  // A dynamic import is an expression, never a type-only declaration, and its
+  // statement bounds cover the call rather than a statement.
+  if (entry.d !== -1) {
+    return false;
+  }
+  return /^\s*(?:import|export)\s+type\b/.test(
+    source.slice(entry.ss, entry.se),
+  );
 }
 
 function parsePendingAnalysis(): BoxelSourceAnalysis {
@@ -618,6 +797,7 @@ export async function classifyBoxelSource(
     imports = [
       ...new Set(
         parse(templates.javascript)[0]
+          .filter((entry) => !isTypeOnlyImport(templates.javascript, entry))
           .map((entry) => entry.n)
           .filter(
             (specifier): specifier is string => typeof specifier === 'string',
@@ -635,7 +815,9 @@ export async function classifyBoxelSource(
         .filter((signal): signal is string => signal !== undefined),
     ),
   ].sort();
-  let { globals, domMethods } = confirmBrowserSignals(templates.javascript);
+  let { globals, domMethods, hasEagerGlobal } = confirmBrowserSignals(
+    templates.javascript,
+  );
   let signals = [
     ...importSignals,
     ...globals,
@@ -659,7 +841,8 @@ export async function classifyBoxelSource(
     propagatesToImporters:
       importSignals.length > 0 ||
       domMethods.length > 0 ||
-      templates.signals.length > 0,
+      templates.signals.length > 0 ||
+      hasEagerGlobal,
   };
 }
 
@@ -769,9 +952,15 @@ export class BoxelModuleGraphClassifier {
     if (existing && existing.sourceHash === sourceHash) {
       return existing.classification;
     }
-    let graph = new Set<string>([moduleIdentifier]);
-    let classification = this.walkGraph(moduleIdentifier, source, graph);
-    let entry = { classification, sourceHash, graph };
+    // The walk fills both fields as it goes: `graph` so invalidation can find
+    // this entry by any member, and `sawPendingSource` so an entry computed
+    // over a draft that did not parse is not kept as an answer.
+    let walk = {
+      graph: new Set<string>([moduleIdentifier]),
+      sawPendingSource: false,
+    };
+    let classification = this.walkGraph(moduleIdentifier, source, walk);
+    let entry = { classification, sourceHash, graph: walk.graph };
     this.entries.set(moduleIdentifier, entry);
     let evict = () => {
       if (this.entries.get(moduleIdentifier) === entry) {
@@ -782,8 +971,15 @@ export class BoxelModuleGraphClassifier {
     // keep: the module may load next time, the draft may parse next time. The
     // eviction reads the resolved value rather than only catching a rejection,
     // because the walk reports such a result rather than throwing it.
+    //
+    // A member that did not parse counts even when the entry's own reason looks
+    // settled: an unparseable dependency contributes no imports and no signals,
+    // so the Capsule that conclusion rests on was drawn over a hole.
     void classification.then(
-      ({ reason }) => (isTransientReason(reason) ? evict() : undefined),
+      ({ reason }) =>
+        isTransientReason(reason) || walk.sawPendingSource
+          ? evict()
+          : undefined,
       evict,
     );
     return classification;
@@ -815,8 +1011,9 @@ export class BoxelModuleGraphClassifier {
   private async walkGraph(
     moduleIdentifier: string,
     entrySource: string | undefined,
-    graph: Set<string>,
+    walk: { graph: Set<string>; sawPendingSource: boolean },
   ): Promise<BoxelSourceClassification> {
+    let graph = walk.graph;
     let maxModules = this.options.maxModules ?? 256;
     // The complete reachable graph is collected BEFORE any promotion is
     // computed. Promotion then reads a finished map, so a diamond reached from
@@ -850,6 +1047,7 @@ export class BoxelModuleGraphClassifier {
         continue;
       }
       analyzed.set(identifier, analysis);
+      walk.sawPendingSource ||= isTransientReason(analysis.analysis.reason);
       for (let dependency of analysis.dependencies) {
         graph.add(dependency);
         // Trusted modules and already-recognized browser-only packages are
@@ -956,11 +1154,20 @@ export class BoxelModuleGraphClassifier {
     // One revision per module: a later supplied source replaces an earlier
     // one, matching the memo's meaning of "what this module currently is".
     this.moduleAnalyses.set(moduleIdentifier, fresh);
-    void fresh.catch(() => {
+    let evict = () => {
       if (this.moduleAnalyses.get(moduleIdentifier) === fresh) {
         this.moduleAnalyses.delete(moduleIdentifier);
       }
-    });
+    };
+    // A rejection is not an answer, and neither is source that did not parse:
+    // an in-progress draft is a state the module leaves, so keeping it would
+    // pin the module to it until something invalidated the module by name.
+    // The current walk still uses the value it already holds.
+    void fresh.then(
+      ({ analysis }) =>
+        isTransientReason(analysis.reason) ? evict() : undefined,
+      evict,
+    );
     return fresh;
   }
 
