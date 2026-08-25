@@ -7,6 +7,7 @@ import {
   findLiveInstanceGeneration,
   findMediaCacheEntry,
   isCaptureFormat,
+  parseScreenshotCaptureSpec,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
   type CaptureSpec,
@@ -85,14 +86,43 @@ interface CaptureResult {
  *       "realmURL": "https://realm.example/user/workspace/",
  *       "cardId": "https://realm.example/user/workspace/Person/fadhlan",
  *       "format": "isolated",
- *       "includeBase64": true
+ *       "includeBase64": true,
+ *       "captureSpec": {
+ *         "viewport": { "width": 1280, "height": 800 },
+ *         "deviceScaleFactor": 2,
+ *         "fullPage": true,
+ *         "clip": { "x": 0, "y": 0, "width": 400, "height": 300 }
+ *       }
  *     }
  *   }
  * }
  * ```
  *
+ * `captureSpec` is optional; every field within it is optional. It is
+ * validated by the shared strict parse in `capture-spec.ts` (viewport ≤
+ * 4096×16384, deviceScaleFactor ≤ 3, clip bounded by the same caps as the
+ * viewport and within the viewport when one is given, physical pixels per
+ * edge ≤ the Chromium texture cap, `fullPage` and `clip` mutually exclusive
+ * — the prerender server's screenshot route runs the identical parse), so
+ * the worker downstream can treat it as trusted. The parse is strict: a
+ * field the engine cannot honor is refused by name — never ignored — and
+ * default-valued fields (`fullPage: false`, `deviceScaleFactor: 1`) are
+ * elided so equal capture intents classify identically. Invalid specs
+ * return a 400 naming the offending field. The one bound no request-time
+ * parse can enforce — a fullPage capture's document extent — is checked
+ * against the same physical-pixel cap at capture time.
+ * A spec with overrides is capture-only: the ledger's canonical capture
+ * identity cannot represent it yet (the GET DSL reserves those params), so it
+ * always renders fresh and returns raw bytes — no ledger fast path, no
+ * MediaCache persist, no `captures` URL.
+ *
  * The `runAs` user is derived from the authenticated JWT.
  */
+
+// The captureSpec bounds and strict parse live in `capture-spec.ts`
+// (runtime-common) so this handler and the prerender server's screenshot
+// route validate identically; see the constants and rules there.
+
 export default function handleScreenshotCard({
   dbAdapter,
   queue,
@@ -162,6 +192,12 @@ export default function handleScreenshotCard({
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
+    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
+    if (captureSpecParse.error) {
+      return sendResponseForBadRequest(ctxt, captureSpecParse.error);
+    }
+    let captureSpec = captureSpecParse.captureSpec ?? null;
+
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token?.user) {
       return sendResponseForBadRequest(
@@ -177,7 +213,15 @@ export default function handleScreenshotCard({
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
-      if (mediaCacheAdapter) {
+      // A custom `captureSpec` has no representation in the ledger's
+      // canonical capture identity yet — the GET `_screenshot/` DSL reserves
+      // `viewport`/`dsf`/`fullPage`/`clip` — so persisting one under the
+      // format-only key would let a custom render serve on the canonical
+      // URL. Custom captures render fresh and return bytes only: no ledger
+      // fast path, no persist, no served URL. The parse normalizes an
+      // all-defaults spec to null, so null exactly means canonical.
+      let isCanonicalCapture = captureSpec === null;
+      if (mediaCacheAdapter && isCanonicalCapture) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -240,6 +284,7 @@ export default function handleScreenshotCard({
           runAs: userId,
           cardId: normalizedCardId,
           format,
+          captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
         },
         queue,
@@ -270,6 +315,13 @@ export default function handleScreenshotCard({
         // The job keeps running and (when persisting) lands its capture in
         // the MediaCache, so the client's retry answers from the ledger
         // with no second render. The retry hint is one average capture.
+        //
+        // That resume applies only to canonical captures. A custom
+        // captureSpec's job is capture-only (persist: null, never
+        // coalesced), so its timed-out render is discarded and each retry
+        // is a full re-render — the Retry-After here is pacing, not a
+        // cheap-resume promise, until the ledger identity learns these
+        // specs.
         let estimate = await estimateScreenshotQueueWait(
           dbAdapter,
           `screenshot:${normalizedRealmURL}`,

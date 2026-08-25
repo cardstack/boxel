@@ -2,10 +2,12 @@ import {
   cleanCapturedHTML,
   delay,
   logger,
+  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   type PrerenderMeta,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
+  type ScreenshotCaptureSpec,
 } from '@cardstack/runtime-common';
 import { prerenderRenderTimeoutMs } from './prerender-constants.ts';
 import { getPendingNetworkRequests } from './network-inflight-tracker.ts';
@@ -92,6 +94,9 @@ export interface CaptureOptions {
   expectedNonce?: string;
   simulateTimeoutMs?: number;
   timeoutMs?: number;
+  // Screenshot-only: per-capture viewport / scale / fullPage / clip overrides.
+  // Ignored by the HTML/meta/module capture paths.
+  captureSpec?: ScreenshotCaptureSpec;
 }
 
 export interface ModuleCapture {
@@ -1262,76 +1267,190 @@ async function waitForImagePaint(page: Page): Promise<void> {
   );
 }
 
+// Puppeteer's default launch viewport (no `defaultViewport` override). Used to
+// restore a pooled page when we can't read its prior viewport — the canonical
+// size the indexing HTML-capture path expects.
+const DEFAULT_SCREENSHOT_VIEWPORT = {
+  width: 800,
+  height: 600,
+  deviceScaleFactor: 1,
+};
+
 export async function captureScreenshot(
   page: Page,
   format: 'isolated' | 'embedded',
   ancestorLevel: number,
   opts?: CaptureOptions,
 ): Promise<ScreenshotCapture | RenderError> {
+  let captureSpec = opts?.captureSpec;
   log.debug(
-    `captureScreenshot start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()}`,
+    `captureScreenshot start format=${format} ancestorLevel=${ancestorLevel} url=${page.url()} captureSpec=${
+      captureSpec ? JSON.stringify(captureSpec) : 'none'
+    }`,
   );
-  await transitionTo(page, 'render.html', format, String(ancestorLevel));
-  await waitForRoutePathSuffix(page, `/html/${format}/${ancestorLevel}`, opts);
-  await waitForPrerenderSettle(page);
-  // After settle, surface any terminal prerender error rather than
-  // screenshotting a skeleton/error frame. Reuses the same data-attribute
-  // signaling as the HTML capture path.
-  let terminal = await page.evaluate(() => {
-    let elements = Array.from(
-      document.querySelectorAll('[data-prerender]'),
-    ) as HTMLElement[];
-    for (let element of elements) {
-      let status = element.dataset.prerenderStatus ?? '';
-      if (status === 'error' || status === 'unusable') {
-        let errorElement = element.querySelector(
-          '[data-prerender-error]',
-        ) as HTMLElement | null;
-        let raw = (
-          errorElement?.textContent ??
-          errorElement?.innerHTML ??
-          ''
-        ).trim();
-        return { status: status as 'error' | 'unusable', raw };
-      }
-    }
-    let stray = document.querySelector(
-      '[data-prerender-error]',
-    ) as HTMLElement | null;
-    if (stray) {
-      let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
-      if (raw.length > 0) {
-        return { status: 'error' as const, raw };
-      }
-    }
-    return null;
-  });
-  if (terminal) {
-    let capture: RenderCapture = {
-      status: terminal.status,
-      value: terminal.raw,
-    };
-    return renderCaptureToError(page, capture, 'render.screenshot');
+
+  // Defensive: `fullPage` and `clip` are mutually exclusive (Puppeteer ignores
+  // clip under fullPage). The realm-server handler already 400s this, but a
+  // direct prerender-server caller could still send it — fail cleanly rather
+  // than return a silently-wrong screenshot.
+  if (captureSpec?.fullPage && captureSpec?.clip) {
+    return buildInvalidRenderResponseError(
+      page,
+      'captureSpec cannot set both fullPage and clip',
+      { title: 'Invalid screenshot capture spec' },
+    );
   }
-  // Settle hook only tracks store/loader generation + animation frames; it
-  // does NOT wait for `<img>` element loads, CSS background-image fetches, or
-  // fonts. Without this extra wait the screenshot races those resources and
-  // produces empty avatars / missing thumbnails. Bounded by an internal
-  // timeout so a slow / 401-looping image can't hang the capture.
-  await waitForImagePaint(page);
-  let dims = await page.evaluate(() => ({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  }));
-  let base64 = (await page.screenshot({
-    encoding: 'base64',
-    type: 'png',
-  })) as string;
-  let pngBytes = Buffer.byteLength(base64, 'base64');
-  log.debug(
-    `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,
-  );
-  return { base64, width: dims.width, height: dims.height };
+
+  // Pooled pages are reused by the indexing HTML-capture path; a viewport left
+  // at a caller-specified size (or 2× scale) would silently change subsequent
+  // index prerenders. Snapshot the current viewport before overriding and
+  // restore it in `finally`. Set the viewport BEFORE the render transition so
+  // the card lays out at the target size before we settle + capture.
+  let wantsViewportOverride =
+    captureSpec?.viewport != null || captureSpec?.deviceScaleFactor != null;
+  let originalViewport = wantsViewportOverride ? page.viewport() : null;
+  let viewportOverridden = false;
+  try {
+    if (wantsViewportOverride) {
+      let width =
+        captureSpec!.viewport?.width ??
+        originalViewport?.width ??
+        DEFAULT_SCREENSHOT_VIEWPORT.width;
+      let height =
+        captureSpec!.viewport?.height ??
+        originalViewport?.height ??
+        DEFAULT_SCREENSHOT_VIEWPORT.height;
+      let deviceScaleFactor =
+        captureSpec!.deviceScaleFactor ??
+        originalViewport?.deviceScaleFactor ??
+        DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor;
+      await page.setViewport({ width, height, deviceScaleFactor });
+      viewportOverridden = true;
+    }
+
+    await transitionTo(page, 'render.html', format, String(ancestorLevel));
+    await waitForRoutePathSuffix(
+      page,
+      `/html/${format}/${ancestorLevel}`,
+      opts,
+    );
+    await waitForPrerenderSettle(page);
+    // After settle, surface any terminal prerender error rather than
+    // screenshotting a skeleton/error frame. Reuses the same data-attribute
+    // signaling as the HTML capture path.
+    let terminal = await page.evaluate(() => {
+      let elements = Array.from(
+        document.querySelectorAll('[data-prerender]'),
+      ) as HTMLElement[];
+      for (let element of elements) {
+        let status = element.dataset.prerenderStatus ?? '';
+        if (status === 'error' || status === 'unusable') {
+          let errorElement = element.querySelector(
+            '[data-prerender-error]',
+          ) as HTMLElement | null;
+          let raw = (
+            errorElement?.textContent ??
+            errorElement?.innerHTML ??
+            ''
+          ).trim();
+          return { status: status as 'error' | 'unusable', raw };
+        }
+      }
+      let stray = document.querySelector(
+        '[data-prerender-error]',
+      ) as HTMLElement | null;
+      if (stray) {
+        let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
+        if (raw.length > 0) {
+          return { status: 'error' as const, raw };
+        }
+      }
+      return null;
+    });
+    if (terminal) {
+      let capture: RenderCapture = {
+        status: terminal.status,
+        value: terminal.raw,
+      };
+      return renderCaptureToError(page, capture, 'render.screenshot');
+    }
+    // Settle hook only tracks store/loader generation + animation frames; it
+    // does NOT wait for `<img>` element loads, CSS background-image fetches, or
+    // fonts. Without this extra wait the screenshot races those resources and
+    // produces empty avatars / missing thumbnails. Bounded by an internal
+    // timeout so a slow / 401-looping image can't hang the capture.
+    await waitForImagePaint(page);
+    // Reported CSS dimensions of the capture. `fullPage` reports the
+    // captured document (derived from the PNG itself below, so report and
+    // bytes cannot disagree); `clip` reports its own region; otherwise the
+    // viewport. Device scale multiplies the PNG's physical pixels but not
+    // these CSS dims.
+    let effectiveScale = page.viewport()?.deviceScaleFactor ?? 1;
+    let dims: { width: number; height: number };
+    if (captureSpec?.fullPage) {
+      // A fullPage capture's extent is the document's scroll size — a bound
+      // no request-time validation can know, so the physical-pixel cap the
+      // parse enforces for viewport/clip is enforced here. Chromium cannot
+      // produce a texture past the cap anyway; failing by name beats
+      // returning silently truncated bytes.
+      dims = await page.evaluate(() => ({
+        width: document.documentElement.scrollWidth,
+        height: document.documentElement.scrollHeight,
+      }));
+      if (
+        dims.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX ||
+        dims.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      ) {
+        return buildInvalidRenderResponseError(
+          page,
+          `fullPage capture of ${dims.width}x${dims.height} CSS px at ${effectiveScale}x exceeds ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
+          { title: 'Screenshot capture too large' },
+        );
+      }
+    } else if (captureSpec?.clip) {
+      dims = {
+        width: captureSpec.clip.width,
+        height: captureSpec.clip.height,
+      };
+    } else {
+      dims = await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }));
+    }
+    let base64 = (await page.screenshot({
+      encoding: 'base64',
+      type: 'png',
+      ...(captureSpec?.fullPage ? { fullPage: true } : {}),
+      ...(captureSpec?.clip ? { clip: captureSpec.clip } : {}),
+    })) as string;
+    if (captureSpec?.fullPage) {
+      // The scroll-size read above and the capture are two separate
+      // measurements (Chromium sizes fullPage from its own layout metrics),
+      // so the reported dims come from the PNG's IHDR: physical pixels at
+      // bytes 16..23, divided back to CSS px by the scale in effect.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      dims = {
+        width: Math.round(header.readUInt32BE(16) / effectiveScale),
+        height: Math.round(header.readUInt32BE(20) / effectiveScale),
+      };
+    }
+    let pngBytes = Buffer.byteLength(base64, 'base64');
+    log.debug(
+      `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,
+    );
+    return { base64, width: dims.width, height: dims.height };
+  } finally {
+    if (viewportOverridden) {
+      // Restore so the next reuse of this pooled page (including the indexing
+      // HTML-capture path) sees the original viewport, not the caller's.
+      try {
+        await page.setViewport(originalViewport ?? DEFAULT_SCREENSHOT_VIEWPORT);
+      } catch {
+        // Page may be closing/evicted; a best-effort restore is enough.
+      }
+    }
+  }
 }
 
 // Best-effort CPU / heap capture via the CDP `Performance` domain. Runs

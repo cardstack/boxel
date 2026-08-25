@@ -5,7 +5,11 @@ import {
   type QueueCoalesceDecision,
   type QueuePublisher,
 } from '../queue.ts';
-import type { ScreenshotPrerenderResponse, DBAdapter } from '../index.ts';
+import {
+  hasCaptureSpecOverrides,
+  type ScreenshotPrerenderResponse,
+  type DBAdapter,
+} from '../index.ts';
 import type {
   ScreenshotCardArgs,
   ScreenshotPersistArgs,
@@ -18,9 +22,10 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // this two simultaneous misses for the same spec would each run a full
 // render (the store's dedupe-on-write only saves the second upload, not the
 // Chrome work). A twin must match the whole capture identity — card, format,
-// render identity, and persist target — since joining hands the incoming
-// caller the twin's result verbatim. Queued and in-flight twins both join;
-// an in-flight join just registers a late waiter on the running job.
+// render identity, captureSpec, and persist target — since joining hands the
+// incoming caller the twin's result verbatim. Queued and in-flight twins
+// both join; an in-flight join just registers a late waiter on the running
+// job.
 //
 // Only persist-carrying jobs coalesce — both surfaces publish them: the GET
 // `_screenshot/` lane always, `POST /_screenshot-card` whenever the instance
@@ -29,16 +34,25 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // different revision. A `persist: null` job (unindexed card, or a server
 // with no MediaCache) is a render-now request whose identity carries no
 // freshness axis — an in-flight twin could be up to a reservation-lease old
-// and of a pre-edit card — so those always insert. The `runAs` equality
-// below keeps joins within one render identity: the GET lane renders as the
-// realm owner and the POST lane as the requester, so cross-surface twins
-// never join even when their persist targets match.
-function chooseScreenshotCardCoalesceDecision(
+// and of a pre-edit card — so those always insert. A job with captureSpec
+// overrides also always inserts, on both the incoming and candidate sides:
+// the persist identity cannot represent the overrides, so an override job
+// is never a canonical job's twin (the producers uphold that pairing by
+// setting `persist: null` on override jobs, and the task refuses the
+// persist if one slips through — this predicate must not depend on it).
+// The `runAs` equality below keeps joins within one render identity: the
+// GET lane renders as the realm owner and the POST lane as the requester,
+// so cross-surface twins never join even when their persist targets match.
+export function chooseScreenshotCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
   let incomingArgs = parseScreenshotCardArgs(incoming.args);
-  if (!incomingArgs || !incomingArgs.persist) {
+  if (
+    !incomingArgs ||
+    !incomingArgs.persist ||
+    hasCaptureSpecOverrides(incomingArgs.captureSpec)
+  ) {
     return { type: 'insert' };
   }
   let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
@@ -48,6 +62,7 @@ function chooseScreenshotCardCoalesceDecision(
     let candidateArgs = parseScreenshotCardArgs(candidate.args);
     return (
       candidateArgs !== undefined &&
+      !hasCaptureSpecOverrides(candidateArgs.captureSpec) &&
       candidateArgs.cardId === incomingArgs.cardId &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&

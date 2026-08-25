@@ -4221,6 +4221,10 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
+        // The GET DSL's spec is canonical by construction (viewport / scale /
+        // clip params are reserved), so there are never capture overrides on
+        // this lane.
+        captureSpec: null,
         persist: { ...entryKey, lane: 'on-demand' },
       },
       this.#queue,
