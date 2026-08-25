@@ -51,6 +51,16 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
       code: `${IMPORT}declare const a: string;\nlet u = new URL(a === rri('@cardstack/base/x') ? 'https://example.com/' : 'https://example.org/');`,
       filename,
     },
+    // An identifier behind an absolute prefix does not decide the leading
+    // spelling: the result parses whatever the identifier holds.
+    {
+      code: `${IMPORT}let id = rri('@cardstack/base/card-api');\nlet u = new URL(`+"`https://example.test/lookup/${id}`"+`);`,
+      filename,
+    },
+    {
+      code: `${IMPORT}let id = rri('@cardstack/base/card-api');\nlet u = new URL('https://example.test/lookup/' + id);`,
+      filename,
+    },
   ],
 
   invalid: [

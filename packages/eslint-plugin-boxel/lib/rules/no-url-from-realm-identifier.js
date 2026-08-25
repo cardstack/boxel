@@ -42,6 +42,12 @@ function brandOf(type, checker, seen = new Set()) {
   return undefined;
 }
 
+// The empty string contributes no spelling of its own, so it does not fix the
+// leading spelling of a concatenation.
+function isEmptyStringLiteral(node) {
+  return node && node.type === 'Literal' && node.value === '';
+}
+
 module.exports = {
   meta: {
     type: 'problem',
@@ -54,7 +60,7 @@ module.exports = {
     schema: [],
     messages: {
       urlFromIdentifier:
-        '`new URL()` on a {{brand}} throws for a prefix-form identifier. Use `new RealmPaths(ri(x))` for path work, `virtualNetwork.toURL(x)` at a genuine network boundary, or ask the realm server which realm a URL belongs to. If this really is the boundary, disable this rule on the line with a reason.',
+        '`new URL()` on a {{brand}} does not survive a prefix-form identifier: it throws with no base, and with one it resolves the prefix as a relative path into a URL that points nowhere. Use `new RealmPaths(ri(x))` for path work, `virtualNetwork.toURL(x)` at a genuine network boundary, or ask the realm server which realm a URL belongs to. If this really is the boundary, disable this rule on the line with a reason.',
     },
   },
 
@@ -137,19 +143,21 @@ module.exports = {
             brandInExpression(node.left, depth + 1) ||
             brandInExpression(node.right, depth + 1)
           );
+        // Concatenation propagates the brand only from whatever fixes the
+        // leading spelling. `${id}.gts` is still an identifier, but
+        // `https://example.test/x/${id}` parses whatever `id` holds, so an
+        // interpolation behind a literal prefix says nothing about the result.
         case 'BinaryExpression':
-          return node.operator === '+'
-            ? brandInExpression(node.left, depth + 1) ||
-                brandInExpression(node.right, depth + 1)
-            : undefined;
-        case 'TemplateLiteral':
-          for (const part of node.expressions) {
-            const found = brandInExpression(part, depth + 1);
-            if (found) {
-              return found;
-            }
+          if (node.operator !== '+') {
+            return undefined;
           }
-          return undefined;
+          return isEmptyStringLiteral(node.left)
+            ? brandInExpression(node.right, depth + 1)
+            : brandInExpression(node.left, depth + 1);
+        case 'TemplateLiteral':
+          return node.quasis.length > 0 && node.quasis[0].value.cooked !== ''
+            ? undefined
+            : brandInExpression(node.expressions[0], depth + 1);
         case 'Identifier': {
           const init = constInitializerOf(node);
           return init ? brandInExpression(init, depth + 1) : undefined;
