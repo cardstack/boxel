@@ -10,6 +10,7 @@ import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
+import type * as FilePresentationModule from '@cardstack/base/file-formats/file-presentation';
 import type * as FileTypeProfileModule from '@cardstack/base/file-formats/file-type-profile';
 import type * as FileViewModelModule from '@cardstack/base/file-formats/file-view-model';
 
@@ -21,6 +22,8 @@ module('Unit | file-formats', function (hooks) {
   let extensionOfFile: typeof FileTypeProfileModule.extensionOfFile;
   let contentTypeForFile: typeof FileTypeProfileModule.contentTypeForFile;
   let fileViewModel: typeof FileViewModelModule.fileViewModel;
+  let shortDate: typeof FilePresentationModule.shortDate;
+  let relativeDate: typeof FilePresentationModule.relativeDate;
   let FITTED_TEXT_CHARACTER_BUDGET: number;
   let FITTED_TEXT_LINE_BUDGET: number;
   let FITTED_WAVEFORM_BAR_BUDGET: number;
@@ -33,7 +36,11 @@ module('Unit | file-formats', function (hooks) {
     let viewModelModule = await loader.import<typeof FileViewModelModule>(
       '@cardstack/base/file-formats/file-view-model',
     );
+    let presentationModule = await loader.import<typeof FilePresentationModule>(
+      '@cardstack/base/file-formats/file-presentation',
+    );
     ({ profileForFile, contentTypeForFile, extensionOfFile } = profileModule);
+    ({ shortDate, relativeDate } = presentationModule);
     ({
       fileViewModel,
       FITTED_TEXT_CHARACTER_BUDGET,
@@ -346,6 +353,49 @@ module('Unit | file-formats', function (hooks) {
     test('describes an oddly-shaped image with a ratio rather than a fraction', function (assert) {
       let vm = fileViewModel({ name: 'pano.jpg', width: 4001, height: 1000 });
       assert.strictEqual(vm.aspectLabel, '4.00:1');
+    });
+  });
+
+  module('timestamps', function () {
+    // A FileDef exposes its created timestamp as `resourceCreatedAt` (the card
+    // key name), not the legacy `createdAt` attribute. The projection has to
+    // resolve the created slot off the getter, or the isolated shell's "Created"
+    // line reads blank for every hydrated file.
+    test('resolves the created slot from resourceCreatedAt', function (assert) {
+      let vm = fileViewModel({
+        name: 'note.txt',
+        url: 'http://test.com/note.txt',
+        lastModified: 1_700_000_500,
+        resourceCreatedAt: 1_699_000_000,
+      });
+      assert.strictEqual(vm.createdAt, 1_699_000_000);
+      assert.strictEqual(vm.lastModified, 1_700_000_500);
+    });
+
+    // The server stamps a file's timestamps in epoch *seconds*, and the shells
+    // hand them straight to these formatters. A bare number read as milliseconds
+    // renders as 1970 — the regression this guards.
+    test('formats epoch-seconds timestamps to the right era, not 1970', function (assert) {
+      // 1_700_000_000s = 2023-11-14T22:13:20Z — far enough into that UTC day
+      // that no local timezone shifts it off the year.
+      assert.true(
+        shortDate(1_700_000_000).includes('2023'),
+        `epoch seconds format to their real year, got: ${shortDate(1_700_000_000)}`,
+      );
+      assert.notOk(
+        shortDate(1_700_000_000).includes('1970'),
+        'a seconds timestamp is not misread as milliseconds',
+      );
+      // Milliseconds already above the seconds floor pass through unchanged.
+      assert.true(
+        shortDate(1_700_000_000_000).includes('2023'),
+        'a millisecond timestamp still formats correctly',
+      );
+      // A recent seconds timestamp reads as a recent relative date, not "56y ago".
+      assert.notOk(
+        relativeDate(1_700_000_000).includes('56y'),
+        'a seconds timestamp is not misread as a 1970 relative date',
+      );
     });
   });
 });
