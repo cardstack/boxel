@@ -83,23 +83,27 @@ export interface DemoEntry {
 export const catalog: DemoEntry[] = [
   {
     Example: Playhead,
-    apis: ['spring()', 'motionValue', 'jump()'],
+    apis: ['c.run', 'run.time', '@name', 'at()', 'c.Spring'],
     group: 'Timeline',
     id: 'playhead',
     lede: 'A hand that clicks for you. Drag the playhead and watch it think.',
     notes: PlayheadNotes,
-    sample: `// A score is beats, not timecodes: walk there, press it, wait. Absolute
-// times fall out of compile(); the coordinates fall out of measuring the cue
-// when the question is asked, so the score names a BUTTON, never a pixel.
-const BEATS = [
-  { kind: 'move',  cue: 'express', ms: 620 },
-  { kind: 'press', cue: 'express', ms: 220 },
-  { kind: 'hold',                  ms: 360 },
+    sample: `// The score IS the template: holds and walks in sequence flow, each press
+// a NAMED dip of the hand, and the app's own value changes anchored to the
+// press by name — \`at 'press-express' 0.55\` is the moment the finger lands.
+<c.Sequence>
+  <c.Wait @of={{hand}} @duration={{0.34}} />
+  <c.Tween @of={{hand}} @x={{this.walkX 'home' 'express'}}
+    @y={{this.walkY 'home' 'express'}} @duration={{0.62}} />
+  <c.Tween @name='press-express' @of={{hand}}
+    @scale={{array 1 0.74 1}} @duration={{0.22}} />
+  <c.Spring @at={{at 'press-express' 0.55}}
+    @of={{pill}} @x={{array 0 127}} @spring={{PILL}} />
   …
-];
+</c.Sequence>
 
-// One description of what a press does. The buttons run it on click, and the
-// timeline folds it to work out what the app IS at a scrubbed time — so a
+// One description of what a press does. The buttons run it on click, and
+// the transport folds it over the presses behind the playhead — so a
 // scrubbed state cannot drift from a clicked one.
 function press(state, cue) {
   switch (cue) {
@@ -109,30 +113,24 @@ function press(state, cue) {
   }
 }
 
-// PLAYING — Motion's clock. The score fires a real .click() on the real
-// control; the app's own handler runs; every {{motion}} animates as usual.
+// PLAYING — run.play(). The transport reads run.time and fires a real
+// .click() on the real control as each press's moment goes by; the app's
+// own handler is what changes the app.
 this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
 
-// SCORED — the playhead's clock. Same springs, asked for their value at t
-// instead of run. Motion's spring() generator is closed-form in t and holds
-// no playhead of its own, so it answers about any time in any order — which
-// is exactly what dragging a scrubber backwards does.
-const gen = spring({ keyframes: [from, to], bounce: 0.3, visualDuration: 0.36 });
-const { value } = gen.next(t - since);
+// SCORED — run.pause(); run.time = t. A scrubbed frame is the library's
+// computed still: every spring stood exactly where the score says t looks
+// like, in either direction. The old private sampler — a poseAt re-running
+// Motion's generator — is deleted whole.
 
-{{! and the whole difference between the two is this one line }}
-<span {{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}} />
-
-get poses() {
-  return this.scored
-    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)   // sample
-    : posesOf(this.state);                        // play
-}
-
-// What has no score cannot be seeked: layout, layoutId and Presence are all
-// absent here on purpose. A spring is a function of time; a projection
-// animation is two measurements of a live tree. Closing that gap — valueAt(t)
-// on <Choreo> — is what this stage is a rehearsal for.`,
+// LIVE — touch a control yourself and the template swaps the score for a
+// handful of state-target springs: the app behaves like the plain app it
+// is, and Play, Reset or the scrubber take the scene back by recomputing.
+{{#if this.isLive}}
+  <c.Spring @of={{pill}} @x={{this.pillX}} @spring={{PILL}} />
+{{else}}
+  …the score…
+{{/if}}`,
     slowmo: false,
     title: 'Playhead',
   },
@@ -361,15 +359,15 @@ get poses() {
     apis: ['c.Camera', '@origin', '@steady', '@zoom', '@x', '@y'],
     group: 'Choreo',
     id: 'camera',
-    lede: 'The whole roll sits on the glass. Loupe in to grade a frame.',
-    sample: `{{! A light table: the whole roll sits on the glass, unlabelled film.
-    Loupe IN and the camera info develops — number first, then the full
+    lede: 'The whole library sits on the glass. Dive in to grade a shot.',
+    sample: `{{! A photo library: the whole set sits on the glass.
+    Dive IN and the camera info develops — number first, then the full
     exposure. ONE step, aimed by state — an interrupted dive simply bends.
 
     The zoom isn't guessed: it's computed in loupe() from two real boxes —
     the clicked frame's rest size and the glass it has to fit inside —
     measured in LAYOUT terms (offsetWidth/offsetTop), never in screen
-    terms, so a click straight from one loupe to the next tile still
+    terms, so a click straight from one dive to the next tile still
     measures the true rest geometry instead of whatever was mid-flight. }}
 <c.Parallel>
   <c.Camera
@@ -378,22 +376,16 @@ get poses() {
     @x={{if this.focus this.panX 0}}
     @y={{if this.focus this.panY 0}}
     @spring={{carry}}
-    @steady={{array (c.role 'no') (c.role 'verdict')}}
+    @steady={{array (c.role 'no') (c.role 'heart') (c.role 'verdict')}}
   />
 
   {{! if a verdict reflows the sheet, every frame that moved tweens }}
   <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
-
-  {{! the verdict control arrives with the loupe — a plain fade, no
-      overshoot, since @steady is already busy correcting its scale
-      against the camera's own move }}
-  <c.Tween @of={{c.inserted 'verdict'}} @opacity={{array 0 1}} @duration={{0.18}} />
-  <c.Tween @of={{c.removed 'verdict'}} @opacity={{0}} @duration={{0.12}} />
 </c.Parallel>
 
-{{! @steady names what must stay legible at any distance: the frame
-    number and the verdict control scale against the camera, damped back
-    toward their own size — the loupe's zoom never blows them up. @x/@y
+{{! @steady keeps the OTHER tiles' take numbers and marks legible
+    while the camera flies — the open frame has none; its facts live
+    in the dock, off the photograph. @x/@y
     are the one thing @origin doesn't give you for free: it pins the aim
     point at its OWN screen position while zooming, it doesn't recentre
     it — panX/panY (computed alongside the zoom, in loupe()) are the extra

@@ -1,38 +1,45 @@
 import type { TOC } from '@ember/component/template-only';
 import { CodeBox } from 'test-app/components/code-box';
 
-const BIND =
-  "{{motion animate=(this.pose 'pill') transition=(this.tx 'pill')}}";
+const SCORE = `<c.Sequence>
+  <c.Wait @of={{hand}} @duration={{0.34}} />
+  <c.Tween @of={{hand}} @x={{this.walkX 'home' 'express'}}
+    @y={{this.walkY 'home' 'express'}} @duration={{0.62}} />
+  <c.Tween @name='press-express' @of={{hand}}
+    @scale={{array 1 0.74 1}} @duration={{0.22}} />
+  <c.Spring @at={{at 'press-express' 0.55}}
+    @of={{pill}} @x={{array 0 127}} @spring={{PILL}} />
+</c.Sequence>`;
 
-const BEATS = `const BEATS = [
-  { kind: 'hold',                    ms: 340 },
-  { kind: 'move',  cue: 'express',   ms: 620 },
-  { kind: 'press', cue: 'express',   ms: 220 },
-  { kind: 'hold',                    ms: 360 },
-];
+const DISPATCH = `// the transport reads run.time; the score knows which
+// button, never what the button does
+while (this.pressAt[this.fired] <= run.time) {
+  const cue = PRESSES[this.fired++];
+  this.stage.querySelector('[data-cue="' + cue + '"]').click();
+}`;
 
-const { clips, duration } = compile(BEATS);`;
+const STILL = `run.pause();
+run.time = t;   // a computed still — either direction, any order`;
 
-const DISPATCH = `this.stage.querySelector('[data-cue="' + cue + '"]').click();`;
+const FOLD = `fold(t) {
+  let state = INITIAL;
+  for (const [i, moment] of this.pressAt.entries()) {
+    if (moment <= t) state = press(state, PRESSES[i]);
+  }
+  this.state = state;
+}`;
 
-const FLIGHT = `interface Flight { from: number; since: number; to: number }
+const LIVE = `{{#if this.isLive}}
+  {{! the app as a plain app: values spring to what state says }}
+  <c.Spring @of={{pill}} @x={{this.pillX}} @spring={{PILL}} />
+{{else}}
+  {{! …the score… }}
+{{/if}}`;
 
-const gen = spring({ keyframes: [flight.from, flight.to], ...spec });
-const { value } = gen.next(t - flight.since);`;
-
-const POSES = `get poses() {
-  return this.scored
-    ? poseAt(this.t, MOMENTS, posesOf, SPRINGS)
-    : posesOf(this.state);
-}
-
-tx = (name) => this.scored ? { duration: 0 } : TWEENS[name];`;
-
-const SEEK = `seek(t) {
-  this.t = t;
-  this.state = stateAt(t, MOMENTS);
-  this.fired = HITS.filter(c => hitAt(c) <= t).length;
-  this.paint();
+const PARK = `if (run.time >= run.duration - 0.02) {
+  run.pause();                      // park at the end — a FINISHED run
+  run.time = run.duration - 0.01;   // replays on any unrelated render,
+  this.mode = 'scored';             // and a watched score must stand
 }`;
 
 /**
@@ -42,33 +49,41 @@ const PlayheadNotes: TOC<object> = <template>
   <section class="dive" aria-label="How it works">
     <header class="dive-head">
       <p class="dive-kicker">How it works</p>
-      <h2>Two clocks, one score</h2>
+      <h2>One score, one clock</h2>
       <p class="dive-lede">
-        Pressing play and dragging the scrubber look the same, but they work
-        differently. Playing runs an animation. Scrubbing calculates what the
-        animation would have looked like at any point in time. Everything else —
-        the buttons, the springs, the elements — is shared between the two.
+        Pressing play and dragging the scrubber used to be two code paths this
+        demo kept honest by hand — its own frame loop, its own spring sampler.
+        Both are gone. The score is a
+        <code>&lt;c.Sequence&gt;</code>
+        in the template, the library plays it, and the scrubber sets
+        <code>run.time</code>. The buttons, the springs and the elements are
+        shared with the app itself.
       </p>
     </header>
 
     <section class="dd">
-      <p class="dd-fn">compile()<span>lib/score.ts</span></p>
+      <p class="dd-fn">&lt;c.Sequence&gt;<span>the score</span></p>
       <h3>The score is a list of actions, not a timeline</h3>
       <div class="dd-col">
         <p>
-          You do not write coordinates or timestamps. You write actions: move
-          there, click it, wait. Each beat specifies what kind of action, how
-          long it takes, and which button it targets. The absolute times are
-          computed by adding up the durations.
+          You do not write coordinates or timestamps. You write actions in
+          order: wait, walk there, press it. Each press is a
+          <em>named</em>
+          dip of the hand, and everything that happens BECAUSE of the press —
+          the ring's pop, the pill's spring — hangs off that name:
+          <code>at 'press-express' 0.55</code>
+          is the moment the finger lands. The absolute times fall out of the
+          compiler.
         </p>
       </div>
-      <CodeBox @label="lib/score.ts" @source={{BEATS}} />
+      <CodeBox @label="playhead.gts" @source={{SCORE}} />
       <div class="dd-col">
         <p>
           The click does not fire at the start of a press beat. It fires
-          <strong>42% of the way in</strong>. A real hand presses down, the
-          button fires, and the hand comes back up. Clicking partway through the
-          beat is what makes it look like a press instead of a teleport.
+          <strong>55% of the way in</strong>
+          — a real hand presses down, the button fires, the hand comes back
+          up. The value cues are anchored to the same moment, so the pill sets
+          off exactly as the finger lands.
         </p>
       </div>
 
@@ -77,8 +92,8 @@ const PlayheadNotes: TOC<object> = <template>
           class="dg"
           viewBox="0 0 900 200"
           role="img"
-          aria-label="Beats are compiled into clips on a timeline. Each click
-            fires at 42 percent of the way through its press beat."
+          aria-label="Beats are compiled into a timeline. Each click fires 55
+            percent of the way through its press beat."
         >
           <text class="dg-eb" x="20" y="26">WHAT YOU WRITE</text>
 
@@ -117,7 +132,7 @@ const PlayheadNotes: TOC<object> = <template>
             text-anchor="middle"
           >click</text>
 
-          <text class="dg-eb" x="20" y="112">WHAT IT BECOMES</text>
+          <text class="dg-eb" x="20" y="112">WHAT THE COMPILER RESOLVES</text>
           <line class="dg-rule" x1="20" y1="140" x2="880" y2="140" />
           <g class="dg-rule">
             <line x1="20" y1="134" x2="20" y2="146" />
@@ -130,54 +145,50 @@ const PlayheadNotes: TOC<object> = <template>
           </g>
 
           <g class="dg-emberline dg-dash">
-            <line x1="417" y1="78" x2="417" y2="136" />
-            <line x1="832" y1="78" x2="832" y2="136" />
+            <line x1="428" y1="78" x2="428" y2="136" />
+            <line x1="843" y1="78" x2="843" y2="136" />
           </g>
-          <circle class="dg-dot" cx="417" cy="140" r="4.5" />
-          <circle class="dg-dot" cx="832" cy="140" r="4.5" />
+          <circle class="dg-dot" cx="428" cy="140" r="4.5" />
+          <circle class="dg-dot" cx="843" cy="140" r="4.5" />
 
-          <text class="dg-t is-hot" x="417" y="166" text-anchor="middle">click
-            at 1052 ms</text>
+          <text class="dg-t is-hot" x="428" y="166" text-anchor="middle">click
+            at 1081 ms</text>
           <text class="dg-t is-hot" x="880" y="166" text-anchor="end">click at
-            2152 ms</text>
-          <text class="dg-t is-faint" x="20" y="190">click time = beat start +
-            42% of the beat</text>
+            1961 ms</text>
+          <text class="dg-t is-faint" x="20" y="190">click time = the press's
+            start + 55% of the press — read back from run.cues</text>
         </svg>
         <figcaption>
-          You never write a time. Times are computed by adding up beat
-          durations.
+          You never write a time. The compiler resolves them, and the
+          transport reads the presses' moments back from the compiled cues —
+          the tick marks on the rail are the same numbers.
         </figcaption>
       </figure>
     </section>
 
     <section class="dd">
-      <p class="dd-fn">ghostAt(t)<span>lib/score.ts</span></p>
-      <h3>The cursor position is computed, not animated</h3>
+      <p class="dd-fn">walkX · walkY<span>the hand</span></p>
+      <h3>The hand is cues; only its map is measured</h3>
       <div class="dd-col">
         <p>
-          Give
-          <code>ghostAt</code>
-          a time and it returns four numbers: the pointer's x and y position,
-          and how hard it is pressing. Nothing is running. You can ask it about
-          1.2 seconds and it answers. Ask about 0.8 seconds next and it answers
-          that too. It works in any order.
+          A walk is a tween of the hand's
+          <code>x</code>
+          and
+          <code>y</code>
+          between two spots, eased in and out. The spots are still measured
+          here — where a control LIVES is this stage's knowledge, read from
+          layout offsets rather than
+          <code>getBoundingClientRect</code>, because elements on this stage
+          are mid-animation whenever you ask. Everything about
+          <em>time</em>
+          belongs to the compiled score.
         </p>
         <p>
-          It finds which beat that time falls in. If it is a move beat, it
-          interpolates between the previous button and the next one. Otherwise
-          the pointer sits still on a button.
-        </p>
-        <p>
-          Two details keep it from looking mechanical. The pointer accelerates
-          and decelerates instead of moving at a constant speed, and the path
-          curves slightly between buttons. The curve is widest in the middle and
-          zero at both ends, so the pointer still lands exactly on target.
-        </p>
-        <p>
-          Button positions are read from the page layout, not from where the
-          button currently appears. Elements here move during animations, so
-          asking "where does this button appear right now" would give a
-          different answer every frame. The layout position is stable.
+          The press is a scale dip through the arrow's own hotspot, and the
+          ring rides
+          <em>inside</em>
+          the hand — one transform source — so its pop happens wherever the
+          hand is, with no second set of position cues.
         </p>
       </div>
 
@@ -186,8 +197,8 @@ const PlayheadNotes: TOC<object> = <template>
           class="dg"
           viewBox="0 0 900 250"
           role="img"
-          aria-label="The pointer follows a curved path from one button to
-            another, with easing at both ends."
+          aria-label="The pointer moves in a straight, eased line from its
+            rest to a button, aimed at the layout position."
         >
           <text class="dg-eb" x="20" y="22">WHERE THE POINTER GOES</text>
 
@@ -242,7 +253,7 @@ const PlayheadNotes: TOC<object> = <template>
           <text class="dg-t is-faint" x="254" y="175" text-anchor="middle">place
             order</text>
 
-          <path class="dg-cop dg-dash" d="M68,206 Q112,146 314,85" />
+          <path class="dg-cop dg-dash" d="M68,206 L314,85" />
           <circle class="dg-faintdot" cx="68" cy="206" r="4" />
           <text
             class="dg-t is-faint"
@@ -256,9 +267,6 @@ const PlayheadNotes: TOC<object> = <template>
           />
           <circle class="dg-dot" cx="314" cy="85" r="2.5" />
 
-          <path class="dg-cop dg-dash" d="M506,78 q14,-11 28,0" />
-          <text class="dg-t is-dim" x="548" y="82">curved path, not a straight
-            line</text>
           <path class="dg-inkline" d="M506,124 c7,0 7,-14 14,-14 s7,14 14,14" />
           <text class="dg-t is-dim" x="548" y="128">eases in and out</text>
           <g class="dg-emberline">
@@ -269,8 +277,8 @@ const PlayheadNotes: TOC<object> = <template>
             position, not the rendered one</text>
         </svg>
         <figcaption>
-          Give it a time and it returns a position. No animation is running —
-          the pointer is placed there directly.
+          The walk is a cue like any other: play it, or stand it at any t —
+          the library's still puts the hand exactly where the score says.
         </figcaption>
       </figure>
 
@@ -280,7 +288,7 @@ const PlayheadNotes: TOC<object> = <template>
           viewBox="0 0 900 220"
           role="img"
           aria-label="During a click the pointer dips and springs back, while
-            a ring spreads from the button and outlasts the beat."
+            a ring spreads from the press and outlasts the beat."
         >
           <text class="dg-eb" x="20" y="22">WHAT A CLICK LOOKS LIKE</text>
 
@@ -316,12 +324,13 @@ const PlayheadNotes: TOC<object> = <template>
           >click</text>
           <text class="dg-t is-faint" x="294" y="192" text-anchor="middle">beat
             ends</text>
-          <text class="dg-t is-faint" x="694" y="192" text-anchor="middle">+560
+          <text class="dg-t is-faint" x="694" y="192" text-anchor="middle">+420
             ms</text>
         </svg>
         <figcaption>
-          The ring outlasts the beat. It stays on the clicked button while the
-          pointer moves on.
+          The ring's pop is anchored to the press by name and lifted out of
+          the sequence's flow — it outlasts the beat while the hand moves on,
+          and its own end still counts toward the run's length.
         </figcaption>
       </figure>
     </section>
@@ -331,8 +340,8 @@ const PlayheadNotes: TOC<object> = <template>
       <h3>The click is a real click</h3>
       <div class="dd-col">
         <p>
-          When a click moment passes during playback, the script finds the
-          actual button element and calls
+          As each press's moment goes by, the transport finds the actual
+          button element and calls
           <code>.click()</code>
           on it. The button's own event handler runs, just as if a user had
           clicked it.
@@ -341,40 +350,37 @@ const PlayheadNotes: TOC<object> = <template>
       <CodeBox @label="playhead.gts" @source={{DISPATCH}} />
       <div class="dd-col">
         <p>
-          This matters because the timeline figures out a scrubbed state by
-          replaying the same handler code. There is only one description of what
-          each button does, so a scrubbed state can never disagree with a
-          clicked state.
+          This matters because the scrubbed state is computed by folding the
+          same handler code over the presses behind the playhead. There is
+          only one description of what each button does, so a scrubbed state
+          can never disagree with a clicked one.
         </p>
       </div>
     </section>
 
     <section class="dd">
-      <p class="dd-fn">poseAt(t)<span>lib/score.ts</span></p>
-      <h3>Scrubbing solves the springs at any time</h3>
+      <p class="dd-fn">run.time = t<span>scrubbing</span></p>
+      <h3>A scrubbed frame is the library's still</h3>
       <div class="dd-col">
         <p>
-          Everything that moves on this stage is a number: how far across the
-          pill is, how far over the switch knob is, how high the receipt is. A
-          scrubbed frame is not just "which step are we on" — it can be halfway
-          through a step.
-        </p>
-        <p>
-          To compute the value at a given time, it replays the score from the
-          beginning. For each animated value it tracks where it started, where
-          it is heading, and when the destination changed. Every time a click
-          changes the target, it records the current position as the new
-          starting point and resets the clock.
+          The demo used to re-run Motion's spring generator itself to answer
+          "where is the pill at 1.25 seconds". Now the question goes to the
+          run:
+          <code>time</code>
+          is settable in either direction, and a scrubbed frame is a computed
+          still — the run retires its animations and stands every value
+          exactly where the score says t looks like, spring curves included,
+          with no memory of the frame before.
         </p>
       </div>
-      <CodeBox @label="lib/score.ts" @source={{FLIGHT}} />
+      <CodeBox @label="playhead.gts" @source={{STILL}} />
       <div class="dd-col">
         <p>
-          Then it asks the spring itself. A spring is a mathematical function:
-          given the time since it started, it returns where it is. You can ask
-          it about any moment, in any order, as many times as you like. That is
-          exactly the property a scrubber needs — dragging backwards means
-          asking about earlier times.
+          Every value cue states both ends of its journey —
+          <code>@x=&lbrace;&lbrace;array 0 127&rbrace;&rbrace;</code>
+          — so the run's first frame pins the whole scene to its opening
+          state, and asking about an earlier time is not a different operation
+          from asking about a later one.
         </p>
       </div>
 
@@ -384,8 +390,8 @@ const PlayheadNotes: TOC<object> = <template>
           viewBox="0 0 900 320"
           role="img"
           aria-label="A chart of the pill's position over time: still at zero,
-            springs to 127 after the first click, then springs back after the
-            last click. A probe at 1250ms reads 120.1."
+            springs right after the first click, then springs back after the
+            last click. A scrub probe reads a mid-flight value."
         >
           <text class="dg-eb" x="20" y="24">PILL POSITION OVER TIME</text>
           <line class="dg-hair dg-dash" x1="70" y1="80" x2="878" y2="80" />
@@ -415,213 +421,96 @@ const PlayheadNotes: TOC<object> = <template>
             <line x1="214" y1="60" x2="214" y2="270" />
             <line x1="768" y1="60" x2="768" y2="270" />
           </g>
-          <text class="dg-t is-dim" x="220" y="72">click — 1052 ms</text>
+          <text class="dg-t is-dim" x="220" y="72">click — 1081 ms</text>
           <text class="dg-t is-dim" x="762" y="72" text-anchor="end">click —
-            5092 ms</text>
+            5121 ms</text>
           <text class="dg-t is-faint" x="220" y="288">heading right</text>
           <text class="dg-t is-faint" x="762" y="288" text-anchor="end">heading
             back left</text>
 
           <line class="dg-cop dg-dash" x1="242" y1="60" x2="242" y2="270" />
           <circle class="dg-copdot" cx="242" cy="119" r="4.5" />
-          <text class="dg-t is-cop" x="252" y="140">scrub to 1250 ms → 120.1 px</text>
+          <text class="dg-t is-cop" x="252" y="140">scrub here → a mid-flight
+            value, on the same curve</text>
           <text class="dg-t is-faint" x="878" y="306" text-anchor="end">the
             overshoot is the same spring</text>
         </svg>
         <figcaption>
-          Playing and scrubbing trace the same curve, because they use the same
-          spring function. Scrub to 1120 ms and the pill is at 37.9 px; 1500 ms
-          and it is at 128.4 — past the target, on its way back.
-        </figcaption>
-      </figure>
-
-      <div class="dd-call">
-        <p>
-          <b>One limitation.</b>
-          If a click changes the target while a value is mid-flight, the new
-          spring starts from the right position but not the right velocity.
-          Nothing jumps, so scrubbing looks correct — it is just slightly softer
-          than the live version.
-        </p>
-      </div>
-    </section>
-
-    <section class="dd">
-      <p class="dd-fn">get poses()<span>playhead.gts</span></p>
-      <h3>One line separates the two modes</h3>
-      <div class="dd-col">
-        <p>
-          The buttons, the springs, and the elements are all shared. The entire
-          difference between playing and scrubbing is which of two values gets
-          passed to the same element.
-        </p>
-      </div>
-      <CodeBox @label="playhead.gts" @source={{POSES}} />
-      <div class="dd-col">
-        <p>
-          Both end up on the same attribute —
-          <code>{{BIND}}</code>. Playing passes a destination and a spring spec;
-          the engine handles the animation. Scrubbing passes finished numbers
-          and a zero-duration transition; the element jumps to position with no
-          animation because the answer is already computed.
-        </p>
-      </div>
-
-      <figure class="dd-fig">
-        <svg
-          class="dg"
-          viewBox="0 0 900 400"
-          role="img"
-          aria-label="Two side-by-side flowcharts. Playing: a frame ticks,
-            time advances, a click fires, the app updates, the element gets
-            a destination and spring. Scrubbing: the slider moves, clicks are
-            replayed, springs are solved, the element gets finished numbers."
-        >
-          <defs>
-            <marker
-              id="dd-ar"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            ><path class="dg-arrow" d="M0,0 L10,5 L0,10 z" /></marker>
-          </defs>
-
-          <text class="dg-h" x="40" y="22">PLAYING</text>
-          <text class="dg-h is-hot" x="490" y="22">SCRUBBING</text>
-
-          <rect class="dg-box" x="40" y="40" width="370" height="34" rx="6" />
-          <text class="dg-t" x="56" y="62">a frame goes by</text>
-          <rect class="dg-box" x="40" y="98" width="370" height="34" rx="6" />
-          <text class="dg-t" x="56" y="120">advance time by the frame's duration</text>
-          <rect class="dg-box" x="40" y="156" width="370" height="34" rx="6" />
-          <text class="dg-t" x="56" y="178">if a click is due — fire the real
-            click</text>
-          <rect
-            class="dg-boxcop"
-            x="40"
-            y="214"
-            width="370"
-            height="34"
-            rx="6"
-          />
-          <text class="dg-t is-cop" x="56" y="236">the app updates its own state</text>
-          <rect class="dg-box" x="40" y="272" width="370" height="34" rx="6" />
-          <text class="dg-t" x="56" y="294">element gets a destination + a
-            spring</text>
-
-          <rect class="dg-box" x="490" y="40" width="370" height="34" rx="6" />
-          <text class="dg-t" x="506" y="62">you drag the slider to a time</text>
-          <rect class="dg-box" x="490" y="98" width="370" height="34" rx="6" />
-          <text class="dg-t" x="506" y="120">replay the score from time zero</text>
-          <rect
-            class="dg-boxcop"
-            x="490"
-            y="156"
-            width="370"
-            height="34"
-            rx="6"
-          />
-          <text class="dg-t is-cop" x="506" y="178">fold every click up to that
-            time</text>
-          <rect class="dg-hot" x="490" y="214" width="370" height="34" rx="6" />
-          <text class="dg-t is-hot" x="506" y="236">solve the springs for that
-            time</text>
-          <rect class="dg-box" x="490" y="272" width="370" height="34" rx="6" />
-          <text class="dg-t" x="506" y="294">element gets finished numbers, no
-            spring</text>
-
-          <g class="dg-rule" marker-end="url(#dd-ar)">
-            <line x1="225" y1="76" x2="225" y2="94" />
-            <line x1="225" y1="134" x2="225" y2="152" />
-            <line x1="225" y1="192" x2="225" y2="210" />
-            <line x1="225" y1="250" x2="225" y2="268" />
-            <line x1="225" y1="308" x2="225" y2="336" />
-            <line x1="675" y1="76" x2="675" y2="94" />
-            <line x1="675" y1="134" x2="675" y2="152" />
-            <line x1="675" y1="192" x2="675" y2="210" />
-            <line x1="675" y1="250" x2="675" y2="268" />
-            <line x1="675" y1="308" x2="675" y2="336" />
-          </g>
-
-          <rect
-            class="dg-plate"
-            x="40"
-            y="340"
-            width="820"
-            height="42"
-            rx="8"
-          />
-          <text class="dg-t is-dim" x="450" y="366" text-anchor="middle">the
-            same buttons, the same springs, the same elements</text>
-        </svg>
-        <figcaption>
-          Only the last step differs. Playing provides a destination; scrubbing
-          provides the answer.
+          Playing and scrubbing trace the same curve, because the same spring
+          plays it and the same spring is sampled — the run's stills come from
+          the engine's own generator, not a re-implementation of it.
         </figcaption>
       </figure>
     </section>
 
     <section class="dd">
-      <p class="dd-fn">seek(t)<span>playhead.gts</span></p>
+      <p class="dd-fn">fold(t)<span>the state</span></p>
       <h3>Nothing needs to be disabled</h3>
       <div class="dd-modes">
         <div class="dd-mode">
           <span class="dd-tag">playing</span>
-          <b>The engine drives</b>
-          <p>Real clicks, real springs. The timeline shows progress.</p>
+          <b>The run drives</b>
+          <p>run.play(). Real clicks, real springs. The playhead is a
+            readout.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">scored</span>
-          <b>The timeline drives</b>
-          <p>Paused or being dragged. All values are computed and set directly.</p>
+          <b>The playhead drives</b>
+          <p>run.pause() and run.time = t. Every value is a computed
+            still.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">live</span>
           <b>You drive</b>
-          <p>Touch a control and the timeline steps aside.</p>
+          <p>Touch a control and the template swaps the score for the app's
+            own state springs.</p>
         </div>
       </div>
       <div class="dd-col">
         <p>
-          You might expect the transport controls to be greyed out when you
-          interact with the form directly. They are not. Seeking to a time never
-          resumes from where it left off — it replays the entire score from zero
-          up to that point.
+          You might expect the transport to be greyed out when a real hand has
+          the scene. It is not. Seeking never resumes from where things were
+          left — the app's state at t is folded from the presses behind the
+          playhead, from zero, every time.
         </p>
       </div>
-      <CodeBox @label="playhead.gts" @source={{SEEK}} />
+      <CodeBox @label="playhead.gts" @source={{FOLD}} />
       <div class="dd-col">
         <p>
-          Whatever you clicked by hand is not in the replayed sequence. Play,
-          Reset, and the scrubber all go through
-          <code>seek</code>, so all three reset the state cleanly and none of
-          them needs special handling.
+          Whatever you clicked by hand is simply not in the folded answer.
+          And the swap itself is one template branch — the mode picks which
+          timeline the region compiles:
         </p>
       </div>
+      <CodeBox @label="playhead.gts" @source={{LIVE}} />
     </section>
 
     <section class="dd">
-      <p class="dd-fn">advance(now)<span>playhead.gts</span></p>
-      <h3>The playhead runs its own frame loop</h3>
+      <p class="dd-fn">the reader<span>playhead.gts</span></p>
+      <h3>A transport is a reader, not a clock</h3>
       <div class="dd-col">
         <p>
-          Each frame, the playhead adds the elapsed time since the last frame,
-          capped at 50ms. If the browser gets busy — a background tab, a page
-          with dozens of live demos — the timeline loses a fraction of a second
-          rather than jumping forward to where the wall clock says it should be.
+          The old demo ran its own requestAnimationFrame loop with a clamped
+          delta, and the comments explaining why ran longer than the loop.
+          All deleted: the run owns the clock, and the transport only looks at
+          it — the rail's fill, the clock text and the range are written
+          imperatively each frame, because a region re-passes on every render
+          and a tracked value written at 60fps would replay the pass at 60fps
+          (the Build Order demo's lesson, learned the hard way).
         </p>
         <p>
-          The frame loop is separate from the animation engine's. A click
-          dispatched by the playhead causes a re-render, and re-rendering runs
-          the engine. A clock living inside the engine would be advanced by its
-          own clicks.
+          One deliberate move at the end of the score: the run is parked a
+          hair before its own finish line.
         </p>
+      </div>
+      <CodeBox @label="playhead.gts" @source={{PARK}} />
+      <div class="dd-col">
         <p>
-          Playback also pauses when the card scrolls off screen, using an
-          IntersectionObserver, and resumes when it returns.
+          A finished run replays on the next real pass — that is the rule that
+          lets an event re-fire a Hold on a quiet region — but a score that
+          has been watched to the end must simply stand until Play or a scrub
+          says otherwise. Parked is not finished, so the region keeps the run,
+          and the scene holds.
         </p>
       </div>
     </section>
@@ -632,21 +521,22 @@ const PlayheadNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           Everything on this stage moves by changing a number. That is
-          deliberate. A spring is a mathematical function, so you can ask it
-          about any point in time. Other kinds of animation are not.
+          deliberate. A spring is a mathematical function, so a still can be
+          computed for any point in time. Other kinds of animation are not.
         </p>
         <p>
-          When an element moves because the layout changed, the engine works it
-          out by measuring the page before and after. There is no function to
-          query — only two measurements that already happened. The same applies
-          to an element leaving the page: once it is gone, there is nothing to
-          ask.
+          When an element moves because the layout changed, the engine works
+          it out by measuring the page before and after. There is no function
+          to query — only two measurements that already happened. The same
+          applies to an element leaving the page: once it is gone, there is
+          nothing to ask.
         </p>
         <p>
           That is why the sliding pill is a number instead of a layout
           animation, and why the receipt stays in the DOM invisibly instead of
-          being removed. Making layout animations and exits queryable is the
-          next piece to build.
+          being removed. The run's stills now cover values, flights and text
+          deliveries; layout projection and exits remain on the far side of
+          the line.
         </p>
       </div>
     </section>

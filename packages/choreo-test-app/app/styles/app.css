@@ -863,23 +863,25 @@ summary,
     rgba(var(--surface-tint-rgb), 0.03);
 }
 
-/* The roll is small film, not a poster: two rows of 4:3 strips are shallow,
-   so the glass is sized to them rather than stretching each frame tall to
-   fill the site's default stage height. */
+/* A 4×3 library of 4:3 prints wants the site's default stage height —
+   the shorter glass was sized for two rows of film strips. */
 /* the glass's own background lives HERE, on the static wrap, not on
    `.cam-stage` — `.cam-stage` carries the camera's own transform, so a
    background painted on it pans and scales with the zoom, pulling away
-   from its edges at the loupe and showing the plain page colour behind
-   it: two visibly different tones with a seam between them. */
+   from its edges at the dive and showing the plain page colour behind
+   it: two visibly different tones with a seam between them.
+
+   --bg is the recessed end of the surface ladder in both themes, so the
+   prints sit on a canvas a notch below the page rather than on a copper
+   light-table that only belonged to the film pass. */
 .stage-wrap:has(.cam) {
-  min-height: min(58vh, 560px);
   background:
     radial-gradient(
-      120cqw 70cqh at 30% 10%,
-      rgba(228, 163, 90, 0.1),
-      transparent 60%
+      70% 60% at 50% 38%,
+      rgba(255, 59, 31, 0.1),
+      transparent 62%
     ),
-    var(--bg-well);
+    var(--bg);
 }
 
 .sample {
@@ -2141,7 +2143,8 @@ html[data-gm-dragging] * {
 
 @media (hover: hover) {
   .cover:hover {
-    box-shadow: 0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
+    box-shadow: 0 14px 30px
+      rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a)));
   }
 }
 
@@ -2604,18 +2607,17 @@ html[data-gm-dragging] * {
   opacity: 0.7;
 }
 
-/* ---- Camera: the light table ---- */
+/* ---- Camera: the photo library ---- */
 
-/* The table IS the demo container, edge to edge — no chrome around the
-   glass. Both themes get their own table: the well tone in light is a
-   cream glass, in dark a charcoal one, and the washes read on either. */
+/* The library IS the demo container, edge to edge — no chrome around the
+   glass. Both themes get their own canvas via --bg on `.stage-wrap`. */
 .cam {
   position: absolute;
   inset: 0;
 }
 
 /* the photographer's hands: pinned over the table's corner, never riding
-   the camera */
+   the camera. Same glass-pill language as `.replay`. */
 .cam-hud-dock {
   position: absolute;
   top: 12px;
@@ -2627,19 +2629,20 @@ html[data-gm-dragging] * {
 }
 
 .cam-hud {
-  padding: 4px 9px;
+  padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
-  background: rgba(var(--bg-rgb), 0.8);
+  background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
+  backdrop-filter: blur(8px);
   font-family: var(--font-mono);
   font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--copper-ink);
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* The glass clips: at rest the whole roll sits on it, unlabelled film.
+/* The glass clips: at rest the whole library sits on it.
    The cursor is the affordance: zoom-in over a frame, zoom-out on the
    table once you are close. */
 .cam-stage {
@@ -2652,10 +2655,9 @@ html[data-gm-dragging] * {
   cursor: zoom-out;
 }
 
-/* one bracket to a row, each row as tall as its own 4:3 strips — not the
-   whole glass. Six frames wide on a roomy glass; narrower glass gets fewer,
-   bigger columns, so the loupe grade panel always has a frame tall enough
-   to sit inside instead of spilling past its edge. */
+/* four columns on a roomy glass — a library, not a contact strip.
+   Narrower glass gets fewer, bigger columns, so a dived print is always
+   tall enough to sit inside instead of spilling past the edge. */
 .cam-sheet {
   position: absolute;
   top: 50%;
@@ -2663,117 +2665,112 @@ html[data-gm-dragging] * {
   transform: translateY(-50%);
   box-sizing: border-box;
   width: 100cqw;
-  padding: 14px;
+  padding: 18px;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   grid-auto-rows: auto;
-  gap: 6px;
+  gap: 10px;
 }
 
 @container (max-width: 640px) {
-  .cam-sheet {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@container (max-width: 420px) {
   .cam-sheet {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@container (max-width: 280px) {
+@container (max-width: 420px) {
   .cam-sheet {
     grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 14px;
   }
 }
 
-/* Film is film in either theme: a near-black base the backlight can't
-   quite reach, sprocket holes punched through to the glass, and the
-   frame data printed on the edge in the developer's amber. */
+/* the print itself: radius and shadow of a cover/shot. No selection ring —
+   the cursor and the dive already say which tile is in play. */
 .cam-frame {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 15px 6px 16px;
+  display: block;
+  padding: 0;
   border: 0;
-  border-radius: 4px;
-  background: #191410;
+  border-radius: 14px;
+  background: transparent;
+  appearance: none;
+  color: inherit;
+  font: inherit;
   cursor: zoom-in;
-  transition:
-    box-shadow 200ms var(--ease),
-    background 200ms var(--ease);
+  overflow: hidden;
 }
 
-/* the sprockets: holes, so they are the glass showing through */
-.cam-frame::before {
-  content: '';
-  position: absolute;
-  top: 4px;
-  left: 8px;
-  right: 8px;
-  height: 7px;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--bg-well) 0 8px,
-    transparent 8px 19px
-  );
-}
-
-@media (hover: hover) {
-  .cam-frame:hover {
-    box-shadow:
-      0 0 0 1px rgba(228, 163, 90, 0.5),
-      0 10px 26px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
-  }
+.cam-frame:focus {
+  outline: none;
 }
 
 .cam-frame.is-open {
-  box-shadow:
-    0 0 0 2px var(--copper),
-    0 10px 26px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
   cursor: zoom-out;
+  z-index: 1;
 }
 
-/* the frame number, edge-printed: basic metadata, legible from rest —
-   the full exposure only develops once you loupe in */
+/* the take number: a glass chip on the print, Syne like a cover title.
+   Dark glass over a photograph in BOTH themes — same reason .lightbox-body
+   names its own white instead of inheriting --ink. */
 .cam-no {
   position: absolute;
-  bottom: 3px;
-  left: 10px;
+  bottom: 8px;
+  left: 8px;
   z-index: 1;
-  font-family: var(--font-mono);
-  font-size: 8px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(228, 163, 90, 0.9);
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 9, 8, 0.42);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
-/* the negative itself: 4:3, same as every frame on the roll — the card
-   around it is taller, for the sprockets and the printed edge data */
+/* the photograph: 4:3, filling the tile — no sprocket gutter around it */
 .cam-wash {
+  position: relative;
+  display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: 2px;
-  /* the exposure's own vignette — light falls off toward the frame */
-  box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow:
+    0 10px 22px rgba(var(--shadow-rgb), calc(0.32 * var(--shadow-a))),
+    inset 0 0 28px rgba(0, 0, 0, 0.28);
+}
+
+@media (hover: hover) {
+  .cam-frame:hover .cam-wash {
+    box-shadow:
+      0 14px 30px rgba(var(--shadow-rgb), calc(0.42 * var(--shadow-a))),
+      inset 0 0 28px rgba(0, 0, 0, 0.28);
+  }
 }
 
 /* the exposure dock: pinned to the table, like `.cam-hud-dock` — never a
-   child of the zoomed sheet, so the loupe zooms the negative, not the
-   reading of it. Same glass-panel language as `.cam-hud`/`.cam-sheet-toggle`
-   (and the rest of the site's own HUD chrome) — not a prop, not a tilted
-   scrap of paper pretending to be a polaroid caption. */
+   child of the zoomed sheet, so the dive zooms the photograph, not the
+   reading of it. Same glass-panel language as `.cam-hud` / `.replay`. */
 .cam-grade-dock {
   position: absolute;
   left: 12px;
   bottom: 12px;
   z-index: 3;
-  padding: 6px 11px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 10px 12px 11px 14px;
+  border-radius: 14px;
   border: 1px solid var(--line-strong);
-  background: rgba(var(--bg-rgb), 0.86);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
+  backdrop-filter: blur(12px);
   box-shadow: 0 10px 24px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
   opacity: 0;
   transform: translateY(6px);
@@ -2786,102 +2783,138 @@ html[data-gm-dragging] * {
 .cam-grade-dock.is-open {
   opacity: 1;
   transform: translateY(0);
+  pointer-events: auto;
+}
+
+.cam-grade-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cam-caption {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  color: var(--ink);
 }
 
 .cam-exp {
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: var(--copper-ink);
+  color: var(--ink-dim);
   font-variant-numeric: tabular-nums;
 }
 
-/* the loved mark: a small heart stamped on the negative's own top
-   corner — reads from the whole sheet at a glance, at rest, without
-   opening the loupe. A drop-shadow instead of a plate keeps it legible
-   over any of the roll's random hues. */
-.cam-heart {
-  position: absolute;
-  top: 5px;
-  left: 7px;
-  z-index: 2;
-  font-size: 12px;
-  line-height: 1;
-  color: #ff5c82;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
-  pointer-events: none;
-}
-
-/* the verdict: a two-way segmented control docked in the label strip,
-   mirroring `.cam-no` on the other side — the whole control sits inside
-   the frame's own bottom margin, never over the photo above it. Love or
-   pass, exactly one or neither active; the active cell is the only one
-   with any colour, so it reads at a glance which it is. */
-.cam-verdict-seg {
-  position: absolute;
-  right: 10px;
-  bottom: 2px;
-  z-index: 2;
+.cam-grade-tools {
   display: flex;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid rgba(228, 163, 90, 0.35);
-  background: rgba(12, 9, 7, 0.85);
-  box-shadow: 0 2px 6px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a)));
+  align-items: center;
+  gap: 6px;
+  flex: none;
 }
 
-.cam-seg {
-  display: grid;
-  place-items: center;
-  width: 15px;
-  height: 12px;
-  font-size: 7px;
-  line-height: 1;
-  color: rgba(243, 236, 227, 0.35);
+.cam-grade-no {
+  padding: 0 6px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* dock controls sit on the table, not the print — theme tokens, a
+   real hit target. Tile marks keep the dark-on-photo chips above. */
+.cam-grade-dock .cam-heart,
+.cam-grade-dock .cam-pass {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  background: rgba(var(--surface-tint-rgb), 0.08);
+  color: var(--ink-dim);
+  box-shadow: none;
   cursor: pointer;
 }
 
-.cam-seg + .cam-seg {
-  border-left: 1px solid rgba(228, 163, 90, 0.25);
+.cam-grade-dock .cam-heart svg,
+.cam-grade-dock .cam-pass svg {
+  width: 14px;
+  height: 14px;
 }
 
-.cam-seg.is-active {
+.cam-grade-dock .cam-heart.is-active {
+  background: var(--ember);
+  border-color: transparent;
   color: #fff;
+  box-shadow: 0 4px 14px rgba(255, 59, 31, 0.45);
 }
 
-.cam-seg.is-loved.is-active {
-  background: #e0507a;
+.cam-grade-dock .cam-pass.is-active {
+  background: rgba(var(--ink-rgb), 0.12);
+  color: var(--ink);
 }
 
-.cam-seg.is-passed-seg.is-active {
-  background: #d9432f;
+/* heart and X: the same job as `.cam-no`, the other end of the frame.
+   They sit. They do not grow. */
+.cam-marks {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
 }
 
-@media (hover: hover) {
-  .cam-seg:hover {
-    color: #f3ece3;
-  }
+.cam-heart,
+.cam-pass {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(12, 9, 8, 0.42);
+  backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-/* a loved frame's own stock runs warmer — the heart is the mark you scan
-   for, this is the mark you feel: the whole card, not just the sticker in
-   the corner, is a little different from the rest of the roll. Tuned per
-   theme rather than shared: the same plum reads as a highlight against
-   dark's near-black surround and as a bruise against light's cream one. */
-:root:not([data-theme='light']) .cam-frame.is-loved {
-  background: #4a1e34;
+.cam-heart svg,
+.cam-pass svg {
+  width: 10px;
+  height: 10px;
+  display: block;
 }
 
-:root[data-theme='light'] .cam-frame.is-loved {
-  background: #5c2340;
+.cam-heart.is-active {
+  color: #fff;
+  background: var(--ember);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(255, 59, 31, 0.5);
 }
 
-/* a passed frame stays on the roll, just dimmed — the mark of a shot
-   that's been looked at and let go, not deleted. The whole card fades
-   evenly against the table; dimming only the wash left the frame's own
-   dark background showing through as a scrim, muddying it instead. */
-.cam-frame.is-passed {
-  opacity: 0.4;
+.cam-pass.is-active {
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(12, 9, 8, 0.55);
+}
+
+.cam-heart.is-control,
+.cam-pass.is-control {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* a passed frame on the contact sheet: the print eases back, that's all.
+   The corner X is the mark; a cross through the wash was too much. Once
+   dived, full colour so you can still grade. */
+.cam-frame.is-passed:not(.is-open) .cam-wash {
+  opacity: 0.55;
+  filter: saturate(0.4) brightness(0.82);
 }
 
 .follow-stage {
@@ -5457,21 +5490,25 @@ html[data-gm-dragging] * {
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
 }
 
+/* the ring rides INSIDE the hand now — one transform source, so the pop
+   happens wherever the hand is without a second set of position cues. It
+   centres on the arrow's hotspot and rests invisible: the score's own
+   keyframes are the only thing that ever lights it. */
 .ph-ring {
   position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 5;
+  top: 3px;
+  left: 5px;
+  z-index: -1;
   width: 38px;
   height: 38px;
   margin: -19px 0 0 -19px;
   border: 2px solid var(--ember-hot);
   border-radius: 50%;
+  opacity: 0;
   pointer-events: none;
 }
 
-.ph-hand.is-off,
-.ph-ring.is-off {
+.ph-hand.is-off {
   opacity: 0;
 }
 
