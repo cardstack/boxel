@@ -246,14 +246,11 @@ module('Integration | structured-theme', function (hooks) {
     );
   });
 
-  test('setCss replaces stale Google Fonts imports but keeps imports from other hosts', function (assert) {
+  test('hand-added imports are kept alongside the derived Google Fonts imports', function (assert) {
     let card = new StructuredTheme({
       rootVariables: new ThemeVarField({}),
       darkModeVariables: new ThemeVarField({}),
-      cssImports: [
-        'https://fonts.googleapis.com/css2?family=Oxanium&display=swap',
-        'https://use.typekit.net/abc123.css',
-      ],
+      customCssImports: ['https://use.typekit.net/abc123.css'],
     });
     card.setCss(TWEAKCN_EXPORT);
     assert.deepEqual(
@@ -267,7 +264,7 @@ module('Integration | structured-theme', function (hooks) {
     );
   });
 
-  test('setCss imports fonts referenced by dark mode and typography fields', function (assert) {
+  test('cssImports derives from dark mode and typography font fields without an import step', function (assert) {
     let card = new StructuredTheme({
       rootVariables: new ThemeVarField({}),
       darkModeVariables: new ThemeVarField({ fontSans: 'Oxanium, sans-serif' }),
@@ -278,7 +275,6 @@ module('Integration | structured-theme', function (hooks) {
         }),
       }),
     });
-    card.setCss(':root { --background: #ffffff; }');
     assert.deepEqual(
       [...card.cssImports],
       [
@@ -289,14 +285,28 @@ module('Integration | structured-theme', function (hooks) {
     );
   });
 
+  test('editing a font field keeps cssImports in sync', function (assert) {
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({ fontSans: 'Geist, sans-serif' }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    assert.deepEqual(
+      [...card.cssImports],
+      ['https://fonts.googleapis.com/css2?family=Geist&display=swap'],
+    );
+    card.rootVariables.fontSans = 'Inter, sans-serif';
+    assert.deepEqual(
+      [...card.cssImports],
+      ['https://fonts.googleapis.com/css2?family=Inter&display=swap'],
+      'the stale import is replaced when the font field changes',
+    );
+  });
+
   test('resetCss clears font-derived imports', function (assert) {
     let card = new StructuredTheme({
       rootVariables: new ThemeVarField({ fontSans: 'Geist, sans-serif' }),
       darkModeVariables: new ThemeVarField({}),
-      cssImports: [
-        'https://fonts.googleapis.com/css2?family=Geist&display=swap',
-        'https://use.typekit.net/abc123.css',
-      ],
+      customCssImports: ['https://use.typekit.net/abc123.css'],
     });
     card.resetCss();
     assert.strictEqual(card.rootVariables.fontSans, null);

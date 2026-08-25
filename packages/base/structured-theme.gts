@@ -19,8 +19,10 @@ import {
 import {
   field,
   contains,
+  containsMany,
   Component,
   CSSField,
+  CssImportField,
   Theme,
   StringField,
   getFields,
@@ -115,8 +117,6 @@ const resetTypographyVariables = (
     }
   }
 };
-
-const GOOGLE_FONTS_URL_PREFIX = 'https://fonts.googleapis.com/css2';
 
 // TODO: move to boxel-ui helpers
 export const mergeRuleMaps = (
@@ -213,7 +213,7 @@ class Isolated extends Component<typeof StructuredTheme> {
               <ThemeVisualizer
                 @toggleDarkMode={{this.toggleDarkMode}}
                 @isDarkMode={{this.isDarkMode}}
-                @fontStack={{@model.fontStacks}}
+                @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
                 @editMode={{this.editMode}}
               >
@@ -233,7 +233,7 @@ class Isolated extends Component<typeof StructuredTheme> {
                     @tag='label'
                     @vertical={{true}}
                   >
-                    <@fields.cssImports />
+                    <@fields.customCssImports />
                   </FieldContainer>
                 </:cssImports>
               </ThemeVisualizer>
@@ -321,6 +321,35 @@ export default class StructuredTheme extends Theme {
     },
   });
 
+  @field customCssImports = containsMany(CssImportField, {
+    description:
+      'CSS links added by hand (e.g. Adobe Fonts) that are kept alongside the derived Google Fonts imports.',
+  });
+
+  // Mirrors the docs guide's theme font loading: the Google Fonts stylesheets
+  // for the theme's font stacks are derived from the font fields, so they can
+  // never fall out of sync when a font is edited. CardContainer links
+  // cssImports wherever the theme is applied.
+  @field cssImports = containsMany(CssImportField, {
+    computeVia: function (this: StructuredTheme) {
+      let fontImports = googleFontImportsFor
+        ? googleFontImportsFor([
+            ...[this.rootVariables, this.darkModeVariables].flatMap((field) => [
+              field?.fontSans,
+              field?.fontSerif,
+              field?.fontMono,
+            ]),
+            ...(this.typography?.cssVariableFields ?? [])
+              .filter(({ cssVariableName }) =>
+                cssVariableName.endsWith('-font-family'),
+              )
+              .map(({ value }) => value),
+          ])
+        : [];
+      return [...(this.customCssImports ?? []), ...fontImports];
+    },
+  });
+
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
     computeVia: function (this: StructuredTheme) {
@@ -346,32 +375,20 @@ export default class StructuredTheme extends Theme {
 
   guideSections: SectionSignature[] = GUIDE_SECTIONS;
 
-  private fontStack(fieldName: 'fontSans' | 'fontSerif' | 'fontMono') {
-    return (
-      this.rootVariables?.[fieldName] ?? this.darkModeVariables?.[fieldName]
-    );
-  }
-
-  get fontSansStack() {
-    return this.fontStack('fontSans');
-  }
-
-  get fontSerifStack() {
-    return this.fontStack('fontSerif');
-  }
-
-  get fontMonoStack() {
-    return this.fontStack('fontMono');
-  }
-
-  // The rows the Theme Visualizer's Fonts section previews
-  get fontStacks() {
+  // The rows the Theme Visualizer's Fonts section previews, following the
+  // active color mode with the other mode's stack as the fallback
+  fontStacksFor = (isDarkMode?: boolean) => {
+    let [preferred, fallback] = isDarkMode
+      ? [this.darkModeVariables, this.rootVariables]
+      : [this.rootVariables, this.darkModeVariables];
+    let stack = (fieldName: 'fontSans' | 'fontSerif' | 'fontMono') =>
+      preferred?.[fieldName] ?? fallback?.[fieldName];
     return [
-      { label: 'sans-serif', stack: this.fontSansStack },
-      { label: 'serif', stack: this.fontSerifStack },
-      { label: 'monospace', stack: this.fontMonoStack },
+      { label: 'sans-serif', stack: stack('fontSans') },
+      { label: 'serif', stack: stack('fontSerif') },
+      { label: 'monospace', stack: stack('fontMono') },
     ];
-  }
+  };
 
   setCss = (content: string): boolean => {
     if (!content || !parseCssGroups) {
@@ -385,7 +402,6 @@ export default class StructuredTheme extends Theme {
     }
     applyCssRulesToField(this.rootVariables, rootRules);
     applyCssRulesToField(this.darkModeVariables, darkRules);
-    this.refreshFontImports();
     return true;
   };
 
@@ -393,33 +409,6 @@ export default class StructuredTheme extends Theme {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
     resetTypographyVariables(this.typography);
-    this.refreshFontImports();
-  };
-
-  // Mirrors the docs guide's theme font loading: the Google Fonts stylesheets
-  // for the theme's font stacks are kept in cssImports, which the
-  // CardContainer links wherever the theme is applied. Imports added by hand
-  // from other hosts are left alone.
-  private refreshFontImports = () => {
-    if (!googleFontImportsFor) {
-      return;
-    }
-    let fontImports = googleFontImportsFor([
-      ...[this.rootVariables, this.darkModeVariables].flatMap((field) => [
-        field?.fontSans,
-        field?.fontSerif,
-        field?.fontMono,
-      ]),
-      ...(this.typography?.cssVariableFields ?? [])
-        .filter(({ cssVariableName }) =>
-          cssVariableName.endsWith('-font-family'),
-        )
-        .map(({ value }) => value),
-    ]);
-    let otherImports = (this.cssImports ?? []).filter(
-      (url) => url && !url.startsWith(GOOGLE_FONTS_URL_PREFIX),
-    );
-    this.cssImports = [...otherImports, ...fontImports];
   };
 
   static isolated: BaseDefComponent = Isolated;

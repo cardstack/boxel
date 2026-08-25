@@ -199,7 +199,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
               <ThemeVisualizer
                 @toggleDarkMode={{this.toggleDarkMode}}
                 @isDarkMode={{this.isDarkMode}}
-                @fontStack={{@model.fontStacks}}
+                @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
                 @editMode={{this.editMode}}
               >
@@ -219,7 +219,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
                     @tag='label'
                     @vertical={{true}}
                   >
-                    <@fields.cssImports />
+                    <@fields.customCssImports />
                   </FieldContainer>
                 </:cssImports>
               </ThemeVisualizer>
