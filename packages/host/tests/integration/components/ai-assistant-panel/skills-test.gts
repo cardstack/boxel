@@ -340,6 +340,50 @@ Instructions live in the markdown body.
     return roomId;
   }
 
+  test('a room whose enabled skill card no longer exists still opens', async function (assert) {
+    // An old room can reference a skill card that was deleted or renamed
+    // after the room was created. The room must still open, and the skill
+    // menu shows the dead reference so the user can turn it off.
+    let missingSkillId = `${testRealmURL}Skill/deleted-skill`;
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room with a deleted skill',
+    });
+    mockMatrixUtils.setRoomState(roomId, APP_BOXEL_ROOM_SKILLS_EVENT_TYPE, {
+      enabledSkillCards: [
+        {
+          sourceUrl: missingSkillId,
+          url: 'mxc://mock-server/deleted-skill',
+          name: 'deleted-skill.json',
+          contentType: 'application/vnd.card+json',
+        },
+      ],
+      disabledSkillCards: [],
+      toolDefinitionFileDefs: [],
+    });
+
+    operatorModeStateService.restore({
+      stacks: [[]],
+      aiAssistantOpen: true,
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-room-settled]');
+    assert.dom('[data-test-room]').hasAttribute('data-test-room', roomId);
+
+    await click('[data-test-skill-menu]');
+    await waitFor(`[data-test-skill-unavailable="${missingSkillId}"]`);
+    assert
+      .dom(`[data-test-skill-unavailable="${missingSkillId}"]`)
+      .containsText('Skill unavailable');
+    assert
+      .dom(`[data-test-skill-toggle="${missingSkillId}-on"]`)
+      .exists('the dead reference can still be toggled off');
+  });
+
   test('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
       `${testRealmURL}Person/fadhlan`,

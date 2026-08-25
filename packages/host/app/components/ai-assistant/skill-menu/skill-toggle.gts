@@ -60,6 +60,13 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
     return this.cardResource?.card;
   }
 
+  // True when the skill's source can no longer be loaded — for example a
+  // room enabled a skill card that has since been deleted or renamed. The
+  // pill still renders so the user can see the reference and turn it off.
+  private get isUnavailable(): boolean {
+    return !this.card && Boolean(this.cardResource?.cardError);
+  }
+
   // Title for either skill source: `cardTitle` for a Skill card; for a skill
   // markdown file, the title indexed from its first heading, falling back to
   // the frontmatter name slug only when the file has no heading.
@@ -133,7 +140,30 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
 
   <template>
     {{consumeContext this.makeCardResource}}
-    {{#if this.card}}
+    {{#if this.isUnavailable}}
+      <div class='toggle-and-realm-icon'>
+        <Pill
+          class='skill-toggle skill-toggle--unavailable'
+          data-test-skill-unavailable={{@cardId}}
+          ...attributes
+        >
+          <:default>
+            <div class='pill-content'>
+              <div class='card-content' title={{@cardId}}>
+                Skill unavailable
+              </div>
+            </div>
+          </:default>
+        </Pill>
+        <Switch
+          class='toggle'
+          @isEnabled={{Boolean @isEnabled}}
+          @onChange={{@onToggle}}
+          @label='Skill unavailable'
+          data-test-skill-toggle='{{@cardId}}-{{if @isEnabled "on" "off"}}'
+        />
+      </div>
+    {{else if this.card}}
       {{#if this.isCreating}}
         <LoadingIndicator />
       {{else}}
@@ -207,6 +237,12 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
       .skill-dropdown__trigger {
         --boxel-icon-button-height: 26px;
         --boxel-icon-button-width: 26px;
+      }
+      .skill-toggle--unavailable {
+        grid-template-columns: 1fr;
+        border-style: dashed;
+        color: var(--boxel-450);
+        font-style: italic;
       }
       .is-autoattached {
         border-style: dashed;
