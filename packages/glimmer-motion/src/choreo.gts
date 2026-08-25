@@ -196,6 +196,30 @@ interface Signature {
 let debugStyle: HTMLStyleElement | undefined;
 
 /**
+ * One rule every region shares: an orphaned skin flies with its
+ * backdrop-filters OFF. A backdrop-filter can never be cached — it
+ * re-samples and re-blurs whatever is behind it on every frame — and
+ * inside a scaling, fading leaver that is paid at full price for the
+ * whole flight (the camera demo's four glass panels, over its gradient
+ * washes, was the return trip's jank). It is also the wrong picture: a
+ * skin is a memory of the OLD scene, and its glass sampling the new
+ * scene behind it shows the wrong world. The panels keep their own
+ * translucent grounds, so they still read as glass in the crossfade.
+ */
+let orphanStyle: HTMLStyleElement | undefined;
+function ensureOrphanStyle() {
+  if (orphanStyle) {
+    return;
+  }
+  orphanStyle = document.createElement('style');
+  orphanStyle.setAttribute('data-choreo-style', '');
+  orphanStyle.textContent =
+    '[data-choreo-orphans] *{backdrop-filter:none!important;' +
+    '-webkit-backdrop-filter:none!important;}';
+  document.head.appendChild(orphanStyle);
+}
+
+/**
  * A fingerprint of the collected timeline tree, for telling an EDIT from
  * noise while a run's own orphans are aloft. Mid-flight, compiled cues are
  * value-laden (every re-measure shifts them), so sameScore cannot answer
@@ -838,6 +862,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     el.style.boxSizing = 'border-box';
     el.style.margin = '0';
     el.style.pointerEvents = 'none';
+    // one texture, transformed — not a subtree re-rastered per frame
+    el.style.willChange = 'transform, opacity';
     layer.appendChild(el);
     this.orphans.add(s.node);
     this.orphanBounds.set(s.node, s.initial);
@@ -899,6 +925,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
   host = modifier((el: HTMLDivElement) => {
     this.element = el;
     setChoreoHost(el, this);
+    ensureOrphanStyle();
     if (getComputedStyle(el).position === 'static') {
       el.style.position = 'relative';
     }
