@@ -468,7 +468,7 @@ export function buildPrerenderApp(options: {
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec
     // -> null), so the capture path sees one canonical shape from every
-    // caller. It is format-aware (fitted/atom require an envelope), so it
+    // caller. It is format-aware (fitted requires an envelope), so it
     // runs only once the format itself is valid.
     let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
       ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
@@ -511,7 +511,7 @@ export function buildPrerenderApp(options: {
       missingMessage:
         captureSpecParse.error !== undefined
           ? captureSpecParse.error
-          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded|fitted|atom)',
+          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded|fitted)',
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${

@@ -681,7 +681,7 @@ module(basename(import.meta.filename), function () {
     let screenshot = (
       cardURL: string,
       captureSpec?: ScreenshotCaptureSpec,
-      format: 'isolated' | 'embedded' | 'fitted' | 'atom' = 'isolated',
+      format: 'isolated' | 'embedded' | 'fitted' = 'isolated',
     ) =>
       prerenderer.prerenderScreenshot({
         realm: realmURL,

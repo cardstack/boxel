@@ -934,12 +934,13 @@ export type ScreenshotCaptureOverrides = {
   // extent is bounded by the same caps as the viewport (and must sit within
   // the viewport when one is given). Mutually exclusive with `fullPage`.
   clip?: { x: number; y: number; width: number; height: number };
-  // Fixed-size parent box (CSS px) the card renders into. `fitted` and `atom`
-  // fill a parent-owned box rather than the viewport, so they need this to lay
-  // out and fire their `@container fitted-card` queries. Required for
-  // fitted/atom captures (enforced by the realm-server handler); ignored for
-  // isolated/embedded. The capture is sized to the envelope, so a batch of
-  // differing envelopes yields differently-sized PNGs off one render.
+  // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
+  // parent-owned box rather than the viewport, so it needs this to lay out
+  // and fire its `@container fitted-card` queries. Required for fitted
+  // captures and refused for isolated/embedded (enforced by the shared
+  // capture-spec parse on both request surfaces). The capture is sized to the
+  // envelope, so a batch of differing envelopes yields differently-sized PNGs
+  // off one render.
   envelope?: { width: number; height: number };
 };
 

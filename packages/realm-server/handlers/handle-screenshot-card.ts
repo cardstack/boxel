@@ -113,13 +113,13 @@ interface CaptureResult {
  * return a 400 naming the offending field. The one bound no request-time
  * parse can enforce — a fullPage capture's document extent — is checked
  * against the same physical-pixel cap at capture time.
- * `format` may be `isolated`, `embedded`, `fitted`, or `atom`. The `fitted`
- * and `atom` formats render into a parent-owned box, so they require an
- * `envelope` (`{ width, height }` in CSS px) on the captureSpec — or on every
- * batch entry; requesting them without one returns a 400. Conversely
+ * `format` may be `isolated`, `embedded`, or `fitted`. The `fitted` format
+ * renders into a parent-owned box, so it requires an `envelope`
+ * (`{ width, height }` in CSS px) on the captureSpec — or on every batch
+ * entry; requesting it without one returns a 400. Conversely
  * `isolated`/`embedded` fill the viewport and reject an envelope. An
- * envelope-carrying spec always has overrides, so fitted/atom captures are
- * always capture-only.
+ * envelope-carrying spec always has overrides, so fitted captures are always
+ * capture-only.
  *
  * A batch of captures may be requested via `captureSpec.captures`, an array
  * of named `{ name, ...overrides }` entries (bounded by
@@ -176,12 +176,12 @@ export default function handleScreenshotCard({
     }
     // Shared with the prerender server's screenshot route so both surfaces
     // accept exactly the same capture formats. Wider than the GET
-    // `_screenshot/` DSL's formats: fitted/atom are capture-only (they always
+    // `_screenshot/` DSL's formats: fitted is capture-only (it always
     // require an envelope, so they never touch the canonical ledger identity).
     if (!isScreenshotFormat(format)) {
       return sendResponseForBadRequest(
         ctxt,
-        'format must be "isolated", "embedded", "fitted", or "atom"',
+        'format must be "isolated", "embedded", or "fitted"',
       );
     }
     if (includeBase64 !== undefined && typeof includeBase64 !== 'boolean') {
@@ -246,7 +246,7 @@ export default function handleScreenshotCard({
       // all-defaults spec to null, so null exactly means canonical.
       let isCanonicalCapture = captureSpec === null;
       // The canonical capture identity speaks the GET DSL's formats only.
-      // fitted/atom can never reach here (they require an envelope, so their
+      // fitted can never reach here (it requires an envelope, so its
       // spec is never null), but the guard keeps that invariant executable
       // and narrows the type.
       let spec: CaptureSpec | undefined =

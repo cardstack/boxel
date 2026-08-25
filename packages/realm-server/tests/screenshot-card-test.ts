@@ -806,14 +806,17 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(published, [], 'does not enqueue any job');
     });
 
-    test('rejects atom without an envelope', async function (assert) {
+    test('rejects atom as an unsupported capture format', async function (assert) {
+      // Atom's rendering through the envelope box is unspecified (its base
+      // wrapper is intrinsic-size inline-block, not a box-filling size
+      // container), so the format is refused until that capture is defined.
       let { response, published } = await postScreenshot('atom', {
-        viewport: { width: 300, height: 300 },
+        envelope: { width: 120, height: 40 },
       });
-      assert.strictEqual(response.status, 400, '400 for atom without envelope');
+      assert.strictEqual(response.status, 400, '400 for atom format');
       assert.ok(
-        response.text.includes('envelope'),
-        `names envelope in the error: ${response.text}`,
+        response.text.includes('format'),
+        `names format in the error: ${response.text}`,
       );
       assert.deepEqual(published, [], 'does not enqueue any job');
     });

@@ -7,15 +7,10 @@ import type {
 } from './index.ts';
 
 // Card formats a screenshot can be captured in. `isolated`/`embedded` fill
-// the viewport; `fitted`/`atom` render into a parent-owned box and so require
-// an `envelope`. Distinct from CAPTURE_FORMATS below, which is the canonical
+// the viewport; `fitted` renders into a parent-owned box and so requires an
+// `envelope`. Distinct from CAPTURE_FORMATS below, which is the canonical
 // (ledger/GET-DSL) serving contract and stays viewport-filling only.
-export const SCREENSHOT_FORMATS = [
-  'isolated',
-  'embedded',
-  'fitted',
-  'atom',
-] as const;
+export const SCREENSHOT_FORMATS = ['isolated', 'embedded', 'fitted'] as const;
 export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
 
 export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
@@ -25,7 +20,7 @@ export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
 // Formats whose card fills a parent-owned box rather than the viewport, and
 // so require an `envelope` to lay out. `isolated`/`embedded` fill the
 // viewport and must NOT be given an envelope.
-const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted', 'atom'];
+const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted'];
 
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
@@ -294,7 +289,8 @@ function checkMergedOverrides(
     return `${path} cannot set both fullPage and clip`;
   }
 
-  // fitted/atom lay out in a parent-owned box, so an envelope is required;
+  // Envelope formats lay out in a parent-owned box, so an envelope is
+  // required;
   // isolated/embedded fill the viewport, where an envelope would be a
   // silent no-op — refused rather than ignored, per the module contract.
   let requiresEnvelope = ENVELOPE_FORMATS.includes(format);
@@ -344,7 +340,7 @@ function checkMergedOverrides(
       return `${path}.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
-  // The capture viewport IS the envelope for fitted/atom, so the same
+  // The capture viewport IS the envelope for envelope formats, so the same
   // physical-pixel composition applies to it.
   if (spec.envelope) {
     if (
@@ -423,7 +419,8 @@ export function parseScreenshotCaptureSpec(
   format: ScreenshotFormat,
 ): ScreenshotCaptureSpecParse {
   if (raw === undefined || raw === null) {
-    // A fitted/atom capture needs an envelope, which can only arrive via the
+    // An envelope-format capture needs an envelope, which can only arrive
+    // via the
     // captureSpec — an absent spec is therefore refused for those formats.
     if (ENVELOPE_FORMATS.includes(format)) {
       return {
