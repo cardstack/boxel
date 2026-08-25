@@ -933,8 +933,9 @@ export type ScreenshotCaptureSpec = {
   // Capture the full scrollable document rather than just the viewport. Mutually
   // exclusive with `clip`.
   fullPage?: boolean;
-  // CSS-pixel region to capture, passed straight to `page.screenshot`. Must sit
-  // within the viewport. Mutually exclusive with `fullPage`.
+  // CSS-pixel region to capture, passed straight to `page.screenshot`. Its
+  // extent is bounded by the same caps as the viewport (and must sit within
+  // the viewport when one is given). Mutually exclusive with `fullPage`.
   clip?: { x: number; y: number; width: number; height: number };
 };
 

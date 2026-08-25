@@ -1,5 +1,7 @@
 import { computeMediaCacheKey } from './media-cache.ts';
 
+import type { ScreenshotCaptureSpec } from './index.ts';
+
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
@@ -19,6 +21,18 @@ export function isCaptureFormat(value: unknown): value is CaptureFormat {
 
 export interface CaptureSpec {
   format: CaptureFormat;
+}
+
+// Whether a screenshot job's per-capture overrides (viewport / scale /
+// fullPage / clip) make it a non-canonical render. The canonical capture
+// identity (and thus the MediaCache ledger and job coalescing) cannot
+// represent these overrides, so everything keyed on that identity must treat
+// an override-carrying capture as outside it: never persisted under a ledger
+// key, never joined to (or by) a canonical twin.
+export function hasCaptureSpecOverrides(
+  captureSpec: ScreenshotCaptureSpec | null | undefined,
+): boolean {
+  return !!captureSpec && Object.keys(captureSpec).length > 0;
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are

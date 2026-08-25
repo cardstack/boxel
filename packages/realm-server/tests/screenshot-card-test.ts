@@ -14,7 +14,10 @@ import {
   putMedia,
   query,
 } from '@cardstack/runtime-common';
-import { estimateScreenshotQueueWait } from '@cardstack/runtime-common/jobs/screenshot-card';
+import {
+  chooseScreenshotCardCoalesceDecision,
+  estimateScreenshotQueueWait,
+} from '@cardstack/runtime-common/jobs/screenshot-card';
 import type {
   DBAdapter,
   QueuePublisher,
@@ -23,6 +26,7 @@ import type {
   PgPrimitive,
   ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
+import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import type { PgAdapter } from '@cardstack/postgres';
 
@@ -207,6 +211,46 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a default-valued captureSpec normalizes to null', async function (assert) {
+      // `{ fullPage: false, deviceScaleFactor: 1 }` means the same capture
+      // as no spec at all; eliding the defaults keeps it classified as
+      // canonical (ledger fast path, persistence, served URL).
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              captureSpec: { fullPage: false, deviceScaleFactor: 1 },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(published.length, 1, 'published exactly one job');
+      assert.strictEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        null,
+        'default-valued spec reaches the job as null',
+      );
+    });
+
     async function expectCaptureSpecRejected(
       assert: Assert,
       captureSpec: unknown,
@@ -282,6 +326,58 @@ module(basename(import.meta.filename), function () {
           clip: { x: 100, y: 0, width: 400, height: 100 },
         },
         'clip',
+      );
+    });
+
+    test('rejects clip extent beyond the viewport caps even without a viewport', async function (assert) {
+      // Puppeteer captures beyond the viewport by default, so an unbounded
+      // clip would be a way around the viewport cost caps.
+      await expectCaptureSpecRejected(
+        assert,
+        { clip: { x: 0, y: 0, width: 1_000_000_000, height: 100 } },
+        'clip x + width',
+      );
+      await expectCaptureSpecRejected(
+        assert,
+        { clip: { x: 0, y: 16_000, width: 100, height: 1_000 } },
+        'clip y + height',
+      );
+    });
+
+    test('rejects an unknown captureSpec field by name', async function (assert) {
+      // A dropped typo would silently classify the request as canonical and
+      // serve the wrong image.
+      await expectCaptureSpecRejected(assert, { fullpage: true }, 'fullpage');
+    });
+
+    test('rejects an unknown nested captureSpec field by name', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { clip: { x: 0, y: 0, width: 100, height: 100, scale: 2 } },
+        'clip.scale',
+      );
+      await expectCaptureSpecRejected(
+        assert,
+        { viewport: { width: 800, height: 600, dsf: 2 } },
+        'viewport.dsf',
+      );
+    });
+
+    test('rejects physical pixels per edge beyond the texture cap', async function (assert) {
+      // Each CSS cap alone passes; the product with deviceScaleFactor is
+      // what exceeds the Chromium texture limit.
+      await expectCaptureSpecRejected(
+        assert,
+        { viewport: { width: 800, height: 6_000 }, deviceScaleFactor: 3 },
+        'viewport.height × deviceScaleFactor',
+      );
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          clip: { x: 0, y: 0, width: 100, height: 6_000 },
+          deviceScaleFactor: 3,
+        },
+        'clip.height × deviceScaleFactor',
       );
     });
 
@@ -636,6 +732,39 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a default-valued captureSpec still answers from the ledger', async function (assert) {
+      // `{ fullPage: false, deviceScaleFactor: 1 }` is the canonical capture
+      // spelled explicitly — it must keep the ledger fast path rather than
+      // classify as a custom capture.
+      await seedInstanceRow();
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec: { fullPage: false, deviceScaleFactor: 1 },
+      }).expect(201);
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      assert.strictEqual(
+        response.body.data.attributes.captures[0].url,
+        `${REALM_URL}_screenshot/Person/fadhlan`,
+        'the canonical served URL is returned',
+      );
+    });
+
     test('a custom captureSpec bypasses the ledger and never persists', async function (assert) {
       await seedInstanceRow();
       // A canonical (format-only) capture exists; the custom-spec request
@@ -917,6 +1046,76 @@ module(basename(import.meta.filename), function () {
         differentRunAs.hasTwin,
         'a different-runAs job is not a twin',
       );
+    });
+  });
+
+  module('screenshot-card coalesce decision', function () {
+    const PERSIST = {
+      realmURL: 'http://example.test/',
+      sourceURL: 'http://example.test/Person/fadhlan',
+      captureSpecHash: 'abc123',
+      sourceGeneration: 1,
+      lane: 'on-demand',
+    };
+
+    function jobSpec(args: Record<string, unknown>): QueueJobSpec {
+      return {
+        jobType: 'screenshot-card',
+        concurrencyGroup: 'screenshot:http://example.test/',
+        timeout: 60,
+        priority: 0,
+        args: args as PgPrimitive,
+      };
+    }
+
+    function canonicalArgs(): Record<string, unknown> {
+      return {
+        cardId: PERSIST.sourceURL,
+        format: 'isolated',
+        runAs: '@owner:localhost',
+        captureSpec: null,
+        persist: PERSIST,
+      };
+    }
+
+    test('canonical persist-carrying twins join', function (assert) {
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec(canonicalArgs()),
+        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'join', jobId: 7 });
+    });
+
+    test('an incoming job with captureSpec overrides always inserts', function (assert) {
+      // The persist identity cannot represent the overrides, so joining a
+      // canonical twin would hand this caller the wrong image.
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec({
+          ...canonicalArgs(),
+          captureSpec: { viewport: { width: 1280, height: 800 } },
+        }),
+        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'insert' });
+    });
+
+    test('a candidate with captureSpec overrides is never a twin', function (assert) {
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec(canonicalArgs()),
+        candidates: [
+          {
+            ...jobSpec({
+              ...canonicalArgs(),
+              captureSpec: { deviceScaleFactor: 2 },
+            }),
+            id: 7,
+          },
+        ],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'insert' });
     });
   });
 });

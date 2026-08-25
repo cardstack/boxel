@@ -99,10 +99,16 @@ interface CaptureResult {
  * ```
  *
  * `captureSpec` is optional; every field within it is optional. It is validated
- * here (viewport ≤ 4096×16384, deviceScaleFactor ≤ 3, clip within the viewport,
- * `fullPage` and `clip` mutually exclusive) so the worker/prerenderer downstream
- * can treat it as trusted. Invalid specs return a 400 naming the offending field.
- * A non-empty `captureSpec` is capture-only: the ledger's canonical capture
+ * here (viewport ≤ 4096×16384, deviceScaleFactor ≤ 3, clip bounded by the same
+ * caps as the viewport and within the viewport when one is given, physical
+ * pixels per edge ≤ the Chromium texture cap, `fullPage` and `clip` mutually
+ * exclusive) so the worker/prerenderer downstream can treat it as trusted. The
+ * parse is strict per the capture-spec contract (`capture-spec.ts`): a field
+ * the engine cannot honor is refused by name — never ignored — and
+ * default-valued fields (`fullPage: false`, `deviceScaleFactor: 1`) are elided
+ * so equal capture intents classify identically. Invalid specs return a 400
+ * naming the offending field.
+ * A spec with overrides is capture-only: the ledger's canonical capture
  * identity cannot represent it yet (the GET DSL reserves those params), so it
  * always renders fresh and returns raw bytes — no ledger fast path, no
  * MediaCache persist, no `captures` URL.
@@ -116,13 +122,28 @@ export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
 export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
 // A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
 export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
+// The Chromium single-texture cap the viewport bounds are derived from,
+// enforced on *physical* pixels: CSS dimension × deviceScaleFactor. The CSS
+// caps alone would admit e.g. a 16384-tall viewport at 3× (~49k physical px).
+export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
 // Result of validating the request's `captureSpec` attribute. On success
-// `captureSpec` is the normalized spec (or null when the attribute was absent);
-// on failure `error` names the offending field for a 400.
+// `captureSpec` is the normalized spec — null when the attribute was absent
+// or carried no overrides (default-valued fields are elided), so `null`
+// exactly means "the canonical capture"; on failure `error` names the
+// offending field for a 400.
 type CaptureSpecParse =
   | { captureSpec: ScreenshotCaptureSpec | null; error?: undefined }
   | { captureSpec?: undefined; error: string };
+
+const CAPTURE_SPEC_FIELDS = new Set([
+  'viewport',
+  'deviceScaleFactor',
+  'fullPage',
+  'clip',
+]);
+const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
+const CAPTURE_SPEC_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
 
 function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value > 0;
@@ -140,12 +161,34 @@ function parseCaptureSpec(raw: unknown): CaptureSpecParse {
     return { error: 'captureSpec must be an object' };
   }
 
+  // Strict per the capture-spec contract: an unrecognized field is refused by
+  // name rather than dropped — silently dropping a typo'd `fullpage: true`
+  // would classify the request as canonical and serve (or persist) the wrong
+  // image.
+  for (let key of Object.keys(raw)) {
+    if (!CAPTURE_SPEC_FIELDS.has(key)) {
+      return { error: `captureSpec.${key} is not a supported field` };
+    }
+  }
+
   let spec: ScreenshotCaptureSpec = {};
 
   if (raw.viewport !== undefined) {
     let viewport = raw.viewport;
+    if (!isPlainObject(viewport)) {
+      return {
+        error:
+          'captureSpec.viewport must have positive integer width and height',
+      };
+    }
+    for (let key of Object.keys(viewport)) {
+      if (!CAPTURE_SPEC_VIEWPORT_FIELDS.has(key)) {
+        return {
+          error: `captureSpec.viewport.${key} is not a supported field`,
+        };
+      }
+    }
     if (
-      !isPlainObject(viewport) ||
       !isPositiveInteger(viewport.width) ||
       !isPositiveInteger(viewport.height)
     ) {
@@ -179,20 +222,37 @@ function parseCaptureSpec(raw: unknown): CaptureSpecParse {
         error: `captureSpec.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
       };
     }
-    spec.deviceScaleFactor = scale;
+    // 1 is the engine default: elide it so `{ deviceScaleFactor: 1 }` means
+    // the same capture as no spec at all and keeps the canonical fast path.
+    if (scale !== 1) {
+      spec.deviceScaleFactor = scale;
+    }
   }
 
   if (raw.fullPage !== undefined) {
     if (typeof raw.fullPage !== 'boolean') {
       return { error: 'captureSpec.fullPage must be a boolean' };
     }
-    spec.fullPage = raw.fullPage;
+    // false is the engine default: elide it (see deviceScaleFactor above).
+    if (raw.fullPage) {
+      spec.fullPage = true;
+    }
   }
 
   if (raw.clip !== undefined) {
     let clip = raw.clip;
+    if (!isPlainObject(clip)) {
+      return {
+        error:
+          'captureSpec.clip must have non-negative x/y and positive integer width/height',
+      };
+    }
+    for (let key of Object.keys(clip)) {
+      if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
+        return { error: `captureSpec.clip.${key} is not a supported field` };
+      }
+    }
     if (
-      !isPlainObject(clip) ||
       typeof clip.x !== 'number' ||
       typeof clip.y !== 'number' ||
       !Number.isFinite(clip.x) ||
@@ -205,6 +265,20 @@ function parseCaptureSpec(raw: unknown): CaptureSpecParse {
       return {
         error:
           'captureSpec.clip must have non-negative x/y and positive integer width/height',
+      };
+    }
+    // The clip's extent is bounded by the same caps as the viewport whether
+    // or not one was sent: Puppeteer captures beyond the viewport by default
+    // (`captureBeyondViewport`), so an unbounded clip would be a way around
+    // the viewport cost caps.
+    if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      return {
+        error: `captureSpec.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+      };
+    }
+    if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      return {
+        error: `captureSpec.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
       };
     }
     spec.clip = {
@@ -221,8 +295,9 @@ function parseCaptureSpec(raw: unknown): CaptureSpecParse {
     };
   }
 
-  // Clip must sit within the viewport when the caller specified both; a clip
-  // beyond the viewport would otherwise capture blank/scrolled area.
+  // Tighter containment when the caller declared a viewport: the layout was
+  // requested at that size, so a clip past its edge is caller error — the
+  // region would be unstyled overflow or blank area past the document edge.
   if (spec.clip && spec.viewport) {
     if (spec.clip.x + spec.clip.width > spec.viewport.width) {
       return {
@@ -236,7 +311,44 @@ function parseCaptureSpec(raw: unknown): CaptureSpecParse {
     }
   }
 
-  return { captureSpec: spec };
+  // The CSS caps compose with the scale factor: what Chromium renders is
+  // physical pixels, and each capture edge must stay under the texture cap.
+  let effectiveScale = spec.deviceScaleFactor ?? 1;
+  if (spec.viewport) {
+    if (
+      spec.viewport.width * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return {
+        error: `captureSpec.viewport.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
+      };
+    }
+    if (
+      spec.viewport.height * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return {
+        error: `captureSpec.viewport.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
+      };
+    }
+  }
+  if (spec.clip) {
+    if (spec.clip.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+      return {
+        error: `captureSpec.clip.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
+      };
+    }
+    if (spec.clip.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+      return {
+        error: `captureSpec.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
+      };
+    }
+  }
+
+  // A spec whose every field matched an engine default normalizes to null:
+  // it means the canonical capture, and null is what the rest of the handler
+  // (and the job args) key that classification on.
+  return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
 }
 
 export default function handleScreenshotCard({
@@ -334,9 +446,9 @@ export default function handleScreenshotCard({
       // `viewport`/`dsf`/`fullPage`/`clip` — so persisting one under the
       // format-only key would let a custom render serve on the canonical
       // URL. Custom captures render fresh and return bytes only: no ledger
-      // fast path, no persist, no served URL.
-      let isCanonicalCapture =
-        !captureSpec || Object.keys(captureSpec).length === 0;
+      // fast path, no persist, no served URL. The parse normalizes an
+      // all-defaults spec to null, so null exactly means canonical.
+      let isCanonicalCapture = captureSpec === null;
       if (mediaCacheAdapter && isCanonicalCapture) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
