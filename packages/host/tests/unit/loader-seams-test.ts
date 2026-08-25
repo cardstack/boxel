@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 
+import { VirtualNetwork } from '@cardstack/runtime-common';
 import {
   Loader,
   type ModuleEvaluator,
@@ -70,6 +71,10 @@ class SourceServer {
     return this.#parked.filter((entry) => entry.url === url).length;
   }
 
+  unpark(path: string) {
+    this.#parkedURLs.delete(this.url(path));
+  }
+
   // Releases one parked fetch by its arrival position, so a test can choose
   // the order two generations of a module complete in.
   release(path: string, arrival: number, outcome: 'source' | 'failure') {
@@ -109,6 +114,20 @@ const fixtures = {
     export function metaLoader() { return import.meta.loader; }
   `,
   'gen.js': `export function value() { return 'v1'; }`,
+  // `./race-b` before `./race-slow`, and a two-module cycle through race-b,
+  // is what leaves race-a's dependency list frozen with both edges still
+  // completing — see the concurrent-completion test below.
+  'race-a.js': `
+    import { b } from './race-b';
+    import { slow } from './race-slow';
+    export function a() { return 'a'; }
+    export function reads() { return b + slow; }
+  `,
+  'race-b.js': `
+    import { a } from './race-a';
+    export const b = 'b';
+  `,
+  'race-slow.js': `export const slow = 'v1';`,
 };
 
 async function waitFor(condition: () => boolean, description: string) {
@@ -229,32 +248,64 @@ module('Unit | loader seams', function (hooks) {
   });
 
   test('a registration the loader cannot use fails the module by name', async function (assert) {
-    let calls = 0;
-    let stubLoader = makeLoader({
-      moduleEvaluator: () => {
-        calls++;
-        return {
-          dependencyList: 'not a list',
-        } as unknown as ModuleRegistration;
+    let unusable: Record<string, unknown> = {
+      'nothing at all': undefined,
+      'a dependency list that is not a list': { dependencyList: 'not a list' },
+      'an implementation that is not callable': {
+        dependencyList: [],
+        implementation: 'not callable',
       },
-    });
+    };
 
-    for (let attempt of ['first', 'second']) {
-      await assert.rejects(
-        stubLoader.import(server.url('leaf.js')),
-        (err: Error) =>
-          err.message.includes(
-            `Module evaluator returned an invalid registration for ${server.url(
-              'leaf.js',
-            )}`,
-          ),
-        `the ${attempt} import fails with the named registration error`,
+    for (let [description, registration] of Object.entries(unusable)) {
+      let calls = 0;
+      let stubLoader = makeLoader({
+        moduleEvaluator: () => {
+          calls++;
+          return registration as unknown as ModuleRegistration;
+        },
+      });
+
+      for (let attempt of ['first', 'second']) {
+        await assert.rejects(
+          stubLoader.import(server.url('leaf.js')),
+          (err: Error) =>
+            err.message.includes(
+              `Module evaluator returned an invalid registration for ${server.url(
+                'leaf.js',
+              )}`,
+            ),
+          `${description}: the ${attempt} import fails with the named registration error`,
+        );
+      }
+      assert.strictEqual(
+        calls,
+        1,
+        `${description}: the failure is cached, so the evaluator is not asked again`,
       );
     }
-    assert.strictEqual(
-      calls,
-      1,
-      'the failure is cached, so the evaluator is not asked again',
+  });
+
+  test('a realm-mapping change discards what a fetch answered with', async function (assert) {
+    let virtualNetwork = new VirtualNetwork(async () => {
+      let response = new Response();
+      (response as any)[Symbol.for('shimmed-module')] = { shimmed: true };
+      return response;
+    });
+    virtualNetwork.addRealmMapping('@seams-remap/', origin);
+    let mappedLoader = new Loader(
+      virtualNetwork.fetch,
+      virtualNetwork.resolveImport,
+      { virtualNetwork },
+    );
+
+    await mappedLoader.import('@seams-remap/served-shim.gts');
+    assert.true(mappedLoader.isShimmedModule('@seams-remap/served-shim'));
+
+    virtualNetwork.addRealmMapping('@seams-remap-other/', origin);
+    assert.false(
+      mappedLoader.isShimmedModule('@seams-remap/served-shim'),
+      'the record is keyed by a spelling only the previous mapping set defines',
     );
   });
 
@@ -478,6 +529,151 @@ module('Unit | loader seams', function (hooks) {
       loader.getKnownConsumedModules(server.url('top.js')).sort(),
       [server.url('leaf'), server.url('middle'), server.url('unrelated')],
       'the dependency set is rebuilt on the replaced module',
+    );
+  });
+
+  // The loader records a dependency as `completing-dep` when it is still
+  // completing on the recording task's own recursion stack. A second import
+  // root entering during that window (the interleaving
+  // `loader-concurrent-cycle-test` pins) leaves the first module evaluating
+  // straight out of that state, so those edges are the only record of what it
+  // imported — and one of them here is not part of any cycle.
+  test('invalidateModule reaches a dependency that was still completing when its importer evaluated', async function (assert) {
+    server.park('race-slow');
+    // Every module here is named by its extensionless spelling, the one
+    // race-b's import of race-a produces: the completing-dep bookkeeping
+    // compares raw identifiers, so a root imported by a different spelling of
+    // the same module does not enter this interleaving at all.
+    let root1 = loader.import<{ reads(): string }>(server.url('race-a'));
+    await waitFor(
+      () => server.parkedCount('race-slow') === 1,
+      'the slow dependency to be requested',
+    );
+    let root2 = loader.import(server.url('race-b'));
+    server.release('race-slow', 0, 'source');
+    let [moduleA] = await Promise.all([root1, root2]);
+    assert.strictEqual(moduleA.reads(), 'bv1');
+
+    server.unpark('race-slow');
+    server.sources.set(server.url('race-slow.js'), `export const slow = 'v2';`);
+    assert.strictEqual(
+      loader.invalidateModule(server.url('race-slow')),
+      3,
+      'the importer whose edges were still completing is a dependent too',
+    );
+
+    let reimported = await loader.import<{ reads(): string }>(
+      server.url('race-a'),
+    );
+    assert.strictEqual(
+      reimported.reads(),
+      'bv2',
+      'no copy of the replaced module survives in an importer',
+    );
+  });
+
+  test('invalidateModule reaches an importer whose dependency is still completing', async function (assert) {
+    server.park('race-slow');
+    let root1 = loader.import(server.url('race-a'));
+    await waitFor(
+      () => server.parkedCount('race-slow') === 1,
+      'the slow dependency to be requested',
+    );
+    // Entering at race-b while the first root is suspended leaves race-b
+    // holding race-a as a dependency that is still completing — the state the
+    // eviction has to read before either module reaches evaluation.
+    let root2 = loader.import(server.url('race-b'));
+    await waitFor(
+      () => loader.isModuleLoaded(server.url('race-b')),
+      'the second root to register race-b',
+    );
+
+    assert.strictEqual(
+      loader.invalidateModule(server.url('race-a')),
+      2,
+      'the importer goes even though neither module has evaluated',
+    );
+
+    server.unpark('race-slow');
+    server.release('race-slow', 0, 'source');
+    let settled = await Promise.allSettled([root1, root2]);
+    assert.deepEqual(
+      settled.map((outcome) => outcome.status),
+      ['fulfilled', 'fulfilled'],
+      'both in-flight roots complete against the refetched modules',
+    );
+  });
+
+  test('invalidateModule evicts importers that have registered but not evaluated', async function (assert) {
+    server.park('leaf');
+    let pending = loader.import<{ top(): string }>(server.url('top.js'));
+    await waitFor(
+      () => server.parkedCount('leaf') === 1,
+      'the leaf fetch to be issued',
+    );
+
+    assert.strictEqual(
+      loader.invalidateModule(server.url('leaf')),
+      3,
+      'a registered importer names its dependencies before it evaluates',
+    );
+
+    server.sources.set(
+      server.url('leaf.js'),
+      `export function leaf() { return 'leaf-v2'; }`,
+    );
+    server.unpark('leaf');
+    server.release('leaf', 0, 'source');
+    assert.strictEqual(
+      (await pending).top(),
+      'top-middle-leaf-v2',
+      'the suspended import completes against the replacement',
+    );
+  });
+
+  // Every loader the host builds carries a VirtualNetwork and its import
+  // resolution, which is what folds a module's realm-prefix, virtual-alias and
+  // real-URL spellings onto one cache key.
+  test('the seams address a module by any spelling a realm mapping gives it', async function (assert) {
+    let virtualNetwork = new VirtualNetwork(server.fetch);
+    virtualNetwork.addRealmMapping('@seams-test/', origin);
+    let mappedLoader = new Loader(
+      virtualNetwork.fetch,
+      virtualNetwork.resolveImport,
+      { virtualNetwork },
+    );
+
+    await mappedLoader.import(server.url('top.js'));
+    mappedLoader.shimModule('@seams-test/shimmed.gts', { shimmed: true });
+
+    for (let spelling of [
+      '@seams-test/shimmed',
+      '@seams-test/shimmed.gts',
+      `${origin}shimmed.ts`,
+    ]) {
+      assert.true(
+        mappedLoader.isShimmedModule(spelling),
+        `${spelling} names the shimmed module`,
+      );
+    }
+
+    assert.strictEqual(
+      mappedLoader.invalidateModule('@seams-test/middle'),
+      2,
+      'the realm-prefix spelling names the module the cache keyed by',
+    );
+    assert.false(mappedLoader.isModuleLoaded(server.url('middle.js')));
+    assert.true(mappedLoader.isModuleLoaded(server.url('leaf.js')));
+
+    // A bare package specifier is a module identity too, and only import
+    // resolution turns it into the URL the loader files it under — the form
+    // authored code names a trusted package by.
+    mappedLoader.shimModule('a-bare-package', { bare: true });
+    assert.true(mappedLoader.isShimmedModule('a-bare-package'));
+    assert.strictEqual(
+      mappedLoader.invalidateModule('a-bare-package'),
+      1,
+      'a bare specifier resolves to the module it was filed under',
     );
   });
 
