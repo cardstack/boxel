@@ -983,10 +983,11 @@ export type ScreenshotCaptureResult = {
 
 export type ScreenshotPrerenderResponse = {
   status: 'ready' | 'error' | 'unusable';
-  // Always present (a single entry named "default" when the request used the
-  // singular fields). The top-level `base64`/`width`/`height` mirror
-  // `captures[0]` for back-compat with the shipped host tool and the staging
-  // capture command, which read the singular fields.
+  // Present on every ready response (a single entry named "default" when the
+  // request used the singular fields); error and unusable responses carry
+  // none. The top-level `base64`/`width`/`height` mirror `captures[0]` for
+  // back-compat with the shipped host tool and the staging capture command,
+  // which read the singular fields.
   captures?: ScreenshotCaptureResult[];
   base64?: string;
   width?: number;

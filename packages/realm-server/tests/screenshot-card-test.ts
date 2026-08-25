@@ -354,6 +354,82 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('includeBase64: false strips capture-entry bytes on the capture-only path', async function (assert) {
+      // A capture-only response's `captures` come straight from the engine
+      // with per-entry base64; the canonical path rebuilds captures[0]
+      // itself, so only this path exercises the entry-level strip.
+      let dbAdapter = makeDbAdapter();
+      let { queue } = makeQueue({
+        status: 'ready',
+        base64: 'iVBORw0KGgo=',
+        width: 1280,
+        height: 720,
+        contentType: 'image/png',
+        captures: [
+          {
+            name: 'wide',
+            base64: 'iVBORw0KGgo=',
+            width: 1280,
+            height: 720,
+            deviceScaleFactor: 1,
+          },
+          {
+            name: 'thumb',
+            base64: 'iVBORw0KGgo=',
+            width: 200,
+            height: 150,
+            deviceScaleFactor: 1,
+          },
+        ],
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+
+      let response = await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              includeBase64: false,
+              captureSpec: {
+                captures: [
+                  { name: 'wide', viewport: { width: 1280, height: 720 } },
+                  {
+                    name: 'thumb',
+                    clip: { x: 0, y: 0, width: 200, height: 150 },
+                  },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      let attrs = response.body.data.attributes;
+      assert.false('base64' in attrs, 'no top-level base64');
+      assert.strictEqual(attrs.captures.length, 2, 'both entries returned');
+      assert.true(
+        attrs.captures.every(
+          (capture: Record<string, unknown>) => !('base64' in capture),
+        ),
+        'no per-entry base64',
+      );
+      assert.deepEqual(
+        attrs.captures.map((capture: { name: string }) => capture.name),
+        ['wide', 'thumb'],
+        'entries keep their names and order',
+      );
+    });
+
     test('rejects a batch over the capture cap', async function (assert) {
       let captures = Array.from({ length: 25 }, (_v, i) => ({
         name: `c${i}`,

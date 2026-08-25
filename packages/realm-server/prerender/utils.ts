@@ -5,6 +5,7 @@ import {
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   type PrerenderMeta,
   type ScreenshotCaptureEntry,
+  type ScreenshotCaptureResult,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
@@ -1195,13 +1196,10 @@ export async function captureResult(
   return result;
 }
 
-export interface ScreenshotCaptureItem {
-  name: string;
-  base64: string;
-  width: number;
-  height: number;
-  deviceScaleFactor: number;
-}
+// The engine-side name for one captured image; aliased to the wire type so
+// the two cannot drift — `render-runner.ts` assigns these straight into the
+// response's `captures`.
+export type ScreenshotCaptureItem = ScreenshotCaptureResult;
 
 export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
@@ -1518,7 +1516,14 @@ export async function captureScreenshot(
         let target = resolveViewport(entry, baseViewport);
         if (!sameViewport(target, currentViewport)) {
           await page.setViewport(target);
+          // Reflow first so the resize's srcset / media-query re-evaluation
+          // has kicked off, then wait out any image loads it started — a
+          // width or scale change can begin fetches that two animation
+          // frames alone would race, capturing half-loaded imagery. When
+          // nothing new loads, the paint wait finds zero pending images and
+          // resolves after a single frame.
           await waitForReflow(page);
+          await waitForImagePaint(page);
           currentViewport = target;
         }
       }
