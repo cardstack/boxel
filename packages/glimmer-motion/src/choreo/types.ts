@@ -104,6 +104,11 @@ export interface ChangesetLike {
   inserted: Sprite[];
   kept: Sprite[];
   /**
+   * The region frame's own size in LOCAL pixels, from the same final
+   * layout every sprite was measured in — the camera's centre reference.
+   */
+  frame?: { height: number; width: number };
+  /**
    * The camera zoom the world was measured under (§6.3): page-space boxes
    * carry the frame's transform, local inline values do not, and this is
    * the ratio between the two spaces. Absent means 1 — the frame at rest.
@@ -327,6 +332,8 @@ export interface Cue {
   flight?: FlightPath;
   /** camera: drive the region's frame */
   camera?: {
+    /** the frame's centre in the same final layout `origin` was measured in */
+    centre?: { x: number; y: number };
     origin?: { x: number; y: number };
     steady: Sprite[];
     to: { x?: number; y?: number; zoom?: number };

@@ -71,6 +71,8 @@ export interface Run {
 interface RunOptions {
   /** where the region's frame stands as this run begins */
   camera?: CameraState;
+  /** the aim point the prior run left applied — see ChoreoRun.cameraAim */
+  cameraAim?: { x: number; y: number } | null;
   /** the element the camera transform drives (the region's scene wrapper) */
   cameraFrame?: HTMLElement;
   inherit?: Velocities;
@@ -223,6 +225,12 @@ interface Track {
   };
   /** camera: where the frame stood when this step began */
   cameraFrom?: CameraState;
+  /** camera: the aim point in force when this step began */
+  aimFrom?: { x: number; y: number };
+  /** camera: this step's own aim point, frozen at its start */
+  aimTo?: { x: number; y: number };
+  /** camera: eased progress of the live step, for the aim-term lerp */
+  cameraP?: number;
   /** tether: the wire this step draws */
   wire?: SVGPathElement;
   /** scroll: the container being driven, and where it is headed */
@@ -275,6 +283,7 @@ export class ChoreoRun implements Run {
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
+    this.cameraAim = options.cameraAim ?? null;
     this.cues = compiled.cues;
     this.pending = new Set(options.removed);
     const s = this.scale;
@@ -656,12 +665,25 @@ export class ChoreoRun implements Run {
         if (inside && !t.started) {
           t.started = true;
           t.cameraFrom = { ...this.camera };
+          // Transform-origin is pinned at 0 0, so aiming at P is the
+          // translate (1−z)·P and the frame's centre cancels out of the
+          // model entirely. The aim point is frozen per cue and lerped
+          // from the point in force — a re-aim is smooth by construction,
+          // and z = 1 is the identity frame for any aim.
+          const aimTo =
+            cue.camera.origin ??
+            cue.camera.centre ?? { x: 0, y: 0 };
+          t.aimFrom = this.cameraAim ?? aimTo;
+          t.aimTo = aimTo;
+          this.cameraAim = aimTo;
         } else if (!inside && t.started && now < t.start) {
           t.started = false;
           t.cameraAnimation?.cancel();
           t.cameraAnimation = undefined;
           if (t.cameraFrom) {
             this.camera = { ...t.cameraFrom };
+            this.cameraAim = t.aimFrom ?? null;
+            t.cameraP = 0;
             this.applyCamera(t);
           }
         }
@@ -678,6 +700,7 @@ export class ChoreoRun implements Run {
             now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
           const to = cue.camera.to;
+          t.cameraP = p;
           this.camera = {
             x: from.x + ((to.x ?? from.x) - from.x) * p,
             y: from.y + ((to.y ?? from.y) - from.y) * p,
@@ -853,6 +876,17 @@ export class ChoreoRun implements Run {
   /* ---- c.Camera: the region's frame (§6.3) ---- */
 
   camera: CameraState;
+  /**
+   * The aim point P in force, local px. With transform-origin pinned at
+   * 0 0, the applied transform is translate(x + (1−z)·P) scale(z) — the
+   * frame's centre cancels out of the algebra entirely, so neither a
+   * board that reflows mid-cue nor a stage that changes height between
+   * cues can move the picture: the formula reads no live DOM at all.
+   * z = 1 is the identity for any P. Public because it is hand-off state:
+   * the next run lerps from the point THIS run left aimed, exactly as it
+   * inherits the camera.
+   */
+  cameraAim: { x: number; y: number } | null = null;
 
   private cameraProgress(t: Track, ms: number): number {
     const span = t.end - t.start;
@@ -885,12 +919,38 @@ export class ChoreoRun implements Run {
     return target / zoom;
   }
 
-  /** the frame's transform for a camera state, '' at identity */
-  private static cameraCss(state: CameraState): string {
-    const { zoom, x, y } = state;
-    return zoom === 1 && x === 0 && y === 0
+  /**
+   * The frame's APPLIED transform for a camera state at aim progress `p`.
+   *
+   * Transform-origin is pinned at 0 0, so the applied transform is
+   * translate(x + (1−z)·P) scale(z) with P the lerped aim point — pure
+   * arithmetic over frozen numbers. Nothing here reads the DOM, so a board
+   * that reflows mid-cue cannot move the camera, and every boundary
+   * (landing, re-aim, next run) agrees to the pixel. At z = 1 the aim term
+   * vanishes: an unpanned camera is EXACTLY the identity.
+   */
+  private appliedCamera(
+    t: Track,
+    state: CameraState,
+    p: number,
+  ): { x: number; y: number; zoom: number } {
+    const from = t.aimFrom ?? t.aimTo ?? { x: 0, y: 0 };
+    const to = t.aimTo ?? from;
+    const aim = {
+      x: from.x + (to.x - from.x) * p,
+      y: from.y + (to.y - from.y) * p,
+    };
+    return {
+      x: state.x + (1 - state.zoom) * aim.x,
+      y: state.y + (1 - state.zoom) * aim.y,
+      zoom: state.zoom,
+    };
+  }
+
+  private static cameraCss(a: { x: number; y: number; zoom: number }): string {
+    return a.zoom === 1 && a.x === 0 && a.y === 0
       ? ''
-      : `translate(${x}px, ${y}px) scale(${zoom})`;
+      : `translate(${a.x}px, ${a.y}px) scale(${a.zoom})`;
   }
 
   /**
@@ -913,8 +973,8 @@ export class ChoreoRun implements Run {
     const span = Math.max(1, t.end - t.start);
     const anim = host.animate(
       [
-        { transform: ChoreoRun.cameraCss(from) || 'none' },
-        { transform: ChoreoRun.cameraCss(final) || 'none' },
+        { transform: ChoreoRun.cameraCss(this.appliedCamera(t, from, 0)) || 'none' },
+        { transform: ChoreoRun.cameraCss(this.appliedCamera(t, final, 1)) || 'none' },
       ],
       {
         duration: span,
@@ -950,17 +1010,18 @@ export class ChoreoRun implements Run {
       return;
     }
     const { zoom } = this.camera;
-    const origin = t.cue.camera?.origin;
-    frame.style.transformOrigin = origin
-      ? `${origin.x}px ${origin.y}px`
-      : '50% 50%';
+    // the origin is PINNED at 0 0 — a percentage origin is a live DOM
+    // quantity, and a stage that changes height would move the picture
+    frame.style.transformOrigin = '0px 0px';
     // the frame is the author's own region element: at identity, leave no
     // trace — a resting transform would quietly become a containing block.
     // While a platform animation owns the frame, the inline write is
     // skipped: the animation overrides it anyway, and the stale value would
     // flash when the animation is cancelled.
     if (!t.cameraAnimation) {
-      frame.style.transform = ChoreoRun.cameraCss(this.camera);
+      frame.style.transform = ChoreoRun.cameraCss(
+        this.appliedCamera(t, this.camera, t.cameraP ?? 1),
+      );
     }
     for (const sprite of t.cue.camera?.steady ?? []) {
       const ve = sprite.node.visualElement;

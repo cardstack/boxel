@@ -36,18 +36,23 @@ export class Changeset implements ChangesetLike {
    */
   readonly measureZoom: number;
 
+  /** the frame's own size in local pixels, from the same final layout */
+  readonly frame?: { height: number; width: number };
+
   constructor(
     inserted: Sprite[],
     removed: Sprite[],
     kept: Sprite[],
     beacons: Map<string, Bounds> = new Map(),
     measureZoom = 1,
+    frame?: { height: number; width: number },
   ) {
     this.inserted = inserted;
     this.removed = removed;
     this.kept = kept;
     this.beacon = (name) => beacons.get(name) ?? null;
     this.measureZoom = measureZoom;
+    this.frame = frame;
   }
 
   get all(): Sprite[] {

@@ -2591,44 +2591,20 @@ html[data-gm-dragging] * {
   width: min(440px, 100%);
 }
 
-.cam-bar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 10px;
-}
-
-.cam-mode {
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  border-radius: 999px;
-  padding: 5px 10px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
-  cursor: pointer;
-}
-
-.cam-mode.is-on {
-  color: var(--ink);
-  border-color: var(--copper);
-}
-
-@media (hover: hover) {
-  .cam-mode:hover {
-    color: var(--ink);
-  }
-}
-
-/* the stage clips — the ARRANGE zoom is what reveals the board's edges,
-   so the well behind them has to be there to reveal */
+/* the stage clips — the MAP zoom is what reveals the board's edges, so
+   the well behind them has to be there to reveal. The cursor is the whole
+   affordance: zoom-in over a kiln, zoom-out on the floor once you are
+   close. */
 .cam-stage {
   position: relative;
   overflow: hidden;
   border-radius: 14px;
   background: var(--bg-well);
   padding: 18px;
+}
+
+.cam-stage.is-zoomed {
+  cursor: zoom-out;
 }
 
 .cam-board {
@@ -2649,8 +2625,21 @@ html[data-gm-dragging] * {
   background: var(--bg-elev);
   color: var(--ink);
   text-align: left;
-  cursor: pointer;
-  transition: border-color 200ms var(--ease);
+  cursor: zoom-in;
+  transition:
+    border-color 200ms var(--ease),
+    box-shadow 200ms var(--ease);
+}
+
+@media (hover: hover) {
+  .cam-card:hover {
+    border-color: var(--line-strong);
+    box-shadow: 0 6px 18px rgba(var(--shadow-rgb), calc(0.18 * var(--shadow-a)));
+  }
+}
+
+.cam-card.is-focus {
+  cursor: zoom-out;
 }
 
 .cam-card.is-focus {
@@ -2708,12 +2697,18 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* the readout rides @steady: it scales with the scene, damped back toward
-   readable — watch it hold its size against either zoom */
-.cam-hud {
+/* the readout and the map chip ride @steady: they scale with the scene,
+   damped back toward readable — watch them hold against either zoom */
+.cam-hud-group {
   position: absolute;
   top: 10px;
   right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cam-hud {
   padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
@@ -2724,6 +2719,30 @@ html[data-gm-dragging] * {
   color: var(--copper-ink);
   pointer-events: none;
   font-variant-numeric: tabular-nums;
+}
+
+.cam-map {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(var(--bg-rgb), 0.72);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+.cam-map.is-on {
+  color: var(--copper-ink);
+  border-color: var(--copper);
+}
+
+@media (hover: hover) {
+  .cam-map:hover {
+    color: var(--ink);
+  }
 }
 
 .follow-stage {

@@ -372,23 +372,29 @@ get poses() {
     @spring={{carry}}
     @steady={{c.role 'hud'}}
   />
-  {{! the edit form arrives only after the camera has landed — it is the
-      landing that renders it (below) — and leaves as the camera pulls back }}
-  <c.Tween @of={{c.inserted 'edit'}} @opacity={{array 0 1}} @duration={{0.24}} />
-  <c.Tween @of={{c.removed 'edit'}} @opacity={{0}} @duration={{0.16}} />
+
+  {{! the transmute rides the SAME pass as the zoom: the form arrives, the
+      card grows and the camera dives together — one changeset, one
+      timeline. Every box the form reflowed tweens. }}
+  <c.Move @of={{c.moved 'card'}} @spring={{settle}} />
+
+  {{! each field is its own participant, so the arrival is a short ladder;
+      everything leaves at once when the camera pulls back }}
+  <c.Tween
+    @of={{c.inserted 'edit'}}
+    @opacity={{array 0 1}}
+    @stagger={{0.07}}
+    @duration={{0.2}}
+  />
+  <c.Tween @of={{c.removed 'edit'}} @opacity={{0}} @duration={{0.14}} />
 </c.Parallel>
 
-{{! The deck's rule, made safe: past a zoom threshold a boxel TRANSMUTES.
-    c.camera is TRACKED and lands at step boundaries — never per frame — so
-    deriving the form from it cannot feed back into the move. Camera state
-    feeds the next changeset; the changeset never drives the camera. }}
-{{#if (this.transmuted boxel.id c.camera)}}
-  <span class='cam-edit' {{motion id='edit' role='edit'}}>…</span>
-{{/if}}
-
-{{! @steady names what must stay legible: the readout scales WITH the scene
-    but is damped back toward its own size — never pinned, never lost }}
-<span class='cam-hud' {{motion id='hud' role='hud'}}>{{zoomLabel c.camera}}</span>`,
+{{! @steady names what must stay legible: the map chip and the readout
+    scale WITH the scene, damped back toward their own size — never
+    pinned, never lost. c.camera is the run's TRACKED landing state. }}
+<span class='cam-hud' {{motion id='hud-zoom' role='hud'}}>
+  {{zoomLabel c.camera}}
+</span>`,
     slowmo: true,
     title: 'Camera',
   },

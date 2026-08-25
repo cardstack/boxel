@@ -458,6 +458,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     const after = root.getBoundingClientRect();
+    // the zoom every box below was measured under (§6.3): the prior run's
+    // live camera if a run was in flight, the resting state otherwise —
+    // geometry that becomes inline pixels divides back by it
+    const measureZoom = this.run?.camera.zoom ?? this.restingCamera.zoom;
     const changeset = new Changeset(
       inserted.filter((s) => s.type === 'inserted'),
       removed,
@@ -465,10 +469,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // measured in the same window as `final`, and re-measured every pass: a
       // beacon can move without this region rendering at all
       measureBeacons(after),
-      // the zoom every one of those boxes was measured under (§6.3): the
-      // prior run's live camera if a run was in flight, the resting state
-      // otherwise — geometry that becomes inline pixels divides back by it
-      this.run?.camera.zoom ?? this.restingCamera.zoom,
+      measureZoom,
+      // the frame's own size in the same final layout, local pixels — the
+      // camera's centre reference, so aim terms are internally consistent
+      {
+        height: after.height / measureZoom,
+        width: after.width / measureZoom,
+      },
     );
     this.changeset = changeset;
 
@@ -535,6 +542,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     this.run = execute(compiled, {
       camera: { ...this.restingCamera },
       cameraFrame: this.element,
+      // the aim point in force carries run to run, so a re-aim lerps from
+      // what is actually applied rather than assuming an unaimed frame
+      cameraAim: this.run?.cameraAim,
       // updated at step boundaries only — a still value app logic can
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an

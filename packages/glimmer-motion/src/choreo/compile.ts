@@ -553,12 +553,22 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         const originSprite = step.origin ? cs.sprite(step.origin) : null;
         const origin =
           originSprite?.final?.context ?? originSprite?.initial?.context;
+        // context space carries the frame's transform (context = zoom ×
+        // local), and transform-origin is written in LOCAL pixels — divide
+        // back by the zoom the world was measured under (§6.3)
+        const oz = cs.measureZoom ?? 1;
         cues.push({
           camera: {
+            // centre and origin from the SAME final layout: the aim term
+            // (origin − centre) is frozen numbers the run lerps — a board
+            // that reflows mid-cue cannot move the camera
+            centre: cs.frame
+              ? { x: cs.frame.width / 2, y: cs.frame.height / 2 }
+              : undefined,
             origin: origin
               ? {
-                  x: origin.x + origin.width / 2,
-                  y: origin.y + origin.height / 2,
+                  x: (origin.x + origin.width / 2) / oz,
+                  y: (origin.y + origin.height / 2) / oz,
                 }
               : undefined,
             steady: step.steady ? cs.sprites(step.steady) : [],
