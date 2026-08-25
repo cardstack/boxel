@@ -10,7 +10,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { runExecutionRuntimeCandidateSmoke } from './execution-runtime-browser-smoke.mjs';
+import {
+  APPLICATION_READY_SELECTOR,
+  CARD_SURFACE_SELECTOR,
+  runExecutionRuntimeCandidateSmoke,
+} from './execution-runtime-browser-smoke.mjs';
 
 const HOST_CHROME = {
   '.new-file-dropdown-trigger': 'rgb(0, 255, 186)',
@@ -32,8 +36,8 @@ function fakeDocument({ text = '', headings = [], mounted = true } = {}) {
     textContent: name,
   });
   let cardSelectors = [
-    '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
-    '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container, [aria-label="Loading card"]',
+    CARD_SURFACE_SELECTOR,
+    APPLICATION_READY_SELECTOR,
     '[data-boxel-card-id], [data-boxel-card-container]',
   ];
   let bySelector = new Map(

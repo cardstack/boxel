@@ -31,6 +31,16 @@
 
 const DEFAULT_REFERENCE_ORIGIN = 'https://realms-staging.stack.cards';
 
+// Readiness is defined by these selectors and nothing else. They are exported
+// so any tool that reports a Host timing measures the same two moments the
+// smoke runner does; a second, slightly different definition elsewhere would
+// make two numbers look comparable when they are not.
+export const CARD_SURFACE_SELECTOR =
+  '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container';
+export const CARD_LOADING_SELECTOR = '[aria-label="Loading card"]';
+export const APPLICATION_READY_SELECTOR = `${CARD_SURFACE_SELECTOR}, ${CARD_LOADING_SELECTOR}`;
+export const SIGN_IN_TEXT = 'Sign in to your Boxel Account';
+
 const FATAL_TEXT = [
   'Unable to render this card',
   'Cannot load card',
@@ -392,38 +402,42 @@ async function settle(tab, expectedText, timeoutMs) {
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     let state = await tab.playwright.evaluate(
-      ({ fatalText, normalizedExpectedText }) => {
+      ({
+        cardLoadingSelector,
+        cardSurfaceSelector,
+        fatalText,
+        normalizedExpectedText,
+        signInText,
+      }) => {
         let text = document.body?.innerText ?? '';
         let normalizedText = text
           .normalize('NFKC')
           .replace(/\s+/g, ' ')
           .trim()
           .toLocaleLowerCase();
+        let cardReady = Boolean(document.querySelector(cardSurfaceSelector));
+        let loadingCard = Boolean(document.querySelector(cardLoadingSelector));
         return {
-          cardReady: Boolean(
-            document.querySelector(
-              '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
-            ),
-          ),
+          cardReady,
           fatal: fatalText.some((value) => text.includes(value)),
-          loadingCard: Boolean(
-            document.querySelector('[aria-label="Loading card"]'),
-          ),
+          loadingCard,
           ready:
-            Boolean(
-              document.querySelector(
-                '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container',
-              ),
-            ) &&
-            !document.querySelector('[aria-label="Loading card"]') &&
+            cardReady &&
+            !loadingCard &&
             (normalizedExpectedText.length === 0 ||
               normalizedExpectedText.every((value) =>
                 normalizedText.includes(value),
               )),
-          signIn: text.includes('Sign in to your Boxel Account'),
+          signIn: text.includes(signInText),
         };
       },
-      { fatalText: FATAL_TEXT, normalizedExpectedText },
+      {
+        cardLoadingSelector: CARD_LOADING_SELECTOR,
+        cardSurfaceSelector: CARD_SURFACE_SELECTOR,
+        fatalText: FATAL_TEXT,
+        normalizedExpectedText,
+        signInText: SIGN_IN_TEXT,
+      },
     );
     if (state.ready || state.fatal || state.signIn) {
       return state;
@@ -445,18 +459,21 @@ async function settle(tab, expectedText, timeoutMs) {
 async function settleApplication(tab, timeoutMs) {
   let deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    let state = await tab.playwright.evaluate((fatalText) => {
-      let text = document.body?.innerText ?? '';
-      return {
-        fatal: fatalText.some((value) => text.includes(value)),
-        mounted: Boolean(
-          document.querySelector(
-            '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container, [aria-label="Loading card"]',
-          ),
-        ),
-        signIn: text.includes('Sign in to your Boxel Account'),
-      };
-    }, FATAL_TEXT);
+    let state = await tab.playwright.evaluate(
+      ({ applicationReadySelector, fatalText, signInText }) => {
+        let text = document.body?.innerText ?? '';
+        return {
+          fatal: fatalText.some((value) => text.includes(value)),
+          mounted: Boolean(document.querySelector(applicationReadySelector)),
+          signIn: text.includes(signInText),
+        };
+      },
+      {
+        applicationReadySelector: APPLICATION_READY_SELECTOR,
+        fatalText: FATAL_TEXT,
+        signInText: SIGN_IN_TEXT,
+      },
+    );
     if (state.mounted || state.fatal || state.signIn) {
       return { ...state, ready: true };
     }

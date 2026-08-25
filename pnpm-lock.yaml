@@ -2190,6 +2190,9 @@ importers:
       '@percy/ember':
         specifier: 'catalog:'
         version: 5.0.1(@babel/core@7.29.7)(@glint/template@1.7.7)(webpack@5.107.2)
+      '@playwright/test':
+        specifier: 'catalog:'
+        version: 1.61.0
       '@rollup/plugin-babel':
         specifier: ^6.0.4
         version: 6.1.0(@babel/core@7.29.7)(@types/babel__core@7.20.5)(rollup@4.62.0)

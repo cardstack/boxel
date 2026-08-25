@@ -12,6 +12,11 @@ import {
   summarizeExecutionRuntimeSmokeRun,
 } from './execution-runtime-browser-smoke.mjs';
 import {
+  median as baselineMedian,
+  parseArguments,
+  renderBaselineTable,
+} from './execution-runtime-render-baseline.mjs';
+import {
   executionRuntimeMirrorCohort,
   mirrorCohortPlanes,
   validateMirrorCohort,
@@ -361,4 +366,71 @@ test('execution stage summaries preserve tiers and calculate median and p95', ()
       samples: 4,
     },
   });
+});
+
+test('the baseline reader takes cards as id=path pairs and refuses an empty run', () => {
+  assert.deepEqual(
+    parseArguments([
+      '--host',
+      'https://localhost:4200',
+      '--card',
+      'skill=/base/Skill/example',
+      '--card',
+      'index=/example-realm/index',
+      '--samples',
+      '5',
+    ]),
+    {
+      cards: [
+        { id: 'skill', path: '/base/Skill/example' },
+        { id: 'index', path: '/example-realm/index' },
+      ],
+      host: 'https://localhost:4200',
+      samples: 5,
+      timeoutMs: 120_000,
+      warm: 3,
+    },
+  );
+  assert.throws(() => parseArguments([]), /At least one --card/);
+  assert.throws(
+    () => parseArguments(['--card', '/no-id']),
+    /--card expects <id>=<path>/,
+  );
+  assert.throws(() => parseArguments(['--nope', '1']), /Unknown argument/);
+});
+
+test('a baseline median ignores no sample and has no value without one', () => {
+  assert.equal(baselineMedian([]), undefined);
+  assert.equal(baselineMedian([7]), 7);
+  assert.equal(baselineMedian([40, 10, 20, 5]), 20);
+});
+
+test('the baseline table marks a card with no usable sample rather than printing zero', () => {
+  let table = renderBaselineTable({
+    cards: [
+      {
+        cold: {
+          applicationMedianMs: 1_200,
+          documentMedianMs: 210,
+          executionMedianMs: 300,
+          totalMedianMs: 1_500,
+        },
+        id: 'measured',
+        warm: {
+          applicationMedianMs: 400,
+          documentMedianMs: 40,
+          executionMedianMs: 90,
+          totalMedianMs: 490,
+        },
+      },
+      {
+        cold: {},
+        id: 'never-settled',
+        warm: {},
+      },
+    ],
+  });
+
+  assert.match(table, /\| measured\s+\| 210 ms\s+\| 1,200 ms/);
+  assert.match(table, /\| never-settled\s+\| —\s+\| —/);
 });
