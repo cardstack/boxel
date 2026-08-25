@@ -81,13 +81,22 @@ export interface BoxelSourceClassification extends BoxelSourceAnalysis {
    * This is the exact set a stronger runtime may read: a Sandbox authorizes a
    * module fetch against it before any authenticated request fires.
    *
-   * Only meaningful as an authorization list when `reason` reports a finding.
-   * A reason that reports what could not be established — a load, parse,
-   * resolve or bound failure — comes with whatever the walk reached before it
-   * stopped, which is a partial list. Such a result is never memoized, so the
-   * caller's move is to classify again rather than to authorize against it.
+   * Complete only when `moduleGraphComplete` says so. The reason string is NOT
+   * that signal: positive evidence is reported ahead of a failure in the same
+   * graph, so a settled-looking `browser-runtime:…` can accompany a list that
+   * stops where an unreadable member did.
    */
   moduleGraph: string[];
+
+  /**
+   * Whether the walk read every module it reached. When false, `moduleGraph` is
+   * whatever it got to before something could not be loaded, parsed, resolved,
+   * or fitted inside the bound — so it is a diagnostic, not an authorization
+   * list, and a runtime that checked fetches against it would refuse reads the
+   * render needs. Such a result is never memoized, so the caller's move is to
+   * classify again rather than to authorize against it.
+   */
+  moduleGraphComplete: boolean;
 }
 
 // Packages that need a real document, canvas, or WebGL context. A card
@@ -678,14 +687,18 @@ function isTypeOnlyImport(
     return false;
   }
   let statement = source.slice(entry.ss, entry.se);
-  // `\b` after the keyword is load-bearing: without it `type` matches the
-  // prefix of a binding name, so `import types from './types.gts'` reads as
-  // type-only and its edge is dropped — a lost signal and a truncated
-  // `moduleGraph`, memoized as a settled answer. The boundary still admits
-  // every real modifier spelling: `type{`, `type *`, `type,` and `type Scene`.
-  let afterTypeKeyword = /^\s*(?:import|export)\s+type\b\s*([\s\S]*)$/.exec(
-    statement,
-  );
+  // The keyword has to end here, or `type` matches the PREFIX of a binding
+  // name: `import types from './types.gts'` would read as the modifier
+  // followed by `s from …`, and its edge would be dropped.
+  //
+  // Spelled as a negated character class rather than `\b`, because `\b` is a
+  // `[A-Za-z0-9_]` boundary and `$` is a legal identifier character that is
+  // not in it — so `\b` fires between `type` and `$`, and `import type$ from
+  // 'three'` takes exactly the path `\b` was added to close. `[\w$]` is the
+  // same class the binding-name test below uses, which is what keeps the two
+  // in agreement.
+  let afterTypeKeyword =
+    /^\s*(?:import|export)\s+type(?![\w$])\s*([\s\S]*)$/.exec(statement);
   if (afterTypeKeyword) {
     let rest = afterTypeKeyword[1]!;
     // `import type {…}` and `import type * as N` are unambiguous modifiers.
@@ -1075,7 +1088,11 @@ export class BoxelModuleGraphClassifier {
     // to weigh against the failure.
     let root = analyzed.get(moduleIdentifier)?.analysis;
     if (!root) {
-      return { ...failedClassification(failureReason()), moduleGraph };
+      return {
+        ...failedClassification(failureReason()),
+        moduleGraph,
+        moduleGraphComplete: !walk.incomplete,
+      };
     }
 
     // Positive evidence is reported ahead of any failure. Both reach Sandbox,
@@ -1086,7 +1103,7 @@ export class BoxelModuleGraphClassifier {
     // there is no positive evidence, which is exactly when an incomplete graph
     // could otherwise be mistaken for a clean one.
     if (root.tier === 'sandbox') {
-      return { ...root, moduleGraph };
+      return { ...root, moduleGraph, moduleGraphComplete: !walk.incomplete };
     }
     // Sorted by identifier with a plain comparison rather than
     // `localeCompare`, which is locale-dependent and would let the reported
@@ -1109,12 +1126,17 @@ export class BoxelModuleGraphClassifier {
         signals: dependency.signals,
         propagatesToImporters: true,
         moduleGraph,
+        moduleGraphComplete: !walk.incomplete,
       };
     }
     if (exceededLimit || failures.length > 0) {
-      return { ...failedClassification(failureReason()), moduleGraph };
+      return {
+        ...failedClassification(failureReason()),
+        moduleGraph,
+        moduleGraphComplete: !walk.incomplete,
+      };
     }
-    return { ...root, moduleGraph };
+    return { ...root, moduleGraph, moduleGraphComplete: !walk.incomplete };
   }
 
   /**
@@ -1221,6 +1243,8 @@ function failedClassification(reason: string): BoxelSourceClassification {
     // importer's behalf either.
     propagatesToImporters: true,
     moduleGraph: [],
+    // Overridden by every walkGraph return, which knows what it reached.
+    moduleGraphComplete: false,
   };
 }
 

@@ -540,8 +540,23 @@ module('Unit | RP-6 classification', function () {
     // A binding whose NAME begins with `type` is not a type-only statement.
     // Reporting one as erased deletes a live edge, which is the unaffordable
     // direction: the module's signals are never gathered and it never enters
-    // the graph a Sandbox authorizes reads against.
-    for (let binding of ['types', 'typeMap', 'typeahead', 'typescriptPlugin']) {
+    // the graph a Sandbox authorizes reads against — and nothing marks the
+    // result incomplete, because nothing failed.
+    //
+    // `$` and `_` are identifier characters that `\b` does not treat as word
+    // characters, so a boundary written that way admits `type$…` while
+    // rejecting `types…`.
+    for (let binding of [
+      'types',
+      'typeMap',
+      'typeahead',
+      'typescriptPlugin',
+      'type$',
+      'type$$',
+      'type$Map',
+      'type_',
+      'type_map',
+    ]) {
       let prefixed = await classifyBoxelSource(
         `import ${binding} from 'three';\nexport default ${binding};`,
       );
@@ -551,6 +566,13 @@ module('Unit | RP-6 classification', function () {
         `a binding named ${binding} is a value, so its edge is real`,
       );
     }
+
+    // The same boundary, with a named value specifier alongside it, so the
+    // statement is unambiguously live.
+    let prefixedWithNamed = await classifyBoxelSource(
+      `import type$, { Group } from 'three';\nexport const x = [type$, Group];`,
+    );
+    assert.deepEqual(prefixedWithNamed.imports, ['three']);
 
     // The words in a string are not a declaration.
     let quoted = await classifyBoxelSource(
@@ -1186,6 +1208,54 @@ module('Unit | RP-6 classification', function () {
       promoted.reason,
       `dependency-runtime:${shared}`,
       'invalidating a dependency re-decides every importer of it, not only the dependency',
+    );
+  });
+
+  test('RP-6.4: graph completeness is reported separately from the reason, because a finding can outrank a failure in the same graph', async function (assert) {
+    // A complete walk.
+    let clean = graphFixture({
+      'https://example.test/entry.gts': `export const t = document.title;`,
+    });
+    let settled = await clean.classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(settled.reason, 'browser-runtime:document');
+    assert.true(
+      settled.moduleGraphComplete,
+      'nothing in this graph went unread',
+    );
+
+    // The same finding, over a graph with an unreadable member. Positive
+    // evidence is reported ahead of the failure, so the reason alone cannot
+    // tell a consumer that the list stops short.
+    let truncated = graphFixture({
+      'https://example.test/entry.gts': `import dep from './dep.gts';\nexport const t = document.title;`,
+    });
+    let partial = await truncated.classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.strictEqual(
+      partial.reason,
+      'browser-runtime:document',
+      'the actionable signal still wins the diagnostic',
+    );
+    assert.false(
+      partial.moduleGraphComplete,
+      'but the graph is not an authorization list: a Sandbox checking fetches against it would refuse the dependency',
+    );
+
+    // And such a result is not kept, so asking again re-reads rather than
+    // returning the truncated answer. Awaited first: two calls in one tick
+    // deliberately share the in-flight walk, and the eviction runs when it
+    // settles.
+    truncated.loads.length = 0;
+    await truncated.classifier.classifyModuleGraph(
+      'https://example.test/entry.gts',
+    );
+    assert.deepEqual(
+      truncated.loads,
+      ['https://example.test/dep.gts'],
+      'an incomplete walk is never memoized, so the next request re-reads the module it could not read — and only that one, since the entry itself was read fine',
     );
   });
 
