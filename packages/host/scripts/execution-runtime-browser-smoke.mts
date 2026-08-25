@@ -15,8 +15,9 @@
  *    slow case at the end discards the whole run.
  * 2. **Cancellation is bounded per case.** `caseTimeoutMs` cuts a single case
  *    loose and moves on, rather than letting it consume the budget for every
- *    case behind it. An abandoned case's page work is cut loose with a blank
- *    navigation so it cannot bleed into the next case's observations.
+ *    case behind it. Cutting loose is not cancelling, so each case holds a
+ *    revocable lease on the shared tab: revoking it stops the abandoned work
+ *    from reaching the next case's page.
  * 3. **Readiness is recorded in two parts.** Application/auth readiness (the
  *    Host booted and authentication resolved) is timed separately from
  *    execution readiness (substantive Direct/Capsule/Sandbox output). Those
@@ -24,8 +25,8 @@
  *    Matrix work otherwise buries the number the execution runtime owns.
  *
  * For the same reason, a case's outcome is a status rather than a boolean.
- * Pre-routing network failure, runtime failure, semantic mismatch, interaction
- * failure, and slow-but-eventually-correct output are different findings and
+ * Pre-routing failure, runtime failure, semantic mismatch, capability gap,
+ * interaction failure, and slow-but-correct output are different findings and
  * lead to different work; collapsing them into red/green destroys that.
  */
 
@@ -240,6 +241,20 @@ export interface UnrunPageResult {
 
 export type SmokePageResult = SmokeProbeResult | UnrunPageResult;
 
+/**
+ * Whether a case got far enough to observe anything.
+ *
+ * A bounded, thrown, or sign-in-blocked case carries no observations at all,
+ * so every read of one has to pass through here first. Reporting code that
+ * skips the check throws on exactly the cases the per-case bound exists to
+ * produce, which is when a report is most needed.
+ */
+export function hasProbeResult(
+  page: SmokePageResult,
+): page is SmokeProbeResult {
+  return page.elapsedMs !== null;
+}
+
 /** The observations reference parity compares; nothing else is read. */
 export type ParityView = Pick<
   SmokeProbeResult,
@@ -248,6 +263,11 @@ export type ParityView = Pick<
 
 export interface SmokeInteractionResult {
   actionElapsedMs?: number;
+  /**
+   * Set when the runner wrote to a real corpus card and could not put the
+   * original value back. The card is left mutated and needs a human.
+   */
+  unrestoredWrite?: { error: string; path: string; value: string };
   error?: string;
   executions?: string[];
   kind?: string;
@@ -315,7 +335,12 @@ const DEFAULT_REFERENCE_ORIGIN = 'https://realms-staging.stack.cards';
 // make two numbers look comparable when they are not.
 export const CARD_SURFACE_SELECTOR =
   '[data-boxel-card-id], [data-boxel-card-container], .boxel-card-container';
-export const CARD_LOADING_SELECTOR = '[aria-label="Loading card"]';
+// The Host marks a card it is still loading with this hook. It is a
+// `data-test-` attribute because that is the only stable handle the loading
+// state has — the affordance itself is a div carrying text, and matching on
+// the text would break on translation and on the two spellings the Host uses
+// ("Loading card..." in a stack item, "Loading card…" in host mode).
+export const CARD_LOADING_SELECTOR = '[data-test-stack-item-loading-card]';
 export const APPLICATION_READY_SELECTOR = `${CARD_SURFACE_SELECTOR}, ${CARD_LOADING_SELECTOR}`;
 export const SIGN_IN_TEXT = 'Sign in to your Boxel Account';
 
@@ -1260,6 +1285,7 @@ async function runInteraction(
       (value) => !values.includes(value),
     );
     let textEntry;
+    let unrestoredWrite;
     if (smokeCase.interaction.textEntryValue) {
       let original = smokeCase.interaction.textEntryValue;
       let inputs = tab.playwright.locator('input, textarea');
@@ -1284,11 +1310,26 @@ async function runInteraction(
           );
           await tab.playwright.waitForTimeout(2500);
         } finally {
-          await input.fill(original, { timeoutMs });
-          await tab.playwright.waitForTimeout(5000);
-          restored = await input.evaluate(
-            (element: HTMLInputElement | HTMLTextAreaElement) => element.value,
-          );
+          // The restore can itself fail — the case may be cut loose during the
+          // autosave wait, and the lease then refuses this write. That leaves
+          // the sentinel persisted in a real corpus card, so say so on the
+          // result: a failed restore is a card a human has to go clean up, and
+          // it must not be reported as merely a failed interaction.
+          try {
+            await input.fill(original, { timeoutMs });
+            await tab.playwright.waitForTimeout(5000);
+            restored = await input.evaluate(
+              (element: HTMLInputElement | HTMLTextAreaElement) =>
+                element.value,
+            );
+          } catch (error) {
+            restored = undefined;
+            unrestoredWrite = {
+              error: describeError(error),
+              path: smokeCase.path,
+              value: sentinel,
+            };
+          }
         }
         textEntry = {
           accepted: accepted === sentinel,
@@ -1309,6 +1350,7 @@ async function runInteraction(
         (!checkExecution || executions.includes('direct')),
       textEntry,
       readyElapsedMs,
+      unrestoredWrite,
       values,
     };
   }
@@ -1426,12 +1468,13 @@ async function runInteraction(
   throw new Error(`Unknown smoke interaction: ${smokeCase.interaction.kind}`);
 }
 
-// A case's outcome is a status, not a boolean. These five findings lead to
-// five different pieces of work — a broken environment, a runtime defect, a
-// projection gap, a capability gap, and a performance problem — so the runner
-// keeps them apart. Order matters: the first bucket a case falls into wins,
-// because a card that never reached routing cannot also be said to have the
-// wrong semantics.
+// A case's outcome is a status, not a boolean. These five buckets lead to five
+// different pieces of work — a broken environment, a runtime defect, a
+// projection gap, a missing capability, and a broken interaction — so the
+// runner keeps them apart. Order matters: the first bucket a case falls into
+// wins, because a card that never reached routing cannot also be said to have
+// the wrong semantics. Correct-but-slow is not among them; it is its own
+// status below, since it is not a defect.
 const STATUS_BUCKETS = [
   [
     'pre-routing-failure',
@@ -1660,34 +1703,52 @@ export function summarizeExecutionRuntimeSmokeRun(run: {
           : candidateResult.assessment.pass
             ? 'pass'
             : 'candidate-regression';
-    let healthyImages = (result) =>
-      result
-        ? (result.page.images ?? []).filter(
+    // A case with no observations reports null rather than a number: zero
+    // healthy images and "signature absent" are findings, and a case that
+    // never rendered has made neither.
+    let healthyImages = (result: SmokeCaseResult | undefined) =>
+      result && hasProbeResult(result.page)
+        ? result.page.images.filter(
             (image) => image.complete && image.width > 0 && image.height > 0,
           ).length
         : null;
+    let candidatePage = candidateResult?.page;
+    let referencePage = referenceResult.page;
 
     return {
       candidate: candidateResult
         ? {
             elapsedMs: candidateResult.page.elapsedMs,
-            executions: candidateResult.page.executions,
+            executions:
+              candidatePage && hasProbeResult(candidatePage)
+                ? candidatePage.executions
+                : null,
             failures: candidateFailures,
             healthyImages: healthyImages(candidateResult),
             parity: candidateResult.referenceParity ?? null,
-            readiness: candidateResult.page.readiness ?? null,
+            readiness:
+              candidatePage && hasProbeResult(candidatePage)
+                ? candidatePage.readiness
+                : null,
             status: candidateResult.assessment.status ?? null,
-            warmReadiness: candidateResult.page.warmReadiness ?? null,
+            warmReadiness:
+              candidatePage && hasProbeResult(candidatePage)
+                ? (candidatePage.warmReadiness ?? null)
+                : null,
           }
         : null,
       diagnosis,
       id: referenceResult.id,
       reference: {
-        elapsedMs: referenceResult.page.elapsedMs,
+        elapsedMs: referencePage.elapsedMs,
         failures: referenceResult.assessment.failures,
         healthyImages: healthyImages(referenceResult),
-        readiness: referenceResult.page.readiness ?? null,
-        signatureReady: referenceResult.page.missingText.length === 0,
+        readiness: hasProbeResult(referencePage)
+          ? referencePage.readiness
+          : null,
+        signatureReady: hasProbeResult(referencePage)
+          ? referencePage.missingText.length === 0
+          : null,
       },
     };
   });
@@ -1763,9 +1824,9 @@ async function auditSandboxTeardown(
  * Run one origin's cases, bounding and persisting each case independently.
  *
  * A case that exceeds `caseTimeoutMs` is cut loose and the run continues. Its
- * abandoned page work is detached with a blank navigation first: the tab is
- * shared across cases, so an in-flight render left running would otherwise
- * contribute DOM, images, and iframes to the next case's observations.
+ * lease on the shared tab is revoked first, so the abandoned work cannot reach
+ * the next case's page; the tab is then blanked so an in-flight render leaves
+ * no DOM, images, or iframes behind for the next case to observe.
  *
  * Every completed case is handed to `onCaseComplete` before the next one
  * starts. A batch that dies partway through therefore still leaves the
@@ -1878,8 +1939,11 @@ export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
     if (typeof value !== 'object' && typeof value !== 'function') return value;
     if (typeof value.then === 'function') return value;
     return new Proxy(value, {
-      get(target, property, receiver) {
-        let member = Reflect.get(target, property, receiver);
+      get(target, property) {
+        // Read with the target as receiver, not the proxy: a getter on the
+        // browser client would otherwise run with `this` bound to the proxy
+        // and fail on any private field it touches.
+        let member = Reflect.get(target, property, target);
         if (typeof member !== 'function') return wrap(member);
         return (...args) => {
           if (!live) throw new CaseAbandonedError(String(property));

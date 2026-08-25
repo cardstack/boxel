@@ -537,20 +537,42 @@ export const wildCorpusTableEnd = '<!-- wild-corpus:end -->';
  * URLs because both origins are stated once above the table, and a two-column
  * URL table is unreadable at fifty rows.
  */
+/**
+ * A markdown table cell is delimited by `|` and terminated by a newline, so a
+ * value containing either cannot round-trip through one. Refusing here is what
+ * keeps the doc-sync test honest: a truncated cell would otherwise make the
+ * test fail with no way to pass it, since regenerating reproduces the
+ * truncation.
+ */
+function tableCell(value: string, column: string, id: string) {
+  if (/[|\r\n]/.test(value)) {
+    throw new Error(
+      `Wild corpus ${id} has a ${column} that cannot be rendered in a markdown table (it contains a pipe or a newline): ${value}`,
+    );
+  }
+  return value;
+}
+
 export function renderWildCorpusTable(cases = executionRuntimeWildCorpusCases) {
   let columns = ['#', 'Area', 'Case', 'Card path', 'What it exercises'];
   let rows = cases.map((smokeCase, index) => [
     String(index + 1),
-    smokeCase.category,
-    `\`${smokeCase.id}\``,
-    `\`${smokeCase.path}\``,
-    smokeCase.purpose,
+    tableCell(smokeCase.category, 'category', smokeCase.id),
+    `\`${tableCell(smokeCase.id, 'id', smokeCase.id)}\``,
+    `\`${tableCell(smokeCase.path, 'path', smokeCase.id)}\``,
+    tableCell(smokeCase.purpose, 'purpose', smokeCase.id),
   ]);
+  // Match the repo's markdown formatter exactly — right-aligned counter
+  // column, three-character minimum so the alignment row fits — so that
+  // regenerating is idempotent. A generator that emitted a different-but-
+  // equivalent table would leave every regeneration showing as a diff the
+  // formatter then reverts.
   let widths = columns.map((column, index) =>
-    Math.max(column.length, ...rows.map((row) => row[index].length)),
+    Math.max(3, column.length, ...rows.map((row) => row[index].length)),
   );
-  let line = (cells) =>
-    `| ${cells.map((cell, index) => cell.padEnd(widths[index])).join(' | ')} |`;
+  let pad = (cell: string, index: number) =>
+    index === 0 ? cell.padStart(widths[index]) : cell.padEnd(widths[index]);
+  let line = (cells: string[]) => `| ${cells.map(pad).join(' | ')} |`;
   let alignment = widths.map((width, index) =>
     index === 0 ? `${'-'.repeat(width - 1)}:` : '-'.repeat(width),
   );

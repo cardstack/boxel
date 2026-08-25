@@ -45,12 +45,25 @@ Readiness is defined by the selectors the browser smoke runner exports, so the
 baseline and the smoke lane measure the same two moments. A second, slightly
 different definition would make two numbers look comparable when they are not.
 
+**The execution part has a floor.** Readiness is detected by polling the page,
+so the shortest interval the instrument can resolve is one `evaluate` round
+trip — measured at roughly 7 ms median and up to ~31 ms on the machine below.
+An execution figure near or under that is reporting the instrument, not the
+card, and per-card execution values in that range are not comparable with each
+other.
+
 **Cold** means a fresh browser context per sample: no HTTP cache, no storage,
-no service worker carried over. **Warm** repeats the navigation in the same
-context, which is what a user moving between cards experiences. Sign-in happens
-once before any sample and the captured session is replayed into each context,
-so the login round trip is never inside a measured number while every sample
-still arrives authenticated.
+no service worker carried over. It is client-cold only — the dev server's
+transpile cache, the realm index, and the OS page cache stay warm across every
+sample, so only the first sample of a run is ever server-cold. **Warm** repeats
+the same full document navigation in the same context, so it measures a reload
+with a warm client cache. It is deliberately _not_ the client-side route
+transition a user makes moving between cards in the Host; that is a different
+measurement and this instrument does not make it.
+
+Sign-in happens once before any sample and the captured session is replayed
+into each context, so the login round trip is never inside a measured number
+while every sample still arrives authenticated.
 
 Each reported figure is a median. A sample that never reached a rendered card
 is excluded from the medians and counted separately, and so is one that landed
@@ -98,16 +111,20 @@ graph the dev server ships, and it is exactly the part a production build
 replaces — which is why these absolute numbers do not transfer.
 
 **Card rendering is not measurably separate here.** Execution readiness runs
-3–355 ms with a median of 20 ms, because the Host's first paint already carries
-the card: the route resolves the card before the app shell renders, so there is
-no window in which a mounted app is waiting for a card. The split still earns
-its place — it separates the two the moment a Host paints a loading state
-first, which is what a Sandbox handoff or a slow authenticated load does — but
-on this build essentially all the cost is in the application part.
+3–355 ms with a median of 20 ms — at or under the round-trip floor above, so
+these per-card figures carry no signal and should not be compared with one
+another. The reason the window is empty is a property of these routes: the
+Host's first paint already carries the card, and the app shell, the host
+chrome, and the card surface were all observed appearing on the same polling
+tick. There is no interval in which a mounted app sits waiting for a card, so
+there is nothing for the split to divide. It divides something wherever a Host
+paints a loading state first; on this build essentially all the cost is in the
+application part.
 
-**Warm saves about a tenth.** Cold total medians run 6.8–8.4 s and warm 5.6–7.7 s.
-An HTTP cache helps less than it might, because the dev server revalidates and
-the application still reboots on every document navigation.
+**Warm saves about a tenth.** Cold total medians run 6.8–8.4 s and warm
+5.6–7.7 s. A warm client cache helps less than it might: the dev server
+revalidates, and because a warm sample is a full document navigation the
+application reboots every time.
 
 **The spread is wide.** Cold totals span 6,597–9,236 ms and warm totals
 4,683–9,701 ms across all cards. On a contended machine a single sample says

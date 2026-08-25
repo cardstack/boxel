@@ -25,6 +25,7 @@ import {
   executionRuntimeWildCorpusCases,
   executionRuntimeWildUrlMatrix,
   parseWildCorpusTable,
+  renderWildCorpusTable,
   validateWildCorpus,
   wildCorpusDocPath,
 } from './execution-runtime-wild-corpus.mts';
@@ -106,12 +107,44 @@ test('the wild corpus does not claim a tier it has not observed', () => {
   );
 });
 
-test('the wild corpus rejects a duplicated card', () => {
-  let duplicated = [
+test('the wild corpus rejects a fifty-first card', () => {
+  let extra = [
     ...executionRuntimeWildCorpusCases,
     executionRuntimeWildCorpusCases[0],
   ];
-  assert.throws(() => validateWildCorpus(duplicated), /exactly 50 cards/);
+  assert.throws(() => validateWildCorpus(extra), /exactly 50 cards/);
+});
+
+test('the wild corpus rejects a card duplicated in place', () => {
+  // Still fifty rows, so the length guard cannot catch this. Copy-paste
+  // produces the second shape far more often than the first: a new row that
+  // kept the row above it's path while getting its own id.
+  let sameId = executionRuntimeWildCorpusCases.map((entry, index) =>
+    index === 1
+      ? { ...entry, id: executionRuntimeWildCorpusCases[0].id }
+      : entry,
+  );
+  assert.throws(() => validateWildCorpus(sameId), /id must be unique/);
+
+  let samePath = executionRuntimeWildCorpusCases.map((entry, index) =>
+    index === 1
+      ? { ...entry, path: executionRuntimeWildCorpusCases[0].path }
+      : entry,
+  );
+  assert.throws(() => validateWildCorpus(samePath), /unique CTSE card/);
+});
+
+test('a purpose that cannot survive a markdown table is refused', () => {
+  // Regenerating the doc could not fix a truncated cell, so the manifest
+  // refuses the value rather than letting the sync test become unpassable.
+  let piped = executionRuntimeWildCorpusCases.map((entry, index) =>
+    index === 0 ? { ...entry, purpose: 'grid | flow composition' } : entry,
+  );
+  assert.throws(() => renderWildCorpusTable(piped), /cannot be rendered/);
+  let newlined = executionRuntimeWildCorpusCases.map((entry, index) =>
+    index === 0 ? { ...entry, purpose: 'grid\nflow' } : entry,
+  );
+  assert.throws(() => renderWildCorpusTable(newlined), /cannot be rendered/);
 });
 
 test('the wild corpus rejects a row with no visible signature', () => {
@@ -433,4 +466,80 @@ test('the baseline table marks a card with no usable sample rather than printing
 
   assert.match(table, /\| measured\s+\| 210 ms\s+\| 1,200 ms/);
   assert.match(table, /\| never-settled\s+\| —\s+\| —/);
+});
+
+test('the summary reports a case that never ran instead of throwing on it', () => {
+  // Per-case cancellation makes an observation-free record routine, and the
+  // summarizer is how a run is read. Throwing here would make a batch's
+  // evidence unreadable through the tool that ships with it.
+  let unrun = (id, page) => ({
+    assessment: {
+      failures: ['case-deadline-exceeded'],
+      pass: false,
+      status: 'pre-routing-failure',
+    },
+    id,
+    interaction: { pass: false, skipped: true },
+    page,
+  });
+
+  let summary = summarizeExecutionRuntimeSmokeRun({
+    candidate: {
+      results: [unrun('bounded', { caseTimeoutMs: 90_000, elapsedMs: null })],
+    },
+    reference: {
+      results: [unrun('bounded', { elapsedMs: null, runnerError: 'boom' })],
+    },
+  });
+
+  assert.equal(summary.length, 1);
+  // Absent, not zero and not true: the case made no observation either way.
+  assert.equal(summary[0].reference.signatureReady, null);
+  assert.equal(summary[0].reference.healthyImages, null);
+  assert.equal(summary[0].candidate.healthyImages, null);
+  assert.equal(summary[0].candidate.readiness, null);
+  assert.equal(summary[0].candidate.executions, null);
+  assert.equal(summary[0].diagnosis, 'reference-drift');
+});
+
+test('the baseline reader refuses a flag with no value or a nonsense count', () => {
+  assert.throws(() => parseArguments(['--card']), /--card expects a value/);
+  assert.throws(() => parseArguments(['--host']), /--host expects a value/);
+  // NaN samples ran zero samples and printed an empty table under a zero exit,
+  // which is indistinguishable from a run where nothing settled.
+  assert.throws(
+    () => parseArguments(['--card', 'a=/b', '--samples', 'abc']),
+    /non-negative whole number/,
+  );
+  assert.throws(
+    () => parseArguments(['--card', 'a=/b', '--warm', '-2']),
+    /non-negative whole number/,
+  );
+  assert.throws(
+    () => parseArguments(['--card', '=/no-id']),
+    /--card expects <id>=<path>/,
+  );
+});
+
+test('the mirror cohort refuses to leave an evidence plane unproven', () => {
+  // The cohort's whole claim is that passing it means compatible; a plane no
+  // scenario exercises is a hole in that claim, so the manifest refuses it.
+  let noPersistence = executionRuntimeMirrorCohort.map((entry) => ({
+    ...entry,
+    planes: entry.planes.filter((plane) => plane !== 'persistence'),
+  }));
+  assert.throws(
+    () => validateMirrorCohort(noPersistence),
+    /leaves an evidence plane unproven: persistence/,
+  );
+});
+
+test('the mirror cohort refuses a scenario with no evidence plane at all', () => {
+  let empty = executionRuntimeMirrorCohort.map((entry, index) =>
+    index === 0 ? { ...entry, planes: [] } : entry,
+  );
+  assert.throws(
+    () => validateMirrorCohort(empty),
+    /at least one evidence plane/,
+  );
 });

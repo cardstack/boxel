@@ -15,10 +15,12 @@
  *   resolving. Common to every card and independent of any execution work.
  * - **Execution readiness** — application readiness to substantive card
  *   output. This is the part the execution runtime owns.
- * - **Cold versus warm** — cold uses a fresh browser context per sample, so
- *   no HTTP cache, storage, or compiled-module state survives. Warm repeats
- *   the navigation in the same context, which is what a user moving between
- *   cards actually experiences.
+ * - **Cold versus warm** — cold uses a fresh browser context per sample, so no
+ *   HTTP cache, storage, or service worker survives; it is client-cold only,
+ *   since the server's own caches stay warm. Warm repeats the same full
+ *   document navigation in that context, so it measures a reload with a warm
+ *   client cache rather than the client-side route transition a user makes
+ *   moving between cards.
  *
  * Readiness is defined by the selectors the browser smoke runner exports, so
  * the two tools measure the same two moments rather than two similar ones.
@@ -31,7 +33,7 @@
  *
  * Usage:
  *
- *   node scripts/execution-runtime-render-baseline.mjs \
+ *   node scripts/execution-runtime-render-baseline.mts \
  *     --host https://localhost:4200 \
  *     --card 'skill=/base/Skill/boxel-development' \
  *     --samples 3 --warm 3 --out baseline.json
@@ -42,6 +44,8 @@
  * a session.
  */
 import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { chromium } from '@playwright/test';
 
@@ -65,9 +69,14 @@ export function parseArguments(argv) {
   for (let index = 0; index < argv.length; index++) {
     let flag = argv[index];
     let value = argv[index + 1];
+    // Every flag here takes a value. Reporting the missing one by name beats
+    // the TypeError that reading past the end would otherwise produce.
+    if (value === undefined) {
+      throw new Error(`${flag} expects a value`);
+    }
     if (flag === '--card') {
       let separator = value.indexOf('=');
-      if (separator === -1) {
+      if (separator < 1) {
         throw new Error(`--card expects <id>=<path>, received: ${value}`);
       }
       options.cards.push({
@@ -92,7 +101,16 @@ export function parseArguments(argv) {
       index++;
     } else if (['--samples', '--warm', '--timeout-ms'].includes(flag)) {
       let key = flag === '--timeout-ms' ? 'timeoutMs' : flag.slice(2);
-      options[key] = Number(value);
+      let count = Number(value);
+      // A non-number silently became NaN, and a NaN sample count runs no
+      // samples at all — the instrument then prints an empty table and exits
+      // zero, which reads exactly like a run where nothing settled.
+      if (!Number.isInteger(count) || count < 0) {
+        throw new Error(
+          `${flag} expects a non-negative whole number, received: ${value}`,
+        );
+      }
+      options[key] = count;
       index++;
     } else {
       throw new Error(`Unknown argument: ${flag}`);
@@ -256,6 +274,8 @@ async function measureCard(browser, card, options) {
         .map((sample) => sample.documentMs)
         .filter((value) => typeof value === 'number'),
     ),
+    // Error samples are a subset of the unready ones, not a second group:
+    // adding the two would double-count.
     errorSamples: samples.filter((sample) => sample.fatal).length,
     executionMedianMs: median(
       usable(samples).map((sample) => sample.executionMs),
@@ -354,7 +374,15 @@ export async function recordRenderBaseline(options) {
   }
 }
 
-if (process.argv[1]?.endsWith('execution-runtime-render-baseline.mjs')) {
+// Run the measurement only when invoked as a command, so importing this module
+// for its pure helpers does not launch a browser. Comparing resolved paths
+// rather than matching a filename matters: a filename comparison fails silent
+// when the file is renamed, and the command then exits zero having done
+// nothing.
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   let options = parseArguments(process.argv.slice(2));
   let report = await recordRenderBaseline(options);
   if (options.out) {

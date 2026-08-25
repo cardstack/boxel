@@ -11,7 +11,7 @@
  *
  * - This cohort is the completion gate. Passing it is what "compatible with
  *   real workspaces" means.
- * - The 50-card wild corpus (`execution-runtime-wild-corpus.mjs`) is the
+ * - The 50-card wild corpus (`execution-runtime-wild-corpus.mts`) is the
  *   breadth lane: rotating rounds that look for behaviors nobody predicted.
  * - The staging execution-runtime suite realm and the sandbox-compatibility
  *   corpus realm are exploratory oracles — an axis laboratory and a cumulative
@@ -30,10 +30,11 @@
  * | persistence | a write reaches the realm, survives reload, and reconciles        |
  * | lifecycle   | cold load, remount, format switch, teardown, no retained runtime  |
  *
- * `subject` names the workspace realm and, where the scenario pins one card,
- * its path within that realm. Scenarios whose subject is a graph rather than a
- * single card name the realm and describe the graph; the concrete instance is
- * chosen at run time from that realm and recorded with the result.
+ * `realm` names the workspace, and `subjectUrl` pins one card within it where
+ * the scenario has one. A scenario whose subject is a graph rather than a
+ * single card leaves `subjectUrl` unset and describes the graph in its
+ * required proof; the concrete instance is chosen at run time from that realm
+ * and recorded with the result.
  *
  * The cohort validates; it does not drive. A red scenario opens a conformance
  * test against the rendering protocol, and the fix lands against that test —
@@ -146,7 +147,6 @@ export function validateMirrorCohort(scenarios) {
     );
   }
 
-  let ids = new Set();
   let planes = new Set(mirrorCohortPlanes);
 
   for (let [index, entry] of scenarios.entries()) {
@@ -155,9 +155,6 @@ export function validateMirrorCohort(scenarios) {
       throw new Error(
         `Mirror cohort scenarios are numbered in order; expected ${expectedId} at position ${index} but found ${entry.id}`,
       );
-    }
-    if (ids.has(entry.id)) {
-      throw new Error(`Mirror scenario id must be unique: ${entry.id}`);
     }
     if (!entry.realm || !entry.requiredProof) {
       throw new Error(
@@ -191,8 +188,6 @@ export function validateMirrorCohort(scenarios) {
         `Mirror scenario ${entry.id} repeats an evidence plane: ${entry.planes.join(', ')}`,
       );
     }
-
-    ids.add(entry.id);
   }
 
   let covered = new Set(scenarios.flatMap((entry) => entry.planes));
