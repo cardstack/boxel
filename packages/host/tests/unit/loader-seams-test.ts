@@ -794,6 +794,36 @@ module('Unit | loader seams', function (hooks) {
     );
   });
 
+  test('a dependency walk taken while a module is still fetching is not memoized', async function (assert) {
+    await loader.import(server.url('top.js'));
+
+    // The re-import holds `top` in the map as a fetching record for the whole
+    // round trip, so unlike an evicted module it is present — and present with
+    // no dependencies named yet.
+    server.park('top.js');
+    loader.invalidateModule(server.url('leaf'));
+    let reimport = loader.import(server.url('top.js'));
+    await waitFor(
+      () => server.parkedCount('top.js') === 1,
+      'the re-import to be in flight',
+    );
+
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')),
+      [],
+      'a module that has not named its dependencies yet reports none',
+    );
+
+    server.unpark('top.js');
+    server.release('top.js', 0, 'source');
+    await reimport;
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')).sort(),
+      [server.url('leaf'), server.url('middle')],
+      'that walk did not outlive the fetch it was taken during',
+    );
+  });
+
   test('an eviction landing after the graph is walked re-enters instead of failing the import', async function (assert) {
     // The read this covers happens after the walk has resolved, so no fetch
     // can reach it — driving the interleaving means stepping in where the

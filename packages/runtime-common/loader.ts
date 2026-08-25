@@ -810,10 +810,14 @@ export class Loader {
 
     let pending = [rootModuleIdentifier];
     let visited = new Set<string>();
-    // A walk that reached a module this loader does not hold saw only part of
-    // the graph. Memoizing that would outlive the gap — the cache is consulted
-    // before the module map, so a set collected while a module was evicted
-    // would still be answered after the module came back.
+    // A walk that reached a module whose dependencies this loader does not know
+    // yet — one it does not hold at all, or one still fetching — saw only part
+    // of the graph. Memoizing that would outlive the gap: the cache is
+    // consulted before the module map and nothing clears it when a module
+    // registers, so a set collected during the gap would still be answered
+    // afterwards. Every other state names its dependencies, `broken` included:
+    // a module that failed before it could name any has none to know, and it
+    // cannot gain any without an invalidation, which clears this cache.
     let complete = true;
 
     while (pending.length > 0) {
@@ -863,6 +867,7 @@ export class Loader {
           }
           break;
         case 'fetching':
+          complete = false;
           break;
         default:
           throw assertNever(module);
