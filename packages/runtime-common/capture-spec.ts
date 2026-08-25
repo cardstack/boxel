@@ -62,7 +62,15 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
 // Cap on batch size. Every entry captures on the same settled render, so this
 // bounds only the number of screenshots taken after one settle, not renders.
-export const SCREENSHOT_MAX_CAPTURES = 24;
+// Sized so a full batch finishes within the handler's sync-wait budget
+// (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s): a batch is capture-only (persist:
+// null), so a batch that misses the sync wait is discarded on the 503 and the
+// retry re-renders from scratch — nothing resumes. Budget: one shared settle +
+// the initial paint wait, then per entry a bounded viewport-switch paint wait
+// (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) + screenshot. Deliberately conservative;
+// the ceiling can rise once incremental persistence lets a batch resume instead
+// of discard.
+export const SCREENSHOT_MAX_CAPTURES = 12;
 
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
@@ -176,50 +184,57 @@ function parseOverrideFields(
 
   if (raw.clip !== undefined) {
     let clip = raw.clip;
-    if (!isPlainObject(clip)) {
+    // `clip: null` is an explicit unset — the only way a batch entry can drop a
+    // batch-wide clip default, since object-valued fields have no scalar
+    // "back to default" spelling the way fullPage/deviceScaleFactor do. It
+    // elides away after the merge, so a normalized spec never carries it.
+    if (clip === null) {
+      overrides.clip = null;
+    } else if (!isPlainObject(clip)) {
       return {
         error: `${path}.clip must have non-negative x/y and positive integer width/height`,
       };
-    }
-    for (let key of Object.keys(clip)) {
-      if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
-        return { error: `${path}.clip.${key} is not a supported field` };
+    } else {
+      for (let key of Object.keys(clip)) {
+        if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
+          return { error: `${path}.clip.${key} is not a supported field` };
+        }
       }
-    }
-    if (
-      typeof clip.x !== 'number' ||
-      typeof clip.y !== 'number' ||
-      !Number.isFinite(clip.x) ||
-      !Number.isFinite(clip.y) ||
-      clip.x < 0 ||
-      clip.y < 0 ||
-      !isPositiveInteger(clip.width) ||
-      !isPositiveInteger(clip.height)
-    ) {
-      return {
-        error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+      if (
+        typeof clip.x !== 'number' ||
+        typeof clip.y !== 'number' ||
+        !Number.isFinite(clip.x) ||
+        !Number.isFinite(clip.y) ||
+        clip.x < 0 ||
+        clip.y < 0 ||
+        !isPositiveInteger(clip.width) ||
+        !isPositiveInteger(clip.height)
+      ) {
+        return {
+          error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+        };
+      }
+      // The clip's extent is bounded by the same caps as the viewport whether
+      // or not one was sent: Puppeteer captures beyond the viewport by default
+      // (`captureBeyondViewport`), so an unbounded clip would be a way around
+      // the viewport cost caps.
+      if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+        return {
+          error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+        };
+      }
+      if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+        return {
+          error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+        };
+      }
+      overrides.clip = {
+        x: clip.x,
+        y: clip.y,
+        width: clip.width,
+        height: clip.height,
       };
     }
-    // The clip's extent is bounded by the same caps as the viewport whether
-    // or not one was sent: Puppeteer captures beyond the viewport by default
-    // (`captureBeyondViewport`), so an unbounded clip would be a way around
-    // the viewport cost caps.
-    if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
-      return {
-        error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
-      };
-    }
-    if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
-      return {
-        error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
-      };
-    }
-    overrides.clip = {
-      x: clip.x,
-      y: clip.y,
-      width: clip.width,
-      height: clip.height,
-    };
   }
 
   return { overrides };
@@ -317,7 +332,10 @@ function mergeOverrides(
   if (fullPage !== undefined) {
     merged.fullPage = fullPage;
   }
-  let clip = entry.clip ?? base.clip;
+  // An entry that sets `clip` at all (including `clip: null` to unset) wins over
+  // the batch-wide default; only an absent entry clip inherits the base. `??`
+  // would wrongly treat `clip: null` as "inherit".
+  let clip = entry.clip !== undefined ? entry.clip : base.clip;
   if (clip) {
     merged.clip = clip;
   }

@@ -988,6 +988,33 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.height, byName.wide.height);
     });
 
+    test('a bare batch entry reverts to the base viewport, not the previous entry', async function (assert) {
+      // The most confusable part of the merge: a second entry that declares no
+      // viewport must resolve from the page's base viewport (800), not inherit
+      // the first entry's 1280. This also guards `sameViewport`'s switch-back —
+      // if it wrongly kept 1280, the bare entry would capture at 1280.
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'wide', viewport: { width: 1280, height: 720 } },
+          { name: 'base' },
+        ],
+      });
+      assert.strictEqual(response.status, 'ready', 'batch succeeded');
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      assert.strictEqual(
+        decodePng(byName.wide.base64).width,
+        1280,
+        'wide entry captures at its declared width',
+      );
+      assert.strictEqual(
+        decodePng(byName.base.base64).width,
+        800,
+        'bare entry reverts to the 800-wide base viewport',
+      );
+    });
+
     test('singular-shape request stays byte-compatible under the new response', async function (assert) {
       let singular = await screenshot(`${realmURL}1`);
       let batchOfOne = await screenshot(`${realmURL}1`, {

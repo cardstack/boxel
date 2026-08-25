@@ -931,8 +931,11 @@ export type ScreenshotCaptureOverrides = {
   fullPage?: boolean;
   // CSS-pixel region to capture, passed straight to `page.screenshot`. Its
   // extent is bounded by the same caps as the viewport (and must sit within
-  // the viewport when one is given). Mutually exclusive with `fullPage`.
-  clip?: { x: number; y: number; width: number; height: number };
+  // the viewport when one is given). Mutually exclusive with `fullPage`. A
+  // batch entry may set `clip: null` to drop a batch-wide clip default (the
+  // only "back to no clip" spelling an object-valued field has); it elides
+  // away after the merge, so a normalized spec never carries null.
+  clip?: { x: number; y: number; width: number; height: number } | null;
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An

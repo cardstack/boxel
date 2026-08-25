@@ -15,27 +15,16 @@ import type {
   ScreenshotPersistArgs,
 } from '../tasks/screenshot-card.ts';
 
-// Floor for a screenshot job: covers a single render + settle + capture. Batch
-// jobs scale up from here. Kept as the previous flat value so single captures
-// don't regress.
+// Timeout for a screenshot job — a wedged-worker backstop covering one render +
+// settle + the capture loop. A batch captures every entry from a single settle,
+// so the marginal per-entry cost (viewport resize + screenshot) is small, and
+// the batch ceiling (`SCREENSHOT_MAX_CAPTURES`) is sized to finish well within
+// the sync-wait budget; one flat value covers singular and batch alike, so the
+// timeout does not scale with capture count. The render itself is separately
+// capped at `cardRenderTimeout` (RENDER_TIMEOUT_MS, default 60s), so a slow
+// render surfaces as a Render timeout regardless of this value — this is the
+// backstop for a worker wedged outside the render (dispatch, result upload).
 export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
-// Base settle budget and per-capture increment for a batch. Every entry captures
-// on one settled render, so the marginal cost per extra capture is small
-// (viewport resize + screenshot). A 24-entry batch lands at ~78s.
-const SCREENSHOT_CARD_JOB_BASE_SEC = 30;
-const SCREENSHOT_CARD_JOB_PER_CAPTURE_SEC = 2;
-
-// Queue-job timeout scaled by the requested capture count. A wedged job still
-// dies promptly relative to its declared size, while a legitimate large batch
-// gets room to finish.
-export function screenshotCardJobTimeoutSec(captureCount: number): number {
-  let count =
-    Number.isFinite(captureCount) && captureCount > 0 ? captureCount : 1;
-  return Math.max(
-    SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
-    SCREENSHOT_CARD_JOB_BASE_SEC + SCREENSHOT_CARD_JOB_PER_CAPTURE_SEC * count,
-  );
-}
 
 // Concurrent requests for one capture fold onto one job: the per-realm
 // concurrency group serializes execution but does not dedupe, so without
@@ -272,11 +261,10 @@ export async function enqueueScreenshotCardJob(
   priority: number,
   opts?: { concurrencyGroup?: string },
 ) {
-  let captureCount = args.captureSpec?.captures?.length ?? 1;
   let job = await queue.publish<ScreenshotPrerenderResponse>({
     jobType: 'screenshot-card',
     concurrencyGroup: opts?.concurrencyGroup ?? `screenshot:${args.realmURL}`,
-    timeout: screenshotCardJobTimeoutSec(captureCount),
+    timeout: SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
     priority,
     args,
   });
