@@ -867,7 +867,7 @@ summary,
    so the glass is sized to them rather than stretching each frame tall to
    fill the site's default stage height. */
 .stage-wrap:has(.cam) {
-  min-height: min(46vh, 420px);
+  min-height: min(58vh, 560px);
 }
 
 .sample {
@@ -2673,8 +2673,9 @@ html[data-gm-dragging] * {
 }
 
 /* one bracket to a row, each row as tall as its own 4:3 strips — not the
-   whole glass. Six frames wide: small strips, filling the sheet edge to
-   edge without stretching any single frame into a tall dead card. */
+   whole glass. Six frames wide on a roomy glass; narrower glass gets fewer,
+   bigger columns, so the loupe grade panel always has a frame tall enough
+   to sit inside instead of spilling past its edge. */
 .cam-sheet {
   position: absolute;
   top: 50%;
@@ -2687,6 +2688,24 @@ html[data-gm-dragging] * {
   grid-template-columns: repeat(6, 1fr);
   grid-auto-rows: auto;
   gap: 6px;
+}
+
+@container (max-width: 640px) {
+  .cam-sheet {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@container (max-width: 420px) {
+  .cam-sheet {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@container (max-width: 280px) {
+  .cam-sheet {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 /* The point the sheet view zooms about: dead centre of the roll, wherever
@@ -2803,14 +2822,14 @@ html[data-gm-dragging] * {
 /* the loupe's data strip: constant dark, because it sits on film */
 .cam-grade {
   position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 16px;
+  left: 6px;
+  right: 6px;
+  bottom: 8px;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
+  gap: clamp(3px, 1cqw, 6px);
+  padding: clamp(5px, 1.4cqw, 8px) clamp(6px, 1.8cqw, 10px);
   border-radius: 6px;
   border: 1px solid rgba(228, 163, 90, 0.35);
   background: rgba(12, 9, 7, 0.9);
@@ -2818,22 +2837,26 @@ html[data-gm-dragging] * {
 
 .cam-exp {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: clamp(6px, 1.6cqw, 9px);
   letter-spacing: 0.04em;
   color: #f3ece3;
 }
 
+/* wraps rather than overflows: a narrow glass gets fewer columns (above),
+   but the loupe can still land on a frame too tight for both pills on one
+   line — stacking beats spilling past the card's edge */
 .cam-verdict {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .cam-pick,
 .cam-pass {
-  padding: 3px 10px;
+  padding: clamp(2px, 0.6cqw, 3px) clamp(6px, 1.8cqw, 10px);
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: clamp(6px, 1.4cqw, 9px);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   cursor: pointer;
@@ -5739,19 +5762,21 @@ html[data-gm-dragging] * {
   transform-origin: 50% 50%;
 }
 
-/* text: one span per glyph, grouped into words. Both groupings exist in the
-   markup at all times, because Delivery chooses between them per frame — it
-   is which window a glyph is given, never which elements are rendered. */
+/* text: whole elements. `@by` splits them into stand-in spans only for the
+   window of their build and puts Glimmer's own text nodes back after — so
+   there is nothing here but type; the spans the library makes are inline-block
+   already, and they inherit the transform-origin below so a glyph scales from
+   its baseline rather than its centre. */
 .bo-word,
 .bo-tag {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: block;
+  text-align: center;
   margin: 0;
 }
 
-.bo-run {
-  display: inline-flex;
+.bo-word > span,
+.bo-tag > span {
+  transform-origin: 50% 80%;
 }
 
 .bo-word {
@@ -5768,19 +5793,6 @@ html[data-gm-dragging] * {
   font-size: clamp(7px, 2.3cqh, 9px);
   letter-spacing: 0.2em;
   color: var(--ink-dim);
-}
-
-.bo-word .bo-run + .bo-run {
-  margin-left: 0.3em;
-}
-
-.bo-tag .bo-run + .bo-run {
-  margin-left: 0.6em;
-}
-
-.bo-cell {
-  display: inline-block;
-  transform-origin: 50% 80%;
 }
 
 .bo-rule-box {
