@@ -751,18 +751,28 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
     }
   });
 
-  test('RP-14.4: an empty exemption exempts nothing rather than everything', function (assert) {
-    // Coverage is prefix-closed, and the empty path is a prefix of every path,
-    // so honoring one would silence the whole record and report parity. Nothing
-    // legitimately names it: the root of a record is not a member.
-    let reference = description();
-    let diff = diffRecords(
-      reference,
-      description({ boxelKind: 'field', ancestors: [] }),
-      { exemptPaths: [''] },
+  test('RP-14.4: an empty exemption is refused rather than exempting everything', function (assert) {
+    // Coverage is prefix-closed and the empty path is a prefix of every path, so
+    // honoring one silences the whole record and reports parity. Nothing
+    // legitimately names it — the root of a record is not a member — which
+    // makes it the one exemption that can be refused without guessing, and
+    // dropping it quietly would be a rule reading as satisfied while doing
+    // nothing.
+    assert.throws(
+      () =>
+        diffRecords(description(), description({ boxelKind: 'field' }), {
+          exemptPaths: [''],
+        }),
+      /must name a member/,
     );
-    assert.strictEqual(diff.divergences.length, 2);
-    assert.false(recordsAgree(diff), describeRecordDiff(diff));
+    // Mixed in with a real one, so the refusal is not conditional on being alone.
+    assert.throws(
+      () =>
+        diffRecords(description(), description({ boxelKind: 'field' }), {
+          exemptPaths: ['presentation', ''],
+        }),
+      /must name a member/,
+    );
   });
 
   test('RP-14.4: a record this protocol cannot use is not compared against a peer', function (assert) {

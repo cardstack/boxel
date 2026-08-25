@@ -40,12 +40,26 @@
 // until it stopped meaning anything. An adapter built by a factory is caught by
 // signal 2 instead, in whichever file defines the operations.
 //
-// What this cannot see, and does not claim to: an implementation that both
-// names the interface nowhere AND defines few operations of its own because it
-// inherits them, and anything under a `tests` directory, which is skipped so a
-// test double is not mistaken for a tier. What it over-reads: a wrapper that
-// forwards most of the interface to an inner runtime looks like an
-// implementation by signal 2, because textually it is one.
+// What this cannot see, and does not claim to:
+//
+//   - an implementation that both names the interface nowhere AND defines few
+//     operations of its own, because it inherits them;
+//   - one that defines its operations *dynamically* — assigning them in a loop
+//     over `BOXEL_RUNTIME_OPERATIONS`, or dispatching by name in a `switch` —
+//     which names none of them textually. The protocol exports that list for
+//     dispatch by name, so this is a shape it invites, and a transport-backed
+//     adapter is the likeliest place for it;
+//   - anything under a `tests` directory, skipped so a test double is not
+//     mistaken for a tier.
+//
+// What it over-reads, all by signal 2 and all because textually they define the
+// operations: a wrapper forwarding most of the interface to an inner runtime; a
+// consumer that destructures the operations out of a runtime under the same
+// names, or calls them bare rather than through a member access; a type-only
+// structural mirror of the interface; and a stub outside a `tests` directory.
+// The lookbehind separates a member-access call from a definition —
+// `runtime.projectInstance(handle)` is a consumer — and does not separate a
+// bare call or a renamed destructure.
 //
 // It is a tripwire on how an adapter is actually written, not a proof that none
 // exists — and it holds files rather than behavior: recording an entry says
@@ -78,7 +92,12 @@ const skipDirectories = new Set([
   'tests',
 ]);
 
+// A declaration file declares types and implements nothing, and generated
+// mirrors of this repo's own source are declaration files — `bundled-types`
+// holds a copy of the protocol module's own `runtime.ts`, which declares all
+// eight operations and sits outside the exclusion below.
 const SOURCE = /\.(ts|gts|mts)$/;
+const DECLARATION_FILE = /\.d\.(ts|mts)$/;
 
 // The module that declares the interface, which is therefore not an
 // implementation of it: its own body defines all eight operations, and its
@@ -146,7 +165,7 @@ function* walk(dir: string): Generator<string> {
     }
     if (stat.isDirectory()) {
       yield* walk(full);
-    } else if (SOURCE.test(entry)) {
+    } else if (SOURCE.test(entry) && !DECLARATION_FILE.test(entry)) {
       yield full;
     }
   }

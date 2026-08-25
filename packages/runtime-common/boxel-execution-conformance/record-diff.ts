@@ -124,7 +124,7 @@ export interface RecordDiffOptions {
    * tier-specific member is a property of the record shape rather than of one
    * element's position, and an exemption that matched no position at all would
    * be a rule that reads as satisfied while doing nothing. An empty entry is
-   * dropped: it would cover every path and silence the whole record.
+   * refused: it would cover every path and silence the whole record.
    */
   exemptPaths?: readonly string[];
 }
@@ -161,19 +161,32 @@ export function diffRecords(
  * The exemptions that can cover a path, wildcarded so an index names the
  * record's shape rather than one position.
  *
- * An empty entry is dropped rather than honored. Coverage is prefix-closed —
- * an exemption covers the path it names and everything under it — and the
- * empty path is a prefix of every path, so honoring one would silence the
- * whole record and report parity. Nothing legitimately names it: the root of a
- * record is not a member, and a member that differs is always named by a
- * non-empty path.
+ * An empty entry is refused rather than dropped. Coverage is prefix-closed — an
+ * exemption covers the path it names and everything under it — and the empty
+ * path is a prefix of every path, so honoring one silences the whole record and
+ * reports parity. Nothing legitimately names it: the root of a record is not a
+ * member, and a member that differs is always named by a non-empty path. That
+ * makes it the one exemption provably incapable of meaning anything, so it is
+ * the one this can refuse without guessing — and dropping it quietly would be
+ * the thing the exemption rules exist to prevent, a rule that reads as
+ * satisfied while doing nothing.
+ *
+ * This throws where the rest of the module reports, and the difference is whose
+ * data it is: a record comes from a producer across a trust boundary and must
+ * never be able to raise, while an exemption list is written by the caller
+ * beside the assertion it serves.
  */
 function activeExemptions(
   exemptPaths: readonly string[] | undefined,
 ): string[] {
-  return [...(exemptPaths ?? [])]
-    .map(wildcardIndices)
-    .filter((exemption) => exemption !== '');
+  let exemptions = [...(exemptPaths ?? [])].map(wildcardIndices);
+  if (exemptions.includes('')) {
+    throw new TypeError(
+      'an exempt path must name a member; the empty path names the record ' +
+        'itself and would exempt every member of it',
+    );
+  }
+  return exemptions;
 }
 
 /** Whether a diff found nothing to report. */

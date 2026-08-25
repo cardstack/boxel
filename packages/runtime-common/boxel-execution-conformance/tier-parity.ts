@@ -86,14 +86,24 @@ export type ParityFinding =
   /** The registry names a tier that produced nothing to check. */
   | { kind: 'mode-absent'; mode: BoxelExecutionMode }
   /**
-   * A tier's record is not one this protocol can use, so it is not compared.
+   * A tier's record is not one this protocol can use, so it is not compared
+   * against a peer.
    *
-   * Two questions collapse into one finding because they have one consequence.
-   * The record may not be inert data — an accessor, a function, a prototype of
-   * its own, a value containing itself. Or it may be data and still not a
-   * record of this protocol: `{}` carries no envelope, and a record declaring
-   * a version the comparing consumer does not implement is refused by RP-14.3's
-   * own gate. Either way there is nothing to hold a peer to.
+   * Two conditions reported as one finding, because a consumer's response to
+   * both is the same — read no member of it. The record may not be inert data:
+   * an accessor, a function, a prototype of its own, a value containing itself.
+   * Or it may be data and still not a record of this protocol: `{}` carries no
+   * envelope, and one declaring a version the comparing consumer does not
+   * implement is refused by RP-14.3's own gate.
+   *
+   * What the two do not share is what the skip costs. A record that is not data
+   * could not have been compared anyway, so skipping it loses nothing. A record
+   * refused for its envelope could have been compared member by member, and
+   * skipping it means every content divergence in that pair goes unreported —
+   * for every candidate at once, when it is the reference tier's record that was
+   * refused. That is the intended trade: RP-14.3 exists so a consumer reads no
+   * member of a record it has rejected, and a differ is a consumer. It costs a
+   * version fixed and a re-run, not a divergence that stays hidden.
    */
   | {
       kind: 'fault';
@@ -131,14 +141,22 @@ export interface ParityReport {
   /** What the tiers were given, so a finding can be reproduced. */
   fixture: string;
   referenceMode: BoxelExecutionMode;
-  /** The non-reference tiers that were compared, in tier order. */
+  /**
+   * The non-reference tiers this report covers, in tier order. A tier appears
+   * here even when none of its records could be compared, so `comparisons` is
+   * what says how much was actually checked.
+   */
   comparedModes: BoxelExecutionMode[];
   /**
    * Record pairs actually diffed against the reference. A pair where either
    * side is not a usable record is not counted, because it was not compared.
    */
   comparisons: number;
-  /** Records read as inert data, the reference tier's included. */
+  /**
+   * Records offered for reading as a usable record, the reference tier's
+   * included — attempts rather than successes, so a run where every record is
+   * `null` still reports one per tier per record kind.
+   */
   inspections: number;
   findings: ParityFinding[];
 }
