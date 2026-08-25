@@ -2442,10 +2442,6 @@ export default class StoreService extends Service implements StoreInterface {
       store: this.store,
       dependencyTrackingContext,
     })) as unknown as FileDef;
-    // The file's timestamps ride in the resource `meta` (stamped at
-    // serialization, mirroring a card), so `createFromSerialized` copies them
-    // onto `instance[meta]` — FileDef's `lastModified` / `resourceCreatedAt`
-    // getters and `getCardMeta` read them with no store-side normalization.
     this.setIdentityContext(instance, 'file-meta');
     return instance;
   }

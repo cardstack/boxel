@@ -1363,8 +1363,7 @@ module(basename(import.meta.filename), function () {
         'file-meta GET carries meta.lastModified',
       );
       assert.strictEqual(
-        typeof (doc.data.meta as { resourceCreatedAt?: unknown })
-          ?.resourceCreatedAt,
+        typeof doc.data.meta?.resourceCreatedAt,
         'number',
         'file-meta GET carries meta.resourceCreatedAt',
       );
@@ -1374,7 +1373,7 @@ module(basename(import.meta.filename), function () {
         'meta.lastModified agrees with the legacy attributes spelling',
       );
       assert.strictEqual(
-        (doc.data.meta as { resourceCreatedAt?: unknown })?.resourceCreatedAt,
+        doc.data.meta?.resourceCreatedAt,
         doc.data.attributes?.createdAt,
         'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
       );
@@ -1390,6 +1389,18 @@ module(basename(import.meta.filename), function () {
       await testDbAdapter.execute(
         `DELETE FROM boxel_index WHERE url = '${testRealm}unindexed-note.txt'`,
       );
+      // Assert the discriminator: with no index row, getFileMeta must take the
+      // filesystem fallback. Without this the test still passes if a row exists
+      // when the fetch runs (both GET branches now stamp the same meta keys), so
+      // it would silently stop covering the fallback it names.
+      let [{ count: indexRowCount }] = (await testDbAdapter.execute(
+        `SELECT count(*)::int AS count FROM boxel_index WHERE url = '${testRealm}unindexed-note.txt'`,
+      )) as { count: number }[];
+      assert.strictEqual(
+        indexRowCount,
+        0,
+        'no index row remains, so the GET must take the filesystem fallback',
+      );
       let response = await fetch(`${testRealm}unindexed-note.txt`, {
         headers: { Accept: SupportedMimeType.FileMeta },
       });
@@ -1402,8 +1413,7 @@ module(basename(import.meta.filename), function () {
         'fallback file-meta GET carries meta.lastModified',
       );
       assert.strictEqual(
-        typeof (doc.data.meta as { resourceCreatedAt?: unknown })
-          ?.resourceCreatedAt,
+        typeof doc.data.meta?.resourceCreatedAt,
         'number',
         'fallback file-meta GET carries meta.resourceCreatedAt',
       );
@@ -1413,7 +1423,7 @@ module(basename(import.meta.filename), function () {
         'meta.lastModified agrees with the legacy attributes spelling',
       );
       assert.strictEqual(
-        (doc.data.meta as { resourceCreatedAt?: unknown })?.resourceCreatedAt,
+        doc.data.meta?.resourceCreatedAt,
         doc.data.attributes?.createdAt,
         'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
       );
