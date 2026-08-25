@@ -398,3 +398,65 @@ test('each warm sample is a real navigation, not a re-read of the same document'
   );
   assert.equal(run.candidate.results[0].page.warmSamplesMs.length, 2);
 });
+
+test('a case cut loose mid-write still names the card it left mutated', async () => {
+  // The write happens, then the case is cut loose during the autosave wait, so
+  // the restore never runs. The case's own result is discarded with it — the
+  // record the batch keeps has to carry the mutated card anyway, or a real
+  // corpus card is left holding a test sentinel with nothing pointing at it.
+  let filled: string[] = [];
+  let tab = fakeTab({
+    documentFor: () => fakeDocument({ headings: ['h'], text: 'Alpha' }),
+  });
+  let input = {
+    evaluate: async () => filled[filled.length - 1] ?? 'Alpha',
+    fill: async (value: string) => {
+      filled.push(value);
+    },
+  };
+  tab.playwright.locator = () => ({
+    evaluateAll: async () => 0,
+    nth: () => input,
+  });
+  tab.playwright.getByRole = () => ({
+    click: async () => {},
+    waitFor: async () => {},
+  });
+
+  let persisted: any[] = [];
+  let run = await runExecutionRuntimeCandidateSmoke({
+    browser: {},
+    candidateTab: tab,
+    candidateOrigin: 'https://localhost:4200',
+    caseTimeoutMs: 1_200,
+    cases: [
+      {
+        ...smokeCase('writes', 'Alpha'),
+        interaction: {
+          kind: 'default-edit',
+          expectedValues: ['Alpha'],
+          textEntryValue: 'Alpha',
+        },
+      },
+    ],
+    onCaseComplete: (result: any) => persisted.push(result),
+    timeoutMs: 2_000,
+  });
+
+  // The sentinel was written and never put back.
+  assert.ok(filled.includes('Alpha [browser smoke]'));
+  assert.equal(filled[filled.length - 1], 'Alpha [browser smoke]');
+
+  let [record] = persisted;
+  assert.ok(
+    record.assessment.failures.includes('corpus-card-left-mutated'),
+    `expected the mutated card to be named, got: ${record.assessment.failures.join(', ')}`,
+  );
+  assert.equal(record.assessment.status, 'corpus-left-mutated');
+  assert.equal(
+    record.interaction.unrestoredWrite.value,
+    'Alpha [browser smoke]',
+  );
+  assert.match(record.interaction.unrestoredWrite.path, /Example\/writes$/);
+  assert.equal(run.candidate.results.length, 1);
+});

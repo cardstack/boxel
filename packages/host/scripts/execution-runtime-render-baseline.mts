@@ -58,6 +58,16 @@ import {
   SIGN_IN_TEXT,
 } from './execution-runtime-browser-smoke.mts';
 
+const KNOWN_FLAGS = [
+  '--card',
+  '--chromium',
+  '--host',
+  '--out',
+  '--samples',
+  '--timeout-ms',
+  '--warm',
+];
+
 const DEFAULTS = {
   host: 'https://localhost:4200',
   samples: 3,
@@ -146,7 +156,10 @@ export function parseArguments(argv: string[]): BaselineOptions {
   for (let index = 0; index < argv.length; index++) {
     let flag = argv[index];
     let value = argv[index + 1];
-    // Every flag here takes a value. Reporting the missing one by name beats
+    if (!KNOWN_FLAGS.includes(flag)) {
+      throw new Error(`Unknown argument: ${flag}`);
+    }
+    // Every known flag takes a value. Reporting the missing one by name beats
     // the TypeError that reading past the end would otherwise produce.
     if (value === undefined) {
       throw new Error(`${flag} expects a value`);
@@ -182,15 +195,17 @@ export function parseArguments(argv: string[]): BaselineOptions {
       // A non-number silently became NaN, and a NaN sample count runs no
       // samples at all — the instrument then prints an empty table and exits
       // zero, which reads exactly like a run where nothing settled.
-      if (!Number.isInteger(count) || count < 0) {
+      // `--warm 0` is a real choice: cold samples only. Zero cold samples or a
+      // zero timeout is not — both produce the empty table and zero exit that
+      // reads exactly like a run where nothing settled.
+      let floor = flag === '--warm' ? 0 : 1;
+      if (!Number.isInteger(count) || count < floor) {
         throw new Error(
-          `${flag} expects a non-negative whole number, received: ${value}`,
+          `${flag} expects a whole number of at least ${floor}, received: ${value}`,
         );
       }
       options[key] = count;
       index++;
-    } else {
-      throw new Error(`Unknown argument: ${flag}`);
     }
   }
   if (!options.cards.length) {

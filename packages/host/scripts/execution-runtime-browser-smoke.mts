@@ -119,15 +119,30 @@ declare global {
 /** `discover` means the tier is recorded from the run, not asserted against. */
 export type ExecutionTier = 'discover' | 'direct' | 'capsule' | 'sandbox';
 
-export interface SmokeInteraction {
+export interface SmokeDefaultEditInteraction {
   expectedExecution?: ExecutionTier;
-  expectedValues?: string[];
-  kind: 'default-edit' | 'edit-scroll' | 'media-play';
+  expectedValues: string[];
+  kind: 'default-edit';
+  textEntryValue?: string;
+}
+
+export interface SmokeEditScrollInteraction {
+  expectedExecution?: ExecutionTier;
+  kind: 'edit-scroll';
+}
+
+export interface SmokeMediaPlayInteraction {
+  expectedExecution?: ExecutionTier;
+  kind: 'media-play';
   pauseName?: string;
   playName?: string;
   requireProgress?: boolean;
-  textEntryValue?: string;
 }
+
+export type SmokeInteraction =
+  | SmokeDefaultEditInteraction
+  | SmokeEditScrollInteraction
+  | SmokeMediaPlayInteraction;
 
 export interface SmokeCase {
   category?: string;
@@ -244,8 +259,9 @@ export type SmokePageResult = SmokeProbeResult | UnrunPageResult;
 /**
  * Whether a case got far enough to observe anything.
  *
- * A bounded, thrown, or sign-in-blocked case carries no observations at all,
- * so every read of one has to pass through here first. Reporting code that
+ * A bounded or thrown case carries no observations at all, so every read of
+ * one has to pass through here first. (A case stopped at the sign-in screen
+ * does have a probe — it observed the sign-in screen.) Reporting code that
  * skips the check throws on exactly the cases the per-case bound exists to
  * produce, which is when a report is most needed.
  */
@@ -337,6 +353,17 @@ export type SmokeCaseListener = (
   result: SmokeCaseResult,
   context: { origin: string },
 ) => unknown;
+
+/**
+ * A write to a real corpus card that has been made but not yet put back.
+ *
+ * Held per case by the run loop rather than on the case's result, because the
+ * result of a case that is cut loose is discarded — and that is precisely when
+ * the restore cannot run.
+ */
+export interface PendingWrite {
+  current?: { error?: string; path: string; value: string };
+}
 
 interface RunOriginOptions {
   caseTimeoutMs?: number;
@@ -1294,11 +1321,23 @@ async function probe(
   };
 }
 
+/** What one edit-scroll interaction measures on the scrolling container. */
+interface EditScrollObservation {
+  clientHeight: number;
+  maximum: number;
+  overflowY: string;
+  point: { x: number; y: number };
+  /** How far the wheel moved it, read back after the scroll. */
+  reached?: number;
+  scrollHeight: number;
+}
+
 async function runInteraction(
   tab: SmokeTab,
   smokeCase: SmokeCase,
   timeoutMs: number,
   checkExecution: boolean,
+  pendingWrite: PendingWrite,
 ): Promise<SmokeInteractionResult> {
   if (!smokeCase.interaction) {
     return { pass: true, skipped: true };
@@ -1341,7 +1380,6 @@ async function runInteraction(
       (value) => !values.includes(value),
     );
     let textEntry;
-    let unrestoredWrite;
     if (smokeCase.interaction.textEntryValue) {
       let original = smokeCase.interaction.textEntryValue;
       let inputs = tab.playwright.locator('input, textarea');
@@ -1361,6 +1399,11 @@ async function runInteraction(
         let restored;
         try {
           await input.fill(sentinel, { timeoutMs });
+          // Claim the write on run-scoped state before waiting. The case can
+          // be cut loose during the autosave wait, and its result is then
+          // discarded — so a record kept only on the result would vanish with
+          // it, which is exactly the case that leaves a card mutated.
+          pendingWrite.current = { path: smokeCase.path, value: sentinel };
           accepted = await input.evaluate(
             (element: HTMLInputElement | HTMLTextAreaElement) => element.value,
           );
@@ -1378,13 +1421,14 @@ async function runInteraction(
               (element: HTMLInputElement | HTMLTextAreaElement) =>
                 element.value,
             );
+            if (restored === original) {
+              pendingWrite.current = undefined;
+            }
           } catch (error) {
             restored = undefined;
-            unrestoredWrite = {
-              error: describeError(error),
-              path: smokeCase.path,
-              value: sentinel,
-            };
+            if (pendingWrite.current) {
+              pendingWrite.current.error = describeError(error);
+            }
           }
         }
         textEntry = {
@@ -1406,7 +1450,7 @@ async function runInteraction(
         (!checkExecution || executions.includes('direct')),
       textEntry,
       readyElapsedMs,
-      unrestoredWrite,
+      unrestoredWrite: pendingWrite.current,
       values,
     };
   }
@@ -1415,7 +1459,7 @@ async function runInteraction(
     let scrollRoot = tab.playwright.locator(
       '.boxel-card-container.edit-format',
     );
-    let scroll = await scrollRoot.evaluate((element) => {
+    let scroll: EditScrollObservation = await scrollRoot.evaluate((element) => {
       let overflowY = getComputedStyle(element).overflowY;
       let maximum = element.scrollHeight - element.clientHeight;
       let rect = element.getBoundingClientRect();
@@ -1464,7 +1508,7 @@ async function runInteraction(
           scroll &&
           ['auto', 'scroll'].includes(scroll.overflowY) &&
           scroll.maximum > 100 &&
-          scroll.reached > 100,
+          (scroll.reached ?? 0) > 100,
         ) &&
         (!checkExecution ||
           !expectedExecution ||
@@ -1499,7 +1543,7 @@ async function runInteraction(
       smokeCase.interaction.requireProgress ? 750 : 100,
     );
     let pauseVisible = await pause.isVisible();
-    let progress;
+    let progress: number | undefined;
     if (smokeCase.interaction.requireProgress) {
       let slider = interactionRoot.getByRole('slider').first();
       let progressDeadline = performance.now() + Math.min(timeoutMs, 3_000);
@@ -1516,7 +1560,7 @@ async function runInteraction(
       kind: 'media-play',
       pass:
         pauseVisible &&
-        (!smokeCase.interaction.requireProgress || progress > 0),
+        (!smokeCase.interaction.requireProgress || (progress ?? 0) > 0),
       pauseVisible,
       progress,
     };
@@ -1532,6 +1576,10 @@ async function runInteraction(
 // the wrong semantics. Correct-but-slow is not among them; it is its own
 // status below, since it is not a defect.
 const STATUS_BUCKETS: [status: string, members: string[]][] = [
+  // First, and outranking every finding about the run itself: this one names
+  // a shared fixture the run changed and did not change back. Every other
+  // status describes something that ended when the run did.
+  ['corpus-left-mutated', ['corpus-card-left-mutated']],
   [
     'pre-routing-failure',
     [
@@ -1655,6 +1703,9 @@ function assess(
   ) {
     failures.push('sandbox-not-interactive');
   }
+  if (interaction.unrestoredWrite) {
+    failures.push('corpus-card-left-mutated');
+  }
   if (!interaction.pass) failures.push('interaction-failed');
   if (
     probeResult.hostChrome.submodeBackground !== 'rgb(0, 0, 0)' ||
@@ -1676,6 +1727,21 @@ export function assessReferenceParity(
 ): SmokeReferenceParity {
   if (!smokeCase.referenceParity) {
     return { failures: [], skipped: true };
+  }
+  // Comparing against a side that observed nothing would report parity: an
+  // absent heading count is not a smaller heading count, and an empty token
+  // set is covered by anything. Refuse the comparison rather than pass it.
+  let observed = (page: Partial<ParityView>) =>
+    typeof page.headingCount === 'number' &&
+    typeof page.inputCount === 'number';
+  if (!observed(candidate) || !observed(reference)) {
+    return {
+      failures: [],
+      reason: !observed(reference)
+        ? 'reference-made-no-observation'
+        : 'candidate-made-no-observation',
+      skipped: true,
+    };
   }
 
   let ignoredTokens = new Set([
@@ -1704,7 +1770,7 @@ export function assessReferenceParity(
   let tokenCoverage = referenceTokens.length
     ? matchedTokens.length / referenceTokens.length
     : 1;
-  let healthyImages = (page) =>
+  let healthyImages = (page: ParityView) =>
     (page.images ?? []).filter(
       (image) => image.complete && image.width > 0 && image.height > 0,
     ).length;
@@ -1764,7 +1830,7 @@ export function summarizeExecutionRuntimeSmokeRun(run: {
     // never rendered has made neither.
     let healthyImages = (result: SmokeCaseResult | undefined) =>
       result && hasProbeResult(result.page)
-        ? result.page.images.filter(
+        ? (result.page.images ?? []).filter(
             (image) => image.complete && image.width > 0 && image.height > 0,
           ).length
         : null;
@@ -1787,6 +1853,8 @@ export function summarizeExecutionRuntimeSmokeRun(run: {
                 ? candidatePage.readiness
                 : null,
             status: candidateResult.assessment.status ?? null,
+            unrestoredWrite:
+              candidateResult.interaction?.unrestoredWrite ?? null,
             warmReadiness:
               candidatePage && hasProbeResult(candidatePage)
                 ? (candidatePage.warmReadiness ?? null)
@@ -1802,6 +1870,7 @@ export function summarizeExecutionRuntimeSmokeRun(run: {
         readiness: hasProbeResult(referencePage)
           ? referencePage.readiness
           : null,
+        unrestoredWrite: referenceResult.interaction?.unrestoredWrite ?? null,
         signatureReady: hasProbeResult(referencePage)
           ? referencePage.missingText.length === 0
           : null,
@@ -1915,8 +1984,9 @@ async function runOrigin(
 
   for (let smokeCase of smokeCases) {
     let lease = leaseTab(tab);
+    let pendingWrite: PendingWrite = {};
     let outcome = await withCaseDeadline(caseTimeoutMs, () =>
-      runCase(lease.tab, smokeCase, origin, options),
+      runCase(lease.tab, smokeCase, origin, options, pendingWrite),
     );
     // Revoke before anything else touches the tab, including on the ordinary
     // path: a case is finished the moment its result is known, and a stray
@@ -1924,19 +1994,31 @@ async function runOrigin(
     lease.revoke();
     if (outcome.timedOut || outcome.thrown) {
       await detachAbandonedCase(tab);
+      // A case cut loose mid-interaction may have left a write on a real
+      // corpus card. That outranks the timeout in what it asks of a human, so
+      // it is named on the synthesized record rather than lost with the
+      // discarded one.
+      let failures = [
+        outcome.thrown ? 'browser-probe-error' : 'case-deadline-exceeded',
+      ];
+      if (pendingWrite.current) {
+        failures.unshift('corpus-card-left-mutated');
+      }
       await record({
         id: smokeCase.id,
         page: outcome.thrown
           ? { elapsedMs: null, runnerError: describeError(outcome.thrown) }
           : { elapsedMs: null, caseTimeoutMs },
         assessment: {
-          failures: [
-            outcome.thrown ? 'browser-probe-error' : 'case-deadline-exceeded',
-          ],
+          failures,
           pass: false,
-          status: 'pre-routing-failure',
+          status: classifySmokeOutcome(failures),
         },
-        interaction: { pass: false, skipped: true },
+        interaction: {
+          pass: false,
+          skipped: true,
+          unrestoredWrite: pendingWrite.current,
+        },
       });
       continue;
     }
@@ -2000,7 +2082,17 @@ export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
         // browser client would otherwise run with `this` bound to the proxy
         // and fail on any private field it touches.
         let member = Reflect.get(target, property, target);
-        if (typeof member !== 'function') return wrap(member);
+        if (typeof member !== 'function') {
+          // A non-writable, non-configurable own property must be reported
+          // exactly as it is, or the proxy invariant makes the read throw. A
+          // frozen handle is then unguarded, which is the safe direction:
+          // unguarded beats unreadable.
+          let descriptor = Reflect.getOwnPropertyDescriptor(target, property);
+          if (descriptor && !descriptor.writable && !descriptor.configurable) {
+            return member;
+          }
+          return wrap(member);
+        }
         return (...args) => {
           if (!live) throw new CaseAbandonedError(String(property));
           return wrap(member.apply(target, args));
@@ -2032,14 +2124,21 @@ async function withCaseDeadline(
     // raised: one case that dies in an unexpected place must not take the
     // cases behind it with it.
     let value = await Promise.race([
-      run().catch((error) => ({ thrown: error })),
+      run().then(
+        (result) => ({ result }),
+        (error: unknown) => ({ thrown: error }),
+      ),
       new Promise((resolve) => {
         timer = setTimeout(() => resolve(expired), caseTimeoutMs);
       }),
     ]);
     if (value === expired) return { timedOut: true };
-    if (value?.thrown) return { thrown: value.thrown, timedOut: false };
-    return { timedOut: false, value };
+    // Discriminate on the wrapper, never on truthiness: `throw null` and
+    // `throw ''` are both falsy, and reading either as success would push a
+    // non-result into the batch and kill the loop this bound exists to keep
+    // alive.
+    if ('thrown' in value) return { thrown: value.thrown, timedOut: false };
+    return { timedOut: false, value: value.result };
   } finally {
     clearTimeout(timer);
   }
@@ -2059,6 +2158,7 @@ async function runCase(
   smokeCase: SmokeCase,
   origin: string,
   options: RunOriginOptions,
+  pendingWrite: PendingWrite,
 ): Promise<SmokeCaseResult> {
   let page;
   try {
@@ -2105,6 +2205,7 @@ async function runCase(
       smokeCase,
       options.timeoutMs,
       options.checkExecution,
+      pendingWrite,
     );
   } catch (error) {
     interaction = {

@@ -356,6 +356,7 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
           parity: { failures: [], tokenCoverage: 1 },
           readiness: { applicationMs: 60, executionMs: 20 },
           status: 'pass',
+          unrestoredWrite: null,
           warmReadiness: { applicationMs: 30, executionMs: 10 },
         },
         diagnosis: 'pass',
@@ -366,6 +367,7 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
           healthyImages: 1,
           readiness: { applicationMs: 90, executionMs: 30 },
           signatureReady: true,
+          unrestoredWrite: null,
         },
       },
     ],
@@ -509,12 +511,20 @@ test('the baseline reader refuses a flag with no value or a nonsense count', () 
   // which is indistinguishable from a run where nothing settled.
   assert.throws(
     () => parseArguments(['--card', 'a=/b', '--samples', 'abc']),
-    /non-negative whole number/,
+    /at least 1/,
   );
   assert.throws(
     () => parseArguments(['--card', 'a=/b', '--warm', '-2']),
-    /non-negative whole number/,
+    /at least 0/,
   );
+  // Zero cold samples has the same symptom NaN had: an empty table under a
+  // zero exit. Zero warm samples is a real choice and stays allowed.
+  assert.throws(
+    () => parseArguments(['--card', 'a=/b', '--samples', '0']),
+    /at least 1/,
+  );
+  assert.equal(parseArguments(['--card', 'a=/b', '--warm', '0']).warm, 0);
+  assert.throws(() => parseArguments(['--nope', '1']), /Unknown argument/);
   assert.throws(
     () => parseArguments(['--card', '=/no-id']),
     /--card expects <id>=<path>/,
