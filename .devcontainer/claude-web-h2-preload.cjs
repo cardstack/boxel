@@ -20,6 +20,12 @@
 // Nothing in this repo sends HTTP trailers, so forcing waitForTrailers off
 // is behavior-preserving: the last DATA frame simply carries END_STREAM
 // itself, eliminating the droppable-trailers window while keeping HTTP/2.
+//
+// The realm-server declines the trailers itself (see
+// `endStreamOnFinalDataFrame` in packages/realm-server/server.ts), so what
+// this preload still covers is the rest of the stack's node servers on this
+// VM — chiefly the host app's vite dev server, which serves the
+// module graph behind the /_standby page.
 'use strict';
 const http2 = require('http2');
 

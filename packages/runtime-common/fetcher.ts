@@ -45,7 +45,13 @@ export function fetcher(
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let token = fetcherWaiter.beginAsync();
+    // Labeled with the request it stands for: this waiter holds `settled()`
+    // open for every fetch the app makes, so a hung one is only actionable if
+    // the pending token says which request it is.
+    let token = fetcherWaiter.beginAsync(
+      undefined,
+      `${request.method} ${request.url}`,
+    );
     try {
       return responseWithWaiters(await buildNext(middlewareStack)(request));
     } finally {
