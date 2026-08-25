@@ -21,7 +21,8 @@
     "openrouter:sync": "OPENROUTER_REALM_URL=${OPENROUTER_REALM_URL:-https://localhost:4201/openrouter/} pnpm --filter @cardstack/realm-server sync-openrouter-models",
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build",
     "prepare": "husky",
-    "lint:protocol-closure": "node ./scripts/check-protocol-import-closure.mts"
+    "lint:protocol-closure": "node ./scripts/check-protocol-import-closure.mts",
+    "lint:tier-registry": "node ./scripts/check-execution-tier-registry.mts"
   },
   "devDependencies": {
     "@actions/core": "catalog:",
