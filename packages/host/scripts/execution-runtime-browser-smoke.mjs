@@ -1470,13 +1470,17 @@ async function runOrigin(browser, origin, smokeCases, options) {
     let outcome = await withCaseDeadline(caseTimeoutMs, () =>
       runCase(tab, smokeCase, origin, options),
     );
-    if (outcome.timedOut) {
+    if (outcome.timedOut || outcome.thrown) {
       await detachAbandonedCase(tab);
       await record({
         id: smokeCase.id,
-        page: { elapsedMs: null, caseTimeoutMs },
+        page: outcome.thrown
+          ? { elapsedMs: null, runnerError: describeError(outcome.thrown) }
+          : { elapsedMs: null, caseTimeoutMs },
         assessment: {
-          failures: ['case-deadline-exceeded'],
+          failures: [
+            outcome.thrown ? 'browser-probe-error' : 'case-deadline-exceeded',
+          ],
           pass: false,
           status: 'pre-routing-failure',
         },
@@ -1508,13 +1512,18 @@ async function withCaseDeadline(caseTimeoutMs, run) {
   let timer;
   let expired = Symbol('case-deadline');
   try {
+    // A throw from the case body is reported as the case's own failure, not
+    // raised: one case that dies in an unexpected place must not take the
+    // cases behind it with it.
     let value = await Promise.race([
-      run(),
+      run().catch((error) => ({ thrown: error })),
       new Promise((resolve) => {
         timer = setTimeout(() => resolve(expired), caseTimeoutMs);
       }),
     ]);
-    return value === expired ? { timedOut: true } : { timedOut: false, value };
+    if (value === expired) return { timedOut: true };
+    if (value?.thrown) return { thrown: value.thrown, timedOut: false };
+    return { timedOut: false, value };
   } finally {
     clearTimeout(timer);
   }
@@ -1818,10 +1827,18 @@ export async function runExecutionRuntimeBrowserSmoke({
       (candidateCase) => candidateCase.id === result.id,
     );
     if (!referenceResult || !smokeCase) continue;
-    if (result.assessment.failures.includes('authentication-required')) {
+    // A case that never produced a page has nothing to compare. Scoring it
+    // against the reference would stack parity failures on top of a finding
+    // that already says the candidate never got that far.
+    let unrun = [
+      'authentication-required',
+      'browser-probe-error',
+      'case-deadline-exceeded',
+    ].find((failure) => result.assessment.failures.includes(failure));
+    if (unrun) {
       result.referenceParity = {
         failures: [],
-        reason: 'candidate-authentication-required',
+        reason: `candidate-${unrun}`,
         skipped: true,
       };
       continue;

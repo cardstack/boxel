@@ -259,3 +259,37 @@ test('a Host that never mounts is a pre-routing finding, not a semantic one', as
   assert.ok(assessment.failures.includes('application-not-ready'));
   assert.equal(assessment.status, 'pre-routing-failure');
 });
+
+test('a case that throws in an unexpected place does not take the batch with it', async () => {
+  let tab = fakeTab({
+    documentFor: () => fakeDocument({ headings: ['h'], text: 'Beta' }),
+  });
+  let originalGoto = tab.goto;
+  let first = true;
+  tab.goto = async (url) => {
+    if (first && url.endsWith('/boom')) {
+      first = false;
+      throw new Error('navigation exploded');
+    }
+    return originalGoto(url);
+  };
+  let persisted = [];
+  let run = await runExecutionRuntimeCandidateSmoke({
+    browser: {},
+    candidateTab: tab,
+    candidateOrigin: 'https://localhost:4200',
+    cases: [smokeCase('boom', 'Alpha'), smokeCase('fine', 'Beta')],
+    onCaseComplete: (result) => persisted.push(result.id),
+    timeoutMs: 2_000,
+  });
+
+  assert.deepEqual(persisted, ['boom', 'fine']);
+  assert.deepEqual(run.candidate.results[0].assessment.failures, [
+    'browser-probe-error',
+  ]);
+  assert.match(
+    run.candidate.results[0].page.runnerError,
+    /navigation exploded/,
+  );
+  assert.equal(run.candidate.results[1].assessment.pass, true);
+});
