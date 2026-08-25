@@ -45,7 +45,11 @@ export function collect(el: Element): TimelineNode[] {
   return out;
 }
 
-/** args that are the step's own; every other named arg is a property to animate */
+/**
+ * args that are the step's own; every other named arg is a property to animate.
+ * `rotate` is NOT here although Move has a `@rotate` arg: on a Tween or
+ * Spring it is a property (Keynote's Spin), and Move never reads its props.
+ */
 const RESERVED = new Set([
   'align',
   'at',
@@ -61,7 +65,6 @@ const RESERVED = new Set([
   'path',
   'repeat',
   'repeatType',
-  'rotate',
   'shadow',
   'size',
   'space',

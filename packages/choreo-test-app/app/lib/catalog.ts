@@ -1096,45 +1096,44 @@ move = (event) => {
   },
   {
     Example: BuildOrder,
-    apis: ['motionValue', 'jump()', 'pathLength'],
+    apis: ['c.Sequence', '@name', 'at()/after()', '@by', 'c.run'],
     group: 'Timeline',
     id: 'build-order',
     lede: 'Keynote\u2019s build inspector, wired to the site\u2019s own logo. Retime it while it runs.',
     notes: BuildOrderNotes,
-    sample: `// A build order, not a timeline. Nothing here is a timecode: a build says
-// WHICH part, WHAT effect, and when it goes relative to the build above it.
-const OPENING = [
-  { part: 'plate', effect: 'move', start: 'with',  delay:   0, ms: 620 },
-  { part: 'tail',  effect: 'draw', start: 'with',  delay: 140, ms: 520 },
-  { part: 'head',  effect: 'draw', start: 'after', delay:   0, ms: 520 },
-  { part: 'bead',  effect: 'pop',  start: 'after', delay:   0, ms: 380 },
+    sample: `// A build order, not a timeline. Nothing here is a timecode: a build
+// names a part, an effect, and when it goes relative to the build above
+// it — and the score is the template. \`with\` anchors on the previous
+// build's START, \`after\` on its end; the compiler resolves the rest.
+<c.Sequence>
+  <c.Tween @name='b1' @of={{c.id 'plate'}}
+    @opacity={{array 0 1 1 1}} @x={{array -38 0}}
+    @ease='easeOut' @duration={{0.62}} />
+  <c.Tween @name='b2' @at={{at 'b1'}} @delay={{0.14}}
+    @of={{c.id 'tail'}} @pathLength={{array 0 1}} @duration={{0.52}} />
+  <c.Tween @name='b3' @at={{after 'b2'}}
+    @of={{c.id 'head'}} @pathLength={{array 0 1}} @duration={{0.52}} />
   …
-  { part: 'word',  effect: 'drift', start: 'after', delay: 60, ms: 760,
-    by: 'character' },   // ← a second timeline, inside the build
-];
+  <c.Tween @name='b7' @at={{after 'b6'}} @delay={{0.06}}
+    @of={{c.id 'word'}} @by='character'  // ← a second timeline, inside
+    @opacity={{array 0 1 1}} @scale={{array 0.78 1}} @y={{array 18 0}}
+    @ease='easeOut' @duration={{0.76}} />
+</c.Sequence>
 
-// The whole scheduler. The relation is always to the PREVIOUS build, which is
-// what makes the order editable: move one and everything downstream follows,
-// because nothing downstream was ever written down.
-at[i] = (build.start === 'with' ? at[i - 1] : end[i - 1]) + build.delay;
+// An effect is nothing but keyframe values and an easing: Pop is a scale
+// through backOut, and a build-in's leading opacity frames are Keynote's
+// "builds in" — pinned hidden from the run's start until its window.
 
-// A build has an END, so an effect is an easing across a stated window —
-// never a spring. A spring has a settle, not a duration, and a bar you can
-// draw on a timeline is a promise about when the thing stops.
-pop: { ease: backOut, at: (p) => ({ opacity: min(1, p * 3), scale: p }) },
-draw: { ease: easeInAndOut, at: (p) => ({ pathLength: p }) },
-wipe: { ease: easeInAndOut, at: (p) => ({ clip: 1 - p }) },
+// The transport holds the run. Play, pause and the scrubber share one
+// clock: \`time\` is settable in either direction, and a scrubbed frame
+// is a computed still.
+c.run.pause();
+c.run.time = 1.4;   // the scrubber — and an edit replays the pass and
+c.run.play();       // puts the new run back at the SAME t, so retiming
+                    // build 2 while parked at 1.4s shows what 1.4s now is.
 
-// Delivery is that same arithmetic one level down: the build keeps its stated
-// window and the glyphs divide it, last cell FINISHING on the build's end.
-const ms = cue.ms * 0.55;
-return { at: cue.at + (i * (cue.ms - ms)) / (n - 1), ms };
-
-// And because a pose is a function of t and nothing else — no DOM, no state,
-// no memory of the frame before — playing and scrubbing are one code path.
-poseAt(t, cue, slot);   // the run loop calls it. so does the scrubber.
-                        // so does an edit, at the same t, so retiming build 2
-                        // while parked at 1.4s shows you what 1.4s now is.`,
+// The bars on the rail are read back from run.cues — the compiler's
+// resolved answer, never a second copy of the schedule.`,
     slowmo: true,
     title: 'Build order',
   },

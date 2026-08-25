@@ -87,16 +87,37 @@ export function split(el: HTMLElement, by: Exclude<DeliveryBy, 'item'>): Split {
   if (!originals.length) {
     throw new Error(`choreo: @by='${by}' needs text to deliver`);
   }
+  // The costume must not change the body's shape. The stand-in spans wear
+  // `white-space: pre`, so whitespace the container was COLLAPSING — a
+  // template's newline and indentation are real text nodes — would suddenly
+  // take width, and a newline would become a hard break: the line jumps
+  // aside for its own delivery and snaps back at restore. Collapse the way
+  // the element's own computed white-space does before cutting units.
+  const ws = getComputedStyle(el).whiteSpace;
+  const collapsing = ws === 'normal' || ws === 'nowrap' || ws === 'pre-line';
+  const textOf = (node: Text, index: number): string => {
+    let text = node.textContent ?? '';
+    if (collapsing) {
+      text = text.replace(/\s+/g, ' ');
+      if (index === 0) {
+        text = text.replace(/^ /, '');
+      }
+      if (index === originals.length - 1) {
+        text = text.replace(/ $/, '');
+      }
+    }
+    return text;
+  };
   const label = el.getAttribute('aria-label');
   el.setAttribute('aria-label', el.textContent ?? '');
   const slots: Slot[] = [];
   const undo: (() => void)[] = [];
-  for (const node of originals) {
+  for (const [index, node] of originals.entries()) {
     const parent = node.parentNode!;
     const marker = document.createComment('choreo-delivery');
     parent.replaceChild(marker, node);
     const spans: HTMLElement[] = [];
-    for (const unit of unitsOf(node.textContent ?? '', by)) {
+    for (const unit of unitsOf(textOf(node, index), by)) {
       const span = spanFor(unit);
       parent.insertBefore(span, marker);
       spans.push(span);
@@ -198,6 +219,15 @@ export function keyframesOf(
 }
 
 const NAMED: Record<string, string> = {
+  // the overshoots as cubic-beziers, so a text delivery may Pop: these are
+  // motion's own anticipate/back curves flattened to one bend
+  anticipate: 'cubic-bezier(0.68,-0.6,0.32,1.6)',
+  backIn: 'cubic-bezier(0.36,0,0.66,-0.56)',
+  backInOut: 'cubic-bezier(0.68,-0.6,0.32,1.6)',
+  backOut: 'cubic-bezier(0.34,1.56,0.64,1)',
+  circIn: 'cubic-bezier(0.55,0,1,0.45)',
+  circInOut: 'cubic-bezier(0.85,0,0.15,1)',
+  circOut: 'cubic-bezier(0,0.55,0.45,1)',
   easeIn: 'ease-in',
   easeInOut: 'ease-in-out',
   easeOut: 'ease-out',

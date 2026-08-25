@@ -1,12 +1,11 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { motion } from 'glimmer-motion';
-import { motionSpeed } from 'glimmer-motion';
+import type { ChoreoRun, Query } from 'glimmer-motion';
+import { after, at, Choreo, motion } from 'glimmer-motion';
 import { motionValue } from 'motion-dom';
 import { BEAD, HEAD, ORBIT, TAIL, TIP } from 'test-app/components/choreo-mark';
 import {
@@ -15,20 +14,8 @@ import {
   type EffectName,
   EFFECTS,
   effectsFor,
-  type Glyph,
-  type PartKind,
   partOf,
-  PARTS,
-  type Pose,
-  poseAt,
   type Relation,
-  runtimeOf,
-  schedule,
-  type Slot,
-  slotOf,
-  type Totals,
-  totalsOf,
-  wordsOf,
 } from 'test-app/lib/builds';
 import { preventSelect } from 'test-app/lib/pointer';
 
@@ -40,12 +27,12 @@ import { preventSelect } from 'test-app/lib/pointer';
  * Read it the way you would read it aloud: the plate slides in, the comet's
  * tail draws with it, the head draws after the tail, the inner orbit sets off
  * WITH the head — two timelines now running in phase — the outer arrival
- * lands its bead, the inner one catches fire, then the wordmark comes after, character by character, with the
- * rule drawing under it and the tagline last. Every start time on the
- * timeline below is derived from that sentence. It is also the library
- * reciting itself: an arc is the line the engine draws between two
- * measurements, a bead is where an element is NOW, and two arcs held in
- * phase by 'with'/'after' is the whole meaning of the word choreography.
+ * lands its bead, the inner one catches fire, then the wordmark comes after,
+ * character by character, with the rule drawing under it and the tagline
+ * last. The template below says exactly that, in the library's words: each
+ * row becomes a named `<c.Tween>`, `with` is `{{at 'b3'}}`, `after` is
+ * `{{after 'b3'}}`, and every start time in the transport is read back from
+ * the run the compiler resolved — never computed here.
  */
 const OPENING: Build[] = [
   {
@@ -122,158 +109,101 @@ const OPENING: Build[] = [
   },
 ];
 
-/** how long the finished logo is held before the loop comes round again */
-const HOLD = 900;
+/** how long the finished logo is held before the loop comes round again —
+    a `<c.Wait>` on the timeline, so the hold is scrubbable like the rest */
+const HOLD = 0.9;
 
 /** the stepper's grain, in ms — 100 so a 1-decimal readout moves every click */
 const STEP = 100;
 
-/** the one slot a part with nothing to divide has */
-const WHOLE: Slot = { i: 0, n: 1 };
+/* ── the score's words, as template helpers ──────────────────────────────── */
 
-/* ── one animated cell ───────────────────────────────────────────────────── */
+/** builds are named by row: the inspector's "Build 3" is the anchor `b3` */
+const nameOf = (index: number) => `b${index + 1}`;
 
 /**
- * A part, or one glyph of one, as a bag of motion values.
- *
- * Values rather than `animate=`, for the same reason the Playhead demo's hand
- * is: a scrubbed frame is a still, and thirty-odd cells re-rendering sixty
- * times a second is not a frame budget. Every value here is `jump`ed, never
- * set — a sampled value has no history and must not leave a velocity behind.
+ * Two words and a reference, resolved by the compiler: `with` anchors on the
+ * previous build's START, `after` on its end. Build 1 has no build above it,
+ * so its start is the run's own zero — Keynote's "On Click" — and it is the
+ * one step left in the sequence's natural flow.
  */
-class Track {
-  private blur = motionValue('none');
-  // `round 20px` matches .bo-plate's own border-radius — inset() defaults to
-  // square corners regardless of the element's actual radius, so left off,
-  // the plate's two right corners get clipped flat by this at ANY progress,
-  // including 0%, where the clip should be invisible. Barely showed on a
-  // near-black plate against a near-black stage; a light stage behind a
-  // light-mode plate makes the squared-off sliver obvious.
-  private clip = motionValue('inset(0 0% 0 0 round 20px)');
-  private o = motionValue(0);
-  private path = motionValue(0);
-  private rot = motionValue(0);
-  private sc = motionValue(1);
-  private tx = motionValue(0);
-  private ty = motionValue(0);
-  /** the pose last written, so a cell sitting still costs nothing */
-  private was?: Pose;
+const anchorOf = (build: Build, index: number) =>
+  index === 0
+    ? undefined
+    : build.start === 'with'
+      ? at(nameOf(index - 1))
+      : after(nameOf(index - 1));
 
-  readonly style: Record<string, unknown>;
+const secondsOf = (ms: number) => ms / 1000;
 
-  constructor(kind: PartKind) {
-    this.style = {
-      filter: this.blur,
-      opacity: this.o,
-      rotate: this.rot,
-      scale: this.sc,
-      x: this.tx,
-      y: this.ty,
-    };
-    // Bound where they mean something and nowhere else. `pathLength` is a
-    // stroke's whole story; `clipPath` establishes a clip on everything it
-    // touches, so it goes only where a Wipe can actually be asked for.
-    //
-    // `pathSpacing` is pinned at 2, and it is a bug fix, not a preference.
-    // Motion renders a drawn path as `stroke-dasharray: length spacing`, and
-    // the default spacing of 1 makes the pattern sum to ~1 when the drawn
-    // length is near zero — which wraps a zero-length dash onto the path's
-    // terminus, inside the browser's length tolerance, and a round linecap
-    // paints that dash as a dot. The end of the line popped in the moment
-    // the draw began. A gap of 2 keeps the second dash a whole path-length
-    // away from the end at any drawn length.
-    if (kind === 'stroke') {
-      this.style['pathLength'] = this.path;
-      this.style['pathSpacing'] = motionValue(2);
-    }
-    if (kind === 'box' || kind === 'text') {
-      this.style['clipPath'] = this.clip;
-    }
-  }
+/** the inspector's 'all' is the library's default: the sprite is the unit */
+const byOf = (by: Delivery) => (by === 'all' ? undefined : by);
 
-  /**
-   * Write the pose, skipping whatever has not moved.
-   *
-   * Thirty-odd cells, eight values each, sixty times a second — and for most
-   * of the run nearly all of them are parked at either end of their build. The
-   * comparison turns a frame into a handful of writes instead of a couple of
-   * hundred, and it is only safe because a pose is recomputed from the score
-   * rather than accumulated: equal input, equal output, nothing to drift.
-   */
-  jump(pose: Pose) {
-    const was = this.was;
-    if (!was || was.opacity !== pose.opacity) {
-      this.o.jump(pose.opacity);
-    }
-    if (!was || was.rotate !== pose.rotate) {
-      this.rot.jump(pose.rotate);
-    }
-    if (!was || was.scale !== pose.scale) {
-      this.sc.jump(pose.scale);
-    }
-    if (!was || was.x !== pose.x) {
-      this.tx.jump(pose.x);
-    }
-    if (!was || was.y !== pose.y) {
-      this.ty.jump(pose.y);
-    }
-    if (!was || was.pathLength !== pose.pathLength) {
-      this.path.jump(pose.pathLength);
-    }
-    if (!was || was.clip !== pose.clip) {
-      this.clip.jump(
-        `inset(0 ${(pose.clip * 100).toFixed(3)}% 0 0 round 20px)`
-      );
-    }
-    if (!was || was.blur !== pose.blur) {
-      // `none` rather than `blur(0px)`: a filter that is doing nothing still
-      // makes the element its own containing block and its own raster layer
-      this.blur.jump(
-        pose.blur > 0.01 ? `blur(${pose.blur.toFixed(2)}px)` : 'none'
-      );
-    }
-    this.was = pose;
-  }
-}
+const isFx = (build: Build, effect: EffectName) => build.effect === effect;
 
-interface Cell {
-  ch: string;
-  style: Record<string, unknown>;
-}
+/**
+ * The score names the STANDING scene: kept sprites, by id. Not `c.id` —
+ * an untyped id query also matches a REMOVED sprite, and when this whole
+ * demo sits inside a leaving gallery card, that would conscript every part
+ * into the full four-second opening while its Presence waits on the region.
+ * A dying card's parts are none of this score's business: with no cue
+ * naming them, the region hands them back to Presence immediately.
+ */
+const standing = (id: string): Query => ({ id, type: 'kept' });
 
 /* ── the demo ────────────────────────────────────────────────────────────── */
 
 /**
  * A logo on the left, the build order that makes it on the right.
  *
- * The Playhead demo had two clocks and one score, and the interesting part was
- * keeping them honest with each other. This one has one clock, because a build
- * order is not a recording of what a user did — it is a description, and a
- * description can simply be evaluated at t. Play and scrub call the same
- * `poseAt`; the only difference between them is who is choosing the number.
+ * This demo used to carry its own scheduler — a `schedule()` that resolved
+ * with/after into start times, a `windowOf`/`slotOf` pair that divided a text
+ * build among its glyphs, and a `poseAt` sampled by its own rAF clock. All
+ * deleted: the score is now written as a `<c.Sequence>` of named steps, the
+ * glyphs are `@by='character'` delivery, and the transport holds `c.run` —
+ * play, pause and the scrubber are `run.play()`, `run.pause()` and
+ * `run.time = t` on the library's own clock.
  *
- * What that buys, and what the panel is here to show, is that the score is
- * EDITABLE while it runs. Change build 6 from After to With and every start
- * time downstream of it moves, because none of them was ever written down —
- * they are consequences of two words and a delay, resolved top to bottom. The
- * bars in the transport are the resolved answer, not a second copy of it.
+ * What the panel is here to show survives the move: the score is EDITABLE
+ * while it runs. Change build 6 from After to With and every start time
+ * downstream of it moves, because none of them was ever written down — the
+ * edit re-renders the steps, the region replays the pass, and the run is put
+ * back at the same t against the new schedule. The bars in the transport are
+ * read from `run.cues` — the compiler's resolved answer, not a second copy.
  */
 export class BuildOrder extends Component {
   @tracked builds: Build[] = OPENING.map((build) => ({ ...build }));
   @tracked loop = true;
   /** which row the inspector is editing */
   @tracked pick = 0;
-  @tracked playing = false;
-  /** the playhead, in ms */
-  @tracked t = 0;
+  @tracked playing = true;
+  /** bumped to replay: any change inside the region re-runs the pass */
+  @tracked take = 0;
+  /** each build's resolved window as fractions of the run, from `run.cues` */
+  @tracked resolved: { at: number; end: number }[] = [];
 
-  /** every animated cell, by part — one for a shape, one per glyph for text */
-  private tracks = new Map<string, Track[]>();
-  /** the same cells flattened per text part, so a glyph can find its slot */
-  private glyphs = new Map<string, Glyph[]>();
-  private totals = new Map<string, Totals>();
+  /**
+   * The playhead and the run's length, in seconds — NOT tracked, and that is
+   * load-bearing: the region's render detector re-runs on EVERY render, so a
+   * tracked value written at 60fps would replay the pass at 60fps, cancelling
+   * the run it is trying to watch. The clock readout and the range input are
+   * written imperatively in `tick` instead.
+   */
+  private t = 0;
+  private runtime = 0;
 
-  /** the transport's own values, painted on the same frame as the scene */
+  /** the region's yielded context, grabbed by a modifier — `this.c.run` is the transport's whole subject */
+  private c?: { run: ChoreoRun | null };
+  /** the run the transport last adopted, so a new pass is noticed once */
+  private seen: ChoreoRun | null = null;
+  /** the run whose natural end already triggered the loop's next take */
+  private doneOf: ChoreoRun | null = null;
+  /** where to put the playhead when the next run arrives (an edit replays) */
+  private reseek: number | null = null;
+  /** true once a hand has stopped the run, after which it stays stopped */
+  private held = false;
+
+  /** the transport's own value, painted on the same frame as the scene */
   private headX = motionValue(0);
 
   private stage?: HTMLElement;
@@ -281,39 +211,9 @@ export class BuildOrder extends Component {
   private watcher?: ResizeObserver;
   private viewport?: IntersectionObserver;
   private raf = 0;
-  private last = 0;
-  /** true once a hand has stopped the run, after which it stays stopped */
-  private held = false;
-
-  /** the wordmark and the tagline, as rows of words of glyph cells */
-  readonly rows = new Map<string, Cell[][]>();
-
-  constructor(owner: Owner, args: object) {
-    super(owner, args);
-    for (const part of PARTS) {
-      if (part.kind !== 'text') {
-        this.tracks.set(part.name, [new Track(part.kind)]);
-        continue;
-      }
-      const words = wordsOf(part.text!);
-      const list: Track[] = [];
-      const flat: Glyph[] = [];
-      this.rows.set(
-        part.name,
-        words.map((run) =>
-          run.map((glyph) => {
-            const track = new Track('text');
-            list.push(track);
-            flat.push(glyph);
-            return { ch: glyph.ch, style: track.style };
-          })
-        )
-      );
-      this.tracks.set(part.name, list);
-      this.glyphs.set(part.name, flat);
-      this.totals.set(part.name, totalsOf(words));
-    }
-  }
+  /** the readouts `tick` writes by hand, found once */
+  private clockEl?: HTMLElement | null;
+  private rangeEl?: HTMLInputElement | null;
 
   willDestroy() {
     super.willDestroy();
@@ -322,44 +222,48 @@ export class BuildOrder extends Component {
     this.viewport?.disconnect();
   }
 
-  /* — the resolved timeline — */
+  /* — wiring — */
 
-  @cached
-  get cues() {
-    return schedule(this.builds);
-  }
-
-  get runtime() {
-    return runtimeOf(this.cues, HOLD);
-  }
-
-  /* — measuring — */
+  /** hold the region's context; the modifier's element is just a hook */
+  wire = modifier((_el: Element, [c]: [{ run: ChoreoRun | null }]) => {
+    this.c = c;
+  });
 
   register = modifier((el: HTMLElement) => {
     this.stage = el;
+    // a debug/test handle: the integration test drives the transport directly
+    (el as HTMLElement & { buildOrder?: BuildOrder }).buildOrder = this;
     this.watcher = new ResizeObserver(() => {
-      this.measure();
-      this.paint();
+      this.railW =
+        this.stage?.querySelector<HTMLElement>('.bo-track')?.clientWidth ?? 0;
     });
     this.watcher.observe(el);
     // A logo animation that has to be started is a logo animation nobody
     // sees, so this one runs itself — but only while it is being looked at.
     // Twenty-six demos live in the gallery, and the frames belong to whichever
-    // of them is on screen. Off screen the playhead stops where it was; back
-    // on screen it carries on, unless a hand has paused it since.
+    // of them is on screen. Off screen the run pauses where it was; back on
+    // screen it carries on, unless a hand has paused it since.
     this.viewport = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          this.resume();
+          this.raf ||= requestAnimationFrame(this.tick);
+          if (this.seen === null && this.take === 0) {
+            // the opening's first take: the region deliberately plays
+            // nothing on its very first render (page loads do not animate),
+            // so being seen is what starts the show
+            this.take++;
+          } else if (this.playing && !this.held) {
+            this.c?.run?.play();
+          }
         } else {
-          this.halt();
+          cancelAnimationFrame(this.raf);
+          this.raf = 0;
+          this.c?.run?.pause();
         }
       },
       { threshold: 0.35 }
     );
     this.viewport.observe(el);
-    this.measure();
-    this.paint();
     return () => {
       this.watcher?.disconnect();
       this.viewport?.disconnect();
@@ -369,147 +273,137 @@ export class BuildOrder extends Component {
     };
   });
 
-  private measure() {
-    this.railW =
-      this.stage?.querySelector<HTMLElement>('.bo-track')?.clientWidth ?? 0;
-  }
-
-  /* — the one reading — */
+  /* — the transport's frame: a reader, not a clock — */
 
   /**
-   * The whole scene at `this.t`.
-   *
-   * One pass over the cues, one `poseAt` per cell, no DOM read and no memory
-   * of the frame before. Called from the run loop and from the scrubber and
-   * from an edit to the score, and it cannot tell which.
+   * The run owns the time; this loop only looks at it. A new run appears
+   * whenever the region replays a pass — an edit, or the loop's next take —
+   * and is adopted here: its resolved cues become the bars, and if the pass
+   * was an edit, the playhead is put back at the t it was parked on, so
+   * retiming build 2 while parked at 1.4s shows you what 1.4s now looks like.
    */
-  private paint = () => {
-    const t = this.t;
-    for (const cue of this.cues) {
-      const list = this.tracks.get(cue.part)!;
-      if (list.length === 1) {
-        list[0]!.jump(poseAt(t, cue, WHOLE));
-        continue;
-      }
-      const flat = this.glyphs.get(cue.part)!;
-      const totals = this.totals.get(cue.part)!;
-      for (let i = 0; i < list.length; i += 1) {
-        list[i]!.jump(poseAt(t, cue, slotOf(flat[i]!, cue.by, totals)));
+  private tick = () => {
+    const run = this.c?.run ?? null;
+    if (run && run !== this.seen) {
+      this.seen = run;
+      this.adopt(run);
+    }
+    if (run) {
+      const t = run.time;
+      this.t = t;
+      this.paint();
+      if (run.isDone() && this.doneOf !== run && !this.held) {
+        this.doneOf = run;
+        if (this.loop) {
+          this.take++;
+        } else {
+          // the run is over rather than interrupted, so scrolling past and
+          // back must not quietly start it again
+          this.playing = false;
+          this.held = true;
+        }
       }
     }
-    this.headX.jump((t / this.runtime) * this.railW);
+    this.raf = requestAnimationFrame(this.tick);
   };
 
-  sty = (name: string) => this.tracks.get(name)![0]!.style;
-
-  /** the nav mark's geometry, worn here at stage size */
-  tailD = TAIL;
-  headD = HEAD;
-  orbitD = ORBIT;
-  tipD = TIP;
-  bead = BEAD;
-
-  get wordRows() {
-    return this.rows.get('word')!;
+  /** the clock, the range and the playhead, written by hand — see `t` */
+  private paint() {
+    this.headX.jump(
+      this.runtime > 0 ? (this.t / this.runtime) * this.railW : 0
+    );
+    this.clockEl ??= this.stage?.querySelector<HTMLElement>('.bo-clock');
+    this.rangeEl ??= this.stage?.querySelector<HTMLInputElement>('.bo-range');
+    const text = `${this.t.toFixed(2)} / ${this.runtime.toFixed(2)}s`;
+    if (this.clockEl && this.clockEl.textContent !== text) {
+      this.clockEl.textContent = text;
+    }
+    if (this.rangeEl) {
+      this.rangeEl.max = String(this.runtime);
+      this.rangeEl.value = String(this.t);
+    }
   }
 
-  get tagRows() {
-    return this.rows.get('tag')!;
-  }
-
-  get head() {
-    return { x: this.headX };
+  private adopt(run: ChoreoRun) {
+    this.runtime = run.duration;
+    // Continuity is the rule, not the exception: any pass replaces the run —
+    // an edit, the loop's next take, an unrelated render — and the new run
+    // resumes where the old one stood. Only a run that had actually finished
+    // starts its successor from zero (the loop coming round).
+    const target = this.reseek ?? this.t;
+    this.reseek = null;
+    if (target > 0.005 && target < run.duration - 0.005) {
+      run.time = target;
+    }
+    if (!this.playing || this.held) {
+      run.pause();
+    }
+    // the resolved schedule, read back: one bar per build, as fractions.
+    // `wait` (the hold) still counts toward the total they are taken against.
+    // Equality-guarded: `resolved` is tracked, a tracked write re-renders,
+    // a render replays the pass — an unguarded write here would spin.
+    const total = Math.max(
+      1,
+      ...run.cues.map((cue) => cue.start + cue.duration)
+    );
+    const next = run.cues
+      .filter((cue) => cue.kind === 'tween')
+      .map((cue) => ({
+        at: cue.start / total,
+        end: (cue.start + cue.duration) / total,
+      }));
+    if (JSON.stringify(next) !== JSON.stringify(this.resolved)) {
+      this.resolved = next;
+    }
   }
 
   /* — transport — */
 
-  /**
-   * Ticks on its own frame, by a clamped delta.
-   *
-   * Not `now - startedAt`: any gap — a background tab, a gallery painting
-   * twenty-six demos — and the next frame teleports the playhead to wherever
-   * the wall clock got to, which looks exactly like the run never played. A
-   * late frame costs the score 50ms and no more.
-   *
-   * The clamp is real wall-clock time; `motionSpeed()` is applied AFTER it, so
-   * the transport's own speed picker (Full · ÷2 · ÷5 · ÷10, gated by
-   * `slowmo` in the catalog) slows this the same way it slows every
-   * `{{motion transition=…}}` on the page — the score is unchanged, only how
-   * much of it a real second covers.
-   */
-  private advance = (now: number) => {
-    const runtime = this.runtime;
-    let t = this.t + Math.min(now - this.last, 50) / motionSpeed();
-    this.last = now;
-    if (t >= runtime) {
-      if (!this.loop) {
-        this.t = runtime;
-        this.paint();
-        // the run is over rather than interrupted, so scrolling past and back
-        // must not quietly start it again
-        this.held = true;
-        this.halt();
-        return;
-      }
-      // wrap by subtraction rather than by zeroing, so the loop does not lose
-      // the overshoot and drift a frame slower every time round
-      t -= runtime * Math.floor(t / runtime);
-    }
-    this.t = t;
-    this.paint();
-    this.raf = requestAnimationFrame(this.advance);
-  };
-
-  /** start the loop again on the demo's own initiative, never over a hand */
-  private resume() {
-    if (this.held || this.playing) {
-      return;
-    }
-    this.playing = true;
-    this.last = performance.now();
-    this.raf = requestAnimationFrame(this.advance);
-  }
-
-  private halt() {
-    if (this.playing) {
-      cancelAnimationFrame(this.raf);
-      this.raf = 0;
-      this.playing = false;
-    }
-  }
-
   toggle = () => {
+    const run = this.c?.run;
     if (this.playing) {
+      this.playing = false;
       this.held = true;
-      this.halt();
+      run?.pause();
       return;
     }
     this.held = false;
-    if (this.t >= this.runtime - 1) {
-      this.t = 0;
-      this.paint();
-    }
     this.playing = true;
-    this.last = performance.now();
-    this.raf = requestAnimationFrame(this.advance);
+    if (!run || run.isDone() || this.t >= this.runtime - 0.001) {
+      this.doneOf = run ?? null;
+      this.take++;
+      return;
+    }
+    run.play();
   };
 
   /**
    * Scrubbing pauses — not because it has to, but because a hand on the
-   * playhead has claimed the clock. The scene is a function of t either way;
-   * the only question is who supplies the number, and two suppliers at once
-   * is a tug of war. `held` too, so scrolling away and back does not quietly
-   * restart what a hand stopped.
+   * playhead has claimed the clock. `run.time` is settable in either
+   * direction and a scrubbed frame is a computed still; the only question is
+   * who supplies the number, and two suppliers at once is a tug of war.
    */
   scrub = (event: Event) => {
+    const run = this.c?.run;
+    if (!run) {
+      return;
+    }
     this.held = true;
-    this.halt();
-    this.t = Number((event.target as HTMLInputElement).value);
+    this.playing = false;
+    run.pause();
+    const t = Number((event.target as HTMLInputElement).value);
+    run.time = t;
+    this.t = t;
     this.paint();
   };
 
   rewind = () => {
-    this.halt();
+    const run = this.c?.run;
+    this.playing = false;
+    run?.pause();
+    if (run) {
+      run.time = 0;
+    }
     this.t = 0;
     this.paint();
   };
@@ -539,19 +433,16 @@ export class BuildOrder extends Component {
   /**
    * Change one build, and let the rest of the timeline fall out again.
    *
-   * The score is replaced rather than mutated so `cues` recomputes, and the
-   * playhead is repainted at the SAME t against the new schedule — which is
-   * what makes an edit feel like editing rather than like restarting. Retiming
-   * build 2 while parked at 1.4s shows you what 1.4s now looks like.
+   * The score is replaced rather than mutated so the steps re-render, which
+   * replays the pass — the region compiles a fresh run against the new
+   * schedule. `reseek` asks `adopt` to put the new run back at the SAME t,
+   * which is what makes an edit feel like editing rather than restarting.
    */
   private edit(patch: Partial<Build>) {
     this.builds = this.builds.map((build, i) =>
       i === this.pick ? { ...build, ...patch } : build
     );
-    if (this.t > this.runtime) {
-      this.t = this.runtime;
-    }
-    this.paint();
+    this.reseek = this.t;
   }
 
   setEffect = (event: Event) => {
@@ -578,55 +469,59 @@ export class BuildOrder extends Component {
 
   /* — readouts — */
 
+  /** the last build's name, which the hold waits behind */
+  get holdAt() {
+    return after(nameOf(this.builds.length - 1));
+  }
+
   /**
    * The sync marks: one faint vertical line per relation, drawn at the moment
    * a build's start was derived FROM — the previous build's start for `with`,
    * its end for `after`. The line is the anchor; the gap between the line and
    * the bar to its right is the delay, made visible.
    */
-  @cached
   get links() {
-    const runtime = this.runtime;
-    return this.cues.slice(1).map((cue, i) => {
-      const prev = this.cues[i]!;
-      const at = cue.start === 'with' ? prev.at : prev.end;
+    return this.builds.slice(1).map((build, i) => {
+      const prev = this.resolved[i];
+      const frac = prev ? (build.start === 'with' ? prev.at : prev.end) : 0;
       return {
         index: i,
         // lane geometry mirrored from .bo-track: 3px pad, 3px lane, 2px gap —
         // the line runs from the previous lane's centre to this one's
         style: htmlSafe(
-          `left:${((at / runtime) * 100).toFixed(3)}%;` +
+          `left:${(frac * 100).toFixed(3)}%;` +
             `top:${(4.5 + i * 5).toFixed(1)}px;height:5px`
         ),
       };
     });
   }
 
-  @cached
   get lanes() {
-    const runtime = this.runtime;
-    return this.cues.map((cue, index) => ({
-      index,
-      on: index === this.pick,
-      style: htmlSafe(
-        `left:${((cue.at / runtime) * 100).toFixed(3)}%;` +
-          `width:${((cue.ms / runtime) * 100).toFixed(3)}%`
-      ),
-    }));
+    return this.builds.map((_build, index) => {
+      const span = this.resolved[index];
+      return {
+        index,
+        on: index === this.pick,
+        style: htmlSafe(
+          span
+            ? `left:${(span.at * 100).toFixed(3)}%;` +
+                `width:${((span.end - span.at) * 100).toFixed(3)}%`
+            : 'left:0;width:0'
+        ),
+      };
+    });
   }
 
-  @cached
   get list() {
-    return this.cues.map((cue, index) => ({
-      effect: EFFECTS[cue.effect]!.label,
+    return this.builds.map((build, index) => ({
+      effect: EFFECTS[build.effect]!.label,
       index,
-      label: partOf(cue.part).label,
-      no: cue.no,
+      label: partOf(build.part).label,
+      no: index + 1,
       on: index === this.pick,
     }));
   }
 
-  @cached
   get effectOptions() {
     return effectsFor(this.part.kind).map((name) => ({
       label: EFFECTS[name]!.label,
@@ -675,8 +570,15 @@ export class BuildOrder extends Component {
     return `${(this.build.ms / 1000).toFixed(1)} s`;
   }
 
-  get clock() {
-    return `${(this.t / 1000).toFixed(2)} / ${(this.runtime / 1000).toFixed(2)}s`;
+  /** the nav mark's geometry, worn here at stage size */
+  tailD = TAIL;
+  headD = HEAD;
+  orbitD = ORBIT;
+  tipD = TIP;
+  bead = BEAD;
+
+  get head() {
+    return { x: this.headX };
   }
 
   <template>
@@ -687,98 +589,208 @@ export class BuildOrder extends Component {
     >
       <div class="bo-split">
 
-        {{! ── the logo ───────────────────────────────────────────────── }}
+        {{! ── the logo: the region is the canvas ─────────────────────── }}
         <div class="bo-canvas">
-          <div class="bo-logo">
-            {{! the box that moves: a plate the mark is built on }}
+          <Choreo class="bo-logo" as |c|>
+            {{! `data-take` is the replay: bumping it re-renders the region,
+                and a pass whose changeset is all-kept still runs its
+                timeline — the loop's next take, with no imperative restart.
+                The box that moves: a plate the mark is built on. }}
             <div
               class="bo-plate"
               data-part="plate"
-              {{motion style=(this.sty "plate")}}
+              data-take="{{this.take}}"
+              {{motion id="plate"}}
+              {{this.wire c}}
             ></div>
 
             <div class="bo-art">
-              {{! the mark itself, from the same exported geometry the top
-                  bar renders — two strokes that draw, one bead that pops }}
-              <svg class="bo-mark" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  class="bo-tail"
-                  d={{this.tailD}}
-                  data-part="tail"
-                  {{motion style=(this.sty "tail")}}
-                />
-                <path
-                  class="bo-head"
-                  d={{this.headD}}
-                  data-part="head"
-                  {{motion style=(this.sty "head")}}
-                />
-                <circle
-                  class="bo-bead"
-                  cx="{{this.bead.cx}}"
-                  cy="{{this.bead.cy}}"
-                  r="{{this.bead.r}}"
-                  data-part="bead"
-                  {{motion style=(this.sty "bead")}}
-                />
-                <path
-                  class="bo-orbit"
-                  d={{this.orbitD}}
-                  data-part="orbit"
-                  {{motion style=(this.sty "orbit")}}
-                />
-                <path
-                  class="bo-tip"
-                  d={{this.tipD}}
-                  data-part="tip"
-                  {{motion style=(this.sty "tip")}}
-                />
-              </svg>
+                {{! the mark itself, from the same exported geometry the top
+                    bar renders — two strokes that draw, one bead that pops }}
+                <svg class="bo-mark" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    class="bo-tail"
+                    d={{this.tailD}}
+                    data-part="tail"
+                    {{motion id="tail"}}
+                  />
+                  <path
+                    class="bo-head"
+                    d={{this.headD}}
+                    data-part="head"
+                    {{motion id="head"}}
+                  />
+                  <circle
+                    class="bo-bead"
+                    cx="{{this.bead.cx}}"
+                    cy="{{this.bead.cy}}"
+                    r="{{this.bead.r}}"
+                    data-part="bead"
+                    {{motion id="bead"}}
+                  />
+                  <path
+                    class="bo-orbit"
+                    d={{this.orbitD}}
+                    data-part="orbit"
+                    {{motion id="orbit"}}
+                  />
+                  <path
+                    class="bo-tip"
+                    d={{this.tipD}}
+                    data-part="tip"
+                    {{motion id="tip"}}
+                  />
+                </svg>
 
-              {{! text, one span per glyph — the delivery decides whether they
-                  share a window or divide it }}
-              <p class="bo-word" data-part="word">
-                {{#each this.wordRows key="@index" as |run|}}
-                  <span class="bo-run">
-                    {{#each run key="@index" as |cell|}}
-                      <span
-                        class="bo-cell"
-                        {{motion style=cell.style}}
-                      >{{cell.ch}}</span>
-                    {{/each}}
-                  </span>
-                {{/each}}
-              </p>
+                {{! text, whole: `@by` splits it at delivery time and puts
+                    Glimmer's own text nodes back after — no glyph spans here }}
+                <p class="bo-word" data-part="word" {{motion id="word"}}>
+                  Choreo</p>
 
-              <svg
-                class="bo-rule-box"
-                viewBox="0 0 220 3"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                <path
-                  class="bo-rule"
-                  d="M1.5 1.5H218.5"
-                  vector-effect="non-scaling-stroke"
-                  data-part="rule"
-                  {{motion style=(this.sty "rule")}}
-                />
-              </svg>
+                <svg
+                  class="bo-rule-box"
+                  viewBox="0 0 220 3"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    class="bo-rule"
+                    d="M1.5 1.5H218.5"
+                    vector-effect="non-scaling-stroke"
+                    data-part="rule"
+                    {{motion id="rule"}}
+                  />
+                </svg>
 
-              <p class="bo-tag" data-part="tag">
-                {{#each this.tagRows key="@index" as |run|}}
-                  <span class="bo-run">
-                    {{#each run key="@index" as |cell|}}
-                      <span
-                        class="bo-cell"
-                        {{motion style=cell.style}}
-                      >{{cell.ch}}</span>
-                    {{/each}}
-                  </span>
-                {{/each}}
-              </p>
+              <p class="bo-tag" data-part="tag" {{motion id="tag"}}>
+                MOTION. CHOREOGRAPHED.</p>
             </div>
-          </div>
+
+            {{!-- ── the score, verbatim ──────────────────────────────────
+                One named step per build. The template's branches are the
+                effect column: an effect is nothing but keyframe values and
+                an easing on a `<c.Tween>` — Pop is a scale through backOut,
+                and a build-in's leading opacity frames are Keynote's
+                "builds in", pinned hidden from the run's start until its
+                window opens. --}}
+            <c.Sequence>
+              {{#each this.builds key="@index" as |build i|}}
+                {{#if (isFx build "dissolve")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeOut"
+                    @opacity={{array 0 1}}
+                  />
+                {{else if (isFx build "draw")}}
+                  {{! opacity leads: a zero-length dash with round linecaps
+                      still paints its caps, so the stroke is withheld until
+                      there is line to show. @pathSpacing pinned at 2 keeps
+                      the dash pattern's second dash a whole path-length away
+                      from the terminus at any drawn length. }}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeInOut"
+                    @pathLength={{array 0 1}}
+                    @pathSpacing={{array 2 2}}
+                    @opacity={{array 0 1 1 1 1}}
+                  />
+                {{else if (isFx build "drift")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeOut"
+                    @opacity={{array 0 1 1}}
+                    @scale={{array 0.78 1}}
+                    @y={{array 18 0}}
+                  />
+                {{else if (isFx build "move")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeOut"
+                    @opacity={{array 0 1 1 1}}
+                    @x={{array -38 0}}
+                  />
+                {{else if (isFx build "pop")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="backOut"
+                    @opacity={{array 0 1 1 1}}
+                    @scale={{array 0 1}}
+                  />
+                {{else if (isFx build "soften")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeOut"
+                    @opacity={{array 0 1 1}}
+                    @scale={{array 1.06 1}}
+                    @filter={{array "blur(10px)" "blur(0px)"}}
+                  />
+                {{else if (isFx build "spin")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="backOut"
+                    @opacity={{array 0 1 1 1}}
+                    @rotate={{array -150 0}}
+                    @scale={{array 0.4 1}}
+                  />
+                {{else if (isFx build "wipe")}}
+                  <c.Tween
+                    @name={{nameOf i}}
+                    @at={{anchorOf build i}}
+                    @delay={{secondsOf build.delay}}
+                    @of={{standing build.part}}
+                    @by={{byOf build.by}}
+                    @duration={{secondsOf build.ms}}
+                    @ease="easeInOut"
+                    @clipPath={{array
+                      "inset(0 100% 0 0 round 20px)"
+                      "inset(0 0% 0 0 round 20px)"
+                    }}
+                  />
+                {{/if}}
+              {{/each}}
+              {{! the rest at the end of the take, on the timeline itself —
+                  scrubbable, and counted in the run's length }}
+              <c.Wait
+                @of={{standing "plate"}}
+                @at={{this.holdAt}}
+                @duration={{HOLD}}
+              />
+            </c.Sequence>
+          </Choreo>
         </div>
 
         {{! ── the inspector ──────────────────────────────────────────── }}
@@ -893,7 +905,7 @@ export class BuildOrder extends Component {
       <div class="bo-transport">
         <div class="bo-track">
           {{! one lane per build: the resolved schedule, drawn. It is not a
-              second copy of the score — it is what `schedule()` returned. }}
+              second copy of the score — it is read back from `run.cues`. }}
           {{#each this.lanes key="index" as |lane|}}
             <span class="bo-lane">
               <i
@@ -910,13 +922,16 @@ export class BuildOrder extends Component {
           <span class="bo-playhead" {{motion style=this.head}}></span>
           {{! a real range input, transparent over the drawing: keyboard scrub
               and a11y for free }}
+          {{! max and value are written by `paint` each frame — a tracked
+              binding here would re-render at 60fps, and every render replays
+              the region's pass }}
           <input
             type="range"
             class="bo-range"
             min="0"
-            max={{this.runtime}}
-            step="1"
-            value={{this.t}}
+            max="0"
+            step="0.01"
+            value="0"
             aria-label="Playhead"
             {{on "input" this.scrub}}
           />
@@ -944,7 +959,7 @@ export class BuildOrder extends Component {
               </svg>
             {{/if}}
           </button>
-          <span class="bo-clock">{{this.clock}}</span>
+          <span class="bo-clock">0.00 / 0.00s</span>
           <span class="bo-spacer"></span>
           <button
             type="button"

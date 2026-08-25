@@ -1281,6 +1281,20 @@ export class ChoreoRun implements Run {
       t.origin = origin;
     }
     if (cue.delivery) {
+      // The sprite has stood pinned at its FIRST keyframes since the run
+      // began (pinStarts) so a build-in sits hidden until its window. From
+      // here the split's slots carry those keyframes each in their own
+      // window, and they are the sprite's children — so the container must
+      // step aside to its END values now, or its pinned opacity would
+      // multiply every slot to nothing. land() leaves it in the same place.
+      for (const key in cue.target) {
+        const raw = cue.target[key];
+        if (Array.isArray(raw)) {
+          const end = raw[raw.length - 1] as PropValue;
+          ve.getValue(key, end)!.jump(end);
+        }
+      }
+      ve.render();
       t.delivery = deliver(cue, this.scale);
       if (!this.playing) {
         t.delivery.pause();
@@ -1561,7 +1575,7 @@ export class ChoreoRun implements Run {
     for (const t of [...this.tracks].sort((a, b) => a.start - b.start)) {
       const cue = t.cue;
       const ve = cue.sprite.node.visualElement;
-      if (!ve || cue.delivery || cue.loop) {
+      if (!ve || cue.loop) {
         continue;
       }
       if (cue.flight) {
