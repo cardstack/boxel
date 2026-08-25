@@ -16,12 +16,19 @@
 // registered mode. An adapter disappearing fails too, because a harness still
 // listing a mode that no longer exists reports a tier absent forever.
 //
-// What this cannot see, and does not claim to: an implementation that satisfies
-// the interface structurally, with no `implements` / `satisfies` / annotated
-// declaration naming it, and one that inherits the interface from a base class
-// that names it. This is a tripwire on the ways an adapter is actually written,
-// not a proof that none exists. Comment detection is line-local, for the
-// reasons `check-rp-bijection.mts` gives at length.
+// Two independent signals, because enumerating syntaxes is how a check like
+// this quietly stops working. The first is the keyword forms an adapter is
+// declared through. The second needs no syntax at all: a file that names the
+// interface and defines most of its operations as its own members is
+// implementing it, however it was declared — which covers the factory forms,
+// a class expression, a decorated class, and whatever the next one is.
+//
+// What this cannot see, and does not claim to: an implementation that names
+// the interface nowhere at all, satisfying it structurally, and one that
+// defines few operations itself because it delegates them to a mixin AND is
+// declared through none of the keyword forms. This is a tripwire on how an
+// adapter is actually written, not a proof that none exists. Comment detection
+// is line-local, for the reasons `check-rp-bijection.mts` gives at length.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -51,14 +58,62 @@ const SOURCE = /\.(ts|gts|mts)$/;
 
 // `implements` may list more than one interface, so the match runs to the class
 // body rather than to the next identifier. `satisfies` covers an object literal
-// adapter, and the annotated-declaration form covers one built by a factory. A
-// parameter or field annotation deliberately does not match: taking a
-// `BoxelRuntime` is what a consumer does.
+// adapter. The two annotation forms are a bound name (`const runtime:
+// BoxelRuntime = …`) and a return type (`function create(): BoxelRuntime`,
+// `(): Promise<BoxelRuntime> =>`), which is how a factory-built adapter is
+// declared. A parameter or field annotation deliberately does not match:
+// taking a `BoxelRuntime` is what a consumer does.
 const DECLARES_RUNTIME = [
   /\bimplements\b[^{;]*\bBoxelRuntime\b/,
   /\bsatisfies\s+BoxelRuntime\b/,
   /\b(?:const|let|var)\s+\w+\s*:\s*BoxelRuntime\b/,
+  /\)\s*:\s*(?:Promise\s*<\s*)?BoxelRuntime\b/,
 ];
+
+// The module that declares the interface, which is therefore never an
+// implementation of it: its own body defines all eight operations, and its
+// operation list names them again.
+const declaringDirectory = join(
+  'packages',
+  'runtime-common',
+  'boxel-execution-protocol',
+);
+
+/**
+ * The operations an implementation has to define, read out of the protocol's
+ * own list rather than repeated here — a copy would drift, and a drifted copy
+ * lowers the bar silently.
+ */
+function runtimeOperations(): string[] {
+  let source = readFileSync(
+    join(repoRoot, declaringDirectory, 'runtime.ts'),
+    'utf8',
+  );
+  let list = /BOXEL_RUNTIME_OPERATIONS\s*=\s*\[([^\]]*)\]/.exec(source);
+  let names = list
+    ? [...list[1].matchAll(/'([^']+)'/g)].map((match) => match[1])
+    : [];
+  if (names.length === 0) {
+    console.error(
+      `Could not read BOXEL_RUNTIME_OPERATIONS out of ${declaringDirectory}/runtime.ts.\n` +
+        `The operation-shape signal is inert without it; fix the reader rather ` +
+        `than leaving the check running on one signal.`,
+    );
+    process.exit(1);
+  }
+  return names;
+}
+
+const operations = runtimeOperations();
+
+// Two thirds of the interface. Not all of it: an adapter part-way through
+// being written, or one inheriting a couple of operations, is exactly what
+// this should catch. The lookbehind is what separates defining an operation
+// from calling one — `runtime.projectInstance(handle)` is a consumer.
+const operationThreshold = Math.ceil((operations.length * 2) / 3);
+const DEFINES_OPERATION = operations.map(
+  (name) => new RegExp(`(?<![.\\w$])${name}\\s*[(:=]`),
+);
 
 function* walk(dir: string): Generator<string> {
   for (let entry of readdirSync(dir)) {
@@ -90,6 +145,10 @@ function withoutComments(source: string): string {
 
 let found: string[] = [];
 for (let file of walk(scanRoot)) {
+  let path = relative(repoRoot, file);
+  if (path.startsWith(declaringDirectory)) {
+    continue;
+  }
   let raw = readFileSync(file, 'utf8');
   // The name is what makes a file worth parsing at all, and most of the repo
   // does not carry it.
@@ -97,8 +156,12 @@ for (let file of walk(scanRoot)) {
     continue;
   }
   let source = withoutComments(raw);
-  if (DECLARES_RUNTIME.some((pattern) => pattern.test(source))) {
-    found.push(relative(repoRoot, file));
+  let declared = DECLARES_RUNTIME.some((pattern) => pattern.test(source));
+  let defined =
+    DEFINES_OPERATION.filter((pattern) => pattern.test(source)).length >=
+    operationThreshold;
+  if (declared || defined) {
+    found.push(path);
   }
 }
 found.sort();

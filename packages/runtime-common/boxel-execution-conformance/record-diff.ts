@@ -32,6 +32,13 @@
  * to itself is not compared at all. It is reported as a fault, naming the
  * member and the refusal code, because "these two records differ at every
  * path" says nothing that "this record is not data" has not already said.
+ *
+ * The root itself must be a record, and that is load-bearing rather than
+ * tidy. `null`, a string and an empty array are all inert data, so two
+ * producers that answered with the same one of them agree at every path — and
+ * a harness reporting parity over two tiers that each produced no record is
+ * exactly the false green this exists to prevent. A root that is not a record
+ * is a fault about that side.
  */
 
 import stringify from 'safe-stable-stringify';
@@ -40,7 +47,7 @@ import type { ProtocolRefusalCode } from '../boxel-execution-protocol/refusal.ts
 import { isProtocolRefusal } from '../boxel-execution-protocol/refusal.ts';
 import {
   asRefusal,
-  normalizeJsonData,
+  normalizeJsonRecord,
 } from '../boxel-execution-protocol/untrusted-input.ts';
 
 /**
@@ -157,10 +164,11 @@ export function recordsAgree(diff: RecordDiff): boolean {
 }
 
 /**
- * Why one record is not inert data, or `undefined` when it is.
+ * Why one value is not a record of inert data, or `undefined` when it is.
  *
  * Worth asking on its own: a harness with a single tier has nothing to diff,
- * and "the one record we have is data" is still a claim about it that can fail.
+ * and "the one record we have is a record" is still a claim about it that can
+ * fail — and it is the claim that fails when a producer answered with `null`.
  */
 export function faultInRecord(
   value: unknown,
@@ -232,7 +240,7 @@ function readAsData(
   faults: RecordFault[],
 ): unknown {
   try {
-    return asRefusal(() => normalizeJsonData(value));
+    return asRefusal(() => normalizeJsonRecord(value, 'a protocol record'));
   } catch (error) {
     // `asRefusal` is what makes the other branch unreachable; the check is
     // here because it is also what narrows `error` to something with a `code`.

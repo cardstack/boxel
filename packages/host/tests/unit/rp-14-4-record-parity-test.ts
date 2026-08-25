@@ -320,12 +320,26 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
     );
   });
 
-  test('RP-14.4: a divergence at the record itself is reported at the root', function (assert) {
+  test('RP-14.4: a side that is not a record at all is a fault about that side', function (assert) {
     let diff = diffRecords(description(), 'a description');
-    assert.strictEqual(diff.divergences.length, 1);
-    assert.strictEqual(diff.divergences[0].path, '');
-    assert.strictEqual(diff.divergences[0].reason, 'shape');
-    assert.true(describeRecordDiff(diff).startsWith('(the record)'));
+    assert.strictEqual(diff.faults.length, 1);
+    assert.strictEqual(diff.faults[0].side, 'candidate');
+    assert.strictEqual(diff.faults[0].code, 'BOXEL_RECORD_MALFORMED');
+    assert.strictEqual(diff.divergences.length, 0);
+  });
+
+  test('RP-14.4: two producers that both answered with no record do not agree', function (assert) {
+    // `null`, a string and an empty array are all inert data, so two producers
+    // that answered with the same one of them agree at every path. Requiring
+    // the root to be a record is what keeps "both tiers produced nothing" from
+    // reading as "the tiers agree" — the false green this harness exists for.
+    for (let answered of [null, 'a description', 42, [], undefined]) {
+      let diff = diffRecords(answered, answered);
+      assert.false(
+        recordsAgree(diff),
+        `${describeRecordDiff(diff)} for ${JSON.stringify(answered) ?? 'undefined'}`,
+      );
+    }
   });
 
   test('RP-14.4: sharing on one side and duplication on the other is not a divergence', function (assert) {
@@ -560,6 +574,26 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
     assert.strictEqual(faults.length, 1);
     assert.strictEqual(faults[0].mode, PARITY_REFERENCE_MODE);
     assert.strictEqual(faults[0].record, 'projection');
+  });
+
+  test('RP-14.4: tiers that all answered with nothing are not at parity', function (assert) {
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        { mode: 'direct', description: null, projection: null },
+        { mode: 'capsule', description: null, projection: null },
+      ],
+      registeredModes: ['direct', 'capsule'],
+    });
+    assert.false(reportsParity(report), describeParityReport(report));
+    // One per tier per record kind: the claim is about each record on its own,
+    // so neither tier is excused by its peer having done the same thing.
+    let faults = findingsOfKind(report, 'fault');
+    assert.strictEqual(faults.length, 4);
+    assert.deepEqual(
+      [...new Set(faults.map((fault) => fault.mode))],
+      ['direct', 'capsule'],
+    );
   });
 
   test('RP-14.4: a candidate tier diverging from Direct is attributed to that tier and record', function (assert) {
