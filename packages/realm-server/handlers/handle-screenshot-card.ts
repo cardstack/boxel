@@ -543,6 +543,13 @@ export default function handleScreenshotCard({
         // The job keeps running and (when persisting) lands its capture in
         // the MediaCache, so the client's retry answers from the ledger
         // with no second render. The retry hint is one average capture.
+        //
+        // That resume applies only to canonical captures. A custom
+        // captureSpec's job is capture-only (persist: null, never
+        // coalesced), so its timed-out render is discarded and each retry
+        // is a full re-render — the Retry-After here is pacing, not a
+        // cheap-resume promise, until the ledger identity learns these
+        // specs.
         let estimate = await estimateScreenshotQueueWait(
           dbAdapter,
           `screenshot:${normalizedRealmURL}`,
