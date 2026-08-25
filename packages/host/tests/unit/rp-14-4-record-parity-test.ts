@@ -532,9 +532,9 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
   });
 
   test('RP-14.4: the spec declares no tier-specific record paths, so the diff is total', function (assert) {
-    // RP-14.4's "modulo fields this spec explicitly declares tier-specific
-    // (currently: none)". An entry appearing here without a statement declaring
-    // it means a member stopped being compared and nothing said so.
+    // RP-14.4's "modulo fields this spec explicitly declares tier-specific".
+    // An entry here without a statement declaring it means a member is not
+    // compared and nothing says so.
     assert.deepEqual([...TIER_SPECIFIC_RECORD_PATHS], []);
   });
 
@@ -692,7 +692,7 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
     assert.strictEqual(absent[0].mode, 'capsule');
   });
 
-  test('RP-14.4: the harness honors the declared tier-specific paths by default', function (assert) {
+  test('RP-14.4: an exemption suppresses a divergence the harness would otherwise report', function (assert) {
     let reference = projection();
     let report = checkRecordParity({
       fixture: 'person/1',
@@ -723,6 +723,153 @@ module('Unit | rendering protocol | cross-tier record parity', function () {
       registeredModes: ['direct', 'capsule'],
     });
     assert.strictEqual(findingsOfKind(unexempted, 'divergence').length, 1);
+  });
+
+  test('RP-14.4: an exemption does not silence a divergence at a path it does not cover', function (assert) {
+    // `personRef` is one object reached from `ref`, from `fields[1].type` and
+    // from `formats[0].provider.ref`, so a memo entered on behalf of an exempt
+    // path would mark that object compared and skip every other path to it —
+    // exempting one member silencing divergences at unrelated ones, with visit
+    // order deciding which.
+    let wrongRef = { module: personRef.module, name: 'PERSON' };
+    let reference = description();
+    let candidate = description({
+      ref: wrongRef,
+      fields: [reference.fields[0], { ...reference.fields[1], type: wrongRef }],
+      formats: [
+        { format: 'isolated', provider: { kind: 'authored', ref: wrongRef } },
+      ],
+    });
+    for (let exemption of ['ref', 'fields[].type', 'formats']) {
+      let diff = diffRecords(reference, candidate, {
+        exemptPaths: [exemption],
+      });
+      assert.false(
+        recordsAgree(diff),
+        `exempting ${exemption} — ${describeRecordDiff(diff)}`,
+      );
+    }
+  });
+
+  test('RP-14.4: an exemption covering no path is reported rather than read as satisfied', function (assert) {
+    let diff = diffRecords(description(), description(), {
+      exemptPaths: ['presentaton.displayName'],
+    });
+    assert.deepEqual(diff.divergences, []);
+    assert.deepEqual(diff.exemptionsUnused, ['presentaton.displayName']);
+    // An exemption is a claim that a member legitimately differs between
+    // tiers. One matching nothing is a claim about a member that is not there.
+    assert.false(recordsAgree(diff));
+    assert.true(describeRecordDiff(diff).includes('covered no path'));
+  });
+
+  test('RP-14.4: a concrete array index in an exemption names that member of every element', function (assert) {
+    let reference = description();
+    let diff = diffRecords(
+      reference,
+      description({
+        fields: [
+          { ...reference.fields[0], isComputed: true },
+          reference.fields[1],
+        ],
+      }),
+      { exemptPaths: ['fields[0].isComputed'] },
+    );
+    // Wildcarded on both sides, so an index names the shape rather than one
+    // position — an exemption that matched no position would be a rule doing
+    // nothing while reading as satisfied.
+    assert.true(recordsAgree(diff), describeRecordDiff(diff));
+  });
+
+  test('RP-14.4: a record carrying no envelope is not a usable record of this protocol', function (assert) {
+    // `{}` is inert data and it is a record, and it is not a description: it
+    // carries no protocol version, so RP-14.3's gate refuses it. Two tiers that
+    // each produced one agree at every path, which is the same false green as
+    // two tiers that each produced nothing.
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        { mode: 'direct', description: {}, projection: {} },
+        { mode: 'capsule', description: {}, projection: {} },
+      ],
+      registeredModes: ['direct', 'capsule'],
+    });
+    assert.false(reportsParity(report), describeParityReport(report));
+    assert.strictEqual(findingsOfKind(report, 'fault').length, 4);
+  });
+
+  test('RP-14.4: a tier whose mode the protocol does not declare is inspected, not skipped', function (assert) {
+    // A tier's mode is data, and a Sandbox tier's arrives across the boundary
+    // this module exists to distrust. Iterating only the declared modes would
+    // leave a typo'd or forged one uninspected, uncompared and unreported while
+    // the run reports no findings.
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        tier('direct'),
+        {
+          mode: 'capsule-next' as BoxelExecutionMode,
+          description: null,
+          projection: projection(),
+        },
+      ],
+      registeredModes: ['direct'],
+    });
+    assert.false(reportsParity(report), describeParityReport(report));
+    assert.deepEqual(
+      findingsOfKind(report, 'mode-unregistered').map(
+        (finding) => finding.mode,
+      ),
+      ['capsule-next' as BoxelExecutionMode],
+    );
+    assert.strictEqual(findingsOfKind(report, 'fault').length, 1);
+    assert.strictEqual(report.inspections, 2 * PARITY_RECORD_KINDS.length);
+  });
+
+  test('RP-14.4: two tiers handed the same record are reported rather than agreeing for free', function (assert) {
+    let records = { description: description(), projection: projection() };
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        { mode: 'direct', ...records },
+        { mode: 'capsule', ...records },
+      ],
+      registeredModes: ['direct', 'capsule'],
+    });
+    assert.false(reportsParity(report), describeParityReport(report));
+    assert.deepEqual(
+      findingsOfKind(report, 'records-shared').map((finding) => finding.record),
+      [...PARITY_RECORD_KINDS],
+    );
+  });
+
+  test('RP-14.4: the comparison count names the pairs actually compared', function (assert) {
+    let liveDescription: Record<string, unknown> = { ...description() };
+    Object.defineProperty(liveDescription, 'boxelKind', {
+      get: () => 'card',
+      enumerable: true,
+      configurable: true,
+    });
+    let report = checkRecordParity({
+      fixture: 'person/1',
+      tiers: [
+        {
+          mode: 'direct',
+          description: liveDescription,
+          projection: projection(),
+        },
+        tier('capsule'),
+      ],
+      registeredModes: ['direct', 'capsule'],
+    });
+    // The description pair was never compared — one side is not a record — so
+    // counting it would have the coverage line claim a check that did not run.
+    assert.strictEqual(report.comparisons, 1);
+    assert.strictEqual(findingsOfKind(report, 'fault').length, 1);
+    assert.true(
+      describeParityReport(report).includes('1 record comparison(s)'),
+      describeParityReport(report),
+    );
   });
 
   test('RP-14.4: a divergence past the report limit is carried into the parity report', function (assert) {

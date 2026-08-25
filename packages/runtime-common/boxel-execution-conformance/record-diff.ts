@@ -44,7 +44,10 @@
 import stringify from 'safe-stable-stringify';
 
 import type { ProtocolRefusalCode } from '../boxel-execution-protocol/refusal.ts';
-import { isProtocolRefusal } from '../boxel-execution-protocol/refusal.ts';
+import {
+  isProtocolRefusal,
+  quoteToken,
+} from '../boxel-execution-protocol/refusal.ts';
 import {
   asRefusal,
   normalizeJsonRecord,
@@ -113,15 +116,29 @@ export interface RecordDiff {
   /** Divergences found past `REPORTED_DIVERGENCE_LIMIT` and not listed. */
   withheld: number;
   faults: RecordFault[];
+  /**
+   * Exemptions that covered no path in either record.
+   *
+   * An exemption is a claim that a member legitimately differs between tiers.
+   * One that matches nothing is a claim about a member neither record has —
+   * a typo, or a member that was renamed out from under it — and it reads as
+   * satisfied rather than as wrong unless something says so.
+   */
+  exemptionsUnused: string[];
 }
 
 export interface RecordDiffOptions {
   /**
    * Paths the spec declares tier-specific, which are therefore not compared
    * (RP-14.4). An exemption covers the path it names and everything under it,
-   * and array indices are wildcarded — `fields[].kind` exempts that member of
-   * every element, since a tier-specific member is a property of the record
-   * shape rather than of one element's position.
+   * and array indices are wildcarded on both sides — `fields[].kind` and
+   * `fields[0].kind` both exempt that member of every element, since a
+   * tier-specific member is a property of the record shape rather than of one
+   * element's position, and an exemption that matched no position at all would
+   * be a rule that reads as satisfied while doing nothing.
+   *
+   * An exemption covering no path in either record comes back in
+   * `exemptionsUnused`.
    */
   exemptPaths?: readonly string[];
 }
@@ -142,24 +159,46 @@ export function diffRecords(
   let referenceData = readAsData(reference, 'reference', faults);
   let candidateData = readAsData(candidate, 'candidate', faults);
   if (faults.length > 0) {
-    return { divergences: [], withheld: 0, faults };
+    return {
+      divergences: [],
+      withheld: 0,
+      faults,
+      exemptionsUnused: [],
+    };
   }
+  let exemptions = [...(options.exemptPaths ?? [])].map(wildcardIndices);
   let walk: Walk = {
     divergences: [],
     withheld: 0,
     compared: new Map(),
-    exemptions: [...(options.exemptPaths ?? [])],
+    exemptions,
+    exempted: new Set(),
   };
   compareValue(walk, '', referenceData, candidateData);
-  return { divergences: walk.divergences, withheld: walk.withheld, faults };
+  return {
+    divergences: walk.divergences,
+    withheld: walk.withheld,
+    faults,
+    exemptionsUnused: exemptions.filter(
+      (exemption) => !walk.exempted.has(exemption),
+    ),
+  };
 }
 
-/** Whether a diff found nothing to report. */
+/**
+ * Whether a diff found nothing to report.
+ *
+ * An unused exemption counts as something to report: it is a rule about a
+ * member neither record has, and a diff that answers "they agree" while
+ * carrying one is agreeing partly by a rule that applies to
+ * nothing.
+ */
 export function recordsAgree(diff: RecordDiff): boolean {
   return (
     diff.faults.length === 0 &&
     diff.divergences.length === 0 &&
-    diff.withheld === 0
+    diff.withheld === 0 &&
+    diff.exemptionsUnused.length === 0
   );
 }
 
@@ -193,13 +232,15 @@ export function describeRecordDiff(diff: RecordDiff): string {
   );
   for (let divergence of diff.divergences) {
     lines.push(
-      `${divergence.path === '' ? '(the record)' : divergence.path} ` +
-        `[${divergence.reason}] reference=${divergence.reference} ` +
-        `candidate=${divergence.candidate}`,
+      `${divergence.path} [${divergence.reason}] ` +
+        `reference=${divergence.reference} candidate=${divergence.candidate}`,
     );
   }
   if (diff.withheld > 0) {
     lines.push(`(and ${diff.withheld} more divergences not listed)`);
+  }
+  for (let exemption of diff.exemptionsUnused) {
+    lines.push(`the exemption ${quoteToken(exemption)} covered no path`);
   }
   return lines.length === 0 ? 'the records agree' : lines.join('\n');
 }
@@ -215,11 +256,15 @@ interface Walk {
    * parents has a number of *paths* exponential in its depth. Without this the
    * harness stops answering on a record it accepted.
    *
-   * The consequence to know: a divergence inside a shared subgraph is reported
-   * at the first path that reaches it, not at every path.
+   * Two consequences to know. A divergence inside a shared subgraph is
+   * reported at the first path that reaches it, not at every path. And the
+   * memo must never be reached for an exempt path, or exempting one member
+   * silences divergences at unrelated ones — which is why exemption prunes the
+   * descent in `compareValue` rather than filtering in `report`.
    */
   compared: Map<object, Set<object>>;
   exemptions: string[];
+  exempted: Set<string>;
 }
 
 /**
@@ -258,6 +303,16 @@ function compareValue(
   reference: Compared,
   candidate: Compared,
 ): void {
+  // Exemption prunes the descent rather than filtering the report, and that
+  // ordering is the whole of its correctness. Filtering at the report meant an
+  // exempt path still walked its subtree and still entered the compared-pair
+  // memo — so a subgraph two records share, reached first through an exempt
+  // path, was recorded as compared and every later non-exempt path to it was
+  // skipped. Exempting one member silenced divergences at unrelated members,
+  // and which ones depended on visit order.
+  if (isExempt(walk, path)) {
+    return;
+  }
   if (reference === ABSENT || candidate === ABSENT) {
     report(walk, path, 'absent', reference, candidate);
     return;
@@ -365,9 +420,6 @@ function report(
   reference: Compared,
   candidate: Compared,
 ): void {
-  if (isExempt(walk.exemptions, path)) {
-    return;
-  }
   if (walk.divergences.length >= REPORTED_DIVERGENCE_LIMIT) {
     walk.withheld += 1;
     return;
@@ -382,20 +434,38 @@ function report(
 
 /**
  * Whether a path is covered by an exemption: the exact path, or anything
- * beneath it. Compared with array indices removed, so an exemption describes
- * the record's shape rather than one element's position.
+ * beneath it.
+ *
+ * Both sides have their array indices removed, so an exemption describes the
+ * record's shape rather than one element's position — and one written with a
+ * concrete index means the member of every element rather than silently
+ * matching nothing.
+ *
+ * Which exemptions fired is recorded, because an exemption is a claim that a
+ * member legitimately differs between tiers, and one that matches nothing is
+ * a claim about a member that does not exist. Without this it reads as
+ * satisfied.
  */
-function isExempt(exemptions: string[], path: string): boolean {
-  if (exemptions.length === 0) {
+function isExempt(walk: Walk, path: string): boolean {
+  if (walk.exemptions.length === 0) {
     return false;
   }
-  let wildcarded = path.replace(/\[\d+\]/g, '[]');
-  return exemptions.some(
+  let wildcarded = wildcardIndices(path);
+  let covering = walk.exemptions.find(
     (exemption) =>
       wildcarded === exemption ||
       wildcarded.startsWith(`${exemption}.`) ||
       wildcarded.startsWith(`${exemption}[`),
   );
+  if (covering === undefined) {
+    return false;
+  }
+  walk.exempted.add(covering);
+  return true;
+}
+
+function wildcardIndices(path: string): string {
+  return path.replace(/\[\d+\]/g, '[]');
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

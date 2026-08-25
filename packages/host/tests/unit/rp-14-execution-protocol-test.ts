@@ -2144,6 +2144,12 @@ module('Unit | rendering protocol | records and operations', function () {
     // refusal. Forty is deliberate: past the record's value ceiling the budget
     // refuses first and the list never fills, which is why the bound tests do
     // not reach this.
+    //
+    // What this pins is the shared count, not any one site's container:
+    // `joinTokens` reads a plain array's length as its total, so an array and
+    // an offender list render the same message at the same count. The
+    // difference between them is retention, which no assertion on a message
+    // can see.
     let refusalFor = (run: () => void): string => {
       try {
         run();

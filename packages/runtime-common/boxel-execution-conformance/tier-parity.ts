@@ -16,8 +16,17 @@
  */
 
 import type { ProtocolRefusalCode } from '../boxel-execution-protocol/refusal.ts';
+import { isProtocolRefusal } from '../boxel-execution-protocol/refusal.ts';
 import type { BoxelExecutionMode } from '../boxel-execution-protocol/runtime.ts';
 import { BOXEL_EXECUTION_MODES } from '../boxel-execution-protocol/runtime.ts';
+import type {
+  ProtocolEnvelope,
+  ProtocolSupport,
+} from '../boxel-execution-protocol/version.ts';
+import {
+  BOXEL_EXECUTION_PROTOCOL_VERSION,
+  assertUsableExecutionRecord,
+} from '../boxel-execution-protocol/version.ts';
 import type { RecordDivergence } from './record-diff.ts';
 import { diffRecords, faultInRecord } from './record-diff.ts';
 
@@ -46,12 +55,11 @@ export const PARITY_REFERENCE_MODE: BoxelExecutionMode = 'direct';
  * Record paths the spec declares tier-specific, and therefore does not
  * compare.
  *
- * Empty, because RP-14.4 currently declares none — so the diff is total. An
- * entry here is a statement that a member legitimately differs between tiers,
- * which is a spec change: it needs the statement declaring it, in the same
- * change that adds the path. Left as a list rather than left out so that the
- * "modulo" clause in RP-14.4 has somewhere to be, and so the fact that it is
- * empty is something a test can hold.
+ * Empty, which makes the diff total. An entry is a statement that a member
+ * legitimately differs between tiers, and that is a spec change: it needs the
+ * statement declaring it, in the change that adds the path. The list exists
+ * rather than being left out so RP-14.4's "modulo" clause has somewhere to
+ * live, and so a test can hold it to whatever the spec declares.
  */
 export const TIER_SPECIFIC_RECORD_PATHS: readonly string[] = [];
 
@@ -98,7 +106,27 @@ export type ParityFinding =
       mode: BoxelExecutionMode;
       record: ParityRecordKind;
       count: number;
-    };
+    }
+  /**
+   * Two tiers were handed the same object, so the comparison compared a record
+   * with itself. Nothing a real pair of tiers can do — the caller wired one
+   * tier's output in twice, and every comparison after it agrees for free.
+   */
+  | {
+      kind: 'records-shared';
+      mode: BoxelExecutionMode;
+      record: ParityRecordKind;
+    }
+  /**
+   * An exemption covered no path in any comparison, so it is a rule about a
+   * member no record has.
+   *
+   * Aggregated across every comparison rather than reported per comparison,
+   * because one list serves both record kinds and every tier: an exemption
+   * naming a projection member is legitimately unused by a description
+   * comparison, and reporting that would make the check fire on correct input.
+   */
+  | { kind: 'exemption-unused'; exemption: string };
 
 export interface ParityReport {
   /** What the tiers were given, so a finding can be reproduced. */
@@ -125,6 +153,12 @@ export interface ParityInput {
   registeredModes: readonly BoxelExecutionMode[];
   /** Defaults to `TIER_SPECIFIC_RECORD_PATHS`. */
   exemptPaths?: readonly string[];
+  /**
+   * What the comparing consumer implements. Defaults to this module's own
+   * protocol version and no optional features, which is what a conformance run
+   * of the current protocol wants.
+   */
+  support?: ProtocolSupport;
 }
 
 /**
@@ -138,6 +172,10 @@ export interface ParityInput {
 export function checkRecordParity(input: ParityInput): ParityReport {
   let { fixture, tiers, registeredModes } = input;
   let exemptPaths = input.exemptPaths ?? TIER_SPECIFIC_RECORD_PATHS;
+  let support = input.support ?? {
+    protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION,
+    features: new Set<string>(),
+  };
   let findings: ParityFinding[] = [];
   let byMode = new Map<BoxelExecutionMode, TierRecords>();
   for (let tier of tiers) {
@@ -148,9 +186,14 @@ export function checkRecordParity(input: ParityInput): ParityReport {
     byMode.set(tier.mode, tier);
   }
   let registered = new Set(registeredModes);
-  // Walked in tier order rather than call order, so two callers listing the
-  // same tiers differently get the same report.
-  for (let mode of BOXEL_EXECUTION_MODES) {
+  // Every mode anyone named, not only the ones the protocol declares. A tier's
+  // mode is data — a Sandbox child's arrives across the boundary this module
+  // exists to distrust — so iterating the declared list alone lets a typo'd or
+  // forged mode go uninspected, uncompared and unreported while the run says
+  // it found nothing.
+  let modes = modesInPlay(byMode, registered);
+
+  for (let mode of modes) {
     if (byMode.has(mode) && !registered.has(mode)) {
       findings.push({ kind: 'mode-unregistered', mode });
     }
@@ -160,14 +203,14 @@ export function checkRecordParity(input: ParityInput): ParityReport {
   }
 
   let inspections = 0;
-  for (let mode of BOXEL_EXECUTION_MODES) {
+  for (let mode of modes) {
     let tier = byMode.get(mode);
     if (tier === undefined) {
       continue;
     }
     for (let record of PARITY_RECORD_KINDS) {
       inspections += 1;
-      let fault = faultInRecord(tier[record]);
+      let fault = faultInParityRecord(tier[record], support);
       if (fault !== undefined) {
         findings.push({ kind: 'fault', mode, record, ...fault });
       }
@@ -188,17 +231,28 @@ export function checkRecordParity(input: ParityInput): ParityReport {
   }
 
   let comparedModes: BoxelExecutionMode[] = [];
-  for (let mode of BOXEL_EXECUTION_MODES) {
+  let comparisons = 0;
+  let usedExemptions = new Set<string>();
+  for (let mode of modes) {
     let candidate = byMode.get(mode);
     if (candidate === undefined || mode === PARITY_REFERENCE_MODE) {
       continue;
     }
     comparedModes.push(mode);
     for (let record of PARITY_RECORD_KINDS) {
+      if (isSameObject(reference[record], candidate[record])) {
+        findings.push({ kind: 'records-shared', mode, record });
+      }
       let diff = diffRecords(reference[record], candidate[record], {
         exemptPaths,
       });
-      // Faults were already reported per tier above; repeating them per
+      // Counted per pair actually compared. A pair where either side is not a
+      // record was never compared, and a coverage line that counts it says the
+      // run checked something it did not.
+      if (diff.faults.length === 0) {
+        comparisons += 1;
+      }
+      // The faults themselves were reported per tier above; repeating them per
       // comparison would say the same thing once per peer.
       for (let divergence of diff.divergences) {
         findings.push({ kind: 'divergence', mode, record, divergence });
@@ -211,6 +265,22 @@ export function checkRecordParity(input: ParityInput): ParityReport {
           count: diff.withheld,
         });
       }
+      for (let exemption of exemptPaths) {
+        if (!diff.exemptionsUnused.includes(exemption)) {
+          usedExemptions.add(exemption);
+        }
+      }
+    }
+  }
+
+  // Only once every comparison has had its chance to use one. An exemption no
+  // comparison used is a rule about a member no record carries, which reads as
+  // satisfied unless something says otherwise.
+  if (comparisons > 0) {
+    for (let exemption of exemptPaths) {
+      if (!usedExemptions.has(exemption)) {
+        findings.push({ kind: 'exemption-unused', exemption });
+      }
     }
   }
 
@@ -218,10 +288,73 @@ export function checkRecordParity(input: ParityInput): ParityReport {
     fixture,
     referenceMode: PARITY_REFERENCE_MODE,
     comparedModes,
-    comparisons: comparedModes.length * PARITY_RECORD_KINDS.length,
+    comparisons,
     inspections,
     findings,
   };
+}
+
+/**
+ * Every mode named by a tier or by the registry, the protocol's own order
+ * first and anything else after it, so one report does not depend on the order
+ * a caller listed its tiers in.
+ */
+function modesInPlay(
+  byMode: Map<BoxelExecutionMode, TierRecords>,
+  registered: Set<BoxelExecutionMode>,
+): BoxelExecutionMode[] {
+  let declared = new Set<string>(BOXEL_EXECUTION_MODES);
+  let named = [...new Set([...byMode.keys(), ...registered])];
+  return [
+    ...BOXEL_EXECUTION_MODES.filter(
+      (mode) => byMode.has(mode) || registered.has(mode),
+    ),
+    ...named.filter((mode) => !declared.has(mode)).sort(),
+  ];
+}
+
+/**
+ * Why a value is not a usable record of this protocol, or `undefined` when it
+ * is.
+ *
+ * Two questions, because a value can pass one and fail the other. `{}` is
+ * inert data and a record, and it is not a `BoxelDescription` — it carries no
+ * envelope, so RP-14.3's gate refuses it. Without the second question two
+ * tiers that each produced `{}` agree at every path, which is the same false
+ * green as two tiers that each produced `null`.
+ */
+function faultInParityRecord(
+  value: unknown,
+  support: ProtocolSupport,
+): { code: ProtocolRefusalCode; message: string } | undefined {
+  let fault = faultInRecord(value);
+  if (fault !== undefined) {
+    return fault;
+  }
+  try {
+    assertUsableExecutionRecord(value as ProtocolEnvelope, support);
+    return undefined;
+  } catch (error) {
+    // `assertUsableExecutionRecord` wraps whatever it meets in a refusal; the
+    // check is what narrows the caught value to one carrying a code.
+    if (!isProtocolRefusal(error)) {
+      throw error;
+    }
+    return { code: error.code, message: error.message };
+  }
+}
+
+/**
+ * Whether two tiers were handed the very same object. No pair of real tiers
+ * can be — each builds its own record — so this is a caller that wired one
+ * tier's output in twice, and every comparison of it agrees for free.
+ */
+function isSameObject(reference: unknown, candidate: unknown): boolean {
+  return (
+    typeof reference === 'object' &&
+    reference !== null &&
+    reference === candidate
+  );
 }
 
 /** Whether a report found nothing. */
@@ -267,12 +400,15 @@ function describeFinding(finding: ParityFinding): string {
     case 'divergence': {
       let { path, reason, reference, candidate } = finding.divergence;
       return (
-        `${finding.mode} ${finding.record} ` +
-        `${path === '' ? '(the record)' : path} [${reason}] ` +
+        `${finding.mode} ${finding.record} ${path} [${reason}] ` +
         `reference=${reference} ${finding.mode}=${candidate}`
       );
     }
     case 'withheld':
       return `${finding.mode} ${finding.record}: and ${finding.count} more divergences not listed`;
+    case 'records-shared':
+      return `${finding.mode} was handed the reference tier's own ${finding.record}, so the comparison compared it with itself`;
+    case 'exemption-unused':
+      return `the exemption ${finding.exemption} covered no path in any comparison`;
   }
 }

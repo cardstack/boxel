@@ -96,11 +96,13 @@ function gateEnvelope(
     );
   }
   // Collected into a bounded list rather than filtered into a full one. The
-  // feature array itself is charged against the record's budget, so this is no
-  // longer where a producer buys unbounded work — but a filter builds one
-  // string per unrecognized feature, each through `JSON.stringify`, to render
-  // ten of them, and the count a diagnostic reports has to be the count the
-  // producer sent rather than the count it printed.
+  // feature array is charged against the record's budget, so a producer cannot
+  // buy unbounded work here; what this bounds is retention — a filter holds one
+  // rendered string per unrecognized feature in order to print ten of them. The
+  // rendering cost per offender is the same either way, and so is the message:
+  // `joinTokens` reads a plain array's length as its total, so the count is
+  // right in both shapes. What the list buys is one collect-and-report idiom
+  // across the three sites that have one.
   let unsupported = newOffenderList();
   for (let feature of requiredFeatures) {
     if (!support.features.has(feature)) {
