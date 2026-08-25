@@ -1416,6 +1416,14 @@ export default class StoreService extends Service implements StoreInterface {
       this.searchCacheGeneration++;
     }
 
+    // Resolve to the scope that actually goes on the wire *before* keying, so
+    // the cache and in-flight coalescer key on the request we send rather than
+    // the caller's spelling of it. `{ type: ref }` and `{ type: ref, scope:
+    // 'all' }` are a byte-identical `_federated-search` body — both resolve to
+    // the undefined wire default — and so must share one key; keying on the raw
+    // `scope` would split them and defeat the dedup.
+    let wireScope = this.resolveWireScope(query, scope);
+
     // Resolved-doc cache eligibility: prerender + jobId + same-realm.
     // Cross-realm reads bypass — see field comment.
     let cacheKey: string | undefined;
@@ -1426,7 +1434,7 @@ export default class StoreService extends Service implements StoreInterface {
       realms.length === 1 &&
       realms[0] === consumingRealm
     ) {
-      cacheKey = searchCacheKey(jobId, consumingRealm, query, scope);
+      cacheKey = searchCacheKey(jobId, consumingRealm, query, wireScope);
       if (cacheKey !== undefined) {
         let cached = this.searchCache.get(cacheKey);
         if (cached !== undefined) {
@@ -1441,7 +1449,7 @@ export default class StoreService extends Service implements StoreInterface {
     let captureGeneration = this.searchCacheGeneration;
 
     let inflightKey = inPrerender
-      ? searchInFlightKey(realms, query, scope)
+      ? searchInFlightKey(realms, query, wireScope)
       : undefined;
     let doc: SearchEntryResults;
     if (inflightKey !== undefined) {
@@ -1452,7 +1460,7 @@ export default class StoreService extends Service implements StoreInterface {
         let pending = this.fetchSearchDocUncoalesced(
           query,
           realms,
-          scope,
+          wireScope,
         ).finally(() => {
           // Identity-check before deletion: a concurrent
           // `clearInFlightSearch()` could in principle have removed
@@ -1467,7 +1475,7 @@ export default class StoreService extends Service implements StoreInterface {
         doc = await pending;
       }
     } else {
-      doc = await this.fetchSearchDocUncoalesced(query, realms, scope);
+      doc = await this.fetchSearchDocUncoalesced(query, realms, wireScope);
     }
 
     // Populate only if the cache generation hasn't moved under us. A
@@ -1485,49 +1493,62 @@ export default class StoreService extends Service implements StoreInterface {
     return doc;
   }
 
-  private async fetchSearchDocUncoalesced(
+  // Resolve the caller's optional explicit scope + the query's filter shape to
+  // the single scope that goes on the wire. A pure function of
+  // `(query, explicitScope)`, so `fetchSearchDoc` can call it above the caching
+  // layer and key on the result — see the note there.
+  //
+  // An explicit scope from the caller always wins — it is the sanctioned way to
+  // ask for cards, files, or both, rather than shaping the filter to coax the
+  // inference below.
+  //
+  // Search spans card instances and files. A query with a positive *concrete*
+  // type ref already selects a kind (a card type -> instances, a FileDef type
+  // -> files), so it passes through with the default 'all' scope and its filter
+  // discriminates. An otherwise-unscoped query is pinned to 'cards' so the
+  // common "search for cards" case doesn't surface a card's dual-indexed
+  // `.json` file row (or plain files) — the choke point that replaces the
+  // former per-call-site card anchor, while leaving file/typed searches (e.g.
+  // SearchResource's file-meta queries) untouched.
+  //
+  // A BaseDef ref is *not* kind-selecting — it terminates both kinds' type
+  // chains, so it matches every row — and is pinned to 'cards' like an untyped
+  // query. Known gap: a mixed `any:` whose one branch is card-typed and another
+  // untyped counts as positively typed, so its untyped branch can still match
+  // file rows in 'all' scope; no caller composes that shape today.
+  //
+  // 'all' is the wire default (undefined scope), so an explicit 'all' maps to
+  // undefined just like the inferred positive-type case — which is what lets
+  // `{ type: ref }` and `{ type: ref, scope: 'all' }` share one cache key.
+  private resolveWireScope(
     query: Query,
-    realms: string[],
     explicitScope?: SearchEntryScope,
-  ): Promise<SearchEntryResults> {
-    // An explicit scope from the caller always wins — it is the sanctioned way
-    // to ask for cards, files, or both, rather than shaping the filter to coax
-    // the inference below.
-    //
-    // Search spans card instances and files. A query with a positive
-    // *concrete* type ref already selects a kind (a card type -> instances, a
-    // FileDef type -> files), so it passes through with the default 'all'
-    // scope and its filter discriminates. An otherwise-unscoped query is
-    // pinned to 'cards' so the common "search for cards" case doesn't surface
-    // a card's dual-indexed `.json` file row (or plain files) — the choke
-    // point that replaces the former per-call-site card anchor, while leaving
-    // file/typed searches (e.g. SearchResource's file-meta queries) untouched.
-    //
-    // A BaseDef ref is *not* kind-selecting — it terminates both kinds' type
-    // chains, so it matches every row — and is pinned to 'cards' like an
-    // untyped query. Known gap: a mixed `any:` whose one branch is card-typed
-    // and another untyped counts as positively typed, so its untyped branch
-    // can still match file rows in 'all' scope; no caller composes that shape
-    // today.
+  ): SearchEntryScope | undefined {
     let typeRefs = query.filter
       ? getTypeRefsFromFilter(query.filter)
       : undefined;
     let hasPositiveType =
       typeRefs?.some((r) => !r.negated && !isEqual(r.ref, baseRef)) ?? false;
-    // 'all' is the wire default (undefined scope), so an explicit 'all' maps to
-    // undefined just like the inferred positive-type case.
-    let scope: SearchEntryScope | undefined =
-      explicitScope !== undefined
-        ? explicitScope === 'all'
-          ? undefined
-          : explicitScope
-        : hasPositiveType
-          ? undefined
-          : 'cards';
+    return explicitScope !== undefined
+      ? explicitScope === 'all'
+        ? undefined
+        : explicitScope
+      : hasPositiveType
+        ? undefined
+        : 'cards';
+  }
+
+  private async fetchSearchDocUncoalesced(
+    query: Query,
+    realms: string[],
+    // Already resolved to the wire scope by `fetchSearchDoc` (via
+    // `resolveWireScope`) so the value keyed on and the value sent match.
+    wireScope?: SearchEntryScope,
+  ): Promise<SearchEntryResults> {
     return await this.fetchSearchEntryDoc(
       searchEntryWireQueryFromQuery(query, {
         fields: ['item'],
-        ...(scope ? { scope } : {}),
+        ...(wireScope ? { scope: wireScope } : {}),
       }),
       realms,
     );

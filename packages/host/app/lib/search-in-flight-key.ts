@@ -1,6 +1,7 @@
 import {
   normalizeQueryForSignature,
   type Query,
+  type SearchEntryScope,
 } from '@cardstack/runtime-common';
 
 // Stable digest key for store-side `_federated-search` in-flight dedup.
@@ -19,9 +20,11 @@ import {
 export function searchInFlightKey(
   realms: string[],
   query: Query,
-  // Two otherwise-identical requests that differ only by scope resolve to
-  // different result sets, so scope is part of the key.
-  scope?: string,
+  // The *resolved* wire scope (see `StoreService.resolveWireScope`), not the
+  // caller's raw scope, so two spellings of a byte-identical request share a
+  // key. Two requests that differ by wire scope are different result sets, so
+  // scope is part of the key.
+  scope?: SearchEntryScope,
 ): string | undefined {
   try {
     return JSON.stringify([

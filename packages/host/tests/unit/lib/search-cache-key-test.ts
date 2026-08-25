@@ -78,6 +78,23 @@ module('Unit | Utility | searchCacheKey', function () {
     );
   });
 
+  test('different wire scopes produce different keys', function (assert) {
+    assert.notStrictEqual(
+      searchCacheKey(jobA, realmA, baseQuery, 'cards'),
+      searchCacheKey(jobA, realmA, baseQuery, 'files'),
+    );
+  });
+
+  test('an explicit wire scope is distinct from omitted', function (assert) {
+    // The store keys on the *resolved* wire scope, so a resolved 'cards' must
+    // not collide with the undefined wire default (a positive-type / 'all'
+    // request) — otherwise the two would share a cache entry.
+    assert.notStrictEqual(
+      searchCacheKey(jobA, realmA, baseQuery),
+      searchCacheKey(jobA, realmA, baseQuery, 'cards'),
+    );
+  });
+
   test('pagination differences produce different keys', function (assert) {
     let p1: Query = { ...baseQuery, page: { number: 0, size: 10 } };
     let p2: Query = { ...baseQuery, page: { number: 1, size: 10 } };
