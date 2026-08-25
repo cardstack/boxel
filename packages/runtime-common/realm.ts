@@ -5095,6 +5095,14 @@ export class Realm {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // Canonical home for the file's timestamps, mirroring a card's `meta`,
+          // so a hydrated FileDef exposes them through `getCardMeta` / its
+          // getters (the wire also carries the legacy
+          // `attributes.lastModified`/`createdAt`). This un-indexed fallback
+          // must stamp them too, so a file's `meta` timestamps don't hinge on
+          // whether the row is in the index yet.
+          lastModified: fileRef.lastModified,
+          resourceCreatedAt: createdAt ?? fileRef.lastModified,
         },
         links: { self: fileURL },
       },

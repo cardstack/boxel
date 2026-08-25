@@ -1380,6 +1380,45 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('serves FileMeta with meta timestamps from the filesystem fallback', async function (assert) {
+      // Drop the index row so getFileMeta finds no entry and falls through to
+      // the filesystem fallback (fileMetaDocument), which builds the doc from
+      // disk metadata. The timestamps must land in `meta` there too, so a
+      // hydrated FileDef reads them the same way it does for an indexed file —
+      // the value must not hinge on whether the row is in the index yet.
+      await realm.write('unindexed-note.txt', 'not yet indexed');
+      await testDbAdapter.execute(
+        `DELETE FROM boxel_index WHERE url = '${testRealm}unindexed-note.txt'`,
+      );
+      let response = await fetch(`${testRealm}unindexed-note.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      assert.strictEqual(doc.data.type, 'file-meta');
+      assert.strictEqual(
+        typeof doc.data.meta?.lastModified,
+        'number',
+        'fallback file-meta GET carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof (doc.data.meta as { resourceCreatedAt?: unknown })
+          ?.resourceCreatedAt,
+        'number',
+        'fallback file-meta GET carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        doc.data.meta?.lastModified,
+        doc.data.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        (doc.data.meta as { resourceCreatedAt?: unknown })?.resourceCreatedAt,
+        doc.data.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
+    });
+
     test('file meta adoptsFrom prefers index types', async function (assert) {
       let fileDefModule = new URL('filedef-mismatch', testRealm).href;
       let fileDefKey = internalKeyFor(
