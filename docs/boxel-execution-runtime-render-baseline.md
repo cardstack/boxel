@@ -72,64 +72,66 @@ appeared" is not on its own evidence that anything rendered.
 
 ## Environment
 
-| Field           | Value                                                                                                       |
-| --------------- | ----------------------------------------------------------------------------------------------------------- |
-| Host            | `https://localhost:4200`, the Vite development server                                                       |
-| Realms measured | base, skills, experiments — all fully indexed before the run                                                |
-| Commit          | `c7860f18`                                                                                                  |
-| Browser         | Chromium 141.0.7390.37                                                                                      |
-| Node            | v24.17.0                                                                                                    |
-| Machine         | 4 vCPU Intel Xeon @ 2.10 GHz, 15 GiB RAM, Linux 6.18                                                        |
-| Concurrent load | the full stack (realm server, worker, prerender, Vite) on the same 4 cores as the browser under measurement |
+| Field           | Value                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Host            | `https://localhost:4200`, the Vite development server                                                                                |
+| Realms measured | base, skills, experiments — all fully indexed before the run                                                                         |
+| Commit          | `b35a9017`                                                                                                                           |
+| Browser         | Chromium 141.0.7390.37                                                                                                               |
+| Node            | v24.17.0                                                                                                                             |
+| Machine         | 4 vCPU Intel Xeon @ 2.10 GHz, 15 GiB RAM, Linux 6.18                                                                                 |
+| Concurrent load | the stack (realm server, worker, prerender, Vite) idle at rest; nothing else running, load average under 0.5 at the start of the run |
 
-The last row matters as much as the others. A 4-core machine running the whole
-stack and the browser is contended by construction, and the spread below is
-mostly that contention. Compare against a re-run in this same shape, not
-against a number from a quiet workstation.
+The last row is part of the measurement. The browser and the whole stack share
+four cores, so a run started while a realm is still indexing measures the
+contention, not the Host — an earlier run under load produced totals about a
+third higher with roughly double the spread. Compare against a re-run in this
+same shape.
 
 ## Numbers
 
 Seven cards spanning trusted Base content, a workspace card over a large
 authored realm, a `linksTo`/`linksToMany` graph, rich markdown with a theme,
 and query-backed nested fields. Three cold samples each, three warm
-navigations per cold sample: 21 cold and 63 warm samples in total. Every
-sample rendered a real card — no errors, no unready samples.
+navigations per cold sample: 21 cold and 63 warm samples. Every sample
+rendered a real card — no errors, no unready samples.
 
 | Card              | Cold doc | Cold app | Cold exec | Cold total | Warm doc | Warm app | Warm exec | Warm total |
 | ----------------- | -------- | -------- | --------- | ---------- | -------- | -------- | --------- | ---------- |
-| base-index        | 5,738 ms | 7,551 ms | 40 ms     | 7,594 ms   | 4,712 ms | 6,944 ms | 14 ms     | 6,958 ms   |
-| base-community    | 5,545 ms | 6,747 ms | 26 ms     | 6,777 ms   | 4,365 ms | 5,622 ms | 18 ms     | 5,641 ms   |
-| skills-index      | 6,295 ms | 7,618 ms | 8 ms      | 7,635 ms   | 4,822 ms | 5,897 ms | 23 ms     | 5,956 ms   |
-| experiments-index | 5,540 ms | 7,413 ms | 21 ms     | 7,419 ms   | 5,775 ms | 7,178 ms | 9 ms      | 7,193 ms   |
-| linked-blog-post  | 5,875 ms | 7,905 ms | 23 ms     | 7,936 ms   | 5,315 ms | 7,512 ms | 20 ms     | 7,531 ms   |
-| rich-markdown     | 6,043 ms | 8,424 ms | 20 ms     | 8,449 ms   | 5,436 ms | 7,575 ms | 154 ms    | 7,712 ms   |
-| query-field       | 5,654 ms | 7,128 ms | 30 ms     | 7,192 ms   | 4,711 ms | 6,212 ms | 20 ms     | 6,216 ms   |
+| base-index        | 4,390 ms | 5,586 ms | 18 ms     | 5,604 ms   | 3,788 ms | 4,713 ms | 15 ms     | 4,720 ms   |
+| base-community    | 4,220 ms | 5,195 ms | 9 ms      | 5,203 ms   | 3,859 ms | 4,816 ms | 19 ms     | 4,837 ms   |
+| skills-index      | 4,550 ms | 5,534 ms | 9 ms      | 5,545 ms   | 3,885 ms | 4,733 ms | 13 ms     | 4,748 ms   |
+| experiments-index | 4,485 ms | 5,885 ms | 17 ms     | 5,889 ms   | 3,794 ms | 4,814 ms | 26 ms     | 4,840 ms   |
+| linked-blog-post  | 4,676 ms | 6,089 ms | 37 ms     | 6,116 ms   | 3,616 ms | 5,156 ms | 19 ms     | 5,175 ms   |
+| rich-markdown     | 4,438 ms | 6,432 ms | 15 ms     | 6,446 ms   | 4,463 ms | 5,864 ms | 106 ms    | 5,961 ms   |
+| query-field       | 4,285 ms | 5,398 ms | 15 ms     | 5,406 ms   | 3,578 ms | 4,670 ms | 15 ms     | 4,682 ms   |
 
-**Document delivery is most of the cost.** Around 5.5 s of a ~7.5 s cold
-navigation is spent before `DOMContentLoaded`. That is the unbundled module
-graph the dev server ships, and it is exactly the part a production build
-replaces — which is why these absolute numbers do not transfer.
+**Document delivery is most of the cost.** Around 4.1 s of a 5.6 s cold
+navigation is spent before `DOMContentLoaded` — roughly three quarters of it.
+That is the unbundled module graph the dev server ships, and it is exactly the
+part a production build replaces, which is why these absolute numbers do not
+transfer.
 
-**Card rendering is not measurably separate here.** Execution readiness runs
-3–355 ms with a median of 20 ms — at or under the round-trip floor above, so
-these per-card figures carry no signal and should not be compared with one
-another. The reason the window is empty is a property of these routes: the
-Host's first paint already carries the card, and the app shell, the host
-chrome, and the card surface were all observed appearing on the same polling
-tick. There is no interval in which a mounted app sits waiting for a card, so
-there is nothing for the split to divide. It divides something wherever a Host
-paints a loading state first; on this build essentially all the cost is in the
-application part.
+**Card rendering is not measurably separate on these routes.** Execution
+readiness runs 3–118 ms with a median of 17 ms, at or under the polling floor
+described above, so these per-card figures report the instrument and cannot be
+compared with one another. The window is empty because the Host's first paint
+already carries the card: the app shell, the host chrome, and the card surface
+were observed appearing on the same polling tick. There is no interval in which
+a mounted app sits waiting for a card, so the split has nothing to divide here.
+It divides something wherever a Host paints a loading state first.
 
-**Warm saves about a tenth.** Cold total medians run 6.8–8.4 s and warm
-5.6–7.7 s. A warm client cache helps less than it might: the dev server
-revalidates, and because a warm sample is a full document navigation the
+**Warm saves about an eighth.** Cold total medians run 5.2–6.4 s and warm
+4.7–6.0 s; across all samples the cold median is 5,604 ms against 4,880 ms
+warm. A warm client cache helps this much and no more, because the dev server
+revalidates and a warm sample is still a full document navigation, so the
 application reboots every time.
 
-**The spread is wide.** Cold totals span 6,597–9,236 ms and warm totals
-4,683–9,701 ms across all cards. On a contended machine a single sample says
-little; the medians are the claim, and a comparison drawn from fewer than three
-samples per card is not one.
+**Spread.** Cold totals span 5,029–6,697 ms — tight enough that the per-card
+ordering above is meaningful. Warm totals span 3,796–8,889 ms: the upper end is
+a single outlier, and warm samples are the noisier measurement because three of
+them share each browser context. The medians are the claim; a comparison drawn
+from fewer than three samples per card is not one.
 
 ## Reproducing this
 
