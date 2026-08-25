@@ -9,6 +9,7 @@ import {
   logger,
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
+  SCREENSHOT_FORMATS,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
@@ -511,7 +512,7 @@ export function buildPrerenderApp(options: {
       missingMessage:
         captureSpecParse.error !== undefined
           ? captureSpecParse.error
-          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded|fitted)',
+          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${SCREENSHOT_FORMATS.join('|')})`,
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${

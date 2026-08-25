@@ -113,12 +113,15 @@ class RenderHtmlTemplate extends Component<Signature> {
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
     {{#if this.envelopeStyle}}
-      {{! Screenshot capture of a parent-box format (fitted/atom): render the
-          card into a fixed-size, non-scrolling box so its `@container
-          fitted-card` queries fire against the envelope rather than the
-          viewport. The base field-component wrapper (fitted-format: width/height
-          100%, container-name: fitted-card, container-type: size) fills this box
-          and establishes the container, so we only supply the sized parent. }}
+      {{! Screenshot capture of the fitted format: render the card into a
+          fixed-size, non-scrolling box so its `@container fitted-card` queries
+          fire against the envelope rather than the viewport. The base
+          field-component wrapper (fitted-format: width/height 100%,
+          container-name: fitted-card, container-type: size) fills this box
+          and establishes the container, so we only supply the sized parent.
+          Fitted is the only format whose wrapper does this — any future
+          envelope format (e.g. atom) needs its own verified wrapper contract
+          before it can join. }}
       <div data-render-envelope style={{this.envelopeStyle}}>
         <@model.Component @format={{@model.format}} />
       </div>

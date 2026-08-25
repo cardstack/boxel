@@ -76,8 +76,15 @@ export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
 // parse time, so the capture path checks it against this cap itself.
 export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
-// Cap on batch size. Every entry captures on the same settled render, so this
-// bounds only the number of screenshots taken after one settle, not renders.
+// Cap on batch size. For the viewport-filling formats every entry captures
+// on the same settled render, so the cap bounds screenshots-per-settle. A
+// fitted batch is costlier: each DISTINCT envelope re-lays-out the hydrated
+// card (route re-transition, settle, envelope-box and image-paint waits —
+// each individually bounded), and the whole batch shares one render timeout,
+// so a batch that outruns it returns nothing. 24 keeps the full standard
+// fitted-size gallery capturable in one request while the happy-path
+// per-envelope cost stays far inside that timeout; callers batching many
+// image-heavy envelopes should split the batch rather than raise this.
 export const SCREENSHOT_MAX_CAPTURES = 24;
 
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
@@ -562,7 +569,10 @@ export function parseCaptureSpecParams(
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCaptureFormat(format)) {
-    // Same wording as the POST /_screenshot-card validation.
+    // Deliberately narrower than the POST /_screenshot-card roster
+    // (SCREENSHOT_FORMATS): CAPTURE_FORMATS is the canonical ledger/GET-DSL
+    // serving contract and stays viewport-filling only, so this message
+    // speaks its own roster.
     return {
       error: {
         field: 'format',

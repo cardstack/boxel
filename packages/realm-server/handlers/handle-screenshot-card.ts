@@ -9,6 +9,7 @@ import {
   isCaptureFormat,
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
+  SCREENSHOT_FORMATS,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
   type CaptureSpec,
@@ -126,7 +127,9 @@ interface CaptureResult {
  * `SCREENSHOT_MAX_CAPTURES`). Each entry's overrides win over the singular
  * `captureSpec` fields, which act as batch-wide defaults; the shared parse
  * normalizes each entry to its fully-merged spec so the capture path iterates
- * them directly against one settled render. The response's `captures` then
+ * them directly — viewport-filling entries against one settled render, while
+ * each distinct fitted envelope re-lays-out the same hydrated card (see
+ * `SCREENSHOT_MAX_CAPTURES` for the cost contract). The response's `captures` then
  * carries one `{ name, base64, width, height, deviceScaleFactor }` entry per
  * capture, with the top-level `base64`/`width`/`height` mirroring
  * `captures[0]` for byte-compatibility with singular-shape callers.
@@ -177,11 +180,12 @@ export default function handleScreenshotCard({
     // Shared with the prerender server's screenshot route so both surfaces
     // accept exactly the same capture formats. Wider than the GET
     // `_screenshot/` DSL's formats: fitted is capture-only (it always
-    // require an envelope, so they never touch the canonical ledger identity).
+    // requires an envelope, so it never touches the canonical ledger
+    // identity). The message derives from the roster so the two can't drift.
     if (!isScreenshotFormat(format)) {
       return sendResponseForBadRequest(
         ctxt,
-        'format must be "isolated", "embedded", or "fitted"',
+        `format must be one of: ${SCREENSHOT_FORMATS.map((f) => `"${f}"`).join(', ')}`,
       );
     }
     if (includeBase64 !== undefined && typeof includeBase64 !== 'boolean') {

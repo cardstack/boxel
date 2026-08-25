@@ -891,7 +891,7 @@ export default class RenderRoute extends Route<Model> {
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
         let normalized = [...params];
-        // A trailing query-params object (e.g. the fitted/atom screenshot
+        // A trailing query-params object (e.g. the fitted-screenshot
         // envelope) is not a positional route param — peel it off before the
         // base-param length heuristic below, then re-append it to the final
         // transition so router.transitionTo receives it as its query-params arg.
