@@ -16,6 +16,7 @@ import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
 import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
+import { Presentation } from 'test-app/components/examples/presentation';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
 import { Reveal } from 'test-app/components/examples/reveal';
@@ -36,6 +37,7 @@ import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
+import { PresentationNotes } from 'test-app/components/notes/presentation';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
@@ -134,6 +136,39 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
 {{/if}}`,
     slowmo: false,
     title: 'Playhead',
+  },
+  {
+    Example: Presentation,
+    apis: ['c.Gate', 'c.advance', '@path', 'c.run'],
+    group: 'Timeline',
+    id: 'presentation',
+    lede: 'The clock waits for you.',
+    notes: PresentationNotes,
+    sample: `// A presentation is a run that parks. The click does not start an
+// animation — it opens a gate in a score that is already compiled.
+// Linger and the next beat has not begun. Mash mid-build and the
+// segment completes instantly (Keynote's click-through), then parks.
+<c.Sequence>
+  <c.Tween @of={{c.id 'title'}} @opacity={{array 0 1}}
+    @x={{array -18 0}} @duration={{0.48}} @ease='easeOut' />
+  <c.Gate @delay={{0.72}} />   {{! the kicker writes itself — you did not click }}
+  <c.Tween @of={{c.id 'kicker'}} @opacity={{array 0 1}} @duration={{0.36}} />
+  <c.Gate />
+  <c.Parallel>
+    <c.Move @of={{c.id 'hull'}} @from={{c.beacon 'approach'}}
+      @path={{APPROACH}} @rotate='auto' @duration={{1.28}} />
+    <c.Tween @of={{c.id 'fairway'}} @pathLength={{array 0 1}} @duration={{1.28}} />
+  </c.Parallel>
+  <c.Gate />
+  <c.Tween @of={{c.id 'stamp'}}
+    @opacity={{array 0 1 1}} @scale={{array 0.86 1.08 1}} @duration={{0.46}} />
+</c.Sequence>
+
+// advance() is the only verb. play() would unpause a paused clock;
+// a gate is a named still. Replay is the only reverse — the cursor
+// only ever moves forward through one pass.`,
+    slowmo: true,
+    title: 'Presentation',
   },
   {
     Example: Lightbox,

@@ -945,19 +945,19 @@ cancelling a parked run, crossing a route mid-morph.
 Three upgrades and five new pages — each demo is the acceptance test for
 exactly the construct it wears:
 
-| demo                                        | construct proven                   | done when                                                                                                                         |
-| ------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                                        |
-| **Playhead** (upgrade)                      | the timeline handle                | the scrubber sets `c.run.time`; the private sampled score deleted                                                                 |
-| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                                        |
-| **Deck** (new)                              | gates                              | a three-build slide advanced by click/key — the mini-Keynote; includes a self-opening `@delay` gate and a click-through mid-build |
-| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                                    |
-| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity                            |
-| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                              |
-| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component                            |
+| demo                                        | construct proven                   | done when                                                                                                                       |
+| ------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| **Build Order** (upgrade)                   | anchors, delivery, keyframe values | `OPENING` is a `<c.Sequence>`; `schedule()`, `windowOf`, `slotOf` deleted from `builds.ts`                                      |
+| **Playhead** (upgrade)                      | the timeline handle                | the scrubber sets `c.run.time`; the private sampled score deleted                                                               |
+| **The gallery ⇄ demo transition** (upgrade) | `@route`, `c.Crossing`             | the `animateView` orchestration in `application.ts` deleted; light mode needs no veil rule                                      |
+| **Presentation** (new)                      | gates                              | a three-build slide advanced by click/key — presenter mode; includes a self-opening `@delay` gate and a click-through mid-build |
+| **Wires** (new)                             | `c.Tether`                         | an ERD whose boxes reflow on toggle while every wire stays attached mid-spring                                                  |
+| **Shelve** (new)                            | `c.gesture` hot start              | a card dragged and released anywhere flies to its slot from the release point, at the release velocity                          |
+| **Zoom** (new)                              | `@space='parent'`                  | a row opens to a detail while its canvas zooms; the composite path is visibly straight at slow tempo                            |
+| **Cite** (new)                              | `c.Scroll`                         | "jump to the cited entry": scroll, then a held highlight, as one sequence — no timers in the component                          |
 
-`@path` and emphasis need no page of their own: Deck's builds use a path
-move and a pulse, which is also how Keynote would.
+`@path` and emphasis need no page of their own: Presentation's builds use a
+path move and a pulse, which is also how Keynote would.
 
 ### 8.2 Contract cases — the sharp ones
 

@@ -3721,6 +3721,229 @@ html[data-gm-dragging] * {
   background: var(--ember-hot);
 }
 
+/* ---- Presentation: a run that parks ---- */
+
+.pres {
+  display: flex;
+  flex-direction: column;
+  width: min(82cqw, 320px);
+  height: min(74cqh, 430px);
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 22px;
+  background: var(--bg-well);
+  container-type: inline-size;
+}
+
+.pres-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px 0;
+}
+
+.pres-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.pres-replay {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .pres-replay:hover {
+    color: var(--ink);
+  }
+}
+
+.pres-slide {
+  flex: 1;
+  min-height: 0;
+  margin: 10px 10px 12px;
+  overflow: hidden;
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 80% at 80% 110%, #c4271233 0%, transparent 58%),
+    radial-gradient(90% 70% at 8% 0%, #3c5c8c44 0%, transparent 62%),
+    var(--bg-spot);
+  cursor: pointer;
+  touch-action: pan-y;
+  position: relative;
+}
+
+.pres-title,
+.pres-kicker,
+.pres-stamp,
+.pres-hull,
+.pres-stroke {
+  opacity: 0;
+}
+
+.pres-copy,
+.pres-stamp,
+.pres-chart,
+.pres-pips {
+  position: absolute;
+}
+
+.pres-copy {
+  top: 11%;
+  left: 10%;
+  right: 10%;
+}
+
+.pres-title {
+  margin: 0;
+  width: fit-content;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.7rem, 11.5cqw, 2.4rem);
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  white-space: nowrap;
+}
+
+.pres-kicker {
+  margin: 8px 0 0;
+  width: fit-content;
+  font-family: var(--font-mono);
+  font-size: clamp(10px, 3.6cqw, 12px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.pres-chart {
+  left: 8%;
+  right: 8%;
+  top: 42%;
+  height: 28%;
+}
+
+.pres-fairway {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pres-ghost,
+.pres-stroke {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.pres-ghost {
+  stroke: color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.pres-stroke {
+  stroke: var(--ember-hot);
+}
+
+.pres-origin,
+.pres-dock,
+.pres-hull {
+  position: absolute;
+  top: 68%;
+}
+
+.pres-origin {
+  left: 4%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+}
+
+.pres-dock {
+  right: 3%;
+  width: 14px;
+  height: 18px;
+  margin-top: -9px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  border-left: 0;
+  border-radius: 0 3px 3px 0;
+}
+
+.pres-hull {
+  right: 7%;
+  width: 22px;
+  height: 12px;
+  margin-top: -6px;
+  background: var(--ember-hot);
+  clip-path: polygon(0 50%, 68% 0, 100% 50%, 68% 100%);
+}
+
+.pres-stamp {
+  right: 10%;
+  bottom: 14%;
+  width: fit-content;
+  font-family: var(--font-mono);
+  font-size: clamp(10px, 3.6cqw, 12px);
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ember-hot);
+}
+
+.pres-pips {
+  left: 50%;
+  bottom: 10px;
+  display: flex;
+  gap: 7px;
+  translate: -50% 0;
+}
+
+.pres-pips i {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+/* current beat is hot; completed beats stay a dimmer ember */
+.pres-pips i:nth-child(1) {
+  background: var(--ember-hot);
+}
+
+.pres-pips[data-segment='2'] i:nth-child(1),
+.pres-pips[data-segment='3'] i:nth-child(1),
+.pres-pips[data-done='1'] i:nth-child(1) {
+  background: color-mix(in srgb, var(--ember-hot) 50%, transparent);
+}
+
+.pres-pips[data-segment='2'] i:nth-child(2) {
+  background: var(--ember-hot);
+}
+
+.pres-pips[data-segment='3'] i:nth-child(2),
+.pres-pips[data-done='1'] i:nth-child(2) {
+  background: color-mix(in srgb, var(--ember-hot) 50%, transparent);
+}
+
+.pres-pips[data-segment='3'] i:nth-child(3),
+.pres-pips[data-done='1'] i:nth-child(3) {
+  background: var(--ember-hot);
+}
+
 /* ---- Choreo demos ---- */
 
 .study {
@@ -6734,6 +6957,10 @@ html[data-gm-dragging] * {
 
 :root:not([data-theme='light']) .slide {
   background: #2e2925;
+}
+
+:root:not([data-theme='light']) .pres {
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .rail {
