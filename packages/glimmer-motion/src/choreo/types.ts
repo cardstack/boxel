@@ -248,9 +248,23 @@ export interface RaiseStep extends StepBase {
  */
 export interface CameraStep extends StepBase {
   ease?: Easing;
+  /**
+   * Dive on this sprite and centre it: the library computes zoom AND pan
+   * from the sprite's rest-layout box and the frame's own size — the same
+   * measurement space FLIP uses, so it is correct even when the click
+   * lands mid-flight on a different tile. `null` (as opposed to absent)
+   * says "fit nothing": back to the resting identity. `@zoom` alongside
+   * overrides the computed magnification but keeps the centring.
+   */
+  fit?: Query | null;
   kind: 'camera';
+  /**
+   * With `fit`: the fraction of the frame the sprite fills once centred,
+   * on whichever axis fits first. Defaults to 0.72.
+   */
+  margin?: number;
   ms?: number;
-  /** aim the zoom at this sprite's centre */
+  /** aim the zoom at this sprite's centre — held in place, not recentred */
   origin?: Query;
   spring?: SpringSpec;
   /** sprites that hold their size against the zoom, damped */

@@ -331,11 +331,16 @@ export class Raise extends StepComponent<
  * `<c.Camera />` — the region's frame as a step (§6.3): `@zoom` / `@x` /
  * `@y` animate the scene, `@origin` aims the zoom at a sprite, `@steady`
  * names sprites that keep their size against it (damped by default).
+ * `@fit` is the other, more common shape — dive on this sprite and CENTRE
+ * it, zoom and pan computed from rest-layout geometry (`@margin` sets the
+ * share of the frame it fills); pass `null` to fit nothing: back to rest.
  */
 export class Camera extends StepComponent<
   StepArgsBase & {
     duration?: number;
     ease?: Easing;
+    fit?: Query | null;
+    margin?: number;
     of?: Query | Query[];
     origin?: Query;
     spring?: SpringSpec;
@@ -346,13 +351,16 @@ export class Camera extends StepComponent<
   }
 > {
   node(): TimelineNode {
-    const { duration, ease, delay, origin, spring, steady, x, y, zoom } =
+    const { duration, ease, delay, fit, margin, origin, spring, steady } =
       this.args;
+    const { x, y, zoom } = this.args;
     return {
       at: this.args.at,
       delay: msOf(delay),
       ease,
+      fit,
       kind: 'camera',
+      margin,
       ms: msOf(duration),
       name: this.args.name,
       of: this.args.of ?? {},

@@ -1,5 +1,15 @@
 # `<c.Camera>`: what I wish I had
 
+> **Shipped.** `@fit` / `@margin` exist now: `fit` names a sprite (or
+> `null` for the resting identity), `margin` is its share of the frame on
+> whichever axis fits first (default 0.72), and `@zoom` alongside overrides
+> the magnification while keeping the centring. The zoom and pan are
+> computed at compile time from the changeset's rest-layout boxes divided
+> back by `measureZoom` — the exact machinery this document asked for — so
+> the mid-flight-click case is correct by construction. The Camera demo now
+> uses it; `Camera#loupe()` is a scroll nudge and a state toggle. The rest
+> of this file is kept as the design rationale.
+
 Written after building the Camera demo (`test-app/app/components/examples/camera.gts`),
 where every hard bug came from the same missing primitive: **there is no way to ask
 the camera to fit and centre a sprite — only to zoom by a number you supply, and to

@@ -670,8 +670,14 @@ export class ChoreoRun implements Run {
           // model entirely. The aim point is frozen per cue and lerped
           // from the point in force — a re-aim is smooth by construction,
           // and z = 1 is the identity frame for any aim.
+          //
+          // A cue with NO origin of its own holds the aim in force rather
+          // than recentring: zooming back out of a dive must back straight
+          // out of the tile it dived on — an aim lerping toward the centre
+          // mid-flight reads as sliding onto the NEIGHBOURING tile first.
           const aimTo =
             cue.camera.origin ??
+            this.cameraAim ??
             cue.camera.centre ?? { x: 0, y: 0 };
           t.aimFrom = this.cameraAim ?? aimTo;
           t.aimTo = aimTo;

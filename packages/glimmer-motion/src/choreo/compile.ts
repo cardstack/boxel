@@ -550,13 +550,49 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
       }
       case 'camera': {
         const ms = step.ms ?? 600;
-        const originSprite = step.origin ? cs.sprite(step.origin) : null;
-        const origin =
+        // fit mode is DECLARED, not inferred: `fit: null` (fit nothing)
+        // still means the step owns the whole pose and returns it to rest
+        const fitting = step.fit !== undefined;
+        const aimQuery = fitting ? step.fit : step.origin;
+        const originSprite = aimQuery ? cs.sprite(aimQuery) : null;
+        const box =
           originSprite?.final?.context ?? originSprite?.initial?.context;
         // context space carries the frame's transform (context = zoom ×
         // local), and transform-origin is written in LOCAL pixels — divide
         // back by the zoom the world was measured under (§6.3)
         const oz = cs.measureZoom ?? 1;
+        const origin = box
+          ? {
+              x: (box.x + box.width / 2) / oz,
+              y: (box.y + box.height / 2) / oz,
+            }
+          : undefined;
+        let to = { x: step.x, y: step.y, zoom: step.zoom };
+        if (fitting) {
+          if (box && origin && cs.frame) {
+            // Fit-and-centre, from the same rest-layout measurement FLIP
+            // uses — never the painted box, so a click that lands mid-zoom
+            // on a DIFFERENT tile still computes against rest geometry.
+            // The margin is the sprite's share of the frame on whichever
+            // axis fits first; the pan solves x + P = centre, since the
+            // applied transform holds the aim point P at x + P (§6.3).
+            const zoom =
+              step.zoom ??
+              (step.margin ?? 0.72) *
+                Math.min(
+                  (cs.frame.width * oz) / box.width,
+                  (cs.frame.height * oz) / box.height,
+                );
+            to = {
+              x: cs.frame.width / 2 - origin.x,
+              y: cs.frame.height / 2 - origin.y,
+              zoom,
+            };
+          } else {
+            // fit nothing (null, or the sprite has left): the resting frame
+            to = { x: 0, y: 0, zoom: 1 };
+          }
+        }
         cues.push({
           camera: {
             // centre and origin from the SAME final layout: the aim term
@@ -565,14 +601,9 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
             centre: cs.frame
               ? { x: cs.frame.width / 2, y: cs.frame.height / 2 }
               : undefined,
-            origin: origin
-              ? {
-                  x: (origin.x + origin.width / 2) / oz,
-                  y: (origin.y + origin.height / 2) / oz,
-                }
-              : undefined,
+            origin,
             steady: step.steady ? cs.sprites(step.steady) : [],
-            to: { x: step.x, y: step.y, zoom: step.zoom },
+            to,
           },
           duration: ms,
           kind: 'camera',
