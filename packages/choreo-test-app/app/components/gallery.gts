@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
@@ -119,7 +119,9 @@ export class Gallery extends Component {
   };
 
   <template>
-    <section class="hero">
+    {{! role='scene': the crossing gives the hero its own exit — it rises
+        out — and fades it back in on the way home }}
+    <section class="hero" {{motion role="scene"}}>
       {{! the repo is Choreo; the thing you install is still glimmer-motion,
           so the eyebrow credits the package by name }}
       <p class="kicker">Includes glimmer-motion</p>
@@ -190,10 +192,20 @@ export class Gallery extends Component {
               once on load is the cheaper price. }}
           as |demo h|
         >
+          {{! The card and its pieces are the crossing's participants. The
+              card itself (role='card') is a leaver the crossing dissolves —
+              naming a container of named things is LEGAL here: the claimed
+              stage and type are lifted out of it into the flight, leaving
+              holes where the eye expects them. The ids pair with the demo
+              page's own stage and type lines, exactly as far matching
+              already pairs ids. On a FILTER pass the timeline is not
+              rendered, so the region compiles nothing and <Presence> keeps
+              owning these same elements' exits. }}
           <article
             class="card"
             data-demo={{demo.id}}
             {{motion
+              role="card"
               presence=h
               layout=true
               initial=this.entrance
@@ -202,20 +214,32 @@ export class Gallery extends Component {
               transition=cardSpring
             }}
           >
-            <div class="card-stage">
+            <div
+              class="card-stage"
+              {{motion id=(concat "stage-" demo.id) role="stage"}}
+            >
               {{#let demo.Example as |Example|}}
                 <Example />
               {{/let}}
             </div>
             <LinkTo @route="demo" @model={{demo.id}} class="card-meta">
-              <span class="card-group">
+              <span
+                class="card-group"
+                {{motion id=(concat "group-" demo.id) role="type"}}
+              >
                 {{demo.group}}
                 {{#if demo.notes}}
                   <span class="card-badge">Deep Dive</span>
                 {{/if}}
               </span>
-              <span class="card-title">{{demo.title}}</span>
-              <span class="card-lede">{{demo.lede}}</span>
+              <span
+                class="card-title"
+                {{motion id=(concat "title-" demo.id) role="type"}}
+              >{{demo.title}}</span>
+              <span
+                class="card-lede"
+                {{motion id=(concat "lede-" demo.id) role="type"}}
+              >{{demo.lede}}</span>
             </LinkTo>
           </article>
         </Presence>

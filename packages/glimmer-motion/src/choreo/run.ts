@@ -55,6 +55,8 @@ export interface Run {
   readonly parked: boolean;
   pause(): void;
   play(): void;
+  /** a pass measured and decided to keep this run: put the picture back */
+  reassert(): void;
   /** put every element this run has touched back to its resting layout NOW */
   releaseForMeasure(): void;
   /** which gate-bounded segment the clock is in */
@@ -278,6 +280,17 @@ export class ChoreoRun implements Run {
     ve: VisualElement;
   }[] = [];
   private movedValues: { key: string; ve: VisualElement }[] = [];
+  /** what the last releaseForMeasure retired, so a kept pass can put it back */
+  private retired: {
+    borrowed: {
+      el: HTMLElement;
+      key: string;
+      prior: string;
+      value: unknown;
+      ve: VisualElement;
+    }[];
+    moved: { key: string; value: unknown; ve: VisualElement }[];
+  } = { borrowed: [], moved: [] };
   private owned: { el: HTMLElement; key: string; ve: VisualElement }[] = [];
   private cancelled = false;
   private ended = false;
@@ -866,8 +879,13 @@ export class ChoreoRun implements Run {
       } else if (t.started && now >= t.end && !cue.loop && !this.playing) {
         // scrubbed (or parked) past its end: hold the finals
         this.completeTrack(t);
-      } else if (!t.started && now >= t.end && !cue.loop && !this.playing) {
-        // never played and the clock is past it: land finals directly
+      } else if (!t.started && !t.passed && now >= t.end && !cue.loop) {
+        // Never played and the clock is past it: land finals directly.
+        // NOT gated on a paused clock — while playing, a coarse tick (a
+        // throttled tab, a long main-thread stall) can jump clean over a
+        // track's whole window, and a track that never starts never lands:
+        // its seeded first keyframe (an arrival's opacity 0) would stand
+        // forever.
         this.jumpFinals(t);
       }
       if (t.started && !this.playing && now >= t.start) {
@@ -1740,7 +1758,15 @@ export class ChoreoRun implements Run {
       this.dropCameraAnimation(t);
     }
     const touched = new Set<VisualElement>();
+    this.retired = { borrowed: [], moved: [] };
     for (const { ve, el, key, prior } of this.borrowedValues.splice(0)) {
+      this.retired.borrowed.push({
+        el,
+        key,
+        prior,
+        value: ve.getValue(key)?.get(),
+        ve,
+      });
       ve.removeValue(key);
       if (prior) {
         el.style.setProperty(dash(key), prior);
@@ -1750,10 +1776,73 @@ export class ChoreoRun implements Run {
       touched.add(ve);
     }
     for (const { ve, key } of this.movedValues.splice(0)) {
+      this.retired.moved.push({ key, value: ve.getValue(key)?.get(), ve });
       ve.getValue(key)?.jump(0);
       touched.add(ve);
     }
     touched.forEach((ve) => ve.render());
+  }
+
+  /**
+   * A pass measured this run's world at rest and then decided to KEEP the
+   * run — but the measurement itself was destructive: releaseForMeasure
+   * cancels platform animations, returns borrowed values, and jumps every
+   * moved value to rest, and a MotionValue.jump() STOPS the animation
+   * driving it. Left like that, a kept run keeps its clock and its landing
+   * but loses its picture: the flight freezes at rest until the finals
+   * land — which on a busy page (the gallery: neighbours re-pass the
+   * region every render) is every crossing, every time. So the keep path
+   * calls this: moved and borrowed values are stood back where they were,
+   * their bookkeeping is re-registered, every in-flight track's animation
+   * is retired so evaluate re-enters it — the machinery a scrub-then-play
+   * already uses — and the re-entered animations are seeked back onto the
+   * run's own clock, so a keep is invisible rather than a restart.
+   */
+  reassert() {
+    const { borrowed, moved } = this.retired;
+    this.retired = { borrowed: [], moved: [] };
+    for (const { el, key, prior, value, ve } of borrowed) {
+      if (value !== undefined) {
+        ve.getValue(key, value as PropValue)!.jump(value as PropValue);
+      }
+      this.borrowedValues.push({ el, key, prior, ve });
+    }
+    for (const { key, value, ve } of moved) {
+      if (value !== undefined) {
+        ve.getValue(key)?.jump(value as PropValue);
+      }
+      this.movedValues.push({ key, ve });
+    }
+    if (!this.playing) {
+      // a paused run is a still, and stills re-assert themselves (restill)
+      return;
+    }
+    const now = this.master;
+    const restarted: Track[] = [];
+    for (const t of this.tracks) {
+      if (
+        t.started &&
+        !t.passed &&
+        now >= t.start &&
+        (now < t.end || t.cue.loop) &&
+        (t.cue.target || t.cue.flight)
+      ) {
+        flushKeyframeResolvers();
+        this.stopTrack(t);
+        restarted.push(t);
+      }
+    }
+    this.evaluate();
+    for (const t of restarted) {
+      // startFlight seeks its platform animation itself; engine tweens and
+      // springs are stood at the window's elapsed time here
+      if (!t.cue.flight) {
+        const at = Math.max(0, now - t.start) / 1000;
+        t.controls?.forEach((c) => {
+          c.time = at;
+        });
+      }
+    }
   }
 
   cancel(keep?: Set<ChoreoNode>) {

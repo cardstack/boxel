@@ -5,41 +5,35 @@ import { Choreo, motion } from 'glimmer-motion';
 import { highlightSample } from 'test-app/lib/highlight';
 import { settings, toggleCode } from 'test-app/lib/tempo';
 
-const TRANSITION_SAMPLE = `// Getting here was a shared-element transition — Magic Move, in Keynote's
-// terms. Three kinds of thing, and telling them apart is the whole trick.
-import { animateView } from 'glimmer-motion';
+const TRANSITION_SAMPLE = `{{! Getting here was a crossing — Magic Move, in Keynote's terms, spoken by
+    the timeline. The whole page is one <Choreo @route> region: the route
+    swap is one render pass, and an id on both sides pairs the card's stage
+    and type with the page's own. Nothing is snapshotted — real elements
+    fly, so every demo keeps running through the move. }}
+<Choreo @route={{true}} @scroll={{scrollIntent}} class='page' as |c|>
+  <c.Parallel>
+    {{! the canned crossing: LEAVES dissolve as the paired MOVES lift off,
+        ARRIVES land near the settle — and only what a viewport can see
+        animates, so twenty-five off-screen cards cost nothing. The
+        crossfade carries COLOR, not transparency: the flying stage holds
+        solid, tweening between its two effective colors, and the ground
+        never leaks through mid-fade. }}
+    <c.Crossing
+      @duration={{0.9}} @ease={{EASE}}
+      @leave={{0.38}} @arrive={{0.5}} @overlap={{0.18}} />
 
-animateView(async () => {
-  await transition.retry();      // the route swaps INSIDE the snapshot
-  window.scrollTo(0, 0);         // and so does the scroll, so the second
-})                               // capture is taken where the page will sit
+    {{! a special exit that is not a dissolve: the hero RISES out — and
+        because a specific step names it, the generic leave yields it }}
+    <c.Tween @of={{c.onstage (c.removed 'scene')}}
+      @y={{array 0 -28}} @opacity={{array 1 0}} @duration={{0.38}} />
 
-  // MOVES — the same object in both scenes. .add(old, new) pairs two
-  // DIFFERENT elements under one name, so they become one layer that travels.
-  .add(cardStageSelector, '.stage-wrap')
-  .class('gm-move gm-stage')
-  .crop(false)                   // cover would clip whatever changes aspect
-  .group(false)                  // and nesting would clip it to the card
-  .layout({ duration: 0.42 })
-  .new({ opacity: [0, 1] }, { duration: 0.14 })   // solid early…
-  .old({ opacity: [1, 0] }, { duration: 0.26 })   // …so the pair never dips
+    {{! the code and the pager, which really can wait for the move to land }}
+    <c.Tween @of={{c.onstage (c.inserted 'late')}}
+      @opacity={{array 0 1}} @delay={{0.59}} @duration={{0.36}} />
+  </c.Parallel>
 
-  // LEAVES — only in the old scene. It goes first, to make room.
-  .add('.grid').exit({ opacity: [1, 0] }, { duration: 0.14 })
-
-  // ARRIVES — only in the new scene. It waits for the move to be nearly home.
-  .add('.sample').enter({ opacity: [0, 1], y: [12, 0] }, { delay: 0.26 });
-
-/* Both renderings are then stretched into the SAME box and crossed inside it,
-   because glyphs cannot morph into other glyphs, and a small stage cannot
-   morph into a bigger one — but one box can hold both while it grows: */
-::view-transition-old(.gm-move),
-::view-transition-new(.gm-move) { width: 100%; height: 100%; object-fit: fill; }
-
-/* And the real page is veiled for the duration — a transition captures
-   whatever is on screen, and the root snapshot is better off blank than a
-   frozen photograph of the page underneath the pieces named above: */
-html.is-crossing > body { opacity: 0; }`;
+  {{outlet}}
+</Choreo>`;
 
 /** out of the control, unfolding as it comes */
 const OPEN = { bounce: 0.14, visualDuration: 0.38 };
@@ -91,7 +85,7 @@ export class HowPanel extends Component {
               {{on "click" this.close}}
             >Close</button>
           </header>
-          <p class="sample-label">routes/application.ts</p>
+          <p class="sample-label">templates/application.gts</p>
           <pre><code>{{this.sample}}</code></pre>
         </section>
       {{/if}}

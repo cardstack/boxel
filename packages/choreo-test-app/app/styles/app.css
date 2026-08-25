@@ -193,40 +193,12 @@ body {
   font-size: 16px;
   line-height: 1.5;
   background: transparent;
-  /* Veiled for the span of a page transition — opacity to 0 and back — so the
-     ROOT snapshot a transition captures is blank rather than a photograph of
-     whatever the old or new page happened to be showing underneath the pieces
-     that actually move. `--gm-veil-out` must stay short enough that the veil
-     is fully down before the snapshot is taken (see routes/application.ts,
-     VEIL_OUT_MS); `--gm-veil-in` just has to feel like an arrival.
-
-     `color` is a second, unrelated transition riding the same declaration —
-     the theme switch's, easing body text between --ink's two values. */
-  transition:
-    opacity var(--gm-veil-out, 20ms) linear,
-    color 220ms var(--ease);
-}
-
-html.is-crossing > body {
-  opacity: 0;
-}
-
-/* ...but only where the ground behind it is dark.
- *
- * The veil works by letting <html>'s own background show through for the
- * length of the morph, and in dark that background is very nearly black, so
- * "the page is not there" reads as "the pieces are flying over a dark stage".
- * In light the same background is cream, and the identical rule reads as the
- * whole screen flashing white — most obvious on Parallax, Reveal and Build
- * Order, whose stages are dark enough to make the blank frame jump. There is
- * nothing to hide behind on a light ground, so light keeps its page and lets
- * the root snapshot do the ordinary thing. */
-html[data-theme='light'].is-crossing > body {
-  opacity: 1;
-}
-
-html.is-returning > body {
-  transition: opacity var(--gm-veil-in, 180ms) ease-out;
+  /* The veil that used to live here is gone with the View Transition that
+     needed it: a Choreo crossing moves real elements over the live page, so
+     there is no root snapshot to keep blank — and no light-mode exception,
+     because there is nothing to flash. What remains is the theme switch's
+     transition, easing body text between --ink's two values. */
+  transition: color 220ms var(--ease);
 }
 
 a {
@@ -338,6 +310,14 @@ summary,
   .top-links a:hover {
     color: var(--ink);
   }
+}
+
+/* the <main> now wraps the <Choreo> region that IS .page: the shell keeps
+   the footer at the foot, the region keeps the page's own measure */
+.page-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .page {
@@ -540,30 +520,20 @@ summary,
   }
 }
 
-/* the destination (or source) card of an in-flight page transition — its own
-   background and border are ordinary live DOM, never extracted into the
-   transition the way .card-stage/.card-title/.card-lede/.card-group are, so
-   left alone they sit fully rendered in the grid for the whole flight: the
-   shell arrives before its contents do. `transition: none` on entry keeps
-   this instant rather than a 180ms fade nobody asked to see. */
-.card.is-veiled {
-  background: transparent;
-  border-color: transparent;
-  transition: none;
-}
-
 .card-stage {
   position: relative;
   height: 400px;
-  /* a faint LIGHT tint, not a dark one — darkening a warm-charcoal stage
-     is invisible; a light wash is what actually reads as its own surface */
+  /* Recessed to --bg, a notch below the page and well below the card's
+     --bg-elev, so the demo UI lifts off the tile and the metadata chin
+     (.card-meta, still on the card's own surface) reads as a distinct bar
+     rather than more of the same wash. The ember radial stays as atmosphere. */
   background:
     radial-gradient(
       80% 70% at 50% 40%,
       rgba(255, 59, 31, 0.08),
       transparent 62%
     ),
-    rgba(var(--surface-tint-rgb), 0.03);
+    var(--bg);
 }
 
 /* these three need a stage with a little more presence than the default —
@@ -684,11 +654,10 @@ summary,
   background: var(--ember);
   box-shadow: 0 0 12px var(--glow);
   /* NOT the draw-in animation the base rule gets. This kicker is one of the
-     page transition's own named/paired subjects (see gm-type in pair()) — it
-     is already fading in on the transition's own clock, carried across with
-     everything else. The browser only hands the real, live element back
-     once that flight lands, so a second animation starting from THERE reads
-     as arriving twice: once with the page, then a beat later on its own. */
+     crossing's own paired subjects — it is already crossfading over from the
+     card's group line on the timeline's clock, so a second animation
+     starting on arrival reads as arriving twice: once with the flight, then
+     a beat later on its own. */
   animation: none;
 }
 
@@ -1621,40 +1590,6 @@ html[data-gm-dragging] * {
 /* The overlay paints nothing of its own. `html` carries the wash and is never
    captured, so it paints straight through the whole transition — which is
    what keeps the background from moving or flashing. */
-:root::view-transition {
-  background: none;
-}
-
-/* No wholesale page dissolve. The scene is named piece by piece in
-   routes/application.ts — what moves, what leaves, what arrives — so nothing
-   is animated twice and the html background paints straight through. */
-
-/* Magic Move's stacking: the scene that is leaving and the scene that is
-   arriving lie flat, and everything that MOVES rides over them — otherwise the
-   thing you are following passes behind the thing it is leaving. */
-::view-transition-group(.gm-scene) {
-  z-index: 1;
-}
-
-::view-transition-group(.gm-stage) {
-  z-index: 3;
-}
-
-/* the demo travels inside its own frame, so it sits one layer above it */
-::view-transition-group(.gm-demo) {
-  z-index: 4;
-}
-
-::view-transition-group(.gm-type) {
-  z-index: 5;
-}
-
-/* the chrome is the same on both pages and never moves: it stays on top so
-   nothing crosses over it */
-::view-transition-group(.gm-steady) {
-  z-index: 6;
-}
-
 .shots {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -5085,55 +5020,6 @@ html[data-gm-dragging] * {
 .filter-code .sample-label {
   margin: 0;
   padding: 14px 18px 0;
-}
-
-/* The iOS / Keynote trick, for EVERY matched element.
- *
- * Two renderings of the same thing cannot morph into each other — "Lightbox"
- * is 15px display type in the card and 80px extra-wide on the page, and the
- * demo is a small stage and a full-width one. So both images are stretched to
- * fill the SAME box, that box interpolates from the old one to the new one,
- * and the two cross from 0% to 100% inside it. What you read is one object
- * growing, rather than two objects dissolving past each other at two sizes.
- *
- * object-fit: fill, not cover: cover crops whatever changes aspect, which is
- * exactly what must not happen to a word or to a demo.
- */
-::view-transition-old(.gm-move),
-::view-transition-new(.gm-move) {
-  width: 100%;
-  height: 100%;
-  object-fit: fill;
-}
-
-/* One clock for the whole transition.
- *
- * Every layer the browser makes starts on ITS default — a quarter of a second
- * — and Motion retimes the ones it is given keyframes for. Any layer it is not
- * given keyframes for keeps that default, so a seven-second morph had seven
- * layers crossing at full speed in its first few frames: all the jitter, all at
- * the beginning. This is the floor for the ones Motion does not touch; where it
- * does, it sets timing through the Web Animations API, which wins over this.
- *
- * IMAGES ONLY. The group is the layer's position and size, and Motion animates
- * that itself — give the group a duration here as well and two animations own
- * the same transform. They do not blend, they take turns, and what you see is a
- * layer jumping between two answers frame by frame.
- */
-::view-transition-old(*),
-::view-transition-new(*) {
-  animation-duration: var(--gm-morph, 250ms);
-}
-
-/* the OLD image gets less of the clock and a curve that front-loads the
-   fade — the UA default (ease-out, the full duration) still has it visibly
-   present past the halfway point, fading underneath whatever the incoming
-   page is doing on top of it. Cut short and weighted early, it is gone
-   well before the new image finishes arriving, instead of the two
-   crossfading through each other for the whole transition. */
-::view-transition-old(*) {
-  animation-duration: calc(var(--gm-morph, 250ms) * 0.6);
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* ---- the transition control, and the code it can show ---- */

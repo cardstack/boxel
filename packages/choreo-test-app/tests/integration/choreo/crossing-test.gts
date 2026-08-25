@@ -93,6 +93,47 @@ class ColorPages extends Component {
 }
 let colors: ColorPages;
 
+class QuietPages extends Component {
+  @tracked page: 'detail' | 'grid' = 'grid';
+  constructor(o: unknown, a: object) {
+    super(o as never, a);
+    quiet = this;
+  }
+  <template>
+    <Choreo
+      @route={{true}}
+      @quiet={{true}}
+      class="stage"
+      style="position:relative;width:300px;height:220px"
+      as |c|
+    >
+      {{! a bystander: not a participant, just a thing with its own
+          animation running — the crossing must freeze it for the span }}
+      <div id="bystander" style="width:20px;height:20px;background:#888"></div>
+      {{#if (eq this.page "grid")}}
+        <div
+          id="tileQ"
+          style="position:absolute;left:10px;top:30px;width:60px;height:40px;background:#0af"
+          {{motion id="stage-q" role="stage"}}
+        ></div>
+      {{else}}
+        <div
+          id="heroQ"
+          style="position:absolute;left:190px;top:110px;width:90px;height:70px;background:#0af"
+          {{motion id="stage-q" role="stage"}}
+        ></div>
+      {{/if}}
+      <c.Crossing
+        @duration={{0.15}}
+        @ease="easeInOut"
+        @leave={{0.06}}
+        @arrive={{0.06}}
+      />
+    </Choreo>
+  </template>
+}
+let quiet: QuietPages;
+
 class ExitPages extends Component {
   @tracked page: 'detail' | 'grid' = 'grid';
   constructor(o: unknown, a: object) {
@@ -343,6 +384,43 @@ module('Integration | choreo | crossing', function (hooks) {
       'rgba(200, 60, 40, 0.5)',
       'at rest the real alpha blend returns'
     );
+    await sleep(20);
+  });
+
+  test('@quiet: the rest of the page freezes for the crossing, and resumes after', async function (assert) {
+    await render(<template><QuietPages /></template>);
+    await animationsSettled();
+    const bystander = find('#bystander') as HTMLElement;
+    const loop = bystander.animate([{ opacity: 0.4 }, { opacity: 1 }], {
+      direction: 'alternate',
+      duration: 300,
+      iterations: Infinity,
+    });
+    assert.strictEqual(loop.playState, 'running', 'the bystander loops');
+
+    quiet.page = 'detail';
+    await settled();
+    await nextFrame();
+    await nextFrame();
+    assert.strictEqual(
+      loop.playState,
+      'paused',
+      'the crossing quiets the rest of the page for its span'
+    );
+    // and the crossing itself still moves: quiet is for everyone else
+    const mid = bounds(find('#heroQ') as HTMLElement);
+    assert.true(
+      mid.left < 189,
+      `the flight is not frozen with them (${mid.left})`
+    );
+
+    await animationsSettled();
+    assert.strictEqual(
+      loop.playState,
+      'running',
+      'the landing hands the page back: the loop resumes where it was'
+    );
+    loop.cancel();
     await sleep(20);
   });
 

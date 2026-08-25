@@ -167,6 +167,18 @@ interface Signature {
     debug?: boolean;
     id?: string;
     /**
+     * Freeze the rest of the page for the span of each run (§4.7): when a
+     * run starts, every animation in the document that is running AT THAT
+     * MOMENT — and that the run itself does not own — is paused, and played
+     * again when the run lands or is cancelled. The run's own animations
+     * are exempt by construction: the sweep happens before they exist.
+     * Pausing is not stopping — a loop resumes exactly where it was, which
+     * is what makes this safe to do to work the region did not write.
+     * Animations that START during the run are not caught; gating those is
+     * the host's job (the crossing flag the gallery's entrances check).
+     */
+    quiet?: boolean;
+    /**
      * Treat a subtree swap as one crossing pass (§4.7): scroll intent is
      * applied inside the pass — after the swap renders, before final bounds
      * are measured — and the tempo control's zero means no run at all. The
@@ -182,6 +194,30 @@ interface Signature {
 }
 
 let debugStyle: HTMLStyleElement | undefined;
+
+/**
+ * A fingerprint of the collected timeline tree, for telling an EDIT from
+ * noise while a run's own orphans are aloft. Mid-flight, compiled cues are
+ * value-laden (every re-measure shifts them), so sameScore cannot answer
+ * "did the author change the timeline?" — but the tree can: it is template
+ * state, identical under noise, different under any real edit. Functions
+ * (property sources) print by identity: a fresh function is a change we
+ * cannot disprove, and recompiling is the safe answer.
+ */
+const fnIds = new WeakMap<object, number>();
+let nextFnId = 0;
+function treePrint(tree: unknown): string {
+  return JSON.stringify(tree, (_key, value: unknown) => {
+    if (typeof value === 'function') {
+      let id = fnIds.get(value);
+      if (id === undefined) {
+        fnIds.set(value, (id = ++nextFnId));
+      }
+      return `fn#${id}`;
+    }
+    return value;
+  });
+}
 
 /**
  * The color the page actually shows behind this region — the nearest
@@ -265,6 +301,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       leavePass(this);
       this.run?.cancel();
       this.run = undefined;
+      // a quiet region must not take its pause to the grave
+      this.unquiet();
       for (const node of [...this.orphans, ...this.claimed]) {
         this.drop(node);
       }
@@ -528,6 +566,20 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         this.drop(node);
       }
       for (const s of removed) {
+        // §5.3, from the other side of the seam: on a pass this region
+        // declines to animate, a <Presence>-managed leaver still mid-exit
+        // belongs to its Presence — calling exitComplete here would cut
+        // that animation short. The region stands aside; when the exit
+        // ends, Presence unmounts the element and it leaves for real.
+        if (
+          s.node.presenceManaged &&
+          !s.node.isPresent &&
+          s.element.isConnected &&
+          !this.orphans.has(s.node)
+        ) {
+          this.leaving.delete(s.node);
+          continue;
+        }
         this.finish(s);
       }
       return;
@@ -535,12 +587,44 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // An unrelated render replays every region's pass — the detector is
     // volatile by design, so on a busy page (the gallery: a neighbouring
     // demo writing tracked state per frame) a region re-passes on every
-    // app render. If nothing changed — no arrivals, no leavers, and the
-    // compiled score IS the one already in flight — the run is kept:
-    // sixty noisy frames a second must not restart this region's clock.
-    // A finished run replays (§3.1's Hold re-fire is an event on a done
-    // region), and any real difference — an edit, a move, a new sprite —
-    // replays exactly as before.
+    // app render. A finished run replays (§3.1's Hold re-fire). An
+    // all-still pass — no arrivals, leavers, or moved boxes — is noise
+    // (a parent writing `hot`, a neighbour ticking at 60fps) and must
+    // not restart the clock. Gates and path-moves make a freshly compiled
+    // cue list incomparable (zero-delta Moves drop; flights exist), so
+    // sameScore cannot be the only detector.
+    //
+    // A removed sprite that is one of this region's own ORPHANS is not a
+    // new leaver: it re-enters every changeset on purpose (addressable
+    // again), and while one is aloft a recompiled score is NOT
+    // authoritative — the pairing that produced the run's flights lived
+    // in the pass that removed and inserted together, and a later pass
+    // sees only the orphan half. Counting orphans as dirt meant a
+    // crossing on a busy page was cancelled into a leave-only rump by
+    // its own neighbours' renders, every frame.
+    const nothingNew =
+      !inserted.length &&
+      pass.removed.every((s) => this.orphans.has(s.node)) &&
+      // A sprite mid-flight reads as "moved" on every re-pass — its initial
+      // is the painted box, by design — so while this run's own orphans are
+      // aloft, kept-motion cannot justify a recompile either: the score it
+      // would produce is the degraded one above.
+      (this.orphans.size > 0 || !changeset.sprites({ type: 'moved' }).length) &&
+      // …but an EDITED timeline is never noise: a changed tree replays,
+      // exactly as it would with no orphans aloft (the build-order
+      // transport's delay nudge, made while a leaver is frozen mid-park)
+      treePrint(tree) === this.scorePrint;
+    if (this.run && !this.run.isDone() && nothingNew) {
+      for (const node of claimed) {
+        this.drop(node);
+      }
+      // the measurement above put the run's world at rest; a keep must be
+      // invisible, so the run stands its picture back up (see reassert)
+      this.run.reassert();
+      return;
+    }
+    // dirty but the compiled score is the one already in flight (tween-only
+    // measurement jitter): keep that run too.
     if (
       this.run &&
       !this.run.isDone() &&
@@ -552,6 +636,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       for (const node of claimed) {
         this.drop(node);
       }
+      this.run.reassert();
       return;
     }
     // the removed participants the run names stay; the rest go now
@@ -582,6 +667,14 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         }
       }
       this.log(changeset, cues);
+    }
+    this.scorePrint = treePrint(tree);
+    // @quiet: pause everything running RIGHT NOW — the run's own animations
+    // do not exist yet, so they are exempt by construction. Accumulated,
+    // not replaced: an interrupted run's replacement sweeps again, and
+    // everything resumes together when the run that survives settles.
+    if (this.args.quiet) {
+      this.quiet();
     }
     this.run = execute(compiled, {
       camera: { ...this.restingCamera },
@@ -616,11 +709,48 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
     });
+    if (this.args.quiet) {
+      const run = this.run;
+      void run.finished.then(() => {
+        // only the run still in charge hands the page back — a cancelled
+        // one was replaced, and its replacement holds the pause
+        if (this.run === run) {
+          this.unquiet();
+        }
+      });
+    }
   }
 
   /* ---- orphans: a removed participant kept alive, locked where it was ---- */
 
   private orphanBounds = new Map<ChoreoNode, Bounds>();
+
+  /** the fingerprint of the tree the current run compiled from (see treePrint) */
+  private scorePrint?: string;
+
+  /* ---- @quiet: the rest of the page, paused for the span of a run ---- */
+
+  /** what quiet() paused, accumulated across replaced runs, resumed as one */
+  private quieted: Animation[] = [];
+
+  private quiet() {
+    for (const animation of document.getAnimations()) {
+      if (animation.playState === 'running') {
+        animation.pause();
+        this.quieted.push(animation);
+      }
+    }
+  }
+
+  private unquiet() {
+    for (const animation of this.quieted.splice(0)) {
+      try {
+        animation.play();
+      } catch {
+        // an animation whose element left with the old scene: nothing to resume
+      }
+    }
+  }
 
   private orphan(s: Sprite, removed: Sprite[], extract = false) {
     // Only the topmost removed element is moved; what it contains comes with
