@@ -1467,9 +1467,14 @@ async function runOrigin(browser, origin, smokeCases, options) {
   }
 
   for (let smokeCase of smokeCases) {
+    let lease = leaseTab(tab);
     let outcome = await withCaseDeadline(caseTimeoutMs, () =>
-      runCase(tab, smokeCase, origin, options),
+      runCase(lease.tab, smokeCase, origin, options),
     );
+    // Revoke before anything else touches the tab, including on the ordinary
+    // path: a case is finished the moment its result is known, and a stray
+    // continuation from it has no claim on the next case's page.
+    lease.revoke();
     if (outcome.timedOut || outcome.thrown) {
       await detachAbandonedCase(tab);
       await record({
@@ -1506,6 +1511,57 @@ function defaultCaseTimeoutMs({ performanceRepeats = 0, timeoutMs }) {
 
 function describeError(error) {
   return error instanceof Error ? (error.stack ?? error.message) : `${error}`;
+}
+
+class CaseAbandonedError extends Error {
+  constructor(operation) {
+    super(
+      `The case that started this ${operation} was cut loose; the tab now belongs to another case`,
+    );
+    this.name = 'CaseAbandonedError';
+  }
+}
+
+/**
+ * Hand a case a revocable view of the shared tab.
+ *
+ * Racing a deadline stops the runner awaiting a case; it does not cancel the
+ * case. The abandoned work keeps a reference to the tab and resumes at its
+ * next step — which may be a click, a form fill, a scroll, or a navigation —
+ * while a later case is reading that same tab. Revoking the lease makes every
+ * subsequent tab operation from the abandoned case throw, so it unwinds at its
+ * next touch instead of driving someone else's page.
+ *
+ * The proxy is recursive because the surface is nested: a locator obtained
+ * before revocation would otherwise still work. Promises pass through
+ * unwrapped so that work already in flight can settle; only new operations are
+ * refused. Methods are bound to their real target, so private fields inside
+ * the browser client keep working.
+ */
+export function leaseTab(tab) {
+  let live = true;
+  let wrap = (value) => {
+    if (value === null) return value;
+    if (typeof value !== 'object' && typeof value !== 'function') return value;
+    if (typeof value.then === 'function') return value;
+    return new Proxy(value, {
+      get(target, property, receiver) {
+        let member = Reflect.get(target, property, receiver);
+        if (typeof member !== 'function') return wrap(member);
+        return (...args) => {
+          if (!live) throw new CaseAbandonedError(String(property));
+          return wrap(member.apply(target, args));
+        };
+      },
+    });
+  };
+
+  return {
+    revoke() {
+      live = false;
+    },
+    tab: wrap(tab),
+  };
 }
 
 async function withCaseDeadline(caseTimeoutMs, run) {
@@ -1598,6 +1654,11 @@ async function runCase(tab, smokeCase, origin, options) {
   let warmSandboxHandoffSamplesMs = [];
   let warmExecutionPerformance = [];
   for (let repeat = 0; repeat < options.performanceRepeats; repeat++) {
+    // Leave the card before measuring it again. `probe` skips its navigation
+    // when the tab already sits at the target, so without this a warm sample
+    // would re-read the document the cold sample left behind and report the
+    // cost of reading a rendered page rather than of a warm navigation.
+    await tab.goto('about:blank');
     let warmPage = await probe(
       tab,
       smokeCase,
