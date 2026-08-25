@@ -761,9 +761,10 @@ module('Unit | RP-6 classification', function () {
 
   test('RP-6.4: an import used only inside a template is still a graph edge', async function (assert) {
     // The most ordinary shape a card has, and the one that rules out deciding
-    // erasure from the transform's output: template bodies are blanked before
-    // the JavaScript is read, so a component imported only for its template
-    // looks unused, and the TypeScript transform drops unused imports.
+    // erasure from the transform's output: in the form content-tag compiles to,
+    // a template is a string literal, so a component imported only for its
+    // template is genuinely unused — and the TypeScript transform drops unused
+    // imports.
     let result = await classifyBoxelSource(
       `import Renderer from './renderer.gts';\n${card('static isolated = class { <template><Renderer /></template> };')}`,
     );

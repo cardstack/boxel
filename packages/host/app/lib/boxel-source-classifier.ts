@@ -233,11 +233,11 @@ const pinnedBabelOptions = {
   configFile: false,
 } as const;
 
-// The one import content-tag adds to every module it processes, to compile the
-// `<template>` blocks it replaced. It is not an authored edge, so it is not a
+// The one import content-tag adds to a module that contains a template, to
+// compile the blocks it replaced. It is not an authored edge, so it is not a
 // graph member — and it is named here rather than pattern-matched so a
 // content-tag upgrade that renames it fails a test instead of quietly adding a
-// module to every card's graph.
+// module to every templated card's graph.
 const templateCompilerModule = '@ember/template-compiler';
 // The template signals below are matched against a `<template>` block's whole
 // body — markup, text nodes, attribute values and `<style>` contents alike —
@@ -492,6 +492,19 @@ function analyzeJavaScript(source: string): {
    */
   hasEagerGlobal: boolean;
 } {
+  // These two lines ARE the accept-set, and it has to stay the realm's. A
+  // Babel plugin can only widen the parser through `manipulateOptions`, and in
+  // `transpile.ts` exactly two of its plugins do: this same TypeScript plugin
+  // contributes `typescript`, and `decorator-transforms` contributes
+  // `decorators-legacy`. The rest — the template compiler, scoped CSS, the
+  // concurrency and loader plugins — contribute no syntax.
+  //
+  // So `decorators-legacy` is mirrored from `decorator-transforms`, not chosen.
+  // If the realm ever moves to a different decorator proposal, narrowing this
+  // list turns servable modules into drafts, which classifies them Capsule with
+  // no signals — and the shape of that failure is a card that renders wrong
+  // rather than a test that goes red. `RP-6.4: syntax the realm serves is
+  // analyzed, not mistaken for a draft` is what holds the current set.
   let ast = babel.parseSync(source, {
     ...pinnedBabelOptions,
     plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
@@ -503,10 +516,11 @@ function analyzeJavaScript(source: string): {
 
   // Read the import graph off the top-level statements before anything
   // transforms them. The TypeScript transform below would answer this too, by
-  // deleting what it erases — but it also deletes an import whose only use is
-  // inside a `<template>`, because those bodies are blanked before this runs,
-  // and that is the most ordinary shape a card has. So type-ness is read from
-  // the parser's own marking, which says nothing about use.
+  // deleting what it erases — but it also deletes an import whose bindings are
+  // unused, and in content-tag's output a template is a string literal, so a
+  // component imported only for its template is exactly that. Dropping it would
+  // lose the most ordinary edge a card has. Type-ness is read from the parser's
+  // own marking instead, which says nothing about use.
   let imports: string[] = [];
   for (let statement of ast.program.body) {
     if (
@@ -755,8 +769,13 @@ export async function classifyBoxelSource(
     // expression position — `const Row = <template>…</template>;`, the dominant
     // idiom — it leaves a hole where an expression has to be, so a finished,
     // servable module reads as unparseable. content-tag replaces each block
-    // with a compiler call, which parses in both positions, and keeps the
-    // components a template references live in its scope argument.
+    // with a compiler call, which parses in both positions.
+    //
+    // What keeps a component imported only for its template from vanishing is
+    // not anything about that call: it is that imports are read off the parsed
+    // statements before any transform touches them. In content-tag's output the
+    // template is a string, so such a binding IS unused, and a transform would
+    // drop it.
     javascript = analyzeJavaScript(
       contentTagPreprocessor.process(source, { filename: 'boxel-source.gts' })
         .code,
