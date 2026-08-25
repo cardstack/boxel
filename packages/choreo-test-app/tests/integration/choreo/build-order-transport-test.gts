@@ -192,4 +192,207 @@ module('Integration | choreo | build-order transport', function (hooks) {
     );
     await windDown();
   });
+
+  /**
+   * A violent drag: dozens of input events, several per frame, sawing back
+   * and forth across every build's window — the event rate of a real hand,
+   * not a polite scripted scrub. Wherever the thumb finally rests, every
+   * cue behind it must sit on its FINALS; a part stuck half-ghosted at a
+   * mid-flight sample means a late animation commit clobbered the still.
+   */
+  test('a violent drag still lands every final', async function (assert) {
+    await render(<template><BuildOrder /></template>);
+    await waitUntil(() => handle().c?.run != null, { timeout: 4000 });
+    await frames(10);
+
+    const range = document.querySelector<HTMLInputElement>('.bo-range')!;
+    range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    const saw = [
+      3.0, 0.5, 3.5, 0.8, 2.5, 1.2, 3.9, 0.3, 2.9, 1.6, 3.3, 0.7, 2.1, 1.0,
+      3.7, 0.4, 2.7, 1.4, 3.1, 0.9,
+    ];
+    for (const [i, v] of saw.entries()) {
+      range.value = String(v);
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      if (i % 3 === 2) {
+        await frames(1); // ~three events per frame, like a real drag
+      }
+    }
+    // rest past every mark build's end
+    range.value = '3.2';
+    range.dispatchEvent(new Event('input', { bubbles: true }));
+    range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await frames(8);
+
+    for (const sel of [
+      '.bo-plate',
+      '.bo-tail',
+      '.bo-head',
+      '.bo-orbit',
+      '.bo-tip',
+      '.bo-word',
+      '.bo-rule',
+    ]) {
+      assert.true(
+        styleOf(sel).includes('opacity: 1'),
+        `${sel} on its finals after the storm — got '${styleOf(sel)}'`
+      );
+    }
+    const dash = (sel: string) =>
+      document.querySelector(sel)?.getAttribute('stroke-dasharray') ?? '(none)';
+    for (const sel of ['.bo-tail', '.bo-head', '.bo-orbit', '.bo-tip']) {
+      assert.false(
+        dash(sel).startsWith('0'),
+        `${sel} fully drawn — stroke-dasharray '${dash(sel)}'`
+      );
+    }
+    await windDown();
+  });
+
+  /**
+   * The word builds in — and STAYS. After its delivery lands, the sprite
+   * must sit at its end values for the rest of the take: the restore puts
+   * Glimmer's own text nodes back, and the container must be wearing
+   * opacity 1, not the pin it stood on before its window.
+   */
+  test('a delivered build stays landed for the rest of the take', async function (assert) {
+    await render(<template><BuildOrder /></template>);
+    await waitUntil(() => handle().c?.run != null, { timeout: 4000 });
+
+    // watch the word straight through its window while the run PLAYS —
+    // reading the CURRENT run each poll: early passes replace the first one
+    const word = document.querySelector<HTMLElement>('.bo-word')!;
+    const seen: { spans: number; style: string; t: number }[] = [];
+    await waitUntil(
+      () => {
+        const run = handle().c?.run;
+        if (!run) {
+          return false;
+        }
+        seen.push({
+          spans: word.querySelectorAll('span').length,
+          style: word.getAttribute('style') ?? '',
+          t: Math.round(run.time * 100) / 100,
+        });
+        return run.time > 3.3;
+      },
+      { timeout: 9000 }
+    );
+
+    // past the word's end (~2.55s) and before the take ends: landed, whole
+    const after = seen.filter((s) => s.t > 2.7 && s.t < 3.35);
+    assert.true(after.length > 3, `sampled the post-delivery stretch (${after.length} samples)`);
+    for (const s of after) {
+      assert.true(
+        s.style.includes('opacity: 1') && s.spans === 0,
+        `word landed and whole at t=${s.t} — style '${s.style}', ${s.spans} spans`
+      );
+    }
+    await windDown();
+  });
+
+  /**
+   * Scrubbing PAST a delivery's end must finish the delivery: end values on
+   * the sprite, stand-in spans gone, Glimmer's own text nodes back. Leaving
+   * the split behind is how "the text exits": the paused spans survive the
+   * scrub, the next take pins the container to opacity 0 over them, and the
+   * take after that splits the wreckage of the first split.
+   */
+  test('a scrub through a delivery gives the text back', async function (assert) {
+    await render(<template><BuildOrder /></template>);
+    await waitUntil(() => handle().c?.run != null, { timeout: 4000 });
+    await frames(10);
+
+    const word = document.querySelector<HTMLElement>('.bo-word')!;
+    const range = document.querySelector<HTMLInputElement>('.bo-range')!;
+    range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+
+    // into the word's window: the still is delivered — split spans present
+    scrubTo(2.1);
+    await frames(4);
+    assert.true(
+      word.querySelectorAll('span').length > 0,
+      'mid-window still is a split delivery'
+    );
+
+    // past its end: the delivery must be COMPLETE — restored, landed, whole
+    scrubTo(2.9);
+    await frames(4);
+    assert.strictEqual(
+      word.querySelectorAll('span').length,
+      0,
+      'past the end, the stand-in spans are gone'
+    );
+    assert.true(
+      (word.getAttribute('style') ?? '').includes('opacity: 1'),
+      `the container wears its end values — got '${word.getAttribute('style')}'`
+    );
+    assert.strictEqual(
+      word.textContent?.trim(),
+      'Choreo',
+      'Glimmer\'s own text is back in the element'
+    );
+
+    // back in, and past again: the cycle is repeatable
+    scrubTo(2.0);
+    await frames(4);
+    assert.true(
+      word.querySelectorAll('span').length > 0,
+      're-entering the window splits afresh'
+    );
+    scrubTo(3.9);
+    await frames(4);
+    assert.strictEqual(
+      word.querySelectorAll('span').length,
+      0,
+      'and leaving it restores again'
+    );
+    range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await windDown();
+  });
+
+  /**
+   * Scrubbing the loop's SECOND take. Every earlier test scrubs the first
+   * run; the field failures (Safari and Chrome alike) all happened after
+   * the demo had looped — the early builds stuck on their pinned origins
+   * while the late builds landed. A take boundary is a full pass: the old
+   * run releases for measure, a fresh run re-pins every first keyframe,
+   * and THAT is the run a hand then drags through.
+   */
+  test('after the loop wraps, a scrub still lands every final', async function (assert) {
+    await render(<template><BuildOrder /></template>);
+    await waitUntil(() => handle().c?.run != null, { timeout: 4000 });
+    const first = handle().c!.run!;
+
+    // let the whole take play out and the loop bring the next one
+    await waitUntil(() => handle().c?.run !== first, { timeout: 10000 });
+    await frames(10);
+
+    const range = document.querySelector<HTMLInputElement>('.bo-range')!;
+    range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    for (const v of [0.6, 2.8, 1.1, 3.6, 0.9, 3.2]) {
+      range.value = String(v);
+      range.dispatchEvent(new Event('input', { bubbles: true }));
+      await frames(2);
+    }
+    range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    await frames(8);
+
+    for (const sel of [
+      '.bo-plate',
+      '.bo-tail',
+      '.bo-head',
+      '.bo-orbit',
+      '.bo-bead',
+      '.bo-tip',
+      '.bo-word',
+      '.bo-rule',
+    ]) {
+      assert.true(
+        styleOf(sel).includes('opacity: 1'),
+        `${sel} on its finals in take 2 — got '${styleOf(sel)}'`
+      );
+    }
+    await windDown();
+  });
 });
