@@ -1439,7 +1439,16 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
+  // Generic over the element type because a search can return `FileDef`
+  // instances (file-meta rows), not just cards — e.g. a file-typed query, or a
+  // mixed card+file scope. Defaults to `CardDef` so existing call sites are
+  // unaffected; a caller that expects files narrows with the type argument
+  // (`store.search<FileDef>(...)`) and gets a correctly-typed result instead of
+  // a `CardDef[]` it has to cast and runtime-discriminate.
+  search<T extends CardDef | FileDef = CardDef>(
+    query: Query,
+    realmURLs?: string[],
+  ): Promise<T[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
