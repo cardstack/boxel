@@ -33,6 +33,18 @@ const entry = join(
 // no runtime dependency of its own.
 const permitted = new Set([
   'packages/runtime-common/boxel-execution-protocol.ts',
+  'packages/runtime-common/boxel-execution-protocol/child-formats.ts',
+  'packages/runtime-common/boxel-execution-protocol/cloneable.ts',
+  'packages/runtime-common/boxel-execution-protocol/component-update.ts',
+  'packages/runtime-common/boxel-execution-protocol/instance-projection.ts',
+  'packages/runtime-common/boxel-execution-protocol/projected-error.ts',
+  'packages/runtime-common/boxel-execution-protocol/refusal.ts',
+  'packages/runtime-common/boxel-execution-protocol/runtime.ts',
+  'packages/runtime-common/boxel-execution-protocol/safe-event.ts',
+  'packages/runtime-common/boxel-execution-protocol/template-bundle.ts',
+  'packages/runtime-common/boxel-execution-protocol/type-description.ts',
+  'packages/runtime-common/boxel-execution-protocol/untrusted-input.ts',
+  'packages/runtime-common/boxel-execution-protocol/version.ts',
   'packages/runtime-common/card-document-shape.ts',
 ]);
 
