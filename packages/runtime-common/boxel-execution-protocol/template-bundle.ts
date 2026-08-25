@@ -14,6 +14,7 @@ import {
   ProtocolRefusal,
   describeValue,
   joinTokens,
+  newOffenderList,
   quoteToken,
   recordOffender,
 } from './refusal.ts';
@@ -132,8 +133,9 @@ const templateDependencyKinds: ReadonlySet<string> = new Set(
  * A single unrecognized dependency kind rejects the whole generation, not the
  * one template that carries it: a bundle is a template and everything its
  * templates reference, so reifying the recognized part of it would render a
- * component whose scope is missing exactly the name nobody understood. Every
- * unrecognized kind is reported at once, so one diagnostic names all of them.
+ * component whose scope is missing exactly the name nobody understood. One
+ * diagnostic covers every unrecognized kind — naming as many as it renders and
+ * counting the rest, since a producer picks how many there are.
  *
  * A dangling reference is that same failure reached by a different route, so
  * it is refused here too: a `root` or an `authored-component` naming a
@@ -165,8 +167,8 @@ function gateTemplateBundle(
     );
   }
 
-  let unrecognized: string[] = [];
-  let dangling: string[] = [];
+  let unrecognized = newOffenderList();
+  let dangling = newOffenderList();
   // Own names only. `in` would resolve `root: 'toString'` against
   // Object.prototype and report a template the bundle does not carry.
   let keys = Object.getOwnPropertyNames(templates);
@@ -248,7 +250,8 @@ function gateTemplateBundle(
         dependency.kind === 'authored-component' &&
         !carried.has(dependency.templateId)
       ) {
-        dangling.push(
+        recordOffender(
+          dangling,
           `${quoteToken(key)} references authored component ${quoteToken(dependency.templateId)}`,
         );
       }
@@ -266,13 +269,13 @@ function gateTemplateBundle(
     );
   }
 
-  if (unrecognized.length > 0) {
+  if (unrecognized.total > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_DEPENDENCY_KIND_UNKNOWN',
       `template bundle ${quoteToken(root)} names dependency kinds this consumer does not recognize — ${joinTokens(unrecognized, '; ')}`,
     );
   }
-  if (dangling.length > 0) {
+  if (dangling.total > 0) {
     throw new ProtocolRefusal(
       'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
       `template bundle ${quoteToken(root)} cannot be reified — ${joinTokens(dangling, '; ')}`,
@@ -369,6 +372,7 @@ function normalizeDescriptor(
   let stylesheets = normalizeStringArray(
     readMember(descriptor, 'stylesheets'),
     where('stylesheets'),
+    budget,
   );
 
   let instance = readMember(descriptor, 'instance');
@@ -400,10 +404,12 @@ function normalizeDescriptor(
       getters: normalizeStringArray(
         readMember(instance, 'getters'),
         where('instance.getters'),
+        budget,
       ),
       actions: normalizeStringArray(
         readMember(instance, 'actions'),
         where('instance.actions'),
+        budget,
       ),
     },
   };

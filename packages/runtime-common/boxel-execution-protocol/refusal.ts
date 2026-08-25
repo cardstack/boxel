@@ -19,20 +19,21 @@ export const PROTOCOL_REFUSAL_CODES = [
 export type ProtocolRefusalCode = (typeof PROTOCOL_REFUSAL_CODES)[number];
 
 /**
+ * Every refusal this module has minted.
+ *
+ * `WeakSet.prototype.has` runs no traps, answers `false` for a non-object, and
+ * is not something a producer can talk its way into — which is what the one
+ * catch block that must not throw needs. A structural check reads a property,
+ * and reading a property on a caught value runs the very trap that catch block
+ * exists to contain.
+ */
+const minted = new WeakSet<object>();
+
+/**
  * A refusal to apply a record. The `code` is the stable identity a diagnostic
  * catalog, a log query, or a test can key on; the message says which record
  * and which member forced it.
  */
-/**
- * Every refusal this module has minted.
- *
- * `WeakSet.prototype.has` runs no traps, answers `false` for a non-object, and
- * cannot be forged — which is what the one catch block that must not throw
- * needs. A structural check reads a property, and reading a property on a
- * caught value runs the very trap that catch block exists to contain.
- */
-const minted = new WeakSet<object>();
-
 export class ProtocolRefusal extends Error {
   readonly code: ProtocolRefusalCode;
 
@@ -95,9 +96,15 @@ export function quoteToken(value: string): string {
 }
 
 /** Joins offending items for a diagnostic, bounded in count as well as size. */
-export function joinTokens(items: string[], separator = ', '): string {
-  let shown = items.slice(0, DIAGNOSTIC_LIST_LIMIT);
-  let withheld = items.length - shown.length;
+export function joinTokens(
+  items: string[] | OffenderList,
+  separator = ', ',
+): string {
+  // An `OffenderList` knows how many it saw; a plain array is its own count.
+  let collected = Array.isArray(items) ? items : items.shown;
+  let total = Array.isArray(items) ? items.length : items.total;
+  let shown = collected.slice(0, DIAGNOSTIC_LIST_LIMIT);
+  let withheld = total - shown.length;
   return withheld > 0
     ? `${shown.join(separator)} (and ${withheld} more)`
     : shown.join(separator);
@@ -166,20 +173,39 @@ export function describesProtocolRefusal(value: {
  * Counting values rather than objects is the point: `structuredClone`
  * preserves sharing, so a directed acyclic graph arrives as a handful of
  * objects, and an array of holes arrives as a single own property.
+ *
+ * The figure itself is unmeasured. No producer exists to size it against yet,
+ * and it is a ceiling on a whole record rather than on any one member, so a
+ * bundle of a few hundred templates each carrying a few dozen scope entries and
+ * state keys comes within range of it. It wants a number from a real bundle
+ * before a producer lands.
  */
 export const MAX_LITERAL_VALUE_NODES = 100_000;
 
 /**
- * Collects an offending item for a diagnostic, keeping only as many as the
- * diagnostic will render.
+ * What a gate collects while deciding to refuse: the offenders it will name,
+ * and how many it actually saw.
  *
- * Capping the message is not enough on its own: the producer picks how many
- * offenders there are, and an accumulator that grows past what `joinTokens`
- * ever shows is the same unbounded growth in a different container. The array
- * keeps one extra so a caller can still tell "exactly the limit" from "more".
+ * Two members rather than one array, because those are two different numbers.
+ * The producer picks how many offenders there are, so an accumulator that grows
+ * past what `joinTokens` renders is the same unbounded growth in a different
+ * container — but a diagnostic that reports the capped length as the count
+ * states a falsehood, telling a tier developer with forty unknown kinds that
+ * they have eleven.
  */
-export function recordOffender(offenders: string[], offender: string): void {
-  if (offenders.length <= DIAGNOSTIC_LIST_LIMIT) {
-    offenders.push(offender);
+export interface OffenderList {
+  shown: string[];
+  total: number;
+}
+
+export function newOffenderList(): OffenderList {
+  return { shown: [], total: 0 };
+}
+
+/** Records an offender, keeping only as many as a diagnostic will render. */
+export function recordOffender(list: OffenderList, offender: string): void {
+  list.total += 1;
+  if (list.shown.length < DIAGNOSTIC_LIST_LIMIT) {
+    list.shown.push(offender);
   }
 }

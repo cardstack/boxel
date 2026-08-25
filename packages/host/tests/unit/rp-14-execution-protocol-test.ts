@@ -592,7 +592,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.3: an unknown required feature refuses the whole record, naming every one at once', function (assert) {
+  test('RP-14.3: an unknown required feature refuses the whole record, naming them in one diagnostic', function (assert) {
     let seen: string[] = [];
     let record = watched(
       description({

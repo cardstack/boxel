@@ -13,6 +13,7 @@ import {
   ProtocolRefusal,
   describeValue,
   joinTokens,
+  newOffenderList,
   quoteToken,
   recordOffender,
 } from './refusal.ts';
@@ -128,7 +129,7 @@ function gateComponentUpdate(
       `an update's effects must be an array, received ${describeValue(effects)}`,
     );
   }
-  let unrecognized: string[] = [];
+  let unrecognized = newOffenderList();
   let normalized: ComponentEffect[] = [];
   let effectsLength = readMember(effects, 'length');
   if (
@@ -176,7 +177,7 @@ function gateComponentUpdate(
       payload: normalizeJsonData(readMember(entry, 'payload'), budget),
     });
   }
-  if (unrecognized.length > 0) {
+  if (unrecognized.total > 0) {
     throw new ProtocolRefusal(
       'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
       `an update names effect kinds this consumer does not recognize: ${joinTokens(unrecognized)}`,
