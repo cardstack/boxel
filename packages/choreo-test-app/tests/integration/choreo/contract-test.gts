@@ -1462,6 +1462,77 @@ module('Integration | choreo | contract', function (hooks) {
         'with nothing left on it'
       );
     });
+
+    test('a moved wrapper is a reflow: the pass may not be declined for it', async function (assert) {
+      // The fast keep fingerprints layout to decide whether a pass can be
+      // declined. What a render moves may be an ANCESTOR that is a
+      // participant of nothing — Escort's seat, one positioned wrapper
+      // carrying three participants — and a fingerprint read at the
+      // participant alone (offsetLeft against that same wrapper) is blind
+      // to it. Declined, the old run plays on against the moved layout
+      // and everything in the seat teleports a whole bay, together,
+      // mid-flight. This is that page, reduced.
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          app = this;
+        }
+        <template>
+          <Choreo
+            class="stage"
+            style="width:400px;height:120px;position:relative"
+            as |c|
+          >
+            {{grabCtx c}}
+            <div
+              style="position:absolute;top:0;left:{{if this.far '200px' '0px'}}"
+            >
+              <div
+                id="seated"
+                style="width:60px;height:40px;background:#0af"
+                {{motion id="seated" role="seated"}}
+              ></div>
+            </div>
+            <c.Move @of={{c.moved "seated"}} @spring={{SLOW}} />
+          </Choreo>
+        </template>
+      }
+      let app: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+
+      app!.far = true;
+      await settled();
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      const before = ctx.run;
+      const mid = bounds(el('#seated')).left;
+
+      // the retarget, mid-flight, again through the wrapper alone
+      app!.far = false;
+      await settled();
+      await nextFrame();
+      const after = bounds(el('#seated')).left;
+      assert.true(
+        Math.abs(after - mid) < 30,
+        `the retarget pins the painted box, it does not teleport ` +
+          `(${Math.round(mid)} → ${Math.round(after)})`
+      );
+      assert.true(
+        ctx.run !== before && ctx.run !== undefined,
+        'a moved wrapper compiled a replacement run'
+      );
+
+      await animationsSettled();
+      const rest = bounds(el('#seated')).left;
+      const home = bounds(el('.stage')).left;
+      assert.true(
+        Math.abs(rest - home) < 2,
+        `and it lands where the wrapper now rests (${Math.round(rest)} vs ${Math.round(home)})`
+      );
+    });
   });
 
   /* ------------------------------------------------------------------ *

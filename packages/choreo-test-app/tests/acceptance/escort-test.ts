@@ -40,11 +40,28 @@ const blurOf = () => {
 module('Acceptance | escort', function (hooks) {
   setupApplicationTest(hooks);
 
+  // The default ember-testing container is half-scaled and content-sized,
+  // and this page's layout is container-query driven: inside it the whole
+  // demo collapses to a few pixels, a bay is ~1px wide, and every
+  // geometric bound in this file passes VACUOUSLY — a card that teleports
+  // a full bay moves less than a rounding error. (That is not
+  // hypothetical: the retarget teleport shipped green through exactly
+  // that keyhole.) So the container is pinned to a real viewport, with
+  // the app's stylesheet kept — the geometry under test is the
+  // stylesheet's.
+  let viewport: HTMLStyleElement | undefined;
   hooks.beforeEach(function () {
+    viewport = document.createElement('style');
+    viewport.textContent = `
+      #ember-testing-container { position: fixed !important; left: 0 !important; top: 0 !important; width: 1000px !important; height: 660px !important; overflow: auto !important; transform: none !important; zoom: 1 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+      #ember-testing { width: 100% !important; height: 100% !important; transform: none !important; zoom: 1 !important; }
+    `;
+    document.head.appendChild(viewport);
     setTempo('smooth');
     resetCrossing();
   });
   hooks.afterEach(function () {
+    viewport?.remove();
     resetCrossing();
   });
 
@@ -101,7 +118,9 @@ module('Acceptance | escort', function (hooks) {
       `and wider (${shadow().width.toFixed(1)} vs ${restWidth.toFixed(1)})`
     );
 
-    await frames(60);
+    // past the follow window (1.6s), which deliberately outlives the
+    // spring's tail — 'arrival' is when the handover has happened
+    await frames(110);
     assert.true(
       Math.abs(blurOf() - restBlur) < 0.6,
       `back to its resting blur on arrival (${blurOf().toFixed(2)})`
@@ -123,13 +142,16 @@ module('Acceptance | escort', function (hooks) {
     // back — long over by the time anything settled, and the whole of
     // what a person actually sees.
     const errors: number[] = [];
+    const cardLefts: number[] = [];
     let stop = false;
     const watch = () => {
       if (stop) {
         return;
       }
-      if (find('[data-test-escort-card]') && find('[data-test-escort-badge]')) {
+      const card = find('[data-test-escort-card]');
+      if (card && find('[data-test-escort-badge]')) {
         errors.push(pinError());
+        cardLefts.push(card.getBoundingClientRect().left);
       }
       requestAnimationFrame(watch);
     };
@@ -143,7 +165,7 @@ module('Acceptance | escort', function (hooks) {
     await click('[data-test-bay="1"]');
     await frames(4);
     const midway = pinError();
-    await frames(70);
+    await frames(110);
     stop = true;
 
     assert.true(
@@ -162,6 +184,31 @@ module('Acceptance | escort', function (hooks) {
     assert.true(
       pinError() < 2,
       `lands on the new bay's corner (${pinError().toFixed(1)}px off)`
+    );
+    // The pin alone cannot see the worst failure: when the retarget pass
+    // is wrongly declined, the seat's layout moves under a run that keeps
+    // playing, and card, badge and shadow teleport a whole bay TOGETHER —
+    // the pin stays perfect through a jump a person cannot miss. So the
+    // CARD itself is held to per-frame smoothness across the retarget: a
+    // correctly replaced run pins frame one to the painted box, and no
+    // frame of a paced spring travels a fraction of a bay.
+    let worstStep = 0;
+    for (let i = 1; i < cardLefts.length; i++) {
+      worstStep = Math.max(
+        worstStep,
+        Math.abs(cardLefts[i]! - cardLefts[i - 1]!)
+      );
+    }
+    const travel = Math.max(...cardLefts) - Math.min(...cardLefts);
+    // the scale guard: if the page ever collapses again, this fails loudly
+    // instead of letting every bound above pass at 1px-bay scale
+    assert.true(
+      travel > 60,
+      `the flight is real at this scale (${travel.toFixed(1)}px of travel)`
+    );
+    assert.true(
+      worstStep < travel / 4,
+      `the card never teleports through the retarget (worst single-frame step ${worstStep.toFixed(1)}px of ${travel.toFixed(1)}px travelled, over ${cardLefts.length} frames)`
     );
   });
 });
