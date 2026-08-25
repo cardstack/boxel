@@ -7,7 +7,7 @@
 import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
-import type { AnchorRef } from './anchors.ts';
+import { type AnchorRef, at } from './anchors.ts';
 import type { BeaconRef } from './beacons.ts';
 import type { GestureRef } from './gesture.ts';
 import type {
@@ -27,6 +27,9 @@ interface Provider {
 }
 
 const providers = new WeakMap<Element, Provider>();
+
+/** unnamed crossings still need a stable, unique inner anchor name */
+let crossings = 0;
 
 /** the steps directly inside an element, in document order; a nested <Choreo> is another region's */
 export function collect(el: Element): TimelineNode[] {
@@ -97,11 +100,28 @@ function propsOf(args: Record<string, unknown>): Record<string, PropSource> {
   return props;
 }
 
-/** the template speaks seconds, as Motion does; the compiler's clock is ms */
-const msOf = (seconds: number | undefined): number | undefined =>
-  seconds === undefined ? undefined : seconds * 1000;
+/**
+ * The template speaks seconds, as Motion does; the compiler's clock is ms.
+ * A composite step writes node literals, which are BELOW that boundary —
+ * so it converts its own seconds args here, and `undefined` stays
+ * `undefined` so an unset arg still means "take the default".
+ */
+export function toMs<T extends number | undefined>(
+  seconds: T,
+): T extends number ? number : number | undefined {
+  // the conditional return type is the whole point — a required `ms` field
+  // takes toMs(x) without a null check when x is a number — and TypeScript
+  // cannot verify a conditional return from inside, so the cast is the
+  // price of stating it
+  return (
+    seconds === undefined ? undefined : seconds * 1000
+  ) as T extends number ? number : number | undefined;
+}
 
-interface StepArgsBase {
+const msOf = toMs;
+
+/** the args every step shares — a composite step extends this */
+export interface StepArgsBase {
   [prop: string]: unknown;
   /** `{{at 'name' 0.4}}` / `{{after 'name' 0.2}}` — start against a named step */
   at?: AnchorRef;
@@ -113,11 +133,51 @@ interface StepArgsBase {
   stagger?: number;
 }
 
-interface StepArgs extends StepArgsBase {
+/** …and the args of a step that names sprites */
+export interface StepArgs extends StepArgsBase {
   of: Query | Query[];
 }
 
-abstract class StepComponent<A extends StepArgsBase> extends Component<{
+/**
+ * The base every step is built on, and the public seam for a COMPOSITE
+ * step — a new word in the timeline that expands into the built-in
+ * vocabulary. `c.Crossing` is one, and is written in nothing but this.
+ *
+ * Subclass it, implement `node()`, and render the component anywhere
+ * inside a `<Choreo>`: the region reads the tree back in document order
+ * and your node takes its place in it.
+ *
+ * ```gts
+ * export class Reveal extends StepComponent<StepArgs & { rise?: number }> {
+ *   node(): TimelineNode {
+ *     const { of, name, rise = 12 } = this.args;
+ *     return {
+ *       at: this.args.at,
+ *       children: [
+ *         { kind: 'tween', generic: true, of, ms: 240, props: { opacity: [0, 1] } },
+ *         { kind: 'tween', generic: true, of, ms: 240, props: { y: [rise, 0] } },
+ *       ],
+ *       kind: 'parallel',
+ *       name,
+ *     };
+ *   }
+ * }
+ * ```
+ *
+ * **`node()` is called on every pass**, and its result is fingerprinted to
+ * decide whether an edited timeline replays the run. So it must be pure
+ * and cheap: no measurement, no DOM writes, no tracked writes (a tracked
+ * write re-renders, which replays the pass, which calls `node()`). And
+ * because functions in the tree are compared by identity, a `node()` that
+ * allocates a fresh closure per call declares an edit on every pass —
+ * hoist property functions to module scope.
+ *
+ * Two conventions worth keeping: mark children `generic: true` so a
+ * sibling step can claim a sprite away from your defaults (the yield
+ * rule, §4.7), and derive any inner `name` from your own `@name` so two
+ * of your step in one timeline do not collide.
+ */
+export abstract class StepComponent<A extends StepArgsBase> extends Component<{
   Args: A;
 }> {
   abstract node(): TimelineNode;
@@ -411,6 +471,11 @@ export class Tether extends StepComponent<
  * settle. One step in the template; a whole overlapped score on the clock —
  * Keynote's Magic Move does not wait for the dissolve to finish before the
  * movers leave, and a crossing that does reads as three acts, not one.
+ *
+ * It is also the reference COMPOSITE step, and deliberately written in
+ * nothing but the public seam (`StepComponent`, `toMs`, `at`, and node
+ * literals): if this needed a privilege an author could not have, the
+ * contract on `StepComponent` would be a lie.
  */
 export class Crossing extends StepComponent<
   StepArgsBase & {
@@ -428,6 +493,16 @@ export class Crossing extends StepComponent<
     swap?: 'during' | 'none' | 'settle';
   }
 > {
+  /**
+   * The flight is addressable from outside — `{{at 'page:flight' 0.5}}`
+   * for a step that wants to ride the move itself. Derived from this
+   * crossing's own `@name` rather than fixed, so two crossings in one
+   * timeline do not collide over it; unnamed, it takes a per-instance
+   * number, which is stable for the life of the component and so does not
+   * disturb the tree fingerprint between passes.
+   */
+  private flightName = `${this.args.name ?? `crossing-${++crossings}`}:flight`;
+
   node(): TimelineNode {
     const {
       arrive = 0.22,
@@ -438,13 +513,16 @@ export class Crossing extends StepComponent<
       spring,
       swap,
     } = this.args;
-    const FLIGHT = '__crossing-flight';
+    const FLIGHT = this.flightName;
     return {
+      at: this.args.at,
+      delay: toMs(this.args.delay),
+      name: this.args.name,
       children: [
         {
           generic: true,
           kind: 'tween',
-          ms: leave * 1000,
+          ms: toMs(leave),
           of: { onstage: true, type: 'departed' },
           props: { opacity: 0 },
         },
@@ -452,7 +530,7 @@ export class Crossing extends StepComponent<
           ease,
           generic: true,
           kind: 'move',
-          ms: duration === undefined ? undefined : duration * 1000,
+          ms: toMs(duration),
           name: FLIGHT,
           of: { type: 'received' },
           // iOS's rule: uniform scale matched by cover, the aspect mismatch
@@ -470,10 +548,10 @@ export class Crossing extends StepComponent<
           props: { zIndex: 2 },
         },
         {
-          at: { anchor: FLIGHT, edge: 'start', progress: overlap },
+          at: at(FLIGHT, overlap),
           generic: true,
           kind: 'tween',
-          ms: arrive * 1000,
+          ms: toMs(arrive),
           of: { onstage: true, type: 'inserted' },
           props: { opacity: [0, 1] },
         },

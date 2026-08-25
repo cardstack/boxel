@@ -1,6 +1,6 @@
 # The step vocabulary, opened
 
-> **Status: design, part 1 landed.** This is the second of the
+> **Status: design; parts 1 and 2 landed, part 3 open.** This is the second of the
 > three gaps the 2026-08-23 superset audit left standing, and the one that
 > blocks the next-generation Boxel work — the audit's line was "no custom
 > step kind, which also blocks `follow` / derived tweens (one cue reading
@@ -108,6 +108,17 @@ own: a named parallel, anchored against, with a sibling starting at 60% of
 its span.
 
 ## Part 2 — composite steps, in public
+
+> **Landed.** `StepComponent`, `StepArgs`, `StepArgsBase`, `toMs` and the
+> node types are exported; `generic` is documented as an author's flag
+> rather than "never set by authors"; the contract is written down as
+> §4.8. `c.Crossing` was rewritten against the seam and kept every
+> privilege it had — none — so it now also takes `@name`, `@at` and
+> `@delay` like anything else, and names its flight `<name>:flight`
+> instead of a fixed private string, which makes the flight anchorable
+> from outside and lets two crossings share a timeline. Two contract
+> tests, written the way an app would write them: one composite compiled
+> and anchored against, one proving the yield rule from the outside.
 
 Export what `c.Crossing` uses, and write down what it means.
 

@@ -29,6 +29,10 @@ import {
   type ChoreoContext,
   motion,
   type SpringSpec,
+  type StepArgs,
+  StepComponent,
+  type TimelineNode,
+  toMs,
 } from 'glimmer-motion';
 import {
   animationsSettled,
@@ -256,6 +260,169 @@ module('Integration | choreo | contract', function (hooks) {
         Math.round(ctx.run!.duration * 1000),
         900,
         'the run still spans the anchored block it holds'
+      );
+      await animationsSettled();
+    });
+  });
+
+  /* ------------------------------------------------------------------ *
+   * Composite steps — a new word, written in the public seam
+   * ------------------------------------------------------------------ */
+
+  module('composite steps', function () {
+    /**
+     * Everything below is written the way an APP would write it: nothing
+     * imported from a deep path, nothing the published package does not
+     * export. If this file ever needs a privilege to say a new step, the
+     * contract on StepComponent is a lie and that is the bug.
+     *
+     * Hoisted, not allocated per node(): functions in the tree print by
+     * identity, so a fresh one per pass would declare an edit every frame.
+     */
+    const startOf = (id: string) =>
+      ctx.run!.cues.filter((cue) => cue.sprite.id === id).map((c) => c.start);
+
+    class Reveal extends StepComponent<
+      StepArgs & { duration?: number; rise?: number }
+    > {
+      node(): TimelineNode {
+        const { of, duration = 0.3, rise = 12 } = this.args;
+        return {
+          at: this.args.at,
+          children: [
+            {
+              generic: true,
+              kind: 'tween',
+              ms: toMs(duration),
+              of,
+              props: { opacity: [0, 1] },
+            },
+            {
+              generic: true,
+              kind: 'tween',
+              ms: toMs(duration),
+              of,
+              props: { y: [rise, 0] },
+            },
+          ],
+          delay: toMs(this.args.delay),
+          kind: 'parallel',
+          name: this.args.name,
+        };
+      }
+    }
+
+    test('an app can say a new step, and the score can point at it', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          composed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+            {{/if}}
+            <Reveal
+              @name="intro"
+              @of={{c.id "a"}}
+              @duration={{0.4}}
+              @delay={{0.1}}
+            />
+            <c.Tween
+              @at={{after "intro"}}
+              @of={{c.id "b"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      let composed: App | undefined;
+      await render(<template><App /></template>);
+      composed!.show = true;
+      await settled();
+
+      // the composite expanded: one step in the template, two cues on one
+      // sprite, both starting after the composite's own delay
+      assert.deepEqual(
+        startOf('a'),
+        [100, 100],
+        "both of the composite's children play, after its delay"
+      );
+      assert.deepEqual(
+        startOf('b'),
+        [500],
+        'a sibling anchors against the composite as one thing (0.1 + 0.4)'
+      );
+      await animationsSettled();
+    });
+
+    test("a composite's generic children yield to a step that names the sprite", async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          yielded = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+            {{/if}}
+            {{! the composite offers its default to BOTH }}
+            <Reveal @of={{c.all}} @duration={{0.4}} />
+            {{! …and 'b' takes something else instead, with no exclusion
+                syntax anywhere: the yield rule, from the outside }}
+            <c.Tween
+              @of={{c.id "b"}}
+              @opacity={{array 0 1}}
+              @duration={{0.9}}
+            />
+          </Choreo>
+        </template>
+      }
+      let yielded: App | undefined;
+      await render(<template><App /></template>);
+      yielded!.show = true;
+      await settled();
+
+      assert.deepEqual(
+        startOf('a').length,
+        2,
+        'the unclaimed sprite keeps the composite’s two children'
+      );
+      const b = ctx.run!.cues.filter((cue) => cue.sprite.id === 'b');
+      assert.strictEqual(
+        b.length,
+        1,
+        'the claimed sprite is animated once, by the step that named it'
+      );
+      assert.strictEqual(
+        Math.round(b[0]!.duration),
+        900,
+        'and it is the specific step that owns it, not the composite'
       );
       await animationsSettled();
     });

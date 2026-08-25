@@ -5,6 +5,7 @@
 export { beacon } from './beacon.ts';
 export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
+export { getActiveChoreoRuns } from './choreo/active-runs.ts';
 export type { AnchorRef } from './choreo/anchors.ts';
 export { after, at } from './choreo/anchors.ts';
 export type { BeaconRef } from './choreo/beacons.ts';
@@ -12,16 +13,24 @@ export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
 export type { GestureRef } from './choreo/gesture.ts';
 export type { ChoreoRun } from './choreo/run.ts';
+export type { StepArgs, StepArgsBase } from './choreo/steps.gts';
+export { StepComponent, toMs } from './choreo/steps.gts';
 export type {
+  Block,
   Bounds,
   CameraState,
   DeliveryBy,
   DeliveryOrder,
   Easing,
+  GateNode,
+  PropSource,
+  PropValue,
   Query,
   Rect,
   SpringSpec,
   Sprite,
+  Step,
+  TimelineNode,
 } from './choreo/types.ts';
 export { scroll } from './dom/scroll/index.ts';
 export { scrollInfo } from './dom/scroll/track.ts';

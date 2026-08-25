@@ -174,12 +174,17 @@ interface StepBase {
    */
   delay?: number;
   /**
-   * The yield rule (§4.7): a generic step — the canned crossing's own
-   * children — surrenders any sprite that a specific (non-generic) step in
-   * the same timeline also names. That is how "a special exit that is NOT
-   * just a dissolve" is said: write the step, and the canned dissolve
-   * yields the sprite entirely. Never set by authors; `c.Crossing` marks
-   * its generated children.
+   * The yield rule (§4.7): a generic step surrenders any sprite that a
+   * specific (non-generic) step in the same timeline also names. That is
+   * how "a special exit that is NOT just a dissolve" is said — write the
+   * step, and the canned dissolve yields the sprite entirely.
+   *
+   * A COMPOSITE step should mark the children it generates generic. It is
+   * what makes an opinionated default feel like a default rather than a
+   * cage: whoever uses the composite can override one role by writing a
+   * plain step beside it, and needs no exclusion syntax to do it. Steps
+   * written directly in a template are never generic — saying it there
+   * would mean "ignore me if anyone else asks".
    */
   generic?: boolean;
   /** a label other steps may anchor against (`@at={{at 'name'}}`) */
