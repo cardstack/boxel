@@ -183,9 +183,11 @@ export function describesProtocolRefusal(value: {
  *
  * The figure itself is unmeasured. No producer exists to size it against yet,
  * and it is a ceiling on a whole record rather than on any one member, so a
- * bundle of a few hundred templates each carrying a few dozen scope entries and
- * state keys comes within range of it. It wants a number from a real bundle
- * before a producer lands.
+ * bundle — whose cost is templates × scope × state, a product rather than a
+ * sum — is the record that reaches it first. Replacing the guess with a
+ * distribution from real cards, and deciding whether a bundle wants its own
+ * ceiling, is tracked separately; a refusal naming this constant is a sizing
+ * signal, not a malformed record.
  */
 export const MAX_LITERAL_VALUE_NODES = 100_000;
 
