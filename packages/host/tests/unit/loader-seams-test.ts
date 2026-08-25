@@ -272,6 +272,12 @@ module('Unit | loader seams', function (hooks) {
         dependencyList: [],
         implementation: 'not callable',
       },
+      // Passes `Array.isArray`, so only an element check refuses it before
+      // the loader tries to resolve 42 as a module identifier.
+      'a dependency that is not an identifier': {
+        dependencyList: ['exports', 42],
+        implementation: () => {},
+      },
     };
 
     for (let [description, registration] of Object.entries(unusable)) {
@@ -762,6 +768,75 @@ module('Unit | loader seams', function (hooks) {
     assert.false(
       loader.isModuleLoaded(server.url('throws-on-eval.js')),
       'the failure is not pinned past the replacement of its dependency',
+    );
+  });
+
+  test('a dependency walk taken while a module is evicted is not memoized', async function (assert) {
+    await loader.import(server.url('top.js'));
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')).sort(),
+      [server.url('leaf'), server.url('middle')],
+      'the dependency set is cached off the first walk',
+    );
+
+    loader.invalidateModule(server.url('leaf'));
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')),
+      [],
+      'a walk taken while the module is gone reports what is loaded, which is nothing',
+    );
+
+    await loader.import(server.url('top.js'));
+    assert.deepEqual(
+      loader.getKnownConsumedModules(server.url('top.js')).sort(),
+      [server.url('leaf'), server.url('middle')],
+      'that walk did not outlive the gap it was taken in',
+    );
+  });
+
+  test('an eviction landing after the graph is walked re-enters instead of failing the import', async function (assert) {
+    // The read this covers happens after the walk has resolved, so no fetch
+    // can reach it — driving the interleaving means stepping in where the
+    // import awaits. Counting microtasks instead would pin nothing stable.
+    let prototype = Object.getPrototypeOf(loader) as Record<string, unknown>;
+    let walk = prototype.advanceToState as (
+      ...args: unknown[]
+    ) => Promise<void>;
+    assert.strictEqual(
+      typeof walk,
+      'function',
+      'the walk this test steps into still exists',
+    );
+
+    let evictions = 0;
+    prototype.advanceToState = async function (
+      this: Loader,
+      ...args: unknown[]
+    ) {
+      let result = await walk.apply(this, args);
+      if (evictions === 0) {
+        evictions++;
+        this.invalidateModule(server.url('leaf'));
+      }
+      return result;
+    };
+
+    try {
+      let module = await loader.import<{ leaf(): string }>(
+        server.url('leaf.js'),
+      );
+      assert.strictEqual(
+        module.leaf(),
+        'leaf',
+        'the import resolves against the module that replaced the evicted one',
+      );
+    } finally {
+      prototype.advanceToState = walk;
+    }
+    assert.strictEqual(
+      evictions,
+      1,
+      'the eviction fired in the window under test',
     );
   });
 

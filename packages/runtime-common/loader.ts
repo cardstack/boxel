@@ -47,7 +47,15 @@ type RegisteredWithDepsModule = {
 
 // Import edges that were still completing when a module's dependency list was
 // frozen — recorded apart from `consumedModules`, which holds only the edges
-// that had resolved by then. Both together are the module's imports.
+// that had resolved by then.
+//
+// The two readers want different halves, deliberately. Eviction reads both,
+// through `directModuleDependencies`: an edge that was still completing is an
+// import, and a module holding another's exports goes stale with it.
+// Dependency tracking — `getConsumedModules` and
+// `collectKnownModuleDependencies` — reads only `consumedModules`, because
+// that set is what the index records module dependencies from, and widening
+// it widens invalidation fan-out across indexing.
 type CompletingDependencies = { completingDependencies: string[] };
 
 type PreparingModule = {
@@ -119,9 +127,14 @@ export interface ModuleRegistration {
 // Evaluates the AMD registration wrapper `transpileAmd` produces and hands
 // back what the module registered. This is the seam that decides *where* a
 // module's code runs: the default evaluates it in the loader's own realm,
-// while a caller that must run authored code somewhere else — a SES
-// Compartment, an iframe child — supplies an evaluator whose `define` binding
-// lives there.
+// while a caller that must run authored code somewhere else supplies an
+// evaluator whose `define` binding lives there.
+//
+// The contract is synchronous, which bounds where the seam applies: an
+// evaluation context reachable synchronously from this loader — a SES
+// Compartment is one. A context that can only be reached by message passing
+// runs its own Loader on its own side of the boundary and injects its
+// evaluator there, rather than answering this one.
 export type ModuleEvaluator = (
   source: string,
   moduleIdentifier: string,
@@ -651,22 +664,24 @@ export class Loader {
       );
     }
 
-    await this.advanceToState(resolvedModule, 'evaluated');
-    this.trackKnownModuleDependencies(
-      resolvedModuleIdentifier,
-      dependencyTrackingContext,
-    );
-    let module = this.getModule(resolvedModuleIdentifier);
-    switch (module?.state) {
-      case 'evaluated':
-      case 'preparing':
-        return module.moduleInstance as T;
-      case 'broken':
-        throw module.exception;
-      default:
-        throw new Error(
-          `bug: advanceToState('${moduleIdentifier}', 'evaluated') resulted in state ${module?.state}`,
-        );
+    // `advanceToState` re-reads the module map after each of its own awaits,
+    // but this read happens after it has resolved. An eviction landing in
+    // between leaves nothing to return, so advance the replacement rather than
+    // reporting the state the eviction produced as a bug.
+    for (;;) {
+      await this.advanceToState(resolvedModule, 'evaluated');
+      this.trackKnownModuleDependencies(
+        resolvedModuleIdentifier,
+        dependencyTrackingContext,
+      );
+      let module = this.getModule(resolvedModuleIdentifier);
+      switch (module?.state) {
+        case 'evaluated':
+        case 'preparing':
+          return module.moduleInstance as T;
+        case 'broken':
+          throw module.exception;
+      }
     }
   }
 
@@ -795,6 +810,11 @@ export class Loader {
 
     let pending = [rootModuleIdentifier];
     let visited = new Set<string>();
+    // A walk that reached a module this loader does not hold saw only part of
+    // the graph. Memoizing that would outlive the gap — the cache is consulted
+    // before the module map, so a set collected while a module was evicted
+    // would still be answered after the module came back.
+    let complete = true;
 
     while (pending.length > 0) {
       let moduleIdentifier = pending.pop()!;
@@ -815,6 +835,7 @@ export class Loader {
 
       let module = this.getModule(moduleIdentifier);
       if (!module) {
+        complete = false;
         continue;
       }
 
@@ -848,7 +869,9 @@ export class Loader {
       }
     }
 
-    this.knownDepsCache.set(rootModuleIdentifier, visited);
+    if (complete) {
+      this.knownDepsCache.set(rootModuleIdentifier, visited);
+    }
     return visited;
   }
 
@@ -1339,6 +1362,9 @@ export class Loader {
       if (
         !registration ||
         !Array.isArray(registration.dependencyList) ||
+        !registration.dependencyList.every(
+          (entry) => typeof entry === 'string',
+        ) ||
         typeof registration.implementation !== 'function'
       ) {
         throw new Error(
