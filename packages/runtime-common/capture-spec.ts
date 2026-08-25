@@ -347,11 +347,15 @@ function checkMergedOverrides(
   // The capture viewport IS the envelope for fitted/atom, so the same
   // physical-pixel composition applies to it.
   if (spec.envelope) {
-    if (spec.envelope.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+    if (
+      spec.envelope.width * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
       return `${path}.envelope.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
     if (
-      spec.envelope.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      spec.envelope.height * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
     ) {
       return `${path}.envelope.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }

@@ -14,6 +14,7 @@ import {
   type ModuleRenderResponse,
   type RunCommandResponse,
   type ScreenshotCaptureSpec,
+  type ScreenshotCaptureSpecParse,
   type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
@@ -469,9 +470,9 @@ export function buildPrerenderApp(options: {
     // -> null), so the capture path sees one canonical shape from every
     // caller. It is format-aware (fitted/atom require an envelope), so it
     // runs only once the format itself is valid.
-    let captureSpecParse = formatIsValid
+    let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
       ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
-      : ({ captureSpec: null } as const);
+      : { captureSpec: null };
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },

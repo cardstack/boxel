@@ -1300,8 +1300,11 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip } = captureSpec ?? {};
-  return [{ name: 'default', viewport, deviceScaleFactor, fullPage, clip }];
+  let { viewport, deviceScaleFactor, fullPage, clip, envelope } =
+    captureSpec ?? {};
+  return [
+    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, envelope },
+  ];
 }
 
 // Whether an entry asks for a viewport different from the page default.

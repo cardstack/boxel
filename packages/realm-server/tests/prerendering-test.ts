@@ -1096,10 +1096,19 @@ module(basename(import.meta.filename), function () {
         auth: auth(),
       });
 
-      await screenshot(
+      let { response } = await screenshot(
         cardURL,
         { envelope: { width: 250, height: 275 } },
         'fitted',
+      );
+      // A singular envelope must reach the capture exactly like a batch
+      // entry's: the PNG is sized to the box, not the default viewport.
+      assert.strictEqual(response.status, 'ready', 'fitted capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.deepEqual(
+        { width: png.width, height: png.height },
+        { width: 250, height: 275 },
+        'singular fitted PNG matches its envelope',
       );
 
       await realm.realmIndexUpdater.fullIndex();

@@ -213,7 +213,10 @@ export default function handleScreenshotCard({
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
-    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec, format);
+    let captureSpecParse = parseScreenshotCaptureSpec(
+      attrs.captureSpec,
+      format,
+    );
     if (captureSpecParse.error) {
       return sendResponseForBadRequest(ctxt, captureSpecParse.error);
     }
