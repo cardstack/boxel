@@ -891,6 +891,18 @@ export default class RenderRoute extends Route<Model> {
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
         let normalized = [...params];
+        // A trailing query-params object (e.g. the fitted/atom screenshot
+        // envelope) is not a positional route param — peel it off before the
+        // base-param length heuristic below, then re-append it to the final
+        // transition so router.transitionTo receives it as its query-params arg.
+        let last = normalized[normalized.length - 1];
+        let queryParamsArg =
+          last &&
+          typeof last === 'object' &&
+          !Array.isArray(last) &&
+          'queryParams' in last
+            ? (normalized.pop() as { queryParams?: Record<string, string> })
+            : undefined;
         if (
           normalized.length >= 3 &&
           normalized[0] === baseParams[0] &&
@@ -905,7 +917,10 @@ export default class RenderRoute extends Route<Model> {
           this.renderBaseParams = baseParams;
           normalized = normalized.slice(3);
         }
-        join(() => this.router.transitionTo(routeName, ...normalized));
+        let finalParams = queryParamsArg
+          ? [...normalized, queryParamsArg]
+          : normalized;
+        join(() => this.router.transitionTo(routeName, ...finalParams));
         return;
       }
       join(() =>

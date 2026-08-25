@@ -7,6 +7,7 @@ import {
   findLiveInstanceGeneration,
   findMediaCacheEntry,
   isCaptureFormat,
+  isScreenshotFormat,
   parseScreenshotCaptureSpec,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
@@ -112,6 +113,14 @@ interface CaptureResult {
  * return a 400 naming the offending field. The one bound no request-time
  * parse can enforce — a fullPage capture's document extent — is checked
  * against the same physical-pixel cap at capture time.
+ * `format` may be `isolated`, `embedded`, `fitted`, or `atom`. The `fitted`
+ * and `atom` formats render into a parent-owned box, so they require an
+ * `envelope` (`{ width, height }` in CSS px) on the captureSpec — or on every
+ * batch entry; requesting them without one returns a 400. Conversely
+ * `isolated`/`embedded` fill the viewport and reject an envelope. An
+ * envelope-carrying spec always has overrides, so fitted/atom captures are
+ * always capture-only.
+ *
  * A batch of captures may be requested via `captureSpec.captures`, an array
  * of named `{ name, ...overrides }` entries (bounded by
  * `SCREENSHOT_MAX_CAPTURES`). Each entry's overrides win over the singular
@@ -165,12 +174,14 @@ export default function handleScreenshotCard({
     if (!cardId || typeof cardId !== 'string') {
       return sendResponseForBadRequest(ctxt, 'cardId is required');
     }
-    // Shared with the GET `_screenshot/` DSL so both surfaces accept exactly
-    // the same capture formats.
-    if (!isCaptureFormat(format)) {
+    // Shared with the prerender server's screenshot route so both surfaces
+    // accept exactly the same capture formats. Wider than the GET
+    // `_screenshot/` DSL's formats: fitted/atom are capture-only (they always
+    // require an envelope, so they never touch the canonical ledger identity).
+    if (!isScreenshotFormat(format)) {
       return sendResponseForBadRequest(
         ctxt,
-        'format must be "isolated" or "embedded"',
+        'format must be "isolated", "embedded", "fitted", or "atom"',
       );
     }
     if (includeBase64 !== undefined && typeof includeBase64 !== 'boolean') {
@@ -199,11 +210,10 @@ export default function handleScreenshotCard({
     if (!normalizedCardId.startsWith(normalizedRealmURL)) {
       return sendResponseForBadRequest(ctxt, 'cardId must be within realmURL');
     }
-    let spec: CaptureSpec = { format };
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
-    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
+    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec, format);
     if (captureSpecParse.error) {
       return sendResponseForBadRequest(ctxt, captureSpecParse.error);
     }
@@ -232,7 +242,13 @@ export default function handleScreenshotCard({
       // fast path, no persist, no served URL. The parse normalizes an
       // all-defaults spec to null, so null exactly means canonical.
       let isCanonicalCapture = captureSpec === null;
-      if (mediaCacheAdapter && isCanonicalCapture) {
+      // The canonical capture identity speaks the GET DSL's formats only.
+      // fitted/atom can never reach here (they require an envelope, so their
+      // spec is never null), but the guard keeps that invariant executable
+      // and narrows the type.
+      let spec: CaptureSpec | undefined =
+        isCanonicalCapture && isCaptureFormat(format) ? { format } : undefined;
+      if (mediaCacheAdapter && spec) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -265,7 +281,7 @@ export default function handleScreenshotCard({
         }
       }
 
-      if (entryKey) {
+      if (entryKey && spec) {
         let entry = await findMediaCacheEntry(dbAdapter, entryKey);
         if (entry) {
           let response = await respondFromLedger({
@@ -364,7 +380,7 @@ export default function handleScreenshotCard({
           );
         }
       }
-      if (entryKey && result.status === 'ready') {
+      if (entryKey && spec && result.status === 'ready') {
         // A canonical capture persisted under its ledger identity: replace
         // the engine's byte-only captures[] entry with the durable served-URL
         // form, carrying through the effective scale the engine reports.

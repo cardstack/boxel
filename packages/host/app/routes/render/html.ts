@@ -29,10 +29,22 @@ const DEFAULT_REALM_INDEX_REFS = [
   { module: '@cardstack/base/workspace', name: 'Workspace' },
 ] as ResolvedCodeRef[];
 
+export interface Envelope {
+  width: number;
+  height: number;
+}
+
 export interface Model {
   instance: CardDef;
   format: Format;
   Component: BoxComponent;
+  // Fixed-size parent box (CSS px) to render the card into, from the
+  // `envelopeWidth`/`envelopeHeight` query params. Present only for screenshot
+  // captures of a parent-box format (fitted/atom); the template wraps the card
+  // in a non-scrolling box of this size so `@container fitted-card` queries
+  // fire against it. Absent for the viewport-filling formats and for indexing
+  // renders (which never send the query params).
+  envelope?: Envelope;
   // True when this render should be short-circuited to the realm-
   // index boilerplate placeholder instead of running through Glimmer.
   // Set only when `format === 'isolated'`, the card is the realm's
@@ -49,6 +61,14 @@ export default class RenderHtmlRoute extends Route<Model> {
   @service declare network: NetworkService;
   @service declare router: RouterService;
   @service declare realm: RealmService;
+
+  // `refreshModel: true` so a batch screenshot capture can re-transition to a
+  // different envelope on the same hydrated card (parent render model is
+  // unchanged) and have model() re-run to re-render into the new box.
+  queryParams = {
+    envelopeWidth: { refreshModel: true },
+    envelopeHeight: { refreshModel: true },
+  };
 
   beforeModel(transition: Transition) {
     let parentModel = this.modelFor('render') as ParentModel | undefined;
@@ -76,9 +96,13 @@ export default class RenderHtmlRoute extends Route<Model> {
   async model({
     format,
     ancestor_level,
+    envelopeWidth,
+    envelopeHeight,
   }: {
     format: string;
     ancestor_level: string;
+    envelopeWidth?: string | null;
+    envelopeHeight?: string | null;
   }): Promise<Model> {
     let parentModel = this.modelFor('render') as ParentModel | undefined;
     let renderModel =
@@ -110,7 +134,9 @@ export default class RenderHtmlRoute extends Route<Model> {
       level === 0 &&
       this.#isDefaultRealmIndexCard(instance, types);
 
-    return { format, instance, Component, useRealmIndexBoilerplate };
+    let envelope = parseEnvelope(envelopeWidth, envelopeHeight);
+
+    return { format, instance, Component, useRealmIndexBoilerplate, envelope };
   }
 
   // True when the card under render is the realm's default index card
@@ -149,4 +175,30 @@ export default class RenderHtmlRoute extends Route<Model> {
     let info = this.realm.info(cardRealmURL.href);
     return info?.includePrerenderedDefaultRealmIndex !== true;
   }
+}
+
+// Parse the `envelopeWidth`/`envelopeHeight` query params (strings off the URL)
+// into a positive-integer box. Returns undefined unless BOTH are present and
+// valid, so a partial or malformed envelope silently falls back to the normal
+// viewport-filling render rather than producing a zero/NaN-sized box. The
+// realm-server handler is the authoritative validator; this is a lenient parse
+// of an already-trusted value.
+function parseEnvelope(
+  rawWidth: string | null | undefined,
+  rawHeight: string | null | undefined,
+): Envelope | undefined {
+  if (rawWidth == null || rawHeight == null) {
+    return undefined;
+  }
+  let width = Number(rawWidth);
+  let height = Number(rawHeight);
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+  return { width, height };
 }

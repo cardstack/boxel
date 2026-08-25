@@ -678,12 +678,16 @@ module(basename(import.meta.filename), function () {
       return JSON.stringify(sessions);
     };
 
-    let screenshot = (cardURL: string, captureSpec?: ScreenshotCaptureSpec) =>
+    let screenshot = (
+      cardURL: string,
+      captureSpec?: ScreenshotCaptureSpec,
+      format: 'isolated' | 'embedded' | 'fitted' | 'atom' = 'isolated',
+    ) =>
       prerenderer.prerenderScreenshot({
         realm: realmURL,
         url: cardURL,
         auth: auth(),
-        format: 'isolated',
+        format,
         ...(captureSpec ? { captureSpec } : {}),
       });
 
@@ -1019,6 +1023,99 @@ module(basename(import.meta.filename), function () {
         singular.response.contentType,
         'image/png',
         'contentType preserved',
+      );
+    });
+
+    test('a fitted batch of 3 envelopes yields 3 differently-sized PNGs', async function (assert) {
+      // The canonical fitted matrix renders one card at many box sizes off a
+      // single hydrate: each entry re-transitions the same card into a new
+      // envelope box and the capture is sized to that box.
+      let { response } = await screenshot(
+        `${realmURL}1`,
+        {
+          captures: [
+            { name: 'sm', envelope: { width: 150, height: 170 } },
+            { name: 'md', envelope: { width: 250, height: 275 } },
+            { name: 'lg', envelope: { width: 400, height: 300 } },
+          ],
+        },
+        'fitted',
+      );
+      assert.strictEqual(response.status, 'ready', 'fitted batch succeeded');
+      assert.strictEqual(response.captures?.length, 3, 'returns 3 captures');
+      assert.deepEqual(
+        response.captures?.map((c) => c.name),
+        ['sm', 'md', 'lg'],
+        'captures are named and ordered as requested',
+      );
+
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      let sm = decodePng(byName.sm.base64);
+      assert.true(sm.isPng, 'sm is a PNG');
+      assert.deepEqual(
+        { width: sm.width, height: sm.height },
+        { width: 150, height: 170 },
+        'sm PNG matches its envelope',
+      );
+      let md = decodePng(byName.md.base64);
+      assert.deepEqual(
+        { width: md.width, height: md.height },
+        { width: 250, height: 275 },
+        'md PNG matches its envelope',
+      );
+      let lg = decodePng(byName.lg.base64);
+      assert.deepEqual(
+        { width: lg.width, height: lg.height },
+        { width: 400, height: 300 },
+        'lg PNG matches its envelope',
+      );
+      assert.deepEqual(
+        response.captures?.map((c) => ({ width: c.width, height: c.height })),
+        [
+          { width: 150, height: 170 },
+          { width: 250, height: 275 },
+          { width: 400, height: 300 },
+        ],
+        'reported CSS dims match each envelope',
+      );
+    });
+
+    test('a fitted envelope capture leaves indexed HTML unchanged', async function (assert) {
+      // The envelope wrapper only exists on the screenshot render (it rides on
+      // query params). A pooled page reused by indexing must not inherit it.
+      let cardURL = `${realmURL}1`;
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let baseline = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      await screenshot(
+        cardURL,
+        { envelope: { width: 250, height: 275 } },
+        'fitted',
+      );
+
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let after = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.strictEqual(
+        cleanWhiteSpace(after.response.isolatedHTML ?? ''),
+        cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
+        'indexed isolated HTML is identical before and after the fitted screenshot',
       );
     });
   });

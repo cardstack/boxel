@@ -6,6 +6,27 @@ import type {
   ScreenshotCaptureSpec,
 } from './index.ts';
 
+// Card formats a screenshot can be captured in. `isolated`/`embedded` fill
+// the viewport; `fitted`/`atom` render into a parent-owned box and so require
+// an `envelope`. Distinct from CAPTURE_FORMATS below, which is the canonical
+// (ledger/GET-DSL) serving contract and stays viewport-filling only.
+export const SCREENSHOT_FORMATS = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+] as const;
+export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
+
+export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
+  return (SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+}
+
+// Formats whose card fills a parent-owned box rather than the viewport, and
+// so require an `envelope` to lay out. `isolated`/`embedded` fill the
+// viewport and must NOT be given an envelope.
+const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted', 'atom'];
+
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
@@ -80,6 +101,7 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'envelope',
   'captures',
 ]);
 const CAPTURE_ENTRY_FIELDS = new Set([
@@ -88,8 +110,10 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'envelope',
 ]);
 const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
+const CAPTURE_SPEC_ENVELOPE_FIELDS = new Set(['width', 'height']);
 const CAPTURE_SPEC_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
 
 function isPositiveInteger(value: unknown): value is number {
@@ -222,6 +246,41 @@ function parseOverrideFields(
     };
   }
 
+  if (raw.envelope !== undefined) {
+    let envelope = raw.envelope;
+    if (!isPlainObject(envelope)) {
+      return {
+        error: `${path}.envelope must have positive integer width and height`,
+      };
+    }
+    for (let key of Object.keys(envelope)) {
+      if (!CAPTURE_SPEC_ENVELOPE_FIELDS.has(key)) {
+        return {
+          error: `${path}.envelope.${key} is not a supported field`,
+        };
+      }
+    }
+    if (
+      !isPositiveInteger(envelope.width) ||
+      !isPositiveInteger(envelope.height)
+    ) {
+      return {
+        error: `${path}.envelope must have positive integer width and height`,
+      };
+    }
+    if (envelope.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      return {
+        error: `${path}.envelope.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+      };
+    }
+    if (envelope.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      return {
+        error: `${path}.envelope.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+      };
+    }
+    overrides.envelope = { width: envelope.width, height: envelope.height };
+  }
+
   return { overrides };
 }
 
@@ -229,9 +288,21 @@ function parseOverrideFields(
 function checkMergedOverrides(
   spec: ScreenshotCaptureOverrides,
   path: string,
+  format: ScreenshotFormat,
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
+  }
+
+  // fitted/atom lay out in a parent-owned box, so an envelope is required;
+  // isolated/embedded fill the viewport, where an envelope would be a
+  // silent no-op — refused rather than ignored, per the module contract.
+  let requiresEnvelope = ENVELOPE_FORMATS.includes(format);
+  if (requiresEnvelope && !spec.envelope) {
+    return `${path}.envelope is required for ${format} format`;
+  }
+  if (!requiresEnvelope && spec.envelope) {
+    return `${path}.envelope is only valid for ${ENVELOPE_FORMATS.join('/')} format`;
   }
 
   // Tighter containment when a viewport was declared: the layout was
@@ -273,6 +344,18 @@ function checkMergedOverrides(
       return `${path}.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
+  // The capture viewport IS the envelope for fitted/atom, so the same
+  // physical-pixel composition applies to it.
+  if (spec.envelope) {
+    if (spec.envelope.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.envelope.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+    if (
+      spec.envelope.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return `${path}.envelope.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+  }
   return undefined;
 }
 
@@ -295,6 +378,9 @@ function elideDefaults(
   }
   if (spec.clip) {
     out.clip = spec.clip;
+  }
+  if (spec.envelope) {
+    out.envelope = spec.envelope;
   }
   return out;
 }
@@ -321,13 +407,25 @@ function mergeOverrides(
   if (clip) {
     merged.clip = clip;
   }
+  let envelope = entry.envelope ?? base.envelope;
+  if (envelope) {
+    merged.envelope = envelope;
+  }
   return merged;
 }
 
 export function parseScreenshotCaptureSpec(
   raw: unknown,
+  format: ScreenshotFormat,
 ): ScreenshotCaptureSpecParse {
   if (raw === undefined || raw === null) {
+    // A fitted/atom capture needs an envelope, which can only arrive via the
+    // captureSpec — an absent spec is therefore refused for those formats.
+    if (ENVELOPE_FORMATS.includes(format)) {
+      return {
+        error: `captureSpec.envelope is required for ${format} format`,
+      };
+    }
     return { captureSpec: null };
   }
   if (!isPlainObject(raw)) {
@@ -350,7 +448,11 @@ export function parseScreenshotCaptureSpec(
   }
 
   if (raw.captures === undefined) {
-    let crossError = checkMergedOverrides(singular.overrides, 'captureSpec');
+    let crossError = checkMergedOverrides(
+      singular.overrides,
+      'captureSpec',
+      format,
+    );
     if (crossError !== undefined) {
       return { error: crossError };
     }
@@ -408,7 +510,7 @@ export function parseScreenshotCaptureSpec(
       return { error: parsed.error };
     }
     let merged = mergeOverrides(singular.overrides, parsed.overrides);
-    let crossError = checkMergedOverrides(merged, path);
+    let crossError = checkMergedOverrides(merged, path, format);
     if (crossError !== undefined) {
       return { error: crossError };
     }

@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { ScreenshotFormat } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -933,6 +934,13 @@ export type ScreenshotCaptureOverrides = {
   // extent is bounded by the same caps as the viewport (and must sit within
   // the viewport when one is given). Mutually exclusive with `fullPage`.
   clip?: { x: number; y: number; width: number; height: number };
+  // Fixed-size parent box (CSS px) the card renders into. `fitted` and `atom`
+  // fill a parent-owned box rather than the viewport, so they need this to lay
+  // out and fire their `@container fitted-card` queries. Required for
+  // fitted/atom captures (enforced by the realm-server handler); ignored for
+  // isolated/embedded. The capture is sized to the envelope, so a batch of
+  // differing envelopes yields differently-sized PNGs off one render.
+  envelope?: { width: number; height: number };
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -958,11 +966,15 @@ export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
   captures?: ScreenshotCaptureEntry[];
 };
 
+// ScreenshotFormat is defined (with its runtime const + guard) in
+// `capture-spec.ts`, re-exported from this module, and imported at the top of
+// this file for the types below.
+
 export type ScreenshotPrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
-  format: 'isolated' | 'embedded';
+  format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
   // Worker-job priority threaded through from the producer side. See
