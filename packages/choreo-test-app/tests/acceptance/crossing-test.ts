@@ -104,6 +104,28 @@ module('Acceptance | crossing', function (hooks) {
       Math.max(...midHeights) - Math.min(...midHeights) < 8,
       `no card row stretches under the flight (${Math.min(...midHeights).toFixed(0)}..${Math.max(...midHeights).toFixed(0)})`
     );
+    // cards mounting mid-crossing must NOT play their entrance: thirty
+    // springs under the flight is the kink the suppression exists for
+    const sprung = [...document.querySelectorAll<HTMLElement>('.card')].filter(
+      (el) => (el.style.transform || '').includes('0.96')
+    );
+    assert.strictEqual(
+      sprung.length,
+      0,
+      `no card plays its entrance under the crossing (${sprung.length} sprung)`
+    );
+    // the stages hold empty for the span — booting thirty demos inside
+    // the pass is the heaviest render in the app — EXCEPT the
+    // counterpart's: the skin dissolves over it, and a dissolve needs
+    // something real underneath
+    const boarded = [
+      ...document.querySelectorAll<HTMLElement>('.card-stage'),
+    ].filter((el) => el.children.length > 0);
+    assert.deepEqual(
+      boarded.map((el) => el.closest<HTMLElement>('.card')?.dataset['demo']),
+      ['playhead'],
+      'only the tile the flight lands on is alive mid-crossing'
+    );
 
     await waitUntil(() => !crossingActive(), { timeout: 8000 });
     await frames(4);
