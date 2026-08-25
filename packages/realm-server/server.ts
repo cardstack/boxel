@@ -298,7 +298,7 @@ function buildHttp2SecureServer(
   try {
     tlsServer = http2.createSecureServer(
       { cert, key, allowHTTP1: true },
-      app.callback(),
+      endStreamOnFinalDataFrame(app.callback()),
     );
   } catch (e) {
     throw new Error(
@@ -313,6 +313,53 @@ function buildHttp2SecureServer(
     installHttp2Diagnostics(tlsServer, log, liveness);
   }
   return tlsServer;
+}
+
+// End every HTTP/2 response with END_STREAM on its final DATA frame rather
+// than through node's trailers mechanism.
+//
+// Node's http2 compat layer — the half that turns an `Http2Stream` into the
+// `(req, res)` pair Koa is written against — responds with
+// `waitForTrailers: true` unconditionally. That moves END_STREAM off the final
+// DATA frame and onto an empty trailers HEADERS frame emitted from a
+// `setImmediate` (`finishSendTrailers` in `lib/internal/http2/core.js`), which
+// drops that frame when the stream is already destroyed. A response whose
+// END_STREAM never arrives leaves its peer holding a body it can neither
+// complete nor fail.
+//
+// Whether this server can reach that state is not established — no sequence
+// here is known to destroy a stream inside the window. What is established is
+// that the deferral buys nothing: nothing in this repo sends HTTP trailers, so
+// declining them is behavior-preserving and removes the window rather than
+// reasoning about its reachability. The last DATA frame carries END_STREAM
+// itself.
+//
+// Applied by wrapping the request listener rather than the `stream` event,
+// because the compat listener registered by `createSecureServer(..., handler)`
+// runs first and responds synchronously for a request the app answers without
+// awaiting — a `stream` listener added afterwards would miss exactly those.
+// `allowHTTP1` means this also sees HTTP/1.1 requests, whose `res` has no
+// backing stream; those are passed through untouched.
+function endStreamOnFinalDataFrame(
+  requestListener: ReturnType<Koa['callback']>,
+): ReturnType<Koa['callback']> {
+  return function (req, res) {
+    let stream = (res as unknown as { stream?: http2.ServerHttp2Stream })
+      .stream;
+    if (stream) {
+      let respond = stream.respond;
+      stream.respond = function (
+        headers?: http2.OutgoingHttpHeaders,
+        options?: http2.ServerStreamResponseOptions,
+      ) {
+        if (options?.waitForTrailers) {
+          options = { ...options, waitForTrailers: false };
+        }
+        return respond.call(this, headers, options);
+      };
+    }
+    return requestListener(req, res);
+  };
 }
 
 // Wire the HTTP/2 PING keepalive onto every session the secure server

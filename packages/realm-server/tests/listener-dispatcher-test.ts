@@ -68,10 +68,30 @@ function makeApp(): Koa {
   return app;
 }
 
+// Same responses as `makeApp`, plus a record of whether the h2 stream ever
+// asked for trailing headers. Node emits `wantTrailers` only for a response
+// that was told to wait for trailers, so this reads whether the response took
+// that path — see the test that uses it.
+function makeTrailerProbeApp(probe: { wantTrailers: boolean }): Koa {
+  let app = new Koa();
+  app.use(async (ctx) => {
+    let stream = (ctx.res as unknown as { stream?: http2.ServerHttp2Stream })
+      .stream;
+    stream?.once('wantTrailers', () => {
+      probe.wantTrailers = true;
+    });
+    ctx.status = 200;
+    ctx.set('content-type', 'text/plain');
+    ctx.body = `ok via ${ctx.req.httpVersion}`;
+  });
+  return app;
+}
+
 async function startListener(opts: {
   cert?: string | null;
   key?: string | null;
   boxelEnvironment?: string | null;
+  app?: Koa;
 }): Promise<{
   port: number;
   server: RealmHttpServer;
@@ -99,7 +119,10 @@ async function startListener(opts: {
   } else {
     process.env.BOXEL_ENVIRONMENT = opts.boxelEnvironment;
   }
-  let { server, proto } = createListener(logger('test:dispatcher'), makeApp());
+  let { server, proto } = createListener(
+    logger('test:dispatcher'),
+    opts.app ?? makeApp(),
+  );
   let isHttp2 = proto === 'https/h2';
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   let port = (server.address() as AddressInfo).port;
@@ -314,6 +337,45 @@ module(basename(import.meta.filename), function (hooks) {
         res.responseHeaders['content-length'],
         String(Buffer.byteLength('ok via 2.0')),
         'h2 HEAD reports the GET body length via content-length',
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  test('h2 responses end with END_STREAM on their final DATA frame', async function (assert) {
+    // Node's http2 compat layer responds with `waitForTrailers: true` on
+    // every response, which moves END_STREAM off the last DATA frame and onto
+    // an empty trailers HEADERS frame sent from a setImmediate — a frame a
+    // stream destroyed in the same event-loop turn never sends, leaving the
+    // peer holding a body it can neither complete nor fail.
+    // `endStreamOnFinalDataFrame` (applied inside `createListener` when an h2
+    // listener is constructed) declines those trailers, so `wantTrailers`,
+    // which node emits only for a response that took the trailers path, must
+    // never fire. Without it this assertion fails while the response body
+    // still arrives intact — which is the whole point: the difference is
+    // invisible in the response and only shows up as a peer that hangs.
+    let probe = { wantTrailers: false };
+    let { port, isHttp2, close } = await startListener({
+      cert: certFile,
+      key: keyFile,
+      app: makeTrailerProbeApp(probe),
+    });
+    try {
+      assert.true(isHttp2, 'listener advertises h2 mode');
+      let res = await h2Request({ port, path: '/_alive', timeoutMs: 2000 });
+      assert.strictEqual(res.status, 200, 'h2 GET returns 200');
+      assert.true(
+        res.body.includes('ok via 2.0'),
+        `body arrives intact — got "${res.body}"`,
+      );
+      // The trailers frame goes out from a setImmediate, so yield one turn
+      // before reading the probe rather than relying on it having fired by
+      // the time the client saw the end of the body.
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.false(
+        probe.wantTrailers,
+        'response did not defer END_STREAM to a trailers frame',
       );
     } finally {
       await close();

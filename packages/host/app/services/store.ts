@@ -89,6 +89,7 @@ import {
   isEntrySingleDocument,
   type PrerenderedHtmlFormat,
   type ResolvedCodeRef,
+  humanReadable,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -711,7 +712,11 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument,
     opts?: TrackedCreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
-    return await this.withTestWaiters(async () => {
+    let adoptsFrom = doc.data.meta?.adoptsFrom;
+    let waiterLabel = `create ${
+      adoptsFrom ? humanReadable(adoptsFrom) : '<unknown type>'
+    } in ${opts?.realm ?? '<default realm>'}`;
+    return await this.withTestWaiters(waiterLabel, async () => {
       if (opts?.realm) {
         doc.data.meta = {
           ...(doc.data.meta ?? {}),
@@ -1757,7 +1762,8 @@ export default class StoreService extends Service implements StoreInterface {
     readType: StoreReadType = 'card',
   ) {
     let deferred = new Deferred<void>();
-    await this.withTestWaiters(async () => {
+    let waiterLabel = `wireUpNewReference ${url}`;
+    await this.withTestWaiters(waiterLabel, async () => {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
@@ -2371,7 +2377,8 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private reloadFileMetaTask = task(async (url: string) => {
-    await this.withTestWaiters(async () => {
+    let waiterLabel = `reloadFileMeta ${url}`;
+    await this.withTestWaiters(waiterLabel, async () => {
       let instanceOrError = await this.getFileMetaInstance<FileDef>({
         idOrDoc: url,
         opts: { noCache: true },
@@ -2898,7 +2905,8 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async drainAutoSaveQueue(queueName: string) {
-    return await this.withTestWaiters(async () => {
+    let waiterLabel = `drainAutoSaveQueue ${queueName}`;
+    return await this.withTestWaiters(waiterLabel, async () => {
       await this.autoSavePromises.get(queueName);
 
       let instance = this.peek(queueName);
@@ -3076,7 +3084,8 @@ export default class StoreService extends Service implements StoreInterface {
     instance: CardDef,
     opts?: PersistOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
-    return await this.withTestWaiters(async () => {
+    let waiterLabel = `persistAndUpdate ${instance.id ?? instance[localIdSymbol]}`;
+    return await this.withTestWaiters(waiterLabel, async () => {
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
         instance[localIdSymbol],
@@ -3196,7 +3205,8 @@ export default class StoreService extends Service implements StoreInterface {
   private async reloadInstance(instance: CardDef): Promise<CardDef> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
-    return await this.withTestWaiters(async () => {
+    let waiterLabel = `reloadInstance ${instance.id}`;
+    return await this.withTestWaiters(waiterLabel, async () => {
       let api = await this.cardService.getAPI();
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
@@ -3345,8 +3355,13 @@ export default class StoreService extends Service implements StoreInterface {
     return isCardInstance(instance) ? instance : undefined;
   }
 
-  private async withTestWaiters<T>(cb: () => Promise<T>) {
-    let token = waiter.beginAsync();
+  // `label` names the individual store operation the token stands for. Every
+  // store operation opens its token on the one `store-service` waiter from
+  // this one call site, so without a label a `settled()` that never resolves
+  // reports only that some store work is outstanding — with a stack that is
+  // this method for all of them.
+  private async withTestWaiters<T>(label: string, cb: () => Promise<T>) {
+    let token = waiter.beginAsync(undefined, label);
     try {
       let result = await cb();
       // only do this in test env--this makes sure that we also wait for any
