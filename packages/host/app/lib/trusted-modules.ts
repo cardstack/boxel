@@ -18,15 +18,17 @@ import config from '@cardstack/host/config/environment';
  *
  * `isTrustedModule` is what the module-graph classifier walks against:
  * `@cardstack/*` packages (including the loader's package pseudo-origin
- * spelling) and the Base realm. It is also the graph's leaf test — a trusted
- * dependency is never fetched or analyzed, because Host code carries no
- * authored evidence to propagate.
+ * spelling) and the Base realm. It is one of the walk's two leaf tests — a
+ * trusted dependency is never fetched or analyzed, because Host code carries
+ * no authored evidence to propagate.
  *
  * `isTrustedImport` widens that set with the further import origins a cage may
  * be handed as a Host-provided stand-in: the Catalog realm, the icons host,
  * and the framework shims. Widening it does NOT make an importer Direct —
  * being allowed to import `@glimmer/component` says nothing about who wrote
- * the importing module.
+ * the importing module. It is the wider question a cage's own module
+ * resolution asks, so classification calls only `isTrustedModule`; nothing
+ * here decides both.
  */
 export function isTrustedModule(moduleIdentifier: string): boolean {
   return (

@@ -17,14 +17,15 @@ export type AuthoredExecutionMode = 'capsule' | 'sandbox';
  * inline at each return, because a reason string is API: it feeds the
  * named-diagnostics catalog, the classification telemetry event, and the
  * author-facing indicator. A consumer parses a reason by splitting on the
- * first `:` — the kind is the whole string for the two that carry no payload,
- * and the prefix for the rest.
+ * first `:` — the kind is the whole string for the three that carry no
+ * payload, and the prefix for the rest.
  *
  *   `default-user-card`             authored code with no browser evidence
  *   `source-parse-pending`          source did not parse (see below)
  *   `browser-runtime:<signals>`     the module's own signals, comma-separated
  *   `dependency-runtime:<url>`      a dependency's signals propagated up
  *   `module-load:<url>`             a graph member's source did not load
+ *   `module-parse:<url>`            a DEPENDENCY's source did not parse
  *   `module-resolve:<specifier>`    an import specifier did not resolve
  *   `module-analysis:<url>`         a graph member's analysis threw
  *   `module-graph-limit`            the reachable graph exceeded its bound
@@ -40,6 +41,7 @@ export const CLASSIFICATION_REASON_KINDS = [
   'browser-runtime',
   'dependency-runtime',
   'module-load',
+  'module-parse',
   'module-resolve',
   'module-analysis',
   'module-graph-limit',
@@ -151,16 +153,20 @@ const domOnlyMethods = [
 /**
  * CSS that resolves a URL when the stylesheet is applied. A Capsule shares the
  * Host document, so such a declaration would issue a request with the viewer's
- * credentials from the Host's origin; the Capsule CSS policy refuses it at
- * admission. Classification routes it to the Sandbox ahead of that refusal, so
- * the card reaches a document where the declaration is actually supported
- * instead of rendering into a rejected stylesheet.
+ * credentials from the Host's origin. Classification routes it to the Sandbox,
+ * where the card gets a document of its own and the declaration is actually
+ * supported.
  *
- * Exported so the Capsule CSS policy and this classifier share one pattern
- * rather than each carrying a copy that can drift.
+ * Exported because the Capsule's CSS admission check needs the same notion of
+ * network-bearing, and two copies of a pattern this fiddly would drift.
+ *
+ * The leading `(?:^|[^\w-])` is what keeps a function name from matching
+ * inside a longer identifier: without it `thumbnailUrl(` reads as `url(` and
+ * `createElement(` as `element(`, each costing a card an iframe. It admits a
+ * hyphen-prefixed vendor form, so `-webkit-image-set(` still matches.
  */
 export const networkBearingCSS =
-  /(?:@import\b|(?:url|src|image|(?:-webkit-)?image-set|cross-fade|(?:-moz-)?element|paint)\s*\()/i;
+  /(?:@import\b|(?:^|[^\w-])(?:url|src|image|(?:-webkit-)?image-set|cross-fade|(?:-moz-)?element|paint)\s*\()/i;
 
 // At-rules and properties whose effect is registered on the document rather
 // than scoped to the element tree they appear in — a font family, a custom
@@ -196,12 +202,11 @@ const templateSignalNames = {
 
 const lexerReady = init;
 const contentTagPreprocessor = new ContentTag.Preprocessor();
-// The prefilter. A regex over masked source is cheap and runs on every module;
-// the Babel parse that confirms what it finds is not, and runs only when it
-// finds something. A hit here is a candidate, never a decision — an unscoped
-// token match is exactly the false positive (a local variable named
-// `document`, a DOM name in a type annotation) the confirmation pass exists to
-// discard.
+// The prefilter. A regex scan is cheap and runs on every module; the Babel
+// parse that confirms what it finds is not, and runs only when it finds
+// something. A hit here is a candidate, never a decision — a token match is
+// exactly the false positive (a local variable named `document`, a DOM name in
+// a type annotation, the word in a comment) the confirmation pass discards.
 const browserGlobalPatterns = browserGlobals.map(
   (signal) => [signal, new RegExp(`\\b${signal}\\b`)] as const,
 );
@@ -210,6 +215,14 @@ const domOnlyMethodPatterns = domOnlyMethods.map(
 );
 const ambientGlobalObjectPattern = /\b(?:globalThis|self)\b/;
 
+// The template signals below are matched against a `<template>` block's whole
+// body — markup, text nodes, attribute values and `<style>` contents alike —
+// rather than against a parsed tree. That is why each one over-reports: a
+// class named `popover`, an email address containing `@page`, or the literal
+// text `url(` in a text node all read as their signal. Every such miss costs
+// an unnecessary iframe and never a lost one, which is the affordable
+// direction; narrowing them means parsing the template here, which is the
+// admission check's job rather than the router's.
 interface TemplateAnalysis {
   /** The source with every `<template>` body blanked, ready for the JS passes. */
   javascript: string;
@@ -222,8 +235,11 @@ interface TemplateAnalysis {
  * not JavaScript, and leaving it in place makes every module with a template
  * an unparseable draft.
  *
- * Blanking preserves character offsets and newlines, so a parse error reported
- * against the residue still names the authored line.
+ * Blanking preserves character offsets and newlines because later passes index
+ * into this text: the lexer's statement bounds are sliced out of it to decide
+ * which imports TypeScript erases, and the prefilter's patterns are
+ * word-anchored against it. Collapsing a block would move every offset after
+ * it and join the characters on either side into a word the source never had.
  */
 function analyzeTemplates(source: string): TemplateAnalysis {
   let characters = Array.from(source);
@@ -289,179 +305,6 @@ function analyzeTemplates(source: string): TemplateAnalysis {
 }
 
 /**
- * Blanks the parts of the source that hold text rather than code — string
- * bodies, comments, regex bodies, and the literal spans of a template — so the
- * prefilter reads code. A module documenting `document` in a comment, or
- * holding the string `'window'`, requests no browser authority, and without
- * this the prefilter would trigger the confirmation parse on nearly every
- * module and give up the reason it exists.
- *
- * Two spans that LOOK like text are deliberately kept, because they hold
- * executable code: a template literal's `${…}` interpolations (nested to any
- * depth), and nothing else. Blanking an interpolation is not a missed
- * optimization but a missed SIGNAL — `` `${document.title}` `` would read as
- * signal-free, skip the confirmation parse, and classify Capsule — so the
- * distinction is load-bearing rather than cosmetic.
- *
- * Offsets and line breaks are preserved, so a parse error reported against the
- * result still names the authored line.
- */
-function maskStringsAndComments(source: string): string {
-  let output = Array.from(source);
-  // One frame per template literal currently open, innermost last. A frame is
-  // reading that literal's text until an interpolation opens, and counts the
-  // interpolation's braces so a nested object or block does not read as its
-  // closing `}`.
-  let templates: { inInterpolation: boolean; braces: number }[] = [];
-  let innermost = ():
-    | { inInterpolation: boolean; braces: number }
-    | undefined => templates[templates.length - 1];
-  // Whether a `/` here opens a regex or divides. Decided from the previous
-  // significant character, which is the standard approximation: after a value
-  // (an identifier, a literal, a closing bracket) it divides, and anywhere
-  // else a regex may start. `}` is read as ending a value, so the rare
-  // `if (x) {} /re/.test(y)` is masked as division — leaving MORE text
-  // visible to the prefilter, which costs a confirmation parse rather than a
-  // signal.
-  let lastSignificant = '';
-  let regexMayStart = (): boolean =>
-    lastSignificant === '' || !/[\w$)\]}'"`]/.test(lastSignificant);
-  let blank = (index: number) => {
-    if (output[index] !== '\n' && output[index] !== '\r') {
-      output[index] = ' ';
-    }
-  };
-
-  for (let index = 0; index < output.length; index++) {
-    let current = output[index]!;
-    let next = output[index + 1];
-    let frame = innermost();
-
-    // Inside a template literal's text, not one of its interpolations.
-    if (frame && !frame.inInterpolation) {
-      if (current === '\\') {
-        blank(index);
-        blank(index + 1);
-        index++;
-        continue;
-      }
-      if (current === '`') {
-        templates.pop();
-        blank(index);
-        continue;
-      }
-      if (current === '$' && next === '{') {
-        frame.inInterpolation = true;
-        frame.braces = 0;
-        blank(index);
-        blank(index + 1);
-        index++;
-        lastSignificant = '';
-        continue;
-      }
-      blank(index);
-      continue;
-    }
-
-    if (current === '/' && next === '/') {
-      blank(index);
-      blank(index + 1);
-      index += 2;
-      while (index < output.length && output[index] !== '\n') {
-        blank(index);
-        index++;
-      }
-      index--;
-      continue;
-    }
-    if (current === '/' && next === '*') {
-      blank(index);
-      blank(index + 1);
-      index += 2;
-      while (index < output.length) {
-        if (output[index] === '*' && output[index + 1] === '/') {
-          blank(index);
-          blank(index + 1);
-          index++;
-          break;
-        }
-        blank(index);
-        index++;
-      }
-      continue;
-    }
-    if (current === "'" || current === '"') {
-      blank(index);
-      index++;
-      while (index < output.length) {
-        if (output[index] === '\\') {
-          blank(index);
-          blank(index + 1);
-          index += 2;
-          continue;
-        }
-        if (output[index] === current) {
-          blank(index);
-          break;
-        }
-        blank(index);
-        index++;
-      }
-      lastSignificant = current;
-      continue;
-    }
-    if (current === '`') {
-      templates.push({ inInterpolation: false, braces: 0 });
-      blank(index);
-      continue;
-    }
-    if (current === '/' && regexMayStart()) {
-      blank(index);
-      index++;
-      let inCharacterClass = false;
-      while (index < output.length && output[index] !== '\n') {
-        let character = output[index];
-        if (character === '\\') {
-          blank(index);
-          blank(index + 1);
-          index += 2;
-          continue;
-        }
-        if (character === '[') {
-          inCharacterClass = true;
-        } else if (character === ']') {
-          inCharacterClass = false;
-        } else if (character === '/' && !inCharacterClass) {
-          blank(index);
-          break;
-        }
-        blank(index);
-        index++;
-      }
-      lastSignificant = ')';
-      continue;
-    }
-    if (frame?.inInterpolation) {
-      if (current === '{') {
-        frame.braces++;
-      } else if (current === '}') {
-        if (frame.braces === 0) {
-          frame.inInterpolation = false;
-          blank(index);
-          lastSignificant = '`';
-          continue;
-        }
-        frame.braces--;
-      }
-    }
-    if (!/\s/.test(current)) {
-      lastSignificant = current;
-    }
-  }
-  return output.join('');
-}
-
-/**
  * Reduces a module identifier to the package name the browser-only vocabulary
  * is written against, so `three` matches however the module was reached: as a
  * bare specifier, through an `esm.sh` URL that carries a version suffix, or
@@ -499,18 +342,34 @@ function browserOnlyPackageSignal(
 }
 
 /**
- * Whether the vocabulary already decides this module, which makes it a leaf of
- * the graph walk alongside the trusted modules.
+ * Whether the vocabulary already decides this module AND the loader serves it
+ * as a bundle rather than as authored source — which together make it a leaf
+ * of the graph walk, alongside the trusted modules. The identifier still
+ * enters the module graph: it is a module the Sandbox may read.
  *
- * Walking into it can only add more browser evidence to a module already
- * promoted by naming it, so the answer is the same either way — and not
- * walking avoids trying to fetch authored source for a package the loader
- * serves as a bundle, which would otherwise report a load failure in place of
- * the far more useful signal the importer already carries. The identifier
- * stays in the module graph: it is still a module the Sandbox may read.
+ * Both halves are load-bearing. Walking into a real package can only add
+ * browser evidence to a module already promoted by naming it, and not walking
+ * avoids trying to fetch authored source for something served as a bundle,
+ * which would report a load failure in place of the far more useful signal the
+ * importer already carries.
+ *
+ * A realm-hosted module is a different thing the same vocabulary matches,
+ * because a vendored copy under a path segment named `three` or `paper` should
+ * still promote its importer. Its dependencies are separate modules the realm
+ * serves, so pruning it would leave them out of `moduleGraph` — and a Sandbox
+ * authorizes reads against exactly that list, making the render fail on a
+ * refused fetch rather than merely cost an iframe. Those are walked.
  */
-export function isBrowserOnlyPackage(moduleIdentifier: string): boolean {
-  return browserOnlyPackageSignal(moduleIdentifier) !== undefined;
+function isBundledBrowserOnlyPackage(moduleIdentifier: string): boolean {
+  if (browserOnlyPackageSignal(moduleIdentifier) === undefined) {
+    return false;
+  }
+  try {
+    return new URL(moduleIdentifier).hostname === 'esm.sh';
+  } catch {
+    // Not a URL, so a bare specifier the loader resolves to a package.
+    return true;
+  }
 }
 
 /**
@@ -538,14 +397,31 @@ function confirmBrowserSignals(source: string): {
    */
   hasEagerGlobal: boolean;
 } {
-  let masked = maskStringsAndComments(source);
+  // Deliberately matched against the source as it is, comments and string
+  // bodies included, rather than against a version with the text spans
+  // blanked.
+  //
+  // The prefilter is a GATE: when it finds nothing, the confirmation pass
+  // never runs and the module classifies Capsule. So anything that blanks a
+  // span the source really executes turns into a lost SIGNAL, not a lost
+  // refinement — and blanking spans correctly means lexing JavaScript, where
+  // every approximation has a case that desynchronizes and swallows the rest
+  // of the file. `/['"]/` after a `}` is enough: read as division, its quote
+  // opens a string that runs to the next quote or to the end.
+  //
+  // Matching the raw source cannot fail that way. What it costs is a
+  // confirmation parse on modules whose PROSE names a browser global — a few
+  // milliseconds against a module fetch — and the parse then reports no
+  // reference, so a comment or a string still classifies Capsule. The
+  // exemption is enforced by the scope-aware pass rather than by guessing
+  // which characters were code.
   let candidateGlobals = browserGlobalPatterns
-    .filter(([, pattern]) => pattern.test(masked))
+    .filter(([, pattern]) => pattern.test(source))
     .map(([signal]) => signal);
   let candidateDOMMethods = domOnlyMethodPatterns
     .filter(([, pattern]) => pattern.test(source))
     .map(([method]) => method);
-  let candidateGlobalObject = ambientGlobalObjectPattern.test(masked);
+  let candidateGlobalObject = ambientGlobalObjectPattern.test(source);
   if (
     candidateGlobals.length === 0 &&
     candidateDOMMethods.length === 0 &&
@@ -560,20 +436,43 @@ function confirmBrowserSignals(source: string): {
   // function body or a non-static class field. Both of those run only when
   // something calls or constructs them, which importing the module does not.
   //
-  // The approximation is deliberate and errs toward "deferred" in one shape:
-  // an immediately-invoked function expression at the top level does run on
+  // The approximation errs toward "deferred" in one shape: an
+  // immediately-invoked function expression at the top level does run on
   // import, but reads as deferred here. Recognizing it means deciding which
   // functions are called immediately, which is not a question static analysis
   // answers in general — and the cost of being wrong is the module's importer
   // staying in a Capsule that the module then needs a browser inside, which
   // fails visibly there.
-  let isEager = (path: babel.NodePath): boolean =>
-    path.find(
-      (ancestor) =>
-        ancestor.isFunction() ||
-        ((ancestor.isClassProperty() || ancestor.isClassPrivateProperty()) &&
-          !ancestor.node.static),
-    ) === null;
+  let isEager = (path: babel.NodePath): boolean => {
+    let child: babel.NodePath = path;
+    for (
+      let ancestor = path.parentPath;
+      ancestor !== null;
+      child = ancestor, ancestor = ancestor.parentPath
+    ) {
+      // A computed member key and a decorator argument are evaluated when the
+      // declaration they sit on is evaluated, never when its body runs — so
+      // they are not deferred by the member that carries them, and the walk
+      // continues outward to decide.
+      if (child.key === 'key' || child.listKey === 'decorators') {
+        continue;
+      }
+      if (ancestor.isFunction()) {
+        return false;
+      }
+      // A non-static field's VALUE runs at construction, so it defers. A
+      // static field's runs when the class is defined, which for a top-level
+      // class is module initialization.
+      if (
+        (ancestor.isClassProperty() || ancestor.isClassPrivateProperty()) &&
+        !ancestor.node.static &&
+        child.key === 'value'
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
   let domMethodCalls = new Set<string>();
   let isBrowserGlobal = (name: string): boolean =>
     browserGlobals.includes(name as (typeof browserGlobals)[number]);
@@ -697,7 +596,10 @@ function confirmBrowserSignals(source: string): {
       filename: 'boxel-source.ts',
       babelrc: false,
       configFile: false,
-      compact: true,
+      // Only the traverse is wanted. Generating code for every module that
+      // trips the prefilter — up to the graph bound, in the browser — buys
+      // nothing this pass reads.
+      code: false,
       plugins: [
         [typescriptPlugin, { allowDeclareFields: true }],
         collectBrowserSignals,
@@ -728,17 +630,28 @@ function confirmBrowserSignals(source: string): {
 /**
  * Whether an import the lexer found is erased before the module ever runs.
  *
- * The lexer reads JavaScript, so `import type { Scene } from 'three'` reads to
- * it as an ordinary edge to `three` — which would route a card to the Sandbox
- * for a compile-time type reference, and would send the walk fetching modules
- * that no longer exist at runtime. Only a statement whose ERASURE is total
- * counts: a leading `import type` / `export type`. `import { type Scene }` is
- * not one of them, because that statement still emits the module for its side
- * effects.
+ * The lexer reads JavaScript, so a TypeScript type-only import reads to it as
+ * an ordinary edge — which would route a card to the Sandbox for a
+ * compile-time reference, and send the walk fetching modules that do not exist
+ * at runtime. What counts as erased is decided by the transform the realm
+ * actually applies to card source (`@babel/plugin-transform-typescript`),
+ * which drops an import statement when every binding it introduces is
+ * type-only:
  *
- * The statement bounds come from the lexer rather than from a regex over the
- * whole source, so a string or comment containing the words cannot be mistaken
- * for a declaration.
+ *   import type { Scene } from 'three'     erased
+ *   import type * as THREE from 'three'    erased
+ *   import type Scene from 'three'         erased
+ *   import { type Scene } from 'three'     erased — no value binding remains
+ *   import { type Scene, Group }           KEPT: `Group` is a value
+ *   import type from 'three'               KEPT: `type` is a default binding
+ *   import type, { Group } from 'three'    KEPT: same, plus a named value
+ *   import 'three'                         KEPT: imported for side effects
+ *
+ * Statement bounds come from the lexer rather than a regex over the whole
+ * source, so the words inside a string or a comment cannot read as a
+ * declaration. A spelling this does not recognize keeps its edge, which is the
+ * safe direction: the walk then tries to fetch a module that may not exist and
+ * fails the graph closed, costing an iframe rather than losing a signal.
  */
 function isTypeOnlyImport(
   source: string,
@@ -749,8 +662,44 @@ function isTypeOnlyImport(
   if (entry.d !== -1) {
     return false;
   }
-  return /^\s*(?:import|export)\s+type\b/.test(
-    source.slice(entry.ss, entry.se),
+  let statement = source.slice(entry.ss, entry.se);
+  let afterTypeKeyword = /^\s*(?:import|export)\s+type\s*([\s\S]*)$/.exec(
+    statement,
+  );
+  if (afterTypeKeyword) {
+    let rest = afterTypeKeyword[1]!;
+    // `import type {…}` and `import type * as N` are unambiguous modifiers.
+    if (/^[{*]/.test(rest)) {
+      return true;
+    }
+    // `import type, {…}` binds a default named `type` and imports values.
+    if (rest.startsWith(',')) {
+      return false;
+    }
+    // `import type Scene from …` is a type-only default import; `import type
+    // from …` binds a value named `type`. The word decides which.
+    let firstWord = /^([A-Za-z_$][\w$]*)/.exec(rest);
+    return firstWord !== null && firstWord[1] !== 'from';
+  }
+  let namedList = /^\s*(?:import|export)\s*\{([^}]*)\}\s*from\b/.exec(
+    statement,
+  );
+  if (!namedList) {
+    return false;
+  }
+  let specifiers = namedList[1]!
+    .split(',')
+    .map((specifier) => specifier.trim())
+    .filter((specifier) => specifier.length > 0);
+  // Every specifier carries an inline `type`, and nothing else is bound. The
+  // second word separates `{ type Scene }` from `{ type as alias }`, which
+  // imports the export literally named `type`.
+  return (
+    specifiers.length > 0 &&
+    specifiers.every((specifier) => {
+      let marked = /^type\s+([A-Za-z_$][\w$]*)/.exec(specifier);
+      return marked !== null && marked[1] !== 'as';
+    })
   );
 }
 
@@ -789,11 +738,17 @@ export async function classifyBoxelSource(
   await lexerReady;
   let imports: string[];
   try {
-    // A dynamic import with a literal specifier carries `n` exactly as a
-    // static one does, so it joins the graph as an ordinary edge and promotes
-    // its importer up front. A computed specifier carries no `n` and is
-    // dropped here: nothing static can authorize it, and both cages refuse it
-    // at runtime.
+    // A dynamic import whose specifier is a plain string literal carries `n`
+    // exactly as a static one does, so it joins the graph as an ordinary edge
+    // and promotes its importer up front.
+    //
+    // Every other spelling carries no `n` and is dropped. Most of them cannot
+    // be statically authorized at all — `import(name)` — and both cages refuse
+    // those at runtime. One could be: the lexer declines a no-substitution
+    // template literal, `` import(`three`) ``, whose value is knowable. It is
+    // dropped with the rest, which costs a Capsule where a Sandbox was wanted
+    // for a card written that way; the runtime refusal is what makes that
+    // visible rather than silent.
     imports = [
       ...new Set(
         parse(templates.javascript)[0]
@@ -871,11 +826,13 @@ class ModuleGraphFailure extends Error {
 
 // The reason kinds that describe something classification could not
 // establish, rather than something it found. A result carrying one is not
-// memoized at the entry level: the next request re-walks instead of pinning a
-// transient fetch failure or an in-progress draft.
+// memoized at either level — the module's own analysis, or the entry's
+// classification — so the next request re-reads instead of pinning a transient
+// fetch failure or an in-progress draft.
 const transientReasonKinds = new Set([
   'source-parse-pending',
   'module-load',
+  'module-parse',
   'module-resolve',
   'module-analysis',
   'module-graph-limit',
@@ -886,7 +843,6 @@ function isTransientReason(reason: string): boolean {
 }
 
 interface ModuleAnalysis {
-  sourceHash: string;
   analysis: BoxelSourceAnalysis;
   /** Resolved dependency identifiers, deduplicated and sorted. */
   dependencies: string[];
@@ -914,6 +870,13 @@ interface ModuleAnalysis {
  * `invalidate(module)` evicts that module's analysis and every entry whose
  * graph contains it. A failed classification is never memoized, so the next
  * request retries rather than pinning a transient fetch failure.
+ *
+ * Neither cache has a size bound: both hold what they are told about until
+ * `invalidate` drops it, since the invalidation signal is the realm's and
+ * arrives per changed module rather than under memory pressure. `maxModules`
+ * bounds one WALK, not the caches. A holder that outlives many module graphs
+ * wants `invalidate()` at whatever point its own module identities stop being
+ * meaningful — a loader reset, a session ending.
  */
 export class BoxelModuleGraphClassifier {
   // Promises rather than values, so entries walking concurrently share one
@@ -934,9 +897,10 @@ export class BoxelModuleGraphClassifier {
 
   /**
    * Classifies `moduleIdentifier` and its reachable graph. Pass `source` to
-   * classify a revision the loader cannot fetch — an unsaved draft — in which
-   * case the entry memo is keyed by that source's hash and a changed draft
-   * replaces it.
+   * classify a revision the loader cannot fetch — an unsaved draft. Such a
+   * result is keyed by that source's hash and answers only this caller: a
+   * draft never enters the memo other entries read, so it cannot decide a card
+   * it is not the source of.
    *
    * The entry module is always analyzed, even when it is itself trusted: "is
    * this module Host-owned" is rule R1's question, answered by the caller
@@ -953,11 +917,11 @@ export class BoxelModuleGraphClassifier {
       return existing.classification;
     }
     // The walk fills both fields as it goes: `graph` so invalidation can find
-    // this entry by any member, and `sawPendingSource` so an entry computed
-    // over a draft that did not parse is not kept as an answer.
+    // this entry by any member, and `incomplete` so a result computed over a
+    // graph the walk could not establish is not kept as an answer.
     let walk = {
       graph: new Set<string>([moduleIdentifier]),
-      sawPendingSource: false,
+      incomplete: false,
     };
     let classification = this.walkGraph(moduleIdentifier, source, walk);
     let entry = { classification, sourceHash, graph: walk.graph };
@@ -972,14 +936,14 @@ export class BoxelModuleGraphClassifier {
     // eviction reads the resolved value rather than only catching a rejection,
     // because the walk reports such a result rather than throwing it.
     //
-    // A member that did not parse counts even when the entry's own reason looks
-    // settled: an unparseable dependency contributes no imports and no signals,
-    // so the Capsule that conclusion rests on was drawn over a hole.
+    // An incomplete walk counts even when the reported reason looks settled: a
+    // module the walk could not read contributes no imports and no signals, so
+    // both the tier and the module graph were drawn over a hole — and
+    // `moduleGraph` is a read-authorization list, so a truncated one means a
+    // refused fetch, not merely a stale tier.
     void classification.then(
       ({ reason }) =>
-        isTransientReason(reason) || walk.sawPendingSource
-          ? evict()
-          : undefined,
+        isTransientReason(reason) || walk.incomplete ? evict() : undefined,
       evict,
     );
     return classification;
@@ -1011,7 +975,7 @@ export class BoxelModuleGraphClassifier {
   private async walkGraph(
     moduleIdentifier: string,
     entrySource: string | undefined,
-    walk: { graph: Set<string>; sawPendingSource: boolean },
+    walk: { graph: Set<string>; incomplete: boolean },
   ): Promise<BoxelSourceClassification> {
     let graph = walk.graph;
     let maxModules = this.options.maxModules ?? 256;
@@ -1033,6 +997,7 @@ export class BoxelModuleGraphClassifier {
       }
       if (analyzed.size >= maxModules) {
         exceededLimit = true;
+        walk.incomplete = true;
         break;
       }
       let analysis: ModuleAnalysis;
@@ -1044,17 +1009,27 @@ export class BoxelModuleGraphClassifier {
             ? error.reasons
             : [`module-analysis:${identifier}`]),
         );
+        walk.incomplete = true;
         continue;
       }
       analyzed.set(identifier, analysis);
-      walk.sawPendingSource ||= isTransientReason(analysis.analysis.reason);
+      // The entry's own draft may sit mid-edit and still classify Capsule — a
+      // dependency's may not. Nothing established that module's imports or its
+      // signals, so its closure is unproven, which RP-6.1 R2 fails closed.
+      if (
+        identifier !== moduleIdentifier &&
+        analysis.analysis.reason === 'source-parse-pending'
+      ) {
+        failures.push(`module-parse:${identifier}`);
+        walk.incomplete = true;
+      }
       for (let dependency of analysis.dependencies) {
         graph.add(dependency);
         // Trusted modules and already-recognized browser-only packages are
         // leaves: nothing their source could say would change the answer.
         if (
           !this.options.isTrustedModule(dependency) &&
-          !isBrowserOnlyPackage(dependency)
+          !isBundledBrowserOnlyPackage(dependency)
         ) {
           queue.push({ identifier: dependency });
         }
@@ -1134,25 +1109,25 @@ export class BoxelModuleGraphClassifier {
     moduleIdentifier: string,
     suppliedSource?: string,
   ): Promise<ModuleAnalysis> {
+    // Supplied source is one caller's revision of the module, not the module.
+    // The shared memo answers every entry that reaches this identifier, so
+    // seating a draft in it would let an unsaved editor buffer decide an
+    // unrelated card's tier — including DOWNWARD, when the saved module needs a
+    // browser and the draft does not, which RP-6.1 R5 forbids. So a draft is
+    // analyzed for its own caller and neither read from nor written to the
+    // shared memo; the entry memo, keyed by the draft's hash, is what keeps an
+    // unchanged draft from re-analyzing.
+    if (suppliedSource !== undefined) {
+      return this.freshAnalysis(moduleIdentifier, suppliedSource);
+    }
     let pending = this.moduleAnalyses.get(moduleIdentifier);
     if (pending) {
       // A rejection propagates to this caller rather than being retried
       // mid-walk: the module already self-evicted, so the retry is the next
       // classification, and this walk fails closed as it should.
-      let memo = await pending;
-      if (
-        suppliedSource === undefined ||
-        memo.sourceHash === hashSource(suppliedSource)
-      ) {
-        return memo;
-      }
-      if (this.moduleAnalyses.get(moduleIdentifier) === pending) {
-        this.moduleAnalyses.delete(moduleIdentifier);
-      }
+      return pending;
     }
-    let fresh = this.freshAnalysis(moduleIdentifier, suppliedSource);
-    // One revision per module: a later supplied source replaces an earlier
-    // one, matching the memo's meaning of "what this module currently is".
+    let fresh = this.freshAnalysis(moduleIdentifier);
     this.moduleAnalyses.set(moduleIdentifier, fresh);
     let evict = () => {
       if (this.moduleAnalyses.get(moduleIdentifier) === fresh) {
@@ -1212,11 +1187,7 @@ export class BoxelModuleGraphClassifier {
       // module, and resolution depends on loader state rather than on source.
       throw new ModuleGraphFailure(unresolved);
     }
-    return {
-      sourceHash: hashSource(source),
-      analysis,
-      dependencies: [...dependencies].sort(),
-    };
+    return { analysis, dependencies: [...dependencies].sort() };
   }
 }
 
@@ -1234,11 +1205,12 @@ function failedClassification(reason: string): BoxelSourceClassification {
 }
 
 /**
- * A cache key for a module's source text.
+ * The entry memo's key for a supplied draft, so an unchanged draft is answered
+ * without re-walking its graph.
  *
  * FNV-1a over two lanes with different multipliers, folded to one hexadecimal
  * key. It is not a cryptographic digest and does not need to be: a collision
- * would let a changed module reuse the previous revision's classification,
+ * would let a changed draft reuse the previous revision's classification,
  * which costs the wrong CAGE — a Capsule where a Sandbox was wanted, or the
  * reverse. Neither is a trust failure. Whether code is Host-owned is decided
  * by `isTrustedModule` from the module's URL, which no cache participates in,
@@ -1246,8 +1218,9 @@ function failedClassification(reason: string): BoxelSourceClassification {
  * to win by forcing a collision: an author who wants the Capsule can simply
  * write code with no browser signals in it.
  *
- * Synchronous by requirement — this runs inside the walk, where the async
- * digest APIs would make every memo lookup a microtask.
+ * Synchronous so that the memo lookup it keys is too: the async digest APIs
+ * would turn "has this draft already been classified" into a microtask that
+ * every caller has to await before it can be answered from cache.
  */
 function hashSource(source: string): string {
   let low = 0x811c9dc5;

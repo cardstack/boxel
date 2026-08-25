@@ -405,72 +405,74 @@ module('Unit | RP-6 classification', function () {
     }
   });
 
-  test('RP-6.4: a browser global inside executable text is a reference, however that text is quoted', async function (assert) {
-    // A template literal's text is prose, but its interpolations are code. The
-    // prefilter decides whether the confirmation pass runs at all, so blanking
-    // an interpolation loses the signal outright rather than costing accuracy.
-    for (let [shape, body, global] of [
-      [
-        'a template interpolation',
-        'export const l = `${document.title}`;',
-        'document',
-      ],
+  test('RP-6.4: a browser global reaches the confirmation pass however the surrounding text is quoted', async function (assert) {
+    // The prefilter gates the confirmation pass, so a span it wrongly treats
+    // as text is a lost signal rather than a lost refinement. These are the
+    // shapes that defeat every approximation of "blank the text spans first":
+    // a regex literal holding a quote desynchronizes a character-level
+    // scanner, and which side of the regex-versus-division question it lands
+    // on decides how much of the file goes with it.
+    for (let [shape, body] of [
+      ['a template interpolation', 'export const l = `${document.title}`;'],
       [
         'a nested template interpolation',
-        'export const l = `${`${navigator.language}`}`;',
-        'navigator',
+        'export const l = `${`${document.title}`}`;',
       ],
       [
         'an interpolation holding an object literal',
         'export const l = `${ { t: document.title }.t }`;',
-        'document',
       ],
       [
-        'an interpolation after a masked one',
-        'export const l = `${"quoted"} ${document.title}`;',
-        'document',
-      ],
-      [
-        'code following a regex literal that holds a quote',
+        'a regex in a value position, then a read',
         `const apostrophe = /'/;\nexport const t = document.title;`,
-        'document',
       ],
       [
-        'code following a regex literal that holds a comment opener',
-        'const slashes = /\\/\\//;\nexport const t = document.title;',
-        'document',
+        'a regex after a keyword, then a read',
+        `export function f(){ return /['"]/.test('a'); }\nexport const t = document.title;`,
       ],
       [
-        'code following a division',
+        'a regex after a closing brace, then a read',
+        `export function f(x){ if (x) {} /['"]/.test('a'); }\nexport const t = document.title;`,
+      ],
+      [
+        'a regex holding an even number of quotes, then a read',
+        `export const r = /["']["']/;\nexport const t = document.title;`,
+      ],
+      [
+        'a division, then a read',
         'export const half = 10 / 2, t = document.title;',
-        'document',
       ],
-    ] as [string, string, string][]) {
+    ] as [string, string][]) {
       let result = await classifyBoxelSource(body);
-      assert.strictEqual(
-        result.tier,
-        'sandbox',
-        `${shape} reaches the confirmation pass`,
-      );
       assert.deepEqual(
         result.signals,
-        [global],
+        ['document'],
         `${shape} reports the global it reads`,
       );
     }
 
-    // The other direction: the masker must still hide genuine prose, or the
-    // prefilter stops being a prefilter.
+    // The other direction is enforced by the scope-aware pass rather than by
+    // guessing which characters were code: prose names a global, and the parse
+    // finds no reference to it.
     for (let [shape, body] of [
-      ['a template literal holding prose', 'export const l = `see document`;'],
-      ['a regex matching the word', 'export const r = /document/;'],
       [
-        'a comment inside a template interpolation',
-        'export const l = `${ /* document */ 1 }`;',
+        'a line comment',
+        '// document and window are avoided here\nexport const x = 1;',
       ],
       [
-        'a string inside a template interpolation',
+        'a block comment',
+        '/* document.createElement is elsewhere */\nexport const x = 1;',
+      ],
+      ['a string', 'export const hint = "call document.querySelector";'],
+      ['a template literal', 'export const l = `see document`;'],
+      ['a regex matching the word', 'export const r = /document/;'],
+      [
+        'a string inside an interpolation',
         'export const l = `${ "document" }`;',
+      ],
+      [
+        'a DOM method name in prose',
+        'export const hint = `surface.getContext("2d")`;',
       ],
     ] as [string, string][]) {
       let result = await classifyBoxelSource(body);
@@ -499,13 +501,41 @@ module('Unit | RP-6 classification', function () {
       );
     }
 
-    // An inline type specifier is NOT erased: the statement still emits the
-    // module for its side effects, so the edge is real.
-    let inlineSpecifier = await classifyBoxelSource(
-      `import { type Scene } from 'three';\nexport const s: Scene | undefined = undefined;`,
+    // A statement keeps its edge whenever any binding survives erasure. The
+    // transform the realm applies drops an import only when every binding it
+    // introduces is type-only, so each of these is a real edge — including
+    // `import type from`, where `type` is an ordinary default binding, and
+    // `{ type as alias }`, which imports the export literally named `type`.
+    for (let [shape, body] of [
+      [
+        'an inline type specifier beside a value',
+        `import { type Scene, Group } from 'three';\nexport class C { s?: Scene; g = Group; }`,
+      ],
+      [
+        'a default binding named type',
+        `import type from 'three';\nexport const x = type;`,
+      ],
+      [
+        'a default binding named type beside a value',
+        `import type, { Group } from 'three';\nexport const x = [type, Group];`,
+      ],
+      ['a side-effect import', `import 'three';\nexport const x = 1;`],
+      [
+        'the export named type, aliased',
+        `import { type as alias } from 'three';\nexport const x = alias;`,
+      ],
+    ] as [string, string][]) {
+      let kept = await classifyBoxelSource(body);
+      assert.deepEqual(kept.imports, ['three'], `${shape} is a runtime edge`);
+    }
+
+    // An inline type specifier that leaves nothing bound IS erased by that
+    // transform, so it is not an edge either.
+    let allInlineTypes = await classifyBoxelSource(
+      `import { type Scene } from 'three';\nexport class C { s?: Scene; }`,
     );
-    assert.deepEqual(inlineSpecifier.imports, ['three']);
-    assert.strictEqual(inlineSpecifier.tier, 'sandbox');
+    assert.deepEqual(allInlineTypes.imports, []);
+    assert.strictEqual(allInlineTypes.tier, 'capsule');
 
     // The words in a string are not a declaration.
     let quoted = await classifyBoxelSource(
@@ -803,6 +833,124 @@ module('Unit | RP-6 classification', function () {
     assert.deepEqual(entry.signals, ['document']);
   });
 
+  test('RP-6.4: a draft answers only the caller that supplied it, and never de-escalates another card', async function (assert) {
+    // The per-module memo answers every entry that reaches an identifier, so a
+    // draft seated in it would let an unsaved editor buffer decide an
+    // unrelated card. The downward direction is the one RP-6.1 R5 forbids.
+    for (let [shape, saved, draft, expected] of [
+      [
+        'a draft that would promote',
+        `export const v = 1;`,
+        `import * as THREE from 'three'; export const v = THREE.Scene;`,
+        'capsule',
+      ],
+      [
+        'a draft that would de-escalate',
+        `import * as THREE from 'three'; export const v = THREE.Scene;`,
+        `export const v = 1;`,
+        'sandbox',
+      ],
+    ] as [string, string, string, string][]) {
+      let shared = 'https://example.test/shared.gts';
+      let { classifier, loads } = graphFixture({
+        'https://example.test/card.gts': `import { v } from './shared.gts'; export default v;`,
+        [shared]: saved,
+      });
+
+      let drafted = await classifier.classifyModuleGraph(shared, draft);
+      assert.strictEqual(
+        drafted.tier,
+        draft.includes('three') ? 'sandbox' : 'capsule',
+        `${shape} decides its own entry`,
+      );
+
+      let card = await classifier.classifyModuleGraph(
+        'https://example.test/card.gts',
+      );
+      assert.strictEqual(
+        card.tier,
+        expected,
+        `${shape} does not reach a card it is not the source of`,
+      );
+      assert.true(
+        loads.includes(shared),
+        `${shape} leaves the saved module to be read from the loader`,
+      );
+    }
+  });
+
+  test('RP-6.4: a realm module under a path segment the vocabulary matches is walked, not pruned', async function (assert) {
+    // The signal vocabulary matches a vendored copy by path segment, which is
+    // wanted — it still promotes its importer. But its dependencies are
+    // separate modules the realm serves, and `moduleGraph` is what a Sandbox
+    // authorizes reads against, so pruning it would turn an iframe into a
+    // refused fetch.
+    let { classifier } = graphFixture({
+      'https://example.test/card.gts': `import n from './paper/note.gts'; export default n;`,
+      'https://example.test/paper/note.gts': `import h from './helper.gts'; export default h;`,
+      'https://example.test/paper/helper.gts': `export default 1;`,
+    });
+
+    let result = await classifier.classifyModuleGraph(
+      'https://example.test/card.gts',
+    );
+    assert.strictEqual(result.reason, 'browser-runtime:paper');
+    assert.deepEqual(result.moduleGraph, [
+      'https://example.test/card.gts',
+      'https://example.test/paper/helper.gts',
+      'https://example.test/paper/note.gts',
+    ]);
+  });
+
+  test('RP-6.4: a bundled browser-only package is a leaf, so its source is never fetched', async function (assert) {
+    for (let specifier of ['three', 'https://esm.sh/three@0.160.0']) {
+      let { classifier, loads } = graphFixture({
+        'https://example.test/card.gts': `import * as THREE from '${specifier}'; export default THREE.Scene;`,
+      });
+      let result = await classifier.classifyModuleGraph(
+        'https://example.test/card.gts',
+      );
+      assert.strictEqual(result.reason, 'browser-runtime:three');
+      assert.false(
+        loads.includes(specifier),
+        `${specifier} is served as a bundle, so it is not fetched as authored source`,
+      );
+      assert.true(
+        result.moduleGraph.includes(specifier),
+        `${specifier} is still a module the Sandbox may read`,
+      );
+    }
+  });
+
+  test("RP-6.1: a dependency whose source does not parse fails the graph closed, unlike the entry's own draft", async function (assert) {
+    let { classifier } = graphFixture({
+      'https://example.test/card.gts': `import d from './draft.gts'; export default d;`,
+      'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
+    });
+
+    let entry = await classifier.classifyModuleGraph(
+      'https://example.test/draft.gts',
+    );
+    assert.strictEqual(
+      entry.reason,
+      'source-parse-pending',
+      'the module being edited keeps the more restrictive renderer, so the last good render stays up',
+    );
+
+    let importer = await classifier.classifyModuleGraph(
+      'https://example.test/card.gts',
+    );
+    assert.strictEqual(
+      importer.tier,
+      'sandbox',
+      'but nothing established that dependency closure, which RP-6.1 R2 fails closed',
+    );
+    assert.strictEqual(
+      importer.reason,
+      'module-parse:https://example.test/draft.gts',
+    );
+  });
+
   test('RP-6.4: a module whose source did not parse is re-read rather than pinned to the draft', async function (assert) {
     let sources: Record<string, string> = {
       'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
@@ -827,7 +975,7 @@ module('Unit | RP-6 classification', function () {
     assert.deepEqual(loads, [entry, entry]);
   });
 
-  test('RP-6.4: an entry whose graph contained an unparseable module is not kept either', async function (assert) {
+  test('RP-6.4: an entry decided over an unparseable dependency is re-decided once it parses', async function (assert) {
     let sources: Record<string, string> = {
       'https://example.test/entry.gts': `import Draft from './draft.gts'; export default Draft;`,
       'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
@@ -836,14 +984,12 @@ module('Unit | RP-6 classification', function () {
     let entry = 'https://example.test/entry.gts';
 
     assert.strictEqual(
-      (await classifier.classifyModuleGraph(entry)).tier,
-      'capsule',
-      'an unparseable dependency contributes no signals, so the entry reads as clean',
+      (await classifier.classifyModuleGraph(entry)).reason,
+      'module-parse:https://example.test/draft.gts',
     );
 
-    // That Capsule was drawn over a hole: the dependency's imports and signals
-    // were never established. Once it parses, the entry has to be re-decided
-    // without anything invalidating the dependency by name.
+    // Nothing invalidates the dependency by name: the entry is not kept,
+    // because the walk that produced it could not establish the graph.
     sources['https://example.test/draft.gts'] =
       `import * as THREE from 'three'; export default THREE.Scene;`;
     assert.strictEqual(
@@ -853,23 +999,27 @@ module('Unit | RP-6 classification', function () {
   });
 
   test('RP-6.4: promotion is computed from the finished graph, so import order and cycles cannot change it', async function (assert) {
-    let { classifier } = graphFixture({
+    let sources = {
       'https://example.test/left.gts': `import Shared from './shared.gts'; export default Shared;`,
       'https://example.test/right.gts': `import Shared from './shared.gts'; export default Shared;`,
       'https://example.test/shared.gts': `import * as THREE from 'three'; export default THREE.Scene;`,
       'https://example.test/cycle-a.gts': `import B from './cycle-b.gts'; export default B;`,
       'https://example.test/cycle-b.gts': `import A from './cycle-a.gts'; import * as THREE from 'three'; export default A || THREE.Scene;`,
-    });
+    };
+    let { classifier } = graphFixture(sources);
     let diamond = (imports: string) =>
       `${imports}\nexport default [Left, Right];`;
 
+    // Two fresh classifiers, so the second call actually traverses rather than
+    // answering from the memo the first call filled — which would prove cache
+    // reuse instead of order independence.
     let leftFirst = await classifier.classifyModuleGraph(
       'https://example.test/entry.gts',
       diamond(
         `import Left from './left.gts'; import Right from './right.gts';`,
       ),
     );
-    let rightFirst = await classifier.classifyModuleGraph(
+    let rightFirst = await graphFixture(sources).classifier.classifyModuleGraph(
       'https://example.test/entry.gts',
       diamond(
         `import Right from './right.gts'; import Left from './left.gts';`,
@@ -884,14 +1034,17 @@ module('Unit | RP-6 classification', function () {
     assert.deepEqual(rightFirst.signals, leftFirst.signals);
     assert.deepEqual(rightFirst.moduleGraph, leftFirst.moduleGraph);
 
-    let cycle = await classifier.classifyModuleGraph(
-      'https://example.test/cycle-a.gts',
-    );
-    assert.strictEqual(
-      cycle.tier,
-      'sandbox',
-      'evidence survives a cycle without recursion or order dependence',
-    );
+    // Entered from either end, on classifiers that have not seen the cycle.
+    for (let entry of ['cycle-a.gts', 'cycle-b.gts']) {
+      let cycle = await graphFixture(sources).classifier.classifyModuleGraph(
+        `https://example.test/${entry}`,
+      );
+      assert.strictEqual(
+        cycle.tier,
+        'sandbox',
+        `evidence survives a cycle entered at ${entry}`,
+      );
+    }
   });
 
   test('RP-6.4: the per-module memo is shared across entries, so a second card re-fetches and re-analyzes nothing it shares', async function (assert) {
@@ -1131,6 +1284,7 @@ module('Unit | RP-6 classification', function () {
       'https://example.test/missing-dep.gts': `import x from './nowhere.gts'; export default x;`,
       'https://example.test/bad-specifier.gts': `import x from 'unresolvable'; export default x;`,
       'https://example.test/draft.gts': `export default class { <template><h1>unclosed`,
+      'https://example.test/parse-dep.gts': `import d from './draft.gts'; export default d;`,
       'https://example.test/deep.gts': `import x from './importer.gts'; export default x;`,
     };
     let { classifier } = graphFixture(sources);
@@ -1142,6 +1296,16 @@ module('Unit | RP-6 classification', function () {
     ): Promise<string> =>
       (await using.classifyModuleGraph(`https://example.test/${entry}`)).reason;
 
+    // `module-analysis` is the fallback for a failure with no more specific
+    // cause, reached here by an option that throws rather than returning.
+    let throwingOption = new BoxelModuleGraphClassifier({
+      loadSource: async () => `import x from 'anything'; export default x;`,
+      resolveImport: (specifier) => specifier,
+      isTrustedModule: () => {
+        throw new Error('an option that throws is not a graph failure kind');
+      },
+    });
+
     let observed = new Set([
       await reasonFor('plain.gts'),
       await reasonFor('own.gts'),
@@ -1149,22 +1313,20 @@ module('Unit | RP-6 classification', function () {
       await reasonFor('missing-dep.gts'),
       await reasonFor('bad-specifier.gts'),
       await reasonFor('draft.gts'),
+      await reasonFor('parse-dep.gts'),
       await reasonFor('deep.gts', bounded),
+      await reasonFor('plain.gts', throwingOption),
     ]);
     let observedKinds = new Set(
       [...observed].map((reason) => reason.split(':')[0]),
     );
 
     assert.deepEqual(
-      [...CLASSIFICATION_REASON_KINDS]
-        .filter((kind) => kind !== 'module-analysis')
-        .filter((kind) => !observedKinds.has(kind)),
+      [...CLASSIFICATION_REASON_KINDS].filter(
+        (kind) => !observedKinds.has(kind),
+      ),
       [],
-      'every reason kind a graph walk can produce is produced here',
-    );
-    assert.true(
-      CLASSIFICATION_REASON_KINDS.includes('module-analysis'),
-      'the analysis-threw kind stays declared: it is the fallback for a failure with no more specific cause, so nothing can construct it on purpose',
+      'every declared reason kind is produced here',
     );
   });
 });
