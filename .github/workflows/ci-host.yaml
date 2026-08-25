@@ -859,7 +859,7 @@ jobs:
             "${{ matrix.shardIndex }}" "$attempted" "$taken" > /tmp/percy-tally.txt
           cat /tmp/percy-tally.txt
           if [ "$taken" -lt "$attempted" ]; then
-            echo "::warning::Shard ${{ matrix.shardIndex }} attempted $attempted Percy snapshot(s) but the CLI received $taken. The finalize job will reject this build so it cannot become a baseline."
+            echo "::warning::Shard ${{ matrix.shardIndex }} attempted $attempted Percy snapshot(s) but the CLI received $taken, so this build's snapshot set is incomplete. On main the finalize job rejects such a build so it cannot become a baseline."
             echo "::group::Snapshots this shard abandoned"
             grep '\[percy-snapshot\]' /tmp/test-output.log | grep 'abandoned after' || true
             echo "::endgroup::"
@@ -1087,11 +1087,23 @@ jobs:
       # exits non-zero when either is missing — so the step runs only when
       # both are present and otherwise skips itself rather than failing the
       # job.
+      # The snapshot-loss trigger is scoped to `main`, where the shard-failure
+      # one is not. Rejecting exists to stop a build becoming a baseline, and
+      # only `main` builds are auto-approved into that role — so on a PR a
+      # reject protects nothing. It also cannot be undone (the reviews
+      # endpoint answers 409 for any later action on a rejected build), and it
+      # would take the snapshots that *did* upload out of review along with
+      # the missing one. Losing a snapshot is far more common than losing a
+      # shard, so applying it to PRs too would block review on a large share
+      # of builds for no protective gain.
       - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
           (
             needs.host-test.result != 'success'
-            || steps.tally.outputs.lost != '0'
+            || (
+              steps.tally.outputs.lost != '0'
+              && github.ref == 'refs/heads/main'
+            )
           )
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
@@ -1110,7 +1122,10 @@ jobs:
         if: >-
           (
             needs.host-test.result != 'success'
-            || steps.tally.outputs.lost != '0'
+            || (
+              steps.tally.outputs.lost != '0'
+              && github.ref == 'refs/heads/main'
+            )
           )
           && (
             steps.finalize.outputs.build_id == ''
