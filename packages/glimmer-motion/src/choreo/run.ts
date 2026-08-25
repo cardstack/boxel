@@ -116,6 +116,9 @@ function platformControls(animation: Animation): AnimationPlaybackControls {
     set speed(rate: number) {
       animation.playbackRate = rate;
     },
+    get state() {
+      return animation.playState;
+    },
     stop: () => animation.cancel(),
     get time() {
       return ((animation.currentTime as number) ?? 0) / 1000;
@@ -545,7 +548,23 @@ export class ChoreoRun implements Run {
       // scrubbing must not play before its start or after its end
       const due = now >= t.start && (now < t.end || t.cue.loop);
       const run = !paused && due;
-      t.controls?.forEach((c) => (run ? c.play() : c.pause()));
+      // Touch only live animations. An accelerated animation that FINISHED
+      // has already committed its finals and been cancelled — and the WAAPI
+      // pause procedure RESURRECTS a cancelled animation, parked at zero
+      // with fill:both, its FIRST keyframe overriding the committed finals.
+      // That is how the Playhead's receipt reappeared at the park: pausing
+      // the run paused its long-finished [1→0] spring, which came back as
+      // a standing opacity 1. play() on a finished control is the same
+      // hazard in the other direction: it restarts the spring from zero.
+      t.controls?.forEach((c) => {
+        if (run) {
+          if (c.state === 'running' || c.state === 'paused') {
+            c.play();
+          }
+        } else if (c.state === 'running') {
+          c.pause();
+        }
+      });
       if (t.delivery) {
         (run ? t.delivery.play : t.delivery.pause)();
       }
@@ -621,6 +640,7 @@ export class ChoreoRun implements Run {
 
   private restill() {
     const now = this.master;
+    const rewinds: Track[] = [];
     for (const t of this.tracks) {
       const { cue } = t;
       const ve = cue.sprite.node.visualElement;
@@ -628,11 +648,9 @@ export class ChoreoRun implements Run {
         continue;
       }
       if (!t.started && t.origin && now < t.start) {
-        // scrubbed back before its start: stand the origin up again
-        for (const key in t.origin) {
-          ve.getValue(key, t.origin[key]!)!.jump(t.origin[key]!);
-        }
-        ve.render();
+        // scrubbed back before its start: stand the origin up again —
+        // deferred and ordered with the others (see rewind())
+        rewinds.push(t);
       } else if (
         t.started &&
         !t.controls &&
@@ -645,16 +663,23 @@ export class ChoreoRun implements Run {
         this.sampleStill(t, now);
       }
     }
+    this.rewind(rewinds, now);
   }
 
   private evaluate(limit = Infinity) {
     const now = this.master;
+    const rewinds: Track[] = [];
     for (const t of this.tracks) {
       const { cue } = t;
       // a completed track scrubbed back into range plays again; its
       // animation was kept, so only the flag moves
       if (t.passed && now < t.end) {
         t.passed = false;
+        if (now < t.start && t.origin) {
+          // completed, and the jump cleared its start entirely: its
+          // committed finals must not stand — restored with the others
+          rewinds.push(t);
+        }
       }
       const fill = cue.hold?.fill ?? false;
       const inside =
@@ -826,8 +851,9 @@ export class ChoreoRun implements Run {
         // fresh one carries on from wherever the scrub left the values
         this.startTrack(t);
       } else if (!inside && t.started && now < t.start) {
-        // scrubbed back before its start: retire the animation and stand
-        // the values back on their origin
+        // scrubbed back before its start: retire the animation; the
+        // origin is restored with the other rewinds AFTER the sweep, in
+        // an order that leaves the right one standing (see rewind())
         t.passed = false;
         t.started = false;
         flushKeyframeResolvers();
@@ -836,12 +862,8 @@ export class ChoreoRun implements Run {
         t.delivery = undefined;
         t.loopAnimation?.cancel();
         t.loopAnimation = undefined;
-        const ve = cue.sprite.node.visualElement;
-        if (ve && t.origin) {
-          for (const key in t.origin) {
-            ve.getValue(key, t.origin[key]!)!.jump(t.origin[key]!);
-          }
-          ve.render();
+        if (t.origin) {
+          rewinds.push(t);
         }
       } else if (t.started && now >= t.end && !cue.loop && !this.playing) {
         // scrubbed (or parked) past its end: hold the finals
@@ -868,6 +890,47 @@ export class ChoreoRun implements Run {
           }
           this.sampleStill(t, now);
         }
+      }
+    }
+    this.rewind(rewinds, now);
+  }
+
+  /**
+   * Stand rewound tracks back on their origins — the part of a backward
+   * seek that must be ORDERED. A sprite with sequential cues has one
+   * origin per cue, each equal to the previous cue's landing; restored
+   * in track order they clobber forward and the sprite ends up standing
+   * on its LAST future cue's origin (the Playhead demo's hand parked on
+   * 'place' after a scrub to zero; its receipt refusing to dismiss). So:
+   * latest-first, which leaves the EARLIEST future cue's origin — the
+   * value the timeline actually holds at `now` — standing; and a key
+   * that any track AT or BEFORE `now` writes is not touched at all,
+   * because that track's own sample or landing is the answer.
+   */
+  private rewind(rewinds: Track[], now: number) {
+    rewinds.sort((a, b) => b.start - a.start);
+    for (const t of rewinds) {
+      const ve = t.cue.sprite.node.visualElement;
+      if (!ve || !t.origin) {
+        continue;
+      }
+      let wrote = false;
+      for (const key in t.origin) {
+        const owned = this.tracks.some(
+          (s) =>
+            s !== t &&
+            s.start <= now &&
+            s.cue.target !== undefined &&
+            key in s.cue.target &&
+            s.cue.sprite.node.visualElement === ve,
+        );
+        if (!owned) {
+          ve.getValue(key, t.origin[key]!)!.jump(t.origin[key]!);
+          wrote = true;
+        }
+      }
+      if (wrote) {
+        ve.render();
       }
     }
   }
