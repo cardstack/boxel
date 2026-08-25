@@ -27,6 +27,25 @@ export type TempEvent = Partial<IEvent> & {
   error?: MatrixSDK.MatrixError;
 };
 
+// `content.data` is a JSON string on the wire — matrix event bodies cannot
+// carry all JSON types, so sendEvent in the matrix-service encodes the field
+// and every reader decodes it. A string that fails to parse is logged and
+// left in place: that message then loses its data-derived fields (token
+// usage, context), but the caller's timeline pass carries on instead of
+// aborting the rest of the room's backfill.
+export function decodeWireData(content: Record<string, any> | undefined) {
+  if (content?.data && typeof content.data === 'string') {
+    try {
+      content.data = JSON.parse(content.data);
+    } catch (e) {
+      console.error(
+        'Failed to decode event content.data; leaving it encoded',
+        e,
+      );
+    }
+  }
+}
+
 export type SkillsConfig = {
   enabledSkillCards: SerializedFile[];
   disabledSkillCards: SerializedFile[];
@@ -129,17 +148,11 @@ export default class Room {
     let { event_id: eventId, state_key: stateKey } = event;
     eventId = eventId ?? stateKey; // room state may not necessary have an event ID
 
-    // If we are receiving an event which contains
-    // a data field, we may need to parse it
-    // because matrix doesn't support all json types
-    // Corresponding encoding is done in
-    // sendEvent in the matrix-service
-    if (event.content?.data) {
-      if (typeof event.content.data === 'string') {
-        event.content.data = JSON.parse(event.content.data);
-      }
-    }
-    eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+    // Decode the event's own wire-encoded data. A backfilled event also
+    // carries its latest edit as an aggregation bundle under
+    // unsigned['m.relations']['m.replace']; that copy is decoded where it is
+    // consumed — getAggregatedReplacement in app/resources/room.ts.
+    decodeWireData(event.content);
     if (!eventId) {
       throw new Error(
         `bug: event ID is undefined for event ${JSON.stringify(

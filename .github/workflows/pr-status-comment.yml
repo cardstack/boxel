@@ -182,7 +182,7 @@ jobs:
 
       - name: Upsert sticky comment
         if: steps.pr.outputs.skip != 'true' && steps.body.outputs.empty != 'true'
-        uses: marocchino/sticky-pull-request-comment@5060d4700a91de252c87eeddd2da026382d9298a # 2.9.4
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
         with:
           header: pr-status
           number: ${{ steps.pr.outputs.number }}

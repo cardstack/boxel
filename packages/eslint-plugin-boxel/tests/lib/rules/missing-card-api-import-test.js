@@ -47,6 +47,28 @@ ruleTester.run('missing-card-api-import', rule, {
         },
       ],
     },
+    // A class member named after a mapped export is not a reference, so
+    // no import is injected for it. Injecting one would create a binding
+    // with no references, the unused-import fix would remove it, and the
+    // two autofixes would ping-pong without converging.
+    {
+      code: `
+        export class Foo {
+          contains(other) {
+            return other === this;
+          }
+          field = 1;
+        }
+      `,
+      options: [
+        {
+          importMappings: {
+            contains: ['contains', '@cardstack/base/card-api'],
+            field: ['field', '@cardstack/base/card-api'],
+          },
+        },
+      ],
+    },
   ],
 
   invalid: [
