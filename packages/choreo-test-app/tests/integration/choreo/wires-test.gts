@@ -11,6 +11,7 @@ import {
   triggerEvent,
   waitUntil,
 } from '@ember/test-helpers';
+import Component from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
@@ -62,6 +63,40 @@ module('Integration | choreo | wires', function (hooks) {
     assert.dom('[data-test-wires-note="hed"]').exists();
     await restingCount(3);
     assert.strictEqual(resting(), 3, 'V2 draws the inserted thread');
+  });
+
+  test('resting ink holds its marks inside a transformed ancestor', async function (assert) {
+    // A crossing carries the whole demo page mid-flight, scaled, while
+    // the follow loop repaints — subtracting raw client rects baked that
+    // scale into the ink and every thread stood off its mark for the
+    // whole flight. The fixture is the flight reduced to one wrapper.
+    class Carried extends Component {
+      <template>
+        <div
+          style="transform: scale(0.82) translate(40px, 24px); transform-origin: 0 0"
+        >
+          <Wires />
+        </div>
+      </template>
+    }
+    await render(<template><Carried /></template>);
+    await animationsSettled();
+    await restingCount(2);
+
+    const t = find('.wires-thread[data-thread="gauge"]') as SVGPathElement;
+    const mark = find('[data-node="m-gauge"]') as HTMLElement;
+    const d = t.getAttribute('d') ?? '';
+    const m = /M (-?[\d.]+) (-?[\d.]+)/.exec(d)!;
+    const inverse = t.ownerSVGElement!.getScreenCTM()!.inverse();
+    const r = mark.getBoundingClientRect();
+    const p = new DOMPoint(r.right, r.top + r.height / 2).matrixTransform(
+      inverse
+    );
+    const err = Math.hypot(p.x - Number(m[1]), p.y - Number(m[2]));
+    assert.true(
+      err < 2,
+      `the thread starts ON its mark under the transform (${err.toFixed(1)}px off)`
+    );
   });
 
   test('stepping back removes the inserted comment; the first pair stays selected', async function (assert) {
