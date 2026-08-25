@@ -6,30 +6,41 @@ import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, spring } from 'glimmer-motion';
 
 /**
- * A light table. Every shot from the foundry roll was bracketed — three
- * frames milliseconds apart — and the work is the camera's distances: at
- * rest the glass frames ONE bracket and you pick the keeper; loupe IN
- * (1.6×) to grade a single variant; pull back (0.5×) and the whole roll —
- * two brackets, built as two glass-heights — fits the glass exactly.
+ * A light table. The sheet is a filmstrip, not a spec sheet: at rest the
+ * glass frames ONE bracket and its number is all you get; loupe IN (1.6×)
+ * onto a frame and the full camera info develops — exposure, timestamp,
+ * the verdict. Pull back (0.5×) and the roll — two brackets, built as two
+ * glass-heights — fits the glass exactly, every frame stripped bare so the
+ * strip reads as film, not a table of data.
  */
 const brackets = [
   {
     caption: 'Night shift',
     exposure: 'f/2.8 · 1/60 · ISO 800',
-    hue: '#ff7a45 0%, #c42712 42%, #2a0c08 100%',
     no: '01',
   },
   {
     caption: 'Foundry glass',
     exposure: 'f/2 · 1/30 · ISO 1600',
-    hue: '#fff4e8 0%, #e4a35a 45%, #5a3214 100%',
     no: '02',
   },
 ];
 
-const VARIANTS = ['a', 'b', 'c'] as const;
+/** the developer's own palette: orange through amber, copper, rust — never
+ * the same two frames the same shade, so the strip reads as distinct shots */
+const HUES = [
+  '#ff7a45 0%, #c42712 42%, #2a0c08 100%',
+  '#fff4e8 0%, #e4a35a 45%, #5a3214 100%',
+  '#ffb27a 0%, #d9632a 40%, #401c08 100%',
+  '#ffd9a0 0%, #c97b3c 45%, #3a2410 100%',
+  '#ff9d5c 0%, #b3401f 45%, #2e0f06 100%',
+  '#fce2b8 0%, #e08a3c 42%, #4a2812 100%',
+];
 
-/** three frames, milliseconds apart: same light, a slightly different world */
+const VARIANTS = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
+
+/** six frames per bracket, milliseconds apart: same light, a slightly
+ * different world — small strips enough to fill the sheet edge to edge */
 const shots = brackets.flatMap((bracket, row) =>
   VARIANTS.map((variant, i) => ({
     bracket: bracket.no,
@@ -38,7 +49,7 @@ const shots = brackets.flatMap((bracket, row) =>
     id: `n${bracket.no}${variant}`,
     label: `${bracket.no} · ${variant.toUpperCase()}`,
     stamp: `07:4${row}:02.${String(114 + i * 83).padStart(3, '0')}`,
-    wash: `linear-gradient(${152 + i * 9}deg, ${bracket.hue})`,
+    wash: `linear-gradient(${142 + i * 23}deg, ${HUES[(row * VARIANTS.length + i) % HUES.length]})`,
   })),
 );
 
@@ -65,6 +76,16 @@ export class Camera extends Component {
   /** where the camera aims: the graded frame, or the middle of the sheet */
   get aimId() {
     return this.focus ?? (this.sheet ? 'sheet-centre' : null);
+  }
+
+  /** is-sheet strips the frame numbers via plain CSS — a pull-back is a
+   * distance change, not a participant entering or leaving, so it fades
+   * on its own rather than joining the Choreo pass */
+  get stageClass() {
+    if (this.focus) {
+      return 'cam-stage is-zoomed';
+    }
+    return this.sheet ? 'cam-stage is-sheet' : 'cam-stage';
   }
 
   loupe = (id: string, event: Event) => {
@@ -131,13 +152,11 @@ export class Camera extends Component {
         {{! the cursor is the affordance: zoom-in over a frame, zoom-out on
             the table once you are close — no toolbar, the world explains }}
         <Choreo
-          class={{if this.focus "cam-stage is-zoomed" "cam-stage"}}
+          class={{this.stageClass}}
           {{on "click" this.clear}}
           as |c|
         >
           <div class="cam-sheet">
-            <div class="cam-roll">Roll 12 · Foundry shoot · pick one per
-              bracket</div>
             <span class="cam-centre" {{motion id="sheet-centre" role="mark"}}
             ></span>
             {{#each shots as |shot|}}
@@ -147,6 +166,8 @@ export class Camera extends Component {
                 {{motion id=shot.id role="frame"}}
                 {{on "click" (fn this.loupe shot.id)}}
               >
+                {{! basic metadata — the frame number — reads at rest; it
+                    fades out on the sheet, where the roll is film, not data }}
                 <span
                   class="cam-no"
                   {{motion id=(labelId shot) role="no"}}
@@ -198,9 +219,11 @@ export class Camera extends Component {
             {{! ONE camera step, aimed by state. Every pass replays it
                 toward wherever the work now stands — an interrupted dive
                 simply bends. @steady names what must stay legible from ANY
-                distance: the frame labels and the picked stars scale with
-                the sheet, damped back toward their own size — from 0.25×
-                you can still read which frames you kept. }}
+                distance: the frame number and the picked stars scale
+                against the camera, damped back toward their own size —
+                so the loupe's 1.6× never blows the label up, even though
+                the sheet itself fades it out entirely (plain CSS, not a
+                Choreo participant). }}
             <c.Camera
               @zoom={{this.zoom}}
               @origin={{if this.aimId (c.id this.aimId)}}

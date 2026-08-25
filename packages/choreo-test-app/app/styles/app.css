@@ -863,6 +863,13 @@ summary,
     rgba(var(--surface-tint-rgb), 0.03);
 }
 
+/* The roll is small film, not a poster: two rows of 4:3 strips are shallow,
+   so the glass is sized to them rather than stretching each frame tall to
+   fill the site's default stage height. */
+.stage-wrap:has(.cam) {
+  min-height: min(46vh, 420px);
+}
+
 .sample {
   margin-top: 22px;
   border: 1px solid var(--line);
@@ -2665,41 +2672,28 @@ html[data-gm-dragging] * {
   cursor: zoom-out;
 }
 
-.cam-roll {
-  position: absolute;
-  top: 14px;
-  left: 16px;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  white-space: nowrap;
-}
-
-/* one bracket to a row, each row the height of the glass — two rows, so
-   the whole roll fits it EXACTLY at 0.5x */
+/* one bracket to a row, each row as tall as its own 4:3 strips — not the
+   whole glass. Six frames wide: small strips, filling the sheet edge to
+   edge without stretching any single frame into a tall dead card. */
 .cam-sheet {
   position: absolute;
-  top: 0;
+  top: 50%;
   left: 0;
+  transform: translateY(-50%);
   box-sizing: border-box;
   width: 100cqw;
-  padding: 38px 14px 14px;
+  padding: 14px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-auto-rows: calc(100cqh - 52px);
-  gap: 10px;
+  grid-template-columns: repeat(6, 1fr);
+  grid-auto-rows: auto;
+  gap: 6px;
 }
 
-/* The point the sheet view zooms about. A zoom holds its aim point fixed,
-   so this is the FIXED POINT of "the whole roll centred at the fit zoom":
-   solving (1−z)·P + z·sheetCentre = glassCentre for a sheet built as 1/z
-   glass-heights gives P = 21px from the top at half width — independent
-   of the container's size AND of the fit zoom, by construction. */
+/* The point the sheet view zooms about: dead centre of the roll, wherever
+   its actual (content-sized) height lands it. */
 .cam-centre {
   position: absolute;
-  top: 21px;
+  top: 50%;
   left: 50%;
   width: 1px;
   height: 1px;
@@ -2713,7 +2707,7 @@ html[data-gm-dragging] * {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 15px 10px 16px;
+  padding: 15px 6px 16px;
   border: 0;
   border-radius: 4px;
   background: #191410;
@@ -2763,7 +2757,8 @@ html[data-gm-dragging] * {
   cursor: zoom-out;
 }
 
-/* the frame number, edge-printed */
+/* the frame number, edge-printed: basic metadata, legible at rest and
+   loupe — but the sheet is film, not a table, so it fades there */
 .cam-no {
   position: absolute;
   bottom: 3px;
@@ -2774,6 +2769,12 @@ html[data-gm-dragging] * {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: rgba(228, 163, 90, 0.9);
+  opacity: 1;
+  transition: opacity 160ms var(--ease);
+}
+
+.cam-stage.is-sheet .cam-no {
+  opacity: 0;
 }
 
 /* the editor's mark: a grease-pencil ring around the keeper */
@@ -2787,9 +2788,11 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
+/* the negative itself: 4:3, same as every frame on the roll — the card
+   around it is taller, for the sprockets and the printed edge data */
 .cam-wash {
-  flex: 1;
-  min-height: 0;
+  width: 100%;
+  aspect-ratio: 4 / 3;
   border-radius: 2px;
   /* the exposure's own vignette — light falls off toward the frame */
   box-shadow: inset 0 0 28px rgba(0, 0, 0, 0.4);
