@@ -1033,7 +1033,6 @@ export interface RealmCards {
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import type { LocalPath } from './paths.ts';
 import type { CardTypeFilter, Query, EveryFilter } from './query.ts';
-import type { SearchEntryScope } from './search-entry.ts';
 import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './http-range.ts';
@@ -1366,7 +1365,12 @@ export type getCardCollection<T extends CardDef = CardDef> = (
   cardErrors: CardErrorJSONAPI[];
   isLoaded: boolean;
 };
-export type getCards<T extends CardDef = CardDef> = (
+// Generic over `CardDef | FileDef` (defaulting to `CardDef`) to match the
+// resource backing it — `StoreService.getSearchResource`, `SearchResource`, and
+// `getSearch` are all `<T extends CardDef | FileDef = CardDef>`. A file-typed
+// search (`getCards<FileDef>(...)`) is then `FileDef`-typed end to end instead
+// of a `CardDef[]` the caller has to cast.
+export type getCards<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -1440,18 +1444,33 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  // `scope` pins which rows the search returns: 'cards' (instance rows),
-  // 'files' (FileDef rows), or 'all' (both). When omitted the scope is inferred
-  // from the filter — an untyped query defaults to 'cards'. Prefer passing it
-  // explicitly over shaping the filter to coax a scope. Note: 'all' returns a
-  // card's instance row *and* its dual-indexed `.json` file row, so an untyped
-  // `scope: 'all'` search yields each card twice unless the caller dedups
+  // `scope` pins which rows the search returns and drives the element type:
+  // 'files' → `FileDef[]`, 'all' → `(CardDef | FileDef)[]`, and 'cards' (or
+  // omitted) → `CardDef[]`. When omitted the scope is inferred from the filter —
+  // an untyped query defaults to 'cards'. Prefer passing it explicitly over
+  // shaping the filter to coax a scope. Note: 'all' returns a card's instance
+  // row *and* its dual-indexed `.json` file row, so an untyped `scope: 'all'`
+  // search yields each card twice unless the caller dedups
   // (e.g. `excludeCardInstanceFileRows()`).
+  //
+  // The element type follows the runtime `scope` argument rather than a free
+  // caller-supplied type parameter, so a file-scoped search is `FileDef`-typed
+  // without a cast and a card-scoped search cannot be mis-asserted as files.
   search(
     query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'files' },
+  ): Promise<FileDef[]>;
+  search(
+    query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'all' },
+  ): Promise<(CardDef | FileDef)[]>;
+  search<T extends CardDef = CardDef>(
+    query: Query,
     realmURLs?: string[],
-    opts?: { scope?: SearchEntryScope },
-  ): Promise<CardDef[]>;
+    opts?: { scope?: 'cards' },
+  ): Promise<T[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
