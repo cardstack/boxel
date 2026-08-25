@@ -50,17 +50,17 @@ module('Integration | choreo | delivery', function (hooks) {
     assert.strictEqual(
       line.textContent,
       'Pour 42 complete',
-      'the original nodes are back, byte-identical',
+      'the original nodes are back, byte-identical'
     );
     assert.strictEqual(
       line.querySelectorAll('span').length,
       0,
-      'no stand-in span survives the run',
+      'no stand-in span survives the run'
     );
     assert.strictEqual(
       parseFloat(getComputedStyle(line).opacity),
       1,
-      'the sprite sits at the delivery end value',
+      'the sprite sits at the delivery end value'
     );
   });
 

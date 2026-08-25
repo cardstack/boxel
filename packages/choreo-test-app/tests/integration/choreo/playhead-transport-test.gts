@@ -13,8 +13,7 @@ import { Playhead } from 'test-app/components/examples/playhead';
 
 function run(): ChoreoRun | null {
   const stage = document.querySelector('.ph-stage') as
-    | (HTMLElement & { playhead?: { c?: { run: ChoreoRun | null } } })
-    | null;
+    (HTMLElement & { playhead?: { c?: { run: ChoreoRun | null } } }) | null;
   return stage?.playhead?.c?.run ?? null;
 }
 
@@ -50,7 +49,10 @@ module('Integration | choreo | playhead transport', function (hooks) {
       Math.abs(r.duration - 6.16) < 0.05,
       `the score compiles to its full length — ${r.duration.toFixed(2)}s`
     );
-    assert.ok(r.time < 0.2, `parked near zero, waiting for Play — at ${r.time.toFixed(2)}`);
+    assert.ok(
+      r.time < 0.2,
+      `parked near zero, waiting for Play — at ${r.time.toFixed(2)}`
+    );
     assert.strictEqual(
       document.querySelectorAll('.ph-mark').length,
       4,
@@ -107,7 +109,10 @@ module('Integration | choreo | playhead transport', function (hooks) {
     await frames(6);
 
     const r = run()!;
-    assert.ok(r.time < 0.05, `the playhead stands at zero (${r.time.toFixed(2)})`);
+    assert.ok(
+      r.time < 0.05,
+      `the playhead stands at zero (${r.time.toFixed(2)})`
+    );
     assert.true(
       styleOf('.ph-receipt').includes('opacity: 0'),
       `the receipt rewinds away — got '${styleOf('.ph-receipt')}'`

@@ -33,7 +33,11 @@ module('Integration | choreo | camera and tether', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           {{grab c}}
           <div
             id="focus"
@@ -54,7 +58,7 @@ module('Integration | choreo | camera and tether', function (hooks) {
     const frame = find('[data-choreo]') as HTMLElement;
     assert.true(
       frame.style.transform.includes('scale(2)'),
-      `the frame zoomed (${frame.style.transform})`,
+      `the frame zoomed (${frame.style.transform})`
     );
     assert.strictEqual(ctx.camera.zoom, 2, 'c.camera landed at the boundary');
     const steady = find('#focus') as HTMLElement;
@@ -64,7 +68,7 @@ module('Integration | choreo | camera and tether', function (hooks) {
     const counter = parseFloat(m![1]!);
     assert.true(
       counter > 0.7 && counter < 0.95,
-      `damped, not full counter (${counter})`,
+      `damped, not full counter (${counter})`
     );
   });
 
@@ -76,7 +80,11 @@ module('Integration | choreo | camera and tether', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           {{grab c}}
           {{! the aim is otherwise only read at pass time — a render has to
               consume it, or changing it schedules no pass at all }}
@@ -115,12 +123,12 @@ module('Integration | choreo | camera and tether', function (hooks) {
     // margin 0.5 of a 300×200 frame around a 40×20 tile: width fits first
     assert.true(
       Math.abs(ctx.camera.zoom - 3.75) < 0.01,
-      `the computed zoom fills half the constraining axis (${ctx.camera.zoom})`,
+      `the computed zoom fills half the constraining axis (${ctx.camera.zoom})`
     );
     const a = centre(find('#fit-a')!);
     assert.true(
       Math.abs(a.x - home.x) < 1 && Math.abs(a.y - home.y) < 1,
-      `the corner tile lands centred (${a.x},${a.y} vs ${home.x},${home.y})`,
+      `the corner tile lands centred (${a.x},${a.y} vs ${home.x},${home.y})`
     );
 
     // straight to the OPPOSITE corner: this pass measures through the 3.75×
@@ -130,7 +138,7 @@ module('Integration | choreo | camera and tether', function (hooks) {
     const b = centre(find('#fit-b')!);
     assert.true(
       Math.abs(b.x - home.x) < 1 && Math.abs(b.y - home.y) < 1,
-      `a dive measured mid-zoom still centres (${b.x},${b.y} vs ${home.x},${home.y})`,
+      `a dive measured mid-zoom still centres (${b.x},${b.y} vs ${home.x},${home.y})`
     );
 
     // fit nothing: back to the resting identity, no trace on the frame —
@@ -147,14 +155,18 @@ module('Integration | choreo | camera and tether', function (hooks) {
     const drift = cross / Math.hypot(bRest.x - home.x, bRest.y - home.y);
     assert.true(
       Math.abs(drift) < 2,
-      `the un-zoom backs straight out of its tile (drift ${drift.toFixed(1)}px)`,
+      `the un-zoom backs straight out of its tile (drift ${drift.toFixed(1)}px)`
     );
     await animationsSettled();
-    assert.strictEqual(ctx.camera.zoom, 1, 'null fit returns the frame to rest');
+    assert.strictEqual(
+      ctx.camera.zoom,
+      1,
+      'null fit returns the frame to rest'
+    );
     assert.strictEqual(
       (find('[data-choreo]') as HTMLElement).style.transform,
       '',
-      'at identity the frame carries no transform',
+      'at identity the frame carries no transform'
     );
   });
 
@@ -166,19 +178,35 @@ module('Integration | choreo | camera and tether', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           <div
             id="a"
-            style="position:absolute;top:20px;left:{{if this.wide '10px' '40px'}};width:40px;height:20px"
+            style="position:absolute;top:20px;left:{{if
+              this.wide
+              '10px'
+              '40px'
+            }};width:40px;height:20px"
             {{motion id="a" role="node"}}
           ></div>
           <div
             id="b"
-            style="position:absolute;top:120px;left:{{if this.wide '240px' '120px'}};width:40px;height:20px"
+            style="position:absolute;top:120px;left:{{if
+              this.wide
+              '240px'
+              '120px'
+            }};width:40px;height:20px"
             {{motion id="b" role="node"}}
           ></div>
           <c.Parallel>
-            <c.Move @of={{c.moved "node"}} @duration={{0.12}} @ease="easeInOut" />
+            <c.Move
+              @of={{c.moved "node"}}
+              @duration={{0.12}}
+              @ease="easeInOut"
+            />
             <c.Tether @from={{c.id "a"}} @to={{c.id "b"}} @path={{wire}} />
           </c.Parallel>
         </Choreo>
@@ -202,13 +230,13 @@ module('Integration | choreo | camera and tether', function (hooks) {
     ).getBoundingClientRect();
     assert.true(
       Math.abs(endX - (bBox.left - layer.left)) < 2,
-      `the wire endpoint sits inside the moving box (${endX} vs ${bBox.left - layer.left})`,
+      `the wire endpoint sits inside the moving box (${endX} vs ${bBox.left - layer.left})`
     );
     assert.true(aBox.left >= 0, 'sanity');
     await animationsSettled();
     assert.notOk(
       find('[data-choreo-tether]'),
-      'the wire leaves when its window ends',
+      'the wire leaves when its window ends'
     );
   });
 });

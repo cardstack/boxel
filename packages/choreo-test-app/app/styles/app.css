@@ -2,45 +2,39 @@
 
 :root {
   color-scheme: dark;
-  /* one notch BELOW --bg: the groove a track or a well sinks into, for the
-     handful of demos that mock up their own device chrome (a composer bar,
-     a scrubber's channel) and want something recessed rather than merely
-     dark. */
-  --bg-well: #0d0b0a;
-  --bg: #110f0d;
-  --bg-elev: #1a1714;
-  --bg-spot: #221d19;
+  /* Dark surfaces are a warm charcoal ladder, not near-black. Near-black
+     punches the pupil against the already-lifted page and makes every card
+     and stage read as a hole. well < bg < page < elev < spot, so recessed
+     chrome still sinks and cards still lift, without a black floor. */
+  --bg-well: #221e1a;
+  --bg: #2a2521;
+  --bg-elev: #3a342e;
+  --bg-spot: #443c35;
 
   /* Playhead's own surfaces.
-     The light-mode sweep pointed this demo's card, button and grooves at the
-     shared --bg-spot/--bg-well ladder, which in dark is a near-black
-     — a good page ground, and far too stark for a small UI sitting ON that
-     ground. These are the warm tones the demo carried before light mode: a
-     card a shade above the page rather than a hole cut in it, and grooves
-     that are a translucent black over the card instead of the page colour.
-     Light overrides them back to the shared ladder, where it reads right. */
-  --ph-card-top: #17130f;
-  --ph-card-bot: #100d0b;
-  --ph-go-top: #2b221c;
-  --ph-go-bot: #1b1512;
-  --ph-receipt-top: #1d1611;
-  --ph-receipt-bot: #120f0d;
-  --ph-row: rgba(0, 0, 0, 0.22);
-  --ph-groove: rgba(0, 0, 0, 0.3);
-  --ph-btn: rgba(0, 0, 0, 0.35);
-  /* the page's own resting tone — not --bg. --bg is the recessed end of the
-     surface ladder (bg < bg-elev < bg-spot) that cards and panels sit on top
-     of; the wash behind all of them used to read lighter than pure --bg
-     because a noise texture sat over it at all times. A first pass matched
-     the measured average of the old grain composited over --bg (#211e1b) —
-     and still read blacker than memory, because the grain's bright speckle
-     lifted the PERCEIVED tone above its average. So this sits a further
-     notch up: a deep warm gray the eye reads the way the textured page
-     read, not the black the arithmetic said it was. */
-  --bg-page: #332d27;
+     Kept a shade above the shared ladder so the small UI sits ON the page
+     rather than cutting a hole in it. Grooves stay translucent black over
+     the card. Light overrides them back to the shared ladder. */
+  --ph-card-top: #3d362f;
+  --ph-card-bot: #322c27;
+  --ph-go-top: #4a4139;
+  --ph-go-bot: #2c2722;
+  --ph-receipt-top: #403830;
+  --ph-receipt-bot: #2e2924;
+  --ph-row: rgba(0, 0, 0, 0.16);
+  --ph-groove: rgba(0, 0, 0, 0.22);
+  --ph-btn: rgba(0, 0, 0, 0.26);
+  /* the page's own resting tone — not --bg. --bg is the recessed canvas
+     (camera stage, overlays via --bg-rgb); cards use --bg-elev, a notch
+     above this, so they lift instead of sinking. */
+  --bg-page: #2e2924;
   --ink: #f3ece3;
-  --ink-dim: #9c9287;
-  --ink-faint: #6b635b;
+  /* Secondary type was tuned against near-black. On the lifted charcoal
+     those same stones recede into the ground — labels and code comments
+     especially. These sit a step closer to --ink so they read, without
+     becoming body copy. */
+  --ink-dim: #d2c9bf;
+  --ink-faint: #b8aea3;
   --line: rgba(var(--ink-rgb), 0.09);
   --line-strong: rgba(var(--ink-rgb), 0.16);
   /* the same three colors above, as bare triplets for `rgba(var(--x-rgb), a)`
@@ -48,7 +42,7 @@
      for — a line, a scrim, a dimmed icon. Redefined alongside --bg/--ink in
      each theme block below, so those call sites repaint without knowing a
      theme exists. */
-  --bg-rgb: 17, 15, 13;
+  --bg-rgb: 42, 37, 33;
 
   /* Shadows.
      Every drop shadow here was picked against a near-black page, where a 45%
@@ -561,9 +555,8 @@ summary,
 .card-stage {
   position: relative;
   height: 400px;
-  /* a faint LIGHT tint, not a dark one — the page is already close to black,
-     so darkening further at any opacity is invisible; a light wash is what
-     actually reads as its own surface against it */
+  /* a faint LIGHT tint, not a dark one — darkening a warm-charcoal stage
+     is invisible; a light wash is what actually reads as its own surface */
   background:
     radial-gradient(
       80% 70% at 50% 40%,
@@ -6634,46 +6627,46 @@ html[data-gm-dragging] * {
  */
 
 :root:not([data-theme='light']) .trail {
-  background: #14110f;
+  background: #2e2925;
 }
 
 :root:not([data-theme='light']) .banner {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #1c1815;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 50%), #3a342e;
 }
 
 :root:not([data-theme='light']) .mode-slot {
-  background: linear-gradient(180deg, #14110f, #0a0908);
+  background: linear-gradient(180deg, #2e2925, #221e1a);
 }
 
 :root:not([data-theme='light']) .toast {
-  background: #221c19;
+  background: #403830;
 }
 
 :root:not([data-theme='light']) .toast.is-fail {
-  background: #1a1c1e;
+  background: #2e3134;
 }
 
 :root:not([data-theme='light']) .toast.is-fail .toast-mark {
   background:
     radial-gradient(circle at 30% 25%, #fff4, transparent 42%),
-    linear-gradient(160deg, #8b969c, #2a211c);
+    linear-gradient(160deg, #8b969c, #3a322c);
 }
 
 :root:not([data-theme='light']) .mode-rest {
-  background: #161311;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .crop {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .track {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .scroll-well {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .chat-app {
@@ -6683,23 +6676,23 @@ html[data-gm-dragging] * {
       rgba(255, 59, 31, 0.08),
       transparent 55%
     ),
-    #100d0b;
+    #2a2521;
 }
 
 :root:not([data-theme='light']) .chat-pip {
-  box-shadow: 0 0 0 2px #100d0b;
+  box-shadow: 0 0 0 2px #2a2521;
 }
 
 :root:not([data-theme='light']) .chat-icon {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .chat-day {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .bubble {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .bubble.is-me {
@@ -6707,91 +6700,91 @@ html[data-gm-dragging] * {
 }
 
 :root:not([data-theme='light']) .clip {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .composer-add,
 :root:not([data-theme='light']) .composer-send {
-  background: #1c1815;
+  background: #3a342e;
 }
 
 :root:not([data-theme='light']) .composer-field {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .sub-tile {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .sub-tile.is-on {
-  background: #1f1815;
+  background: #3d342c;
 }
 
 :root:not([data-theme='light']) .pour {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .key-pour {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .slides {
-  background: #100e0c;
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .slide {
-  background: #14110f;
+  background: #2e2925;
 }
 
 :root:not([data-theme='light']) .rail {
-  background: linear-gradient(180deg, #131110, #0b0a09);
+  background: linear-gradient(180deg, #2c2723, #241f1b);
 }
 
 :root:not([data-theme='light']) .sheet-app {
-  background: #100e0c;
+  background: #2a2521;
 }
 
 :root:not([data-theme='light']) .sheet {
-  background: #1a1613;
+  background: #322c27;
 }
 
 :root:not([data-theme='light']) .share-tile {
-  background: #16130f;
+  background: #312c27;
 }
 
 :root:not([data-theme='light']) .sheet.is-rows .share-mark,
 :root:not([data-theme='light']) .sheet.is-app .share-mark {
-  background: #221b16;
+  background: #403830;
 }
 
 @media (hover: hover) {
   :root:not([data-theme='light']) .share-extra:hover {
-    background: #221b16;
+    background: #403830;
   }
 }
 
 :root:not([data-theme='light']) .how {
-  background: #0a0908;
+  background: #221e1a;
 }
 
 :root:not([data-theme='light']) .bo-plate {
-  background: linear-gradient(180deg, #17130f, #100d0b);
+  background: linear-gradient(180deg, #322c27, #2a2521);
 }
 
 :root:not([data-theme='light']) .bo-field select {
-  background: #0d0b0a;
+  background: #25211d;
 }
 
 :root:not([data-theme='light']) .bo-step {
-  background: #0d0b0a;
+  background: #25211d;
 }
 
 :root:not([data-theme='light']) .bo-play {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 :root:not([data-theme='light']) .bo-chip {
-  background: rgba(0, 0, 0, 0.35);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 /* The rest of the sweep's dark-side drift.
@@ -6832,21 +6825,21 @@ html[data-gm-dragging] * {
     ),
     radial-gradient(
       100% 100% at 50% 50%,
-      rgba(8, 7, 6, 0.5),
-      rgba(6, 5, 4, 0.9)
+      rgba(28, 24, 20, 0.42),
+      rgba(20, 17, 14, 0.78)
     );
 }
 
 :root:not([data-theme='light']) .chat-bar {
-  background: rgba(16, 13, 11, 0.82);
+  background: rgba(42, 37, 33, 0.82);
 }
 
 :root:not([data-theme='light']) .composer {
-  background: rgba(16, 13, 11, 0.94);
+  background: rgba(42, 37, 33, 0.94);
 }
 
 :root:not([data-theme='light']) .sub-seam::before {
-  border: 1px solid #16130f;
+  border: 1px solid #312c27;
 }
 
 :root:not([data-theme='light']) .inbox-trash b {
@@ -6872,41 +6865,41 @@ html[data-gm-dragging] * {
 }
 
 :root:not([data-theme='light']) .sheet-scrim {
-  background: #050403;
+  background: #1a1613;
 }
 
 :root:not([data-theme='light']) .bo-panel {
-  background: rgba(0, 0, 0, 0.34);
+  background: rgba(0, 0, 0, 0.22);
 }
 
 :root:not([data-theme='light']) .dive-head h2 {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .dive-lede {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd h3 {
-  color: #c9c0b5;
+  color: #d4cbc2;
 }
 
 :root:not([data-theme='light']) .dd-col p {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd-col strong {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .dd-call p {
-  color: #ada49a;
+  color: #d2c9bf;
 }
 
 :root:not([data-theme='light']) .dd-call b {
-  color: #d8d0c7;
+  color: #e6dfd6;
 }
 
 :root:not([data-theme='light']) .syn-attr {
-  color: #cbbba8;
+  color: #d8cdb8;
 }

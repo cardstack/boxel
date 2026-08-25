@@ -58,7 +58,6 @@ export function styles(
   return values;
 }
 
-
 /**
  * A transition per animated value: `transition=(perValue opacity=(tween
  * duration=0.16) y=(spring bounce=0.38))`.

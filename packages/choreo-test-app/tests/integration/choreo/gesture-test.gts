@@ -25,7 +25,11 @@ module('Integration | choreo | gesture', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           {{#each (array this.gen) key="@identity" as |g|}}
             {{#if g}}
               <div
@@ -59,13 +63,13 @@ module('Integration | choreo | gesture', function (hooks) {
     const mid = bounds(find('#dropped') as HTMLElement);
     assert.true(
       mid.left > 100,
-      `starts from the release point, flying home (${mid.left})`,
+      `starts from the release point, flying home (${mid.left})`
     );
     await animationsSettled();
     const rest = bounds(find('#dropped') as HTMLElement);
     assert.true(
       Math.abs(rest.left - 20) < 1.5 && Math.abs(rest.top - 20) < 1.5,
-      `lands on the resting box (${rest.left}, ${rest.top})`,
+      `lands on the resting box (${rest.left}, ${rest.top})`
     );
   });
 });

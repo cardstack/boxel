@@ -1,12 +1,7 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import {
-  type Changeset,
-  Choreo,
-  motion,
-  type Sprite,
-} from 'glimmer-motion';
+import { type Changeset, Choreo, motion, type Sprite } from 'glimmer-motion';
 
 const firm = { damping: 34, stiffness: 420 };
 
@@ -37,10 +32,7 @@ export class SplitView extends Component {
    *  from-and-to in one value, which is how a spring states its start now */
   leftRange = (_s: Sprite, cs: Changeset) => {
     const bar = cs.sprite({ id: 'split-bar' });
-    return [
-      bar?.initial?.parent.width ?? 0,
-      bar?.final?.parent.width ?? 0,
-    ];
+    return [bar?.initial?.parent.width ?? 0, bar?.final?.parent.width ?? 0];
   };
 
   <template>

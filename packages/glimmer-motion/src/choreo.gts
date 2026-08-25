@@ -15,7 +15,6 @@
  * docs/choreography.md has the whole design and the legacy it descends from.
  */
 import { registerDestructor } from '@ember/destroyable';
-import { schedule } from '@ember/runloop';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -24,7 +23,6 @@ import { modifier } from 'ember-modifier';
 
 import { registerBusyProbe } from './activity.ts';
 import { type BeaconRef, measureBeacons } from './choreo/beacons.ts';
-import { GESTURE, type GestureRef, trackGestures } from './choreo/gesture.ts';
 import Changeset from './choreo/changeset.ts';
 import compile, { sameScore } from './choreo/compile.ts';
 import {
@@ -34,6 +32,7 @@ import {
   setBeforeMeasure,
   setPassScheduler,
 } from './choreo/far.ts';
+import { GESTURE, type GestureRef, trackGestures } from './choreo/gesture.ts';
 import {
   boundsOf as bounds,
   measure,
@@ -85,22 +84,30 @@ export interface ChoreoContext {
   Crossing: typeof Crossing;
   Gate: typeof Gate;
   Hold: typeof Hold;
-  Raise: typeof Raise;
-  Scroll: typeof Scroll;
-  Tether: typeof Tether;
   Move: typeof Move;
   Parallel: typeof Parallel;
+  Raise: typeof Raise;
+  Scroll: typeof Scroll;
   Sequence: typeof Sequence;
   Spring: typeof Spring;
+  Tether: typeof Tether;
   Tween: typeof Tween;
   Wait: typeof Wait;
+  /** open the gate the run is parked at; template-stable, because gates are wired in templates */
+  advance: () => void;
   all: Selector;
   /** `{{c.beacon 'trash'}}` — a named box to borrow, for Move's @from / @to */
   beacon: (name: string) => BeaconRef;
-  /** the live drag as geometry: its pose as a box, its velocity into springs */
-  gesture: GestureRef;
+  /**
+   * Where the region's frame stands — tracked, updated when a camera step
+   * lands or cancels, deliberately not per frame (§9): app logic may derive
+   * from it (the zoom-threshold transmute) without a feedback loop.
+   */
+  readonly camera: CameraState;
   /** the removed half an arriving element claimed — orphaned, ready to cross-fade */
   counterpart: Selector;
+  /** the live drag as geometry: its pose as a box, its velocity into springs */
+  gesture: GestureRef;
   id: (id: string) => Query;
   inserted: Selector;
   kept: Selector;
@@ -109,17 +116,9 @@ export interface ChoreoContext {
   received: Selector;
   removed: Selector;
   role: (role: string) => Query;
-  /**
-   * Where the region's frame stands — tracked, updated when a camera step
-   * lands or cancels, deliberately not per frame (§9): app logic may derive
-   * from it (the zoom-threshold transmute) without a feedback loop.
-   */
-  readonly camera: CameraState;
   /** the current pass's run, as a value you can hold — null between passes (§4.6) */
   readonly run: ChoreoRun | null;
   still: Selector;
-  /** open the gate the run is parked at; template-stable, because gates are wired in templates */
-  advance: () => void;
 }
 
 function contextFor(region: Choreo): ChoreoContext {
@@ -579,7 +578,9 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           prior.x !== state.x ||
           prior.y !== state.y
         ) {
-          schedule('afterRender', () => (this.cameraState = state));
+          // the library's own host hook — the Ember adapter installs the
+          // runloop's afterRender behind it, and this file stays host-blind
+          postRender(() => (this.cameraState = state));
         }
       },
       raisedLayer: this.raisedLayer,

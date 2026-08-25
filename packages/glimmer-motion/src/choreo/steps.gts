@@ -200,9 +200,9 @@ export class Move extends StepComponent<
     /** 'auto' orients along the tangent; a number adds a constant offset */
     rotate?: 'auto' | number;
     size?: boolean;
-    spring?: SpringSpec;
     /** measure the delta in 'page' (default) or the sprite's 'parent' space */
     space?: 'page' | 'parent';
+    spring?: SpringSpec;
     /** counterpart skins: 'during' (default), 'settle', or 'none' */
     swap?: 'during' | 'none' | 'settle';
     /** `{{c.beacon 'trash'}}` — fly out to that box rather than to where the sprite landed */

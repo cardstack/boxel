@@ -28,7 +28,11 @@ module('Integration | choreo | raise and scroll', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           <div id="clipper" style="overflow:hidden;width:80px;height:40px">
             <div
               id="lifted"
@@ -40,7 +44,11 @@ module('Integration | choreo | raise and scroll', function (hooks) {
           <c.Sequence>
             <c.Parallel>
               <c.Raise @of={{c.role "card"}} @shadow={{true}} />
-              <c.Tween @of={{c.role "card"}} @opacity={{0.9}} @duration={{0.1}} />
+              <c.Tween
+                @of={{c.role "card"}}
+                @opacity={{0.9}}
+                @duration={{0.1}}
+              />
             </c.Parallel>
           </c.Sequence>
         </Choreo>
@@ -55,22 +63,22 @@ module('Integration | choreo | raise and scroll', function (hooks) {
     const el = find('#lifted') as HTMLElement;
     assert.ok(
       el.closest('[data-choreo-raised]'),
-      'promoted to the elevated layer for the span',
+      'promoted to the elevated layer for the span'
     );
     assert.ok(
       document.querySelector('#clipper [aria-hidden]'),
-      'a placeholder holds the slot',
+      'a placeholder holds the slot'
     );
     assert.true(
       el.style.filter.includes('drop-shadow'),
-      'the shadow casts on the layer below',
+      'the shadow casts on the layer below'
     );
     await animationsSettled();
     const home = find('#lifted') as HTMLElement;
     assert.strictEqual(
       home.parentElement!.id,
       'clipper',
-      'restored exactly where it was',
+      'restored exactly where it was'
     );
     assert.notOk(document.querySelector('#clipper [aria-hidden]'));
     assert.strictEqual(home.style.filter, '', 'the costume comes off');
@@ -97,7 +105,11 @@ module('Integration | choreo | raise and scroll', function (hooks) {
           </div>
           <c.Sequence>
             <c.Scroll @of={{c.id "row-8"}} @align="center" @duration={{0.08}} />
-            <c.Hold @of={{c.id "row-8"}} @outline="2px solid red" @duration={{0.05}} />
+            <c.Hold
+              @of={{c.id "row-8"}}
+              @outline="2px solid red"
+              @duration={{0.05}}
+            />
           </c.Sequence>
         </Choreo>
       </template>
@@ -113,7 +125,7 @@ module('Integration | choreo | raise and scroll', function (hooks) {
     assert.strictEqual(
       Math.round(scroller.scrollTop),
       290,
-      'the container ends with the sprite centered',
+      'the container ends with the sprite centered'
     );
   });
 });

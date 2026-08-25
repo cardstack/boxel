@@ -691,13 +691,21 @@ export class Playhead extends Component {
         {{! the score has stepped aside: the app is a plain app, its values
             springing to what its state says — same springs, same numbers }}
         <c.Parallel>
-          <c.Spring @of={{standing "pill"}} @x={{this.pillX}} @spring={{PILL}} />
+          <c.Spring
+            @of={{standing "pill"}}
+            @x={{this.pillX}}
+            @spring={{PILL}}
+          />
           <c.Spring
             @of={{standing "knob"}}
             @x={{this.knobX}}
             @spring={{KNOB_S}}
           />
-          <c.Spring @of={{standing "lit"}} @opacity={{this.litO}} @spring={{LIT}} />
+          <c.Spring
+            @of={{standing "lit"}}
+            @opacity={{this.litO}}
+            @spring={{LIT}}
+          />
           <c.Spring
             @of={{standing "app"}}
             @opacity={{this.appO}}
@@ -713,14 +721,14 @@ export class Playhead extends Component {
           />
         </c.Parallel>
       {{else}}
-        {{!-- The score, verbatim. Holds and walks in sequence flow; each
+        {{! The score, verbatim. Holds and walks in sequence flow; each
             press is a NAMED dip of the hand; the ring's pop and the app's
             own value changes hang off the press by name — `at 'press-x'
             0.55` is the moment the finger lands, and `dispatch` fires the
             real click at exactly that moment. Every value cue states both
             ends of its journey, so the run's first frame pins the whole
             scene to its opening state and a scrub is deterministic in
-            either direction. --}}
+            either direction. }}
         <c.Sequence>
           <c.Wait @of={{standing "hand"}} @duration={{0.34}} />
           <c.Tween

@@ -275,7 +275,11 @@ module('Integration | choreo', function (hooks) {
               <c.Move @of={{c.kept "card"}} @spring={{FAST}} />
               <c.Hold @of={{c.kept "card"}} @zIndex={{7}} />
             </c.Parallel>
-            <c.Tween @of={{c.kept "card"}} @opacity={{grab}} @duration={{0.1}} />
+            <c.Tween
+              @of={{c.kept "card"}}
+              @opacity={{grab}}
+              @duration={{0.1}}
+            />
           </c.Sequence>
         </Choreo>
       </template>
@@ -324,7 +328,11 @@ module('Integration | choreo', function (hooks) {
         <Choreo as |c|>
           <div id="container" style={{this.w}} {{motion id="container"}}></div>
           <div id="content" {{motion id="content"}}></div>
-          <c.Tween @of={{c.id "content"}} @width={{fromContainer}} @duration={{0.05}} />
+          <c.Tween
+            @of={{c.id "content"}}
+            @width={{fromContainer}}
+            @duration={{0.05}}
+          />
         </Choreo>
       </template>
     }
@@ -634,7 +642,11 @@ module('Integration | choreo', function (hooks) {
             <div id="stay" {{motion id="stay" role="stay"}}></div>
           </div>
           <c.Parallel>
-            <c.Tween @of={{c.removed "card"}} @opacity={{0}} @duration={{0.4}} />
+            <c.Tween
+              @of={{c.removed "card"}}
+              @opacity={{0}}
+              @duration={{0.4}}
+            />
             <c.Hold @of={{c.role "stay"}} @zIndex={{4}} @duration={{0.4}} />
           </c.Parallel>
         </Choreo>

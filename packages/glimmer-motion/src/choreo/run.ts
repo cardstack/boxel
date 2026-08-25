@@ -24,14 +24,13 @@ import {
 import { easingDefinitionToFunction } from 'motion-utils';
 
 import { motionSpeed, scaleTransition } from '../speed.ts';
-import { cssEasing, deliver, keyframesOf, type Delivery } from './deliver.ts';
+import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
 import type {
   CameraState,
   ChoreoNode,
   Compiled,
   Cue,
   Easing,
-  FlightPath,
   GateMark,
   PropValue,
   Rect,
@@ -208,8 +207,16 @@ function releaseHold(ve: VisualElement, el: HTMLElement, held: HeldValue[]) {
 
 /** what one cue is doing right now */
 interface Track {
+  /** camera: the aim point in force when this step began */
+  aimFrom?: { x: number; y: number };
+  /** camera: this step's own aim point, frozen at its start */
+  aimTo?: { x: number; y: number };
   /** camera: the platform animation flying the region's frame (§6.3) */
   cameraAnimation?: Animation;
+  /** camera: where the frame stood when this step began */
+  cameraFrom?: CameraState;
+  /** camera: eased progress of the live step, for the aim-term lerp */
+  cameraP?: number;
   controls?: AnimationPlaybackControls[];
   cue: Cue;
   delivery?: Delivery;
@@ -217,25 +224,17 @@ interface Track {
   end: number;
   held?: HeldValue[];
   loopAnimation?: Animation;
-  /** flight: the platform animations this track owns — cancelled before any measure */
-  platform?: Animation[];
   /** where each value stood when this track first started — the scrub-back frame */
   origin?: Record<string, PropValue>;
+  /** completed while playing (finals landed / hold released) */
+  passed: boolean;
   /** raise: how to put the element back where it was */
   perch?: {
     placeholder: HTMLElement;
     prior: string;
   };
-  /** camera: where the frame stood when this step began */
-  cameraFrom?: CameraState;
-  /** camera: the aim point in force when this step began */
-  aimFrom?: { x: number; y: number };
-  /** camera: this step's own aim point, frozen at its start */
-  aimTo?: { x: number; y: number };
-  /** camera: eased progress of the live step, for the aim-term lerp */
-  cameraP?: number;
-  /** tether: the wire this step draws */
-  wire?: SVGPathElement;
+  /** flight: the platform animations this track owns — cancelled before any measure */
+  platform?: Animation[];
   /** scroll: the container being driven, and where it is headed */
   scrolling?: {
     cancelListener(): void;
@@ -243,10 +242,10 @@ interface Track {
     from: { left: number; top: number };
     to: { left: number; top: number };
   };
-  /** completed while playing (finals landed / hold released) */
-  passed: boolean;
   start: number;
   started: boolean;
+  /** tether: the wire this step draws */
+  wire?: SVGPathElement;
 }
 
 export class ChoreoRun implements Run {
@@ -683,9 +682,7 @@ export class ChoreoRun implements Run {
       }
       const fill = cue.hold?.fill ?? false;
       const inside =
-        now >= t.start &&
-        t.start < limit &&
-        (now < t.end || cue.loop || fill);
+        now >= t.start && t.start < limit && (now < t.end || cue.loop || fill);
       if (cue.camera) {
         if (inside && !t.started) {
           t.started = true;
@@ -700,8 +697,7 @@ export class ChoreoRun implements Run {
           // than recentring: zooming back out of a dive must back straight
           // out of the tile it dived on — an aim lerping toward the centre
           // mid-flight reads as sliding onto the NEIGHBOURING tile first.
-          const aimTo =
-            cue.camera.origin ??
+          const aimTo = cue.camera.origin ??
             this.cameraAim ??
             cue.camera.centre ?? { x: 0, y: 0 };
           t.aimFrom = this.cameraAim ?? aimTo;
@@ -727,8 +723,7 @@ export class ChoreoRun implements Run {
           // target instead of on it re-arms every subsequent pass: the
           // landing renders, the replay chases the miss, and the equality
           // guard downstream never sees the same state twice.
-          const p =
-            now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
+          const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
           const to = cue.camera.to;
           t.cameraP = p;
@@ -961,8 +956,7 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
-      | (Record<string, unknown> & { ease?: unknown })
-      | undefined;
+      (Record<string, unknown> & { ease?: unknown }) | undefined;
     if (isSpring(transition)) {
       const generator = springGenerator({
         keyframes: [0, 100],
@@ -1042,8 +1036,14 @@ export class ChoreoRun implements Run {
     const span = Math.max(1, t.end - t.start);
     const anim = host.animate(
       [
-        { transform: ChoreoRun.cameraCss(this.appliedCamera(t, from, 0)) || 'none' },
-        { transform: ChoreoRun.cameraCss(this.appliedCamera(t, final, 1)) || 'none' },
+        {
+          transform:
+            ChoreoRun.cameraCss(this.appliedCamera(t, from, 0)) || 'none',
+        },
+        {
+          transform:
+            ChoreoRun.cameraCss(this.appliedCamera(t, final, 1)) || 'none',
+        },
       ],
       {
         duration: span,
@@ -1436,7 +1436,10 @@ export class ChoreoRun implements Run {
       return;
     }
     const pts = flight.points;
-    const at = Math.min(pts.length - 1 - 1e-9, Math.max(0, p) * (pts.length - 1));
+    const at = Math.min(
+      pts.length - 1 - 1e-9,
+      Math.max(0, p) * (pts.length - 1),
+    );
     const index = Math.floor(at);
     const local = at - index;
     const a = pts[index]!;
@@ -1458,8 +1461,7 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     const transition = t.cue.transition as
-      | (Record<string, unknown> & { ease?: unknown })
-      | undefined;
+      (Record<string, unknown> & { ease?: unknown }) | undefined;
     if (isSpring(transition)) {
       const pts = t.cue.flight!.points;
       const end = pts[pts.length - 1]!;
@@ -1470,9 +1472,9 @@ export class ChoreoRun implements Run {
       } as never);
       return generator.next(ms / this.scale).value / distance;
     }
-    return easingDefinitionToFunction((transition?.ease as never) ?? 'easeInOut')(
-      raw,
-    );
+    return easingDefinitionToFunction(
+      (transition?.ease as never) ?? 'easeInOut',
+    )(raw);
   }
 
   /**
@@ -1562,14 +1564,11 @@ export class ChoreoRun implements Run {
     const span = t.end - t.start;
     const p = span > 0 ? Math.min(1, Math.max(0, (now - t.start) / span)) : 1;
     const transition = cue.transition as
-      | (Record<string, unknown> & { ease?: unknown; type?: string })
-      | undefined;
+      (Record<string, unknown> & { ease?: unknown; type?: string }) | undefined;
     const sprung = isSpring(transition);
     const ease = sprung
       ? null
-      : easingDefinitionToFunction(
-          (transition?.ease as never) ?? 'easeInOut',
-        );
+      : easingDefinitionToFunction((transition?.ease as never) ?? 'easeInOut');
     for (const key in cue.target) {
       const raw = cue.target[key];
       const frames: PropValue[] = Array.isArray(raw)

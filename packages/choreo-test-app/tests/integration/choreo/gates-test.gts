@@ -4,7 +4,7 @@
  * Keynote's click-through — every property lands on its segment-end
  * value. A parked run is a still, and settled.
  */
-import { find, render, settled,setupOnerror } from '@ember/test-helpers';
+import { find, render, settled, setupOnerror } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
@@ -68,7 +68,7 @@ module('Integration | choreo | gates', function (hooks) {
     assert.strictEqual(
       opacityOf('#a'),
       0.5,
-      'the first segment landed; the second has not started',
+      'the first segment landed; the second has not started'
     );
     ctx.advance();
     await animationsSettled();
@@ -87,7 +87,7 @@ module('Integration | choreo | gates', function (hooks) {
     assert.strictEqual(
       opacityOf('#a'),
       0.5,
-      'click-through lands the exact segment-end value',
+      'click-through lands the exact segment-end value'
     );
     assert.true(ctx.run!.parked, 'and parks at the gate');
     ctx.advance();
@@ -127,9 +127,17 @@ module('Integration | choreo | gates', function (hooks) {
         <Choreo class="stage" style="width:300px;height:100px" as |c|>
           <div id="a" data-s={{this.step}} {{motion id="a" role="card"}}></div>
           <c.Sequence>
-            <c.Tween @of={{c.role "card"}} @opacity={{0.5}} @duration={{0.05}} />
+            <c.Tween
+              @of={{c.role "card"}}
+              @opacity={{0.5}}
+              @duration={{0.05}}
+            />
             <c.Gate @delay={{0.05}} />
-            <c.Tween @of={{c.role "card"}} @opacity={{0.1}} @duration={{0.05}} />
+            <c.Tween
+              @of={{c.role "card"}}
+              @opacity={{0.1}}
+              @duration={{0.05}}
+            />
           </c.Sequence>
         </Choreo>
       </template>
@@ -154,7 +162,11 @@ module('Integration | choreo | gates', function (hooks) {
         <Choreo class="stage" as |c|>
           <div id="a" data-s={{this.step}} {{motion id="a" role="card"}}></div>
           <c.Parallel>
-            <c.Tween @of={{c.role "card"}} @opacity={{0.5}} @duration={{0.05}} />
+            <c.Tween
+              @of={{c.role "card"}}
+              @opacity={{0.5}}
+              @duration={{0.05}}
+            />
             <c.Gate />
           </c.Parallel>
         </Choreo>
@@ -170,7 +182,7 @@ module('Integration | choreo | gates', function (hooks) {
     await settled().catch(() => {});
     assert.true(
       /total order/.test(message),
-      `the error names the rule (${message})`,
+      `the error names the rule (${message})`
     );
   });
 });

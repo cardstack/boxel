@@ -11,7 +11,6 @@ import {
 } from 'motion-dom';
 
 import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
-
 import type {
   Block,
   ChangesetLike,
@@ -401,9 +400,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
             transition['repeatType'] = step.repeatType ?? 'loop';
           }
           cues.push({
-            delivery: splitting
-              ? { by: step.by!, order, stagger }
-              : undefined,
+            delivery: splitting ? { by: step.by!, order, stagger } : undefined,
             duration: length,
             kind: 'tween',
             loop: loop || undefined,
@@ -420,9 +417,7 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
         const { target, longest: d } = resolveTarget(step, sprite, cs);
         if (Object.keys(target).length) {
           cues.push({
-            delivery: splitting
-              ? { by: step.by!, order, stagger }
-              : undefined,
+            delivery: splitting ? { by: step.by!, order, stagger } : undefined,
             duration: d,
             kind: 'spring',
             offset,
@@ -755,7 +750,7 @@ export default function compile(
         if (r.open) {
           throw new Error(
             'choreo: an anchored hold needs its own @duration — lifted out ' +
-              "of its block, it has no span to borrow",
+              'of its block, it has no span to borrow',
           );
         }
         base =
@@ -843,10 +838,14 @@ function sameCue(a: Cue, b: Cue): boolean {
     return false;
   }
   if (
-    a.flight || b.flight ||
-    a.tether || b.tether ||
-    a.raise || b.raise ||
-    a.scroll || b.scroll
+    a.flight ||
+    b.flight ||
+    a.tether ||
+    b.tether ||
+    a.raise ||
+    b.raise ||
+    a.scroll ||
+    b.scroll
   ) {
     return false;
   }

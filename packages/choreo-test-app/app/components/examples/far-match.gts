@@ -161,7 +161,11 @@ export class FarMatch extends Component {
                   continuing somewhere else) and the receiver is `kept`, not
                   `inserted`. Turn the switch off and they are the whole
                   transition. }}
-              <c.Tween @of={{c.removed "piece"}} @opacity={{0}} @duration={{0.2}} />
+              <c.Tween
+                @of={{c.removed "piece"}}
+                @opacity={{0}}
+                @duration={{0.2}}
+              />
               <c.Tween
                 @of={{c.inserted "piece"}}
                 @opacity={{array 0 1}}

@@ -221,14 +221,20 @@ export class Camera extends Component {
     return shot && this.isVerdict(shot, 'passed')
       ? 'cam-pass is-control is-active'
       : 'cam-pass is-control';
-  };
+  }
 
   /** the frame's own class: open while dived, dimmed once passed on */
   frameClass = (shot: (typeof shots)[number]) => {
     const classes = ['cam-frame'];
-    if (this.isFocus(shot.id)) {classes.push('is-open');}
-    if (this.isVerdict(shot, 'loved')) {classes.push('is-loved');}
-    if (this.isVerdict(shot, 'passed')) {classes.push('is-passed');}
+    if (this.isFocus(shot.id)) {
+      classes.push('is-open');
+    }
+    if (this.isVerdict(shot, 'loved')) {
+      classes.push('is-loved');
+    }
+    if (this.isVerdict(shot, 'passed')) {
+      classes.push('is-passed');
+    }
     return classes.join(' ');
   };
 
@@ -317,7 +323,11 @@ export class Camera extends Component {
               @fit={{if this.focus (c.id this.focus) null}}
               @margin={{FILL}}
               @spring={{carry}}
-              @steady={{array (c.role "no") (c.role "heart") (c.role "verdict")}}
+              @steady={{array
+                (c.role "no")
+                (c.role "heart")
+                (c.role "verdict")
+              }}
             />
             {{! if a verdict reflows the sheet, every frame that moved tweens }}
             <c.Move @of={{c.moved "frame"}} @spring={{settle}} />

@@ -185,7 +185,11 @@ export class Slides extends Component {
 
             {{! The note is the only thing that comes and goes. It leaves fast
                 and arrives late, so the slide is never carrying two of them. }}
-            <c.Tween @of={{c.removed "note"}} @opacity={{0}} @duration={{0.14}} />
+            <c.Tween
+              @of={{c.removed "note"}}
+              @opacity={{0}}
+              @duration={{0.14}}
+            />
             <c.Tween
               @of={{c.inserted "note"}}
               @opacity={{array 0 1}}

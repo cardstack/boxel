@@ -42,9 +42,9 @@ import { rootProjectionNode } from 'motion-dom';
 
 import { isMotionIdle, whatIsBusy } from '../activity.ts';
 import { resetBeacons } from '../choreo/beacons.ts';
+import { resetBarrier } from '../choreo/far.ts';
 import { resetGestures } from '../choreo/gesture.ts';
 import { activeRuns } from '../choreo/run.ts';
-import { resetBarrier } from '../choreo/far.ts';
 import { layoutLoopDetected, resetLayoutLoopGuard } from '../layout.ts';
 import { setMotionSpeed } from '../speed.ts';
 

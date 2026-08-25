@@ -26,7 +26,11 @@ module('Integration | choreo | move extras', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           <div
             id="comet"
             style="position:absolute;width:40px;height:40px;background:#fa0;{{if
@@ -56,7 +60,7 @@ module('Integration | choreo | move extras', function (hooks) {
     const mid = bounds(find('#comet') as HTMLElement);
     assert.true(
       mid.top < before.top + 100,
-      'the journey bends off the straight line (arcs upward)',
+      'the journey bends off the straight line (arcs upward)'
     );
     await animationsSettled();
     const after = bounds(find('#comet') as HTMLElement);
@@ -72,7 +76,11 @@ module('Integration | choreo | move extras', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           {{#each (array this.gen) key="@identity" as |g|}}
             <div
               id="skin-{{g}}"
@@ -84,7 +92,11 @@ module('Integration | choreo | move extras', function (hooks) {
               {{motion id="card" role="card"}}
             ></div>
           {{/each}}
-          <c.Move @of={{c.received "card"}} @duration={{0.12}} @ease="easeInOut" />
+          <c.Move
+            @of={{c.received "card"}}
+            @duration={{0.12}}
+            @ease="easeInOut"
+          />
         </Choreo>
       </template>
     }
@@ -108,7 +120,7 @@ module('Integration | choreo | move extras', function (hooks) {
     assert.notOk(find('#skin-0'), 'the old skin is dropped at the landing');
     assert.strictEqual(
       parseFloat(getComputedStyle(find('#skin-1') as HTMLElement).opacity),
-      1,
+      1
     );
   });
 
@@ -120,7 +132,11 @@ module('Integration | choreo | move extras', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:200px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:200px"
+          as |c|
+        >
           {{#each (array this.gen) key="@identity" as |g|}}
             <div
               id="skin-{{g}}"
@@ -152,19 +168,19 @@ module('Integration | choreo | move extras', function (hooks) {
     assert.strictEqual(
       parseFloat(getComputedStyle(receiver).opacity),
       0,
-      'the receiver hides for the flight',
+      'the receiver hides for the flight'
     );
     assert.strictEqual(
       parseFloat(getComputedStyle(leaver).opacity),
       1,
-      'the old rendering is carried whole',
+      'the old rendering is carried whole'
     );
     await animationsSettled();
     assert.notOk(find('#skin-0'));
     assert.strictEqual(
       parseFloat(getComputedStyle(find('#skin-1') as HTMLElement).opacity),
       1,
-      'the swap happened at the landing',
+      'the swap happened at the landing'
     );
   });
 });

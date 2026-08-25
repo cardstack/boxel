@@ -81,9 +81,9 @@ const PlayheadNotes: TOC<object> = <template>
         <p>
           The click does not fire at the start of a press beat. It fires
           <strong>55% of the way in</strong>
-          — a real hand presses down, the button fires, the hand comes back
-          up. The value cues are anchored to the same moment, so the pill sets
-          off exactly as the finger lands.
+          — a real hand presses down, the button fires, the hand comes back up.
+          The value cues are anchored to the same moment, so the pill sets off
+          exactly as the finger lands.
         </p>
       </div>
 
@@ -159,9 +159,9 @@ const PlayheadNotes: TOC<object> = <template>
             start + 55% of the press — read back from run.cues</text>
         </svg>
         <figcaption>
-          You never write a time. The compiler resolves them, and the
-          transport reads the presses' moments back from the compiled cues —
-          the tick marks on the rail are the same numbers.
+          You never write a time. The compiler resolves them, and the transport
+          reads the presses' moments back from the compiled cues — the tick
+          marks on the rail are the same numbers.
         </figcaption>
       </figure>
     </section>
@@ -175,20 +175,20 @@ const PlayheadNotes: TOC<object> = <template>
           <code>x</code>
           and
           <code>y</code>
-          between two spots, eased in and out. The spots are still measured
-          here — where a control LIVES is this stage's knowledge, read from
-          layout offsets rather than
-          <code>getBoundingClientRect</code>, because elements on this stage
-          are mid-animation whenever you ask. Everything about
+          between two spots, eased in and out. The spots are still measured here
+          — where a control LIVES is this stage's knowledge, read from layout
+          offsets rather than
+          <code>getBoundingClientRect</code>, because elements on this stage are
+          mid-animation whenever you ask. Everything about
           <em>time</em>
           belongs to the compiled score.
         </p>
         <p>
-          The press is a scale dip through the arrow's own hotspot, and the
-          ring rides
+          The press is a scale dip through the arrow's own hotspot, and the ring
+          rides
           <em>inside</em>
-          the hand — one transform source — so its pop happens wherever the
-          hand is, with no second set of position cues.
+          the hand — one transform source — so its pop happens wherever the hand
+          is, with no second set of position cues.
         </p>
       </div>
 
@@ -277,8 +277,8 @@ const PlayheadNotes: TOC<object> = <template>
             position, not the rendered one</text>
         </svg>
         <figcaption>
-          The walk is a cue like any other: play it, or stand it at any t —
-          the library's still puts the hand exactly where the score says.
+          The walk is a cue like any other: play it, or stand it at any t — the
+          library's still puts the hand exactly where the score says.
         </figcaption>
       </figure>
 
@@ -328,9 +328,9 @@ const PlayheadNotes: TOC<object> = <template>
             ms</text>
         </svg>
         <figcaption>
-          The ring's pop is anchored to the press by name and lifted out of
-          the sequence's flow — it outlasts the beat while the hand moves on,
-          and its own end still counts toward the run's length.
+          The ring's pop is anchored to the press by name and lifted out of the
+          sequence's flow — it outlasts the beat while the hand moves on, and
+          its own end still counts toward the run's length.
         </figcaption>
       </figure>
     </section>
@@ -340,8 +340,8 @@ const PlayheadNotes: TOC<object> = <template>
       <h3>The click is a real click</h3>
       <div class="dd-col">
         <p>
-          As each press's moment goes by, the transport finds the actual
-          button element and calls
+          As each press's moment goes by, the transport finds the actual button
+          element and calls
           <code>.click()</code>
           on it. The button's own event handler runs, just as if a user had
           clicked it.
@@ -351,9 +351,9 @@ const PlayheadNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           This matters because the scrubbed state is computed by folding the
-          same handler code over the presses behind the playhead. There is
-          only one description of what each button does, so a scrubbed state
-          can never disagree with a clicked one.
+          same handler code over the presses behind the playhead. There is only
+          one description of what each button does, so a scrubbed state can
+          never disagree with a clicked one.
         </p>
       </div>
     </section>
@@ -364,13 +364,12 @@ const PlayheadNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           The demo used to re-run Motion's spring generator itself to answer
-          "where is the pill at 1.25 seconds". Now the question goes to the
-          run:
+          "where is the pill at 1.25 seconds". Now the question goes to the run:
           <code>time</code>
           is settable in either direction, and a scrubbed frame is a computed
-          still — the run retires its animations and stands every value
-          exactly where the score says t looks like, spring curves included,
-          with no memory of the frame before.
+          still — the run retires its animations and stands every value exactly
+          where the score says t looks like, spring curves included, with no
+          memory of the frame before.
         </p>
       </div>
       <CodeBox @label="playhead.gts" @source={{STILL}} />
@@ -378,9 +377,9 @@ const PlayheadNotes: TOC<object> = <template>
         <p>
           Every value cue states both ends of its journey —
           <code>@x=&lbrace;&lbrace;array 0 127&rbrace;&rbrace;</code>
-          — so the run's first frame pins the whole scene to its opening
-          state, and asking about an earlier time is not a different operation
-          from asking about a later one.
+          — so the run's first frame pins the whole scene to its opening state,
+          and asking about an earlier time is not a different operation from
+          asking about a later one.
         </p>
       </div>
 
@@ -450,20 +449,18 @@ const PlayheadNotes: TOC<object> = <template>
         <div class="dd-mode">
           <span class="dd-tag">playing</span>
           <b>The run drives</b>
-          <p>run.play(). Real clicks, real springs. The playhead is a
-            readout.</p>
+          <p>run.play(). Real clicks, real springs. The playhead is a readout.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">scored</span>
           <b>The playhead drives</b>
-          <p>run.pause() and run.time = t. Every value is a computed
-            still.</p>
+          <p>run.pause() and run.time = t. Every value is a computed still.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">live</span>
           <b>You drive</b>
-          <p>Touch a control and the template swaps the score for the app's
-            own state springs.</p>
+          <p>Touch a control and the template swaps the score for the app's own
+            state springs.</p>
         </div>
       </div>
       <div class="dd-col">
@@ -477,9 +474,9 @@ const PlayheadNotes: TOC<object> = <template>
       <CodeBox @label="playhead.gts" @source={{FOLD}} />
       <div class="dd-col">
         <p>
-          Whatever you clicked by hand is simply not in the folded answer.
-          And the swap itself is one template branch — the mode picks which
-          timeline the region compiles:
+          Whatever you clicked by hand is simply not in the folded answer. And
+          the swap itself is one template branch — the mode picks which timeline
+          the region compiles:
         </p>
       </div>
       <CodeBox @label="playhead.gts" @source={{LIVE}} />
@@ -491,26 +488,26 @@ const PlayheadNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           The old demo ran its own requestAnimationFrame loop with a clamped
-          delta, and the comments explaining why ran longer than the loop.
-          All deleted: the run owns the clock, and the transport only looks at
-          it — the rail's fill, the clock text and the range are written
-          imperatively each frame, because a region re-passes on every render
-          and a tracked value written at 60fps would replay the pass at 60fps
-          (the Build Order demo's lesson, learned the hard way).
+          delta, and the comments explaining why ran longer than the loop. All
+          deleted: the run owns the clock, and the transport only looks at it —
+          the rail's fill, the clock text and the range are written imperatively
+          each frame, because a region re-passes on every render and a tracked
+          value written at 60fps would replay the pass at 60fps (the Build Order
+          demo's lesson, learned the hard way).
         </p>
         <p>
-          One deliberate move at the end of the score: the run is parked a
-          hair before its own finish line.
+          One deliberate move at the end of the score: the run is parked a hair
+          before its own finish line.
         </p>
       </div>
       <CodeBox @label="playhead.gts" @source={{PARK}} />
       <div class="dd-col">
         <p>
           A finished run replays on the next real pass — that is the rule that
-          lets an event re-fire a Hold on a quiet region — but a score that
-          has been watched to the end must simply stand until Play or a scrub
-          says otherwise. Parked is not finished, so the region keeps the run,
-          and the scene holds.
+          lets an event re-fire a Hold on a quiet region — but a score that has
+          been watched to the end must simply stand until Play or a scrub says
+          otherwise. Parked is not finished, so the region keeps the run, and
+          the scene holds.
         </p>
       </div>
     </section>
@@ -525,18 +522,18 @@ const PlayheadNotes: TOC<object> = <template>
           computed for any point in time. Other kinds of animation are not.
         </p>
         <p>
-          When an element moves because the layout changed, the engine works
-          it out by measuring the page before and after. There is no function
-          to query — only two measurements that already happened. The same
-          applies to an element leaving the page: once it is gone, there is
-          nothing to ask.
+          When an element moves because the layout changed, the engine works it
+          out by measuring the page before and after. There is no function to
+          query — only two measurements that already happened. The same applies
+          to an element leaving the page: once it is gone, there is nothing to
+          ask.
         </p>
         <p>
           That is why the sliding pill is a number instead of a layout
           animation, and why the receipt stays in the DOM invisibly instead of
           being removed. The run's stills now cover values, flights and text
-          deliveries; layout projection and exits remain on the far side of
-          the line.
+          deliveries; layout projection and exits remain on the far side of the
+          line.
         </p>
       </div>
     </section>

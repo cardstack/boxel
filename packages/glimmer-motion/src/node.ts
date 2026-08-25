@@ -800,8 +800,7 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
   /** for the region's @debug lints (§5.3) */
   get ownAnimation(): boolean {
     const props = this.latest?.props as
-      | { animate?: unknown; exit?: unknown; initial?: unknown }
-      | undefined;
+      { animate?: unknown; exit?: unknown; initial?: unknown } | undefined;
     return Boolean(props && (props.animate || props.exit || props.initial));
   }
 

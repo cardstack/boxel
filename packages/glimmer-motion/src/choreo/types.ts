@@ -30,16 +30,16 @@ export interface Bounds {
 /** what a choreography needs from one {{motion}} element */
 export interface ChoreoNode {
   element?: Element;
-  /** carries its own animate/exit/initial — a second scheduler (§5.3) */
-  ownAnimation?: boolean;
-  /** wrapped by a <Presence> that manages it — double retention (§5.3) */
-  presenceManaged?: boolean;
   /** the Presence it lives under has let it go, and this run is done with it */
   exitComplete(): void;
   id: string | null;
   isPresent: boolean;
   /** stable identity for this node, for bookkeeping keyed per element */
   layoutKey: string;
+  /** carries its own animate/exit/initial — a second scheduler (§5.3) */
+  ownAnimation?: boolean;
+  /** wrapped by a <Presence> that manages it — double retention (§5.3) */
+  presenceManaged?: boolean;
   /** unmount a VisualElement whose teardown was deferred to the choreography */
   release(): void;
   role: string | null;
@@ -101,13 +101,13 @@ export interface ChangesetLike {
   beacon(name: string): Bounds | null;
   /** something happened this pass a choreography could animate */
   dirty: boolean;
-  inserted: Sprite[];
-  kept: Sprite[];
   /**
    * The region frame's own size in LOCAL pixels, from the same final
    * layout every sprite was measured in — the camera's centre reference.
    */
   frame?: { height: number; width: number };
+  inserted: Sprite[];
+  kept: Sprite[];
   /**
    * The camera zoom the world was measured under (§6.3): page-space boxes
    * carry the frame's transform, local inline values do not, and this is
@@ -197,13 +197,13 @@ export interface MoveStep extends StepBase {
   rotate?: 'auto' | number;
   /** animate width/height as well as position (default true) */
   size?: boolean;
-  spring?: SpringSpec;
   /**
    * Which space the delta is measured in (§6.1). 'page' (default) is the
    * one space two regions agree on; 'parent' resolves the flight against
    * the sprite's own (possibly animating) container.
    */
   space?: 'page' | 'parent';
+  spring?: SpringSpec;
   /** the counterpart-skin policy: cross mid-flight, carry to the landing, or neither (§6.3) */
   swap?: 'during' | 'none' | 'settle';
   /** borrow a beacon's box as the end of the move instead of where the sprite landed */
@@ -334,16 +334,14 @@ export interface CameraState {
 /** a sampled flight path: points at even progress, in the sprite's own space */
 export interface FlightPath {
   points: { x: number; y: number }[];
-  /** tangent-follow: degrees added on top when a number was given */
-  rotate?: 'auto' | number;
   /** what the element's x/y are at rest, to subtract for kept sprites */
   rest: { x: number; y: number };
+  /** tangent-follow: degrees added on top when a number was given */
+  rotate?: 'auto' | number;
 }
 
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {
-  /** move: travel along this sampled path instead of the straight line */
-  flight?: FlightPath;
   /** camera: drive the region's frame */
   camera?: {
     /** the frame's centre in the same final layout `origin` was measured in */
@@ -352,28 +350,30 @@ export interface Cue {
     steady: Sprite[];
     to: { x?: number; y?: number; zoom?: number };
   };
+  /** text delivery: the run splits the sprite and plays the slots inside `duration` */
+  delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
+  duration: number;
+  /** move: travel along this sampled path instead of the straight line */
+  flight?: FlightPath;
+  /** hold: the values to set (and whether to keep them) */
+  hold?: { fill: boolean; values: Record<string, PropValue> };
+  kind: Step['kind'];
+  /** an infinite-repeat tween: plays past the run's end, excluded from its length */
+  loop?: boolean;
   /** raise: promote to the elevated layer for the window */
   raise?: { shadow: boolean };
+  /** scroll: animate the sprite's scroll container to this alignment */
+  scroll?: { align: 'center' | 'end' | 'start' };
+  sprite: Sprite;
+  start: number;
+  /** tween / spring / move: the engine target… */
+  target?: Record<string, unknown>;
   /** tether: draw between these two, every frame */
   tether?: {
     from: Sprite | null;
     path: (from: Rect, to: Rect) => string;
     to: Sprite | null;
   };
-  /** scroll: animate the sprite's scroll container to this alignment */
-  scroll?: { align: 'center' | 'end' | 'start' };
-  /** text delivery: the run splits the sprite and plays the slots inside `duration` */
-  delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
-  duration: number;
-  /** an infinite-repeat tween: plays past the run's end, excluded from its length */
-  loop?: boolean;
-  /** hold: the values to set (and whether to keep them) */
-  hold?: { fill: boolean; values: Record<string, PropValue> };
-  kind: Step['kind'];
-  sprite: Sprite;
-  start: number;
-  /** tween / spring / move: the engine target… */
-  target?: Record<string, unknown>;
   /** …and its transition, without the delay the start supplies */
   transition?: Record<string, unknown>;
 }

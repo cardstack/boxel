@@ -54,7 +54,7 @@ module('Unit | choreo | compile', function () {
           kind: 'sequence',
         },
       ],
-      cs,
+      cs
     );
     const [first, anchored, next] = cues;
     assert.strictEqual(first!.start, 0);
@@ -62,7 +62,7 @@ module('Unit | choreo | compile', function () {
     assert.strictEqual(
       next!.start,
       500,
-      'the anchored step did not push the sequence',
+      'the anchored step did not push the sequence'
     );
   });
 
@@ -78,7 +78,7 @@ module('Unit | choreo | compile', function () {
           kind: 'sequence',
         },
       ],
-      cs,
+      cs
     );
     assert.strictEqual(cues[1]!.start, 700, '500ms end + 0.2s');
   });
@@ -95,7 +95,7 @@ module('Unit | choreo | compile', function () {
           kind: 'sequence',
         },
       ],
-      cs,
+      cs
     );
     assert.strictEqual(cues[1]!.start, 600, 'at(name, 1) is the real end');
   });
@@ -106,13 +106,13 @@ module('Unit | choreo | compile', function () {
       () =>
         compile(
           [fade({ name: 'x' }), fade({ name: 'x', of: { id: 'b' } })],
-          cs,
+          cs
         ),
-      /two steps named 'x'/,
+      /two steps named 'x'/
     );
     assert.throws(
       () => compile([fade({ at: at('later') })], cs),
-      /anchors point up the score/,
+      /anchors point up the score/
     );
   });
 
@@ -135,9 +135,9 @@ module('Unit | choreo | compile', function () {
               kind: 'sequence',
             },
           ],
-          cs,
+          cs
         ),
-      /anchored hold/,
+      /anchored hold/
     );
   });
 
@@ -146,14 +146,11 @@ module('Unit | choreo | compile', function () {
     const { cues } = compile(
       [
         {
-          children: [
-            fade({ repeat: 2 }),
-            fade({ ms: 100, of: { id: 'b' } }),
-          ],
+          children: [fade({ repeat: 2 }), fade({ ms: 100, of: { id: 'b' } })],
           kind: 'sequence',
         },
       ],
-      cs,
+      cs
     );
     assert.strictEqual(cues[0]!.duration, 1500, 'three plays of 500ms');
     assert.strictEqual(cues[1]!.start, 1500);
@@ -163,7 +160,7 @@ module('Unit | choreo | compile', function () {
     assert.strictEqual(
       looped[0]!.duration,
       500,
-      'and occupies one cycle of the schedule',
+      'and occupies one cycle of the schedule'
     );
   });
 
@@ -181,9 +178,9 @@ module('Unit | choreo | compile', function () {
               props: { opacity: [0, 1, 0] },
             } as TimelineNode,
           ],
-          cs,
+          cs
         ),
-      /two keyframes/,
+      /two keyframes/
     );
   });
 
@@ -199,11 +196,11 @@ module('Unit | choreo | compile', function () {
           kind: 'sequence',
         },
       ],
-      cs,
+      cs
     );
     assert.deepEqual(
       cues.slice(0, 3).map((c) => c.start),
-      [0, 150, 300],
+      [0, 150, 300]
     );
     assert.strictEqual(cues[3]!.start, 800, 'the ladder stretches the step');
   });
@@ -216,14 +213,18 @@ module('Unit | choreo | delivery math', function () {
   test('the ladder orders delivery: forward, reverse, center', function (assert) {
     assert.deepEqual(ladder(4, 'forward'), [0, 1, 2, 3]);
     assert.deepEqual(ladder(4, 'reverse'), [3, 2, 1, 0]);
-    assert.deepEqual(ladder(5, 'center'), [3, 1, 0, 2, 4], 'middle first, outward');
+    assert.deepEqual(
+      ladder(5, 'center'),
+      [3, 1, 0, 2, 4],
+      'middle first, outward'
+    );
   });
 
   test('windows: @stagger spaces starts and the remainder is the window', function (assert) {
     const w = windows(3, 1000, 150);
     assert.deepEqual(
       w.map((x) => x.at),
-      [0, 150, 300],
+      [0, 150, 300]
     );
     assert.strictEqual(w[0]!.ms, 700, 'span minus the offsets');
   });
@@ -233,7 +234,7 @@ module('Unit | choreo | delivery math', function () {
     assert.strictEqual(w[0]!.ms, 550);
     assert.deepEqual(
       w.map((x) => Math.round(x.at)),
-      [0, 225, 450],
+      [0, 225, 450]
     );
   });
 });

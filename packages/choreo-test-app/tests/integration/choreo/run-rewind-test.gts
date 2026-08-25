@@ -42,7 +42,11 @@ module('Integration | choreo | run rewind', function (hooks) {
         app = this;
       }
       <template>
-        <Choreo class="stage" style="position:relative;width:300px;height:100px" as |c|>
+        <Choreo
+          class="stage"
+          style="position:relative;width:300px;height:100px"
+          as |c|
+        >
           {{grab c}}
           <div
             id="walker"
@@ -51,11 +55,23 @@ module('Integration | choreo | run rewind', function (hooks) {
             {{motion id="walker"}}
           ></div>
           <c.Sequence>
-            <c.Tween @of={{c.id "walker"}} @x={{array 10 110}} @duration={{0.1}} />
+            <c.Tween
+              @of={{c.id "walker"}}
+              @x={{array 10 110}}
+              @duration={{0.1}}
+            />
             <c.Wait @of={{c.id "walker"}} @duration={{0.05}} />
-            <c.Tween @of={{c.id "walker"}} @x={{array 110 210}} @duration={{0.1}} />
+            <c.Tween
+              @of={{c.id "walker"}}
+              @x={{array 110 210}}
+              @duration={{0.1}}
+            />
             <c.Wait @of={{c.id "walker"}} @duration={{0.05}} />
-            <c.Tween @of={{c.id "walker"}} @x={{array 210 60}} @duration={{0.1}} />
+            <c.Tween
+              @of={{c.id "walker"}}
+              @x={{array 210 60}}
+              @duration={{0.1}}
+            />
           </c.Sequence>
         </Choreo>
       </template>
@@ -81,12 +97,18 @@ module('Integration | choreo | run rewind', function (hooks) {
     // stand on the FIRST cue's origin, not the third's
     run.time = 0;
     await frames(4);
-    assert.true(x().includes('10'), `a jump to 0 stands on the opening pose — ${x()}`);
+    assert.true(
+      x().includes('10'),
+      `a jump to 0 stands on the opening pose — ${x()}`
+    );
 
     // and a jump into the gap between cue 1 and cue 2: cue 1's landing
     run.time = 0.125;
     await frames(4);
-    assert.true(x().includes('110'), `mid-gap stands on the previous landing — ${x()}`);
+    assert.true(
+      x().includes('110'),
+      `mid-gap stands on the previous landing — ${x()}`
+    );
 
     run.cancel();
     await animationsSettled();

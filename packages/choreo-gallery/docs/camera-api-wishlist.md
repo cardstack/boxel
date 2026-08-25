@@ -47,9 +47,9 @@ All in `Camera#loupe()`:
 2. **The pan.** Re-derive the library's own `translate(x + (1−z)·P)·scale(z)`
    formula by hand to solve for the `x`/`y` that lands the aim point at the
    region's centre instead of in place. ~10 lines (`§PAN`).
-3. **The actual bug.** Both of the above need the target's *rest* geometry —
+3. **The actual bug.** Both of the above need the target's _rest_ geometry —
    its size and position as if the camera were at identity. But
-   `getBoundingClientRect()` returns the *currently painted* box, which is
+   `getBoundingClientRect()` returns the _currently painted_ box, which is
    wrong the instant you're mid-zoom on a DIFFERENT tile and click straight
    through to a new one (no intervening rest frame). That shipped, and it
    looked like the newly-selected tile "flying away" on click. The fix was to
@@ -75,7 +75,7 @@ and layout-space measurement to get a zoom-and-centre right.
 ```
 
 - `@fit` names a sprite (or `null`/absent for identity/rest).
-- `@margin` is the fraction of the region's *smaller-fitting* dimension the
+- `@margin` is the fraction of the region's _smaller-fitting_ dimension the
   sprite should fill once centred — one number instead of a manually-derived
   `min(byHeight, byWidth)` pair.
 - The library computes zoom **and** pan internally, off the same rest-layout
@@ -87,5 +87,5 @@ and layout-space measurement to get a zoom-and-centre right.
 
 `@origin`/`@x`/`@y` would stay exactly as they are — they're the right tool
 for pinch-anchored or otherwise deliberately-off-centre zooms. `@fit` would
-just be the other, more common shape: *dive on this thing, and centre it*,
+just be the other, more common shape: _dive on this thing, and centre it_,
 which today costs ~30 hand-written lines and one landmine.

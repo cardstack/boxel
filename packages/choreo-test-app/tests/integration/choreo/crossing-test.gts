@@ -43,7 +43,12 @@ class Pages extends Component {
         ></div>
         <div id="new-only" {{motion id="pager" role="foot"}}>pager</div>
       {{/if}}
-      <c.Crossing @duration={{0.12}} @ease="easeInOut" @leave={{0.06}} @arrive={{0.06}} />
+      <c.Crossing
+        @duration={{0.12}}
+        @ease="easeInOut"
+        @leave={{0.06}}
+        @arrive={{0.06}}
+      />
     </Choreo>
   </template>
 }
@@ -65,26 +70,26 @@ module('Integration | choreo | crossing', function (hooks) {
     const mid = bounds(find('#hero') as HTMLElement);
     assert.true(
       mid.left < 79 && mid.left >= before.left - 1,
-      `the received stage is mid-flight from its old seat (${mid.left})`,
+      `the received stage is mid-flight from its old seat (${mid.left})`
     );
     const menu = find('#old-only') as HTMLElement;
     assert.ok(menu, 'the leave is still aloft, fading');
     const arriving = find('#new-only') as HTMLElement;
     assert.true(
       parseFloat(getComputedStyle(arriving).opacity) < 0.5,
-      'what only the new scene has waits for the settle',
+      'what only the new scene has waits for the settle'
     );
     await animationsSettled();
     assert.notOk(find('#old-only'), 'leaves are dropped at the end');
     assert.strictEqual(
       parseFloat(getComputedStyle(find('#new-only') as HTMLElement).opacity),
       1,
-      'arrivals landed',
+      'arrivals landed'
     );
     const rest = bounds(find('#hero') as HTMLElement);
     assert.true(
       Math.abs(rest.left - 80) < 1.5,
-      `the flight closed on the real seat (${rest.left})`,
+      `the flight closed on the real seat (${rest.left})`
     );
     await sleep(20);
   });

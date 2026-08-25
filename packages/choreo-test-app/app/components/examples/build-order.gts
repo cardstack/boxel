@@ -638,74 +638,74 @@ export class BuildOrder extends Component {
             ></div>
 
             <div class="bo-art">
-                {{! the mark itself, from the same exported geometry the top
+              {{! the mark itself, from the same exported geometry the top
                     bar renders — two strokes that draw, one bead that pops }}
-                <svg class="bo-mark" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    class="bo-tail"
-                    d={{this.tailD}}
-                    data-part="tail"
-                    {{motion id="tail"}}
-                  />
-                  <path
-                    class="bo-head"
-                    d={{this.headD}}
-                    data-part="head"
-                    {{motion id="head"}}
-                  />
-                  <circle
-                    class="bo-bead"
-                    cx="{{this.bead.cx}}"
-                    cy="{{this.bead.cy}}"
-                    r="{{this.bead.r}}"
-                    data-part="bead"
-                    {{motion id="bead"}}
-                  />
-                  <path
-                    class="bo-orbit"
-                    d={{this.orbitD}}
-                    data-part="orbit"
-                    {{motion id="orbit"}}
-                  />
-                  <path
-                    class="bo-tip"
-                    d={{this.tipD}}
-                    data-part="tip"
-                    {{motion id="tip"}}
-                  />
-                </svg>
+              <svg class="bo-mark" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  class="bo-tail"
+                  d={{this.tailD}}
+                  data-part="tail"
+                  {{motion id="tail"}}
+                />
+                <path
+                  class="bo-head"
+                  d={{this.headD}}
+                  data-part="head"
+                  {{motion id="head"}}
+                />
+                <circle
+                  class="bo-bead"
+                  cx="{{this.bead.cx}}"
+                  cy="{{this.bead.cy}}"
+                  r="{{this.bead.r}}"
+                  data-part="bead"
+                  {{motion id="bead"}}
+                />
+                <path
+                  class="bo-orbit"
+                  d={{this.orbitD}}
+                  data-part="orbit"
+                  {{motion id="orbit"}}
+                />
+                <path
+                  class="bo-tip"
+                  d={{this.tipD}}
+                  data-part="tip"
+                  {{motion id="tip"}}
+                />
+              </svg>
 
-                {{! text, whole: `@by` splits it at delivery time and puts
+              {{! text, whole: `@by` splits it at delivery time and puts
                     Glimmer's own text nodes back after — no glyph spans here }}
-                <p class="bo-word" data-part="word" {{motion id="word"}}>
-                  Choreo</p>
+              <p class="bo-word" data-part="word" {{motion id="word"}}>
+                Choreo</p>
 
-                <svg
-                  class="bo-rule-box"
-                  viewBox="0 0 220 3"
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    class="bo-rule"
-                    d="M1.5 1.5H218.5"
-                    vector-effect="non-scaling-stroke"
-                    data-part="rule"
-                    {{motion id="rule"}}
-                  />
-                </svg>
+              <svg
+                class="bo-rule-box"
+                viewBox="0 0 220 3"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                <path
+                  class="bo-rule"
+                  d="M1.5 1.5H218.5"
+                  vector-effect="non-scaling-stroke"
+                  data-part="rule"
+                  {{motion id="rule"}}
+                />
+              </svg>
 
               <p class="bo-tag" data-part="tag" {{motion id="tag"}}>
                 MOTION. CHOREOGRAPHED.</p>
             </div>
 
-            {{!-- ── the score, verbatim ──────────────────────────────────
+            {{! ── the score, verbatim ──────────────────────────────────
                 One named step per build. The template's branches are the
                 effect column: an effect is nothing but keyframe values and
                 an easing on a `<c.Tween>` — Pop is a scale through backOut,
                 and a build-in's leading opacity frames are Keynote's
                 "builds in", pinned hidden from the run's start until its
-                window opens. --}}
+                window opens. }}
             <c.Sequence>
               {{#each this.builds key="@index" as |build i|}}
                 {{#if (isFx build "dissolve")}}

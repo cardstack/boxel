@@ -34,7 +34,9 @@ class Noise extends Component {
     super.willDestroy();
     cancelAnimationFrame(this.raf);
   }
-  <template><span data-noise>{{this.n}}</span></template>
+  <template>
+    <span data-noise>{{this.n}}</span>
+  </template>
 }
 
 function run(): ChoreoRun | null {
@@ -75,7 +77,8 @@ module('Integration | choreo | build-order neighbours', function (hooks) {
     range.dispatchEvent(new Event('input', { bubbles: true }));
     range.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
     await frames(30);
-    const plate = document.querySelector('.bo-plate')?.getAttribute('style') ?? '';
+    const plate =
+      document.querySelector('.bo-plate')?.getAttribute('style') ?? '';
     assert.true(
       plate.includes('opacity: 1'),
       `the plate holds its finals under render noise — got '${plate}'`

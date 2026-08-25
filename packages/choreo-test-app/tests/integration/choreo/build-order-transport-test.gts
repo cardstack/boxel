@@ -208,8 +208,8 @@ module('Integration | choreo | build-order transport', function (hooks) {
     const range = document.querySelector<HTMLInputElement>('.bo-range')!;
     range.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     const saw = [
-      3.0, 0.5, 3.5, 0.8, 2.5, 1.2, 3.9, 0.3, 2.9, 1.6, 3.3, 0.7, 2.1, 1.0,
-      3.7, 0.4, 2.7, 1.4, 3.1, 0.9,
+      3.0, 0.5, 3.5, 0.8, 2.5, 1.2, 3.9, 0.3, 2.9, 1.6, 3.3, 0.7, 2.1, 1.0, 3.7,
+      0.4, 2.7, 1.4, 3.1, 0.9,
     ];
     for (const [i, v] of saw.entries()) {
       range.value = String(v);
@@ -281,7 +281,10 @@ module('Integration | choreo | build-order transport', function (hooks) {
 
     // past the word's end (~2.55s) and before the take ends: landed, whole
     const after = seen.filter((s) => s.t > 2.7 && s.t < 3.35);
-    assert.true(after.length > 3, `sampled the post-delivery stretch (${after.length} samples)`);
+    assert.true(
+      after.length > 3,
+      `sampled the post-delivery stretch (${after.length} samples)`
+    );
     for (const s of after) {
       assert.true(
         s.style.includes('opacity: 1') && s.spans === 0,
@@ -330,7 +333,7 @@ module('Integration | choreo | build-order transport', function (hooks) {
     assert.strictEqual(
       word.textContent?.trim(),
       'Choreo',
-      'Glimmer\'s own text is back in the element'
+      "Glimmer's own text is back in the element"
     );
 
     // back in, and past again: the cycle is repeatable

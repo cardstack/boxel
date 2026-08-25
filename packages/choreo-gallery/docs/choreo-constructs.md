@@ -58,23 +58,23 @@ is deleted.
 
 ### 2.1 The Keynote map
 
-| Keynote                                    | Choreo                                            |
-| ------------------------------------------ | ------------------------------------------------- |
-| Build In                                   | a step `@of={{c.inserted …}}`                     |
-| Build Out                                  | a step `@of={{c.removed …}}`                      |
-| Action: move along a path                  | `@path` (+ `@rotate`)                             |
-| Action: emphasis (pulse, jiggle…)          | keyframe values                                   |
-| With / After Previous (+ delay)            | block order in `Sequence` / `Parallel`, `@delay`  |
-| With / After Build N                       | `@name` / `@at` anchors                           |
-| Duration                                   | `@duration` / `@spring`                           |
-| On Click                                   | `c.Gate`, `c.advance()`                           |
-| Start automatically after N s              | `@delay` on a gate                                |
-| Delivery: by object                        | `@stagger`                                        |
-| Delivery: by word / character / paragraph  | `@by` (+ `@stagger`)                              |
-| Delivery order: forward / reverse / random | `@order`                                          |
-| Rehearse / scrub                           | the run handle — `c.run.time`                     |
-| Magic Move (slide transition)              | `@route` + `c.Crossing`                           |
-| Builds play backwards on ←                 | free — a changeset reversed is the reverse run    |
+| Keynote                                    | Choreo                                           |
+| ------------------------------------------ | ------------------------------------------------ |
+| Build In                                   | a step `@of={{c.inserted …}}`                    |
+| Build Out                                  | a step `@of={{c.removed …}}`                     |
+| Action: move along a path                  | `@path` (+ `@rotate`)                            |
+| Action: emphasis (pulse, jiggle…)          | keyframe values                                  |
+| With / After Previous (+ delay)            | block order in `Sequence` / `Parallel`, `@delay` |
+| With / After Build N                       | `@name` / `@at` anchors                          |
+| Duration                                   | `@duration` / `@spring`                          |
+| On Click                                   | `c.Gate`, `c.advance()`                          |
+| Start automatically after N s              | `@delay` on a gate                               |
+| Delivery: by object                        | `@stagger`                                       |
+| Delivery: by word / character / paragraph  | `@by` (+ `@stagger`)                             |
+| Delivery order: forward / reverse / random | `@order`                                         |
+| Rehearse / scrub                           | the run handle — `c.run.time`                    |
+| Magic Move (slide transition)              | `@route` + `c.Crossing`                          |
+| Builds play backwards on ←                 | free — a changeset reversed is the reverse run   |
 
 ## 3. The language, complete
 
@@ -96,13 +96,13 @@ that pass, before final bounds are measured.
 Usable anywhere a step wants sprites or a box: `@of`, `@from`, `@to`,
 `@origin`, `@steady`.
 
-| query                                                   | matches                                                        |
-| ------------------------------------------------------- | -------------------------------------------------------------- |
-| `c.all` / `c.kept` / `c.inserted` / `c.removed` (role?) | by changeset type                                              |
-| `c.role 'x'` / `c.id 'x'`                               | by identity                                                    |
-| `c.still` / `c.moved`                                   | kept, split by bounds delta                                    |
-| `c.received` / `c.counterpart`                          | the two halves of a counterpart match, far match included      |
-| `c.beacon 'x'`                                          | a named box that is never a participant                        |
+| query                                                   | matches                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `c.all` / `c.kept` / `c.inserted` / `c.removed` (role?) | by changeset type                                                                                 |
+| `c.role 'x'` / `c.id 'x'`                               | by identity                                                                                       |
+| `c.still` / `c.moved`                                   | kept, split by bounds delta                                                                       |
+| `c.received` / `c.counterpart`                          | the two halves of a counterpart match, far match included                                         |
+| `c.beacon 'x'`                                          | a named box that is never a participant                                                           |
 | `c.gesture`                                             | the live drag: its box seeds a `Move`'s `@from`, its velocity flows into any spring that moves it |
 
 ### 3.3 Blocks
@@ -118,18 +118,18 @@ descend from boxel-motion's behaviors (§5.1). Every animating step
 reads _who · what · how long_, position in the block gives _when_, and
 every duration in the language is **seconds**, as in Motion.
 
-| step         | reads as                                                                                                                                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c.Tween`    | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), `@duration` + `@ease`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger`                 |
-| `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                          |
+| step         | reads as                                                                                                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c.Tween`    | animate properties: `@of`, flat property args (numbers, keyframe arrays, functions), `@duration` + `@ease`; `@delay`; `@repeat` + `@repeatType`; delivery via `@by` `@order` `@stagger`                           |
+| `c.Spring`   | the same, driven by `@spring` instead of `@duration` + `@ease`                                                                                                                                                    |
 | `c.Move`     | FLIP the measured delta: `@spring` or `@duration` + `@ease`, `@size`; `@from`/`@to` take a beacon or `c.gesture`; `@path` + `@rotate`; `@space`; `@swap='during' \| 'settle' \| 'none'` for the counterpart skins |
-| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                  |
-| `c.Raise`    | promote to the region's elevated layer for the block's span (or `@duration`); `@shadow`                                                                                                                 |
-| `c.Camera`   | the region's frame: `@zoom` `@x` `@y`, `@origin` aiming at a sprite; `@steady={{query}}` names sprites that keep their size (damped by default)                                                          |
-| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                |
-| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites, redrawn every frame and every still                                                                                                  |
-| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                           |
-| `c.Crossing` | the canned route transition: `@spring` (or `@duration` + `@ease`), `@leave`, `@arrive`, `@overlap`, `@swap`                                                                                              |
+| `c.Hold`     | set properties for a window and release: `@duration` or the block's span, `@fill`; with no properties it is a pure wait                                                                                           |
+| `c.Raise`    | promote to the region's elevated layer for the block's span (or `@duration`); `@shadow`                                                                                                                           |
+| `c.Camera`   | the region's frame: `@zoom` `@x` `@y`, `@origin` aiming at a sprite; `@steady={{query}}` names sprites that keep their size (damped by default)                                                                   |
+| `c.Scroll`   | animate the sprite's scroll container to `@align`; occupies the sequence                                                                                                                                          |
+| `c.Tether`   | `@from` `@to` `@path` — geometry continuously derived from sprites, redrawn every frame and every still                                                                                                           |
+| `c.Gate`     | park the run until `c.advance()`; `@delay` opens it by itself                                                                                                                                                     |
+| `c.Crossing` | the canned route transition: `@spring` (or `@duration` + `@ease`), `@leave`, `@arrive`, `@overlap`, `@swap`                                                                                                       |
 
 ### 3.5 Timing
 
@@ -461,17 +461,17 @@ The binding keeps Motion's names 1:1 (`initial`, `layout`,
 wherever a concept overlaps — a reader who knows Motion never relearns
 a name, and a divergence always means a genuinely new concept:
 
-| concept                     | motion.dev                                                     | Choreo                                                                                                                                                 |
-| --------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| duration / delay            | seconds                                                        | same — `@duration` / `@delay`, seconds                                                                                                                 |
-| spring spec                 | `stiffness` `damping` `mass` `bounce` `visualDuration`         | identical, same engine                                                                                                                                 |
-| easing                      | named / cubic-bezier array                                     | identical — `@ease`                                                                                                                                    |
-| keyframes                   | value arrays                                                   | identical, as property values                                                                                                                          |
-| repeat                      | `repeat` count + `repeatType: 'loop' \| 'reverse' \| 'mirror'` | identical pair                                                                                                                                         |
-| sequence labels             | `at: 'label'`                                                  | `@name` + `@at={{at 'label' 0.4}}` — same concept, typed helpers instead of the string micro-DSL (`"<"`, `"+0.5"`), which Glint cannot check           |
+| concept                     | motion.dev                                                     | Choreo                                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| duration / delay            | seconds                                                        | same — `@duration` / `@delay`, seconds                                                                                                                   |
+| spring spec                 | `stiffness` `damping` `mass` `bounce` `visualDuration`         | identical, same engine                                                                                                                                   |
+| easing                      | named / cubic-bezier array                                     | identical — `@ease`                                                                                                                                      |
+| keyframes                   | value arrays                                                   | identical, as property values                                                                                                                            |
+| repeat                      | `repeat` count + `repeatType: 'loop' \| 'reverse' \| 'mirror'` | identical pair                                                                                                                                           |
+| sequence labels             | `at: 'label'`                                                  | `@name` + `@at={{at 'label' 0.4}}` — same concept, typed helpers instead of the string micro-DSL (`"<"`, `"+0.5"`), which Glint cannot check             |
 | stagger                     | `stagger(0.1, { from: 'first' \| 'last' \| 'center' })`        | `@stagger` seconds; `@order` adds `'center'` alongside `'forward'` / `'reverse'` — order and origin are the same idea for a line — and seeded `'random'` |
-| playback controls           | `time` (settable, s), `speed`, `duration`                      | identical, plus `advance()` / `segment` / `parked` for gates                                                                                           |
-| what Motion has no word for | —                                                              | changesets, roles, beacons, the gesture, gates, camera, tether, raise, crossing — new concepts, new words                                              |
+| playback controls           | `time` (settable, s), `speed`, `duration`                      | identical, plus `advance()` / `segment` / `parked` for gates                                                                                             |
+| what Motion has no word for | —                                                              | changesets, roles, beacons, the gesture, gates, camera, tether, raise, crossing — new concepts, new words                                                |
 
 #### The Ember lineage
 

@@ -96,12 +96,12 @@ const BuildOrderNotes: TOC<object> = <template>
         <p>
           Because the relation always points at the
           <em>previous</em>
-          build, moving one build moves everything under it. Switch build 6
-          from After to With in the inspector and every start time downstream
+          build, moving one build moves everything under it. Switch build 6 from
+          After to With in the inspector and every start time downstream
           recomputes — nothing had to be re-typed, because nothing was ever a
           timecode to begin with. An anchored step is lifted out of the
-          sequence’s flow, and its end still counts toward the run’s length:
-          the compiler’s runtime is a
+          sequence’s flow, and its end still counts toward the run’s length: the
+          compiler’s runtime is a
           <code>max</code>, not a last.
         </p>
       </div>
@@ -164,8 +164,8 @@ const BuildOrderNotes: TOC<object> = <template>
           <code>@pathLength</code>
           from 0 to 1; Wipe is two
           <code>inset()</code>
-          clip frames. The leading opacity frames are Keynote’s “builds in”
-          made of arithmetic: a keyframe array’s
+          clip frames. The leading opacity frames are Keynote’s “builds in” made
+          of arithmetic: a keyframe array’s
           <em>first</em>
           value is pinned onto the part from the run’s very start, so a build
           that begins at 2.1s sits hidden — at its own first frame — until its
@@ -177,8 +177,8 @@ const BuildOrderNotes: TOC<object> = <template>
         <p>
           That pin is also why every effect here states both ends of its
           journey. An effect that only named its destination would inherit
-          whatever the part was doing before — and a build order is a
-          statement about the whole journey, not a nudge toward a target.
+          whatever the part was doing before — and a build order is a statement
+          about the whole journey, not a nudge toward a target.
         </p>
       </div>
     </section>
@@ -190,11 +190,10 @@ const BuildOrderNotes: TOC<object> = <template>
         <p>
           Set a text build’s Delivery to By Character and the wordmark does not
           simply fade in as one block — every glyph gets its own turn, and the
-          library does the splitting: the sprite’s own text nodes are lifted
-          out whole, stand-in spans deliver the animation, and the restore puts
-          Glimmer’s own nodes back exactly where they were. The build still
-          owns its stated window; each cell gets 55% of it, starts spread so
-          the
+          library does the splitting: the sprite’s own text nodes are lifted out
+          whole, stand-in spans deliver the animation, and the restore puts
+          Glimmer’s own nodes back exactly where they were. The build still owns
+          its stated window; each cell gets 55% of it, starts spread so the
           <em>last</em>
           cell finishes exactly on the build’s own end.
         </p>
@@ -203,12 +202,12 @@ const BuildOrderNotes: TOC<object> = <template>
       <div class="dd-col">
         <p>
           The split taught this page a lesson worth keeping: a costume must not
-          change the body’s shape. A template’s newline and indentation are
-          real text nodes, and stand-in spans wear
+          change the body’s shape. A template’s newline and indentation are real
+          text nodes, and stand-in spans wear
           <code>white-space: pre</code>
-          — so whitespace the container had been collapsing suddenly took
-          width, and the whole line jumped aside for its own delivery. The
-          split now collapses the way the element’s computed style does.
+          — so whitespace the container had been collapsing suddenly took width,
+          and the whole line jumped aside for its own delivery. The split now
+          collapses the way the element’s computed style does.
         </p>
       </div>
       <CodeBox @label="glimmer-motion" @source={{COSTUME}} />
@@ -237,8 +236,8 @@ const BuildOrderNotes: TOC<object> = <template>
         <div class="dd-mode">
           <span class="dd-tag">playing</span>
           <b>The run drives</b>
-          <p>Its master clock crosses cues and the platform plays them —
-            plain tweens accelerate onto WAAPI, off the main thread.</p>
+          <p>Its master clock crosses cues and the platform plays them — plain
+            tweens accelerate onto WAAPI, off the main thread.</p>
         </div>
         <div class="dd-mode">
           <span class="dd-tag">scrubbing</span>
@@ -266,18 +265,17 @@ const BuildOrderNotes: TOC<object> = <template>
           against the new schedule. The transport then adopts the new run and
           puts it back at the
           <em>same</em>
-          t: retiming build 2 while parked at 1.4s shows you what 1.4s now
-          looks like, immediately.
+          t: retiming build 2 while parked at 1.4s shows you what 1.4s now looks
+          like, immediately.
         </p>
       </div>
       <CodeBox @label="build-order.gts" @source={{ADOPT}} />
       <div class="dd-col">
         <p>
-          Continuity is the rule, not the exception. Any pass replaces the run
-          — an edit, the loop’s next take, an unrelated render — and the new
-          run resumes where the old one stood. Only a run that had actually
-          finished starts its successor from zero, which is the loop coming
-          round.
+          Continuity is the rule, not the exception. Any pass replaces the run —
+          an edit, the loop’s next take, an unrelated render — and the new run
+          resumes where the old one stood. Only a run that had actually finished
+          starts its successor from zero, which is the loop coming round.
         </p>
       </div>
     </section>
@@ -303,11 +301,11 @@ const BuildOrderNotes: TOC<object> = <template>
         <p>
           So the clock text, the range’s value and the playhead’s position are
           written imperatively on the transport’s own frame, and the only
-          tracked writes left are the rare ones — an edit, a loop take, a
-          press of play. It is the same lesson every demo with a per-frame
-          value has to learn once: Glimmer’s render loop and an animation’s
-          frame loop are different clocks, and state that belongs to the
-          second must not be phrased in the first.
+          tracked writes left are the rare ones — an edit, a loop take, a press
+          of play. It is the same lesson every demo with a per-frame value has
+          to learn once: Glimmer’s render loop and an animation’s frame loop are
+          different clocks, and state that belongs to the second must not be
+          phrased in the first.
         </p>
       </div>
     </section>

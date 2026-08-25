@@ -39,7 +39,11 @@ module('Integration | choreo | build-order leaver', function (hooks) {
     const state = new Shown();
     await render(
       <template>
-        <button type="button" class="narrow" {{on "click" state.narrow}}>x</button>
+        <button
+          type="button"
+          class="narrow"
+          {{on "click" state.narrow}}
+        >x</button>
         <div style="position:relative">
           <Presence
             @items={{state.items}}
@@ -50,7 +54,13 @@ module('Integration | choreo | build-order leaver', function (hooks) {
           >
             <article
               data-it={{item.id}}
-              {{motion presence=h initial=gone animate=here exit=gone transition=quick}}
+              {{motion
+                presence=h
+                initial=gone
+                animate=here
+                exit=gone
+                transition=quick
+              }}
             >
               {{#if (isBo item)}}<BuildOrder />{{else}}<p>plain</p>{{/if}}
             </article>
@@ -59,17 +69,18 @@ module('Integration | choreo | build-order leaver', function (hooks) {
       </template>
     );
     await rest(400);
-    assert.strictEqual(document.querySelectorAll('[data-it]').length, 2, 'both up');
+    assert.strictEqual(
+      document.querySelectorAll('[data-it]').length,
+      2,
+      'both up'
+    );
     await click('.narrow');
     await rest(900);
     const bo = document.querySelector<HTMLElement>('[data-it="bo"]');
     const stage = document.querySelector('.bo-stage') as
-      | (HTMLElement & { buildOrder?: { c?: { run: unknown } } })
-      | null;
+      (HTMLElement & { buildOrder?: { c?: { run: unknown } } }) | null;
     const run = stage?.buildOrder?.c?.run as
-      | { duration: number, isDone(): boolean; time: number; }
-      | null
-      | undefined;
+      { duration: number; isDone(): boolean; time: number } | null | undefined;
     assert.strictEqual(
       document.querySelectorAll('[data-it]').length,
       1,
