@@ -1354,6 +1354,30 @@ module(basename(import.meta.filename), function () {
         doc.data.attributes?.lastModified,
         'lastModified sourced from response attributes',
       );
+      // Timestamps also ride in `meta` (mirroring a card), the canonical home a
+      // hydrated FileDef reads through `getCardMeta` / its getters. They are
+      // stamped from the index columns and agree with the legacy attributes.
+      assert.strictEqual(
+        typeof doc.data.meta?.lastModified,
+        'number',
+        'file-meta GET carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof (doc.data.meta as { resourceCreatedAt?: unknown })
+          ?.resourceCreatedAt,
+        'number',
+        'file-meta GET carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        doc.data.meta?.lastModified,
+        doc.data.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        (doc.data.meta as { resourceCreatedAt?: unknown })?.resourceCreatedAt,
+        doc.data.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
     });
 
     test('file meta adoptsFrom prefers index types', async function (assert) {
