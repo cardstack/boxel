@@ -11,6 +11,7 @@ import {
   type Expression,
 } from './expression.ts';
 import { uint8ArrayToHex } from './index.ts';
+import { effectiveHasError, prerenderedJoin } from './index-query-engine.ts';
 
 const log = logger('media-cache');
 
@@ -85,6 +86,11 @@ export interface MediaCacheEntry extends MediaCacheEntryKey {
   lane: MediaCacheLane;
   contentType: string;
   sizeBytes: number;
+  // Pixel dimensions of the capture, recorded so serving paths that answer
+  // from the ledger never decode the bytes; null when the capture engine
+  // didn't report them.
+  width: number | null;
+  height: number | null;
   createdAt: number;
   lastAccessedAt: number;
 }
@@ -129,11 +135,15 @@ export async function putMedia(
     sourceGeneration,
     sourceContentHash = null,
     lane,
+    width = null,
+    height = null,
   }: MediaCacheEntryKey & {
     bytes: Uint8Array;
     contentType: string;
     lane: MediaCacheLane;
     sourceContentHash?: string | null;
+    width?: number | null;
+    height?: number | null;
   },
 ): Promise<{ objectKey: string; sizeBytes: number }> {
   let objectKey = await computeMediaCacheKey(bytes);
@@ -160,6 +170,8 @@ export async function putMedia(
     lane,
     content_type: contentType,
     size_bytes: bytes.length,
+    width,
+    height,
     created_at: now,
     last_accessed_at: now,
   });
@@ -266,6 +278,8 @@ export async function findMediaCacheEntry(
     lane: MediaCacheLane;
     content_type: string;
     size_bytes: number | string;
+    width: number | null;
+    height: number | null;
     created_at: number | string;
     last_accessed_at: number | string;
   }[];
@@ -283,9 +297,44 @@ export async function findMediaCacheEntry(
     lane: row.lane,
     contentType: row.content_type,
     sizeBytes: Number(row.size_bytes),
+    width: row.width == null ? null : Number(row.width),
+    height: row.height == null ? null : Number(row.height),
     createdAt: Number(row.created_at),
     lastAccessedAt: Number(row.last_accessed_at),
   };
+}
+
+// The generation of a live indexed instance, addressable by either its
+// extensionless card-id URL or its `.json` file URL — the capture-identity
+// resolution a caller needs before it can compute a MediaCache key. Returns
+// undefined when the instance is absent, tombstoned, or in effective-error
+// state.
+//
+// "Live" here MUST mean what `IndexQueryEngine.liveInstanceGeneration` (the
+// GET `_screenshot/` serving gate) means, or a capture persisted under this
+// probe's generation resolves to a URL that route answers as a miss. The
+// row predicate is that method's, built from the same exported fragments
+// (`prerenderedJoin`, `effectiveHasError`), plus a realm scope this caller
+// has and the engine's path does not need.
+export async function findLiveInstanceGeneration(
+  dbAdapter: DBAdapter,
+  { realmURL, instanceURL }: { realmURL: string; instanceURL: string },
+): Promise<number | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT i.generation FROM boxel_index AS i ${prerenderedJoin()}
+     WHERE (i.url =`,
+    param(instanceURL),
+    `OR i.file_alias =`,
+    param(instanceURL),
+    `) AND i.realm_url =`,
+    param(realmURL),
+    `AND i.type = 'instance'
+      AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+      AND NOT ${effectiveHasError()}
+     LIMIT 1`,
+  ] as Expression)) as { generation: number | string }[];
+  let row = rows[0];
+  return row == null ? undefined : Number(row.generation);
 }
 
 // ---------------------------------------------------------------------------

@@ -130,6 +130,8 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
             ...persist,
             bytes,
             contentType: response.contentType ?? 'image/png',
+            width: response.width ?? null,
+            height: response.height ?? null,
           });
         } catch (e: any) {
           log.error(
