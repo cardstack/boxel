@@ -2817,16 +2817,6 @@ html[data-gm-dragging] * {
   flex: none;
 }
 
-.cam-grade-no {
-  padding: 0 6px;
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
-}
-
 /* dock controls sit on the table, not the print — theme tokens, a
    real hit target. Tile marks keep the dark-on-photo chips above. */
 .cam-grade-dock .cam-heart,
@@ -2913,8 +2903,8 @@ html[data-gm-dragging] * {
    The corner X is the mark; a cross through the wash was too much. Once
    dived, full colour so you can still grade. */
 .cam-frame.is-passed:not(.is-open) .cam-wash {
-  opacity: 0.55;
-  filter: saturate(0.4) brightness(0.82);
+  opacity: 0.38;
+  filter: saturate(0.35) brightness(0.78);
 }
 
 .follow-stage {

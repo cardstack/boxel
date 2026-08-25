@@ -6,12 +6,12 @@ import { tracked } from '@glimmer/tracking';
 import { Choreo, motion, spring } from 'glimmer-motion';
 
 /**
- * A light table. The whole roll sits on the glass at once, unlabelled
- * film — loupe IN onto a frame and the camera info develops: its number
- * first, then, a beat later, the full exposure and the verdict.
+ * A photo library. The whole set sits on the glass at once — dive IN onto a
+ * shot and the camera info develops: its number first, then, a beat later,
+ * the caption, the exposure, and the verdict.
  *
- * The loupe's zoom is not a stylistic choice: it is computed so the
- * negative itself fills a set share of the glass (§FILL below). The grade
+ * The dive's zoom is not a stylistic choice: it is computed so the
+ * photograph itself fills a set share of the glass (§FILL below). The grade
  * panel never has to compete with it for room — it's a callout beside the
  * frame, not a card laid over the photo.
  */
@@ -28,35 +28,40 @@ const brackets = [
   },
 ];
 
-/** one developer's-tank hue band — yellow through orange and red to
- * brown — and every frame draws its own point in it, so no two shots on
- * the roll ever land on quite the same shade */
-function filmWash(): string {
-  const hue = 8 + Math.random() * 42; // 8°(red) .. 50°(yellow), one warm band
-  const sat = 62 + Math.random() * 28; // kept high — low sat reads muddy, not brown
-  const highlight = `hsl(${hue} ${Math.min(sat + 8, 100)}% ${78 + Math.random() * 15}%)`;
-  const mid = `hsl(${hue} ${sat}% ${38 + Math.random() * 12}%)`;
-  // browns are just this same band darkened, not desaturated toward grey —
-  // desaturating too far is what reads as an off, muddy-green wrong note
-  const shadow = `hsl(${hue} ${Math.max(sat - 12, 50)}% ${9 + Math.random() * 7}%)`;
-  const angle = 130 + Math.random() * 60;
-  return `linear-gradient(${angle}deg, ${highlight} 0%, ${mid} 42%, ${shadow} 100%)`;
-}
+/**
+ * Twelve photographs, not twelve cuts of the same amber negative. The rest
+ * of the suite tells shots apart with ember, copper, iris, teal, steel —
+ * a library that was all one developer-tank hue couldn't.
+ */
+const washes = [
+  'linear-gradient(158deg, #8eb8f0 0%, #2a4a78 44%, #0c141c 100%)',
+  'linear-gradient(148deg, #ffc07a 0%, #d4581c 46%, #2a1008 100%)',
+  'linear-gradient(164deg, #c4a0ff 0%, #5a2a9c 42%, #1a0c28 100%)',
+  'linear-gradient(152deg, #6fd6c4 0%, #1a5c5e 48%, #081618 100%)',
+  'linear-gradient(160deg, #ff8a5a 0%, #c42712 48%, #1c0806 100%)',
+  'linear-gradient(170deg, #d0d6da 0%, #5c6568 40%, #161412 100%)',
+  'linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%)',
+  'linear-gradient(145deg, #ffb36a 0%, #ff3b1f 48%, #4a1208 100%)',
+  'linear-gradient(165deg, #c5cdd0 0%, #5c6568 40%, #1a1613 100%)',
+  'linear-gradient(150deg, #fff4e8 0%, #e4a35a 45%, #5a3214 100%)',
+  'linear-gradient(156deg, #b08cff 0%, #4a1878 46%, #140818 100%)',
+  'linear-gradient(162deg, #b6d15a 0%, #3a4e14 44%, #101408 100%)',
+];
 
 const VARIANTS = ['a', 'b', 'c', 'd', 'e', 'f'] as const;
 
 /** six frames per bracket, milliseconds apart: same light, a slightly
- * different world — small strips enough to fill the sheet edge to edge */
+ * different world */
 const shots = brackets.flatMap((bracket, row) =>
   VARIANTS.map((variant, i) => ({
     bracket: bracket.no,
     caption: bracket.caption,
     exposure: bracket.exposure,
     id: `n${bracket.no}${variant}`,
-    label: `${bracket.no} · ${variant.toUpperCase()}`,
+    label: String(row * 6 + i + 1).padStart(2, '0'),
     stamp: `07:4${row}:02.${String(114 + i * 83).padStart(3, '0')}`,
-    wash: filmWash(),
-  })),
+    wash: washes[row * 6 + i]!,
+  }))
 );
 
 /** a camera has weight: it carries the whole table, so it never snaps */
@@ -66,7 +71,7 @@ const carry = spring({ bounce: 0.12, visualDuration: 0.62 });
 const settle = spring({ bounce: 0.22, visualDuration: 0.42 });
 
 /**
- * §FILL — the loupe's zoom, computed, not guessed, from what's actually
+ * §FILL — the dive's zoom, computed, not guessed, from what's actually
  * on screen. A fixed multiplier assumes a reference viewport; on any
  * other one (a narrow phone, a squeezed column) the SAME multiplier
  * either underzooms or — worse — overzooms and crops the frame against
@@ -74,14 +79,14 @@ const settle = spring({ bounce: 0.22, visualDuration: 0.42 });
  * two real boxes measured in `loupe()` below: the clicked frame's own
  * rest-state size, and the glass (`.cam-stage`) it has to fit inside.
  *
- * TARGET_H is what a loupe should feel like — the negative filling most
+ * TARGET_H is what a dive should feel like — the photograph filling most
  * of the glass's height. TARGET_W is a looser cap on the OTHER axis: it
  * only bites on a glass much wider than it is tall, where a height-only
  * target would zoom the frame wide enough to crop left and right. The
  * smaller of the two candidate zooms is the one that's guaranteed not to
  * crop either way.
  */
-const TARGET_H = 0.65; // the frame's share of the glass's height, louped in
+const TARGET_H = 0.72; // the frame's share of the glass's height, dived in
 const TARGET_W = 0.86; // the same, but for width — a looser backstop
 
 type Verdict = 'loved' | 'neutral' | 'passed';
@@ -163,9 +168,9 @@ export class Camera extends Component {
         const frameCenterY = sheetTop + frame.offsetTop + this.restH / 2;
         this.panX = this.glassW / 2 - frameCenterX;
         this.panY = this.glassH / 2 - frameCenterY;
-        // §FILL sizes the loupe to fit the GLASS — but the glass itself
+        // §FILL sizes the dive to fit the GLASS — but the glass itself
         // can be taller than the actual visible viewport (a phone's
-        // browser chrome eats real estate `min(58vh, 560px)` doesn't
+        // browser chrome eats real estate the stage's own height doesn't
         // know about), so a corner dive can still land partly below the
         // fold. This is the one place scroll position is a legitimate
         // part of "does the result fit" — nudge the glass fully into
@@ -187,7 +192,7 @@ export class Camera extends Component {
   setVerdict = (
     shot: (typeof shots)[number],
     verdict: Verdict,
-    event: Event,
+    event: Event
   ) => {
     event.stopPropagation();
     const next = this.isVerdict(shot, verdict) ? 'neutral' : verdict;
@@ -201,8 +206,35 @@ export class Camera extends Component {
   isVerdict = (shot: (typeof shots)[number], verdict: Verdict) =>
     this.verdictOf(shot) === verdict;
 
-  /** the frame's own class: open while louped, tinted once loved,
-   * dimmed once passed on */
+  /** contact-sheet marks only — loved and passed, at rest. Once dived
+   * the same facts live in the grade dock, so the print stays clean. */
+  showHeart = (shot: (typeof shots)[number]) =>
+    this.isVerdict(shot, 'loved') && !this.isFocus(shot.id);
+
+  showPass = (shot: (typeof shots)[number]) =>
+    this.isVerdict(shot, 'passed') && !this.isFocus(shot.id);
+
+  heartClass = (shot: (typeof shots)[number]) =>
+    this.isVerdict(shot, 'loved') ? 'cam-heart is-active' : 'cam-heart';
+
+  passClass = (shot: (typeof shots)[number]) =>
+    this.isVerdict(shot, 'passed') ? 'cam-pass is-active' : 'cam-pass';
+
+  get dockHeartClass() {
+    const shot = this.focusedShot;
+    return shot && this.isVerdict(shot, 'loved')
+      ? 'cam-heart is-control is-active'
+      : 'cam-heart is-control';
+  }
+
+  get dockPassClass() {
+    const shot = this.focusedShot;
+    return shot && this.isVerdict(shot, 'passed')
+      ? 'cam-pass is-control is-active'
+      : 'cam-pass is-control';
+  };
+
+  /** the frame's own class: open while dived, dimmed once passed on */
   frameClass = (shot: (typeof shots)[number]) => {
     const classes = ['cam-frame'];
     if (this.isFocus(shot.id)) classes.push('is-open');
@@ -224,18 +256,14 @@ export class Camera extends Component {
   <template>
     <div class="ex">
       <div class="cam">
-        {{! the loupe power is the photographer's hand, not part of the
-            table — pinned over the corner, it never rides the camera }}
+        {{! the zoom readout is the photographer's hand, not part of the
+            library — pinned over the corner, it never rides the camera }}
         <span class="cam-hud-dock">
           <span class="cam-hud">{{this.power}}</span>
         </span>
         {{! the cursor is the affordance: zoom-in over a frame, zoom-out on
             the table once you are close — no toolbar, the world explains }}
-        <Choreo
-          class={{this.stageClass}}
-          {{on "click" this.clear}}
-          as |c|
-        >
+        <Choreo class={{this.stageClass}} {{on "click" this.clear}} as |c|>
           <div class="cam-sheet">
             {{#each shots as |shot|}}
               <button
@@ -244,55 +272,46 @@ export class Camera extends Component {
                 {{motion id=shot.id role="frame"}}
                 {{on "click" (fn this.loupe shot.id)}}
               >
-                {{! basic metadata — the frame number — reads at rest;
-                    the full exposure only develops once you loupe in }}
+                <span class="cam-wash" style={{washOf shot.wash}}></span>
                 <span
                   class="cam-no"
                   {{motion id=(labelId shot) role="no"}}
                 >{{shot.label}}</span>
-                <span class="cam-wash" style={{washOf shot.wash}}></span>
-                {{! the loved mark reads from the whole sheet at a glance,
-                    not just from inside the loupe — a heart stamped on
-                    the negative itself, the way a grease pencil would }}
-                {{#if (this.isVerdict shot "loved")}}
-                  <span
-                    class="cam-heart"
-                    {{motion id=(heartId shot) role="no"}}
-                  >♥</span>
-                {{/if}}
-                {{! the verdict control: docked in the label strip,
-                    mirroring `.cam-no` on the other side — never over the
-                    photo. Two segments, not three: neutral isn't a
-                    button, it's what you get by clicking the active one
-                    again. Its own role, steady like the frame number, so
-                    the loupe's zoom never blows it up. }}
-                {{#if (this.isFocus shot.id)}}
-                  <span
-                    class="cam-verdict-seg"
-                    {{motion id=(verdictId shot) role="verdict"}}
-                  >
-                    <span
-                      class={{if
-                        (this.isVerdict shot "loved")
-                        "cam-seg is-loved is-active"
-                        "cam-seg is-loved"
-                      }}
-                      role="button"
-                      aria-label="Love this one"
-                      {{on "click" (fn this.setVerdict shot "loved")}}
-                    >♥</span>
-                    <span
-                      class={{if
-                        (this.isVerdict shot "passed")
-                        "cam-seg is-passed-seg is-active"
-                        "cam-seg is-passed-seg"
-                      }}
-                      role="button"
-                      aria-label="Pass"
-                      {{on "click" (fn this.setVerdict shot "passed")}}
-                    >✕</span>
+                {{! heart and X on the contact sheet only — when dived they
+                    live in the grade dock, off the print }}
+                {{#unless (this.isFocus shot.id)}}
+                  <span class="cam-marks">
+                    {{#if (this.showHeart shot)}}
+                      <span
+                        class={{this.heartClass shot}}
+                        {{motion id=(heartId shot) role="heart"}}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M12 21s-7.2-4.6-9.6-8.8C.4 8.8 1.5 4.6 5.2 3.4 7.8 2.5 10.2 3.6 12 6.2c1.8-2.6 4.2-3.7 6.8-2.8 3.7 1.2 4.8 5.4 2.8 8.8C19.2 16.4 12 21 12 21z"
+                          />
+                        </svg>
+                      </span>
+                    {{/if}}
+                    {{#if (this.showPass shot)}}
+                      <span
+                        class={{this.passClass shot}}
+                        {{motion id=(verdictId shot) role="verdict"}}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-linecap="round"
+                            stroke-width="2.2"
+                            d="M7 7l10 10M17 7L7 17"
+                          />
+                        </svg>
+                      </span>
+                    {{/if}}
                   </span>
-                {{/if}}
+                {{/unless}}
               </button>
             {{/each}}
           </div>
@@ -300,47 +319,70 @@ export class Camera extends Component {
           <c.Parallel>
             {{! ONE camera step, aimed by state. Every pass replays it
                 toward wherever the work now stands — an interrupted dive
-                simply bends. @steady names what must stay legible at any
-                distance: the frame number and the verdict icon scale
-                against the camera, damped back toward their own size —
-                the loupe zooms the NEGATIVE in, not the UI on top of it.
-                The grade dock lives outside this region entirely (below),
-                so it never needs steadying. }}
+                simply bends. @steady keeps take numbers and the other
+                tiles' marks legible while the camera flies. Heart and
+                pass on the OPEN frame live in the dock, off the print. }}
             <c.Camera
               @zoom={{this.zoom}}
               @origin={{if this.aimId (c.id this.aimId)}}
               @x={{if this.focus this.panX 0}}
               @y={{if this.focus this.panY 0}}
               @spring={{carry}}
-              @steady={{array (c.role "no") (c.role "verdict")}}
+              @steady={{array (c.role "no") (c.role "heart") (c.role "verdict")}}
             />
             {{! if a verdict reflows the sheet, every frame that moved tweens }}
             <c.Move @of={{c.moved "frame"}} @spring={{settle}} />
-            {{! the verdict icon arrives with the loupe — a plain fade, no
-                overshoot, since @steady is already busy correcting its
-                scale against the camera's own move }}
-            <c.Tween
-              @of={{c.inserted "verdict"}}
-              @opacity={{array 0 1}}
-              @duration={{0.18}}
-            />
-            <c.Tween
-              @of={{c.removed "verdict"}}
-              @opacity={{0}}
-              @duration={{0.12}}
-            />
           </c.Parallel>
         </Choreo>
 
-        {{! the exposure dock: pinned to the TABLE, not the frame or the
-            camera — a bottom bar, like `.cam-hud-dock` above it, so
-            zooming the negative never zooms the reading of it. The
-            verdict itself lives on the frame's own corner instead — two
-            dots, not a panel over the photo. }}
-        <div class={{if this.focusedShot "cam-grade-dock is-open" "cam-grade-dock"}}>
+        {{! the grade dock: pinned to the TABLE, not the frame — so the
+            dive zooms the photograph and never the reading of it. Heart
+            and pass sit HERE, beside the caption, never on the print. }}
+        <div
+          class={{if
+            this.focusedShot
+            "cam-grade-dock is-open"
+            "cam-grade-dock"
+          }}
+        >
           {{#if this.focusedShot}}
-            <span class="cam-exp">{{this.focusedShot.exposure}} ·
-              {{this.focusedShot.stamp}}</span>
+            <div class="cam-grade-copy">
+              <span class="cam-caption">{{this.focusedShot.caption}}</span>
+              <span class="cam-exp">{{this.focusedShot.exposure}}
+                ·
+                {{this.focusedShot.stamp}}</span>
+            </div>
+            <div class="cam-grade-tools">
+              <span
+                class={{this.dockHeartClass}}
+                role="button"
+                aria-label="Love this one"
+                {{on "click" (fn this.setVerdict this.focusedShot "loved")}}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 21s-7.2-4.6-9.6-8.8C.4 8.8 1.5 4.6 5.2 3.4 7.8 2.5 10.2 3.6 12 6.2c1.8-2.6 4.2-3.7 6.8-2.8 3.7 1.2 4.8 5.4 2.8 8.8C19.2 16.4 12 21 12 21z"
+                  />
+                </svg>
+              </span>
+              <span
+                class={{this.dockPassClass}}
+                role="button"
+                aria-label="Pass"
+                {{on "click" (fn this.setVerdict this.focusedShot "passed")}}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-width="2.2"
+                    d="M7 7l10 10M17 7L7 17"
+                  />
+                </svg>
+              </span>
+            </div>
           {{/if}}
         </div>
       </div>

@@ -383,9 +383,9 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
   <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
 </c.Parallel>
 
-{{! @steady keeps the OTHER tiles' take numbers and marks legible
-    while the camera flies — the open frame has none; its facts live
-    in the dock, off the photograph. @x/@y
+{{! @steady keeps take numbers and the other tiles' marks legible
+    while the camera flies. Heart and pass on the open frame live in
+    the dock, off the photograph. @x/@y
     are the one thing @origin doesn't give you for free: it pins the aim
     point at its OWN screen position while zooming, it doesn't recentre
     it — panX/panY (computed alongside the zoom, in loupe()) are the extra
