@@ -89,6 +89,7 @@ import {
   isEntrySingleDocument,
   type PrerenderedHtmlFormat,
   type ResolvedCodeRef,
+  humanReadable,
   type RealmIdentifier,
   type RealmResourceIdentifier,
   type Saved,
@@ -711,7 +712,10 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument,
     opts?: TrackedCreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
-    let waiterLabel = `create ${opts?.realm ?? '<default realm>'}`;
+    let adoptsFrom = doc.data.meta?.adoptsFrom;
+    let waiterLabel = `create ${
+      adoptsFrom ? humanReadable(adoptsFrom) : '<unknown type>'
+    } in ${opts?.realm ?? '<default realm>'}`;
     return await this.withTestWaiters(waiterLabel, async () => {
       if (opts?.realm) {
         doc.data.meta = {

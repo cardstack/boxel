@@ -58,11 +58,14 @@ export function fetcher(
   return instance;
 }
 
-// Method and target of a request, for a waiter label. Query values are
-// replaced with a placeholder because a diagnostic that prints this label ends
-// up in a log — a query string can carry a credential (a Matrix OpenID
-// exchange puts an access token in one), and knowing which request is
-// outstanding needs its shape, never its values.
+// Method and target of a request, for a waiter label. This waiter labels every
+// request the app's network layer makes, and a diagnostic that prints the label
+// ends up in a log, so query values are replaced with a placeholder: knowing
+// which request is outstanding needs the request's shape, never its values.
+//
+// The host's own fetch-debugging helper (`describeFetchRequest` in
+// `host/tests/helpers/setup.ts`) prints into the same dump without redacting,
+// so the two do not yet agree on policy.
 function describeRequest(request: Request): string {
   let target: string;
   try {

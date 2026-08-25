@@ -319,20 +319,19 @@ function buildHttp2SecureServer(
 //
 // Node's http2 compat layer — the half that turns an `Http2Stream` into the
 // `(req, res)` pair Koa is written against — responds with
-// `waitForTrailers: true` unconditionally, and then emits the (empty)
-// trailers HEADERS frame, the frame that actually carries END_STREAM, from a
-// `setImmediate` (`finishSendTrailers` in `lib/internal/http2/core.js`). When
-// a batch of streams finishes in one event-loop turn, a stream can be
-// destroyed before its `setImmediate` runs; `finishSendTrailers` then drops
-// the trailers silently and the stream terminates as RST_STREAM(NO_ERROR)
-// with a truncated body. Chromium treats such a response as neither complete
-// nor failed and leaves the load pending forever — no error, no retry — which
-// is what a browser-side hang with a clean, promptly-closed server-side
-// stream looks like.
+// `waitForTrailers: true` unconditionally. That moves END_STREAM off the final
+// DATA frame and onto an empty trailers HEADERS frame emitted from a
+// `setImmediate` (`finishSendTrailers` in `lib/internal/http2/core.js`), which
+// drops that frame when the stream is already destroyed. A response whose
+// END_STREAM never arrives leaves its peer holding a body it can neither
+// complete nor fail.
 //
-// Nothing here sends HTTP trailers, so declining them is behavior-preserving:
-// the last DATA frame carries END_STREAM itself and the droppable-trailers
-// window closes.
+// Whether this server can reach that state is not established — no sequence
+// here is known to destroy a stream inside the window. What is established is
+// that the deferral buys nothing: nothing in this repo sends HTTP trailers, so
+// declining them is behavior-preserving and removes the window rather than
+// reasoning about its reachability. The last DATA frame carries END_STREAM
+// itself.
 //
 // Applied by wrapping the request listener rather than the `stream` event,
 // because the compat listener registered by `createSecureServer(..., handler)`
