@@ -272,6 +272,9 @@ export class ChoreoRun implements Run {
   private borrowedValues: {
     el: HTMLElement;
     key: string;
+    /** what the style ATTRIBUTE already said, restored on release — an
+     *  inline declaration removeProperty cannot resurrect */
+    prior: string;
     ve: VisualElement;
   }[] = [];
   private movedValues: { key: string; ve: VisualElement }[] = [];
@@ -1682,11 +1685,26 @@ export class ChoreoRun implements Run {
         if (cue.kind === 'move') {
           if (key in SIZES) {
             if (!ve.hasValue(key)) {
-              this.borrowedValues.push({ el: cue.sprite.element, key, ve });
+              this.borrowedValues.push({
+                el: cue.sprite.element,
+                key,
+                prior: cue.sprite.element.style.getPropertyValue(dash(key)),
+                ve,
+              });
             }
           } else {
             this.movedValues.push({ key, ve });
           }
+        } else if (cue.borrow && !ve.hasValue(key)) {
+          // the cue only borrows this value (the crossfade's color-carry):
+          // returned — inline style removed — when the run releases, so the
+          // stylesheet's own declaration stands again
+          this.borrowedValues.push({
+            el: cue.sprite.element,
+            key,
+            prior: cue.sprite.element.style.getPropertyValue(dash(key)),
+            ve,
+          });
         }
         ve.getValue(key, value[0] as PropValue)!.jump(value[0] as PropValue);
         rendered.add(ve);
@@ -1722,9 +1740,13 @@ export class ChoreoRun implements Run {
       this.dropCameraAnimation(t);
     }
     const touched = new Set<VisualElement>();
-    for (const { ve, el, key } of this.borrowedValues.splice(0)) {
+    for (const { ve, el, key, prior } of this.borrowedValues.splice(0)) {
       ve.removeValue(key);
-      el.style.removeProperty(dash(key));
+      if (prior) {
+        el.style.setProperty(dash(key), prior);
+      } else {
+        el.style.removeProperty(dash(key));
+      }
       touched.add(ve);
     }
     for (const { ve, key } of this.movedValues.splice(0)) {

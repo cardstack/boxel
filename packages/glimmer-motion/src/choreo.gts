@@ -112,6 +112,8 @@ export interface ChoreoContext {
   inserted: Selector;
   kept: Selector;
   moved: Selector;
+  /** narrow any query to sprites a viewport can actually see (§4.7) */
+  onstage: (query: Query) => Query;
   /** kept only because it claimed a leaver's identity: the receiving half of a counterpart or far match */
   received: Selector;
   removed: Selector;
@@ -145,6 +147,7 @@ function contextFor(region: Choreo): ChoreoContext {
     inserted: selector('inserted'),
     kept: selector('kept'),
     moved: selector('moved'),
+    onstage: (query) => ({ ...query, onstage: true }),
     received: selector('received'),
     removed: selector('removed'),
     role: (role) => ({ role }),
@@ -179,6 +182,25 @@ interface Signature {
 }
 
 let debugStyle: HTMLStyleElement | undefined;
+
+/**
+ * The color the page actually shows behind this region — the nearest
+ * ancestor (the region itself included) wearing a background with any
+ * alpha at all. What a crossing blends a semi-transparent skin against
+ * when it turns opacity into an actual color (§4.7). Undefined when the
+ * whole chain is transparent; the crossfade then stays a plain dissolve.
+ */
+function groundOf(root: Element): string | undefined {
+  let el: Element | null = root;
+  while (el) {
+    const bg = getComputedStyle(el).backgroundColor;
+    if (bg && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg)) {
+      return bg;
+    }
+    el = el.parentElement;
+  }
+  return undefined;
+}
 
 /**
  * The barrier books one post-render callback for every region taking part in a
@@ -475,6 +497,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
         height: after.height / measureZoom,
         width: after.width / measureZoom,
       },
+      groundOf(root),
     );
     this.changeset = changeset;
 
@@ -544,7 +567,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (!named.has(s)) {
         this.finish(s);
       } else if (!s.element.isConnected || claimed.includes(s.node)) {
-        this.orphan(s, removed);
+        this.orphan(s, removed, s.claimed === true);
       }
     }
     if (this.args.debug) {
@@ -599,19 +622,35 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   private orphanBounds = new Map<ChoreoNode, Bounds>();
 
-  private orphan(s: Sprite, removed: Sprite[]) {
-    // only the topmost removed element is moved; what it contains comes with it
+  private orphan(s: Sprite, removed: Sprite[], extract = false) {
+    // Only the topmost removed element is moved; what it contains comes with
+    // it — EXCEPT a claimed skin. Its whole job is to cross inside the flight,
+    // and riding a fading ancestor instead is the View Transitions nesting
+    // rule (never name a container of named things) sneaking back in. A
+    // claimed sprite is lifted out of the doomed subtree; both end up locked
+    // to the same page coordinates in the same layer, so the lift is
+    // invisible — all it leaves behind is a hole in the ancestor, which is
+    // exactly where the eye expects one while the skin is elsewhere.
     const inside = removed.some(
       (o) =>
         o !== s && o.element !== s.element && o.element.contains(s.element),
     );
-    if (inside || !s.initial) {
+    if ((inside && !extract) || !s.initial) {
       return;
     }
     const layer = this.orphanLayer;
     const root = this.element;
     if (!layer || !root) {
       return;
+    }
+    if (inside) {
+      // hold the seat: the ancestor is itself a leaver, and without this its
+      // remaining children reflow into the gap mid-fade. The placeholder
+      // lives only inside that doomed subtree, so it leaves with it.
+      const seat = document.createElement('div');
+      seat.style.width = `${s.initial.page.width}px`;
+      seat.style.height = `${s.initial.page.height}px`;
+      s.element.parentElement?.insertBefore(seat, s.element);
     }
     // locked where it was ON THE PAGE: the region itself may have moved in the same pass
     const { page } = s.initial;

@@ -345,6 +345,53 @@ function resolveMove(
   };
 }
 
+/** parse a computed rgb()/rgba() color into channels, or null */
+function rgbOf(
+  css: string | undefined,
+): { a: number; b: number; g: number; r: number } | null {
+  if (!css) {
+    return null;
+  }
+  const m = /^rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?\)$/.exec(
+    css,
+  );
+  if (!m) {
+    return null;
+  }
+  return {
+    a: m[4] === undefined ? 1 : parseFloat(m[4]),
+    b: parseFloat(m[3]!),
+    g: parseFloat(m[2]!),
+    r: parseFloat(m[1]!),
+  };
+}
+
+/**
+ * A skin's EFFECTIVE color: its background alpha-blended against the ground
+ * it stood on — opacity turned into an actual color (§4.7). Null when the
+ * skin has no visible background (type over transparency crossfades as
+ * opacity, there is nothing to solidify) or wears a color this parser does
+ * not speak, in which case the crossfade stays a plain dissolve.
+ */
+function effective(
+  paint: string | undefined,
+  ground: string | undefined,
+): string | null {
+  const src = rgbOf(paint);
+  if (!src || src.a === 0) {
+    return null;
+  }
+  if (src.a === 1) {
+    return `rgb(${src.r}, ${src.g}, ${src.b})`;
+  }
+  const dst = rgbOf(ground);
+  if (!dst) {
+    return null;
+  }
+  const mix = (s: number, d: number) => Math.round(s * src.a + d * (1 - src.a));
+  return `rgb(${mix(src.r, dst.r)}, ${mix(src.g, dst.g)}, ${mix(src.b, dst.b)})`;
+}
+
 const tweenTransition = (step: MoveStep | TweenStep, ms: number) => ({
   duration: ms / 1000,
   ease: step.ease ?? 'easeInOut',
@@ -355,8 +402,14 @@ const springTransition = (spec: SpringSpec | undefined) => ({
   type: 'spring',
 });
 
-function resolveStep(step: Step, cs: ChangesetLike): Resolved {
-  const sprites = cs.sprites(step.of);
+function resolveStep(
+  step: Step,
+  cs: ChangesetLike,
+  exclude?: ReadonlySet<Sprite>,
+): Resolved {
+  const sprites = cs
+    .sprites(step.of)
+    .filter((s) => !exclude || !exclude.has(s));
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
   const stagger = step.stagger ?? 0;
@@ -491,22 +544,55 @@ function resolveStep(step: Step, cs: ChangesetLike): Resolved {
               });
             }
             if (swap === 'during') {
-              // both skins cross over the one flying box
-              cues.push({
-                duration: r.longest,
-                kind: 'tween',
-                offset,
-                sprite,
-                target: { opacity: [0, 1] },
-                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
-              });
+              // Both skins cross over the one flying box. A symmetric
+              // opacity crossfade composites each against whatever stands
+              // behind it, and mid-fade the pair sums short of solid — the
+              // ground leaks through and the box visibly dips. So when both
+              // skins wore a real background, alpha is turned into an
+              // actual color (§4.7): the receiver holds opacity 1 wearing a
+              // SOLID that tweens between the two skins' effective colors,
+              // the old skin dissolves ABOVE it, and on landing the solid
+              // is handed back to the stylesheet's own alpha (Cue.borrow).
+              const oldSkin = effective(cp.initial?.paint, cs.ground);
+              const newSkin = effective(sprite.final?.paint, cs.ground);
+              const fade = {
+                duration: r.longest / 1000,
+                ease: 'easeInOut',
+              };
+              if (oldSkin && newSkin) {
+                cues.push({
+                  borrow: true,
+                  duration: r.longest,
+                  kind: 'tween',
+                  offset,
+                  sprite,
+                  target: { backgroundColor: [oldSkin, newSkin] },
+                  transition: fade,
+                });
+                cues.push({
+                  duration: r.longest,
+                  hold: { fill: false, values: { zIndex: 3 } },
+                  kind: 'hold',
+                  offset,
+                  sprite: cp,
+                });
+              } else {
+                cues.push({
+                  duration: r.longest,
+                  kind: 'tween',
+                  offset,
+                  sprite,
+                  target: { opacity: [0, 1] },
+                  transition: fade,
+                });
+              }
               cues.push({
                 duration: r.longest,
                 kind: 'tween',
                 offset,
                 sprite: cp,
                 target: { opacity: [1, 0] },
-                transition: { duration: r.longest / 1000, ease: 'easeInOut' },
+                transition: fade,
               });
             } else {
               // 'settle': the old rendering is carried whole; the swap is
@@ -670,11 +756,48 @@ export default function compile(
   tree: TimelineNode[],
   cs: ChangesetLike,
 ): Compiled {
+  // The yield rule (§4.7): a sprite a SPECIFIC step names belongs to that
+  // step — the canned crossing's generic children surrender it, so "a
+  // special exit that is not just a dissolve" is one sibling step, not a
+  // query-exclusion syntax. Only property steps with a selective query
+  // claim: a camera or a scroll is a statement about the scene, and an
+  // unqualified `of` (match everything) is not a choice of sprite.
+  const explicit = new Set<Sprite>();
+  const claim = (node: TimelineNode) => {
+    if (isGate(node)) {
+      return;
+    }
+    if (isBlock(node)) {
+      node.children.forEach(claim);
+      return;
+    }
+    if (
+      node.generic ||
+      (node.kind !== 'tween' &&
+        node.kind !== 'spring' &&
+        node.kind !== 'move' &&
+        node.kind !== 'hold')
+    ) {
+      return;
+    }
+    const q = node.of;
+    const selective = Array.isArray(q)
+      ? q.length > 0
+      : q.id !== undefined || q.role !== undefined || q.type !== undefined;
+    if (!selective) {
+      return;
+    }
+    for (const s of cs.sprites(q)) {
+      explicit.add(s);
+    }
+  };
+  tree.forEach(claim);
+
   const resolved = new Map<Step, Resolved>();
   const of = (step: Step) => {
     let r = resolved.get(step);
     if (!r) {
-      r = resolveStep(step, cs);
+      r = resolveStep(step, cs, step.generic ? explicit : undefined);
       resolved.set(step, r);
     }
     return r;

@@ -23,6 +23,13 @@ export interface Bounds {
   context: Rect;
   /** viewport coordinates */
   page: Rect;
+  /**
+   * The computed background the element wore when this box was taken —
+   * captured with the geometry because a removed skin's element is detached
+   * by the time a crossing wants to turn its alpha into an actual color
+   * (§4.7), and a detached element's computed style is empty.
+   */
+  paint?: string;
   /** relative to the element's offset parent — where a kept sprite moves */
   parent: Rect;
 }
@@ -77,6 +84,16 @@ export interface Sprite {
  */
 export interface Query {
   id?: string;
+  /**
+   * Keynote's slide rule (§4.7): only animate what a viewport can see.
+   * A removed sprite is judged against where it stood when the old scene
+   * was on screen (its initial box, measured before any crossing scroll);
+   * everything else against where it will stand (its final box, measured
+   * after). Sprites entirely outside the window are simply not selected —
+   * a leaver nobody can watch drops without a frame, an arrival below the
+   * fold just stands.
+   */
+  onstage?: boolean;
   role?: string;
   type?:
     | SpriteType
@@ -106,6 +123,12 @@ export interface ChangesetLike {
    * layout every sprite was measured in — the camera's centre reference.
    */
   frame?: { height: number; width: number };
+  /**
+   * The color the page actually shows behind this region — the nearest
+   * ancestor with a real background. What a semi-transparent skin's alpha
+   * is blended against when a crossing turns it into an actual color.
+   */
+  ground?: string;
   inserted: Sprite[];
   kept: Sprite[];
   /**
@@ -143,6 +166,15 @@ interface StepBase {
    * the boundary, and everything from here down is one ms clock.
    */
   delay?: number;
+  /**
+   * The yield rule (§4.7): a generic step — the canned crossing's own
+   * children — surrenders any sprite that a specific (non-generic) step in
+   * the same timeline also names. That is how "a special exit that is NOT
+   * just a dissolve" is said: write the step, and the canned dissolve
+   * yields the sprite entirely. Never set by authors; `c.Crossing` marks
+   * its generated children.
+   */
+  generic?: boolean;
   /** a label other steps may anchor against (`@at={{at 'name'}}`) */
   name?: string;
   of: Query | Query[];
@@ -155,7 +187,7 @@ interface StepBase {
 }
 
 /** a named engine easing, a cubic-bezier as four numbers, or any function of 0..1 */
-export type Easing = string | number[] | ((t: number) => number);
+export type Easing = string | readonly number[] | ((t: number) => number);
 
 /** Keynote's delivery panel: what the unit of delivery is, and in what order */
 export type DeliveryBy = 'character' | 'item' | 'paragraph' | 'word';
@@ -342,6 +374,14 @@ export interface FlightPath {
 
 /** one resolved thing to do to one sprite, in milliseconds from the run's start */
 export interface Cue {
+  /**
+   * These values are BORROWED, not owned: the run removes them — motion
+   * value and inline style both — when it ends or is released, so the
+   * stylesheet's own declaration stands again. The crossing's color-carry
+   * uses this: the solid it paints mid-flight is handed back to the real
+   * alpha blend on landing.
+   */
+  borrow?: boolean;
   /** camera: drive the region's frame */
   camera?: {
     /** the frame's centre in the same final layout `origin` was measured in */

@@ -110,9 +110,17 @@ module('Integration | choreo | move extras', function (hooks) {
     const receiver = find('#skin-1') as HTMLElement;
     const leaver = find('#skin-0') as HTMLElement;
     assert.ok(leaver, 'the old skin is aloft with the new');
+    // both skins wear a real background, so the crossfade carries color
+    // (§4.7): the receiver holds SOLID — the ground can never leak through
+    // the flying box — while the old skin dissolves above it
     const rOp = parseFloat(getComputedStyle(receiver).opacity);
     const lOp = parseFloat(getComputedStyle(leaver).opacity);
-    assert.true(rOp < 1, `the new skin is fading in (${rOp})`);
+    assert.strictEqual(rOp, 1, 'the new skin holds solid under the dissolve');
+    assert.strictEqual(
+      getComputedStyle(receiver).backgroundColor,
+      'rgb(0, 170, 255)',
+      'the flying box wears its effective color, full alpha'
+    );
     assert.true(lOp < 1, `the old skin is fading out (${lOp})`);
     const lb = bounds(leaver);
     assert.true(lb.left > 10, `the old skin flies too (${lb.left})`);

@@ -4,6 +4,28 @@
  */
 import type { Bounds, ChangesetLike, Query, Sprite } from './types.ts';
 
+/**
+ * Is any part of this sprite inside the window (Query.onstage)?
+ *
+ * A removed sprite is judged where the OLD scene showed it — its initial box,
+ * captured before the crossing scrolled the window — and everything else where
+ * the new scene will show it. Both boxes are client-space measurements taken
+ * on their own side of the scroll, so each is compared against the viewport
+ * that was (or will be) actually on screen with it.
+ */
+function onstage(s: Sprite): boolean {
+  const box = (s.type === 'removed' ? s.initial : (s.final ?? s.initial))?.page;
+  if (!box) {
+    return true;
+  }
+  return (
+    box.x < window.innerWidth &&
+    box.y < window.innerHeight &&
+    box.x + box.width > 0 &&
+    box.y + box.height > 0
+  );
+}
+
 const isStill = (s: Sprite) =>
   !s.delta ||
   (s.delta.x === 0 &&
@@ -39,6 +61,9 @@ export class Changeset implements ChangesetLike {
   /** the frame's own size in local pixels, from the same final layout */
   readonly frame?: { height: number; width: number };
 
+  /** what the page shows behind this region — see ChangesetLike.ground */
+  readonly ground?: string;
+
   constructor(
     inserted: Sprite[],
     removed: Sprite[],
@@ -46,6 +71,7 @@ export class Changeset implements ChangesetLike {
     beacons: Map<string, Bounds> = new Map(),
     measureZoom = 1,
     frame?: { height: number; width: number },
+    ground?: string,
   ) {
     this.inserted = inserted;
     this.removed = removed;
@@ -53,6 +79,7 @@ export class Changeset implements ChangesetLike {
     this.beacon = (name) => beacons.get(name) ?? null;
     this.measureZoom = measureZoom;
     this.frame = frame;
+    this.ground = ground;
   }
 
   get all(): Sprite[] {
@@ -118,7 +145,8 @@ export class Changeset implements ChangesetLike {
     return pool.filter(
       (s) =>
         (query.id === undefined || s.id === query.id) &&
-        (query.role === undefined || s.role === query.role),
+        (query.role === undefined || s.role === query.role) &&
+        (!query.onstage || onstage(s)),
     );
   }
 

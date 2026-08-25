@@ -192,7 +192,7 @@ export class Move extends StepComponent<
   StepArgs & {
     /** seconds; with @ease, the tween form of the flight */
     duration?: number;
-    ease?: string | number[];
+    ease?: string | readonly number[];
     /** `{{c.beacon 'compose'}}` or `{{c.gesture}}` — fly in from that box */
     from?: BeaconRef | GestureRef;
     /** an SVG path for the journey, drawn from where the sprite stands */
@@ -406,9 +406,11 @@ export class Tether extends StepComponent<
 
 /**
  * `<c.Crossing />` — the canned scene crossing (§4.7): what only the old
- * scene had fades first, everything paired flies (skins swapping per
- * `@swap`), and what only the new scene has fades in near the settle.
- * One step in the template; a whole sequence on the clock.
+ * scene had fades as the flight lifts off, everything paired flies (skins
+ * swapping per `@swap`), and what only the new scene has fades in near the
+ * settle. One step in the template; a whole overlapped score on the clock —
+ * Keynote's Magic Move does not wait for the dissolve to finish before the
+ * movers leave, and a crossing that does reads as three acts, not one.
  */
 export class Crossing extends StepComponent<
   StepArgsBase & {
@@ -440,39 +442,38 @@ export class Crossing extends StepComponent<
     return {
       children: [
         {
+          generic: true,
           kind: 'tween',
           ms: leave * 1000,
-          of: { type: 'departed' },
+          of: { onstage: true, type: 'departed' },
           props: { opacity: 0 },
         },
         {
-          children: [
-            {
-              ease,
-              kind: 'move',
-              ms: duration === undefined ? undefined : duration * 1000,
-              name: FLIGHT,
-              of: { type: 'received' },
-              spring,
-              swap,
-            },
-            {
-              kind: 'hold',
-              of: { type: 'received' },
-              props: { zIndex: 2 },
-            },
-          ],
-          kind: 'parallel',
+          ease,
+          generic: true,
+          kind: 'move',
+          ms: duration === undefined ? undefined : duration * 1000,
+          name: FLIGHT,
+          of: { type: 'received' },
+          spring,
+          swap,
+        },
+        {
+          generic: true,
+          kind: 'hold',
+          of: { type: 'received' },
+          props: { zIndex: 2 },
         },
         {
           at: { anchor: FLIGHT, edge: 'start', progress: overlap },
+          generic: true,
           kind: 'tween',
           ms: arrive * 1000,
-          of: { type: 'inserted' },
+          of: { onstage: true, type: 'inserted' },
           props: { opacity: [0, 1] },
         },
       ],
-      kind: 'sequence',
+      kind: 'parallel',
     };
   }
 }
