@@ -5,7 +5,6 @@ import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
   BOXEL_RUNTIME_OPERATIONS,
   COMPONENT_EFFECT_KINDS,
-  HOST_OWNED_DATASET_PREFIXES,
   PROJECTED_ERROR_MAX_TEXT_LENGTH,
   MATERIALIZATION_PURPOSES,
   PROJECTED_ERROR_MAX_CAUSE_DEPTH,
@@ -21,8 +20,8 @@ import {
   SAFE_EVENT_TARGET_STRING_PROPERTIES,
   TEMPLATE_DEPENDENCY_KINDS,
   assertExecutionTransportVersion,
-  assertKnownComponentEffects,
-  assertKnownTemplateDependencies,
+  acceptComponentUpdate,
+  acceptTemplateBundle,
   assertUsableExecutionRecord,
   childFieldFormatsFor,
   isBoxelValueReference,
@@ -186,11 +185,22 @@ function safeEvent(): SafeEvent {
 
 // Records the member names a gate touched, so a test can show the gate
 // decided from the envelope alone.
+//
+// Traps `getOwnPropertyDescriptor` rather than `get`, because that is how a
+// gate reads: property access would run an accessor, and a gate never does.
+// A `get` trap here would record nothing and the assertion would pass
+// vacuously.
 function watched<T extends object>(record: T, seen: string[]): T {
   return new Proxy(record, {
-    get(target, key, receiver) {
+    getOwnPropertyDescriptor(target, key) {
       if (typeof key === 'string') {
         seen.push(key);
+      }
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+    get(target, key, receiver) {
+      if (typeof key === 'string') {
+        seen.push(`get:${key}`);
       }
       return Reflect.get(target, key, receiver);
     },
@@ -505,28 +515,27 @@ module('Unit | rendering protocol | records and operations', function () {
     );
   });
 
-  test('RP-14.1: the Host keeps its own identifiers out of a projected dataset', function (assert) {
-    // Base stamps a card's canonical URL under BOTH namespaces on the same
-    // container: `data-boxel-card-id` and `data-test-card` carry the identical
-    // `card.id`, and nothing strips the test spelling on the way to a realm.
-    // Filtering one and not the other filters nothing.
-    let projected = projectDataset({
+  test("RP-14.1: a projected dataset carries the author's own keys and nothing else", function (assert) {
+    // A denylist cannot hold here. Base stamps a card's canonical URL under
+    // at least three spellings — data-boxel-card-id, data-test-card, and
+    // data-cards-grid-item, the last one added precisely because the
+    // data-test- spelling is pruned in production — across sixteen distinct
+    // data-* namespaces. The author's own key set is the only thing that
+    // separates what they wrote from what the Host stamped around it.
+    let onTheElement = {
       boxelCardId: 'http://test/vendors/1',
-      boxelCardFormat: 'fitted',
       testCard: 'http://test/vendors/1',
-      testCardFormat: 'fitted',
+      cardsGridItem: 'http://test/vendors/1',
+      cardTypeDisplayName: 'Invoice',
+      cardUrl: 'http://test/vendors/1',
       sku: 'A-17',
-      boxelish: 'the author owns this one',
-      testimonial: 'and this one',
-    });
+      rowIndex: '3',
+    };
+    let projected = projectDataset(onTheElement, ['sku', 'rowIndex']);
     assert.deepEqual(
       { ...projected },
-      {
-        sku: 'A-17',
-        boxelish: 'the author owns this one',
-        testimonial: 'and this one',
-      },
-      'no spelling of a card id crosses, and a key that merely begins with those letters does',
+      { sku: 'A-17', rowIndex: '3' },
+      'only what the author declared crosses',
     );
     for (let [key, value] of Object.entries(projected)) {
       assert.false(
@@ -534,13 +543,16 @@ module('Unit | rendering protocol | records and operations', function () {
         `${key} carries no card identity`,
       );
     }
+
+    // An author cannot name a key into existence that the element does not
+    // carry, and cannot reach the Host's by declaring it.
     assert.deepEqual(
-      [...HOST_OWNED_DATASET_PREFIXES],
-      ['boxel', 'test'],
-      'both namespaces Base stamps, in the camelCase form a DOMStringMap exposes',
+      { ...projectDataset(onTheElement, ['boxelCardId', 'absent']) },
+      { boxelCardId: 'http://test/vendors/1' },
+      'the allowlist is an intersection: declaring a key does not conjure one',
     );
     assert.deepEqual(
-      { ...projectDataset({}) },
+      { ...projectDataset({}, ['sku']) },
       {},
       'an empty dataset projects empty',
     );
@@ -662,7 +674,7 @@ module('Unit | rendering protocol | records and operations', function () {
     ]);
 
     try {
-      assertKnownTemplateDependencies(unrecognized, support);
+      acceptTemplateBundle(unrecognized, support);
       assert.true(false, 'expected a refusal');
     } catch (error) {
       assert.strictEqual(
@@ -691,7 +703,7 @@ module('Unit | rendering protocol | records and operations', function () {
       { kind: 'literal-value', value: 'Ships in 2 days' },
       { kind: 'literal-value', value: { nested: [1, 2, null] } },
     ]);
-    assertKnownTemplateDependencies(
+    acceptTemplateBundle(
       {
         ...carried,
         templates: {
@@ -721,7 +733,7 @@ module('Unit | rendering protocol | records and operations', function () {
     stale.protocolVersion = BOXEL_EXECUTION_PROTOCOL_VERSION + 1;
 
     assert.throws(
-      () => assertKnownTemplateDependencies(stale, support),
+      () => acceptTemplateBundle(stale, support),
       (error: Error) =>
         error instanceof ProtocolRefusal &&
         error.code === 'BOXEL_PROTOCOL_VERSION_UNSUPPORTED',
@@ -741,14 +753,14 @@ module('Unit | rendering protocol | records and operations', function () {
     });
 
     assert.throws(
-      () => assertKnownComponentEffects(withUnknownEffect, support),
+      () => acceptComponentUpdate(withUnknownEffect, support),
       (error: Error) =>
         error instanceof ProtocolRefusal &&
         error.code === 'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
       'applying the state and dropping the request would show a half-performed intent',
     );
 
-    assertKnownComponentEffects(update(), support);
+    acceptComponentUpdate(update(), support);
     assert.deepEqual(
       [...COMPONENT_EFFECT_KINDS],
       ['presentation', 'layout', 'observe', 'view-card', 'patch'],
@@ -818,7 +830,7 @@ module('Unit | rendering protocol | records and operations', function () {
   test('RP-14.3: a component update is gated on its envelope, not only on its effect kinds', function (assert) {
     assert.throws(
       () =>
-        assertKnownComponentEffects(
+        acceptComponentUpdate(
           update({ protocolVersion: BOXEL_EXECUTION_PROTOCOL_VERSION + 1 }),
           support,
         ),
@@ -829,7 +841,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
     assert.throws(
       () =>
-        assertKnownComponentEffects(
+        acceptComponentUpdate(
           update({ requiredFeatures: ['an-unbuilt-feature'] }),
           support,
         ),
@@ -840,7 +852,7 @@ module('Unit | rendering protocol | records and operations', function () {
     );
     assert.throws(
       () =>
-        assertKnownComponentEffects(
+        acceptComponentUpdate(
           update({ effects: [null] as unknown as ComponentUpdate['effects'] }),
           support,
         ),
@@ -873,7 +885,7 @@ module('Unit | rendering protocol | records and operations', function () {
     ];
     for (let [label, candidate] of dangling) {
       assert.throws(
-        () => assertKnownTemplateDependencies(candidate, support),
+        () => acceptTemplateBundle(candidate, support),
         (error: Error) =>
           error instanceof ProtocolRefusal &&
           error.code === 'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
@@ -885,7 +897,7 @@ module('Unit | rendering protocol | records and operations', function () {
     // is the bundle's reference space and the id is the compiler's, and a
     // class inheriting its template from an ancestor legitimately yields two
     // entries carrying one compiler id.
-    assertKnownTemplateDependencies(
+    acceptTemplateBundle(
       {
         ...carried,
         templates: {
@@ -936,11 +948,7 @@ module('Unit | rendering protocol | records and operations', function () {
     // the bundle does not carry.
     for (let inherited of ['toString', 'constructor', 'hasOwnProperty']) {
       assert.throws(
-        () =>
-          assertKnownTemplateDependencies(
-            { ...bundle(), root: inherited },
-            support,
-          ),
+        () => acceptTemplateBundle({ ...bundle(), root: inherited }, support),
         (error: Error) =>
           (error as ProtocolRefusal).code ===
           'BOXEL_TEMPLATE_BUNDLE_INCOMPLETE',
@@ -954,7 +962,7 @@ module('Unit | rendering protocol | records and operations', function () {
     // and the refusal is written to a log.
     let hostile = 'x'.repeat(5000);
     try {
-      assertKnownComponentEffects(
+      acceptComponentUpdate(
         update({
           effects: [
             { kind: hostile, payload: null },
@@ -971,7 +979,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
 
     try {
-      assertKnownTemplateDependencies(
+      acceptTemplateBundle(
         { ...bundle(), root: 'line-one\nWARN forged-line' },
         support,
       );
@@ -1015,7 +1023,7 @@ module('Unit | rendering protocol | records and operations', function () {
     for (let [label, broken] of unreifiable) {
       assert.throws(
         () =>
-          assertKnownTemplateDependencies(
+          acceptTemplateBundle(
             {
               ...carried,
               templates: { 'template-0': broken },
@@ -1045,7 +1053,7 @@ module('Unit | rendering protocol | records and operations', function () {
     for (let [label, dependency] of payloadless) {
       assert.throws(
         () =>
-          assertKnownTemplateDependencies(
+          acceptTemplateBundle(
             bundle([dependency as TemplateDependency]),
             support,
           ),
@@ -1076,8 +1084,7 @@ module('Unit | rendering protocol | records and operations', function () {
     ];
     for (let [label, candidate] of malformed) {
       assert.throws(
-        () =>
-          assertKnownTemplateDependencies(candidate as TemplateBundle, support),
+        () => acceptTemplateBundle(candidate as TemplateBundle, support),
         (error: Error) =>
           (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
         `${label} is refused`,
@@ -1085,7 +1092,7 @@ module('Unit | rendering protocol | records and operations', function () {
     }
     assert.throws(
       () =>
-        assertKnownComponentEffects(
+        acceptComponentUpdate(
           update({
             effects: 'view-card' as unknown as ComponentUpdate['effects'],
           }),
@@ -1178,7 +1185,7 @@ module('Unit | rendering protocol | records and operations', function () {
     ] as unknown as [string, TemplateDependency][];
     for (let [label, dependency] of notData) {
       assert.throws(
-        () => assertKnownTemplateDependencies(bundle([dependency]), support),
+        () => acceptTemplateBundle(bundle([dependency]), support),
         (error: Error) =>
           (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
         `${label} is not a literal value`,
@@ -1195,13 +1202,13 @@ module('Unit | rendering protocol | records and operations', function () {
       enumerable: true,
     });
     assert.throws(
-      () => assertKnownTemplateDependencies(bundle([hostile]), support),
+      () => acceptTemplateBundle(bundle([hostile]), support),
       (error: Error) =>
         (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
       'an accessor is refused without being read',
     );
 
-    assertKnownTemplateDependencies(
+    acceptTemplateBundle(
       bundle([
         { kind: 'literal-value', value: { a: [1, 'x', null, false] } },
         { kind: 'literal-value', value: null },
@@ -1220,7 +1227,7 @@ module('Unit | rendering protocol | records and operations', function () {
       ['changed carrying a function', { changed: { total: () => 1 } }],
     ] as [string, Partial<ComponentUpdate>][]) {
       assert.throws(
-        () => assertKnownComponentEffects(update(override), support),
+        () => acceptComponentUpdate(update(override), support),
         (error: Error) =>
           (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
         `${label} is refused`,
@@ -1296,6 +1303,192 @@ module('Unit | rendering protocol | records and operations', function () {
     }
   });
 
+  test('RP-14.3: a gate hands back what it checked, not the object it was given', function (assert) {
+    // Validating in place answers a question about the adversary's object and
+    // then hands that same object on, so a Proxy can answer the check one way
+    // and the consumer another. What a consumer applies has to be what was
+    // checked.
+    let reads = 0;
+    let shifty = new Proxy(
+      { kind: 'trusted-export', module: '@cardstack/boxel-ui', name: 'Pill' },
+      {
+        get(target, key, receiver) {
+          if (key === 'kind') {
+            reads += 1;
+            return reads > 4 ? 'literal-value' : 'trusted-export';
+          }
+          return Reflect.get(target, key, receiver);
+        },
+        getOwnPropertyDescriptor(target, key) {
+          if (key === 'kind') {
+            reads += 1;
+            return {
+              value: reads > 4 ? 'literal-value' : 'trusted-export',
+              writable: true,
+              enumerable: true,
+              configurable: true,
+            };
+          }
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      },
+    ) as unknown as TemplateDependency;
+
+    let accepted = acceptTemplateBundle(bundle([shifty]), support);
+    let dependency = accepted.templates['template-0'].scope[0];
+    assert.strictEqual(
+      dependency.kind,
+      'trusted-export',
+      'the returned dependency is a plain object whose kind cannot change under the consumer',
+    );
+    assert.strictEqual(
+      Object.getPrototypeOf(dependency),
+      Object.prototype,
+      'and it is not the proxy the gate was handed',
+    );
+
+    // A non-enumerable member is still reachable by whoever holds the object,
+    // so a normalized value must not carry one.
+    let smuggler: Record<string, unknown> = { visible: 1 };
+    Object.defineProperty(smuggler, 'run', {
+      value: () => 'reached authored scope',
+      enumerable: false,
+    });
+    assert.throws(
+      () =>
+        acceptTemplateBundle(
+          bundle([
+            { kind: 'literal-value', value: smuggler } as TemplateDependency,
+          ]),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'a non-enumerable function member is refused',
+    );
+
+    let symbolic: Record<string, unknown> = { visible: 1 };
+    (symbolic as Record<symbol, unknown>)[Symbol('hidden')] = () => 'reached';
+    assert.throws(
+      () =>
+        acceptTemplateBundle(
+          bundle([
+            { kind: 'literal-value', value: symbolic } as TemplateDependency,
+          ]),
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'a symbol-keyed member is refused',
+    );
+  });
+
+  test('RP-14.3: an accessor anywhere in a record is refused, never invoked', function (assert) {
+    // Reading a member through plain property access runs far-side code
+    // inside the gate, and a getter that throws escapes as its own error
+    // rather than as a refusal.
+    let ran = false;
+    let hostile = (key: string, host: Record<string, unknown>) => {
+      Object.defineProperty(host, key, {
+        get() {
+          ran = true;
+          throw new Error('executed inside the gate');
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      return host;
+    };
+
+    assert.throws(
+      () =>
+        assertUsableExecutionRecord(
+          hostile('protocolVersion', {
+            requiredFeatures: [],
+          }) as unknown as BoxelDescription,
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'an accessor on the envelope is refused',
+    );
+
+    let carried = bundle();
+    assert.throws(
+      () =>
+        acceptTemplateBundle(
+          {
+            ...carried,
+            templates: {
+              'template-0': hostile('block', {
+                ...carried.templates['template-0'],
+              }) as unknown as TemplateBundle['templates'][string],
+            },
+          },
+          support,
+        ),
+      (error: Error) =>
+        (error as ProtocolRefusal).code === 'BOXEL_RECORD_MALFORMED',
+      'an accessor on a descriptor is refused',
+    );
+
+    assert.false(ran, 'no getter was ever invoked');
+  });
+
+  test('RP-14.1: projecting a thrown value never throws', function (assert) {
+    // Projection IS the clone step for a throw, so nothing has sanitized it
+    // first, and authored code can throw anything. A projector that fails
+    // leaves a lane with no response on it, which its peer discovers only by
+    // timing out.
+    let unreadable: Record<string, unknown> = { message: 7 };
+    Object.defineProperty(unreadable, 'cause', {
+      get() {
+        throw new Error('unreadable');
+      },
+      enumerable: true,
+    });
+    Object.defineProperty(unreadable, 'toString', {
+      value() {
+        throw new Error('undescribable');
+      },
+    });
+    let projected = projectError(unreadable);
+    assert.strictEqual(typeof projected.message, 'string');
+    assert.strictEqual(projected.cause, undefined, 'the bad cause is dropped');
+
+    // A refusal's code is the identity a catalog or a log query keys on, so it
+    // needs a member of its own rather than surviving as a message prefix.
+    try {
+      assertExecutionTransportVersion(BOXEL_EXECUTION_TRANSPORT_VERSION + 1);
+      assert.true(false, 'expected a refusal');
+    } catch (error) {
+      assert.strictEqual(
+        projectError(error).code,
+        'BOXEL_TRANSPORT_VERSION_UNSUPPORTED',
+        'the code crosses as data, not as a prefix to parse',
+      );
+    }
+  });
+
+  test('RP-14.3: a literal value the record type declares legal is not refused', function (assert) {
+    // JSONTypes.Value types NaN and the infinities as ordinary numbers, and
+    // structuredClone — the contract this module states — carries them. A gate
+    // that refused them would reject a type-checking record and take the whole
+    // generation with it.
+    let accepted = acceptTemplateBundle(
+      bundle([
+        { kind: 'literal-value', value: NaN },
+        { kind: 'literal-value', value: Infinity },
+      ]),
+      support,
+    );
+    let values = accepted.templates['template-0'].scope.map((dependency) =>
+      dependency.kind === 'literal-value' ? dependency.value : null,
+    );
+    assert.true(Number.isNaN(values[0] as number), 'NaN crosses');
+    assert.strictEqual(values[1], Infinity, 'so does Infinity');
+  });
+
   test('RP-14.3: every code the catalog declares is reachable, and every reachable refusal is declared', function (assert) {
     let thrown = new Set<string>();
     let attempts: (() => void)[] = [
@@ -1314,14 +1507,14 @@ module('Unit | rendering protocol | records and operations', function () {
       () =>
         assertExecutionTransportVersion(BOXEL_EXECUTION_TRANSPORT_VERSION + 1),
       () =>
-        assertKnownTemplateDependencies(
+        acceptTemplateBundle(
           bundle([
             { kind: 'nope', name: 'x' } as unknown as TemplateDependency,
           ]),
           support,
         ),
       () =>
-        assertKnownComponentEffects(
+        acceptComponentUpdate(
           update({
             effects: [
               {
@@ -1338,10 +1531,7 @@ module('Unit | rendering protocol | records and operations', function () {
           support,
         ),
       () =>
-        assertKnownTemplateDependencies(
-          { ...bundle(), root: 'template-absent' },
-          support,
-        ),
+        acceptTemplateBundle({ ...bundle(), root: 'template-absent' }, support),
     ];
 
     for (let attempt of attempts) {

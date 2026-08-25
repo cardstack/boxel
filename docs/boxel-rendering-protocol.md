@@ -664,11 +664,17 @@ behavior these cannot express is a spec change, while a tier-local capability
 its own Host code calls directly — source volatility (RP-18), instance sync
 (RP-20.5/20.6) — is not an operation on this interface.
 
-**RP-14.3** Version discipline: every record carries the protocol version;
-**consumers check it** and fail closed to last-known-good with one
-diagnostic. `requiredFeatures` is populated by producers and
-rejected-when-unknown by consumers. Semantic and transport versions are
-independent and both enforced.
+**RP-14.3** Version discipline: every record that crosses on its own carries
+the protocol version; **consumers check it** and fail closed to
+last-known-good with one diagnostic. `requiredFeatures` is populated by
+producers and rejected-when-unknown by consumers. Semantic and transport
+versions are independent and both enforced. A consumer acts on the record a
+gate **returns**, never on the one it supplied: a producer sits across a
+trust boundary, so a check that leaves the caller holding the producer's own
+object proves nothing about what the consumer later reads — an accessor runs
+again, a proxy answers differently, a member the check skipped is still
+reachable. Each member is read once, as own data, and what the gate hands
+back is built from those reads.
 
 **RP-14.4** Record parity: Direct, Capsule, and Sandbox produce
 deep-equal `BoxelDescription`/`InstanceProjection` records for the same

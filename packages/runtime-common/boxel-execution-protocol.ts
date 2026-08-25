@@ -17,10 +17,13 @@
  *    browser event. Each record type below is declared through `Cloneable`,
  *    which proves at compile time that it is `structuredClone`-able JSON
  *    data.
- * 3. **Versioned.** Every record carries the protocol version and the
- *    features it requires; a consumer checks both before it applies any part
- *    of a record, and fails closed to its last-known-good output otherwise
- *    (RP-14.3).
+ * 3. **Versioned.** Every record that crosses on its own carries the protocol
+ *    version and the features it requires; a consumer checks both before it
+ *    applies any part of a record, and fails closed to its last-known-good
+ *    output otherwise (RP-14.3). Records that only ever travel inside another
+ *    — `ResolvedField` in an operation's result, `ProjectedError` in a
+ *    rejection — are versioned by the record or the response carrying them,
+ *    and carry no envelope of their own.
  *
  * This module is deliberately absent from `index.ts`: reaching it through the
  * `@cardstack/runtime-common` barrel would drag the barrel's own graph in,
@@ -153,7 +156,7 @@ export class ProtocolRefusal extends Error {
 export function assertUsableExecutionRecord(
   record: ProtocolEnvelope,
   support: ProtocolSupport,
-): void {
+): ProtocolEnvelope {
   // Read once, up front: the envelope is the whole basis of the decision, and
   // reading it exactly once is what makes that checkable.
   let { protocolVersion, requiredFeatures } = readEnvelope(record);
@@ -174,6 +177,7 @@ export function assertUsableExecutionRecord(
       )}`,
     );
   }
+  return { protocolVersion, requiredFeatures };
 }
 
 /**
@@ -225,54 +229,140 @@ function joinTokens(items: string[], separator = ', '): string {
 const MAX_LITERAL_VALUE_DEPTH = 32;
 
 /**
- * Whether an object carries `key` as an own data property holding inert JSON.
- * Never reads through an accessor.
+ * Reads one member of an untrusted record as own data.
+ *
+ * Plain property access is not available to a gate. It runs an accessor — far
+ * side code, inside the gate, free to throw straight past the refusal
+ * contract — and it re-reads a member a Proxy may answer differently every
+ * time. Every read below goes through here, once per member, and what a gate
+ * returns is built from those reads rather than from the object they came
+ * out of.
  */
-function isJsonDataProperty(source: object, key: string): boolean {
+function readMember(source: object, key: string): unknown {
   let descriptor = Object.getOwnPropertyDescriptor(source, key);
-  return (
-    descriptor !== undefined &&
-    'value' in descriptor &&
-    isJsonData(descriptor.value)
-  );
+  if (descriptor === undefined) {
+    return undefined;
+  }
+  if (!('value' in descriptor)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${quoteToken(key)} is an accessor; a record carries data, not behavior`,
+    );
+  }
+  return descriptor.value;
 }
 
 /**
- * Whether a value is inert JSON data all the way down.
+ * Returns `value` as inert JSON data, or refuses.
  *
- * Accessors are refused rather than read: a getter is not data, and invoking
- * one to find out would run far-side code inside the gate. Prototypes other
- * than `Object.prototype` are refused for the same reason a class instance is
- * — the members that matter would not be the own ones.
+ * Normalizing rather than inspecting is the whole point. An inspection answers
+ * a question about the caller's object and then hands that same object on, so
+ * a Proxy, a non-enumerable member, or a symbol-keyed one can differ between
+ * the check and the use. What this returns has none of those: every leaf was
+ * read once as own data, and the result is a plain graph a consumer can hold.
  */
-function isJsonData(value: unknown, depth = MAX_LITERAL_VALUE_DEPTH): boolean {
+function normalizeJsonData(
+  value: unknown,
+  depth = MAX_LITERAL_VALUE_DEPTH,
+): JSONTypes.Value {
   if (value === null) {
-    return true;
+    return null;
   }
-  if (typeof value === 'string' || typeof value === 'boolean') {
-    return true;
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value);
+  if (
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    typeof value === 'number'
+  ) {
+    // Every number, `NaN` and the infinities included: the contract this
+    // module states is `structuredClone`, which carries them, and refusing
+    // them would reject a value the record's own type declares legal.
+    return value;
   }
   if (typeof value !== 'object' || depth <= 0) {
-    return false;
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `not data, or nested past ${MAX_LITERAL_VALUE_DEPTH} levels: ${describeValue(value)}`,
+    );
   }
   if (Array.isArray(value)) {
-    return value.every((entry) => isJsonData(entry, depth - 1));
+    let entries: JSONTypes.Value[] = [];
+    for (let index = 0; index < value.length; index++) {
+      entries.push(
+        normalizeJsonData(readMember(value, String(index)), depth - 1),
+      );
+    }
+    return entries;
   }
   let prototype = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {
-    return false;
-  }
-  return Object.keys(value).every((key) => {
-    let descriptor = Object.getOwnPropertyDescriptor(value, key);
-    return (
-      descriptor !== undefined &&
-      'value' in descriptor &&
-      isJsonData(descriptor.value, depth - 1)
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      'a value with a prototype of its own is an object, not data',
     );
-  });
+  }
+  if (Object.getOwnPropertySymbols(value).length > 0) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      'a value carrying symbol-keyed members is not data',
+    );
+  }
+  let normalized: Record<string, JSONTypes.Value> = {};
+  // getOwnPropertyNames, not keys: a non-enumerable member is still reachable
+  // by whoever holds the object, so skipping it proves nothing about what a
+  // consumer would be handed.
+  for (let key of Object.getOwnPropertyNames(value)) {
+    normalized[key] = normalizeJsonData(readMember(value, key), depth - 1);
+  }
+  return normalized;
+}
+
+function normalizeJsonRecord(
+  value: unknown,
+  label: string,
+): Record<string, JSONTypes.Value> {
+  let normalized = normalizeJsonData(value);
+  if (
+    typeof normalized !== 'object' ||
+    normalized === null ||
+    Array.isArray(normalized)
+  ) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${label} must be a record of data, received ${describeValue(value)}`,
+    );
+  }
+  return normalized;
+}
+
+function normalizeStringArray(value: unknown, label: string): string[] {
+  if (!Array.isArray(value)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${label} must be an array, received ${describeValue(value)}`,
+    );
+  }
+  let entries: string[] = [];
+  for (let index = 0; index < value.length; index++) {
+    let entry = readMember(value, String(index));
+    if (typeof entry !== 'string') {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `${label} must hold strings, received ${describeValue(entry)}`,
+      );
+    }
+    entries.push(entry);
+  }
+  return entries;
+}
+
+function normalizeString(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${label} must be a string, received ${describeValue(value)}`,
+    );
+  }
+  return value;
 }
 
 /**
@@ -323,8 +413,8 @@ function readEnvelope(record: ProtocolEnvelope): {
       `expected a record object, received ${describeValue(candidate)}`,
     );
   }
-  let { protocolVersion, requiredFeatures } =
-    candidate as Partial<ProtocolEnvelope>;
+  let protocolVersion = readMember(candidate, 'protocolVersion');
+  let requiredFeatures = readMember(candidate, 'requiredFeatures');
   if (
     typeof protocolVersion !== 'number' ||
     !Number.isFinite(protocolVersion)
@@ -334,19 +424,16 @@ function readEnvelope(record: ProtocolEnvelope): {
       `protocolVersion must be a finite number, received ${describeValue(protocolVersion)}`,
     );
   }
-  if (
-    !Array.isArray(requiredFeatures) ||
-    // Spread first: `some` and `filter` skip the holes in a sparse array, so
-    // `[, ,]` would pass as "an array of strings" and then be carried as two
-    // features named `undefined`.
-    ![...requiredFeatures].every((feature) => typeof feature === 'string')
-  ) {
-    throw new ProtocolRefusal(
-      'BOXEL_RECORD_MALFORMED',
-      `requiredFeatures must be an array of strings, received ${describeValue(requiredFeatures)}`,
-    );
-  }
-  return { protocolVersion, requiredFeatures };
+  // Index-by-index rather than `some`/`every`, which skip the holes in a
+  // sparse array — `[, ,]` would otherwise pass as "an array of strings" and
+  // be carried as two features named `undefined`.
+  return {
+    protocolVersion,
+    requiredFeatures: normalizeStringArray(
+      requiredFeatures,
+      'requiredFeatures',
+    ),
+  };
 }
 
 /**
@@ -390,11 +477,16 @@ export type MaterializationPurpose = (typeof MATERIALIZATION_PURPOSES)[number];
 /**
  * A runtime-local identity for an object that never leaves its runtime.
  *
- * The handle is an opaque string, so it is cloneable and crosses freely; what
- * it names — a loaded class, a materialized instance — does not. A runtime
- * issues handles that are unguessable within it and resolves them only for the
- * consumer it issued them to, so holding one grants nothing beyond asking that
- * runtime to act on it.
+ * The handle is a string, so it is cloneable and crosses freely; what it names
+ * — a loaded class, a materialized instance — does not.
+ *
+ * A handle is an identifier, NOT a capability, and the distinction is the
+ * issuing runtime's to enforce. Nothing about the type makes a handle
+ * unguessable or scopes it to the consumer it was issued to; a registry that
+ * mints sequential ids and resolves any handle for any caller satisfies this
+ * type completely. A channel that accepts a handle from across a boundary
+ * must therefore check that the peer sending it was the peer it was issued
+ * to — holding a well-formed handle is not evidence of anything.
  */
 declare const runtimeHandleBrand: unique symbol;
 declare const boxelTypeHandleBrand: unique symbol;
@@ -416,9 +508,17 @@ export type BoxelExecutionMode = (typeof BOXEL_EXECUTION_MODES)[number];
 /**
  * What every tier's runtime offers, and nothing else (RP-14.2).
  *
- * Every argument and every result here is either a handle or a cloneable
- * record, which is what makes one interface serve a local call, a call into a
- * Compartment, and a call across a message port without changing shape.
+ * Every argument and every result here is a handle, a record this module
+ * proves cloneable, or a JSON:API document — which is what makes one interface
+ * serve a local call, a call into a Compartment, and a call across a message
+ * port without changing shape.
+ *
+ * The documents are the exception worth naming: `LooseCardResource` and
+ * `LooseSingleCardDocument` do NOT satisfy `Cloneable`, and cannot be made to
+ * — their `Meta` and `Relationship` members are index-signature-less
+ * interfaces, and their attribute bags are `any`. They are cloneable in
+ * practice because the wire format they describe is JSON, but that is a
+ * property of the format rather than something proved here.
  *
  * Three things are deliberately absent:
  *
@@ -515,8 +615,13 @@ export type BoxelRuntimeOperationsAreExact = Exact<
  * sees neither the field's kind nor the target's definition kind:
  *
  * - RP-2.7: in `edit`, a linked CardDef or FileDef target renders `fitted` —
- *   a linked card is never edited inline — while a linked FieldDef keeps
- *   `edit` (`getChildFormat`, `@cardstack/base/card-api.gts`).
+ *   a linked card is never edited inline — while a singular linked FieldDef
+ *   keeps `edit` (`getChildFormat`, `@cardstack/base/card-api.gts`). A
+ *   `linksToMany` editor is different again: it renders FieldDef elements as
+ *   `atom` pills and card elements as a `fitted` sortable list
+ *   (`getEditorChildFormat`, `@cardstack/base/links-to-many-component.gts`),
+ *   so a tier applying only the singular rule renders a stack of full field
+ *   editors where main shows pills.
  * - RP-2.5: a computed field never renders `edit`; it is rewritten to
  *   `embedded` at format resolution.
  * - RP-2.4: an explicit `@format` that is in the renderable inventory
@@ -920,7 +1025,16 @@ const templateDependencyKinds: ReadonlySet<string> = new Set(
 );
 
 /**
- * The gate a consumer passes before it reifies any part of a bundle.
+ * The gate a consumer passes before it reifies any part of a bundle, and the
+ * only bundle it may then reify.
+ *
+ * It returns a normalized bundle rather than approving the caller's. A gate
+ * that validates in place answers a question about the adversary's object and
+ * then hands that same object on, so every member it checked can differ by the
+ * time the consumer reads it — a Proxy re-answers, an accessor runs again, a
+ * non-enumerable member appears. Everything here is read once as own data and
+ * rebuilt; what comes back is a plain graph whose members are what they were
+ * checked to be.
  *
  * A single unrecognized dependency kind rejects the whole generation, not the
  * one template that carries it: a bundle is a template and everything its
@@ -933,84 +1047,88 @@ const templateDependencyKinds: ReadonlySet<string> = new Set(
  * template the bundle does not carry would otherwise reify into a component
  * whose scope resolves to nothing at render time, past every gate.
  */
-export function assertKnownTemplateDependencies(
+export function acceptTemplateBundle(
   bundle: TemplateBundle,
   support: ProtocolSupport,
-): void {
-  assertUsableExecutionRecord(bundle, support);
+): TemplateBundle {
+  let envelope = assertUsableExecutionRecord(bundle, support);
 
-  let { root, templates } = bundle as Partial<TemplateBundle>;
-  if (
-    typeof templates !== 'object' ||
-    templates === null ||
-    Array.isArray(templates)
-  ) {
+  let root = normalizeString(readMember(bundle, 'root'), "a bundle's root");
+  let templates = readMember(bundle, 'templates');
+  if (!isPlainRecord(templates)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `template bundle's templates must be an object keyed by template id, received ${describeValue(templates)}`,
-    );
-  }
-  if (typeof root !== 'string') {
-    throw new ProtocolRefusal(
-      'BOXEL_RECORD_MALFORMED',
-      `template bundle's root must be a template id, received ${describeValue(root)}`,
+      `a bundle's templates must be an object keyed by template id, received ${describeValue(templates)}`,
     );
   }
 
   let unrecognized: string[] = [];
   let dangling: string[] = [];
-  // Own keys only. `in` would resolve `root: 'toString'` against
+  // Own names only. `in` would resolve `root: 'toString'` against
   // Object.prototype and report a template the bundle does not carry.
-  let carried = new Set(Object.keys(templates));
+  let keys = Object.getOwnPropertyNames(templates);
+  let carried = new Set(keys);
   if (!carried.has(root)) {
     dangling.push(`root ${quoteToken(root)}`);
   }
-  for (let [key, descriptor] of Object.entries(templates)) {
-    if (
-      typeof descriptor !== 'object' ||
-      descriptor === null ||
-      Array.isArray(descriptor) ||
-      !Array.isArray(descriptor.scope)
-    ) {
+
+  let normalized: Record<string, TemplateDescriptor> = {};
+  for (let key of keys) {
+    let descriptor = readMember(templates, key);
+    if (!isPlainRecord(descriptor)) {
       throw new ProtocolRefusal(
         'BOXEL_RECORD_MALFORMED',
-        `template ${quoteToken(key)} must be a descriptor carrying a scope array, received ${describeValue(descriptor)}`,
+        `template ${quoteToken(key)} must be a descriptor, received ${describeValue(descriptor)}`,
       );
     }
-    assertReifiableDescriptor(key, descriptor);
-    for (let dependency of descriptor.scope) {
-      if (
-        typeof dependency !== 'object' ||
-        dependency === null ||
-        typeof (dependency as { kind?: unknown }).kind !== 'string'
-      ) {
+    let scope = readMember(descriptor, 'scope');
+    if (!Array.isArray(scope)) {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `template ${quoteToken(key)} must carry a scope array, received ${describeValue(scope)}`,
+      );
+    }
+
+    let dependencies: TemplateDependency[] = [];
+    for (let index = 0; index < scope.length; index++) {
+      let entry = readMember(scope, String(index));
+      if (!isPlainRecord(entry)) {
         throw new ProtocolRefusal(
           'BOXEL_RECORD_MALFORMED',
-          `template ${quoteToken(key)} carries a scope entry that is not a dependency, received ${describeValue(dependency)}`,
+          `template ${quoteToken(key)} carries a scope entry that is not a dependency, received ${describeValue(entry)}`,
         );
       }
-      if (!templateDependencyKinds.has(dependency.kind)) {
-        unrecognized.push(`${quoteToken(key)}: ${quoteToken(dependency.kind)}`);
-      } else if (
-        !hasReifiableDependencyPayload(dependency as TemplateDependency)
-      ) {
+      // Read once. A kind read a second time is a kind a Proxy may answer
+      // differently, so the gate would bless one and the consumer redeem
+      // another.
+      let kind = readMember(entry, 'kind');
+      if (typeof kind !== 'string') {
         throw new ProtocolRefusal(
           'BOXEL_RECORD_MALFORMED',
-          `template ${quoteToken(key)} carries a ${quoteToken(
-            dependency.kind,
-          )} dependency without the members that kind requires`,
+          `template ${quoteToken(key)} carries a dependency with no kind, received ${describeValue(kind)}`,
         );
-      } else if (
+      }
+      if (!templateDependencyKinds.has(kind)) {
+        unrecognized.push(`${quoteToken(key)}: ${quoteToken(kind)}`);
+        continue;
+      }
+      let dependency = normalizeDependency(
+        key,
+        kind as TemplateDependencyKind,
+        entry,
+      );
+      if (
         dependency.kind === 'authored-component' &&
         !carried.has(dependency.templateId)
       ) {
         dangling.push(
-          `${quoteToken(key)} references authored component ${quoteToken(
-            dependency.templateId,
-          )}`,
+          `${quoteToken(key)} references authored component ${quoteToken(dependency.templateId)}`,
         );
       }
+      dependencies.push(dependency);
     }
+
+    normalized[key] = normalizeDescriptor(key, descriptor, dependencies);
   }
 
   if (unrecognized.length > 0) {
@@ -1025,10 +1143,8 @@ export function assertKnownTemplateDependencies(
       `template bundle ${quoteToken(root)} cannot be reified — ${joinTokens(dangling, '; ')}`,
     );
   }
-}
 
-function isStringArray(value: unknown): boolean {
-  return Array.isArray(value) && [...value].every((v) => typeof v === 'string');
+  return { ...envelope, root, templates: normalized };
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -1036,39 +1152,52 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Whether a dependency carries the members its own kind is redeemed through.
+ * Rebuilds a dependency from own-data reads, refusing one that lacks the
+ * members its own kind is redeemed through.
  *
- * The kind allowlist alone establishes almost nothing: a `trusted-export` with
- * no `module` passes it and then fails at resolution, past every gate, which
- * is the class of escape this gate exists to prevent.
+ * The kind allowlist alone establishes almost nothing: a `trusted-export`
+ * with no `module` passes it and then fails at resolution, past every gate,
+ * which is the class of escape this gate exists to prevent.
  */
-function hasReifiableDependencyPayload(
-  dependency: TemplateDependency,
-): boolean {
-  switch (dependency.kind) {
-    case 'trusted-export':
-      return (
-        typeof dependency.module === 'string' &&
-        typeof dependency.name === 'string'
+function normalizeDependency(
+  templateKey: string,
+  kind: TemplateDependencyKind,
+  entry: Record<string, unknown>,
+): TemplateDependency {
+  let member = (name: string) => {
+    let value = readMember(entry, name);
+    if (typeof value !== 'string') {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `template ${quoteToken(templateKey)} carries a ${quoteToken(kind)} dependency whose ${name} is ${describeValue(value)}`,
       );
+    }
+    return value;
+  };
+  switch (kind) {
+    case 'trusted-export':
+      return {
+        kind,
+        module: member('module'),
+        name: member('name'),
+      };
     case 'authored-component':
-      return typeof dependency.templateId === 'string';
+      return { kind, templateId: member('templateId') };
     case 'literal-value':
       // The kind that carries an arbitrary value is the one most worth
-      // checking. An own `value` — `in` would accept one inherited from a
-      // prototype — that is inert JSON all the way down. A function here
-      // survives to the redeemer, where it either fails `structuredClone`
-      // with a bare error past every gate, or on a tier that shares a heap
-      // and does not clone, reaches authored scope as the live object.
-      // Read the descriptor, not the member: `dependency.value` would invoke
-      // an accessor, running far-side code inside the gate — and a getter that
-      // throws would escape as its own error rather than as a refusal.
-      return isJsonDataProperty(dependency, 'value');
+      // checking. `readMember` refuses an accessor rather than running it,
+      // and `normalizeJsonData` refuses anything that is not data — a
+      // function here would otherwise survive to the redeemer, failing
+      // `structuredClone` with a bare error past every gate, or on a tier
+      // that shares a heap and does not clone, reaching authored scope as
+      // the live object.
+      return { kind, value: normalizeJsonData(readMember(entry, 'value')) };
   }
 }
 
 /**
- * Whether a descriptor carries what a consumer reads when it reifies one.
+ * Rebuilds a descriptor from own-data reads, refusing one a consumer could
+ * not reify.
  *
  * Checked here rather than left to the consumer because `block` is compiled,
  * `stylesheets` is iterated, and `instance` is dereferenced — so a descriptor
@@ -1076,75 +1205,71 @@ function hasReifiableDependencyPayload(
  * loop over the characters of a string, or the same bare TypeError this
  * module refuses everywhere else.
  */
-function assertReifiableDescriptor(
+function normalizeDescriptor(
   key: string,
-  descriptor: TemplateDescriptor,
-): void {
-  let faults: string[] = [];
+  descriptor: Record<string, unknown>,
+  scope: TemplateDependency[],
+): TemplateDescriptor {
+  let where = (name: string) => `template ${quoteToken(key)}'s ${name}`;
   // Deliberately NOT `descriptor.id === key`. The map key is the bundle's own
   // reference space and the descriptor's id is the compiler's, and the two are
   // allowed to differ — a class inheriting its template from an ancestor
   // legitimately yields two entries carrying one compiler id. What a consumer
   // needs is that the id is nameable at all, since it names the reified
   // factory.
-  if (typeof descriptor.id !== 'string') {
-    faults.push(
-      `id must be a string, received ${describeValue(descriptor.id)}`,
-    );
-  }
-  if (typeof descriptor.block !== 'string') {
-    faults.push(
-      `block must be the compiled template, received ${describeValue(descriptor.block)}`,
-    );
-  }
-  if (typeof descriptor.moduleName !== 'string') {
-    faults.push(
-      `moduleName must be a string, received ${describeValue(descriptor.moduleName)}`,
-    );
-  }
-  if (typeof descriptor.isStrictMode !== 'boolean') {
-    faults.push(
-      `isStrictMode must be a boolean, received ${describeValue(descriptor.isStrictMode)}`,
-    );
-  }
-  if (!isStringArray(descriptor.stylesheets)) {
-    faults.push(
-      `stylesheets must be an array of urls, received ${describeValue(descriptor.stylesheets)}`,
-    );
-  }
-  let instance: unknown = descriptor.instance;
-  if (!isPlainRecord(instance)) {
-    faults.push(
-      `instance must be a component descriptor, received ${describeValue(instance)}`,
-    );
-  } else {
-    if (typeof instance.handle !== 'string') {
-      faults.push(
-        `instance.handle must be a string, received ${describeValue(instance.handle)}`,
-      );
-    }
-    if (!isPlainRecord(instance.state) || !isJsonData(instance.state)) {
-      faults.push(
-        `instance.state must be a record of data, received ${describeValue(instance.state)}`,
-      );
-    }
-    if (!isStringArray(instance.getters)) {
-      faults.push(
-        `instance.getters must be an array of names, received ${describeValue(instance.getters)}`,
-      );
-    }
-    if (!isStringArray(instance.actions)) {
-      faults.push(
-        `instance.actions must be an array of names, received ${describeValue(instance.actions)}`,
-      );
-    }
-  }
-  if (faults.length > 0) {
+  let id = normalizeString(readMember(descriptor, 'id'), where('id'));
+  let block = normalizeString(readMember(descriptor, 'block'), where('block'));
+  let moduleName = normalizeString(
+    readMember(descriptor, 'moduleName'),
+    where('moduleName'),
+  );
+  let isStrictMode = readMember(descriptor, 'isStrictMode');
+  if (typeof isStrictMode !== 'boolean') {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `template ${quoteToken(key)} cannot be reified — ${joinTokens(faults, '; ')}`,
+      `${where('isStrictMode')} must be a boolean, received ${describeValue(isStrictMode)}`,
     );
   }
+  let stylesheets = normalizeStringArray(
+    readMember(descriptor, 'stylesheets'),
+    where('stylesheets'),
+  );
+
+  let instance = readMember(descriptor, 'instance');
+  if (!isPlainRecord(instance)) {
+    throw new ProtocolRefusal(
+      'BOXEL_RECORD_MALFORMED',
+      `${where('instance')} must be a component descriptor, received ${describeValue(instance)}`,
+    );
+  }
+  return {
+    id,
+    block,
+    moduleName,
+    isStrictMode,
+    stylesheets,
+    scope,
+    instance: {
+      handle: normalizeString(
+        readMember(instance, 'handle'),
+        where('instance.handle'),
+      ),
+      // The state a Capsule installs into authored scope, so it is data on
+      // the same terms as a literal value.
+      state: normalizeJsonRecord(
+        readMember(instance, 'state'),
+        where('instance.state'),
+      ),
+      getters: normalizeStringArray(
+        readMember(instance, 'getters'),
+        where('instance.getters'),
+      ),
+      actions: normalizeStringArray(
+        readMember(instance, 'actions'),
+        where('instance.actions'),
+      ),
+    },
+  };
 }
 
 /**
@@ -1194,62 +1319,80 @@ const componentEffectKinds: ReadonlySet<string> = new Set(
 
 /**
  * The gate a consumer passes before it applies an update or dispatches its
- * effects. An unrecognized effect kind rejects the whole update, changed
- * state included: applying the state while dropping the request that was
- * supposed to accompany it is how a surface ends up showing a half-performed
- * intent.
+ * effects, and the only update it may then apply.
+ *
+ * Normalized and returned for the same reason as a bundle: what a consumer
+ * applies has to be what was checked, not an object that merely answered the
+ * check that way once.
+ *
+ * An unrecognized effect kind rejects the whole update, changed state
+ * included: applying the state while dropping the request that was supposed to
+ * accompany it is how a surface ends up showing a half-performed intent.
  */
-export function assertKnownComponentEffects(
+export function acceptComponentUpdate(
   update: ComponentUpdate,
   support: ProtocolSupport,
-): void {
-  assertUsableExecutionRecord(update, support);
+): ComponentUpdate {
+  let envelope = assertUsableExecutionRecord(update, support);
 
-  let { generation, changed, effects } = update as Partial<ComponentUpdate>;
-  // The generation is the guard that stops superseded output being applied, so
-  // a generation that cannot be compared defeats it silently.
+  // The generation is the guard that stops superseded output being applied,
+  // so a generation that cannot be compared defeats it silently.
+  let generation = readMember(update, 'generation');
   if (typeof generation !== 'number' || !Number.isFinite(generation)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `component update's generation must be a finite number, received ${describeValue(generation)}`,
+      `an update's generation must be a finite number, received ${describeValue(generation)}`,
     );
   }
-  if (!isPlainRecord(changed) || !isJsonData(changed)) {
-    throw new ProtocolRefusal(
-      'BOXEL_RECORD_MALFORMED',
-      `component update's changed must be a record of data, received ${describeValue(changed)}`,
-    );
-  }
+  let changed = normalizeJsonRecord(
+    readMember(update, 'changed'),
+    "an update's changed",
+  );
+
+  let effects = readMember(update, 'effects');
   if (!Array.isArray(effects)) {
     throw new ProtocolRefusal(
       'BOXEL_RECORD_MALFORMED',
-      `component update's effects must be an array, received ${describeValue(effects)}`,
+      `an update's effects must be an array, received ${describeValue(effects)}`,
     );
   }
   let unrecognized: string[] = [];
-  for (let effect of effects) {
-    if (
-      typeof effect !== 'object' ||
-      effect === null ||
-      typeof (effect as { kind?: unknown }).kind !== 'string'
-    ) {
+  let normalized: ComponentEffect[] = [];
+  for (let index = 0; index < effects.length; index++) {
+    let entry = readMember(effects, String(index));
+    if (!isPlainRecord(entry)) {
       throw new ProtocolRefusal(
         'BOXEL_RECORD_MALFORMED',
-        `component update carries an entry that is not an effect, received ${describeValue(effect)}`,
+        `an update carries an entry that is not an effect, received ${describeValue(entry)}`,
       );
     }
-    if (!componentEffectKinds.has(effect.kind)) {
-      unrecognized.push(effect.kind);
+    let kind = readMember(entry, 'kind');
+    if (typeof kind !== 'string') {
+      throw new ProtocolRefusal(
+        'BOXEL_RECORD_MALFORMED',
+        `an effect carries no kind, received ${describeValue(kind)}`,
+      );
     }
+    if (!componentEffectKinds.has(kind)) {
+      unrecognized.push(quoteToken(kind));
+      continue;
+    }
+    // A payload is the same kind of thing as a literal value — arbitrary,
+    // author-chosen, and handed onward — so it is normalized on the same
+    // terms rather than passed through because its shape is open.
+    normalized.push({
+      kind: kind as ComponentEffectKind,
+      payload: normalizeJsonData(readMember(entry, 'payload')),
+    });
   }
   if (unrecognized.length > 0) {
     throw new ProtocolRefusal(
       'BOXEL_COMPONENT_EFFECT_KIND_UNKNOWN',
-      `component update names effect kinds this consumer does not recognize: ${joinTokens(
-        unrecognized.map((kind) => quoteToken(kind)),
-      )}`,
+      `an update names effect kinds this consumer does not recognize: ${joinTokens(unrecognized)}`,
     );
   }
+
+  return { ...envelope, generation, changed, effects: normalized };
 }
 
 /**
@@ -1262,6 +1405,13 @@ export const PROJECTED_ERROR_MAX_CAUSE_DEPTH = 8;
 type ProjectedErrorShape = {
   name: string;
   message: string;
+  /**
+   * A `ProtocolRefusal`'s code, when the failure was one. The code is the
+   * whole point of naming a refusal — the identity a catalog, a log query or
+   * a test keys on — and without a member of its own it survives a crossing
+   * only as a prefix of `message`, recoverable by string-parsing.
+   */
+  code?: string;
   stack?: string;
   cause?: ProjectedErrorShape;
 };
@@ -1278,15 +1428,6 @@ type ProjectedErrorShape = {
 export type ProjectedError = Cloneable<ProjectedErrorShape>;
 
 /**
- * Projects a thrown value into the cloneable record, following `cause` no
- * further than `PROJECTED_ERROR_MAX_CAUSE_DEPTH`.
- *
- * The bound is what makes the depth limit real rather than advisory. A cause
- * chain is built from data the far side controls and `structuredClone`
- * preserves cycles, so a chain that loops back on itself arrives intact; a
- * consumer walking it without a bound hangs instead of reporting.
- */
-/**
  * How much of a projected error's text crosses.
  *
  * Generous enough for a real stack, bounded because the text is chosen by the
@@ -1300,29 +1441,62 @@ function boundText(value: string): string {
     : value;
 }
 
+/**
+ * Projects a thrown value into the cloneable record, following `cause` no
+ * further than `PROJECTED_ERROR_MAX_CAUSE_DEPTH`.
+ *
+ * The bound is what makes the depth limit real rather than advisory: a cause
+ * chain is built from data the far side controls and `structuredClone`
+ * preserves cycles, so a chain that loops back on itself arrives intact and a
+ * consumer walking it without a bound hangs instead of reporting.
+ */
 export function projectError(
   error: unknown,
   depth: number = PROJECTED_ERROR_MAX_CAUSE_DEPTH,
 ): ProjectedError {
-  let source = (
-    isPlainRecord(error) ? error : { message: String(error) }
-  ) as Partial<{
-    name: unknown;
-    message: unknown;
-    stack: unknown;
-    cause: unknown;
-  }>;
-  let projected: ProjectedErrorShape = {
-    name: boundText(typeof source.name === 'string' ? source.name : 'Error'),
-    message: boundText(
-      typeof source.message === 'string' ? source.message : String(error),
-    ),
+  // Never throws. Projection IS the clone step for a thrown value, so unlike
+  // a record arriving over a port nothing has sanitized this yet — and
+  // authored code can throw anything, including an object whose every member
+  // is a getter that throws. A projector that fails here turns "render
+  // failed" into a lane with no response on it, which its peer can only
+  // discover by timing out.
+  let read = (key: string): unknown => {
+    if (typeof error !== 'object' || error === null) {
+      return undefined;
+    }
+    try {
+      let descriptor = Object.getOwnPropertyDescriptor(error, key);
+      return descriptor && 'value' in descriptor ? descriptor.value : undefined;
+    } catch {
+      return undefined;
+    }
   };
-  if (typeof source.stack === 'string') {
-    projected.stack = boundText(source.stack);
+  let describe = (): string => {
+    try {
+      return String(error);
+    } catch {
+      return `a thrown ${typeof error} that could not be described`;
+    }
+  };
+
+  let name = read('name');
+  let message = read('message');
+  let stack = read('stack');
+  let cause = read('cause');
+
+  let projected: ProjectedErrorShape = {
+    name: boundText(typeof name === 'string' ? name : 'Error'),
+    message: boundText(typeof message === 'string' ? message : describe()),
+  };
+  let code = read('code');
+  if (typeof code === 'string') {
+    projected.code = boundText(code);
   }
-  if (source.cause != null && depth > 1) {
-    projected.cause = projectError(source.cause, depth - 1);
+  if (typeof stack === 'string') {
+    projected.stack = boundText(stack);
+  }
+  if (cause != null && depth > 1) {
+    projected.cause = projectError(cause, depth - 1);
   }
   return projected;
 }
@@ -1369,62 +1543,40 @@ export const SAFE_EVENT_STRING_PROPERTIES = [
 export const SAFE_EVENT_NULLABLE_STRING_PROPERTIES = ['data'] as const;
 
 /**
- * The dataset namespaces Base stamps its own identifiers under.
+ * The dataset an event target may hand an authored handler: the author's own
+ * `data-*` attributes, and nothing else.
  *
- * In the camelCase form a `DOMStringMap` exposes, not the attribute spelling:
- * `data-boxel-card-id` reads back as `boxelCardId`, and a filter written
- * against the attribute name matches nothing.
+ * An allowlist, supplied by the caller, because a denylist cannot work here.
+ * Base stamps identity into this namespace — `data-boxel-card-id`,
+ * `data-test-card` and `data-cards-grid-item` each carry a card's canonical
+ * URL, the last one specifically because the `data-test-` spelling is pruned
+ * in production — and Base emits sixteen distinct `data-*` namespaces in all.
+ * Every list of "the Host's prefixes" is a list that is one Base commit from
+ * being wrong, and being wrong means an authored handler is handed the
+ * identity of a card it holds only a reference to.
  *
- * Both namespaces, because Base stamps a card's canonical URL twice on the
- * same element — `data-boxel-card-id` and `data-test-card` carry the identical
- * `card.id` (`field-component.gts`), and nothing strips the test spelling on
- * the way to a realm. Filtering one and not the other filters nothing.
- *
- * A denylist, and therefore only as complete as this list: a namespace Base
- * adds later leaks until it is named here. It is a denylist rather than an
- * allowlist because the alternative — knowing which keys the author's own
- * template wrote — is not answerable from a `DOMStringMap`, whose element may
- * be Host-rendered chrome the author never wrote.
- */
-export const HOST_OWNED_DATASET_PREFIXES = ['boxel', 'test'] as const;
-
-// Anchored on a camelCase boundary, so an author's own `boxelish` or
-// `testimonial` key is theirs and survives.
-const hostOwnedDatasetKey = new RegExp(
-  `^(?:${HOST_OWNED_DATASET_PREFIXES.join('|')})(?:[A-Z]|$)`,
-);
-
-function isHostOwnedDatasetKey(key: string): boolean {
-  return hostOwnedDatasetKey.test(key);
-}
-
-/**
- * The dataset an event target may hand an authored handler.
- *
- * Every other member of `SafeEventTarget` is drawn from a per-member
- * allowlist; a dataset cannot be, since its keys are whatever the author
- * wrote. What makes it safe is subtraction rather than enumeration: Base
- * stamps the Host's own identifiers into these namespaces — `data-boxel-card-id`
- * and `data-test-card` both carry a card's canonical URL (RP-11.4) — and a card
- * is entitled to its own data attributes but not to those.
- *
- * Concretely: an authored template containing `<@fields.vendor />` renders a
- * Base container stamped with the vendor's id. A click landing there bubbles
- * to the author's own handler, and a dataset copied wholesale would hand it
- * the canonical URL of a card the author holds only a reference to.
+ * The element an event lands on is frequently Host chrome the author never
+ * wrote, so the question is not what the key is called but who wrote it. Only
+ * the caller knows: a rebuilt template's own wire data names the attributes
+ * its author declared. Pass those; everything else stays behind.
  *
  * A pure string function, so it lives here with the shape it guards rather
  * than with the projection: it needs no `Event`, no `Element`, and no DOM.
  */
 export function projectDataset(
   dataset: Record<string, string>,
+  authoredKeys: Iterable<string>,
 ): Record<string, string> {
+  let authored = new Set(authoredKeys);
   // Null prototype: a `__proto__` key would otherwise be swallowed by an
   // ordinary object literal, or set the result's prototype outright.
   let projected: Record<string, string> = Object.create(null);
-  for (let [key, value] of Object.entries(dataset)) {
-    if (!isHostOwnedDatasetKey(key)) {
-      projected[key] = value;
+  for (let key of Object.getOwnPropertyNames(dataset)) {
+    if (authored.has(key)) {
+      let value = readMember(dataset, key);
+      if (typeof value === 'string') {
+        projected[key] = value;
+      }
     }
   }
   return projected;
@@ -1450,8 +1602,9 @@ export type SafeEventTarget = Cloneable<
   {
     tagName: string;
     /**
-     * The element's `data-*` attributes, less the ones the Host owns — see
-     * `projectDataset`, which is how a projection produces this member.
+     * The `data-*` attributes the card's own author wrote — see
+     * `projectDataset`, which is how a projection produces this member, and
+     * why it takes the author's key set rather than guessing at the Host's.
      */
     dataset?: Record<string, string>;
   } & {
