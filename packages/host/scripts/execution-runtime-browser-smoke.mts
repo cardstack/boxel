@@ -289,7 +289,7 @@ export interface SmokeInteractionResult {
    * Set when the runner wrote to a real corpus card and could not put the
    * original value back. The card is left mutated and needs a human.
    */
-  unrestoredWrite?: { error: string; path: string; value: string };
+  unrestoredWrite?: { error?: string; path: string; value: string };
   error?: string;
   executions?: string[];
   kind?: string;
@@ -363,6 +363,18 @@ export type SmokeCaseListener = (
  */
 export interface PendingWrite {
   current?: { error?: string; path: string; value: string };
+}
+
+/** Shared by the two entry points; each adds what only it needs. */
+export interface SmokeRunOptions {
+  browser: SmokeBrowser;
+  candidateOrigin: string;
+  candidateTab?: SmokeTab;
+  caseTimeoutMs?: number;
+  cases?: SmokeCase[];
+  onCaseComplete?: RunOriginOptions['onCaseComplete'];
+  performanceRepeats?: number;
+  timeoutMs?: number;
 }
 
 interface RunOriginOptions {
@@ -1565,15 +1577,16 @@ async function runInteraction(
       progress,
     };
   }
-  throw new Error(`Unknown smoke interaction: ${smokeCase.interaction.kind}`);
+  let unreachable: never = smokeCase.interaction;
+  throw new Error(`Unknown smoke interaction: ${JSON.stringify(unreachable)}`);
 }
 
-// A case's outcome is a status, not a boolean. These five buckets lead to five
-// different pieces of work — a broken environment, a runtime defect, a
-// projection gap, a missing capability, and a broken interaction — so the
-// runner keeps them apart. Order matters: the first bucket a case falls into
-// wins, because a card that never reached routing cannot also be said to have
-// the wrong semantics. Correct-but-slow is not among them; it is its own
+// A case's outcome is a status, not a boolean. Each bucket leads to a
+// different piece of work — a mutated fixture, a broken environment, a runtime
+// defect, a projection gap, a missing capability, a broken interaction — so
+// the runner keeps them apart. Order matters: the first bucket a case falls
+// into wins, because a card that never reached routing cannot also be said to
+// have the wrong semantics. Correct-but-slow is not among them; it is its own
 // status below, since it is not a defect.
 const STATUS_BUCKETS: [status: string, members: string[]][] = [
   // First, and outranking every finding about the run itself: this one names
@@ -1731,7 +1744,7 @@ export function assessReferenceParity(
   // Comparing against a side that observed nothing would report parity: an
   // absent heading count is not a smaller heading count, and an empty token
   // set is covered by anything. Refuse the comparison rather than pass it.
-  let observed = (page: Partial<ParityView>) =>
+  let observed = (page: Partial<ParityView>): page is ParityView =>
     typeof page.headingCount === 'number' &&
     typeof page.inputCount === 'number';
   if (!observed(candidate) || !observed(reference)) {
@@ -1969,10 +1982,10 @@ async function runOrigin(
   // caller has one; otherwise create an owned scratch tab.
   let tab = options.tab ?? (await browser.tabs.new());
   let caseTimeoutMs = options.caseTimeoutMs ?? defaultCaseTimeoutMs(options);
-  let results = [];
-  let persistenceErrors = [];
+  let results: SmokeCaseResult[] = [];
+  let persistenceErrors: { error: string; id: string }[] = [];
 
-  async function record(result) {
+  async function record(result: SmokeCaseResult) {
     results.push(result);
     if (!options.onCaseComplete) return;
     try {
@@ -2007,7 +2020,10 @@ async function runOrigin(
       await record({
         id: smokeCase.id,
         page: outcome.thrown
-          ? { elapsedMs: null, runnerError: describeError(outcome.thrown) }
+          ? {
+              elapsedMs: null,
+              runnerError: describeError(outcome.thrown.error),
+            }
           : { elapsedMs: null, caseTimeoutMs },
         assessment: {
           failures,
@@ -2022,6 +2038,7 @@ async function runOrigin(
       });
       continue;
     }
+    if (!outcome.value) continue;
     await record(outcome.value);
     // Authentication is the one finding that makes every later case
     // meaningless: the remaining pages would all report the sign-in screen.
@@ -2046,7 +2063,7 @@ function describeError(error: unknown) {
 }
 
 class CaseAbandonedError extends Error {
-  constructor(operation) {
+  constructor(operation: string) {
     super(
       `The case that started this ${operation} was cut loose; the tab now belongs to another case`,
     );
@@ -2072,10 +2089,10 @@ class CaseAbandonedError extends Error {
  */
 export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
   let live = true;
-  let wrap = (value) => {
+  let wrap = (value: unknown): unknown => {
     if (value === null) return value;
     if (typeof value !== 'object' && typeof value !== 'function') return value;
-    if (typeof value.then === 'function') return value;
+    if (typeof (value as { then?: unknown }).then === 'function') return value;
     return new Proxy(value, {
       get(target, property) {
         // Read with the target as receiver, not the proxy: a getter on the
@@ -2093,7 +2110,7 @@ export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
           }
           return wrap(member);
         }
-        return (...args) => {
+        return (...args: unknown[]) => {
           if (!live) throw new CaseAbandonedError(String(property));
           return wrap(member.apply(target, args));
         };
@@ -2105,39 +2122,47 @@ export function leaseTab(tab: SmokeTab): { revoke: () => void; tab: SmokeTab } {
     revoke() {
       live = false;
     },
-    tab: wrap(tab),
+    tab: wrap(tab) as SmokeTab,
   };
+}
+
+interface CaseOutcome {
+  /** Set when the case body threw rather than returning a result. */
+  thrown?: { error: unknown };
+  timedOut: boolean;
+  /** Absent when the case timed out or threw. */
+  value?: SmokeCaseResult;
 }
 
 async function withCaseDeadline(
   caseTimeoutMs: number,
   run: () => Promise<SmokeCaseResult>,
-): Promise<{
-  thrown?: unknown;
-  timedOut: boolean;
-  value?: SmokeCaseResult;
-}> {
-  let timer;
+): Promise<CaseOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = Symbol('case-deadline');
   try {
     // A throw from the case body is reported as the case's own failure, not
     // raised: one case that dies in an unexpected place must not take the
     // cases behind it with it.
-    let value = await Promise.race([
-      run().then(
-        (result) => ({ result }),
-        (error: unknown) => ({ thrown: error }),
-      ),
-      new Promise((resolve) => {
-        timer = setTimeout(() => resolve(expired), caseTimeoutMs);
-      }),
-    ]);
-    if (value === expired) return { timedOut: true };
+    let value: { result: SmokeCaseResult } | { thrown: unknown } | symbol =
+      await Promise.race([
+        run().then(
+          (result) => ({ result }),
+          (error: unknown) => ({ thrown: error }),
+        ),
+        new Promise<symbol>((resolve) => {
+          timer = setTimeout(() => resolve(expired), caseTimeoutMs);
+        }),
+      ]);
+    /* c8 ignore next */
+    if (typeof value === 'symbol') return { timedOut: true };
     // Discriminate on the wrapper, never on truthiness: `throw null` and
     // `throw ''` are both falsy, and reading either as success would push a
     // non-result into the batch and kill the loop this bound exists to keep
     // alive.
-    if ('thrown' in value) return { thrown: value.thrown, timedOut: false };
+    if ('thrown' in value) {
+      return { thrown: { error: value.thrown }, timedOut: false };
+    }
     return { timedOut: false, value: value.result };
   } finally {
     clearTimeout(timer);
@@ -2275,8 +2300,9 @@ async function runCase(
 }
 
 function median(values: (number | undefined)[]): number | undefined {
-  if (!values.length) return undefined;
-  let sorted = [...values].sort((a, b) => a - b);
+  let present = values.filter((value): value is number => value !== undefined);
+  if (!present.length) return undefined;
+  let sorted = present.sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }
 
@@ -2288,14 +2314,19 @@ function summarizePerformance(
   let casesById = new Map(
     smokeCases.map((smokeCase) => [smokeCase.id, smokeCase]),
   );
-  let capsule = [];
-  let sandbox = [];
-  let direct = [];
+  // Narrow to observations once, here. A passing case always has a probe, but
+  // resting on that leaves every read below correct only by an argument about
+  // somewhere else; keeping the timings in a list that cannot hold an
+  // observation-free case makes it correct by construction instead.
+  let capsule: SmokeProbeResult[] = [];
+  let sandbox: SmokeProbeResult[] = [];
+  let direct: number[] = [];
   for (let result of run.results) {
     let smokeCase = casesById.get(result.id);
     if (!smokeCase || !result.assessment.pass) continue;
-    if (smokeCase.expectedExecution === 'capsule') capsule.push(result);
-    if (smokeCase.expectedExecution === 'sandbox') sandbox.push(result);
+    if (!hasProbeResult(result.page)) continue;
+    if (smokeCase.expectedExecution === 'capsule') capsule.push(result.page);
+    if (smokeCase.expectedExecution === 'sandbox') sandbox.push(result.page);
     if (
       smokeCase.interaction?.expectedExecution === 'direct' &&
       typeof result.interaction.readyElapsedMs === 'number'
@@ -2303,32 +2334,31 @@ function summarizePerformance(
       direct.push(result.interaction.readyElapsedMs);
     }
   }
-  let sample = (results, read) =>
-    median(results.map(read).filter((value) => typeof value === 'number'));
+  let sample = (
+    from: SmokeProbeResult[],
+    read: (page: SmokeProbeResult) => number | undefined,
+  ) => median(from.map(read));
   // Application/auth readiness and execution readiness are reported side by
   // side rather than summed. Host and Matrix startup dominates a full
   // navigation, so a total alone cannot say whether a tier got slower.
-  let readySummary = (results) => ({
+  let readySummary = (pages: SmokeProbeResult[]) => ({
     coldApplicationMedianMs: sample(
-      results,
-      (result) => result.page.readiness?.applicationMs,
+      pages,
+      (page) => page.readiness.applicationMs,
     ),
-    coldExecutionMedianMs: sample(
-      results,
-      (result) => result.page.readiness?.executionMs,
-    ),
-    coldMedianMs: median(results.map((result) => result.page.elapsedMs)),
-    samples: results.length,
+    coldExecutionMedianMs: sample(pages, (page) => page.readiness.executionMs),
+    coldMedianMs: sample(pages, (page) => page.elapsedMs),
+    samples: pages.length,
     warmApplicationMedianMs: sample(
-      results,
-      (result) => result.page.warmReadiness?.applicationMs,
+      pages,
+      (page) => page.warmReadiness?.applicationMs,
     ),
     warmExecutionMedianMs: sample(
-      results,
-      (result) => result.page.warmReadiness?.executionMs,
+      pages,
+      (page) => page.warmReadiness?.executionMs,
     ),
-    warmMedianMs: sample(results, (result) => result.page.warmElapsedMs),
-    stages: summarizeExecutionStages(results),
+    warmMedianMs: sample(pages, (page) => page.warmElapsedMs),
+    stages: summarizeExecutionStages(pages),
   });
   return {
     // Direct is entered through the trusted Base edit portal in these cases;
@@ -2340,29 +2370,25 @@ function summarizePerformance(
     capsule: readySummary(capsule),
     sandbox: {
       ...readySummary(sandbox),
-      coldInteractiveHandoffMedianMs: median(
-        sandbox
-          .map((result) => result.page.sandboxHandoff?.elapsedMs)
-          .filter((value) => typeof value === 'number'),
+      coldInteractiveHandoffMedianMs: sample(
+        sandbox,
+        (page) => page.sandboxHandoff?.elapsedMs,
       ),
-      warmInteractiveHandoffMedianMs: median(
-        sandbox
-          .map((result) => result.page.warmSandboxHandoffMs)
-          .filter((value) => typeof value === 'number'),
+      warmInteractiveHandoffMedianMs: sample(
+        sandbox,
+        (page) => page.warmSandboxHandoffMs,
       ),
     },
   };
 }
 
-export function summarizeExecutionStages(
-  results: Pick<SmokeCaseResult, 'page'>[],
-) {
-  let values = new Map();
-  for (let result of results) {
+export function summarizeExecutionStages(pages: SmokeProbeResult[]) {
+  let values = new Map<string, number[]>();
+  for (let page of pages) {
     let snapshots = [
-      result.page.executionPerformance,
-      ...(result.page.warmExecutionPerformance ?? []),
-    ].filter(Boolean);
+      page.executionPerformance,
+      ...(page.warmExecutionPerformance ?? []),
+    ].filter((snapshot) => snapshot != null);
     for (let snapshot of snapshots) {
       for (let record of snapshot.records ?? []) {
         if (record.status !== 'ok') continue;
@@ -2411,6 +2437,10 @@ export async function runExecutionRuntimeBrowserSmoke({
   referenceTab,
   referenceOrigin = DEFAULT_REFERENCE_ORIGIN,
   timeoutMs = 20_000,
+}: SmokeRunOptions & {
+  continueOnReferenceDrift?: boolean;
+  referenceOrigin?: string;
+  referenceTab?: SmokeTab;
 }) {
   if (!browser) throw new Error('browser is required');
   if (!candidateOrigin) throw new Error('candidateOrigin is required');
@@ -2475,9 +2505,12 @@ export async function runExecutionRuntimeBrowserSmoke({
       };
       continue;
     }
+    // `unrun` above already excluded the observation-free candidates, and the
+    // candidate set is filtered to reference-passing cases, so both sides have
+    // a probe here. assessReferenceParity re-checks rather than trusting that.
     result.referenceParity = assessReferenceParity(
-      result.page,
-      referenceResult.page,
+      hasProbeResult(result.page) ? result.page : {},
+      hasProbeResult(referenceResult.page) ? referenceResult.page : {},
       smokeCase,
     );
     result.assessment.failures.push(...result.referenceParity.failures);
@@ -2485,7 +2518,9 @@ export async function runExecutionRuntimeBrowserSmoke({
     result.assessment.pass = result.assessment.failures.length === 0;
     result.assessment.status = classifySmokeOutcome(
       result.assessment.failures,
-      result.page.readiness?.executionMs,
+      hasProbeResult(result.page)
+        ? result.page.readiness.executionMs
+        : undefined,
     );
   }
   let failures = candidate.results.filter((result) => !result.assessment.pass);
@@ -2574,7 +2609,7 @@ export async function runExecutionRuntimeCandidateSmoke({
   onCaseComplete,
   performanceRepeats = 0,
   timeoutMs = 20_000,
-}) {
+}: SmokeRunOptions) {
   if (!browser) throw new Error('browser is required');
   if (!candidateOrigin) throw new Error('candidateOrigin is required');
 
@@ -2617,11 +2652,14 @@ export async function runExecutionRuntimeCandidateSmoke({
  * manufacture the exact startup failures this gate is meant to detect.
  * Keep a failed tab only while diagnosing it; close every completed run.
  */
-export async function closeExecutionRuntimeSmokeTabs(result) {
+export async function closeExecutionRuntimeSmokeTabs(result: {
+  candidate?: { tab?: SmokeTab } | null;
+  reference?: { tab?: SmokeTab } | null;
+}) {
   await Promise.all(
     [result?.reference?.tab, result?.candidate?.tab]
-      .filter(Boolean)
-      .map((tab) => tab.close()),
+      .filter((tab): tab is SmokeTab => Boolean(tab?.close))
+      .map((tab) => tab.close?.()),
   );
 }
 
@@ -2640,6 +2678,13 @@ export async function runExecutionRuntimeNavigationSoak({
   cycles = 3,
   checkExecution = true,
   timeoutMs = 20_000,
+}: {
+  cases?: NavigationSoakCase[];
+  checkExecution?: boolean;
+  cycles?: number;
+  origin: string;
+  tab: SmokeTab;
+  timeoutMs?: number;
 }) {
   if (!tab) throw new Error('tab is required');
   if (!origin) throw new Error('origin is required');
