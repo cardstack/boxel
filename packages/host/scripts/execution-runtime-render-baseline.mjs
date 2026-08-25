@@ -49,6 +49,7 @@ import {
   APPLICATION_READY_SELECTOR,
   CARD_LOADING_SELECTOR,
   CARD_SURFACE_SELECTOR,
+  FATAL_CARD_TEXT,
   SIGN_IN_TEXT,
 } from './execution-runtime-browser-smoke.mjs';
 
@@ -116,6 +117,7 @@ async function waitFor(page, predicate, timeoutMs) {
       applicationReadySelector: APPLICATION_READY_SELECTOR,
       cardLoadingSelector: CARD_LOADING_SELECTOR,
       cardSurfaceSelector: CARD_SURFACE_SELECTOR,
+      fatalText: FATAL_CARD_TEXT,
       signInText: SIGN_IN_TEXT,
     });
     if (state.done) return state;
@@ -132,14 +134,27 @@ const applicationReady = ({ applicationReadySelector, signInText }) => {
   };
 };
 
-const executionReady = ({ cardLoadingSelector, cardSurfaceSelector }) => ({
-  done:
-    Boolean(document.querySelector(cardSurfaceSelector)) &&
-    !document.querySelector(cardLoadingSelector),
-});
+// An error card occupies the same surface as a rendered card, so "a surface
+// appeared" is not on its own evidence that anything rendered. A sample that
+// lands on an error is timed but excluded from the medians.
+const executionReady = ({
+  cardLoadingSelector,
+  cardSurfaceSelector,
+  fatalText,
+}) => {
+  let text = document.body?.innerText ?? '';
+  let fatal = fatalText.some((value) => text.includes(value));
+  return {
+    done:
+      fatal ||
+      (Boolean(document.querySelector(cardSurfaceSelector)) &&
+        !document.querySelector(cardLoadingSelector)),
+    fatal,
+  };
+};
 
 /**
- * Time one navigation, split into its two readiness parts.
+ * Time one navigation.
  *
  * `performance.now()` is read in this process rather than in the page, so the
  * clock is continuous across a navigation that replaces the document.
@@ -169,7 +184,8 @@ export async function sampleRender(page, url, timeoutMs) {
     applicationMs,
     documentMs,
     executionMs,
-    ready: Boolean(execution.done),
+    fatal: Boolean(execution.fatal),
+    ready: Boolean(execution.done) && !execution.fatal,
     signIn: Boolean(application.signIn),
     totalMs: applicationMs + executionMs,
   };
@@ -243,6 +259,7 @@ async function measureCard(browser, card, options) {
     executionMedianMs: median(
       usable(samples).map((sample) => sample.executionMs),
     ),
+    errorSamples: samples.filter((sample) => sample.fatal).length,
     samples: samples.length,
     totalMedianMs: median(usable(samples).map((sample) => sample.totalMs)),
     unreadySamples: samples.length - usable(samples).length,

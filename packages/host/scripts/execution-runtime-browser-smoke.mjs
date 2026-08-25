@@ -41,13 +41,18 @@ export const CARD_LOADING_SELECTOR = '[aria-label="Loading card"]';
 export const APPLICATION_READY_SELECTOR = `${CARD_SURFACE_SELECTOR}, ${CARD_LOADING_SELECTOR}`;
 export const SIGN_IN_TEXT = 'Sign in to your Boxel Account';
 
-const FATAL_TEXT = [
+// Text a Host renders in place of a card it could not render. Exported so a
+// tool that only checks "did a card surface appear" can tell a rendered card
+// from a rendered error, which occupy the same surface.
+export const FATAL_CARD_TEXT = Object.freeze([
   'Unable to render this card',
   'Cannot load card',
   'This card contains an error',
   'RUNTIME ERROR',
   'SYNTAX ERROR',
-];
+]);
+
+const FATAL_TEXT = FATAL_CARD_TEXT;
 
 const FATAL_SANDBOX_LOG_TEXT = [
   'Timed out loading the Sandbox child',
