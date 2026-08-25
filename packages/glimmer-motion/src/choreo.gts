@@ -389,6 +389,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     if (!root) {
       return undefined;
     }
+    // THE FAST PATH: a volatile re-pass that cannot change the run. On a
+    // busy page every app render replays every region's pass, and the full
+    // pipeline is destructive even when its verdict is "keep" — release
+    // puts the world at rest (stopping the very animations it measures
+    // around), and standing them back up once per frame IS the jitter the
+    // keep exists to prevent. So a pass with no arrivals, no new leavers
+    // and the same timeline tree is declined before anything is touched:
+    // the run plays on, undisturbed.
+    if (this.fastKeep(root)) {
+      return undefined;
+    }
     // `initial` was captured before the DOM changed, with any in-flight Move's
     // values still on the elements — that is what was on screen. `final` must
     // be the layout the stylesheet actually asks for, so put everything the
@@ -727,6 +738,39 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
 
   /** the fingerprint of the tree the current run compiled from (see treePrint) */
   private scorePrint?: string;
+
+  /**
+   * Can this pass be declined outright? Only while a run is in flight, and
+   * only when nothing the pass could discover would change it: no arrivals,
+   * no retentions pending, every participant either present or already a
+   * known leaver, and the collected timeline tree fingerprints identical to
+   * the one the run compiled from (an EDIT always replays). Anything else
+   * takes the full pipeline.
+   */
+  private fastKeep(root: HTMLElement): boolean {
+    if (
+      !this.run ||
+      this.run.isDone() ||
+      this.claimed.size ||
+      this.arrived.size
+    ) {
+      return false;
+    }
+    for (const node of this.participants) {
+      const el = node.element;
+      if (!el || !el.isConnected) {
+        return false;
+      }
+      if (
+        !node.isPresent &&
+        !this.leaving.has(node) &&
+        !this.orphans.has(node)
+      ) {
+        return false;
+      }
+    }
+    return treePrint(collect(root)) === this.scorePrint;
+  }
 
   /* ---- @quiet: the rest of the page, paused for the span of a run ---- */
 
