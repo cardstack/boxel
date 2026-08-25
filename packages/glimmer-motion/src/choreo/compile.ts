@@ -13,6 +13,7 @@ import {
 import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
 import type {
   Block,
+  Bounds,
   ChangesetLike,
   Compiled,
   Cue,
@@ -230,6 +231,43 @@ function resolveTarget(
   return { longest, target };
 }
 
+/**
+ * The two boxes a shape-matched flight aligns: the declared subjects
+ * ([data-choreo-substance]) when either end has one — Keynote matches
+ * OBJECTS, not slide frames — with the undeclared end derived by fraction
+ * (content laid out proportionally keeps one fraction at both scales; the
+ * return trip's card, whose demo has not boarded yet, has nothing to
+ * measure). Neither end declared: the frames themselves.
+ */
+function matchBoxes(
+  initial: Bounds,
+  final: Bounds,
+  from: Rect,
+  to: Rect,
+  z: number,
+): { from: Rect; to: Rect } {
+  const subI = initial.substance && descale(initial.substance, z);
+  const subF = final.substance && descale(final.substance, z);
+  if (!subI && !subF) {
+    return { from, to };
+  }
+  const map = (s: Rect, a: Rect, b: Rect): Rect => ({
+    height: (s.height / (a.height || 1)) * b.height,
+    width: (s.width / (a.width || 1)) * b.width,
+    x: b.x + ((s.x - a.x) / (a.width || 1)) * b.width,
+    y: b.y + ((s.y - a.y) / (a.height || 1)) * b.height,
+  });
+  return {
+    from: subI ?? map(subF!, to, from),
+    to: subF ?? map(subI!, from, to),
+  };
+}
+
+const centreOf = (r: Rect) => ({
+  x: r.x + r.width / 2,
+  y: r.y + r.height / 2,
+});
+
 /** a page-space box, divided back into local space by the measure-time zoom */
 function descale(r: Rect, z: number): Rect {
   return z === 1
@@ -283,16 +321,14 @@ function resolveMove(
   const to = descale(parentSpace ? final.parent : final.page, z);
   const target: Record<string, unknown> = {};
   const pairs: [number, number][] = [];
-  // 'scale' matches shape by transform about the centre (MoveStep.size), so
-  // position legs run centre-to-centre; layout modes run corner-to-corner
-  // with the real size animating alongside
+  // 'scale' matches shape by transform (MoveStep.size): position runs
+  // centre-to-centre over the MATCH boxes — the declared subjects when
+  // either end has one, the frames otherwise. Layout modes run
+  // corner-to-corner with the real size animating alongside.
   const scaleMode = step.size === 'scale';
-  const dx = scaleMode
-    ? to.x + to.width / 2 - (from.x + from.width / 2)
-    : to.x - from.x;
-  const dy = scaleMode
-    ? to.y + to.height / 2 - (from.y + from.height / 2)
-    : to.y - from.y;
+  const m = scaleMode ? matchBoxes(initial, final, from, to, z) : null;
+  const dx = m ? centreOf(m.to).x - centreOf(m.from).x : to.x - from.x;
+  const dy = m ? centreOf(m.to).y - centreOf(m.from).y : to.y - from.y;
   /**
    * Which end the element is actually sitting on decides the sign.
    *
@@ -314,6 +350,36 @@ function resolveMove(
       rotate: step.rotate,
     };
     pairs.push(leg(Math.hypot(dx, dy)));
+  } else if (m) {
+    // The transform scales about the element's own centre, so an
+    // off-centre match box needs a correction on the translate: the
+    // flight pins the MATCH box — the subject — through the move, and
+    // the frame simply comes along. With frame-matching the correction
+    // is zero and this is the plain centre-to-centre leg.
+    const sx = m.from.width / (m.to.width || 1) || 1;
+    const sy = m.from.height / (m.to.height || 1) || 1;
+    const fx = holdsStart ? 1 / sx : sx;
+    const fy = holdsStart ? 1 / sy : sy;
+    const anchor = centreOf(holdsStart ? from : to);
+    const pinned = centreOf(holdsStart ? m.from : m.to);
+    const cx = (1 - fx) * (pinned.x - anchor.x);
+    const cy = (1 - fy) * (pinned.y - anchor.y);
+    const x = holdsStart ? dx + cx : -dx + cx;
+    const y = holdsStart ? dy + cy : -dy + cy;
+    if (x !== 0) {
+      target['x'] = holdsStart ? [0, x] : [x, 0];
+      pairs.push(holdsStart ? [0, x] : [x, 0]);
+    }
+    if (y !== 0) {
+      target['y'] = holdsStart ? [0, y] : [y, 0];
+      pairs.push(holdsStart ? [0, y] : [y, 0]);
+    }
+    if (fx !== 1) {
+      target['scaleX'] = holdsStart ? [1, fx] : [fx, 1];
+    }
+    if (fy !== 1) {
+      target['scaleY'] = holdsStart ? [1, fy] : [fy, 1];
+    }
   } else {
     if (dx !== 0) {
       target['x'] = leg(dx);
@@ -325,14 +391,7 @@ function resolveMove(
     }
   }
   if (scaleMode) {
-    if (from.width !== to.width) {
-      const s = from.width / (to.width || 1);
-      target['scaleX'] = holdsStart ? [1, 1 / (s || 1)] : [s, 1];
-    }
-    if (from.height !== to.height) {
-      const s = from.height / (to.height || 1);
-      target['scaleY'] = holdsStart ? [1, 1 / (s || 1)] : [s, 1];
-    }
+    // handled above: the match block owns both translation and scale
   } else if (step.size !== false) {
     if (from.width !== to.width) {
       target['width'] = [from.width, to.width];
@@ -537,21 +596,30 @@ function resolveStep(
             const to = descale(sprite.final.page, cpz);
             const cpTarget: Record<string, unknown> = {};
             if (step.size === 'scale') {
-              // the old skin rides the same centre-to-centre, scale-matched
-              // flight as its receiver — transform only, layout untouched
-              const dcx = to.x + to.width / 2 - (from.x + from.width / 2);
-              const dcy = to.y + to.height / 2 - (from.y + from.height / 2);
-              if (dcx !== 0) {
-                cpTarget['x'] = [0, dcx];
+              // the old skin rides the same match-box flight as its
+              // receiver, mirrored: identity at its own seat, landing with
+              // its SUBJECT on the receiver's — transform only, layout
+              // untouched, and the same off-centre correction (see the
+              // receiver's match block)
+              const cpm = matchBoxes(cp.initial, sprite.final, from, to, cpz);
+              const mf = centreOf(cpm.from);
+              const mt = centreOf(cpm.to);
+              const anchor = centreOf(from);
+              const ex = cpm.to.width / (cpm.from.width || 1) || 1;
+              const ey = cpm.to.height / (cpm.from.height || 1) || 1;
+              const dxe = mt.x - anchor.x - ex * (mf.x - anchor.x);
+              const dye = mt.y - anchor.y - ey * (mf.y - anchor.y);
+              if (dxe !== 0) {
+                cpTarget['x'] = [0, dxe];
               }
-              if (dcy !== 0) {
-                cpTarget['y'] = [0, dcy];
+              if (dye !== 0) {
+                cpTarget['y'] = [0, dye];
               }
-              if (from.width !== to.width) {
-                cpTarget['scaleX'] = [1, to.width / (from.width || 1)];
+              if (ex !== 1) {
+                cpTarget['scaleX'] = [1, ex];
               }
-              if (from.height !== to.height) {
-                cpTarget['scaleY'] = [1, to.height / (from.height || 1)];
+              if (ey !== 1) {
+                cpTarget['scaleY'] = [1, ey];
               }
             } else {
               if (to.x !== from.x) {

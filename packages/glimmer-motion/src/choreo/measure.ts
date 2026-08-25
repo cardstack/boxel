@@ -33,6 +33,8 @@ export interface Snapshot {
   /** the computed background at measure time — see Bounds.paint */
   paint?: string;
   parent: DOMRect;
+  /** the declared subject's box at measure time — see Bounds.substance */
+  substance?: DOMRect;
 }
 
 /** the containing block a `position: absolute` child would be placed against */
@@ -49,6 +51,13 @@ export const measure = (el: Element): Snapshot => ({
   // skin is detached DOM by the time a crossing asks what color it wore
   paint: getComputedStyle(el).backgroundColor,
   parent: offsetBox(el),
+  // Keynote matches OBJECTS, not slide frames: an element may declare its
+  // visible subject with [data-choreo-substance], and a shape-matched
+  // flight aligns THAT box instead of the frame. Captured with the
+  // geometry for the same reason paint is.
+  substance: el
+    .querySelector('[data-choreo-substance]')
+    ?.getBoundingClientRect(),
 });
 
 /** the three spaces, from a snapshot and the region's own box */
@@ -57,6 +66,7 @@ export const boundsOf = (snap: Snapshot, root: DOMRect): Bounds => ({
   page: rect(snap.el),
   paint: snap.paint,
   parent: minus(snap.el, snap.parent),
+  substance: snap.substance && rect(snap.substance),
 });
 
 /** measure an element straight into bounds — what a beacon needs */

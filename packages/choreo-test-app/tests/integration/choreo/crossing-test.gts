@@ -93,6 +93,58 @@ class ColorPages extends Component {
 }
 let colors: ColorPages;
 
+class SubstancePages extends Component {
+  @tracked page: 'detail' | 'grid' = 'grid';
+  constructor(o: unknown, a: object) {
+    super(o as never, a);
+    substance = this;
+  }
+  <template>
+    <Choreo
+      @route={{true}}
+      class="stage"
+      style="position:relative;width:400px;height:300px"
+      as |c|
+    >
+      {{#if (eq this.page "grid")}}
+        {{! the subject sits in the LEFT HALF of the small frame }}
+        <div
+          id="tileS"
+          style="position:absolute;left:10px;top:20px;width:100px;height:80px;background:#0af"
+          {{motion id="stage-s" role="stage"}}
+        >
+          <div
+            id="tileSub"
+            data-choreo-substance
+            style="position:absolute;left:0;top:20px;width:40px;height:20px;background:#fff"
+          ></div>
+        </div>
+      {{else}}
+        {{! …and in the RIGHT HALF of the big one: matching frames would
+            let the subject drift; the flight must match the SUBSTANCE }}
+        <div
+          id="heroS"
+          style="position:absolute;left:140px;top:120px;width:240px;height:160px;background:#0af"
+          {{motion id="stage-s" role="stage"}}
+        >
+          <div
+            id="heroSub"
+            data-choreo-substance
+            style="position:absolute;left:120px;top:40px;width:120px;height:80px;background:#fff"
+          ></div>
+        </div>
+      {{/if}}
+      <c.Crossing
+        @duration={{0.4}}
+        @ease="easeInOut"
+        @leave={{0.06}}
+        @arrive={{0.06}}
+      />
+    </Choreo>
+  </template>
+}
+let substance: SubstancePages;
+
 class QuietPages extends Component {
   @tracked page: 'detail' | 'grid' = 'grid';
   constructor(o: unknown, a: object) {
@@ -383,6 +435,40 @@ module('Integration | choreo | crossing', function (hooks) {
       getComputedStyle(find('#heroC') as HTMLElement).backgroundColor,
       'rgba(200, 60, 40, 0.5)',
       'at rest the real alpha blend returns'
+    );
+    await sleep(20);
+  });
+
+  test('the flight matches the SUBSTANCE, not the frame', async function (assert) {
+    await render(<template><SubstancePages /></template>);
+    await animationsSettled();
+    const oldSub = bounds(find('#tileSub') as HTMLElement);
+
+    substance.page = 'detail';
+    await settled();
+    await nextFrame();
+    const nowSub = bounds(find('#heroSub') as HTMLElement);
+    // the receiver's SUBJECT opens where the old subject stood — even
+    // though the frames' fractions disagree, so frame-matching would put
+    // it somewhere else entirely
+    assert.true(
+      Math.abs(nowSub.left - oldSub.left) < 14 &&
+        Math.abs(nowSub.top - oldSub.top) < 14,
+      `the subject opens on the old subject's seat ` +
+        `(${nowSub.left.toFixed(0)},${nowSub.top.toFixed(0)} vs ${oldSub.left.toFixed(0)},${oldSub.top.toFixed(0)})`
+    );
+    assert.true(
+      Math.abs(nowSub.width - oldSub.width) / oldSub.width < 0.3,
+      `…at the old subject's extent (${nowSub.width.toFixed(0)} vs ${oldSub.width.toFixed(0)})`
+    );
+
+    await animationsSettled();
+    const region = bounds(find('.stage') as HTMLElement);
+    const rest = bounds(find('#heroS') as HTMLElement);
+    assert.true(
+      Math.abs(rest.left - (region.left + 140)) < 1.5 &&
+        Math.abs(rest.top - (region.top + 120)) < 1.5,
+      `the frame still lands exactly on its real seat (${rest.left.toFixed(0)},${rest.top.toFixed(0)})`
     );
     await sleep(20);
   });
