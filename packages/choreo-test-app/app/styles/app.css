@@ -2585,124 +2585,23 @@ html[data-gm-dragging] * {
   opacity: 0.7;
 }
 
-/* ---- Camera: the frame is a participant ---- */
+/* ---- Camera: the light table ---- */
 
+/* The table IS the demo container, edge to edge — no chrome around the
+   glass. Both themes get their own table: the well tone in light is a
+   cream glass, in dark a charcoal one, and the washes read on either. */
 .cam {
-  width: min(440px, 100%);
-}
-
-/* the stage clips — the MAP zoom is what reveals the board's edges, so
-   the well behind them has to be there to reveal. The cursor is the whole
-   affordance: zoom-in over a kiln, zoom-out on the floor once you are
-   close. */
-.cam-stage {
-  position: relative;
-  overflow: hidden;
-  border-radius: 14px;
-  background: var(--bg-well);
-  padding: 18px;
-}
-
-.cam-stage.is-zoomed {
-  cursor: zoom-out;
-}
-
-.cam-board {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.cam-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-height: 96px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  color: var(--ink);
-  text-align: left;
-  cursor: zoom-in;
-  transition:
-    border-color 200ms var(--ease),
-    box-shadow 200ms var(--ease);
-}
-
-@media (hover: hover) {
-  .cam-card:hover {
-    border-color: var(--line-strong);
-    box-shadow: 0 6px 18px rgba(var(--shadow-rgb), calc(0.18 * var(--shadow-a)));
-  }
-}
-
-.cam-card.is-focus {
-  cursor: zoom-out;
-}
-
-.cam-card.is-focus {
-  border-color: var(--copper);
-  background: var(--bg-spot);
-}
-
-.cam-name {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.cam-kicker {
-  font-size: 11px;
-  color: var(--ink-dim);
-}
-
-.cam-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-  align-self: stretch;
-}
-
-.cam-field {
-  display: flex;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink);
-}
-
-.cam-field em {
-  font-style: normal;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-}
-
-.cam-save {
-  cursor: pointer;
-  align-self: flex-end;
-  margin-top: 2px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: var(--ember);
-  color: #fff;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-/* the readout and the map chip ride @steady: they scale with the scene,
-   damped back toward readable — watch them hold against either zoom */
-.cam-hud-group {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  inset: 0;
+}
+
+/* the photographer's hands: pinned over the table's corner, never riding
+   the camera */
+.cam-hud-dock {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2712,7 +2611,7 @@ html[data-gm-dragging] * {
   padding: 4px 9px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
-  background: rgba(var(--bg-rgb), 0.72);
+  background: rgba(var(--bg-rgb), 0.8);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
@@ -2721,11 +2620,11 @@ html[data-gm-dragging] * {
   font-variant-numeric: tabular-nums;
 }
 
-.cam-map {
+.cam-sheet-toggle {
   padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
-  background: rgba(var(--bg-rgb), 0.72);
+  background: rgba(var(--bg-rgb), 0.8);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -2734,13 +2633,191 @@ html[data-gm-dragging] * {
   cursor: pointer;
 }
 
-.cam-map.is-on {
+.cam-sheet-toggle.is-on {
   color: var(--copper-ink);
   border-color: var(--copper);
 }
 
 @media (hover: hover) {
-  .cam-map:hover {
+  .cam-sheet-toggle:hover {
+    color: var(--ink);
+  }
+}
+
+/* The glass clips: at rest it frames exactly ONE bracket — three variants
+   of one shot, milliseconds apart — and the camera is what reveals the
+   rest of the roll. The cursor is the affordance: zoom-in over a frame,
+   zoom-out on the table once you are close. */
+.cam-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      120cqw 70cqh at 30% 10%,
+      rgba(228, 163, 90, 0.1),
+      transparent 60%
+    ),
+    var(--bg-well);
+}
+
+.cam-stage.is-zoomed {
+  cursor: zoom-out;
+}
+
+.cam-roll {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+/* one bracket to a row, each row the height of the glass — four rows, so
+   the whole roll fits it EXACTLY at 0.25x */
+.cam-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 100cqw;
+  padding: 38px 14px 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: calc(100cqh - 52px);
+  gap: 10px;
+}
+
+/* The point the sheet view zooms about. A zoom holds its aim point fixed,
+   so this is the FIXED POINT of "the whole roll centred at 0.25x": solving
+   (1−z)·P + z·sheetCentre = glassCentre with z = 0.25 and a sheet built as
+   four glass-heights gives P = 21px from the top, at half width —
+   independent of the container's size. */
+.cam-centre {
+  position: absolute;
+  top: 21px;
+  left: 50%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.cam-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--bg-elev);
+  cursor: zoom-in;
+  transition:
+    border-color 200ms var(--ease),
+    box-shadow 200ms var(--ease);
+}
+
+@media (hover: hover) {
+  .cam-frame:hover {
+    border-color: var(--copper);
+    box-shadow: 0 8px 22px rgba(var(--shadow-rgb), calc(0.28 * var(--shadow-a)));
+  }
+}
+
+.cam-frame.is-open {
+  border-color: var(--copper);
+  cursor: zoom-out;
+}
+
+.cam-no {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 1;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(var(--bg-rgb), 0.75);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--copper-ink);
+}
+
+.cam-star {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  z-index: 1;
+  font-size: 13px;
+  color: #ffb36a;
+  text-shadow: 0 0 8px rgba(255, 122, 69, 0.8);
+}
+
+.cam-wash {
+  flex: 1;
+  min-height: 0;
+  border-radius: 6px;
+}
+
+/* the grade floats over the frame's foot — arriving with the loupe, it
+   never reflows the bracket under it */
+.cam-grade {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(var(--bg-rgb), 0.85);
+}
+
+.cam-exp {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.cam-verdict {
+  display: flex;
+  gap: 6px;
+}
+
+.cam-pick,
+.cam-pass {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cam-pick {
+  background: var(--ember);
+  color: #fff;
+}
+
+.cam-pass {
+  border: 1px solid var(--line-strong);
+  color: var(--ink-dim);
+}
+
+@media (hover: hover) {
+  .cam-pick:hover {
+    background: var(--ember-hot);
+  }
+
+  .cam-pass:hover {
     color: var(--ink);
   }
 }

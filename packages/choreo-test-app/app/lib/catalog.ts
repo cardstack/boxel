@@ -358,43 +358,50 @@ get poses() {
   },
   {
     Example: Camera,
-    apis: ['c.Camera', '@origin', '@steady', 'c.camera'],
+    apis: ['c.Camera', '@origin', '@steady', '@zoom'],
     group: 'Choreo',
     id: 'camera',
-    lede: 'Zoom out to arrange, in to edit. The frame is a participant.',
-    sample: `{{! ONE camera step, aimed by state. Every pass replays it toward wherever
-    the app now stands, so an interrupted zoom simply bends — and the spring
-    has weight, because it carries the whole scene. }}
+    lede: 'Loupe in to grade a frame. Pull back to read the whole roll.',
+    sample: `{{! A light table, and the camera is the work: loupe IN (1.6x) to grade
+    one frame, pull the sheet ALL the way back (0.25x) to read the roll.
+    At rest the glass shows one corner; the camera is what reveals the
+    rest. ONE step, aimed by state — an interrupted dive simply bends. }}
 <c.Parallel>
   <c.Camera
     @zoom={{this.zoom}}
-    @origin={{if this.focus (c.id this.focus)}}
+    @origin={{if this.aimId (c.id this.aimId)}}
     @spring={{carry}}
-    @steady={{c.role 'hud'}}
+    @steady={{array (c.role 'no') (c.role 'badge')}}
   />
 
-  {{! the transmute rides the SAME pass as the zoom: the form arrives, the
-      card grows and the camera dives together — one changeset, one
-      timeline. Every box the form reflowed tweens. }}
-  <c.Move @of={{c.moved 'card'}} @spring={{settle}} />
+  {{! the grade rides the SAME pass as the dive: the panel arrives, the
+      frame grows and the loupe drops together — one changeset, one
+      timeline. Every frame the panel reflowed tweens on its own spring. }}
+  <c.Move @of={{c.moved 'frame'}} @spring={{settle}} />
 
-  {{! each field is its own participant, so the arrival is a short ladder;
-      everything leaves at once when the camera pulls back }}
+  {{! the readout and the verdicts climb in as a short ladder;
+      everything leaves at once on the way out }}
   <c.Tween
-    @of={{c.inserted 'edit'}}
+    @of={{c.inserted 'grade'}}
     @opacity={{array 0 1}}
     @stagger={{0.07}}
     @duration={{0.2}}
   />
-  <c.Tween @of={{c.removed 'edit'}} @opacity={{0}} @duration={{0.14}} />
+  <c.Tween @of={{c.removed 'grade'}} @opacity={{0}} @duration={{0.14}} />
+
+  {{! a pick lands as the camera pulls back: the star pops on the sheet —
+      a keyframe round trip through 1.25 that settles at full size }}
+  <c.Tween
+    @of={{c.inserted 'badge'}}
+    @opacity={{array 0 1}}
+    @scale={{array 0.4 1.25 1}}
+    @duration={{0.45}}
+  />
 </c.Parallel>
 
-{{! @steady names what must stay legible: the map chip and the readout
-    scale WITH the scene, damped back toward their own size — never
-    pinned, never lost. c.camera is the run's TRACKED landing state. }}
-<span class='cam-hud' {{motion id='hud-zoom' role='hud'}}>
-  {{zoomLabel c.camera}}
-</span>`,
+{{! @steady names what must stay legible from ANY distance: the frame
+    numbers and the pick stars scale with the sheet, damped back toward
+    their own size — from 0.25x you can still read which frames you kept }}`,
     slowmo: true,
     title: 'Camera',
   },
