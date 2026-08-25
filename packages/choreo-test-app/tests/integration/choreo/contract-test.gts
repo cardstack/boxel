@@ -469,7 +469,7 @@ module('Integration | choreo | contract', function (hooks) {
               <div
                 id="card"
                 style="width:80px;height:40px;background:#0af"
-                {{motion id="card"}}
+                {{motion id="card" role="card"}}
               ></div>
             </div>
             <div
@@ -501,15 +501,23 @@ module('Integration | choreo | contract', function (hooks) {
       await nextFrame();
       await nextFrame();
       await nextFrame();
+      // A follower is EXACT, not merely close: it corrects the measured
+      // box by the source's current motion values, so it reads the frame
+      // being drawn rather than the one last painted. The bound below
+      // would be a whole bay wide if it did not — on the first frame of a
+      // FLIP the source's layout has already jumped to the destination.
+      const step = bounds(el('#card')).left;
+      await nextFrame();
       const card = bounds(el('#card'));
       const badge = bounds(el('#badge'));
+      const perFrame = Math.abs(card.left - step);
       assert.true(
-        Math.abs(badge.left - (card.left + card.width)) < 2,
-        `the badge rides the card's right edge mid-flight (${Math.round(badge.left)} vs ${Math.round(card.left + card.width)})`
+        perFrame > 1,
+        `the card really is in motion (${perFrame.toFixed(1)}px this frame)`
       );
       assert.true(
-        card.left > 5,
-        `and the card really is in motion (${Math.round(card.left)})`
+        Math.abs(badge.left - (card.left + card.width)) < 2,
+        `the badge is ON the card's right edge mid-flight (off by ${Math.abs(badge.left - (card.left + card.width)).toFixed(1)}px, a frame of travel is ${perFrame.toFixed(1)}px)`
       );
 
       await animationsSettled();
@@ -539,7 +547,7 @@ module('Integration | choreo | contract', function (hooks) {
               <div
                 id="card2"
                 style="width:80px;height:40px;background:#0af"
-                {{motion id="card2"}}
+                {{motion id="card2" role="card2"}}
               ></div>
             </div>
             <div

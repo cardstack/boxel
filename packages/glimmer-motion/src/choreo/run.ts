@@ -1214,7 +1214,7 @@ export class ChoreoRun implements Run {
     self.y -= painted.f / zoom;
     const sources: Rect[] = [];
     for (const source of derive.sources) {
-      const rect = this.regionRect(source);
+      const rect = this.liveRect(source);
       if (!rect) {
         return; // a source that is not on the page has no box to follow
       }
@@ -1231,9 +1231,12 @@ export class ChoreoRun implements Run {
     for (const [key, value] of Object.entries(values)) {
       ve.getValue(key, value)!.set(value);
     }
-    // setting a value the element was not already animating schedules
-    // nothing on its own — the same explicit render a hold performs
-    ve.scheduleRender();
+    // rendered NOW, not scheduled. A scheduled render lands in motion's
+    // own render step, which is a hop later than the synchronous pin the
+    // move it is following just did — so on the first frame of a flight
+    // the source would already be drawn at the origin while the follower
+    // was still drawn at the destination, which is a whole bay's flash.
+    ve.render();
   }
 
   /** the window closed (or was scrubbed out of): put the declared rest back */
@@ -1246,7 +1249,35 @@ export class ChoreoRun implements Run {
     for (const [key, value] of Object.entries(rest)) {
       ve.getValue(key, value)!.jump(value);
     }
-    ve.scheduleRender();
+    ve.render();
+  }
+
+  /**
+   * A source's box as it will be THIS frame, not as it was painted last
+   * frame.
+   *
+   * A measured rect carries the transform the browser last painted, which
+   * is one frame stale — and one frame of staleness is not a rounding
+   * error when the source is a FLIP. On the first frame of a move the
+   * element's layout has already jumped to the destination while its
+   * transform still has to carry it back to the origin, so a follower
+   * reading the painted box sees the card a whole bay away from where it
+   * is about to be drawn, and flashes there. Correcting the measured box
+   * by (current motion value − painted translate) removes the staleness
+   * entirely: the follower is exact, not merely close.
+   */
+  private liveRect(sprite: Sprite): Rect | null {
+    const rect = this.regionRect(sprite);
+    const el = sprite.element;
+    if (!rect || !el) {
+      return rect;
+    }
+    const ve = sprite.node.visualElement;
+    const painted = new DOMMatrix(getComputedStyle(el).transform);
+    const zoom = this.camera.zoom || 1;
+    rect.x += ((ve?.getValue('x')?.get() as number) ?? 0) - painted.e / zoom;
+    rect.y += ((ve?.getValue('y')?.get() as number) ?? 0) - painted.f / zoom;
+    return rect;
   }
 
   /**

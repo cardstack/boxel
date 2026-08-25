@@ -2,6 +2,7 @@ import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
+import { Escort } from 'test-app/components/examples/escort';
 import { FarMatch } from 'test-app/components/examples/far-match';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
@@ -455,6 +456,44 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
 // Jo's is inserted at V2. Step back and that tether follows the leaver.`,
     slowmo: true,
     title: 'Wires',
+  },
+  {
+    Example: Escort,
+    apis: ['c.Follow', 'StepComponent', '@name'],
+    group: 'Choreo',
+    id: 'escort',
+    lede: 'Read from the card, not animated with it.',
+    sample: `// A composite step: a new word in the timeline, written in nothing but the
+// published seam. Its children are generic, so a specific step beside it
+// takes the sprite away without an exclusion syntax.
+class Carry extends StepComponent {
+  node() {
+    return {
+      kind: 'parallel',
+      name: this.args.name,
+      children: [
+        { kind: 'move', generic: true, of: this.args.of, spring },
+        { kind: 'hold', generic: true, of: this.args.of, props: { zIndex: 3 } },
+      ],
+    };
+  }
+}
+
+// …and two values READ from the flight rather than animated with it. Neither
+// can be a tween: a tween would have to know the spring's overshoot in
+// advance, and what a mid-flight retarget does to it.
+const pin = ({ self, sources: [card] }) => ({
+  x: card.x + card.width - (self.x + self.width),
+  y: card.y - self.y,
+});
+
+<c.Parallel>
+  <Carry @name='carry' @of={{c.moved 'card'}} />
+  <c.Follow @at={{at 'carry'}} @of={{c.id 'badge'}} @to={{c.id 'card'}}
+            @read={{pin}} @rest={{PIN_REST}} @duration={{1.1}} />
+</c.Parallel>`,
+    slowmo: true,
+    title: 'Escort',
   },
   {
     Example: ReorderGrid,

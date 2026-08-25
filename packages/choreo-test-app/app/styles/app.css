@@ -8092,3 +8092,164 @@ html[data-gm-dragging] * {
 :root:not([data-theme='light']) .syn-attr {
   color: #d8cdb8;
 }
+
+/* ── Escort: derived values, read from a moving card ──────────────────── */
+
+.esc-stage {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  /* .ex centres its children, which makes a column child shrink to its
+     content — the rail has to span to lay its bays out */
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(10px, 3cqw, 18px);
+  padding: clamp(14px, 4cqw, 26px);
+}
+
+.esc-field {
+  position: relative;
+  width: min(100%, 620px);
+  margin-inline: auto;
+}
+
+.esc-rail {
+  /* one source of truth for the rider geometry: percentage margins resolve
+     against the CONTAINER, not the element, so every offset here is px */
+  --esc-card-w: clamp(52px, 15cqw, 78px);
+  --esc-badge-w: 18px;
+  /* On the dark ground a cast shadow is invisible — a card lifting off a
+     near-black floor has nothing to darken. So dark mode casts LIGHT: an
+     ember halo that spreads and softens on exactly the same reading. */
+  --esc-cast: var(--ember);
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(8px, 2.4cqw, 16px);
+}
+
+.esc-bay {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-height: clamp(88px, 26cqw, 140px);
+  padding: clamp(6px, 1.8cqw, 10px);
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  /* the handoff between cells CROSSFADES. It used to switch border-style
+     the instant the bay changed, which snapped from one cell to the next
+     while the card was still gliding between them — and a hard cut beside
+     a smooth move reads as the move having jumped. */
+  transition:
+    border-color 0.36s var(--ease),
+    background-color 0.36s var(--ease);
+}
+
+.esc-bay:hover {
+  border-color: var(--ember);
+}
+
+.esc-bay.is-here {
+  border-color: color-mix(in srgb, var(--ember) 55%, transparent);
+  background-color: color-mix(in srgb, var(--ember) 8%, transparent);
+}
+
+.esc-bay-name {
+  font-family: var(--font-mono);
+  font-size: clamp(8.5px, 2cqw, 10.5px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* the seat: the card's own box, parked at a bay. Everything that rides
+   with the card is positioned against THIS, so the badge's corner and the
+   shadow's centre are exact by construction — no arithmetic to drift. */
+.esc-seat {
+  position: absolute;
+  top: 0;
+  width: var(--esc-card-w);
+  height: 100%;
+  margin-left: calc(var(--esc-card-w) / -2);
+}
+
+.esc-card {
+  position: absolute;
+  top: clamp(10px, 3cqw, 18px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: clamp(7px, 2cqw, 11px);
+  border-radius: 8px;
+  background: linear-gradient(160deg, var(--bg-spot), var(--bg-well));
+  box-shadow: 0 1px 0 rgba(var(--bg-rgb), 0.6) inset;
+}
+
+.esc-card-no {
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 2.2cqw, 11px);
+  color: var(--ember);
+}
+
+.esc-card-line {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.esc-card-line.is-short {
+  width: 58%;
+}
+
+.esc-badge {
+  position: absolute;
+  top: clamp(4px, 1.4cqw, 8px);
+  right: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: var(--esc-badge-w);
+  height: 18px;
+  border-radius: 9px;
+  background: var(--ember);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1;
+}
+
+.esc-shadow {
+  position: absolute;
+  top: clamp(56px, 16.5cqw, 86px);
+  left: 0;
+  width: 100%;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--esc-cast);
+  filter: blur(5px);
+  opacity: 0.72;
+}
+
+/* light mode has a floor to darken, so it keeps a real shadow */
+:root[data-theme='light'] .esc-rail {
+  --esc-cast: rgba(var(--shadow-rgb), 0.8);
+}
+
+.esc-note {
+  width: min(100%, 620px);
+  margin-inline: auto;
+  font-size: clamp(10px, 2.4cqw, 12.5px);
+  color: var(--ink-dim);
+  line-height: 1.45;
+}
+
+.esc-note b {
+  color: var(--ink);
+}

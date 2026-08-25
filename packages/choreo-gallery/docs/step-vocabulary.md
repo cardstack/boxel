@@ -252,6 +252,20 @@ the run hands to WAAPI. That is the price, and it belongs in the docs
 beside the feature, not in a footnote. Thirty followers is a budget
 decision; three is free.
 
+**But it is EXACT, not merely close.** Two corrections buy that, and both
+were found by watching a real flight rather than by reasoning. A measured
+rect carries the transform the browser last _painted_, which is a frame
+stale — and a frame of staleness is not a rounding error when the source
+is a FLIP, because on the first frame the source's layout has already
+jumped to the destination while its transform still has to carry it back.
+A follower reading that saw its card a whole bay from where it was about
+to be drawn, and flashed there. So the measured box is corrected by
+(current motion value − painted translate), which removes the staleness
+entirely. And the write is _rendered_, not scheduled: a scheduled render
+lands a hop later than the synchronous pin the move it follows just did,
+which reintroduces the same flash on frame one. Measured across a whole
+flight afterwards, the follower is within 0.1px on every frame.
+
 **It must declare a rest.** `releaseForMeasure` jumps moved values to
 `rest ?? 0` before a measure and `reassert()` puts them back. A derived
 cue with no declared rest would either leave its last computed value
