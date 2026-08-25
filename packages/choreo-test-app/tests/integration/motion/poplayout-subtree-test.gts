@@ -1,5 +1,5 @@
 import { on } from '@ember/modifier';
-import { click, render } from '@ember/test-helpers';
+import { click, render, waitUntil } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 import { setupMotion } from 'glimmer-motion/test-support';
@@ -35,8 +35,25 @@ class Shown {
   };
 }
 
-function rest() {
-  return new Promise((resolve) => setTimeout(resolve, 900));
+/**
+ * Wait for the DOM to reach the shape under test, rather than sleeping and
+ * hoping. A fixed sleep here was a budget for the whole catalog mounting
+ * and exiting at once, and every demo added to the gallery ate into it —
+ * the failure it produced named a stuck leaver rather than a slow one.
+ */
+function until(count: number) {
+  return waitUntil(
+    () => document.querySelectorAll('[data-demo]').length === count,
+    { timeout: 8000 }
+  ).catch(() => {
+    // fall through: the assertion below reports which ones are stuck,
+    // which is the diagnostic this test exists to give
+  });
+}
+
+/** a beat for the exits to actually finish once the count is right */
+function settleOut() {
+  return new Promise((resolve) => setTimeout(resolve, 300));
 }
 
 module('Integration | motion | popLayout subtree', function (hooks) {
@@ -80,7 +97,7 @@ module('Integration | motion | popLayout subtree', function (hooks) {
         </LayoutGroup>
       </template>
     );
-    await rest();
+    await until(catalog.length);
     assert.strictEqual(
       document.querySelectorAll('[data-demo]').length,
       catalog.length,
@@ -89,7 +106,8 @@ module('Integration | motion | popLayout subtree', function (hooks) {
 
     const drag = catalog.filter((demo) => demo.group === 'Drag');
     await click('.narrow');
-    await rest();
+    await until(drag.length);
+    await settleOut();
 
     const left = [...document.querySelectorAll<HTMLElement>('[data-demo]')];
     const stuck = left

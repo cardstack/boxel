@@ -16,11 +16,31 @@
  * There is no `sleep()` used as "it is probably done by now" — where a sleep
  * appears it is deliberately mid-flight, and says so.
  */
-import { find, findAll, render, settled } from '@ember/test-helpers';
+import { array } from '@ember/helper';
+import {
+  find,
+  findAll,
+  render,
+  settled,
+  setupOnerror,
+} from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setupRenderingTest } from 'ember-qunit';
-import { beacon, Choreo, motion, type SpringSpec } from 'glimmer-motion';
+import {
+  after,
+  at,
+  beacon,
+  Choreo,
+  type ChoreoContext,
+  type DeriveContext,
+  motion,
+  type SpringSpec,
+  type StepArgs,
+  StepComponent,
+  type TimelineNode,
+  toMs,
+} from 'glimmer-motion';
 import {
   animationsSettled,
   bounds,
@@ -39,10 +59,713 @@ const SLOW: SpringSpec = { damping: 26, stiffness: 60 };
 
 const el = (sel: string) => find(sel) as HTMLElement;
 
+/** the region's yielded context, for tests that read the compiled cues */
+let ctx: ChoreoContext;
+const grabCtx = (c: ChoreoContext) => {
+  ctx = c;
+  return '';
+};
+
 module('Integration | choreo | contract', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
   setupMotion(hooks);
+
+  /* ------------------------------------------------------------------ *
+   * Anchors — a block is a step's equal
+   * ------------------------------------------------------------------ */
+
+  module('anchors', function () {
+    /**
+     * A composite step (c.Crossing, and anything an author writes) returns a
+     * BLOCK, so everything the anchor system offers a step has to be offered
+     * to a block too — or a composite is a thing you cannot point at. The
+     * crossing works around this today by naming a child `__crossing-flight`
+     * and anchoring against that, which is a private string an author reaches
+     * only by accident.
+     *
+     * Start times are read from the compiled cues, in ms: what the compiler
+     * resolved, not what the DOM happens to be showing.
+     */
+    const startOf = (id: string) =>
+      ctx.run!.cues.filter((cue) => cue.sprite.id === id).map((c) => c.start);
+
+    test('a named block can be anchored against, and its span is its content', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          anchored = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+              <div
+                id="c"
+                style="width:10px;height:10px"
+                {{motion id="c"}}
+              ></div>
+              <div
+                id="d"
+                style="width:10px;height:10px"
+                {{motion id="d"}}
+              ></div>
+            {{/if}}
+            {{! the composite: two tweens at once, the longer one 0.5s }}
+            <c.Parallel @name="intro">
+              <c.Tween
+                @of={{c.id "a"}}
+                @opacity={{array 0 1}}
+                @duration={{0.2}}
+              />
+              <c.Tween
+                @of={{c.id "b"}}
+                @opacity={{array 0 1}}
+                @duration={{0.5}}
+              />
+            </c.Parallel>
+            {{! after the WHOLE block, not after either child }}
+            <c.Tween
+              @at={{after "intro"}}
+              @of={{c.id "c"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+            {{! and halfway into it }}
+            <c.Tween
+              @at={{at "intro" 0.5}}
+              @of={{c.id "d"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      let anchored: App | undefined;
+      await render(<template><App /></template>);
+      anchored!.show = true;
+      await settled();
+
+      assert.deepEqual(startOf('a'), [0], 'the block starts at the top');
+      assert.deepEqual(startOf('b'), [0], 'its children are parallel');
+      assert.deepEqual(
+        startOf('c'),
+        [500],
+        'after the block is after its LONGEST child, not its first'
+      );
+      assert.deepEqual(
+        startOf('d'),
+        [250],
+        'a fraction of a block is a fraction of its span'
+      );
+      await animationsSettled();
+    });
+
+    test('a block takes a delay, and an anchored block lifts out of the flow', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          delayed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+              <div
+                id="c"
+                style="width:10px;height:10px"
+                {{motion id="c"}}
+              ></div>
+              <div
+                id="e"
+                style="width:10px;height:10px"
+                {{motion id="e"}}
+              ></div>
+            {{/if}}
+            <c.Sequence>
+              <c.Tween
+                @name="first"
+                @of={{c.id "a"}}
+                @opacity={{array 0 1}}
+                @duration={{0.2}}
+              />
+              {{! a delayed block: the delay is inside its slot, and it still
+                  pushes the sequence forward by delay + content }}
+              <c.Parallel @delay={{0.1}}>
+                <c.Tween
+                  @of={{c.id "b"}}
+                  @opacity={{array 0 1}}
+                  @duration={{0.3}}
+                />
+              </c.Parallel>
+              {{! an ANCHORED block neither pushes the sequence nor stretches
+                  it — §4.2's rule, one level up }}
+              <c.Parallel @at={{at "first"}}>
+                <c.Tween
+                  @of={{c.id "c"}}
+                  @opacity={{array 0 1}}
+                  @duration={{0.9}}
+                />
+              </c.Parallel>
+              {{! the step after it: this is where "lifts out of the flow"
+                  is actually observable }}
+              <c.Tween
+                @of={{c.id "e"}}
+                @opacity={{array 0 1}}
+                @duration={{0.1}}
+              />
+            </c.Sequence>
+          </Choreo>
+        </template>
+      }
+      let delayed: App | undefined;
+      await render(<template><App /></template>);
+      delayed!.show = true;
+      await settled();
+
+      assert.deepEqual(startOf('a'), [0], 'the first step is at the top');
+      assert.deepEqual(
+        startOf('b'),
+        [300],
+        "the block's delay is spent inside its own slot"
+      );
+      assert.deepEqual(
+        startOf('c'),
+        [0],
+        'the anchored block starts where it points, not where it sits'
+      );
+      assert.deepEqual(
+        startOf('e'),
+        [600],
+        'the anchored block did not push the sequence forward (0.2 + 0.1 + 0.3)'
+      );
+      // it does still lengthen the RUN — a lifted block is out of the flow,
+      // not out of the score, and a run is as long as its longest cue
+      assert.strictEqual(
+        Math.round(ctx.run!.duration * 1000),
+        900,
+        'the run still spans the anchored block it holds'
+      );
+      await animationsSettled();
+    });
+  });
+
+  /* ------------------------------------------------------------------ *
+   * Composite steps — a new word, written in the public seam
+   * ------------------------------------------------------------------ */
+
+  module('composite steps', function () {
+    /**
+     * Everything below is written the way an APP would write it: nothing
+     * imported from a deep path, nothing the published package does not
+     * export. If this file ever needs a privilege to say a new step, the
+     * contract on StepComponent is a lie and that is the bug.
+     *
+     * Hoisted, not allocated per node(): functions in the tree print by
+     * identity, so a fresh one per pass would declare an edit every frame.
+     */
+    const startOf = (id: string) =>
+      ctx.run!.cues.filter((cue) => cue.sprite.id === id).map((c) => c.start);
+
+    class Reveal extends StepComponent<
+      StepArgs & { duration?: number; rise?: number }
+    > {
+      node(): TimelineNode {
+        const { of, duration = 0.3, rise = 12 } = this.args;
+        return {
+          at: this.args.at,
+          children: [
+            {
+              generic: true,
+              kind: 'tween',
+              ms: toMs(duration),
+              of,
+              props: { opacity: [0, 1] },
+            },
+            {
+              generic: true,
+              kind: 'tween',
+              ms: toMs(duration),
+              of,
+              props: { y: [rise, 0] },
+            },
+          ],
+          delay: toMs(this.args.delay),
+          kind: 'parallel',
+          name: this.args.name,
+        };
+      }
+    }
+
+    test('an app can say a new step, and the score can point at it', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          composed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+            {{/if}}
+            <Reveal
+              @name="intro"
+              @of={{c.id "a"}}
+              @duration={{0.4}}
+              @delay={{0.1}}
+            />
+            <c.Tween
+              @at={{after "intro"}}
+              @of={{c.id "b"}}
+              @opacity={{array 0 1}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      let composed: App | undefined;
+      await render(<template><App /></template>);
+      composed!.show = true;
+      await settled();
+
+      // the composite expanded: one step in the template, two cues on one
+      // sprite, both starting after the composite's own delay
+      assert.deepEqual(
+        startOf('a'),
+        [100, 100],
+        "both of the composite's children play, after its delay"
+      );
+      assert.deepEqual(
+        startOf('b'),
+        [500],
+        'a sibling anchors against the composite as one thing (0.1 + 0.4)'
+      );
+      await animationsSettled();
+    });
+
+    test("a composite's generic children yield to a step that names the sprite", async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          yielded = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="a"
+                style="width:10px;height:10px"
+                {{motion id="a"}}
+              ></div>
+              <div
+                id="b"
+                style="width:10px;height:10px"
+                {{motion id="b"}}
+              ></div>
+            {{/if}}
+            {{! the composite offers its default to BOTH }}
+            <Reveal @of={{c.all}} @duration={{0.4}} />
+            {{! …and 'b' takes something else instead, with no exclusion
+                syntax anywhere: the yield rule, from the outside }}
+            <c.Tween
+              @of={{c.id "b"}}
+              @opacity={{array 0 1}}
+              @duration={{0.9}}
+            />
+          </Choreo>
+        </template>
+      }
+      let yielded: App | undefined;
+      await render(<template><App /></template>);
+      yielded!.show = true;
+      await settled();
+
+      assert.deepEqual(
+        startOf('a').length,
+        2,
+        'the unclaimed sprite keeps the composite’s two children'
+      );
+      const b = ctx.run!.cues.filter((cue) => cue.sprite.id === 'b');
+      assert.strictEqual(
+        b.length,
+        1,
+        'the claimed sprite is animated once, by the step that named it'
+      );
+      assert.strictEqual(
+        Math.round(b[0]!.duration),
+        900,
+        'and it is the specific step that owns it, not the composite'
+      );
+      await animationsSettled();
+    });
+  });
+
+  /* ------------------------------------------------------------------ *
+   * c.Follow — a value derived from the scene, every frame
+   * ------------------------------------------------------------------ */
+
+  module('follow', function () {
+    /**
+     * Hoisted, not inline: property functions print by identity, and a
+     * fresh closure per render would declare an edit on every pass.
+     * `read` pins the badge's top-left to the card's top-right — `rest`
+     * is the badge's resting box from the pass, `now` is where the run
+     * holds the card this frame.
+     */
+    const corner = ({ rest, sources }: DeriveContext) => {
+      const card = sources[0]!.now;
+      return { x: card.x + card.width - rest.x, y: card.y - rest.y };
+    };
+    const REST = { x: 0, y: 0 };
+    /** deliberately illegal: width is layout, and layout is refused */
+    const WIDE = { width: 0 };
+    /** the fixture under test, for the refusal helper to drive */
+    let bad: { show: boolean } | undefined;
+
+    test('a follower tracks its source, and stands at rest when its window closes', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          followed = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card" role="card"}}
+              ></div>
+            </div>
+            <div
+              id="badge"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge"}}
+            ></div>
+            <c.Parallel>
+              <c.Move @of={{c.moved "card"}} @spring={{SLOW}} />
+              <c.Follow
+                @of={{c.id "badge"}}
+                @to={{c.id "card"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{0.6}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let followed: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+
+      followed!.far = true;
+      await settled();
+      // MID-FLIGHT, deliberately: the point of a follower is that it is
+      // right on the frames in between, not only at the ends
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      // A follower is EXACT, not merely close: `now` is the source's
+      // resting box composed with the values driving it this frame, so it
+      // reads the frame being drawn rather than the one last painted. The
+      // bound below would be a whole bay wide if it did not — on the
+      // first frame of a FLIP the source's layout has already jumped to
+      // the destination.
+      const step = bounds(el('#card')).left;
+      await nextFrame();
+      const card = bounds(el('#card'));
+      const badge = bounds(el('#badge'));
+      const perFrame = Math.abs(card.left - step);
+      assert.true(
+        perFrame > 1,
+        `the card really is in motion (${perFrame.toFixed(1)}px this frame)`
+      );
+      assert.true(
+        Math.abs(badge.left - (card.left + card.width)) < 2,
+        `the badge is ON the card's right edge mid-flight (off by ${Math.abs(badge.left - (card.left + card.width)).toFixed(1)}px, a frame of travel is ${perFrame.toFixed(1)}px)`
+      );
+
+      await animationsSettled();
+      // the window closed: the declared rest is what stands, so a measure
+      // pass sees the element where the stylesheet puts it
+      // identity spellings — '', 'none', translateX(0px) — are all rest;
+      // what must not stand is the 280 it was holding mid-flight
+      const style = getComputedStyle(el('#badge')).transform;
+      const painted = new DOMMatrix(style === 'none' ? '' : style);
+      assert.true(
+        Math.abs(painted.e) < 1 && Math.abs(painted.f) < 1,
+        `the follower rests where it declared — got '${style}'`
+      );
+    });
+
+    test('a derived value is a still: seeking back reproduces the frame', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          sought = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card2"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card2" role="card2"}}
+              ></div>
+            </div>
+            <div
+              id="badge2"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge2"}}
+            ></div>
+            <c.Parallel>
+              <c.Tween
+                @of={{c.moved "card2"}}
+                @duration={{1}}
+                @ease="linear"
+                @opacity={{array 1 1}}
+              />
+              <c.Follow
+                @of={{c.id "badge2"}}
+                @to={{c.id "card2"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{1}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let sought: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+      sought!.far = true;
+      await settled();
+
+      const run = ctx.run!;
+      run.pause();
+      run.time = 0.4;
+      await nextFrame();
+      const first = bounds(el('#badge2')).left;
+      run.time = 0.8;
+      await nextFrame();
+      run.time = 0.4;
+      await nextFrame();
+      const again = bounds(el('#badge2')).left;
+      assert.true(
+        Math.abs(first - again) < 1,
+        `the same t is the same frame (${Math.round(first)} vs ${Math.round(again)})`
+      );
+      run.cancel();
+    });
+
+    test('a follower computes from the pass, not the page', async function (assert) {
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          vandal = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:400px;height:200px" as |c|>
+            {{grabCtx c}}
+            <div style="padding-left:{{if this.far '200px' '0px'}}">
+              <div
+                id="card3"
+                style="width:80px;height:40px;background:#0af"
+                {{motion id="card3" role="card3"}}
+              ></div>
+            </div>
+            <div
+              id="badge3"
+              style="position:absolute;top:0;left:0;width:16px;height:16px;background:#f30"
+              {{motion id="badge3"}}
+            ></div>
+            <c.Parallel>
+              <c.Tween
+                @of={{c.moved "card3"}}
+                @duration={{1}}
+                @ease="linear"
+                @opacity={{array 1 1}}
+              />
+              <c.Follow
+                @of={{c.id "badge3"}}
+                @to={{c.id "card3"}}
+                @read={{corner}}
+                @rest={{REST}}
+                @duration={{1}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </template>
+      }
+      let vandal: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+      vandal!.far = true;
+      await settled();
+
+      const run = ctx.run!;
+      run.pause();
+      run.time = 0.4;
+      await nextFrame();
+      const first = bounds(el('#badge3')).left;
+      // Vandalise the page mid-window, with no pass to tell the region:
+      // under the API this replaces, @read was handed live boxes and a
+      // follower would chase this. Now every box it sees was measured by
+      // the pass, so the frame at t is a function of t and nothing else.
+      el('#card3').style.marginLeft = '40px';
+      run.time = 0.8;
+      await nextFrame();
+      run.time = 0.4;
+      await nextFrame();
+      const again = bounds(el('#badge3')).left;
+      assert.true(
+        Math.abs(first - again) < 1,
+        `the frame at t is untouched by a mutation the score never saw (${Math.round(first)} vs ${Math.round(again)})`
+      );
+      el('#card3').style.marginLeft = '';
+      run.cancel();
+    });
+
+    /**
+     * Both refusals are compile-time and both are load-bearing, so they are
+     * asserted the way the gate rules are: render, arm the handler, then
+     * make the pass that compiles.
+     */
+    const refusal = async (
+      make: () => object,
+      pattern: RegExp,
+      what: string,
+      assert: Assert
+    ) => {
+      let message = '';
+      setupOnerror((error) => {
+        message = String(error);
+      });
+      const App = make();
+      await render(App as never);
+      bad!.show = true;
+      await settled().catch(() => {});
+      assert.true(pattern.test(message), `${what} — got '${message}'`);
+      setupOnerror();
+    };
+
+    test('a derived value may not write layout', async function (assert) {
+      class Layout extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          bad = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:80px" as |c|>
+            {{#if this.show}}
+              <div id="l1" style="width:10px;height:10px" {{motion id="l1"}}>
+              </div>
+              <div id="l2" style="width:10px;height:10px" {{motion id="l2"}}>
+              </div>
+            {{/if}}
+            <c.Follow
+              @of={{c.id "l1"}}
+              @to={{c.id "l2"}}
+              @read={{corner}}
+              @rest={{WIDE}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      await refusal(
+        () => <template><Layout /></template>,
+        /may only write transform/,
+        'driving width is refused where the author can still read the name',
+        assert
+      );
+    });
+
+    test('a follower may not follow a follower', async function (assert) {
+      class Chain extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          bad = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:80px" as |c|>
+            {{#if this.show}}
+              <div id="c1" style="width:10px;height:10px" {{motion id="c1"}}>
+              </div>
+              <div id="c2" style="width:10px;height:10px" {{motion id="c2"}}>
+              </div>
+              <div id="c3" style="width:10px;height:10px" {{motion id="c3"}}>
+              </div>
+            {{/if}}
+            <c.Follow
+              @of={{c.id "c1"}}
+              @to={{c.id "c2"}}
+              @read={{corner}}
+              @rest={{REST}}
+              @duration={{0.2}}
+            />
+            <c.Follow
+              @of={{c.id "c2"}}
+              @to={{c.id "c3"}}
+              @read={{corner}}
+              @rest={{REST}}
+              @duration={{0.2}}
+            />
+          </Choreo>
+        </template>
+      }
+      await refusal(
+        () => <template><Chain /></template>,
+        /may not follow a follower/,
+        'a chain is refused rather than half-supported',
+        assert
+      );
+    });
+  });
 
   /* ------------------------------------------------------------------ *
    * Nesting — an inner region is another scene
@@ -737,6 +1460,77 @@ module('Integration | choreo | contract', function (hooks) {
         strandedTransforms(el('.stage')),
         [],
         'with nothing left on it'
+      );
+    });
+
+    test('a moved wrapper is a reflow: the pass may not be declined for it', async function (assert) {
+      // The fast keep fingerprints layout to decide whether a pass can be
+      // declined. What a render moves may be an ANCESTOR that is a
+      // participant of nothing — Escort's seat, one positioned wrapper
+      // carrying three participants — and a fingerprint read at the
+      // participant alone (offsetLeft against that same wrapper) is blind
+      // to it. Declined, the old run plays on against the moved layout
+      // and everything in the seat teleports a whole bay, together,
+      // mid-flight. This is that page, reduced.
+      class App extends Component {
+        @tracked far = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          app = this;
+        }
+        <template>
+          <Choreo
+            class="stage"
+            style="width:400px;height:120px;position:relative"
+            as |c|
+          >
+            {{grabCtx c}}
+            <div
+              style="position:absolute;top:0;left:{{if this.far '200px' '0px'}}"
+            >
+              <div
+                id="seated"
+                style="width:60px;height:40px;background:#0af"
+                {{motion id="seated" role="seated"}}
+              ></div>
+            </div>
+            <c.Move @of={{c.moved "seated"}} @spring={{SLOW}} />
+          </Choreo>
+        </template>
+      }
+      let app: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+
+      app!.far = true;
+      await settled();
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      const before = ctx.run;
+      const mid = bounds(el('#seated')).left;
+
+      // the retarget, mid-flight, again through the wrapper alone
+      app!.far = false;
+      await settled();
+      await nextFrame();
+      const after = bounds(el('#seated')).left;
+      assert.true(
+        Math.abs(after - mid) < 30,
+        `the retarget pins the painted box, it does not teleport ` +
+          `(${Math.round(mid)} → ${Math.round(after)})`
+      );
+      assert.true(
+        ctx.run !== before && ctx.run !== undefined,
+        'a moved wrapper compiled a replacement run'
+      );
+
+      await animationsSettled();
+      const rest = bounds(el('#seated')).left;
+      const home = bounds(el('.stage')).left;
+      assert.true(
+        Math.abs(rest - home) < 2,
+        `and it lands where the wrapper now rests (${Math.round(rest)} vs ${Math.round(home)})`
       );
     });
   });

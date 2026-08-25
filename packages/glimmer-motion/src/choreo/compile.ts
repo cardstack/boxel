@@ -10,6 +10,7 @@ import {
   spring,
 } from 'motion-dom';
 
+import type { AnchorRef } from './anchors.ts';
 import { gestureBounds, gestureVelocity, isGestureRef } from './gesture.ts';
 import type {
   Block,
@@ -40,6 +41,27 @@ const isGate = (node: TimelineNode): node is import('./types.ts').GateNode =>
   node.kind === 'gate';
 
 const DEFAULT_SPRING: SpringSpec = { damping: 30, stiffness: 300 };
+
+/**
+ * What `c.Follow` is allowed to drive: paint, never layout. See the throw
+ * in the 'follow' case for why the line is drawn exactly here.
+ */
+const DERIVABLE = new Set([
+  'filter',
+  'opacity',
+  'rotate',
+  'rotateX',
+  'rotateY',
+  'rotateZ',
+  'scale',
+  'scaleX',
+  'scaleY',
+  'skewX',
+  'skewY',
+  'x',
+  'y',
+  'z',
+]);
 
 /** the shared offstage <svg> that path geometry is sampled inside */
 let pathHost: SVGSVGElement | undefined;
@@ -896,6 +918,71 @@ function resolveStep(
         }
         break;
       }
+      case 'follow': {
+        // A derived write may only touch what the compositor treats as
+        // paint, never layout: the region's fast keep declines a pass by
+        // fingerprinting every participant's offsetLeft/Top/Width/Height,
+        // so a follower writing real width would fail that fingerprint on
+        // every frame and put the whole region back into release-and-
+        // reassert once per frame — the jitter the fast keep exists to
+        // prevent. Caught here, where the author can still read the name.
+        for (const key of Object.keys(step.rest)) {
+          if (!DERIVABLE.has(key)) {
+            throw new Error(
+              `choreo: c.Follow cannot drive '${key}' — a derived value is ` +
+                'computed every frame, so it may only write transform, ' +
+                'opacity and filter properties, never layout',
+            );
+          }
+        }
+        // The geometry a follower computes from is the PASS's, not the
+        // page's: resting boxes measured while every moved value stood
+        // released (releaseForMeasure), taken here into region space. The
+        // run never measures for a follower again — see drive(). A sprite
+        // the pass could not measure simply compiles no follow.
+        const fz = cs.measureZoom ?? 1;
+        const inZ = (r: Rect): Rect => ({
+          height: r.height / fz,
+          width: r.width / fz,
+          x: r.x / fz,
+          y: r.y / fz,
+        });
+        const restBounds = sprite.final ?? sprite.initial;
+        if (!restBounds) {
+          break;
+        }
+        const followed: { from: Rect; sprite: Sprite; to: Rect }[] = [];
+        for (const source of cs.sprites(step.to)) {
+          const toB = source.final ?? source.initial;
+          const fromB = source.initial ?? source.final;
+          if (toB && fromB) {
+            followed.push({
+              from: inZ(fromB.context),
+              sprite: source,
+              to: inZ(toB.context),
+            });
+          }
+        }
+        const ms = step.ms;
+        cues.push({
+          derive: {
+            read: step.read,
+            rest: step.rest,
+            restBox: inZ(restBounds.context),
+            sources: followed,
+          },
+          duration: ms ?? 0,
+          kind: 'follow',
+          offset,
+          sprite,
+        });
+        if (ms === undefined) {
+          open = true;
+        } else {
+          longest = Math.max(longest, offset + ms);
+        }
+        break;
+      }
       case 'scroll': {
         const ms = step.ms ?? 420;
         cues.push({
@@ -982,19 +1069,35 @@ export default function compile(
     }
     return r;
   };
-  const measure = (node: TimelineNode): number => {
+  /**
+   * A node's own length, anchoring aside — for a block, the span its
+   * children occupy, which is what a `@name` on it promises to anyone who
+   * anchors against it.
+   */
+  const extent = (node: TimelineNode): number => {
     if (isGate(node)) {
       return 0;
     }
     if (!isBlock(node)) {
-      // an anchored step is lifted out of its block's flow: it neither pushes
-      // a sequence forward nor stretches a block's span (§4.2)
-      return node.at ? 0 : of(node).duration;
+      return of(node).duration;
     }
-    if (node.kind === 'sequence') {
-      return node.children.reduce((sum, c) => sum + measure(c), 0);
+    return node.kind === 'sequence'
+      ? node.children.reduce((sum, c) => sum + measure(c), 0)
+      : node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
+  };
+  /** what a node contributes to its parent's flow */
+  const measure = (node: TimelineNode): number => {
+    if (isGate(node)) {
+      return 0;
     }
-    return node.children.reduce((max, c) => Math.max(max, measure(c)), 0);
+    // an anchored step or BLOCK is lifted out of its parent's flow: it
+    // neither pushes a sequence forward nor stretches a block's span (§4.2)
+    if (node.at) {
+      return 0;
+    }
+    // a step's own duration already counts its delay; a block's does not,
+    // because the delay is spent before its children begin
+    return isBlock(node) ? (node.delay ?? 0) + extent(node) : of(node).duration;
   };
   const out: Cue[] = [];
   // duplicate names are an authoring error, caught before anything is placed
@@ -1003,13 +1106,16 @@ export default function compile(
     if (isGate(node)) {
       return;
     }
-    if (isBlock(node)) {
-      node.children.forEach(checkNames);
-    } else if (node.name) {
+    // one namespace: a block and a step cannot share a name, or `@at` would
+    // have two answers
+    if (node.name) {
       if (seen.has(node.name)) {
         throw new Error(`choreo: two steps named '${node.name}'`);
       }
       seen.add(node.name);
+    }
+    if (isBlock(node)) {
+      node.children.forEach(checkNames);
     }
   };
   tree.forEach(checkNames);
@@ -1038,28 +1144,31 @@ export default function compile(
       gates.push({ at: start, auto: node.ms });
       return;
     }
+    /** where an anchored node begins — the same arithmetic for a step and a block */
+    const anchored = (ref: AnchorRef) => {
+      const target = names.get(ref.anchor);
+      if (!target) {
+        throw new Error(
+          `choreo: @at names '${ref.anchor}', which is not a step ` +
+            'above this one — anchors point up the score',
+        );
+      }
+      return ref.edge === 'end'
+        ? target.start + target.duration + (ref.delay ?? 0) * 1000
+        : target.start + (ref.progress ?? 0) * target.duration;
+    };
     if (!isBlock(node)) {
       const r = of(node);
       const delay = node.delay ?? 0;
       let base = start;
       if (node.at) {
-        const target = names.get(node.at.anchor);
-        if (!target) {
-          throw new Error(
-            `choreo: @at names '${node.at.anchor}', which is not a step ` +
-              'above this one — anchors point up the score',
-          );
-        }
         if (r.open) {
           throw new Error(
             'choreo: an anchored hold needs its own @duration — lifted out ' +
               'of its block, it has no span to borrow',
           );
         }
-        base =
-          node.at.edge === 'end'
-            ? target.start + target.duration + (node.at.delay ?? 0) * 1000
-            : target.start + (node.at.progress ?? 0) * target.duration;
+        base = anchored(node.at);
       }
       if (node.name) {
         names.set(node.name, {
@@ -1083,20 +1192,29 @@ export default function compile(
       }
       return;
     }
+    // a block answers to the anchor system on a step's terms: it can be
+    // pointed at (`@name`), it can point (`@at`), and its delay is spent
+    // inside its own slot before its children begin
+    const total = extent(node);
+    const from = (node.at ? anchored(node.at) : start) + (node.delay ?? 0);
+    if (node.name) {
+      // recorded BEFORE the children are placed, so a child may anchor
+      // against the block it is in — `@at={{at 'intro' 0.5}}` reads the
+      // same from inside as from outside
+      names.set(node.name, { duration: total, start: from });
+    }
     if (node.kind === 'sequence') {
-      const total = measure(node);
       let offset = 0;
       for (const child of node.children) {
-        place(child, start + offset, total - offset);
+        place(child, from + offset, total - offset);
         offset += measure(child);
       }
       return;
     }
     // a parallel: every child at once — and no gate anywhere under it
     node.children.forEach(forbidGates);
-    const total = measure(node);
     for (const child of node.children) {
-      place(child, start, total);
+      place(child, from, total);
     }
   };
   const root = measure({ children: tree, kind: 'parallel' });
@@ -1107,7 +1225,38 @@ export default function compile(
     place(node, 0, root);
   }
   gates.sort((a, b) => a.at - b.at);
-  return { cues: out, gates };
+  const derived = out.filter((cue) => cue.derive);
+  if (!derived.length) {
+    return { cues: out, gates };
+  }
+  // A follower's `now` is composed from whatever is driving its source
+  // THIS frame, so it has to be evaluated after that driver has written
+  // its frame. Cues are walked in order, so derived ones sort last —
+  // stably, which keeps two followers in the order they were written.
+  const nameOf = (sprite: Sprite) => sprite.id ?? sprite.role ?? 'a sprite';
+  const drivenBy = new Map<Sprite, Cue>();
+  for (const cue of derived) {
+    drivenBy.set(cue.sprite, cue);
+  }
+  for (const cue of derived) {
+    for (const source of cue.derive!.sources) {
+      if (drivenBy.has(source.sprite)) {
+        // Chains are resolvable in principle — a topological sort would do
+        // it — but they are refused for now rather than half-supported: a
+        // cycle inside one would be a frame loop with no honest answer,
+        // and nothing yet needs the depth.
+        throw new Error(
+          `choreo: c.Follow on '${nameOf(cue.sprite)}' reads ` +
+            `'${nameOf(source.sprite)}', which is itself derived — a follower may ` +
+            'not follow a follower',
+        );
+      }
+    }
+  }
+  return {
+    cues: [...out.filter((cue) => !cue.derive), ...derived],
+    gates,
+  };
 }
 
 /* ---- score identity: is this compile the one already in flight? ---- */

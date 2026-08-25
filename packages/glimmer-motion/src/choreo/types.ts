@@ -174,12 +174,17 @@ interface StepBase {
    */
   delay?: number;
   /**
-   * The yield rule (§4.7): a generic step — the canned crossing's own
-   * children — surrenders any sprite that a specific (non-generic) step in
-   * the same timeline also names. That is how "a special exit that is NOT
-   * just a dissolve" is said: write the step, and the canned dissolve
-   * yields the sprite entirely. Never set by authors; `c.Crossing` marks
-   * its generated children.
+   * The yield rule (§4.7): a generic step surrenders any sprite that a
+   * specific (non-generic) step in the same timeline also names. That is
+   * how "a special exit that is NOT just a dissolve" is said — write the
+   * step, and the canned dissolve yields the sprite entirely.
+   *
+   * A COMPOSITE step should mark the children it generates generic. It is
+   * what makes an opinionated default feel like a default rather than a
+   * cage: whoever uses the composite can override one role by writing a
+   * plain step beside it, and needs no exclusion syntax to do it. Steps
+   * written directly in a template are never generic — saying it there
+   * would mean "ignore me if anyone else asks".
    */
   generic?: boolean;
   /** a label other steps may anchor against (`@at={{at 'name'}}`) */
@@ -337,8 +342,73 @@ export interface TetherStep extends StepBase {
   to: Query;
 }
 
+/**
+ * One source of a derived value: the boxes the PASS measured, in region
+ * space, named for which box each one is — because the distinction
+ * between resting and live geometry is the whole correctness argument
+ * (docs/postmortem-follow.md). `from` and `to` are resting layout, where
+ * the stylesheet put the sprite on either side of this change; `now` is
+ * `to` composed with the transform the run is driving this frame. None
+ * of the three is read from the page while the run plays.
+ */
+export interface FollowSource {
+  /** its resting box before this change (equal to `to` when it did not move) */
+  from: Rect;
+  /** where the run holds it THIS frame — arithmetic, not a measurement */
+  now: Rect;
+  /** its resting box after the change — where the run will land it */
+  to: Rect;
+}
+
+/**
+ * What a derived value is computed FROM, handed to `@read` every frame
+ * and every scrubbed still. All geometry comes from the pass's own
+ * measurements, region-relative, so a follower lands on its source at
+ * any camera zoom — and never touches the page while it runs.
+ */
+export interface DeriveContext {
+  /** where the region's frame stands this frame */
+  camera: CameraState;
+  /** 0..1 across this step's own window */
+  p: number;
+  /** the driven sprite's own RESTING box — it never contains what the follower writes */
+  rest: Rect;
+  /** the sprites named by `@to`, in the order the query returned them */
+  sources: FollowSource[];
+  /** seconds on the run's clock */
+  t: number;
+}
+
+/**
+ * A value derived from the scene rather than interpolated between two
+ * keyframes (§4.10) — a badge that rides a flying card, a label held
+ * upright under a rotating parent, a readout that tracks a box.
+ *
+ * `@read` is pure BY CONSTRUCTION: it is handed boxes the pass already
+ * measured — never the live page — so there is no way for a follower to
+ * read back what it just wrote, and nothing it does can force a style
+ * recalculation mid-move. It must still be a pure function of its
+ * context: the run is scrubbable in both directions, and a derived value
+ * with memory would make a seek irreproducible. It is computed on the
+ * main thread every frame — a follower can never be handed to the
+ * compositor — and it may only write transform, opacity and filter
+ * properties, because a derived write that changed layout would fail the
+ * region's fast keep on every frame.
+ */
+export interface FollowStep extends StepBase {
+  kind: 'follow';
+  /** the window; without it, the enclosing block's span */
+  ms?: number;
+  read: (ctx: DeriveContext) => Record<string, PropValue>;
+  /** what each written property is at rest, so a measure pass can undo it */
+  rest: Record<string, PropValue>;
+  /** what to read — one query, however many sprites it returns */
+  to: Query | Query[];
+}
+
 export type Step =
   | CameraStep
+  | FollowStep
   | HoldStep
   | MoveStep
   | RaiseStep
@@ -356,8 +426,28 @@ export interface GateNode {
 }
 
 export interface Block {
+  /**
+   * Start against a named step or block instead of this block's place in
+   * its own block's flow. An anchored block lifts out exactly as an
+   * anchored step does (§4.2): it neither pushes a sequence forward nor
+   * stretches its parent's span.
+   */
+  at?: AnchorRef;
   children: TimelineNode[];
+  /**
+   * Milliseconds before the block's contents start, inside its slot. The
+   * template speaks seconds; the block component converts at the boundary.
+   */
+  delay?: number;
   kind: 'parallel' | 'sequence';
+  /**
+   * A label other steps may anchor against — the block's span is its
+   * contents, so `{{after 'intro'}}` means after the LONGEST thing in it.
+   * This is what makes a composite step (a `node()` that returns a block —
+   * `c.Crossing`, and anything an author writes) something the rest of the
+   * score can point at, rather than an opaque lump.
+   */
+  name?: string;
 }
 export type TimelineNode = Block | GateNode | Step;
 
@@ -409,6 +499,15 @@ export interface Cue {
   };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
+  /** follow: compute this sprite's values from the pass's measurements, every frame */
+  derive?: {
+    read: (ctx: DeriveContext) => Record<string, PropValue>;
+    rest: Record<string, PropValue>;
+    /** the follower's own resting box, region space, from the pass */
+    restBox: Rect;
+    /** each source's measured ends, with the sprite whose transform composes `now` */
+    sources: { from: Rect; sprite: Sprite; to: Rect }[];
+  };
   duration: number;
   /** move: travel along this sampled path instead of the straight line */
   flight?: FlightPath;

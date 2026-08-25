@@ -44,6 +44,7 @@ import {
   Camera,
   collect,
   Crossing,
+  Follow,
   Gate,
   Hold,
   Move,
@@ -82,6 +83,7 @@ const selector = (type?: Query['type']): Selector =>
 export interface ChoreoContext {
   Camera: typeof Camera;
   Crossing: typeof Crossing;
+  Follow: typeof Follow;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Move: typeof Move;
@@ -127,6 +129,7 @@ function contextFor(region: Choreo): ChoreoContext {
   return {
     Camera,
     Crossing,
+    Follow,
     Gate,
     Hold,
     Move,
@@ -783,16 +786,37 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * these, so such a run never takes the fast path. That is the honest
    * answer rather than a missed optimisation: a run writing layout cannot
    * be told apart from a page writing layout without measuring.
+   *
+   * Offsets are accumulated up the offset chain to the region, not read
+   * at the participant alone, because what a render moves may be an
+   * ANCESTOR that is no participant of anything — Escort's seat, one
+   * positioned wrapper carrying three participants. Read flat, the
+   * fingerprint was blind to exactly the reflow a retarget makes, the
+   * pass was declined, and the old run played on against the moved
+   * layout: card, badge and shadow teleported a whole bay, together. The
+   * walk stops at the region's edge so the page above it stays out of the
+   * print — a busy neighbour reflowing above the region must not cancel
+   * its runs.
    */
   private layoutOf(): string {
+    const root = this.element;
     const parts: string[] = [];
     for (const node of this.participants) {
       const el = node.element as HTMLElement | undefined | null;
       if (!el || !el.isConnected) {
         continue;
       }
+      let x = 0;
+      let y = 0;
+      let walk: HTMLElement | null = el;
+      while (walk && walk !== root && root?.contains(walk)) {
+        x += walk.offsetLeft;
+        y += walk.offsetTop;
+        const parent: Element | null = walk.offsetParent;
+        walk = parent instanceof HTMLElement ? parent : null;
+      }
       parts.push(
-        `${node.id ?? node.role ?? ''}@${el.offsetLeft},${el.offsetTop},` +
+        `${node.id ?? node.role ?? ''}@${x},${y},` +
           `${el.offsetWidth},${el.offsetHeight}`,
       );
     }
