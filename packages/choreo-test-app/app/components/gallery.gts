@@ -108,9 +108,15 @@ export class Gallery extends Component {
     }
   }
 
-  get stagesLive() {
-    return this.stagesReleased;
-  }
+  /**
+   * …with ONE exception: the counterpart's own stage boards DURING the
+   * crossing. The old skin dissolves [1 -> 0] over the receiving tile,
+   * and a dissolve needs something real underneath — the live demo
+   * reaches full presence exactly as the snapshot reaches none. One
+   * demo booting inside the pass is the price of the crossfade; the
+   * other twenty-nine still wait for the landing.
+   */
+  stageLive = (id: string) => this.stagesReleased || id === counterpartId();
 
   get demos() {
     if (this.filter === 'All') {
@@ -256,7 +262,7 @@ export class Gallery extends Component {
               class="card-stage"
               {{motion id=(concat "stage-" demo.id) role="stage"}}
             >
-              {{#if this.stagesLive}}
+              {{#if (this.stageLive demo.id)}}
                 {{#let demo.Example as |Example|}}
                   <Example />
                 {{/let}}
