@@ -2,6 +2,7 @@ import {
   cleanCapturedHTML,
   delay,
   logger,
+  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
   type PrerenderMeta,
   type PrerenderTypes,
   type RenderError,
@@ -1379,16 +1380,33 @@ export async function captureScreenshot(
     // produces empty avatars / missing thumbnails. Bounded by an internal
     // timeout so a slow / 401-looping image can't hang the capture.
     await waitForImagePaint(page);
-    // Reported CSS dimensions of the capture. `fullPage` reports the full
-    // scrollable document; `clip` reports its own region; otherwise the
-    // viewport. Device scale multiplies the PNG's physical pixels but not these
-    // CSS dims.
+    // Reported CSS dimensions of the capture. `fullPage` reports the
+    // captured document (derived from the PNG itself below, so report and
+    // bytes cannot disagree); `clip` reports its own region; otherwise the
+    // viewport. Device scale multiplies the PNG's physical pixels but not
+    // these CSS dims.
+    let effectiveScale = page.viewport()?.deviceScaleFactor ?? 1;
     let dims: { width: number; height: number };
     if (captureSpec?.fullPage) {
+      // A fullPage capture's extent is the document's scroll size — a bound
+      // no request-time validation can know, so the physical-pixel cap the
+      // parse enforces for viewport/clip is enforced here. Chromium cannot
+      // produce a texture past the cap anyway; failing by name beats
+      // returning silently truncated bytes.
       dims = await page.evaluate(() => ({
         width: document.documentElement.scrollWidth,
         height: document.documentElement.scrollHeight,
       }));
+      if (
+        dims.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX ||
+        dims.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      ) {
+        return buildInvalidRenderResponseError(
+          page,
+          `fullPage capture of ${dims.width}x${dims.height} CSS px at ${effectiveScale}x exceeds ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels per edge`,
+          { title: 'Screenshot capture too large' },
+        );
+      }
     } else if (captureSpec?.clip) {
       dims = {
         width: captureSpec.clip.width,
@@ -1406,6 +1424,17 @@ export async function captureScreenshot(
       ...(captureSpec?.fullPage ? { fullPage: true } : {}),
       ...(captureSpec?.clip ? { clip: captureSpec.clip } : {}),
     })) as string;
+    if (captureSpec?.fullPage) {
+      // The scroll-size read above and the capture are two separate
+      // measurements (Chromium sizes fullPage from its own layout metrics),
+      // so the reported dims come from the PNG's IHDR: physical pixels at
+      // bytes 16..23, divided back to CSS px by the scale in effect.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      dims = {
+        width: Math.round(header.readUInt32BE(16) / effectiveScale),
+        height: Math.round(header.readUInt32BE(20) / effectiveScale),
+      };
+    }
     let pngBytes = Buffer.byteLength(base64, 'base64');
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} bytes=${pngBytes} base64Chars=${base64.length} ${dims.width}x${dims.height}`,

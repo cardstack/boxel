@@ -7,6 +7,7 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  parseScreenshotCaptureSpec,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
@@ -456,10 +457,16 @@ export function buildPrerenderApp(options: {
     let rawAffinityType = attrs.affinityType;
     let rawAffinityValue = attrs.affinityValue;
     let rawFormat = attrs.format;
-    let rawCaptureSpec = attrs.captureSpec;
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
     let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    // Same strict parse + bounds as the realm-server's POST /_screenshot-card
+    // body: this route is its own HTTP surface, and an unvalidated spec here
+    // would reach `page.setViewport` on a pooled page with none of the cost
+    // caps applied. The parse also normalizes (defaults elided, empty spec
+    // -> null), so the capture path sees one canonical shape from every
+    // caller.
+    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },
@@ -474,6 +481,9 @@ export function buildPrerenderApp(options: {
         name: 'format',
       },
     ]);
+    if (captureSpecParse.error !== undefined) {
+      missing = [...missing, 'captureSpec'];
+    }
     return {
       args:
         missing.length > 0
@@ -486,14 +496,16 @@ export function buildPrerenderApp(options: {
               auth: rawAuth as string,
               format: rawFormat as 'isolated' | 'embedded',
               renderOptions,
-              ...(rawCaptureSpec
-                ? { captureSpec: rawCaptureSpec as ScreenshotCaptureSpec }
+              ...(captureSpecParse.captureSpec
+                ? { captureSpec: captureSpecParse.captureSpec }
                 : {}),
               ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
-        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+        captureSpecParse.error !== undefined
+          ? captureSpecParse.error
+          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${

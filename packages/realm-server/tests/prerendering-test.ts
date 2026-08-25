@@ -744,6 +744,18 @@ module(basename(import.meta.filename), function () {
                 },
               },
             },
+            'giant.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Giant extends CardDef {
+                static displayName = "Giant";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div style="height: 6000px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                  </template>
+                }
+              }
+            `,
             // Named `tall`, not `long`: an instance sharing its extensionless
             // alias with `long.gts` would make the render route's
             // extensionless card id ambiguous — the module source wins the
@@ -754,6 +766,14 @@ module(basename(import.meta.filename), function () {
                 attributes: { name: 'Tall Card' },
                 meta: {
                   adoptsFrom: { module: rri('./long'), name: 'Long' },
+                },
+              },
+            },
+            'huge.json': {
+              data: {
+                attributes: { name: 'Huge Card' },
+                meta: {
+                  adoptsFrom: { module: rri('./giant'), name: 'Giant' },
                 },
               },
             },
@@ -822,6 +842,41 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(png.height, 300, 'PNG matches the clip height');
       assert.strictEqual(response.width, 400, 'reports the clip width');
       assert.strictEqual(response.height, 300, 'reports the clip height');
+    });
+
+    test('fullPage rejects a document past the physical-pixel cap', async function (assert) {
+      // The parse cannot bound a fullPage capture's extent (the document's
+      // scroll size), so the capture path enforces the physical-pixel cap:
+      // a 6000px-tall document at 3× is ~18k physical px, past the 16384
+      // Chromium texture cap.
+      let { response } = await screenshot(`${realmURL}huge`, {
+        fullPage: true,
+        deviceScaleFactor: 3,
+      });
+      assert.strictEqual(response.status, 'error', 'capture is refused');
+      assert.true(
+        (response.error ?? '').includes('physical pixels'),
+        `error names the cap: ${response.error}`,
+      );
+    });
+
+    test('fullPage within the cap still captures at scale', async function (assert) {
+      // The same document is fine at 1× (6000 < 16384) — the cap composes
+      // with the scale factor rather than banning tall documents outright.
+      let { response } = await screenshot(`${realmURL}huge`, {
+        fullPage: true,
+      });
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(
+        png.height > 5000,
+        `captures the full document (got ${png.height})`,
+      );
+      assert.strictEqual(
+        png.height,
+        response.height,
+        'reported height matches the captured PNG height',
+      );
     });
 
     test('viewport override is restored on the pooled page between captures', async function (assert) {
