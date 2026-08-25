@@ -596,6 +596,14 @@ function getFields(card: typeof CardDef): {
   return fields;
 }
 
+// The child-format cascade (RP-2.6). `childFieldFormatsFor` in
+// `@cardstack/runtime-common/boxel-execution-protocol/child-formats` is the
+// same table for every consumer outside this file, and a conformance suite
+// holds that one to it — so an edit here that is not made there renders nested
+// cards in one format inside the Host and another wherever authored code is
+// caged, which neither side's own tests can see. This copy stays because a
+// realm module can only import what the host's virtual network shims, and
+// widening that surface is not this function's call to make.
 function defaultFieldFormats(containingFormat: Format): FieldFormats {
   switch (containingFormat) {
     case 'edit':

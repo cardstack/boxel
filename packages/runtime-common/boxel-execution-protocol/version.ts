@@ -7,7 +7,13 @@
  */
 
 import type { Cloneable } from './cloneable.ts';
-import { ProtocolRefusal, describeValue, joinTokens } from './refusal.ts';
+import {
+  ProtocolRefusal,
+  describeValue,
+  joinTokens,
+  newOffenderList,
+  recordOffender,
+} from './refusal.ts';
 import {
   asRefusal,
   newNormalizationBudget,
@@ -89,14 +95,23 @@ function gateEnvelope(
       `record declares protocol version ${protocolVersion}; this consumer implements ${support.protocolVersion}`,
     );
   }
-  let unsupported = requiredFeatures.filter(
-    (feature) => !support.features.has(feature),
-  );
-  if (unsupported.length > 0) {
+  // Collected into a bounded list rather than filtered into a full one. The
+  // feature array itself is charged against the record's budget, so this is no
+  // longer where a producer buys unbounded work — but a filter builds one
+  // string per unrecognized feature, each through `JSON.stringify`, to render
+  // ten of them, and the count a diagnostic reports has to be the count the
+  // producer sent rather than the count it printed.
+  let unsupported = newOffenderList();
+  for (let feature of requiredFeatures) {
+    if (!support.features.has(feature)) {
+      recordOffender(unsupported, describeValue(feature));
+    }
+  }
+  if (unsupported.total > 0) {
     throw new ProtocolRefusal(
       'BOXEL_PROTOCOL_FEATURE_UNSUPPORTED',
       `record requires features this consumer does not implement: ${joinTokens(
-        unsupported.map((feature) => describeValue(feature)),
+        unsupported,
       )}`,
     );
   }
