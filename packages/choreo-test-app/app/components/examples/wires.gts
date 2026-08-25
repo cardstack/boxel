@@ -169,18 +169,35 @@ function paintRest(svg: SVGSVGElement) {
   if (!root) {
     return;
   }
+  // Client rects carry every ancestor transform — including the page
+  // crossing, which is scaling this whole stage mid-flight while the
+  // follow loop repaints. Subtracting raw client coordinates baked that
+  // scale into the ink and the threads stood ~10px off their marks for
+  // the whole flight; mapping through the svg's own screen CTM lands
+  // them in user units no matter what is carrying the page this frame —
+  // the same mapping, for the same reason, as the engine's drawTether.
+  const inverse = svg.getScreenCTM()?.inverse();
   const R = root.getBoundingClientRect();
+  const toLocal = (x: number, y: number) => {
+    if (!inverse) {
+      return { x: x - R.left, y: y - R.top };
+    }
+    const p = new DOMPoint(x, y).matrixTransform(inverse);
+    return { x: p.x, y: p.y };
+  };
   const box = (id: string): Rect | null => {
     const el = root.querySelector(`[data-node="${id}"]`);
     if (!el) {
       return null;
     }
     const r = el.getBoundingClientRect();
+    const tl = toLocal(r.left, r.top);
+    const br = toLocal(r.right, r.bottom);
     return {
-      height: r.height,
-      width: r.width,
-      x: r.left - R.left,
-      y: r.top - R.top,
+      height: br.y - tl.y,
+      width: br.x - tl.x,
+      x: tl.x,
+      y: tl.y,
     };
   };
   const keep = new Set<string>();

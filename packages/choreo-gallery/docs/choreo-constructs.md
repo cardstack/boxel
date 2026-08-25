@@ -429,18 +429,23 @@ the old `animateView` orchestration carried:
    measurement carries that box alongside the frame, and the shape match
    is computed between the two subjects. Declare it on either end and
    the other is derived by the same fraction.
-7. **Nothing distorts: `@size='crop'`, which is iOS's rule.** The default
-   `@size={{true}}` animates real width and height, which stretches
-   whatever the two ends do not agree about and — inside a grid — drags
-   the whole row with it. `@size='scale'` matches by transform alone
-   (centre to centre, `scaleX`/`scaleY`): layout is never written, so a
-   row can never stretch, but a mismatched aspect still squashes.
-   `@size='crop'` is the honest one and the crossing's default: a single
-   uniform scale `s = max(Wf/Wt, Hf/Ht)` covers the target, and the
-   overflow is cut off by a `clipPath` window — the OTHER end's frame,
-   pulled back through the inverse transform (`p = C + (W − C − d)/s`)
-   so it travels with the box and opens to nothing at the landing. One
-   side of the pair crops the other, and neither is stretched.
+7. **Nothing distorts: `@size='crop'`, the matching-snapshot rule.** The
+   default `@size={{true}}` animates real width and height, which
+   stretches whatever the two ends do not agree about and — inside a
+   grid — drags the whole row with it. `@size='scale'` matches by
+   transform alone (centre to centre, `scaleX`/`scaleY`): layout is
+   never written, so a row can never stretch, but a mismatched aspect
+   still squashes. `@size='crop'` is the honest one and the crossing's
+   default, and its geometry is exactly the superimposed snapshot: the
+   entering subject is scaled — uniformly, by WIDTH alone,
+   `s = Wf/Wt`, never by cover — to fill the exiting subject's width,
+   its TOP pinned to the exiting subject's top, and whatever runs past
+   the exiting subject's height is cut off at the BOTTOM by a `clipPath`
+   window pulled back through the inverse transform, travelling with the
+   box and opening to nothing at the landing. The rule is symmetric: as
+   the pair lands, the exiting skin stands at the entering subject's
+   width, tops together, its own overflow cropped the same way. One side
+   of the pair crops the other, and neither is stretched.
 
 The canned shape is overlapped, as a Magic Move is: the leave fades as
 the flight lifts off; `@overlap` still places the arrivals. And two
