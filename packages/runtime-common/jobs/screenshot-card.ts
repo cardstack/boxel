@@ -5,10 +5,10 @@ import {
   type QueueCoalesceDecision,
   type QueuePublisher,
 } from '../queue.ts';
-import {
-  hasCaptureSpecOverrides,
-  type ScreenshotPrerenderResponse,
-  type DBAdapter,
+import type {
+  ScreenshotCaptureSpec,
+  ScreenshotPrerenderResponse,
+  DBAdapter,
 } from '../index.ts';
 import type {
   ScreenshotCardArgs,
@@ -34,25 +34,21 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // different revision. A `persist: null` job (unindexed card, or a server
 // with no MediaCache) is a render-now request whose identity carries no
 // freshness axis — an in-flight twin could be up to a reservation-lease old
-// and of a pre-edit card — so those always insert. A job with captureSpec
-// overrides also always inserts, on both the incoming and candidate sides:
-// the persist identity cannot represent the overrides, so an override job
-// is never a canonical job's twin (the producers uphold that pairing by
-// setting `persist: null` on override jobs, and the task refuses the
-// persist if one slips through — this predicate must not depend on it).
-// The `runAs` equality below keeps joins within one render identity: the
-// GET lane renders as the realm owner and the POST lane as the requester,
-// so cross-surface twins never join even when their persist targets match.
+// and of a pre-edit card — so those always insert. The persist identity's
+// `captureSpecHash` covers captureSpec overrides (viewport / scale /
+// fullPage / clip), so same-spec custom captures coalesce like canonical
+// ones; the `sameCaptureSpec` compare below is belt-and-braces against a
+// producer whose hash and spec disagree, since joining hands the incoming
+// caller the twin's render verbatim. The `runAs` equality keeps joins
+// within one render identity: the GET lane renders as the realm owner and
+// the POST lane as the requester, so cross-surface twins never join even
+// when their persist targets match.
 export function chooseScreenshotCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
   let incomingArgs = parseScreenshotCardArgs(incoming.args);
-  if (
-    !incomingArgs ||
-    !incomingArgs.persist ||
-    hasCaptureSpecOverrides(incomingArgs.captureSpec)
-  ) {
+  if (!incomingArgs || !incomingArgs.persist) {
     return { type: 'insert' };
   }
   let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
@@ -62,10 +58,10 @@ export function chooseScreenshotCardCoalesceDecision(
     let candidateArgs = parseScreenshotCardArgs(candidate.args);
     return (
       candidateArgs !== undefined &&
-      !hasCaptureSpecOverrides(candidateArgs.captureSpec) &&
       candidateArgs.cardId === incomingArgs.cardId &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&
+      sameCaptureSpec(candidateArgs.captureSpec, incomingArgs.captureSpec) &&
       samePersist(candidateArgs.persist, incomingArgs.persist)
     );
   });
@@ -98,6 +94,29 @@ function parseScreenshotCardArgs(
     return undefined;
   }
   return obj as ScreenshotCardArgs;
+}
+
+// Field-by-field rather than JSON.stringify: one side round-trips through
+// jsonb, which does not preserve key order. Producers normalize specs via
+// `parseScreenshotCaptureSpec` (defaults elided), so a default-valued field
+// never appears on one side only.
+function sameCaptureSpec(
+  a: ScreenshotCaptureSpec | null | undefined,
+  b: ScreenshotCaptureSpec | null | undefined,
+): boolean {
+  if (!a || !b) {
+    return !a && !b;
+  }
+  return (
+    (a.viewport?.width ?? null) === (b.viewport?.width ?? null) &&
+    (a.viewport?.height ?? null) === (b.viewport?.height ?? null) &&
+    (a.deviceScaleFactor ?? null) === (b.deviceScaleFactor ?? null) &&
+    (a.fullPage ?? false) === (b.fullPage ?? false) &&
+    (a.clip?.x ?? null) === (b.clip?.x ?? null) &&
+    (a.clip?.y ?? null) === (b.clip?.y ?? null) &&
+    (a.clip?.width ?? null) === (b.clip?.width ?? null) &&
+    (a.clip?.height ?? null) === (b.clip?.height ?? null)
+  );
 }
 
 // Field-by-field rather than JSON.stringify: one side round-trips through

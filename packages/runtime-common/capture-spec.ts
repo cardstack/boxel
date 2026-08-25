@@ -19,26 +19,40 @@ export function isCaptureFormat(value: unknown): value is CaptureFormat {
   return (CAPTURE_FORMATS as readonly unknown[]).includes(value);
 }
 
-export interface CaptureSpec {
+// The engine's default capture geometry — Puppeteer's launch viewport (no
+// `defaultViewport` override), the size every canonical capture renders at.
+// Pinned here because the canonical form elides default-valued fields: a
+// request spelling these values explicitly must hash identically to one that
+// omits them, which only works if both sides agree on what the defaults are.
+export const DEFAULT_CAPTURE_VIEWPORT = {
+  width: 800,
+  height: 600,
+  deviceScaleFactor: 1,
+} as const;
+
+// The full capture identity: the render format plus the per-capture geometry
+// overrides. This is what canonicalizes into the MediaCache ledger key, so a
+// custom-geometry capture persists and serves exactly like a format-only one.
+export interface CaptureSpec extends ScreenshotCaptureSpec {
   format: CaptureFormat;
 }
 
-// Whether a screenshot job's per-capture overrides (viewport / scale /
-// fullPage / clip) make it a non-canonical render. The canonical capture
-// identity (and thus the MediaCache ledger and job coalescing) cannot
-// represent these overrides, so everything keyed on that identity must treat
-// an override-carrying capture as outside it: never persisted under a ledger
-// key, never joined to (or by) a canonical twin.
-export function hasCaptureSpecOverrides(
-  captureSpec: ScreenshotCaptureSpec | null | undefined,
-): boolean {
-  return !!captureSpec && Object.keys(captureSpec).length > 0;
+// The geometry overrides a spec carries beyond the engine defaults — the
+// portion of the identity the prerenderer must be told about (`format` rides
+// separately on the job args). Null when the spec is all-defaults, matching
+// the `ScreenshotCardArgs.captureSpec: ... | null` contract.
+export function captureSpecOverrides(
+  spec: CaptureSpec,
+): ScreenshotCaptureSpec | null {
+  let overrides = canonicalOverrides(spec);
+  return Object.keys(overrides).length > 0 ? overrides : null;
 }
 
 // ---------------------------------------------------------------------------
 // ScreenshotCaptureSpec bounds + strict parse — one enforcement point for
 // every surface that accepts a spec off the wire (the realm-server's POST
-// /_screenshot-card body and the prerender server's /prerender-screenshot
+// /_screenshot-card body, the GET `_screenshot/` URL DSL via
+// `parseCaptureSpecParams`, and the prerender server's /prerender-screenshot
 // route), and the home of the caps the capture path itself enforces for the
 // extents only it can know (a fullPage capture's document size).
 // ---------------------------------------------------------------------------
@@ -152,21 +166,14 @@ export function parseScreenshotCaptureSpec(
         error: `captureSpec.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
       };
     }
-    // 1 is the engine default: elide it so `{ deviceScaleFactor: 1 }` means
-    // the same capture as no spec at all and keeps the canonical fast path.
-    if (scale !== 1) {
-      spec.deviceScaleFactor = scale;
-    }
+    spec.deviceScaleFactor = scale;
   }
 
   if (raw.fullPage !== undefined) {
     if (typeof raw.fullPage !== 'boolean') {
       return { error: 'captureSpec.fullPage must be a boolean' };
     }
-    // false is the engine default: elide it (see deviceScaleFactor above).
-    if (raw.fullPage) {
-      spec.fullPage = true;
-    }
+    spec.fullPage = raw.fullPage;
   }
 
   if (raw.clip !== undefined) {
@@ -228,6 +235,8 @@ export function parseScreenshotCaptureSpec(
   // Tighter containment when the caller declared a viewport: the layout was
   // requested at that size, so a clip past its edge is caller error — the
   // region would be unstyled overflow or blank area past the document edge.
+  // Checked before default-elision so an explicitly-declared default-sized
+  // viewport still constrains its clip.
   if (spec.clip && spec.viewport) {
     if (spec.clip.x + spec.clip.width > spec.viewport.width) {
       return {
@@ -280,47 +289,119 @@ export function parseScreenshotCaptureSpec(
   // A spec whose every field matched an engine default normalizes to null:
   // it means the canonical capture, and null is what consumers key that
   // classification on.
-  return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
+  let normalized = canonicalOverrides(spec);
+  return {
+    captureSpec: Object.keys(normalized).length > 0 ? normalized : null,
+  };
+}
+
+// The default-elision rule, applied everywhere a spec is normalized: a field
+// spelling out an engine default (the 800×600 viewport, scale 1, fullPage
+// false) is dropped, so equal capture intents canonicalize — and hash —
+// identically however they were spelled.
+function canonicalOverrides(
+  spec: ScreenshotCaptureSpec,
+): ScreenshotCaptureSpec {
+  let out: ScreenshotCaptureSpec = {};
+  if (
+    spec.viewport &&
+    !(
+      spec.viewport.width === DEFAULT_CAPTURE_VIEWPORT.width &&
+      spec.viewport.height === DEFAULT_CAPTURE_VIEWPORT.height
+    )
+  ) {
+    out.viewport = { width: spec.viewport.width, height: spec.viewport.height };
+  }
+  if (
+    spec.deviceScaleFactor != null &&
+    spec.deviceScaleFactor !== DEFAULT_CAPTURE_VIEWPORT.deviceScaleFactor
+  ) {
+    out.deviceScaleFactor = spec.deviceScaleFactor;
+  }
+  if (spec.fullPage) {
+    out.fullPage = true;
+  }
+  if (spec.clip) {
+    out.clip = {
+      x: spec.clip.x,
+      y: spec.clip.y,
+      width: spec.clip.width,
+      height: spec.clip.height,
+    };
+  }
+  return out;
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are
 // reserved for the engine capabilities the project's URL grammar assigns
 // them, and refused (never ignored) while the engine lacks them.
-const RESERVED_CAPTURE_PARAMS = new Set([
-  'envelope',
+const RESERVED_CAPTURE_PARAMS = new Set(['envelope', 'target']);
+const CAPTURE_PARAMS = new Set([
+  'format',
   'viewport',
   'dsf',
   'fullPage',
   'clip',
-  'target',
 ]);
 
 export type CaptureSpecParseResult =
   | { spec: CaptureSpec }
   | { error: { field: string; message: string } };
 
+// The URL grammar for the geometry params — each is the flat spelling of the
+// POST body's field, so the two surfaces express one identity:
+//   viewport=1280x800      ⇔ captureSpec.viewport {width, height}
+//   dsf=2                  ⇔ captureSpec.deviceScaleFactor
+//   fullPage=true          ⇔ captureSpec.fullPage
+//   clip=0,0,400x300       ⇔ captureSpec.clip {x, y, width, height}
+const VIEWPORT_PARAM_PATTERN = /^(\d+)x(\d+)$/;
+
+// Maps a shared-validator error (spelled in POST-body field terms) onto the
+// GET param that carried the offending value, keeping one error wording
+// across both surfaces while still naming the field in the caller's own
+// grammar.
+function captureParamForSpecError(message: string): string {
+  // clip before viewport: the containment errors name both fields, and the
+  // clip is the value that broke the constraint.
+  if (message.includes('captureSpec.clip')) {
+    return 'clip';
+  }
+  if (message.includes('captureSpec.viewport')) {
+    return 'viewport';
+  }
+  if (message.includes('captureSpec.deviceScaleFactor')) {
+    return 'dsf';
+  }
+  if (message.includes('fullPage')) {
+    return 'fullPage';
+  }
+  return 'clip';
+}
+
 // Parses the flat, unprefixed query params of a `_screenshot/` request into
 // a spec. Strict on principle (see the module comment): unknown and
 // reserved params, repeated params, and out-of-range values are each a 400
-// naming the offending field. `name=` addresses a declared screenshot, a
-// different addressing form entirely — the route splits it off before
-// calling this.
+// naming the offending field. Bounds validation is the same
+// `parseScreenshotCaptureSpec` the POST body runs, so the two surfaces
+// accept and refuse identical geometry with identical wording. `name=`
+// addresses a declared screenshot, a different addressing form entirely —
+// the route splits it off before calling this.
 export function parseCaptureSpecParams(
   searchParams: URLSearchParams,
 ): CaptureSpecParseResult {
   for (let key of new Set(searchParams.keys())) {
-    if (key === 'format') {
+    if (CAPTURE_PARAMS.has(key)) {
+      if (searchParams.getAll(key).length > 1) {
+        return {
+          error: { field: key, message: `${key} may only be given once` },
+        };
+      }
       continue;
     }
     let message = RESERVED_CAPTURE_PARAMS.has(key)
       ? `parameter "${key}" is not supported by this capture engine`
       : `unsupported parameter "${key}"`;
     return { error: { field: key, message } };
-  }
-  if (searchParams.getAll('format').length > 1) {
-    return {
-      error: { field: 'format', message: 'format may only be given once' },
-    };
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCaptureFormat(format)) {
@@ -332,22 +413,130 @@ export function parseCaptureSpecParams(
       },
     };
   }
-  return { spec: { format } };
+
+  // Translate the URL grammar into the POST body's shape, then run the one
+  // shared validator over it. Grammar failures (a malformed value) are named
+  // here; bounds failures come back from the validator in its own wording.
+  let raw: Record<string, unknown> = {};
+  let viewport = searchParams.get('viewport');
+  if (viewport !== null) {
+    let match = VIEWPORT_PARAM_PATTERN.exec(viewport);
+    if (!match) {
+      return {
+        error: {
+          field: 'viewport',
+          message:
+            'viewport must be "<width>x<height>" with positive integers (e.g. viewport=1280x800)',
+        },
+      };
+    }
+    raw.viewport = { width: Number(match[1]), height: Number(match[2]) };
+  }
+  let dsf = searchParams.get('dsf');
+  if (dsf !== null) {
+    let scale = Number(dsf);
+    if (dsf.trim() === '' || !Number.isFinite(scale)) {
+      return {
+        error: {
+          field: 'dsf',
+          message: 'dsf must be a positive number (e.g. dsf=2)',
+        },
+      };
+    }
+    raw.deviceScaleFactor = scale;
+  }
+  let fullPage = searchParams.get('fullPage');
+  if (fullPage !== null) {
+    if (fullPage !== 'true' && fullPage !== 'false') {
+      return {
+        error: {
+          field: 'fullPage',
+          message: 'fullPage must be "true" or "false"',
+        },
+      };
+    }
+    raw.fullPage = fullPage === 'true';
+  }
+  let clip = searchParams.get('clip');
+  if (clip !== null) {
+    // x and y parse as `Number` rather than by pattern: the POST body admits
+    // any non-negative finite value, whose canonical `String` form can be
+    // scientific notation — the served URL must reparse whatever the shared
+    // validator admitted. Width and height are positive integers, so their
+    // spelling is always plain digits.
+    let clipError = {
+      error: {
+        field: 'clip',
+        message:
+          'clip must be "<x>,<y>,<width>x<height>" with non-negative x/y and positive integer width/height (e.g. clip=0,0,400x300)',
+      },
+    };
+    let parts = clip.split(',');
+    if (parts.length !== 3) {
+      return clipError;
+    }
+    let [xPart, yPart, extentPart] = parts;
+    let extentMatch = /^(\d+)x(\d+)$/.exec(extentPart);
+    let x = Number(xPart);
+    let y = Number(yPart);
+    if (
+      xPart.trim() === '' ||
+      yPart.trim() === '' ||
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !extentMatch
+    ) {
+      return clipError;
+    }
+    raw.clip = {
+      x,
+      y,
+      width: Number(extentMatch[1]),
+      height: Number(extentMatch[2]),
+    };
+  }
+
+  let parsed = parseScreenshotCaptureSpec(raw);
+  if (parsed.error) {
+    return {
+      error: {
+        field: captureParamForSpecError(parsed.error),
+        message: parsed.error,
+      },
+    };
+  }
+  return { spec: { format, ...(parsed.captureSpec ?? {}) } };
 }
 
-// The canonical serialization: keys sorted, default-valued fields elided —
-// so the all-defaults spec is `{}` however it was spelled, and any two
-// requests meaning the same capture hash identically.
+// The canonical serialization: keys sorted (nested objects included),
+// default-valued fields elided — so the all-defaults spec is `{}` however it
+// was spelled, and any two requests meaning the same capture hash
+// identically.
 export function canonicalCaptureSpecString(spec: CaptureSpec): string {
   let canonical: Record<string, unknown> = {};
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
     canonical.format = spec.format;
   }
-  return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(canonical).sort(([a], [b]) => a.localeCompare(b)),
-    ),
-  );
+  let overrides = canonicalOverrides(spec);
+  if (overrides.viewport) {
+    canonical.viewport = sortKeys(overrides.viewport);
+  }
+  if (overrides.deviceScaleFactor != null) {
+    canonical.deviceScaleFactor = overrides.deviceScaleFactor;
+  }
+  if (overrides.fullPage) {
+    canonical.fullPage = true;
+  }
+  if (overrides.clip) {
+    canonical.clip = sortKeys(overrides.clip);
+  }
+  return JSON.stringify(sortKeys(canonical));
+}
+
+function sortKeys<T extends Record<string, unknown>>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)),
+  ) as T;
 }
 
 // The ledger key component for a spec: the hash of its canonical form (the
@@ -361,11 +550,32 @@ export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
 
 // The spec's canonical query string — '' for the all-defaults spec — so a
 // served URL round-trips through `parseCaptureSpecParams` back to the same
-// canonical form.
+// canonical form. Numbers serialize through `String`, which is already the
+// shortest round-trip form (`2`, not `2.0`), matching how `Number` reparses
+// them.
 export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
   let searchParams = new URLSearchParams();
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
     searchParams.set('format', spec.format);
+  }
+  let overrides = canonicalOverrides(spec);
+  if (overrides.viewport) {
+    searchParams.set(
+      'viewport',
+      `${overrides.viewport.width}x${overrides.viewport.height}`,
+    );
+  }
+  if (overrides.deviceScaleFactor != null) {
+    searchParams.set('dsf', String(overrides.deviceScaleFactor));
+  }
+  if (overrides.fullPage) {
+    searchParams.set('fullPage', 'true');
+  }
+  if (overrides.clip) {
+    searchParams.set(
+      'clip',
+      `${overrides.clip.x},${overrides.clip.y},${overrides.clip.width}x${overrides.clip.height}`,
+    );
   }
   let qs = searchParams.toString();
   return qs.length > 0 ? `?${qs}` : '';

@@ -1,5 +1,6 @@
 import {
   cleanCapturedHTML,
+  DEFAULT_CAPTURE_VIEWPORT,
   delay,
   logger,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
@@ -1282,12 +1283,9 @@ async function waitForImagePaint(page: Page): Promise<void> {
 
 // Puppeteer's default launch viewport (no `defaultViewport` override). Used to
 // restore a pooled page when we can't read its prior viewport — the canonical
-// size the indexing HTML-capture path expects.
-const DEFAULT_SCREENSHOT_VIEWPORT = {
-  width: 800,
-  height: 600,
-  deviceScaleFactor: 1,
-};
+// size the indexing HTML-capture path expects. Shared with the capture-spec
+// canonicalizer, which elides a spec spelling out exactly these values.
+const DEFAULT_SCREENSHOT_VIEWPORT = DEFAULT_CAPTURE_VIEWPORT;
 
 export async function captureScreenshot(
   page: Page,

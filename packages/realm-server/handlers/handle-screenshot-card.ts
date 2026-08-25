@@ -40,9 +40,9 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // One entry of the response's `captures` array: the durable served URL is
 // the reference callers should embed (a re-capture rotates its bytes, never
 // the URL); `base64` rides along by default until callers migrate to URLs
-// (`includeBase64: false` opts out). `name` and `deviceScaleFactor` are
-// null for ad-hoc captures — they populate for declared-screenshot batches
-// and once the capture engine reports a scale factor.
+// (`includeBase64: false` opts out). `name` is null for ad-hoc captures —
+// it populates for declared-screenshot batches. `deviceScaleFactor`
+// populates when the capture spec overrides it, null at the default scale.
 interface CaptureResult {
   name: string | null;
   url: string;
@@ -107,18 +107,19 @@ interface CaptureResult {
  * 4096×16384, deviceScaleFactor ≤ 3, clip bounded by the same caps as the
  * viewport and within the viewport when one is given, physical pixels per
  * edge ≤ the Chromium texture cap, `fullPage` and `clip` mutually exclusive
- * — the prerender server's screenshot route runs the identical parse), so
- * the worker downstream can treat it as trusted. The parse is strict: a
- * field the engine cannot honor is refused by name — never ignored — and
- * default-valued fields (`fullPage: false`, `deviceScaleFactor: 1`) are
- * elided so equal capture intents classify identically. Invalid specs
- * return a 400 naming the offending field. The one bound no request-time
- * parse can enforce — a fullPage capture's document extent — is checked
- * against the same physical-pixel cap at capture time.
- * A spec with overrides is capture-only: the ledger's canonical capture
- * identity cannot represent it yet (the GET DSL reserves those params), so it
- * always renders fresh and returns raw bytes — no ledger fast path, no
- * MediaCache persist, no `captures` URL.
+ * — the prerender server's screenshot route and the GET `_screenshot/` URL
+ * DSL run the identical parse), so the worker downstream can treat it as
+ * trusted. The parse is strict: a field the engine cannot honor is refused
+ * by name — never ignored — and default-valued fields (`fullPage: false`,
+ * `deviceScaleFactor: 1`, the engine's 800×600 viewport) are elided so
+ * equal capture intents classify identically. Invalid specs return a 400
+ * naming the offending field. The one bound no request-time parse can
+ * enforce — a fullPage capture's document extent — is checked against the
+ * same physical-pixel cap at capture time.
+ * The spec is part of the canonical capture identity — its hash keys the
+ * MediaCache ledger — so a custom capture persists and serves on its own
+ * GET `_screenshot/` URL (`?viewport=…&dsf=…`) exactly like a format-only
+ * one: ledger fast path, coalescing, and `captures[].url` all apply.
  *
  * The `runAs` user is derived from the authenticated JWT.
  */
@@ -192,7 +193,6 @@ export default function handleScreenshotCard({
     if (!normalizedCardId.startsWith(normalizedRealmURL)) {
       return sendResponseForBadRequest(ctxt, 'cardId must be within realmURL');
     }
-    let spec: CaptureSpec = { format };
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
@@ -201,6 +201,10 @@ export default function handleScreenshotCard({
       return sendResponseForBadRequest(ctxt, captureSpecParse.error);
     }
     let captureSpec = captureSpecParse.captureSpec ?? null;
+    // The full capture identity: format plus the normalized geometry
+    // overrides. Its hash keys the ledger, so a custom capture persists and
+    // serves under its own durable URL exactly like a format-only one.
+    let spec: CaptureSpec = { format, ...(captureSpec ?? {}) };
 
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token?.user) {
@@ -221,17 +225,9 @@ export default function handleScreenshotCard({
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
-      // A custom `captureSpec` has no representation in the ledger's
-      // canonical capture identity yet — the GET `_screenshot/` DSL reserves
-      // `viewport`/`dsf`/`fullPage`/`clip` — so persisting one under the
-      // format-only key would let a custom render serve on the canonical
-      // URL. Custom captures render fresh and return bytes only: no ledger
-      // fast path, no persist, no served URL. The parse normalizes an
-      // all-defaults spec to null, so null exactly means canonical.
-      let isCanonicalCapture = captureSpec === null;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
-      if (mediaCacheAdapter && isCanonicalCapture) {
+      if (mediaCacheAdapter) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -363,13 +359,6 @@ export default function handleScreenshotCard({
         // The job keeps running and (when persisting) lands its capture in
         // the MediaCache, so the client's retry answers from the ledger
         // with no second render. The retry hint is one average capture.
-        //
-        // That resume applies only to canonical captures. A custom
-        // captureSpec's job is capture-only (persist: null, never
-        // coalesced), so its timed-out render is discarded and each retry
-        // is a full re-render — the Retry-After here is pacing, not a
-        // cheap-resume promise, until the ledger identity learns these
-        // specs.
         let estimate = await estimateScreenshotQueueWait(
           dbAdapter,
           `screenshot:${normalizedRealmURL}`,
@@ -462,7 +451,9 @@ function captureResult({
     }),
     width,
     height,
-    deviceScaleFactor: null,
+    // Known only when the spec overrode it; a default-scale capture reports
+    // null until the capture engine reports the effective factor itself.
+    deviceScaleFactor: spec.deviceScaleFactor ?? null,
     ...(withBase64 && base64 !== undefined ? { base64 } : {}),
   };
 }
