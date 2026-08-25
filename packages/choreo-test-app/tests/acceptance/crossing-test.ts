@@ -104,15 +104,15 @@ module('Acceptance | crossing', function (hooks) {
       Math.max(...midHeights) - Math.min(...midHeights) < 8,
       `no card row stretches under the flight (${Math.min(...midHeights).toFixed(0)}..${Math.max(...midHeights).toFixed(0)})`
     );
-    // cards mounting mid-crossing must NOT play their entrance: thirty
-    // springs under the flight is the kink the suppression exists for
-    const sprung = [...document.querySelectorAll<HTMLElement>('.card')].filter(
-      (el) => (el.style.transform || '').includes('0.96')
+    // mid-flight only the counterpart tile is lit; every unmatched card
+    // HOLDS its hidden pose — dark, not entering — until the settle
+    const lit = [...document.querySelectorAll<HTMLElement>('.card')].filter(
+      (el) => getComputedStyle(el).opacity !== '0'
     );
-    assert.strictEqual(
-      sprung.length,
-      0,
-      `no card plays its entrance under the crossing (${sprung.length} sprung)`
+    assert.deepEqual(
+      lit.map((el) => el.dataset['demo']),
+      ['playhead'],
+      'only the counterpart tile is visible under the flight'
     );
     // the stages hold empty for the span — booting thirty demos inside
     // the pass is the heaviest render in the app — EXCEPT the
