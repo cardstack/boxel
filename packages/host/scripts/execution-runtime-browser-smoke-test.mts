@@ -375,26 +375,22 @@ test('the smoke summary preserves reference, execution, readiness, and diagnosis
 });
 
 test('execution stage summaries preserve tiers and calculate median and p95', () => {
-  let result = (samples) => ({
-    page: {
+  // The summarizer takes the observations it reads, not the case wrapping
+  // them, so a case that observed nothing cannot be handed to it at all.
+  let page = (samples: number[]) =>
+    ({
       executionPerformance: {
         droppedRecords: 0,
-        records: samples.map((durationMs, index) => ({
+        records: samples.map((durationMs) => ({
           durationMs,
-          occurrenceId: `surface:${index}`,
-          operationId: `operation:${index}`,
-          sequence: index + 1,
           stage: 'runtime-create',
-          startedAt: 0,
-          endedAt: durationMs,
           status: 'ok',
           tier: 'sandbox',
         })),
       },
-    },
-  });
+    }) as unknown as Parameters<typeof summarizeExecutionStages>[0][number];
 
-  assert.deepEqual(summarizeExecutionStages([result([5, 10, 20, 40])]), {
+  assert.deepEqual(summarizeExecutionStages([page([5, 10, 20, 40])]), {
     'sandbox:runtime-create': {
       medianMs: 20,
       p95Ms: 40,
