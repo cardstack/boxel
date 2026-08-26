@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import type { ChoreoRun } from 'glimmer-motion';
 import { beacon, Choreo, motion } from 'glimmer-motion';
 
@@ -41,6 +42,12 @@ interface Row {
   subject: string;
   time: string;
 }
+
+interface SeekableInboxElement extends HTMLElement {
+  seekDemo?: (time: number) => PromiseLike<void> | void;
+}
+
+const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /**
  * The case beacons exist for.
@@ -150,8 +157,34 @@ export class Inbox extends Component {
     this.binned += 1;
   };
 
+  private root?: HTMLElement;
+
+  register = modifier((el: HTMLElement) => {
+    this.root = el;
+    (el as SeekableInboxElement).seekDemo = this.seekDemo;
+    return () => {
+      delete (el as SeekableInboxElement).seekDemo;
+      this.root = undefined;
+    };
+  });
+
+  /** Optional capture handle; it drives this demo's actual Choreo run. */
+  seekDemo = async (time: number) => {
+    const local = Math.max(0, time - 0.9);
+    if (time >= 0.9 && this.rows.length === 3) {
+      this.compose();
+      await nextFrame();
+      await nextFrame();
+    }
+    const run = this.c?.run;
+    if (run) {
+      run.pause();
+      run.time = Math.min(local, run.duration);
+    }
+  };
+
   <template>
-    <div class="ex">
+    <div class="ex" {{this.register}}>
       <div class="inbox">
         {{! the chrome — outside the Choreo, and never animated }}
         <header class="inbox-bar">

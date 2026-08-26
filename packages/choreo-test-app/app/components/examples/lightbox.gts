@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import { LayoutGroup, motion, Presence } from 'glimmer-motion';
 
 const photos = [
@@ -69,6 +70,12 @@ const detailsOut = { opacity: 0 };
 const detailsTween = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
 const spring = { bounce: 0.12, type: 'spring', visualDuration: 0.5 } as const;
 
+interface SeekableLightboxElement extends HTMLElement {
+  seekDemo?: (time: number) => PromiseLike<void> | void;
+}
+
+const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 type Photo = (typeof photos)[number];
 
 export class Lightbox extends Component {
@@ -92,9 +99,35 @@ export class Lightbox extends Component {
     this.lit = null;
   };
 
+  private root?: HTMLElement;
+
+  register = modifier((el: HTMLElement) => {
+    this.root = el;
+    (el as SeekableLightboxElement).seekDemo = this.seekDemo;
+    return () => {
+      delete (el as SeekableLightboxElement).seekDemo;
+      this.root = undefined;
+    };
+  });
+
+  /** Optional capture handle; ordinary gallery interaction is unchanged. */
+  seekDemo = async (time: number) => {
+    const local = Math.max(0, time - 0.55);
+    if (time >= 0.55 && !this.open) {
+      this.choose(photos[3]!);
+      await nextFrame();
+      await nextFrame();
+    }
+    for (const animation of this.root?.getAnimations({ subtree: true }) ?? []) {
+      animation.pause();
+      const end = Number(animation.effect?.getComputedTiming().endTime ?? 0);
+      animation.currentTime = Math.min(local * 1000, end);
+    }
+  };
+
   <template>
     <LayoutGroup>
-      <div class="ex">
+      <div class="ex" {{this.register}}>
         <div class="shots">
           {{#each photos as |photo|}}
             <button
