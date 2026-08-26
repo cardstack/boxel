@@ -8,7 +8,7 @@ import {
 } from './card-api';
 import StringField from './string';
 import TextAreaField from './text-area';
-import StructuredTheme from './structured-theme';
+import StructuredTheme, { orderEditSections } from './structured-theme';
 import UrlField from './url';
 import {
   ThemeVisualizer,
@@ -25,6 +25,7 @@ import {
   FieldContainer,
   GridContainer,
 } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 class Isolated extends Component<typeof StyleReference> {
   // Edit extends this template with the field editors swapped in
@@ -58,12 +59,15 @@ class Isolated extends Component<typeof StyleReference> {
     // the Card Container CSS reference is display-only and stays out of
     // the editor
     if (this.editMode) {
-      return [
-        ...this.contentSections,
-        ...guideSections.filter(
-          (section) => section.id !== 'card-container-css',
-        ),
-      ];
+      return orderEditSections(
+        [
+          ...this.contentSections,
+          ...guideSections.filter(
+            (section) => section.id !== 'card-container-css',
+          ),
+        ],
+        this.hasThemeCss,
+      );
     }
     if (!this.hasThemeCss) {
       return [];
@@ -143,19 +147,41 @@ class Isolated extends Component<typeof StyleReference> {
 
           <GridContainer class='style-ref-grid'>
             {{#if this.editMode}}
-              <section id='visual-dna' class='visual-dna'>
-                <h2>Visual DNA</h2>
-                <@fields.visualDNA />
-              </section>
-
-              <section id='inspirations' class='inspirations'>
-                <h2>Inspirations</h2>
-                <@fields.inspirations />
-              </section>
-
-              <section id='wallpapers' class='wallpapers'>
-                <h2>Wallpaper Gallery</h2>
-                <@fields.wallpaperImages />
+              {{#each this.visibleSections as |navSection|}}
+                {{#if (eq navSection.id 'visual-dna')}}
+                  <section id='visual-dna' class='visual-dna'>
+                    <h2>{{navSection.title}}</h2>
+                    <@fields.visualDNA />
+                  </section>
+                {{else if (eq navSection.id 'inspirations')}}
+                  <section id='inspirations' class='inspirations'>
+                    <h2>{{navSection.title}}</h2>
+                    <@fields.inspirations />
+                  </section>
+                {{else if (eq navSection.id 'wallpapers')}}
+                  <section id='wallpapers' class='wallpapers'>
+                    <h2>{{navSection.title}}</h2>
+                    <@fields.wallpaperImages />
+                  </section>
+                {{else if (eq navSection.id 'import-css')}}
+                  <section id='import-css'>
+                    <h2>{{navSection.title}}</h2>
+                    {{! the cardInfo editor in the header owns the name and
+                      description, so the importer only handles CSS here }}
+                    <ThemeImporter @setCss={{@model.setCss}} />
+                  </section>
+                {{else if (eq navSection.id 'view-code')}}
+                  <section id='view-code'>
+                    <h2>{{navSection.title}}</h2>
+                    <@fields.cssVariables />
+                  </section>
+                {{/if}}
+              {{/each}}
+              <section>
+                <h2>Reset CSS</h2>
+                <div>
+                  <ResetButton @reset={{@model.resetCss}} />
+                </div>
               </section>
             {{else}}
               {{#if @model.visualDNA.length}}
@@ -206,28 +232,10 @@ class Isolated extends Component<typeof StyleReference> {
                   <CardContainerCss @cssVariables={{@model.cssVariables}} />
                 </section>
               {{/if}}
-            {{/if}}
 
-            {{#if this.editMode}}
-              <section id='import-css'>
-                <h2>Import CSS Variables</h2>
-                {{! the cardInfo editor in the header owns the name and
-                  description, so the importer only handles CSS here }}
-                <ThemeImporter @setCss={{@model.setCss}} />
-              </section>
-            {{/if}}
-
-            <section id='view-code'>
-              <h2>Generated CSS Variables</h2>
-              <@fields.cssVariables />
-            </section>
-
-            {{#if this.editMode}}
-              <section>
-                <h2>Reset CSS</h2>
-                <div>
-                  <ResetButton @reset={{@model.resetCss}} />
-                </div>
+              <section id='view-code'>
+                <h2>Generated CSS Variables</h2>
+                <@fields.cssVariables />
               </section>
             {{/if}}
           </GridContainer>

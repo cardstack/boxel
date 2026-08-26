@@ -40,7 +40,7 @@ import BrandFunctionalPalette, {
   formatSwatchName,
 } from './brand-functional-palette';
 import BrandLogo from './brand-logo';
-import { mergeRuleMaps } from './structured-theme';
+import { mergeRuleMaps, orderEditSections } from './structured-theme';
 import { ThemeTypographyField } from './structured-theme-variables';
 import DetailedStyleRef from './detailed-style-reference';
 import {
@@ -1019,16 +1019,20 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   ];
 
   private get sectionsWithContent() {
+    // every field stays editable in edit mode, theme or content or not;
+    // the Card Container CSS reference and the UI component samples are
+    // display-only and stay out of the editor
+    if (this.editMode) {
+      return orderEditSections(
+        this.sections.filter(
+          (section) =>
+            section.id !== 'card-container-css' &&
+            section.id !== 'ui-components',
+        ),
+        this.hasThemeCss,
+      );
+    }
     return this.sections.filter((section) => {
-      // every field stays editable in edit mode, theme or content or not;
-      // the Card Container CSS reference and the UI component samples are
-      // display-only and stay out of the editor
-      if (this.editMode) {
-        return (
-          section.id !== 'card-container-css' && section.id !== 'ui-components'
-        );
-      }
-
       if (!this.hasThemeCss) {
         return false;
       }

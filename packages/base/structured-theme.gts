@@ -64,6 +64,27 @@ export const GUIDE_SECTIONS = [
   },
 ];
 
+// A theme-less card in edit mode leads with the import workflow; the nav and
+// the body render the same list, so the importer lands at the top of the
+// page too.
+export const orderEditSections = (
+  sections: SectionSignature[],
+  hasThemeCss: boolean,
+): SectionSignature[] => {
+  if (hasThemeCss) {
+    return sections;
+  }
+  let leading: SectionSignature[] = [];
+  let rest: SectionSignature[] = [];
+  for (let section of sections) {
+    (section.id === 'import-css' || section.id === 'view-code'
+      ? leading
+      : rest
+    ).push(section);
+  }
+  return [...leading, ...rest];
+};
+
 // Applies parsed CSS rules back onto the card fields for editing.
 export const applyCssRulesToField = (
   field: ThemeVarField | undefined,
@@ -171,7 +192,10 @@ class Isolated extends Component<typeof StructuredTheme> {
     // every field stays editable in edit mode; the Card Container CSS
     // reference is display-only and stays out of the editor
     if (this.editMode) {
-      return sections.filter((section) => section.id !== 'card-container-css');
+      return orderEditSections(
+        sections.filter((section) => section.id !== 'card-container-css'),
+        this.hasThemeCss,
+      );
     }
     if (this.hasThemeCss) {
       // the importer is an editing tool, so the isolated view leaves it out

@@ -1,7 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
 import StyleReference from './style-reference';
-import { GUIDE_SECTIONS } from './structured-theme';
+import { GUIDE_SECTIONS, orderEditSections } from './structured-theme';
 import { ThemeTypographyField } from './structured-theme-variables';
 import { contains, field, Component, type BaseDefComponent } from './card-api';
 import MarkdownField from './markdown';
@@ -114,14 +114,17 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
   private get sectionsWithContent() {
     let sections = this.args.model?.guideSections;
+    // every field stays editable in edit mode, theme or content or not;
+    // the Card Container CSS reference is display-only and stays out of
+    // the editor
+    if (this.editMode) {
+      return orderEditSections(
+        sections?.filter((section) => section.id !== 'card-container-css') ??
+          [],
+        this.hasThemeCss,
+      );
+    }
     return sections?.filter((section) => {
-      // every field stays editable in edit mode, theme or content or not;
-      // the Card Container CSS reference is display-only and stays out of
-      // the editor
-      if (this.editMode) {
-        return section.id !== 'card-container-css';
-      }
-
       if (!this.hasThemeCss) {
         return false;
       }
