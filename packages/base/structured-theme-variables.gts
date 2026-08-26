@@ -5,7 +5,6 @@ import {
 } from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
-  dasherize,
   entriesToCssRuleMap,
   markdownEscape,
   sanitizeHtmlSafe,
@@ -23,6 +22,7 @@ import {
   type BaseDefComponent,
   type BoxComponent,
 } from './card-api';
+
 import ColorField from './color';
 import CSSValueField from './css-value';
 import enumField from './enum';
@@ -60,7 +60,7 @@ function describeColor(base: string) {
 
 function getFieldGroup(fieldNames: string[], model?: Record<string, any>) {
   return fieldNames?.map((fieldName: string) => ({
-    name: dasherize(fieldName).replace('-', ' '),
+    name: buildCssVariableName(fieldName),
     value: model?.[fieldName],
   }));
 }
@@ -291,6 +291,66 @@ export class ThemeTypographyField extends FieldDef {
   };
 }
 
+export class FontPreviews extends GlimmerComponent<{
+  Args: {
+    fontStack?: { label: string; stack?: string }[];
+  };
+  Element: HTMLElement;
+}> {
+  private fontStyle(stack: string | null | undefined) {
+    return stack ? sanitizeHtmlSafe(`font-family: ${stack}`) : undefined;
+  }
+
+  <template>
+    <div class='theme-var-font-previews' ...attributes>
+      {{#each @fontStack as |font|}}
+        {{#if font.stack}}
+          <div
+            class='theme-var-font-preview'
+            style={{this.fontStyle font.stack}}
+          >
+            <div class='theme-var-font-preview-line'>
+              <span class='theme-var-font-label'>{{font.label}}</span>
+              The quick brown fox
+            </div>
+          </div>
+        {{/if}}
+      {{/each}}
+    </div>
+    <style scoped>
+      .theme-var-font-previews {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xs);
+      }
+      .theme-var-font-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-4xs);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        background: var(--muted, var(--boxel-100));
+        border-radius: var(--boxel-border-radius-sm);
+        color: var(--foreground, var(--boxel-dark));
+        font-size: 1rem;
+        word-break: break-word;
+      }
+      .theme-var-font-preview-line {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-sm);
+      }
+      .theme-var-font-label {
+        flex-shrink: 0;
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        color: var(--muted-foreground, var(--boxel-400));
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+    </style>
+  </template>
+}
+
 class Embedded extends Component<typeof ThemeVarField> {
   <template>
     {{#each @model.fieldGroups as |group|}}
@@ -348,11 +408,11 @@ class ThemeSwatch extends GlimmerComponent<{
           display: inline-grid;
           grid-template-columns: minmax(50%, 1fr) 1.875rem;
           align-items: end;
-          width: 20rem;
-          max-width: 100%;
+          width: 100%;
         }
         .theme-swatch {
-          --swatch-width: 3.375rem;
+          --swatch-width: 2.75rem;
+          --swatch-height: 2.75rem;
           display: flex;
           flex-direction: row-reverse;
           justify-content: flex-end;
@@ -360,6 +420,8 @@ class ThemeSwatch extends GlimmerComponent<{
         }
         :deep(.boxel-swatch-preview) {
           box-shadow: var(--swatch-background);
+          flex-shrink: 0;
+          aspect-ratio: 1;
         }
         :deep(.boxel-swatch-label) {
           white-space: nowrap;
@@ -369,8 +431,10 @@ class ThemeSwatch extends GlimmerComponent<{
         .empty-field-name,
         :deep(.boxel-swatch-name) {
           font-weight: 600;
+          font-size: var(--boxel-font-size-xs);
+          font-family: var(--font-mono, var(--boxel-monospace-font-family));
           text-wrap: wrap;
-          text-transform: capitalize;
+          overflow-wrap: anywhere;
         }
         :deep(.boxel-swatch-value) {
           font-size: var(--boxel-font-size-xs);
@@ -401,7 +465,7 @@ class FieldGrid extends GlimmerComponent<{
     <style scoped>
       .field-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
         gap: var(--boxel-sp-xs) var(--boxel-sp-2xs);
       }
     </style>
@@ -697,19 +761,6 @@ export default class ThemeVarField extends FieldDef {
   }
 
   static edit = class Edit extends Component<typeof ThemeVarField> {
-    private get fontSansStyle() {
-      let v = this.args.model.fontSans;
-      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
-    }
-    private get fontSerifStyle() {
-      let v = this.args.model.fontSerif;
-      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
-    }
-    private get fontMonoStyle() {
-      let v = this.args.model.fontMono;
-      return v ? sanitizeHtmlSafe(`font-family: ${v}`) : undefined;
-    }
-
     private get typescaleSteps() {
       let baseStr = this.args.model.themeFontSize;
       let scaleStr = this.args.model.themeScale;
@@ -759,16 +810,45 @@ export default class ThemeVarField extends FieldDef {
       ].filter((s) => s.value);
     }
 
+    private get fontStack() {
+      if (!this.args.model) {
+        return undefined;
+      }
+      let { fontSans, fontSerif, fontMono } = this.args.model;
+      return [
+        {
+          label: 'sans-serif',
+          stack: fontSans,
+        },
+        {
+          label: 'serif',
+          stack: fontSerif,
+        },
+        {
+          label: 'monospace',
+          stack: fontMono,
+        },
+      ];
+    }
+
     <template>
       <div class='theme-var-edit'>
 
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Main</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Background' @vertical={{true}} data-test-field='background'>
+            <FieldContainer
+              @label='Background'
+              @vertical={{true}}
+              data-test-field='background'
+            >
               <@fields.background />
             </FieldContainer>
-            <FieldContainer @label='Foreground' @vertical={{true}} data-test-field='foreground'>
+            <FieldContainer
+              @label='Foreground'
+              @vertical={{true}}
+              data-test-field='foreground'
+            >
               <@fields.foreground />
             </FieldContainer>
           </div>
@@ -777,10 +857,18 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Primary</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Primary' @vertical={{true}} data-test-field='primary'>
+            <FieldContainer
+              @label='Primary'
+              @vertical={{true}}
+              data-test-field='primary'
+            >
               <@fields.primary />
             </FieldContainer>
-            <FieldContainer @label='Primary Foreground' @vertical={{true}} data-test-field='primaryForeground'>
+            <FieldContainer
+              @label='Primary Foreground'
+              @vertical={{true}}
+              data-test-field='primaryForeground'
+            >
               <@fields.primaryForeground />
             </FieldContainer>
           </div>
@@ -789,18 +877,34 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Secondary & Accent</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Secondary' @vertical={{true}} data-test-field='secondary'>
+            <FieldContainer
+              @label='Secondary'
+              @vertical={{true}}
+              data-test-field='secondary'
+            >
               <@fields.secondary />
             </FieldContainer>
-            <FieldContainer @label='Secondary Foreground' @vertical={{true}} data-test-field='secondaryForeground'>
+            <FieldContainer
+              @label='Secondary Foreground'
+              @vertical={{true}}
+              data-test-field='secondaryForeground'
+            >
               <@fields.secondaryForeground />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Accent' @vertical={{true}} data-test-field='accent'>
+            <FieldContainer
+              @label='Accent'
+              @vertical={{true}}
+              data-test-field='accent'
+            >
               <@fields.accent />
             </FieldContainer>
-            <FieldContainer @label='Accent Foreground' @vertical={{true}} data-test-field='accentForeground'>
+            <FieldContainer
+              @label='Accent Foreground'
+              @vertical={{true}}
+              data-test-field='accentForeground'
+            >
               <@fields.accentForeground />
             </FieldContainer>
           </div>
@@ -809,26 +913,50 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>UI Components</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Card' @vertical={{true}} data-test-field='card'>
+            <FieldContainer
+              @label='Card'
+              @vertical={{true}}
+              data-test-field='card'
+            >
               <@fields.card />
             </FieldContainer>
-            <FieldContainer @label='Card Foreground' @vertical={{true}} data-test-field='cardForeground'>
+            <FieldContainer
+              @label='Card Foreground'
+              @vertical={{true}}
+              data-test-field='cardForeground'
+            >
               <@fields.cardForeground />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Popover' @vertical={{true}} data-test-field='popover'>
+            <FieldContainer
+              @label='Popover'
+              @vertical={{true}}
+              data-test-field='popover'
+            >
               <@fields.popover />
             </FieldContainer>
-            <FieldContainer @label='Popover Foreground' @vertical={{true}} data-test-field='popoverForeground'>
+            <FieldContainer
+              @label='Popover Foreground'
+              @vertical={{true}}
+              data-test-field='popoverForeground'
+            >
               <@fields.popoverForeground />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Muted' @vertical={{true}} data-test-field='muted'>
+            <FieldContainer
+              @label='Muted'
+              @vertical={{true}}
+              data-test-field='muted'
+            >
               <@fields.muted />
             </FieldContainer>
-            <FieldContainer @label='Muted Foreground' @vertical={{true}} data-test-field='mutedForeground'>
+            <FieldContainer
+              @label='Muted Foreground'
+              @vertical={{true}}
+              data-test-field='mutedForeground'
+            >
               <@fields.mutedForeground />
             </FieldContainer>
           </div>
@@ -837,28 +965,52 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Form & Feedback</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Border' @vertical={{true}} data-test-field='border'>
+            <FieldContainer
+              @label='Border'
+              @vertical={{true}}
+              data-test-field='border'
+            >
               <@fields.border />
             </FieldContainer>
-            <FieldContainer @label='Input' @vertical={{true}} data-test-field='input'>
+            <FieldContainer
+              @label='Input'
+              @vertical={{true}}
+              data-test-field='input'
+            >
               <@fields.input />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Ring' @vertical={{true}} data-test-field='ring'>
+            <FieldContainer
+              @label='Ring'
+              @vertical={{true}}
+              data-test-field='ring'
+            >
               <@fields.ring />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Destructive' @vertical={{true}} data-test-field='destructive'>
+            <FieldContainer
+              @label='Destructive'
+              @vertical={{true}}
+              data-test-field='destructive'
+            >
               <@fields.destructive />
             </FieldContainer>
-            <FieldContainer @label='Destructive Foreground' @vertical={{true}} data-test-field='destructiveForeground'>
+            <FieldContainer
+              @label='Destructive Foreground'
+              @vertical={{true}}
+              data-test-field='destructiveForeground'
+            >
               <@fields.destructiveForeground />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Success' @vertical={{true}} data-test-field='success'>
+            <FieldContainer
+              @label='Success'
+              @vertical={{true}}
+              data-test-field='success'
+            >
               <@fields.success />
             </FieldContainer>
           </div>
@@ -867,23 +1019,43 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Chart Colors</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Chart 1' @vertical={{true}} data-test-field='chart1'>
+            <FieldContainer
+              @label='Chart 1'
+              @vertical={{true}}
+              data-test-field='chart1'
+            >
               <@fields.chart1 />
             </FieldContainer>
-            <FieldContainer @label='Chart 2' @vertical={{true}} data-test-field='chart2'>
+            <FieldContainer
+              @label='Chart 2'
+              @vertical={{true}}
+              data-test-field='chart2'
+            >
               <@fields.chart2 />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Chart 3' @vertical={{true}} data-test-field='chart3'>
+            <FieldContainer
+              @label='Chart 3'
+              @vertical={{true}}
+              data-test-field='chart3'
+            >
               <@fields.chart3 />
             </FieldContainer>
-            <FieldContainer @label='Chart 4' @vertical={{true}} data-test-field='chart4'>
+            <FieldContainer
+              @label='Chart 4'
+              @vertical={{true}}
+              data-test-field='chart4'
+            >
               <@fields.chart4 />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Chart 5' @vertical={{true}} data-test-field='chart5'>
+            <FieldContainer
+              @label='Chart 5'
+              @vertical={{true}}
+              data-test-field='chart5'
+            >
               <@fields.chart5 />
             </FieldContainer>
           </div>
@@ -892,15 +1064,27 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Sidebar</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Sidebar' @vertical={{true}} data-test-field='sidebar'>
+            <FieldContainer
+              @label='Sidebar'
+              @vertical={{true}}
+              data-test-field='sidebar'
+            >
               <@fields.sidebar />
             </FieldContainer>
-            <FieldContainer @label='Sidebar Foreground' @vertical={{true}} data-test-field='sidebarForeground'>
+            <FieldContainer
+              @label='Sidebar Foreground'
+              @vertical={{true}}
+              data-test-field='sidebarForeground'
+            >
               <@fields.sidebarForeground />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Sidebar Primary' @vertical={{true}} data-test-field='sidebarPrimary'>
+            <FieldContainer
+              @label='Sidebar Primary'
+              @vertical={{true}}
+              data-test-field='sidebarPrimary'
+            >
               <@fields.sidebarPrimary />
             </FieldContainer>
             <FieldContainer
@@ -912,7 +1096,11 @@ export default class ThemeVarField extends FieldDef {
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Sidebar Accent' @vertical={{true}} data-test-field='sidebarAccent'>
+            <FieldContainer
+              @label='Sidebar Accent'
+              @vertical={{true}}
+              data-test-field='sidebarAccent'
+            >
               <@fields.sidebarAccent />
             </FieldContainer>
             <FieldContainer
@@ -924,56 +1112,19 @@ export default class ThemeVarField extends FieldDef {
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Sidebar Border' @vertical={{true}} data-test-field='sidebarBorder'>
+            <FieldContainer
+              @label='Sidebar Border'
+              @vertical={{true}}
+              data-test-field='sidebarBorder'
+            >
               <@fields.sidebarBorder />
             </FieldContainer>
-            <FieldContainer @label='Sidebar Ring' @vertical={{true}} data-test-field='sidebarRing'>
+            <FieldContainer
+              @label='Sidebar Ring'
+              @vertical={{true}}
+              data-test-field='sidebarRing'
+            >
               <@fields.sidebarRing />
-            </FieldContainer>
-          </div>
-        </section>
-
-        <section class='theme-var-edit-section'>
-          <h4 class='theme-var-edit-heading'>Fonts</h4>
-          <p class='theme-var-edit-hint'>
-            Custom font family links must be added to the
-            <strong>CSS Imports</strong>
-            section (e.g. a Google Fonts url) before they will render correctly.
-          </p>
-          <div class='theme-var-font-previews'>
-            {{#if @model.fontSans}}
-              <div class='theme-var-font-preview' style={{this.fontSansStyle}}>
-                <span class='theme-var-font-label'>Sans-serif</span>
-                The quick brown fox
-              </div>
-            {{/if}}
-            {{#if @model.fontSerif}}
-              <div class='theme-var-font-preview' style={{this.fontSerifStyle}}>
-                <span class='theme-var-font-label'>Serif</span>
-                The quick brown fox
-              </div>
-            {{/if}}
-            {{#if @model.fontMono}}
-              <div
-                class='theme-var-font-preview theme-var-font-preview--mono'
-                style={{this.fontMonoStyle}}
-              >
-                <span class='theme-var-font-label'>Monospace</span>
-                const hello = "world"
-              </div>
-            {{/if}}
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Sans-serif' @vertical={{true}} data-test-field='fontSans'>
-              <@fields.fontSans />
-            </FieldContainer>
-            <FieldContainer @label='Serif' @vertical={{true}} data-test-field='fontSerif'>
-              <@fields.fontSerif />
-            </FieldContainer>
-          </div>
-          <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Monospace' @vertical={{true}} data-test-field='fontMono'>
-              <@fields.fontMono />
             </FieldContainer>
           </div>
         </section>
@@ -981,18 +1132,34 @@ export default class ThemeVarField extends FieldDef {
         <section class='theme-var-edit-section'>
           <h4 class='theme-var-edit-heading'>Geometry</h4>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Border Radius' @vertical={{true}} data-test-field='radius'>
+            <FieldContainer
+              @label='Border Radius'
+              @vertical={{true}}
+              data-test-field='radius'
+            >
               <@fields.radius />
             </FieldContainer>
-            <FieldContainer @label='Spacing' @vertical={{true}} data-test-field='spacing'>
+            <FieldContainer
+              @label='Spacing'
+              @vertical={{true}}
+              data-test-field='spacing'
+            >
               <@fields.spacing />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Base Font Size' @vertical={{true}} data-test-field='themeFontSize'>
+            <FieldContainer
+              @label='Base Font Size'
+              @vertical={{true}}
+              data-test-field='themeFontSize'
+            >
               <@fields.themeFontSize />
             </FieldContainer>
-            <FieldContainer @label='Typescale' @vertical={{true}} data-test-field='themeScale'>
+            <FieldContainer
+              @label='Typescale'
+              @vertical={{true}}
+              data-test-field='themeScale'
+            >
               <@fields.themeScale />
             </FieldContainer>
           </div>
@@ -1014,7 +1181,11 @@ export default class ThemeVarField extends FieldDef {
             </div>
           {{/if}}
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='Letter Spacing' @vertical={{true}} data-test-field='trackingNormal'>
+            <FieldContainer
+              @label='Letter Spacing'
+              @vertical={{true}}
+              data-test-field='trackingNormal'
+            >
               <@fields.trackingNormal />
             </FieldContainer>
           </div>
@@ -1036,39 +1207,106 @@ export default class ThemeVarField extends FieldDef {
             </div>
           {{/if}}
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='2xs' @vertical={{true}} data-test-field='shadow2xs'>
+            <FieldContainer
+              @label='2xs'
+              @vertical={{true}}
+              data-test-field='shadow2xs'
+            >
               <@fields.shadow2xs />
             </FieldContainer>
-            <FieldContainer @label='xs' @vertical={{true}} data-test-field='shadowXs'>
+            <FieldContainer
+              @label='xs'
+              @vertical={{true}}
+              data-test-field='shadowXs'
+            >
               <@fields.shadowXs />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='sm' @vertical={{true}} data-test-field='shadowSm'>
+            <FieldContainer
+              @label='sm'
+              @vertical={{true}}
+              data-test-field='shadowSm'
+            >
               <@fields.shadowSm />
             </FieldContainer>
-            <FieldContainer @label='Base' @vertical={{true}} data-test-field='shadow'>
+            <FieldContainer
+              @label='Base'
+              @vertical={{true}}
+              data-test-field='shadow'
+            >
               <@fields.shadow />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='md' @vertical={{true}} data-test-field='shadowMd'>
+            <FieldContainer
+              @label='md'
+              @vertical={{true}}
+              data-test-field='shadowMd'
+            >
               <@fields.shadowMd />
             </FieldContainer>
-            <FieldContainer @label='lg' @vertical={{true}} data-test-field='shadowLg'>
+            <FieldContainer
+              @label='lg'
+              @vertical={{true}}
+              data-test-field='shadowLg'
+            >
               <@fields.shadowLg />
             </FieldContainer>
           </div>
           <div class='theme-var-edit-row theme-var-edit-row--2col'>
-            <FieldContainer @label='xl' @vertical={{true}} data-test-field='shadowXl'>
+            <FieldContainer
+              @label='xl'
+              @vertical={{true}}
+              data-test-field='shadowXl'
+            >
               <@fields.shadowXl />
             </FieldContainer>
-            <FieldContainer @label='2xl' @vertical={{true}} data-test-field='shadow2xl'>
+            <FieldContainer
+              @label='2xl'
+              @vertical={{true}}
+              data-test-field='shadow2xl'
+            >
               <@fields.shadow2xl />
             </FieldContainer>
           </div>
         </section>
 
+        <section class='theme-var-edit-section'>
+          <h4 class='theme-var-edit-heading'>Fonts</h4>
+          <p class='theme-var-edit-hint'>
+            Custom font family links must be added to the
+            <strong>CSS Imports</strong>
+            section (e.g. a Google Fonts url) below before they will render
+            correctly.
+          </p>
+          <FontPreviews @fontStack={{this.fontStack}} />
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Sans-serif'
+              @vertical={{true}}
+              data-test-field='fontSans'
+            >
+              <@fields.fontSans />
+            </FieldContainer>
+            <FieldContainer
+              @label='Serif'
+              @vertical={{true}}
+              data-test-field='fontSerif'
+            >
+              <@fields.fontSerif />
+            </FieldContainer>
+          </div>
+          <div class='theme-var-edit-row theme-var-edit-row--2col'>
+            <FieldContainer
+              @label='Monospace'
+              @vertical={{true}}
+              data-test-field='fontMono'
+            >
+              <@fields.fontMono />
+            </FieldContainer>
+          </div>
+        </section>
       </div>
       <style scoped>
         .theme-var-edit {
@@ -1164,34 +1402,6 @@ export default class ThemeVarField extends FieldDef {
           color: var(--muted-foreground, var(--boxel-400));
           text-transform: uppercase;
           letter-spacing: 0.04em;
-        }
-        .theme-var-font-previews {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-2xs);
-        }
-        .theme-var-font-preview {
-          display: flex;
-          align-items: baseline;
-          gap: var(--boxel-sp-sm);
-          padding: var(--boxel-sp-xs) var(--boxel-sp);
-          background: var(--muted, var(--boxel-100));
-          border-radius: var(--boxel-border-radius-sm);
-          color: var(--foreground, var(--boxel-dark));
-          font-size: 1rem;
-          word-break: break-word;
-        }
-        .theme-var-font-preview--mono {
-          font-size: 0.875rem;
-        }
-        .theme-var-font-label {
-          flex-shrink: 0;
-          font-size: var(--boxel-font-size-xs);
-          font-weight: 600;
-          color: var(--muted-foreground, var(--boxel-400));
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
-          font-family: var(--boxel-font);
         }
       </style>
     </template>

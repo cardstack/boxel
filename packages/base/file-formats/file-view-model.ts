@@ -114,8 +114,8 @@ export interface FileViewModel {
   contentPreview: string;
   previewTruncated: boolean;
   durationSeconds?: number;
-  lastModified?: string | Date;
-  createdAt?: string | Date;
+  lastModified?: string | Date | number;
+  createdAt?: string | Date | number;
   realmPath?: string;
   width?: number;
   height?: number;
@@ -540,7 +540,10 @@ export function fileViewModel(
         archiveEntries.length < completeArchiveEntries.length),
     durationSeconds: durationOf(file),
     lastModified: file.lastModified,
-    createdAt: file.createdAt,
+    // A FileDef exposes its created timestamp as `resourceCreatedAt` (the card
+    // key name); `createdAt` is the legacy attribute spelling a plain wire
+    // object may still carry. Prefer the explicit field, fall back to the getter.
+    createdAt: file.createdAt ?? file.resourceCreatedAt,
     realmPath: file.realmPath,
     width,
     height,

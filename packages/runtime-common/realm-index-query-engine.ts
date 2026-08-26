@@ -66,6 +66,7 @@ import type {
   Saved,
   EntryResource,
 } from './resource-types.ts';
+import { fileMetaTimestamps } from './resource-types.ts';
 import {
   buildCssResource,
   parseUsedRenderType,
@@ -2256,6 +2257,7 @@ function fileResourceFromIndex(
     meta: {
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
+      ...fileMetaTimestamps(lastModified, createdAt),
     },
     links: { self: fileURL.href },
   };

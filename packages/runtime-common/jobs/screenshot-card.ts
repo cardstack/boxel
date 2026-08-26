@@ -15,6 +15,15 @@ import type {
   ScreenshotPersistArgs,
 } from '../tasks/screenshot-card.ts';
 
+// Timeout for a screenshot job — a wedged-worker backstop covering one render +
+// settle + the capture loop. A batch captures every entry from a single settle,
+// so the marginal per-entry cost (viewport resize + screenshot) is small, and
+// the batch ceiling (`SCREENSHOT_MAX_CAPTURES`) is sized to finish well within
+// the sync-wait budget; one flat value covers singular and batch alike, so the
+// timeout does not scale with capture count. The render itself is separately
+// capped at `cardRenderTimeout` (RENDER_TIMEOUT_MS, default 60s), so a slow
+// render surfaces as a Render timeout regardless of this value — this is the
+// backstop for a worker wedged outside the render (dispatch, result upload).
 export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 
 // Concurrent requests for one capture fold onto one job: the per-realm

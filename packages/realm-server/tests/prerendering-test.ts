@@ -948,6 +948,106 @@ module(basename(import.meta.filename), function () {
         'indexed isolated HTML is identical before and after the screenshot',
       );
     });
+
+    test('a batch of 3 yields 3 named captures from one settle', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'wide', viewport: { width: 1280, height: 720 } },
+          { name: 'full', fullPage: true },
+          { name: 'thumb', clip: { x: 0, y: 0, width: 200, height: 150 } },
+        ],
+      });
+      assert.strictEqual(response.status, 'ready', 'batch succeeded');
+      assert.strictEqual(response.captures?.length, 3, 'returns 3 captures');
+      assert.deepEqual(
+        response.captures?.map((c) => c.name),
+        ['wide', 'full', 'thumb'],
+        'captures are named and ordered as requested',
+      );
+
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      let wide = decodePng(byName.wide.base64);
+      assert.strictEqual(wide.width, 1280, 'wide capture is 1280 wide');
+
+      let full = decodePng(byName.full.base64);
+      assert.true(full.height > 720, 'fullPage capture exceeds the viewport');
+
+      let thumb = decodePng(byName.thumb.base64);
+      assert.strictEqual(thumb.width, 200, 'thumb clip width');
+      assert.strictEqual(thumb.height, 150, 'thumb clip height');
+
+      // Back-compat mirror: top-level fields echo captures[0].
+      assert.strictEqual(
+        response.base64,
+        byName.wide.base64,
+        'top-level base64 mirrors captures[0]',
+      );
+      assert.strictEqual(response.width, byName.wide.width);
+      assert.strictEqual(response.height, byName.wide.height);
+    });
+
+    test('a bare batch entry reverts to the base viewport, not the previous entry', async function (assert) {
+      // The most confusable part of the merge: a second entry that declares no
+      // viewport must resolve from the page's base viewport (800), not inherit
+      // the first entry's 1280. This also guards `sameViewport`'s switch-back —
+      // if it wrongly kept 1280, the bare entry would capture at 1280.
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'wide', viewport: { width: 1280, height: 720 } },
+          { name: 'base' },
+        ],
+      });
+      assert.strictEqual(response.status, 'ready', 'batch succeeded');
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      assert.strictEqual(
+        decodePng(byName.wide.base64).width,
+        1280,
+        'wide entry captures at its declared width',
+      );
+      assert.strictEqual(
+        decodePng(byName.base.base64).width,
+        800,
+        'bare entry reverts to the 800-wide base viewport',
+      );
+    });
+
+    test('singular-shape request stays byte-compatible under the new response', async function (assert) {
+      let singular = await screenshot(`${realmURL}1`);
+      let batchOfOne = await screenshot(`${realmURL}1`, {
+        captures: [{ name: 'default' }],
+      });
+
+      // Both shapes describe one capture at the default viewport.
+      assert.strictEqual(singular.response.captures?.length, 1);
+      assert.strictEqual(batchOfOne.response.captures?.length, 1);
+      let a = decodePng(singular.response.base64!);
+      let b = decodePng(batchOfOne.response.base64!);
+      assert.deepEqual(
+        { width: a.width, height: a.height },
+        { width: 800, height: 600 },
+        'singular request still renders at 800x600',
+      );
+      assert.deepEqual(
+        { width: b.width, height: b.height },
+        { width: a.width, height: a.height },
+        'batch-of-one matches the singular dimensions',
+      );
+      assert.strictEqual(
+        singular.response.width,
+        800,
+        'top-level width preserved for singular callers',
+      );
+      assert.strictEqual(singular.response.height, 600);
+      assert.strictEqual(
+        singular.response.contentType,
+        'image/png',
+        'contentType preserved',
+      );
+    });
   });
 
   function defineNonMutatingRunnerTests() {

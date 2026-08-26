@@ -4,8 +4,10 @@
     "attributes": {
       "cardTitle": "Theme",
       "specType": "card",
+      "readMe": "This spec deliberately references the detailed style reference card rather than the bare `theme` module: creating a Theme from the catalog should yield the full-featured implementation — structured variables, CSS import tooling, and the theme visualizer — while keeping the familiar Theme name.",
+      "cardDescription": "Comprehensive reference card for documenting a product’s visual language and theme variables.",
       "ref": {
-        "module": "https://cardstack.com/base/theme",
+        "module": "https://cardstack.com/base/detailed-style-reference",
         "name": "default"
       }
     },
