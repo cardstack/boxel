@@ -63,7 +63,7 @@ module('Acceptance | workspace card', function (hooks) {
         'Note/1.json': new Note({ cardTitle: 'First Note' }),
         // A plain uploaded file (not a card). It indexes as a `file` row, so it
         // only reaches the Activity feed if the feed query surfaces files
-        // alongside cards (CS-12476).
+        // alongside cards.
         'welcome-song.mp3': 'ID3 fake audio bytes',
         // A remix cloned from Note/1 — its own indexed instance is the record
         // of the clone that the Activity feed surfaces as a "Remixed" event.
@@ -240,12 +240,50 @@ module('Acceptance | workspace card', function (hooks) {
     await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
     await waitFor(`${STACK} .feed-row`);
 
-    let titles = [...document.querySelectorAll(`${STACK} .feed-title`)].map(
-      (el) => el.textContent?.trim(),
-    );
+    let rows = [...document.querySelectorAll(`${STACK} .feed-row`)];
+    let titleOf = (row: Element) =>
+      row.querySelector('.feed-title')?.textContent?.trim();
+    let fileRow = rows.find((row) => titleOf(row) === 'welcome-song.mp3');
     assert.ok(
-      titles.includes('welcome-song.mp3'),
-      `the uploaded audio file appears in the feed (saw: ${titles.join(', ')})`,
+      fileRow,
+      `the uploaded audio file appears in the feed (saw: ${rows
+        .map(titleOf)
+        .join(', ')})`,
     );
+
+    // A file row must be dated, not merely present: '—' is the placeholder
+    // rendered when the file's `lastModified` meta fails to reach the client,
+    // and the title alone would still render in that case.
+    let when = fileRow!.querySelector('.feed-when')?.textContent?.trim() ?? '';
+    assert.notStrictEqual(
+      when,
+      '—',
+      'the file row carries a real timestamp, not the missing-date placeholder',
+    );
+    assert.notStrictEqual(when, '', 'the file row renders its timestamp rail');
+
+    // Source modules index as file rows too, but the feed's query excludes
+    // code edits so they cannot crowd cards out of the shared row budget.
+    assert.notOk(
+      rows.some((row) => titleOf(row) === 'note.gts'),
+      'a source module does not appear in the feed',
+    );
+  });
+
+  test('opening a file feed row opens the file, not a card', async function (assert) {
+    await visit('/');
+    await click('[data-test-workspace-button="Unnamed Workspace"]');
+    await waitFor(`${STACK} nav.tabs`);
+
+    await click(`${STACK} nav.tabs .tab:nth-child(3)`); // Activity
+    await waitFor(`${STACK} .feed-row`);
+
+    // A file feed row routes through the file stack-item path, keyed by the
+    // file's URL — not the card path a card row takes.
+    await click(`${STACK} [aria-label="Open welcome-song.mp3"]`);
+    await waitFor(`[data-test-stack-card="${testRealmURL}welcome-song.mp3"]`);
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}welcome-song.mp3"]`)
+      .exists('the file opens as a file stack item');
   });
 });

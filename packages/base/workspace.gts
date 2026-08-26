@@ -38,7 +38,10 @@ import {
   codeRef,
   specRef,
   baseCardRef,
+  baseFileRef,
   baseRealmRRI,
+  executableExtensions,
+  inferContentType,
   isCardInstance,
   isFileDefInstance,
   excludeCardInstanceFileRows,
@@ -302,6 +305,28 @@ function excludeSelfReferentialCards(on?: CodeRef): Filter[] {
   return SELF_REFERENTIAL_CARD_TYPES.map((_cardType) =>
     on ? { not: { on, eq: { _cardType } } } : { not: { eq: { _cardType } } },
   );
+}
+
+// Source modules (.gts, .ts, …) index as `file` rows just like uploaded
+// assets, but the Activity feed is a content stream — cards and uploaded
+// files, not code edits. The exclusion must live in the query rather than the
+// render loop: the server-side row budget is shared across both kinds, so a
+// realm under active code editing would otherwise fill the window with module
+// saves and evict every card. Deriving the content types from
+// `executableExtensions` through the same `inferContentType` the file indexer
+// stamps rows with keeps the filter and the index in lockstep. The negation is
+// qualified with `on: baseFileRef` so it wraps a type gate card rows fail — a
+// bare negated match on a key card rows lack is SQL NULL, which would drop
+// them all.
+function excludeExecutableFiles(): Filter {
+  return {
+    not: {
+      on: baseFileRef,
+      any: executableExtensions.map((extension) => ({
+        eq: { contentType: inferContentType(`module${extension}`) },
+      })),
+    },
+  };
 }
 
 // Debounce window for the post-index refresh. Active editing (e.g. an AI setup
@@ -3509,13 +3534,12 @@ class Isolated extends Component<typeof Workspace> {
     verb: ActivityVerb;
     card: CardDef | FileDef;
   }): string | undefined => {
-    if (item.verb !== 'Remixed') {
+    if (item.verb !== 'Remixed' || !isCardInstance(item.card)) {
+      // Only a card is ever classified 'Remixed'; the guard also narrows the
+      // card/file union so the cast below starts from CardDef.
       return undefined;
     }
-    // Only a card is ever classified 'Remixed', so the cast is safe here.
-    return (
-      (item.card as unknown as RemixCardLike).remixedFrom?.cardTitle ?? undefined
-    );
+    return (item.card as RemixCardLike).remixedFrom?.cardTitle ?? undefined;
   };
 
   watchFeedEnd = modifier((element: Element) => {
@@ -3556,11 +3580,13 @@ class Isolated extends Component<typeof Workspace> {
         // the negation wraps a type gate a file row fails, so files survive.
         // `excludeCardInstanceFileRows()` drops a card's dual-indexed `.json`
         // file row so each card shows once (via its instance row) — still
-        // required alongside `scope: 'all'`.
+        // required alongside `scope: 'all'`. `excludeExecutableFiles()` keeps
+        // source-module saves from consuming the shared row budget.
         filter: {
           every: [
             ...excludeSelfReferentialCards(baseCardRef),
             excludeCardInstanceFileRows(),
+            excludeExecutableFiles(),
           ],
         },
         sort: [{ by: 'lastModified', direction: 'desc' }],
@@ -3584,10 +3610,12 @@ class Isolated extends Component<typeof Workspace> {
         continue;
       }
       seen.add(entry.id);
-      // A single malformed row (a file whose preview can't build, a card
-      // missing metadata) must not blank the whole feed — skip it and keep
-      // going. The restartable task would otherwise swallow the throw and leave
-      // the log truncated at the failing row.
+      // A single malformed row (a throwing `cardTitle`/`name` getter, an
+      // unreadable timestamp) must not cost the rows after it — skip it and
+      // keep going. The restartable task would otherwise swallow the throw and
+      // truncate the feed at the failing row. This guards only the row build:
+      // `getComponent` just returns the component, so a preview that throws
+      // does so later, when Glimmer renders it in the template.
       try {
         // Timestamps read the same way for both kinds: a file carries its
         // `lastModified` / `resourceCreatedAt` on `meta` from the serialization
@@ -3616,7 +3644,9 @@ class Isolated extends Component<typeof Workspace> {
           verb,
           dayLabel: day,
           showDay: Boolean(day) && day !== prevDay,
-          title: card ? (card.cardTitle ?? undefined) : (file!.name ?? undefined),
+          title: card
+            ? (card.cardTitle ?? undefined)
+            : (file!.name ?? undefined),
           typeName: (ctor as typeof CardDef).displayName,
           typeIcon: (ctor as typeof CardDef).icon,
           card: entry,
@@ -3930,8 +3960,8 @@ export class Workspace extends CardDef {
             <div class='setting'>
               <div class='setting-text'>
                 <span class='setting-label'>Hide About</span>
-                <p class='setting-help'>The About section shows below the pins by
-                  default. Turn on to keep Home to cards only.</p>
+                <p class='setting-help'>The About section shows below the pins
+                  by default. Turn on to keep Home to cards only.</p>
               </div>
               <div class='setting-control'><@fields.hideAbout /></div>
             </div>
