@@ -206,10 +206,12 @@ export default class RenderRoute extends Route<Model> {
     // all; on a page whose URL is not a render path (a standby page mid
     // in-app transition) this stash is then the only surviving record of
     // which card the error doc's deps must name.
-    let attemptedCardId = this.#transitionCardId(transition);
+    let attemptedCardId =
+      this.#transitionCardId(transition) ?? this.#renderParamsId();
     if (attemptedCardId) {
       this.#lastAttemptedCardId = attemptedCardId;
     }
+    this.#recordBeforeModelDiag(transition, attemptedCardId);
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
     if (!isTesting()) {
@@ -1055,6 +1057,7 @@ export default class RenderRoute extends Route<Model> {
       transitionId,
       this.renderBaseParams?.[0],
       this.#lastAttemptedCardId,
+      this.#renderParamsId(),
     ]);
     let normalizationContext = {
       cardId: context?.cardId,
@@ -1418,17 +1421,23 @@ export default class RenderRoute extends Route<Model> {
       id:
         params?.id ??
         this.#transitionCardId(transition) ??
-        this.#lastAttemptedCardId,
+        this.#lastAttemptedCardId ??
+        this.#renderParamsId(),
     });
     try {
       parsedReason = JSON.parse(reason);
     } catch {
       parsedReason = undefined;
     }
+    let diagDeps = this.#preModelDiagDeps(transition);
     if (parsedReason && typeof parsedReason === 'object') {
       if (parsedReason.error && typeof parsedReason.error === 'object') {
         parsedReason.error.deps = [
-          ...new Set([...(parsedReason.error.deps ?? []), ...fallbackDeps]),
+          ...new Set([
+            ...(parsedReason.error.deps ?? []),
+            ...fallbackDeps,
+            ...diagDeps,
+          ]),
         ];
       }
       parsedReason.evict = true;
@@ -1442,7 +1451,7 @@ export default class RenderRoute extends Route<Model> {
             title: 'Render failed',
             message: reason || 'Render failed before model hook',
             additionalErrors: null,
-            deps: fallbackDeps,
+            deps: [...fallbackDeps, ...diagDeps],
           },
           evict: true,
         },
@@ -1494,6 +1503,89 @@ export default class RenderRoute extends Route<Model> {
       }
     }
     return this.#fallbackDepsFromIds([id]);
+  }
+
+  // The transition's serialized state params for this route, readable even
+  // when the public RouteInfo chain has not materialized `params` yet.
+  // `paramsFor` reads the router's active transition state directly, which is
+  // populated at intent-application time for named transitions — earlier than
+  // the RouteInfo params the walk in #transitionCardId depends on.
+  #renderParamsId(): string | undefined {
+    try {
+      let params = this.paramsFor('render') as { id?: string } | undefined;
+      return typeof params?.id === 'string' && params.id.length > 0
+        ? params.id
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // TEMP CS-12090 diagnostics (remove after CI verification): snapshot every
+  // candidate card-id source at beforeModel entry so a pre-model failure's
+  // error doc can report why deps derivation came up empty.
+  #diagBeforeModel: string | undefined;
+
+  #recordBeforeModelDiag(
+    transition: Transition | undefined,
+    attemptedCardId: string | undefined,
+  ) {
+    try {
+      let chain: unknown[] = [];
+      let current: Transition['to'] | null | undefined = transition?.to;
+      while (current) {
+        chain.push({
+          name: (current as any).name,
+          params: current.params ? { ...current.params } : null,
+        });
+        current = current.parent;
+      }
+      let intent = (transition as any)?.intent;
+      this.#diagBeforeModel = JSON.stringify({
+        stash: attemptedCardId ?? null,
+        chain,
+        intent: intent
+          ? {
+              url: intent.url ?? null,
+              name: intent.name ?? null,
+              contexts: Array.isArray(intent.contexts)
+                ? intent.contexts.length
+                : null,
+            }
+          : null,
+        loc: typeof window !== 'undefined' ? window.location.pathname : null,
+        paramsFor: this.#renderParamsId() ?? null,
+      });
+    } catch (e: any) {
+      this.#diagBeforeModel = `diag-error:${e?.message}`;
+    }
+  }
+
+  #preModelDiagDeps(transition?: Transition): string[] {
+    try {
+      let chain: unknown[] = [];
+      let current: Transition['to'] | null | undefined = transition?.to;
+      while (current) {
+        chain.push({
+          name: (current as any).name,
+          params: current.params ? { ...current.params } : null,
+        });
+        current = current.parent;
+      }
+      return [
+        `diag:beforeModel:${this.#diagBeforeModel ?? 'unset'}`,
+        `diag:errorPath:${JSON.stringify({
+          hasTransition: Boolean(transition),
+          chain,
+          stash: this.#lastAttemptedCardId ?? null,
+          base: this.renderBaseParams?.[0] ?? null,
+          paramsFor: this.#renderParamsId() ?? null,
+          loc: typeof window !== 'undefined' ? window.location.pathname : null,
+        })}`,
+      ];
+    } catch (e: any) {
+      return [`diag:error:${e?.message}`];
+    }
   }
 
   #transitionCardId(transition?: Transition): string | undefined {
