@@ -353,8 +353,9 @@ not the source of.
 
 **RP-6.8** Classification reports whether a module's own source declares any
 `static edit = …` template — on any class the module defines, whether that is
-the card class or a FieldDef, and whether or not the declaration carries a type
-annotation. This is the fact RP-6.3's exception reads, and it is a property of
+the card class or a FieldDef, under any spelling that names one declaration:
+with or without a type annotation, with the modifiers TypeScript allows before
+the name, under a string-literal computed key, and as a static getter. This is the fact RP-6.3's exception reads, and it is a property of
 the module's declaration rather than of its graph: a module that declares none
 contributes no authored code to the edit surface. It is established for
 authored modules only, since a trusted module renders every format Direct.

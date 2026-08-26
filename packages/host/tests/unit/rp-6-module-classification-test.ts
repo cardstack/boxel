@@ -789,6 +789,24 @@ module('Unit | rendering protocol | module classification', function () {
         ),
         'the annotated form the Base realm itself writes',
       );
+      // Every modifier TypeScript allows between `static` and the name, plus
+      // the key spellings that still name one declaration.
+      for (let declaration of [
+        'static readonly edit = Edit;',
+        'static override edit = Edit;',
+        'static readonly override edit: BaseDefComponent = Edit;',
+        'declare static edit: BaseDefComponent;',
+        'static ["edit"] = Edit;',
+        "static ['edit'] = Edit;",
+        'static get edit() { return Edit; }',
+      ]) {
+        assert.true(
+          await editTemplateFor(
+            `class Edit {}\nexport class Person {\n  ${declaration}\n}\n`,
+          ),
+          declaration,
+        );
+      }
       assert.true(
         await editTemplateFor(
           [
@@ -820,6 +838,12 @@ module('Unit | rendering protocol | module classification', function () {
       assert.false(
         await editTemplateFor(`export class Person {}\n`),
         'nothing declared',
+      );
+      assert.false(
+        await editTemplateFor(
+          `export class Person {\n  static edited = 1;\n  static [key] = 2;\n}\n`,
+        ),
+        'a longer name, and a computed key no reading of the source resolves',
       );
     });
   });

@@ -180,12 +180,19 @@ const templateCompilerModule = '@ember/template-compiler';
 // nothing.
 //
 // The two ways this can be wrong are not symmetric. A false POSITIVE — the
-// text appearing in a comment, a string, or a template body — keeps the edit
-// surface in the stronger cage, which is always allowed. A false NEGATIVE
-// hands a surface that does contain authored code to the trusted Base editor,
-// which is a containment failure, so the pattern is written to err toward
-// matching.
-const authoredEditTemplatePattern = /\bstatic\s+edit\s*[:=]/;
+// text appearing in a comment, a string, or a template body, or a `declare`
+// field that holds no runtime value — keeps the edit surface in the stronger
+// cage, which is always allowed. A false NEGATIVE hands a surface that does
+// contain authored code to the trusted Base editor, which is a containment
+// failure. So the pattern admits every spelling of the declaration that
+// carries one: the modifiers TypeScript allows between `static` and the name,
+// a string-literal computed key, and a static getter.
+//
+// What it cannot cover is a computed key that is not a literal
+// (`static [chooseKey()] = …`), which no reading of the source can resolve.
+// That residue belongs to the AST-based extraction, not to a longer pattern.
+const authoredEditTemplatePattern =
+  /\bstatic\s+(?:(?:readonly|override|get)\s+)*(?:edit\s*[:=(]|\[\s*(['"])edit\1\s*\]\s*[:=])/;
 
 const preprocessor = new ContentTag.Preprocessor();
 
