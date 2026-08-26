@@ -14,7 +14,10 @@ import {
 } from '@cardstack/runtime-common';
 import type { PgAdapter } from '@cardstack/postgres';
 import { testRealmURL } from './helpers.ts';
-import { settlePrerenderHtmlJobs } from '../helpers/indexing.ts';
+import {
+  rejectedPrerenderHtmlJobIds,
+  settlePrerenderHtmlJobs,
+} from '../helpers/indexing.ts';
 import {
   closeServer,
   createVirtualNetwork,
@@ -30,13 +33,20 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// A single readiness request holds for as long as its own gates take:
+// READINESS_REQUEST_BUDGET_MS across startup / in-flight index / index-lane
+// settle, then `awaitPublishedHtmlReady`'s own budget on top. Roughly 70s
+// today. `waitUntil` tests its deadline between attempts and never abandons
+// one in flight, so a poll can overshoot its budget by a whole request.
+const READINESS_POLL_TIMEOUT_MS = 90_000;
+
 // Budget for a publish setup hook: realm boot, the fixture writes, the
-// from-scratch index of the published copy, and its render. Sized to sit
-// clear of the waits nested inside it (READINESS_POLL_TIMEOUT_MS plus the
-// settle that follows plus the write traffic before either), so whichever
-// stage stalls is the one that reports the failure.
-const PUBLISHED_REALM_SETUP_TIMEOUT_MS = 240_000;
-const READINESS_POLL_TIMEOUT_MS = 120_000;
+// from-scratch index of the published copy, its render, and the settle that
+// follows. Sized against the worst case those add up to — the readiness poll
+// plus one request's overshoot, plus the settle, plus the write traffic
+// before either — so a stalled stage is reported by the wait that owns it
+// rather than by QUnit's stageless timeout.
+const PUBLISHED_REALM_SETUP_TIMEOUT_MS = 300_000;
 
 // Wait for a freshly published realm to be both indexed and rendered.
 //
@@ -55,21 +65,52 @@ const READINESS_POLL_TIMEOUT_MS = 120_000;
 // `X-Boxel-Not-Ready` names the stage still outstanding, which is the whole
 // diagnosis when this times out — index vs prerender-html are different
 // failures with different causes.
+//
+// 503 is the only status worth another attempt. Anything else — the realm
+// never mounted, an auth misconfiguration, a throw out of the handler — is
+// settled, and retrying it to the end of the budget only converts a specific
+// error into a slow generic one.
+//
+// A rejected render is settled too, and invisible to readiness: the job never
+// reaches its batch swap, so no HTML lands and the readiness predicate stays
+// false for good. Reading the channel each attempt keeps that failure
+// reported as the job that failed rather than as a wait that ran out.
 async function waitForPublishedRealmReady(
   request: SuperTest<Test>,
+  dbAdapter: DBAdapter,
+  publishedRealmURL: string,
   publishedRealmPath: string,
   publishedRealmHost: string,
 ): Promise<void> {
   let lastStatus = 'no response';
   await waitUntil(
     async () => {
+      let rejected = await rejectedPrerenderHtmlJobIds(
+        dbAdapter,
+        publishedRealmURL,
+      );
+      if (rejected.length > 0) {
+        throw new Error(
+          `prerender_html job(s) rejected while awaiting readiness for ${publishedRealmURL}: ${rejected.join(', ')}`,
+        );
+      }
       let response = await request
         .get(`${publishedRealmPath}_readiness-check?awaitPrerenderHtml=true`)
         .set('Host', publishedRealmHost)
         .set('Accept', 'application/vnd.api+json');
+      if (response.status === 200) {
+        return true;
+      }
       let stage = response.headers['x-boxel-not-ready'];
-      lastStatus = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}`;
-      return response.status === 200;
+      lastStatus = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}${
+        response.text ? ` ${response.text.slice(0, 300)}` : ''
+      }`;
+      if (response.status !== 503) {
+        throw new Error(
+          `published realm ${publishedRealmHost}${publishedRealmPath} answered a settled failure to its readiness check: ${lastStatus}`,
+        );
+      }
+      return false;
     },
     {
       timeout: READINESS_POLL_TIMEOUT_MS,
@@ -1679,6 +1720,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           await testRealmServer.testingOnlyReconcile();
           await waitForPublishedRealmReady(
             request,
+            dbAdapter,
+            publishedRealmURLString,
             publishedRealmPath,
             publishedRealmHost,
           );
@@ -1956,6 +1999,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           await testRealmServer.testingOnlyReconcile();
           await waitForPublishedRealmReady(
             request,
+            dbAdapter,
+            publishedRealmURLString,
             publishedRealmPath,
             publishedRealmHost,
           );
