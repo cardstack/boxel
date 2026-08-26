@@ -1,35 +1,70 @@
 #!/usr/bin/env -S node
-// Holds `packages/host` and `packages/runtime-common` on the same content-tag.
+// Holds every package that declares content-tag on one version of it.
 //
-// Both packages preprocess authored `<template>` source, and each uses its own
-// copy: the realm transpiles with runtime-common's (`transpile.ts`), while the
-// Boxel source classifier in host analyzes what host's copy emits. Those two
-// copies have to agree about what the compiled form looks like. Where they do
-// not, the classifier reads a module the realm serves as an unfinished draft —
-// or reads the injected template-compiler import as an authored graph edge, and
-// adds a module to every templated card's graph.
+// Several packages preprocess authored `<template>` source with their own copy:
+// the realm transpiles with runtime-common's, the Boxel source classifier in
+// host analyzes what host's emits, and the CLI drives its own. Those copies have
+// to agree about what the compiled form looks like. Where they do not, the
+// classifier reads a module the realm serves as an unfinished draft — or reads
+// the injected template-compiler import as an authored graph edge, and adds a
+// module to every templated card's graph.
 //
-// Nothing today fails when they diverge. Parity is a side effect of both
-// packages spelling the dependency `catalog:`, which resolves to one version
-// for the whole workspace; pinning either side to a literal range, or adding a
-// pnpm override for one of them, breaks it silently and in a shape no test can
-// see, since a test suite bundles whatever it resolved.
+// Parity is a side effect of every package spelling the dependency `catalog:`,
+// which resolves to one version for the whole workspace, and nothing declares
+// that it matters. The host browser suite bundles host's copy and
+// runtime-common's into one process, so a divergence that changes behavior on
+// the syntax those tests cover does surface there — but only incidentally, and
+// only for that pair. What no test sees is the declaration itself drifting, or a
+// divergence in a package no suite bundles both sides of.
 //
 // So both the declared range and the installed version are compared. The
 // declared range catches the edit, in the diff that makes it; the installed
-// version catches the ways a range is not the last word — an override, a
-// patch, a stale store.
+// version catches the ways a range is not the last word — an override scoped to
+// one package, a patch, a stale store.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const packages = ['packages/host', 'packages/runtime-common'];
 const dependency = 'content-tag';
 
 function readJSON(path: string): Record<string, any> {
   return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+function declaredRange(manifest: Record<string, any>): string | undefined {
+  return (
+    manifest.dependencies?.[dependency] ??
+    manifest.devDependencies?.[dependency]
+  );
+}
+
+// Every package that declares it, discovered rather than listed: a new one
+// joining is the case this check exists for, and a hand-maintained list would
+// silently omit it.
+const packages = readdirSync(join(repoRoot, 'packages'), {
+  withFileTypes: true,
+})
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => `packages/${entry.name}`)
+  .filter((pkg) => {
+    try {
+      return (
+        declaredRange(readJSON(join(repoRoot, pkg, 'package.json'))) !==
+        undefined
+      );
+    } catch {
+      return false;
+    }
+  })
+  .sort();
+
+if (packages.length < 2) {
+  console.error(
+    `only ${packages.length} package declares ${dependency}; this check compares copies, so it has nothing to hold`,
+  );
+  process.exit(1);
 }
 
 const declared = new Map<string, string>();
@@ -37,14 +72,7 @@ const installed = new Map<string, string>();
 const offenders: string[] = [];
 
 for (let pkg of packages) {
-  let manifest = readJSON(join(repoRoot, pkg, 'package.json'));
-  let range =
-    manifest.dependencies?.[dependency] ??
-    manifest.devDependencies?.[dependency];
-  if (!range) {
-    offenders.push(`${pkg} does not declare ${dependency}`);
-    continue;
-  }
+  let range = declaredRange(readJSON(join(repoRoot, pkg, 'package.json')))!;
   declared.set(pkg, range);
 
   // Read through the package's own node_modules rather than resolving from
@@ -88,9 +116,9 @@ console.log(
 if (offenders.length > 0) {
   console.error(
     `\n${offenders.join('\n')}\n\n` +
-      `Both packages preprocess authored \`<template>\` source with their own copy,\n` +
+      `These packages preprocess authored \`<template>\` source with their own copy,\n` +
       `and the source classifier analyzes what its copy emits. Put them back on one\n` +
-      `version — \`catalog:\` on both sides is what holds this without an override.`,
+      `version — \`catalog:\` everywhere is what holds this without an override.`,
   );
 }
 

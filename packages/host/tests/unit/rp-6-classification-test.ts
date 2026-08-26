@@ -1,11 +1,10 @@
 import * as babel from '@babel/core';
-// @ts-ignore no upstream types are available
-import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { module, test } from 'qunit';
 
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 import {
   realmBabelPlugins,
+  realmTypescriptPlugin,
   transpileJS,
 } from '@cardstack/runtime-common/transpile';
 
@@ -20,44 +19,57 @@ import {
   isTrustedModule,
 } from '@cardstack/host/lib/trusted-modules';
 
-// The erasure half of what the realm does to card source: the TypeScript
-// transform, with the options `packages/runtime-common/transpile.ts` passes it.
-// Whether a module name survives this is the fact the classifier's import
-// collection has to agree with.
+// Babel options the probes below share. Neither side of a comparison reads
+// anything off `process`, and neither consults a Babel config file, so what a
+// probe reports is a property of the plugin list it was handed.
+const probeBabelOptions = {
+  cwd: '/',
+  root: '/',
+  envName: 'production',
+  babelrc: false,
+  configFile: false,
+} as const;
+
+// The erasure half of what the realm does to card source: its TypeScript
+// transform alone. Whether a module name survives this is the fact the
+// classifier's import collection has to agree with.
 function transformedByRealm(source: string): string {
   return (
     babel.transformSync(source, {
-      cwd: '/',
-      root: '/',
-      envName: 'production',
+      ...probeBabelOptions,
       filename: 'card.ts',
-      babelrc: false,
-      configFile: false,
       compact: true,
-      plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+      plugins: [realmTypescriptPlugin],
     })?.code ?? ''
   );
 }
 
-// What a Babel plugin list widens the parser to, computed BY Babel rather than
-// read off the plugins: `manipulateOptions` is the only hook that can widen the
-// parser, and Babel calls each plugin's before parsing, accumulating into the
-// one `parserOpts.plugins` array it also seeds from the caller's own. So a
-// recorder placed last in the list sees the finished accept-set without this
-// file knowing which plugin contributed what — which is the point, since the
-// contributions are what is under comparison.
+// How a Babel plugin list widens the parser, computed BY Babel rather than read
+// off the plugins: `manipulateOptions` is the only hook that can widen it, and
+// Babel calls each plugin's before parsing against one `parserOpts` object,
+// seeded by identity from the caller's own. So a recorder appended last to the
+// list observes the finished parser configuration without this file knowing
+// which plugin contributed what — which is the point, since the contributions
+// are what is under comparison.
 //
-// The array handed in is copied because Babel appends to the one it is given,
-// and both lists here are the values the shipping code parses with.
-function parserPluginsContributedBy(options: babel.TransformOptions): string[] {
-  let recorded: unknown[] = [];
+// The WHOLE object is reported, not just `plugins`. A plugin widens the parser
+// through any field of it — `allowReturnOutsideFunction` and
+// `allowAwaitOutsideFunction` admit syntax on their own — and a probe that read
+// only the plugin list would compare two identical lists and call a real
+// divergence equal.
+//
+// The arrays handed in are copied, because Babel appends to the ones it is
+// given and both sides here are the values the shipping code parses with.
+function acceptSetContributedBy(options: babel.TransformOptions): {
+  plugins: unknown[];
+  [key: string]: unknown;
+} {
+  let recorded: Record<string, unknown> | undefined;
   babel.transformSync('', {
-    cwd: '/',
-    root: '/',
-    envName: 'production',
+    ...probeBabelOptions,
+    // Neither side's real filename: a probe reports what a plugin list
+    // contributes, and no plugin in either list varies that by filename.
     filename: 'accept-set.ts',
-    babelrc: false,
-    configFile: false,
     parserOpts: { plugins: [...(options.parserOpts?.plugins ?? [])] },
     plugins: [
       ...(options.plugins ?? []),
@@ -65,22 +77,58 @@ function parserPluginsContributedBy(options: babel.TransformOptions): string[] {
         name: 'record-accept-set',
         manipulateOptions(
           _options: unknown,
-          parserOpts: { plugins: unknown[] },
+          parserOpts: Record<string, unknown>,
         ) {
-          recorded = [...parserOpts.plugins];
+          recorded = { ...parserOpts };
         },
         visitor: {},
       }),
     ],
   });
+  if (!recorded) {
+    throw new Error('Babel did not call the recorder, so nothing was measured');
+  }
   // A contribution is either a bare name or a `[name, options]` tuple, and the
   // two spellings widen the parser identically — so both normalize to the tuple
-  // form. The options stay in the comparison: a plugin can widen differently
-  // depending on them. Sorted because reaching the same syntax in a different
-  // order is not a difference.
-  return recorded
-    .map((entry) => JSON.stringify(Array.isArray(entry) ? entry : [entry, {}]))
-    .sort();
+  // form, and the options stay in the comparison because a plugin can widen
+  // differently depending on them. Deduped, because two plugins contributing
+  // the same syntax reach the same accept-set as one; and sorted, because the
+  // order a list arrives at that accept-set in is not a difference.
+  let plugins = [...((recorded.plugins as unknown[] | undefined) ?? [])].map(
+    (entry) =>
+      Array.isArray(entry) ? [entry[0], entry[1] ?? {}] : [entry, {}],
+  );
+  let byIdentity = new Map<string, unknown>();
+  for (let entry of plugins) {
+    byIdentity.set(JSON.stringify(canonicalized(entry)), entry);
+  }
+  return {
+    ...recorded,
+    plugins: [...byIdentity.keys()].sort().map((key) => byIdentity.get(key)),
+  };
+}
+
+// Recursively key-sorted, so a value serializes to one string however its
+// object literals were written. Two plugins reaching the same accept-set must
+// dedupe against each other, and a multi-key option bag — the decorators
+// syntax plugin contributes `decoratorsBeforeExport` and
+// `allowCallParenthesized` together — must not read as a divergence because
+// someone wrote its keys in the other order.
+function canonicalized(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalized);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [
+          key,
+          canonicalized((value as Record<string, unknown>)[key]),
+        ]),
+    );
+  }
+  return value;
 }
 
 // A card module around whatever the case under test is, so every row of the
@@ -876,7 +924,7 @@ module('Unit | RP-6 classification', function () {
     }
   });
 
-  test("RP-6.4: the parser accept-set is the realm's, plugin for plugin", async function (assert) {
+  test("RP-6.4: the parser accept-set is the realm's, contribution for contribution", async function (assert) {
     // The mirroring the classifier's parse rests on, compared rather than
     // restated. `the realm and the classifier agree on which source is
     // servable` covers the syntax someone thought to write a fixture for; this
@@ -888,18 +936,25 @@ module('Unit | RP-6 classification', function () {
     // to the realm's pipeline, or swapped for one that widens differently,
     // moves one side and fails here. Narrowing the classifier's list fails here
     // too, from the other direction.
-    let realm = parserPluginsContributedBy({ plugins: realmBabelPlugins });
-    let classifier = parserPluginsContributedBy(sourceParseOptions());
+    //
+    // Equality rather than "the classifier admits at least the realm's syntax",
+    // because the classifier's options are a mirror and not a choice: slack in
+    // either direction means the mirror has stopped tracking, and the direction
+    // that is merely untidy today is the one that hides the direction that
+    // costs an iframe tomorrow.
+    let realm = acceptSetContributedBy({ plugins: [...realmBabelPlugins] });
+    let classifier = acceptSetContributedBy(sourceParseOptions());
     assert.deepEqual(
       classifier,
       realm,
-      'the two lists widen the parser to the same syntax',
+      'the two lists configure the parser the same way',
     );
-    // Two empty sets compare equal, so the comparison above passes for a
-    // reading that failed to read anything — a recorder Babel never calls, or
-    // a plugin list it declines to instantiate. Both come back bare.
+    // Two empty accept-sets compare equal, so the comparison above would pass
+    // for a reading that measured nothing. The recorder throws when Babel never
+    // calls it; this catches the subtler shape, where it is called against a
+    // parserOpts no plugin ever contributed to.
     assert.true(
-      realm.length > 0,
+      (realm.plugins as unknown[]).length > 0,
       'the realm contributes syntax, so the comparison above is not vacuous',
     );
   });
@@ -907,9 +962,11 @@ module('Unit | RP-6 classification', function () {
   test('RP-6.4: the realm and the classifier agree on which source is servable', async function (assert) {
     // The mirroring, checked end to end: each fixture goes through the realm's
     // own `transpileJS` and through classification, and the two have to agree
-    // that it is servable. Whatever the realm transpiles, the classifier must
-    // parse — the reverse slack is harmless, since source the realm refuses
-    // never reaches a render.
+    // that it is servable. This is the direction that costs something —
+    // whatever the realm transpiles, the classifier must read — and it is the
+    // only direction a fixture can observe, since source the realm refuses
+    // never reaches a render either way. `the parser accept-set is the realm's,
+    // contribution for contribution` is what holds the mirror exact.
     //
     // Asserting the agreement rather than the syntax is what keeps this honest
     // as the pipeline moves: a fixture the realm stops serving switches to the
@@ -970,6 +1027,22 @@ module('Unit | RP-6 classification', function () {
         'a satisfies expression',
         'export const t = document.title satisfies string;',
       ],
+      [
+        'an import attribute clause',
+        `import d from './d.json' with { type: 'json' };\nexport const t = [d, document.title];`,
+      ],
+      [
+        'a decorator ahead of export',
+        'const dec = (t: unknown) => t;\nexport @dec class A { x = document.title; }',
+      ],
+      [
+        'a using declaration',
+        'using r = { [Symbol.dispose]() {} };\nexport const t = document.title;',
+      ],
+      [
+        'an await using declaration',
+        'export async function f() { await using r = {}; return document.title; }',
+      ],
       // The negative cases. `accessor` needs a decorator proposal the realm's
       // `decorator-transforms` does not enable, and JSX is syntax content-tag
       // refuses ahead of Babel — so the realm serves neither, and the
@@ -988,15 +1061,22 @@ module('Unit | RP-6 classification', function () {
       } else {
         refused++;
       }
-      let parsed =
-        (await classifyBoxelSource(source)).reason !== 'source-parse-pending';
+      // Every servable fixture reads `document`, and the classifier has to
+      // report that read — not merely decline to call the source a draft. What
+      // a missed accept-set costs is the module's SIGNALS: the parse is all or
+      // nothing, so a refusal takes the template signals with it and the module
+      // classifies Capsule with an empty list. Asserting only that the reason
+      // is not `source-parse-pending` would pass for a parse that succeeds and
+      // an analysis that finds nothing.
+      let analysis = await classifyBoxelSource(source);
+      let analyzed = analysis.signals.join(',') === 'document';
       // The one combination the mirroring forbids: source the realm hands out
       // that classification cannot read. The other three are all fine — the
       // realm refusing it makes the classifier's answer moot either way.
-      let holeInTheMirror = servable && !parsed;
+      let holeInTheMirror = servable && !analyzed;
       assert.false(
         holeInTheMirror,
-        `${shape} — the realm ${servable ? 'transpiles' : 'refuses'} it and the classifier ${parsed ? 'parses' : 'reads it as a draft'}`,
+        `${shape} — the realm ${servable ? 'transpiles' : 'refuses'} it and the classifier reports ${analysis.reason}`,
       );
     }
     // Each row above rules out one combination, which a fixture the realm

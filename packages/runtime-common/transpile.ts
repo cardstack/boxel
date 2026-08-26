@@ -46,29 +46,51 @@ const compiler = {
   },
 };
 
-const templateOptions: EmberTemplatePluginOptions = {
+const templateOptions: EmberTemplatePluginOptions = Object.freeze({
   compiler,
-  transforms: [scopedCSSTransform],
-};
+  transforms: Object.freeze([
+    scopedCSSTransform,
+  ]) as (typeof scopedCSSTransform)[],
+});
 
-// The Babel half of the realm's pipeline, a value rather than an inline literal
-// because the SYNTAX the realm serves is a property of this list and of nothing
-// else. A Babel plugin can widen the parser only through `manipulateOptions`,
-// so driving Babel over this array reports the accept-set a module has to fall
-// inside to be transpiled at all.
+// The realm's TypeScript entry, named on its own because which imports survive
+// to runtime is a fact other code has to agree with: the source classifier
+// reads a module's import graph off the parsed statements and has to reach the
+// same answer this erasure does. Code checking that agreement uses this value,
+// so it cannot be checking against a restatement that has drifted.
+export const realmTypescriptPlugin: babel.PluginItem = Object.freeze([
+  typescriptPlugin,
+  Object.freeze({ allowDeclareFields: true }),
+]) as babel.PluginItem;
+
+// The Babel half of the realm's pipeline. Which JavaScript syntax survives
+// transpilation is a property of this array: a Babel plugin can widen the
+// parser only through `manipulateOptions`, so driving Babel over these plugins
+// reports the accept-set the Babel stage admits. content-tag's preprocessor
+// runs ahead of it with an accept-set of its own, so this is the second of two
+// gates rather than the only one — and Babel additionally merges any config
+// file it finds from the working directory, which a caller transpiling inside
+// someone else's project can move.
 //
 // The Boxel source classifier in `packages/host` parses card source with a
 // hand-written mirror of these contributions, and a mirror that falls behind
 // reads servable modules as unfinished drafts. It holds itself to this array
 // rather than to a restatement of it, so adding a plugin here that contributes
 // syntax fails that comparison instead of passing silently.
-export const realmBabelPlugins: babel.PluginItem[] = [
+//
+// One array and one options object serve every transpile, which is also what
+// lets Babel instantiate each plugin once for the life of the process instead
+// of per module. They are frozen because a plugin instance shared that widely
+// must not be reachable for mutation; nothing writes to them today
+// (`babel-plugin-ember-template-compilation` normalizes its options into a
+// fresh object and never writes back).
+export const realmBabelPlugins: readonly babel.PluginItem[] = Object.freeze([
   emberConcurrencyAsyncPlugin,
-  [typescriptPlugin, { allowDeclareFields: true }],
+  realmTypescriptPlugin,
   [decoratorTransforms],
   [makeEmberTemplatePlugin, templateOptions],
   loaderPlugin,
-];
+] as babel.PluginItem[]);
 
 export async function transpileJS(
   content: string,
@@ -96,7 +118,10 @@ export async function transpileJS(
   const transformed = await babel.transformAsync(content, {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
-    plugins: realmBabelPlugins,
+    // Cast rather than spread: Babel caches instantiated plugins against the
+    // identity of the array it is handed, so a fresh copy per call would build
+    // five plugin instances per module.
+    plugins: realmBabelPlugins as babel.PluginItem[],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });
   const src = transformed?.code;

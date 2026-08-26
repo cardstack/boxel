@@ -251,16 +251,17 @@ const pinnedBabelOptions = {
  * it there, and moving the realm to a different decorator proposal has to move
  * this too.
  *
- * Nothing about that reasoning is self-enforcing, which is why it is exported
- * rather than written inline: `RP-6.4: the parser accept-set is the realm's,
- * plugin for plugin` drives Babel over both lists and compares what each
- * contributes, so a plugin added to the realm's pipeline fails a comparison
- * instead of quietly serving syntax this file cannot read.
+ * Nothing about that reasoning is self-enforcing, which is why these options
+ * are exported: `RP-6.4: the parser accept-set is the realm's, contribution
+ * for contribution` drives Babel over both lists and compares the parser
+ * configuration each produces, so a plugin added to the realm's pipeline fails
+ * a comparison instead of quietly serving syntax this file cannot read.
  *
  * A function, not a constant, because Babel appends every plugin's
- * contribution to the very `parserOpts.plugins` array it is handed — a shared
- * one would accumulate `typescript` once per parse and report an accept-set
- * that grows with use.
+ * contribution to the very `parserOpts.plugins` array it is handed. A shared
+ * one would take on three more entries per parse — `objectRestSpread`,
+ * `classProperties` and `typescript` — and report an accept-set that grows with
+ * use.
  */
 export function sourceParseOptions(): {
   plugins: babel.PluginItem[];
