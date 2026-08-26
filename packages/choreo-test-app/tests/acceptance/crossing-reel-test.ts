@@ -27,7 +27,7 @@ module('Acceptance | crossing reel', function (hooks) {
   setupApplicationTest(hooks);
 
   test('three clips Magic-Move the same plate, title, and note', async function (assert) {
-    await visit('/_crossing-reel');
+    await visit('/crossing-reel');
     await animationsSettled();
 
     const root = find('[data-test-crossing-reel]') as HTMLElement;
@@ -69,7 +69,7 @@ module('Acceptance | crossing reel', function (hooks) {
   });
 
   test('a mid-flight cut retargets rather than queueing', async function (assert) {
-    await visit('/_crossing-reel');
+    await visit('/crossing-reel');
     await animationsSettled();
 
     reel().go(1);

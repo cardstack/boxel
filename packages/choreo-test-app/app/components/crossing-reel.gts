@@ -41,10 +41,11 @@ function radiusFor(clip: Clip) {
 }
 
 /**
- * A separate reel from `/_feature-reel`: three Kiln compositions as clips,
- * Magic-Moved. Same four identities (plate, title, kicker, note); only the
- * stylesheet says where they live. The conductor clock changes `clip` at
- * score thresholds and stops there — the flights ride WAAPI via `play()`.
+ * A separate reel at `/crossing-reel` (not `/_feature-reel`): three Kiln
+ * compositions as clips, Magic-Moved. Same four identities (plate, title,
+ * kicker, note); only the stylesheet says where they live. The conductor
+ * clock changes `clip` at score thresholds and stops there — the flights
+ * ride WAAPI via `play()`.
  */
 export class CrossingReel extends Component {
   @tracked clip: Clip = 0;

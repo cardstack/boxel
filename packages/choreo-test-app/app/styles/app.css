@@ -3135,7 +3135,7 @@ html[data-gm-dragging] * {
   height: 58%;
 }
 
-/* ── Kiln Magic Move reel (separate from /_feature-reel) ────────────────
+/* ── Kiln Magic Move reel — /crossing-reel, not /_feature-reel ───────────
    Three compositions of the same four things, full-bleed. The conductor
    only changes data-clip; c.Move + layout projection play the trip. */
 .xreel-viewport {

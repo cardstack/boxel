@@ -8,6 +8,7 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('feature-reel', { path: '/_feature-reel' });
-  this.route('crossing-reel', { path: '/_crossing-reel' });
+  // Own URL, not a capture underscore-route and not a /:demo_id.
+  this.route('crossing-reel', { path: '/crossing-reel' });
   this.route('demo', { path: '/:demo_id' });
 });
