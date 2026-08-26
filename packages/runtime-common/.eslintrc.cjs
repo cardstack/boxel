@@ -27,5 +27,14 @@ module.exports = {
         '@cardstack/boxel/no-url-from-realm-identifier': 'warn',
       },
     },
+    // TEMPORARY, paired with lint-rule-demo.ts: raises the rule to an error for
+    // that one file so a CI lint job fails on it and nothing else. Revert the
+    // commit that added both.
+    {
+      files: ['lint-rule-demo.ts'],
+      rules: {
+        '@cardstack/boxel/no-url-from-realm-identifier': 'error',
+      },
+    },
   ],
 };
