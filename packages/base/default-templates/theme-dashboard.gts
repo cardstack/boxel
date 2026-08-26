@@ -835,6 +835,7 @@ export class NavBar extends GlimmerComponent<{
         list-style: none;
         margin: 0;
         padding: 0;
+        padding-inline: var(--boxel-sp);
         display: flex;
         gap: var(--boxel-sp-xs);
         overflow-x: auto;
