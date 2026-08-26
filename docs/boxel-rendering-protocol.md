@@ -298,6 +298,49 @@ is ignored with a diagnostic, because honoring it host-side would execute
 the module's authored field templates in the main document. This is an
 instance of R5: nothing may de-escalate isolation.
 
+**RP-6.6** R1's trusted-provenance predicate is a test on the module's
+identifier and admits nothing else: the Base realm, the Cardstack packages
+pseudo-origin, and `@cardstack/*` bare specifiers. A bare specifier reaches
+the predicate BEFORE the Loader resolves it, so URL normalization has not
+run and cannot protect it; that form is therefore admitted only when it is
+unambiguously a path inside an `@cardstack` package — decodable, free of
+`\`, `%`, `?` and `#`, and free of `.`/`..` segments — and is rejected
+rather than normalized otherwise. Nothing derived from a module's SOURCE
+participates in this decision, so no cache, hash, or graph result can reach
+it. A wider set of import origins is Host-provided — the Catalog realm, the
+icons host, the framework stand-ins, and whatever else a runtime shims —
+which is the graph walk's pruning test (RP-6.7) and NOT a grant of Direct
+execution: what a module may import says nothing about who wrote it
+(`trusted-modules.ts`).
+
+**RP-6.7** An authored module's classification yields its module graph: the
+set reachable from the entry over static import edges and literal-specifier
+dynamic imports, collected in full before anything is read off it, with
+Host-provided modules (RP-6.6) recorded as edges but never fetched or
+followed, and bounded at 256 authored modules. The graph is the exact read
+authority a stronger runtime is given — a Sandbox authorizes a module fetch
+against it before any authenticated request fires — so it is reported with
+an availability flag, and it is an authorization list only when that flag
+says the walk read every module it reached. An unresolvable specifier, an
+unreadable or unparseable dependency, and an exceeded bound each mark the
+graph unavailable and name the failure; a render over an unavailable graph
+fails closed with that diagnostic rather than authorizing a wider set, and
+an unavailable result is not memoized. Computed dynamic specifiers cannot
+be statically authorized, are absent from the graph, and are refused at
+runtime. The result is a property of the graph, not of traversal: a diamond
+reached from either side and a cycle entered from either end yield the same
+graph and the same reported failure. A caller-supplied draft revision is
+classified for that caller alone and never enters the memo other entries
+read, so an unsaved buffer cannot decide the read authority of a card it is
+not the source of.
+
+**RP-6.8** Classification reports whether a module's own source declares any
+`static edit = …` template — on the card class or on any FieldDef the module
+defines. This is the fact RP-6.3's exception reads, and it is a property of
+the module's declaration rather than of its graph: a module that declares
+none contributes no authored code to the edit surface. It is established for
+authored modules only, since a trusted module renders every format Direct.
+
 ## RP-7 Relationships and lazy loading
 
 **RP-7.1** Link state is a five-way union: `present`, `not-loaded`,
