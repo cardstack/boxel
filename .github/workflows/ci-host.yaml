@@ -869,7 +869,15 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() && needs.check-percy.outputs.percy_needed == 'true' }}
         with:
-          name: percy-tally-${{ matrix.shardIndex }}
+          # Scope the name to the run attempt, for the reason spelled out on
+          # the junit report below: artifacts are retained per attempt under
+          # one run_id and download-artifact has no attempt filter. The cost
+          # here is worse than a stale report, because the finalize job sums
+          # the tallies it finds — a prior attempt's shortfall would be added
+          # to a clean re-run's totals and reject a build that lost nothing.
+          # The Percy nonce is already attempt-scoped, so each attempt is a
+          # distinct build and its tally has to be too.
+          name: percy-tally-${{ github.run_attempt }}-${{ matrix.shardIndex }}
           path: /tmp/percy-tally.txt
           retention-days: 30
           if-no-files-found: ignore
@@ -1015,7 +1023,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         continue-on-error: true
         with:
-          pattern: percy-tally-*
+          pattern: percy-tally-${{ github.run_attempt }}-*
           path: /tmp/percy-tallies
 
       - name: Total the Percy snapshot tallies
