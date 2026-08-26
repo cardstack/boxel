@@ -35,6 +35,13 @@ import config from '@cardstack/host/config/environment';
  * however Host-owned the realm is: it is authored source with its own import
  * graph, and pruning at it would report a complete graph while dropping
  * everything behind it.
+ *
+ * The icons host is here and not in `isTrustedModule`, so an icon module's
+ * package spelling answers the provenance question and its CDN URL does not.
+ * That asymmetry is deliberate: the boundary has no path of its own, and an
+ * origin-wide grant is exactly what provenance refuses (see `isURLWithin`).
+ * The two answers differ only in how strongly the module is contained, never
+ * in whether the walk stops there, and the stricter one is what the URL gets.
  */
 export function isTrustedModule(moduleIdentifier: string): boolean {
   return (
@@ -74,10 +81,17 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
  * right direction for a stale list — visible, and never an escalation — and
  * it does not break the graph walk, which prunes on the runtime's own shim
  * registry rather than on this list.
+ *
+ * The list carries one constraint in the other direction, which nothing here
+ * can enforce: no realm may ever be mapped under a name on it. A realm named
+ * for a Host package would have its authored content admitted by this test,
+ * which is the hazard above running backwards. The wiring that registers realm
+ * mappings is where that belongs as an assertion.
  */
 const hostPackages = new Set([
   'base',
   'boxel-host',
+  'host',
   'boxel-icons',
   'boxel-ui',
   'bxl',

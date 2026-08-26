@@ -92,6 +92,8 @@ module('Unit | rendering protocol | module classification', function () {
         `${PACKAGES_FAKE_ORIGIN}@cardstack/boxel-ui/components`,
         '@cardstack/boxel-ui/components',
         '@cardstack/runtime-common',
+        '@cardstack/host/tests/helpers/setup',
+        `${PACKAGES_FAKE_ORIGIN}@cardstack/host/tests/helpers/setup`,
       ]) {
         assert.true(isTrustedModule(identifier), `trusted: ${identifier}`);
       }
@@ -149,6 +151,33 @@ module('Unit | rendering protocol | module classification', function () {
       assert.true(
         isTrustedModule('https://cardstack.com/base/card-api'),
         'base URL',
+      );
+    });
+
+    test('RP-6.7: a published realm is walked rather than pruned, by either spelling', function (assert) {
+      // Pruning is sound only where trust begins, so a realm the Host
+      // publishes is not a leaf: it is authored source with its own import
+      // graph, and stopping there would report a complete graph while dropping
+      // everything behind it. The URL spelling has to say so as loudly as the
+      // alias does.
+      assert.false(
+        isTrustedImport('https://cardstack.com/catalog/blog-post'),
+        'the Catalog realm is not a Host stand-in',
+      );
+      let configured = config.resolvedCatalogRealmURL;
+      try {
+        config.resolvedCatalogRealmURL = 'https://realms.example/catalog/';
+        assert.false(
+          isTrustedImport('https://realms.example/catalog/blog-post'),
+          'nor is it one once this deployment resolves it',
+        );
+      } finally {
+        config.resolvedCatalogRealmURL = configured;
+      }
+      assert.strictEqual(
+        config.resolvedCatalogRealmURL,
+        configured,
+        'the environment is left as it was found',
       );
     });
 

@@ -65,10 +65,12 @@ export interface BoxelModuleClassification {
    * Spellings are mixed by construction: an authored dependency appears as
    * `resolveImport` returned it, while a module the Host provides appears as
    * the specifier the author wrote, because resolving one can evaluate it. A
-   * gate comparing a requested URL against this list must therefore fold the
-   * same identity family the Loader does (`moduleCacheKey`,
-   * `trimExecutableExtension`) rather than compare strings exactly, or it will
-   * refuse a fetch for a module that is in the list under a sibling spelling.
+   * gate comparing a requested URL against this list must therefore reproduce
+   * the runtime's own resolution before comparing — the Loader's identifier
+   * folding (`moduleCacheKey`, `trimExecutableExtension`) AND the import-map
+   * transforms that send a package specifier somewhere else entirely, as
+   * `@cardstack/boxel-icons/mail` is rewritten onto the icons host. An exact
+   * string comparison refuses fetches for modules that are in the list.
    */
   moduleGraph: readonly string[];
 
@@ -142,8 +144,9 @@ export interface BoxelModuleClassifierOptions {
   isHostProvidedModule?(moduleIdentifier: string): boolean;
 
   /**
-   * The number of authored modules one walk will read. Modules the walk prunes
-   * at do not count against it, since they are never fetched.
+   * The number of module reads one walk will attempt. A read that fails counts,
+   * so unreadable imports cannot outrun the bound; modules the walk prunes at
+   * do not, since they are never read.
    */
   maxModules?: number;
 }
