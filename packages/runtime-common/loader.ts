@@ -1412,9 +1412,9 @@ export class Loader {
     // distinction is dropped as the module leaves the registered states, and
     // both readers of `consumedModules` need every import: eviction so a
     // module does not outlive something whose exports it holds, and the index
-    // so an edit to an imported module invalidates what imported it. What
-    // this set holds is what indexing invalidation fans out over, so it holds
-    // imports and nothing else.
+    // so an edit to an imported module invalidates what imported it. This set
+    // is also what indexing invalidation fans out over, which is the cost of
+    // anything added to it: it holds imports, and nothing that is not one.
     let consumedModules = new Set(
       module.dependencies.flatMap((dep) =>
         dep.type === 'dep' || dep.type === 'completing-dep'

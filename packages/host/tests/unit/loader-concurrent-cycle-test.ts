@@ -2,10 +2,13 @@ import { module, test } from 'qunit';
 
 import { Deferred, Loader } from '@cardstack/runtime-common';
 
-// The loader records a `completing-dep` for a module that is mid-completion on
-// the recording task's own recursion stack — cycle handling. That leaves a
-// window where the dep is still 'registered': the recording task must resume
-// before the dep advances. A *concurrent* import root that reaches the
+// The loader records a `completing-dep` for any dep that had not finished
+// completing when a module's dependency list was frozen. One way that happens
+// is a dep mid-completion on the recording task's own recursion stack — cycle
+// handling; another is a dep left in 'registered-completing-deps' by a
+// suspended import root, which is how an edge to a module in no cycle at all
+// comes to be marked completing. Either way it leaves a window where the dep
+// has not advanced yet: the recording task must resume before it does. A *concurrent* import root that reaches the
 // recorded module during that window completes the dep itself rather than
 // treating the not-yet-advanced dep as a broken invariant, since state
 // transitions are monotonic and re-entrant. Regression guard against
