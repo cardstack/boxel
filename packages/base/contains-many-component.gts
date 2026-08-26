@@ -80,7 +80,11 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
 
   <template>
     <PermissionsConsumer as |permissions|>
-      <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
+      <div
+        class='contains-many-editor'
+        data-card-field={{@field.name}}
+        data-test-contains-many={{@field.name}}
+      >
         {{#if this.decoratedChildren.length}}
           <ul
             {{sortableGroup

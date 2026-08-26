@@ -93,7 +93,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
-    <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
+    <div
+      class='links-to-many-editor'
+      data-card-field={{@field.name}}
+      data-test-links-to-many={{@field.name}}
+    >
       {{#if (eq @childFormat 'atom')}}
         <LinksToManyCompactEditor
           @model={{@model}}

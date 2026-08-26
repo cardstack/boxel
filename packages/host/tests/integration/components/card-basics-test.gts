@@ -982,12 +982,12 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="number"]').containsText('10');
     });
 
-    // The capture/discovery contract: every rendered field boundary — a card
-    // rendered as a field, a compound field's wrapper, and the plural-field
-    // wrappers — carries data-card-field=<fieldName>, so selector-based
-    // screenshot capture and region discovery can address fields in templates
-    // that never opted in. The card root itself carries no field context, so
-    // it must not carry the attribute.
+    // The capture/discovery contract: a rendered field boundary — a card
+    // rendered as a field, a compound field's wrapper, and the plural wrappers
+    // in both their view and edit forms — carries data-card-field=<fieldName>,
+    // so selector-based screenshot capture and region discovery can address
+    // fields in templates that never opted in. The card root itself carries no
+    // field context, so it must not carry the attribute.
     test('rendered field boundaries carry data-card-field', async function (assert) {
       class Guest extends FieldDef {
         @field name = contains(StringField);
@@ -1068,6 +1068,18 @@ module('Integration | card-basics', function (hooks) {
           'data-card-field',
           'the card root has no field context, so no data-card-field',
         );
+
+      // Edit format renders plural fields through their own editor wrappers,
+      // distinct elements from the view-format plural wrappers above. A
+      // containsMany of primitives has no per-item boundary, so the editor
+      // wrapper is the only element that can name the field for discovery.
+      await renderCard(loader, person, 'edit');
+      assert
+        .dom('.contains-many-editor[data-card-field="nicknames"]')
+        .exists('a containsMany editor wrapper carries its field name');
+      assert
+        .dom('.links-to-many-editor[data-card-field="pets"]')
+        .exists('a linksToMany editor wrapper carries its field name');
     });
 
     test('render a field in atom format', async function (assert) {

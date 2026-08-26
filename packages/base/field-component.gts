@@ -358,15 +358,19 @@ export function getBoxComponent(
                 }}
                   {{#if (isCard model.value)}}
                     {{#let model.value as |card|}}
-                      {{! Every rendered field boundary carries
-                          data-card-field=<fieldName> — here, on the
-                          compound-field wrapper below, and on the plural-field
-                          wrappers in contains-many-component and
-                          links-to-many-component — so selector-based screenshot
-                          capture and region discovery can address fields in
-                          templates that never opted in. Stamped
-                          unconditionally; inert for CSS. Omitted when no field
-                          context exists (a card rendered as the root). }}
+                      {{! A rendered field boundary carries
+                          data-card-field=<fieldName> so selector-based
+                          screenshot capture and region discovery can address
+                          fields in templates that never opted in. That is: this
+                          card-as-field container and the compound-field wrapper
+                          below, plus the plural wrappers in
+                          contains-many-component and links-to-many-component —
+                          both their view (`plural-field`) and edit
+                          (`*-editor`) forms. Stamped unconditionally; inert for
+                          CSS. Omitted where no boundary element is rendered — a
+                          card at the root (no field context), and a primitive
+                          leaf field, which renders bare with no wrapper to
+                          carry it. }}
                       <DefaultFormatsProvider
                         @value={{defaultFieldFormats effectiveFormats.cardDef}}
                       >
