@@ -3303,10 +3303,15 @@ html[data-gm-dragging] * {
 .xstress-hud {
   position: absolute;
   z-index: 5;
-  top: 4.5%;
-  right: 5%;
+  top: 3%;
+  right: 4%;
   left: auto;
-  max-width: min(42ch, 46vw);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65em 1em;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: min(72ch, 70vw);
   text-align: right;
   pointer-events: auto;
 }
@@ -3316,7 +3321,7 @@ html[data-gm-dragging] * {
   gap: 0.8em;
   justify-content: flex-end;
   align-items: baseline;
-  margin: 0 0 0.35em;
+  margin: 0;
   font-family: var(--font-mono);
   font-size: clamp(11px, 1.05vw, 18px);
   letter-spacing: 0.16em;
@@ -3334,10 +3339,11 @@ html[data-gm-dragging] * {
 }
 
 .xstress-lede {
-  margin: 0 0 0.85em;
-  font-size: clamp(11px, 0.95vw, 15px);
-  line-height: 1.35;
-  color: #b8aea3;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 
 .xstress-controls {
