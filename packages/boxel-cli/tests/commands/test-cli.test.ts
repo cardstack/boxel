@@ -34,24 +34,18 @@ async function runTestCli(argv: string[]): Promise<void> {
 }
 
 describe('boxel test CLI flags', () => {
-  let exitSpy: ReturnType<typeof vi.spyOn>;
-  let errorSpy: ReturnType<typeof vi.spyOn>;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-
   beforeEach(() => {
     runTestsLocally.mockReset().mockResolvedValue(passedResult);
     runTestsForRealm.mockReset().mockResolvedValue(passedResult);
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit(${code})`);
     }) as never);
-    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
-    exitSpy.mockRestore();
-    errorSpy.mockRestore();
-    logSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
   it('forwards --timeout to runTestsLocally as numeric timeoutMs', async () => {
@@ -89,7 +83,7 @@ describe('boxel test CLI flags', () => {
       );
       expect(runTestsLocally).not.toHaveBeenCalled();
       expect(runTestsForRealm).not.toHaveBeenCalled();
-      expect(errorSpy).toHaveBeenCalledWith(
+      expect(console.error).toHaveBeenCalledWith(
         expect.stringContaining('--timeout must be a positive integer'),
       );
     });
