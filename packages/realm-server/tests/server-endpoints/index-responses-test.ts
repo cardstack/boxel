@@ -30,6 +30,14 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// Budget for a publish setup hook: realm boot, the fixture writes, the
+// from-scratch index of the published copy, and its render. Sized to sit
+// clear of the waits nested inside it (READINESS_POLL_TIMEOUT_MS plus the
+// settle that follows plus the write traffic before either), so whichever
+// stage stalls is the one that reports the failure.
+const PUBLISHED_REALM_SETUP_TIMEOUT_MS = 240_000;
+const READINESS_POLL_TIMEOUT_MS = 120_000;
+
 // Wait for a freshly published realm to be both indexed and rendered.
 //
 // `awaitPrerenderHtml=true` is the gate every publish consumer uses
@@ -64,7 +72,7 @@ async function waitForPublishedRealmReady(
       return response.status === 200;
     },
     {
-      timeout: 120_000,
+      timeout: READINESS_POLL_TIMEOUT_MS,
       interval: 1000,
       timeoutMessage: () =>
         `published realm ${publishedRealmHost}${publishedRealmPath} never passed its readiness check; last response: ${lastStatus}`,
@@ -1494,7 +1502,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let publishedRealmPath: string;
       let ownerUserId = '@mango:localhost';
 
-      hooks.beforeEach(function () {
+      hooks.beforeEach(function (assert) {
+        // QUnit arms one timeout per hook promise, so the whole publish setup
+        // below — realm boot, the writes, the from-scratch index, and the
+        // render — shares a single window, and the suite-wide
+        // `QUnit.config.testTimeout` is too small to hold it. Raise it past
+        // the waits inside that hook so their timeout messages, which name the
+        // stage that stalled, are what a failure reports rather than QUnit's
+        // stageless "test timed out".
+        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
         dir = dirSync();
       });
       setupDB(hooks, {
@@ -1757,7 +1773,9 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let publishedRealmPath: string;
       let ownerUserId = '@mango:localhost';
 
-      hooks.beforeEach(function () {
+      hooks.beforeEach(function (assert) {
+        // Same single-window-per-hook reasoning as the theme module above.
+        assert.timeout(PUBLISHED_REALM_SETUP_TIMEOUT_MS);
         dir = dirSync();
       });
       setupDB(hooks, {
