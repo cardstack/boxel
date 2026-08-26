@@ -9010,3 +9010,42 @@ html[data-gm-dragging] * {
   font-weight: 500;
   color: var(--ink);
 }
+
+/* ── The poster cut ──────────────────────────────────────────────────────
+   A full-frame plate the poster clip mounts for the film's first beat;
+   its removal at 0.45s IS the hard cut — no transition, by definition. */
+.reel-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  background: #090b10;
+  color: #f3ece3;
+}
+
+.reel-poster-rule {
+  width: 84px;
+  height: 3px;
+  background: #ff3b1f;
+  margin-bottom: 26px;
+}
+
+.reel-poster-word {
+  margin: 0;
+  font:
+    800 clamp(64px, 9vw, 168px) / 0.92 'Syne',
+    sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.reel-poster-tag {
+  margin: 18px 0 0;
+  color: #d2c9bf;
+  font:
+    500 22px/1.2 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}

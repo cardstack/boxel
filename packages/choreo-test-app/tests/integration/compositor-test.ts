@@ -200,4 +200,174 @@ module('Integration | compositor host', function () {
       'a missing action names itself'
     );
   });
+
+  test('a clip maps parent time to source time and folds its lifecycle', async function (assert) {
+    const seeks: number[] = [];
+    const presence: boolean[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [
+        {
+          at: 2,
+          end: 'hold',
+          id: 'take',
+          rate: 2,
+          sourceIn: 1,
+          sourceOut: 5,
+          target: 'demo',
+        },
+      ],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+    });
+    compositor.register('demo', {
+      parameters: {
+        time: (v) => {
+          seeks.push(v);
+        },
+      },
+      presence: (p) => {
+        presence.push(p);
+      },
+    });
+
+    // absent before its window: unmounted, never seeked
+    await compositor.renderAt(1);
+    assert.deepEqual(presence, [false], 'absent before at');
+    assert.deepEqual(seeks, [], 'no seek while absent');
+
+    // active: source = sourceIn + (parent - at) × rate
+    await compositor.renderAt(3);
+    assert.deepEqual(presence, [false, true], 'mounted inside the window');
+    assert.deepEqual(seeks, [3], 'source time honours sourceIn and rate');
+
+    // window is (sourceOut - sourceIn) / rate = 2s of parent time; past it
+    // the hold policy keeps it mounted at the edited boundary sample —
+    // and mounted-to-mounted is no change, so the presence port stays quiet
+    await compositor.renderAt(10);
+    assert.deepEqual(presence, [false, true], 'hold keeps it mounted');
+    assert.deepEqual(seeks, [3, 5], 'hold stands at sourceOut');
+
+    // backward: the fold re-derives absent, exactly as at the start
+    await compositor.renderAt(0.5);
+    assert.deepEqual(
+      presence,
+      [false, true, false],
+      'a backward seek unmounts it again'
+    );
+    assert.deepEqual(seeks, [3, 5], 'and never seeks an absent clip');
+  });
+
+  test('clip end policies: remove unmounts, freeze stops writing', async function (assert) {
+    const log: string[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [
+        { at: 0, id: 'cold', sourceOut: 1, target: 'a' },
+        { at: 0, end: 'freeze', id: 'ice', sourceOut: 1, target: 'b' },
+      ],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+    });
+    compositor.register('a', {
+      parameters: {
+        time: (v) => {
+          log.push(`a:${String(v)}`);
+        },
+      },
+      presence: (p) => {
+        log.push(`a-present:${String(p)}`);
+      },
+    });
+    compositor.register('b', {
+      parameters: {
+        time: (v) => {
+          log.push(`b:${String(v)}`);
+        },
+      },
+      presence: (p) => {
+        log.push(`b-present:${String(p)}`);
+      },
+    });
+
+    await compositor.renderAt(0.5);
+    log.length = 0;
+    await compositor.renderAt(5);
+    assert.true(
+      log.includes('a-present:false'),
+      'remove (the default) unmounts past the window'
+    );
+    assert.true(
+      !log.some((l) => l.startsWith('b')),
+      'freeze stays mounted (no presence change) and writes nothing further'
+    );
+  });
+
+  test('a preview fold flips clip presence but never seeks', async function (assert) {
+    const seeks: number[] = [];
+    const presence: boolean[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [{ at: 1, id: 'take', sourceOut: 5, target: 'demo' }],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+    });
+    compositor.register('demo', {
+      parameters: {
+        time: (v) => {
+          seeks.push(v);
+        },
+      },
+      presence: (p) => {
+        presence.push(p);
+      },
+    });
+    await compositor.foldTo(2, { parameters: false });
+    assert.deepEqual(
+      presence,
+      [true],
+      'presence is structure: preview flips it'
+    );
+    assert.deepEqual(
+      seeks,
+      [],
+      'seeking is capture reconstruction: preview skips it'
+    );
+  });
+
+  test('a clip may name which parameter port receives its clock', async function (assert) {
+    const values: number[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [
+        {
+          at: 2,
+          end: 'hold',
+          id: 'scrub',
+          parameter: 'progress',
+          sourceOut: 4,
+          target: 'build',
+        },
+      ],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+    });
+    compositor.register('build', {
+      parameters: {
+        progress: (v) => {
+          values.push(v);
+        },
+      },
+    });
+    await compositor.renderAt(3);
+    assert.deepEqual(values, [1], 'the named port receives source time');
+  });
 });

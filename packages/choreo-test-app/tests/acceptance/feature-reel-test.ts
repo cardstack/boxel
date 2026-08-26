@@ -146,6 +146,10 @@ module('Acceptance | feature reel transport', function (hooks) {
       Boolean(find('.reel-lightbox .overlay')),
       '1.5s: the photo.open cue folded in'
     );
+    assert.false(
+      Boolean(find('.reel-poster')),
+      '1.5s: the poster clip cut away at 0.45s'
+    );
 
     await reel().renderAt(5.1);
     assert.strictEqual(opacityOf('[data-lt="lt-beacons"]'), '1', '5.1s: 02');
@@ -178,6 +182,10 @@ module('Acceptance | feature reel transport', function (hooks) {
       opacityOf('[data-lt="lt-lightbox"]'),
       '0',
       '0.05s: no third is up yet'
+    );
+    assert.true(
+      Boolean(find('.reel-poster')),
+      '0.05s: the poster clip re-derives PRESENT from a backward fold'
     );
   });
 });

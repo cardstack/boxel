@@ -31,6 +31,8 @@ interface BuildOrderElement extends HTMLElement {
 /** New editorial shell; the subjects are the gallery's real demos. */
 export class FeatureReel extends Component {
   @tracked take = 0;
+  /** the opening plate: mounted by the poster clip's presence fold */
+  @tracked poster = true;
   private root?: HTMLElement;
   private c?: { run: ChoreoRun | null };
   private t?: { run: ChoreoRun | null };
@@ -49,21 +51,33 @@ export class FeatureReel extends Component {
    * preview the demos play their own engines.
    */
   private compositor = createCompositor({
-    automations: [
+    automations: [],
+    // the reel's editorial structure IS clips now: each demo take is a
+    // declared source-time window instead of a hand-rolled offset, and
+    // the poster is the hard cut — a plate that opens the film and cuts
+    // to the picture as the first camera move begins
+    clips: [
+      { at: 0, id: 'poster', sourceOut: 0.45, target: 'poster' },
       {
-        name: 'time',
-        sample: (t: number) => Math.max(0, t - 0.55),
+        at: 0.55,
+        end: 'hold',
+        id: 'lightbox-take',
+        sourceOut: 2.9,
         target: 'lightbox',
       },
       {
-        name: 'time',
-        sample: (t: number) => Math.max(0, t - 3.45),
+        at: 3.45,
+        end: 'hold',
+        id: 'inbox-take',
+        sourceOut: 3.0,
         target: 'inbox',
       },
       {
-        from: 7.3,
-        name: 'progress',
-        sample: (t: number) => Math.max(0, t - 7.3),
+        at: 7.3,
+        end: 'hold',
+        id: 'build-take',
+        parameter: 'progress',
+        sourceOut: 7.7,
         target: 'build',
       },
     ],
@@ -148,6 +162,13 @@ export class FeatureReel extends Component {
       },
       // no reset: the inbox has no cheap return to its seed rows; the
       // compose port is idempotent, so a backward replay cannot double it
+    });
+    this.compositor.register('poster', {
+      presence: (present) => {
+        if (this.poster !== present) {
+          this.poster = present;
+        }
+      },
     });
     this.compositor.register('build', {
       parameters: {
@@ -399,6 +420,17 @@ export class FeatureReel extends Component {
           <c.Wait @duration={{2.1}} />
         </c.Sequence>
       </Choreo>
+
+      {{! The hard cut: a full-frame poster plate, mounted by a clip's
+          presence fold — on screen from the first frame, cut away exactly
+          as the opening camera move begins. }}
+      {{#if this.poster}}
+        <div class="reel-poster">
+          <span class="reel-poster-rule" aria-hidden="true"></span>
+          <p class="reel-poster-word">Choreo</p>
+          <p class="reel-poster-tag">Motion. Choreographed.</p>
+        </div>
+      {{/if}}
 
       {{! The title plane: its own Choreo region, a sibling of the camera'd
           world — viewport-anchored typography the demo camera cannot drag.
