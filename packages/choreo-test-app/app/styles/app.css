@@ -3537,8 +3537,9 @@ html[data-gm-dragging] * {
 
 .xstress-hero {
   /* never a 0×0 empty span — crop-scale of that is invisible.
-     overflow stays visible: the drop-shadow lives on THIS node
-     (via the modifier) and clip would eat it. Innards clip on .face. */
+     overflow stays visible: the drop-shadows live on .cast children
+     (static box-shadow, opacity-blended) and clip would eat them.
+     Innards clip on .face. */
   top: 28%;
   left: calc(50% - 11vmin);
   width: 22vmin;
@@ -3552,6 +3553,31 @@ html[data-gm-dragging] * {
     #d4b48a 100%
   );
   z-index: 2;
+}
+
+/* One caster per rest-state light. The shadow string never tweens —
+   only opacity does, so the compositor can dissolve Tide's teal into
+   Ember's warm without parsing box-shadow or mixing colour through mud.
+   Transparent fill: box-shadow still casts from the border box;
+   filter: drop-shadow() would not (it follows alpha, and there is none). */
+.xstress-hero-cast {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.xstress-hero-cast.tide {
+  box-shadow: 0 18px 42px rgb(6 38 42 / 58%);
+}
+
+.xstress-hero-cast.ember {
+  box-shadow: 0 52px 110px rgb(72 16 4 / 78%);
+}
+
+.xstress-hero-cast.violet {
+  box-shadow: 0 6px 18px rgb(0 0 0 / 42%);
 }
 
 .xstress-hero-face {

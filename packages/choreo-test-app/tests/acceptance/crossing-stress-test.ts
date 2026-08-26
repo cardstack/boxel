@@ -51,10 +51,17 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.ok(find('[data-test-shot]'), 'the plate holds a live shot');
     assert.ok(find('[data-test-mark]'), 'the plate holds a spinning mark');
     assert.ok(find('[data-test-rule]'), 'a kept hairline sits on the stage');
+    const tideCast = find('[data-test-cast="0"]') as HTMLElement;
     assert.true(
-      getComputedStyle(find('[data-test-hero]') as HTMLElement).boxShadow !==
-        'none',
-      'the plate drop-shadow is on the modifier, not eaten by overflow'
+      parseFloat(getComputedStyle(tideCast).opacity) > 0.9 &&
+        getComputedStyle(tideCast).boxShadow !== 'none',
+      "Tide's shadow is a lit caster (opacity blend, not a tweened string)"
+    );
+    assert.true(
+      parseFloat(
+        getComputedStyle(find('[data-test-cast="1"]') as HTMLElement).opacity
+      ) < 0.1,
+      "Ember's caster is dark while Tide is showing"
     );
     assert.true(
       titleBox().width < window.innerWidth * 0.55,
@@ -131,6 +138,12 @@ module('Acceptance | crossing stress', function (hooks) {
       find('[data-test-hero] [data-test-mark]'),
       'the spinning mark stays inside the flying plate'
     );
+    assert.strictEqual(
+      document.querySelectorAll('[data-choreo-orphans] [data-test-cast]')
+        .length,
+      0,
+      'shadow casters ride inside the kept plate — they dissolve, they do not orphan'
+    );
 
     await animationsSettled();
     assert.strictEqual(
@@ -152,6 +165,18 @@ module('Acceptance | crossing stress', function (hooks) {
       ember.width < window.innerWidth * 0.55 &&
         ember.height < window.innerHeight * 0.7,
       `Ember's hero stays a tile (${ember.width.toFixed(0)}×${ember.height.toFixed(0)} in ${window.innerWidth}×${window.innerHeight})`
+    );
+    assert.true(
+      parseFloat(
+        getComputedStyle(find('[data-test-cast="1"]') as HTMLElement).opacity
+      ) > 0.9,
+      "Ember's caster is the lit light after landing"
+    );
+    assert.true(
+      parseFloat(
+        getComputedStyle(find('[data-test-cast="0"]') as HTMLElement).opacity
+      ) < 0.1,
+      "Tide's caster has dissolved"
     );
 
     stress().go(2);

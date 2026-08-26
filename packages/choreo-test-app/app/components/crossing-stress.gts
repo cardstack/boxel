@@ -36,19 +36,16 @@ function t() {
   };
 }
 
-/** radius + shadow, on their own short curve — Kiln's rule, not a skin swap */
+/** radius + shadow dissolve — Kiln's curve, not a skin swap */
 const plateTween = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
 
 function radiusFor(slide: Slide) {
   return ['28px', '36px', '0px'][slide]!;
 }
 
-function shadowFor(slide: Slide) {
-  return [
-    '0 18px 42px rgb(6 38 42 / 58%)',
-    '0 52px 110px rgb(72 16 4 / 78%)',
-    '0 6px 18px rgb(0 0 0 / 42%)',
-  ][slide]!;
+/** 1 on the live slide, 0 on the rest — the only honest shadow blend */
+function castFor(slide: Slide, current: Slide) {
+  return slide === current ? 1 : 0;
 }
 
 const deck = [
@@ -95,13 +92,19 @@ const STRESS = 0.72;
  * `/crossing-reel`.
  *
  * Three full-viewport slides. The beige plate is ONE element: `c.Move`
- * tweens its real box; `animate` tweens radius and drop-shadow (those
- * have to live on the modifier, or a size tween smears them). Live
- * innards — a shot, a spinning mark, a meter, ticking dots — are NOT
- * participants: they reflow with the box. An inset caption inside the
- * plate IS a counterpart, so a skin crosses while its parent flies.
- * Titles, kickers, and chips pair as counterparts (`pack="content"` on
- * type). A kept hairline `c.Move`s with the plate. Unique washes fade.
+ * tweens its real box; `animate` tweens radius (that has to live on the
+ * modifier, or a size tween smears the corners). Drop-shadows do not
+ * tween: Tide's tight teal, Ember's huge warm, Violet's small black
+ * are three different lights. Mixing the `box-shadow` string parses
+ * and rebuilds every frame (Gestures forbids this) and interpolates
+ * colour through mud. Each rest-state shadow is a dedicated caster
+ * with a static `box-shadow`; only opacity crossfades — the same
+ * grammar as Crossing skins. Live innards — a shot, a spinning mark,
+ * a meter, ticking dots — are NOT participants: they reflow with the
+ * box. An inset caption inside the plate IS a counterpart, so a skin
+ * crosses while its parent flies. Titles, kickers, and chips pair as
+ * counterparts (`pack="content"` on type). A kept hairline `c.Move`s
+ * with the plate. Unique washes fade.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
  * Loops are CSS transforms on the motion nodes themselves, so the pass
@@ -335,17 +338,22 @@ export class CrossingStress extends Component {
           {{motion
             id="xstress-hero"
             role="hero"
-            style=(styles
-              borderRadius=(radiusFor this.slide)
-              boxShadow=(shadowFor this.slide)
-            )
-            animate=(to
-              borderRadius=(radiusFor this.slide)
-              boxShadow=(shadowFor this.slide)
-            )
+            style=(styles borderRadius=(radiusFor this.slide))
+            animate=(to borderRadius=(radiusFor this.slide))
             transition=plateTween
           }}
         >
+          {{#each deck as |s|}}
+            <span
+              class="xstress-hero-cast {{s.tone}}"
+              data-test-cast={{s.n}}
+              {{motion
+                style=(styles opacity=(castFor s.n this.slide))
+                animate=(to opacity=(castFor s.n this.slide))
+                transition=plateTween
+              }}
+            ></span>
+          {{/each}}
           <div class="xstress-hero-face">
             <div class="xstress-hero-shot" data-test-shot></div>
             <span class="xstress-hero-mark" data-test-mark></span>
