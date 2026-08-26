@@ -21,6 +21,22 @@ import { Order } from './order';
 import { Subscription } from './subscription';
 import { Payment } from './payment';
 import { formatMoney, lineTotal, sumLineItems } from './money';
+import DueDateField from './due-date-field';
+
+// The due-date pill states calendar facts it cannot square with the invoice's
+// lifecycle, so terminal invoices render the plain date instead of the field.
+function plainDate(value: Date | null | undefined): string {
+  if (!value) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(value);
+}
+
+function isTerminal(status: string | null | undefined): boolean {
+  return ['paid', 'void'].includes(status ?? '');
+}
 
 // Overdue is not a state anyone sets — it is what being unpaid past the due
 // date looks like, so it is derived rather than stored and cannot drift from
@@ -39,7 +55,7 @@ export class Invoice extends CardDef {
   @field owner = linksTo(User);
   @field issueDate = contains(DateField);
   @field sentDate = contains(DateField);
-  @field dueDate = contains(DateField);
+  @field dueDate = contains(DueDateField);
   @field status = contains(InvoiceStatusField);
   @field lineItems = containsMany(LineItem);
   @field order = linksTo(() => Order);
@@ -177,6 +193,9 @@ export class Invoice extends CardDef {
     get itemCount() {
       return this.args.model?.lineItems?.length ?? 0;
     }
+    get dueLabel() {
+      return plainDate(this.args.model?.dueDate);
+    }
     <template>
       <div class='fitted'>
         <div class='fmt badge'>
@@ -210,7 +229,7 @@ export class Invoice extends CardDef {
           <span class='name'>{{@model.cardTitle}}</span>
           <span class='figure figure-lg'>{{this.total}}</span>
           {{#if @model.dueDate}}
-            <span class='meta'>Due <@fields.dueDate /></span>
+            <span class='meta'>Due {{this.dueLabel}}</span>
           {{/if}}
         </div>
         <div class='fmt card'>
@@ -230,7 +249,7 @@ export class Invoice extends CardDef {
             <span class='meta'>{{this.itemCount}}
               item{{unless (eq this.itemCount 1) 's'}}{{#if @model.dueDate}}
                 · due
-                <@fields.dueDate />{{/if}}</span>
+                {{this.dueLabel}}{{/if}}</span>
           </div>
           <span class='figure figure-lg'>{{this.total}}</span>
         </div>
@@ -372,6 +391,12 @@ export class Invoice extends CardDef {
   };
 
   static isolated = class Isolated extends Component<typeof Invoice> {
+    get showDueness() {
+      return !isTerminal(this.args.model?.status);
+    }
+    get dueLabel() {
+      return plainDate(this.args.model?.dueDate);
+    }
     get rows() {
       return (this.args.model?.lineItems ?? []).map((item) => ({
         description: item?.description || '\u2014',
@@ -433,10 +458,10 @@ export class Invoice extends CardDef {
               <dd><@fields.sentDate /></dd>
             {{/if}}
             <dt>Due</dt>
-            <dd><@fields.dueDate /></dd>
-            {{#if @model.daysOverdue}}
-              <dt>Overdue</dt>
-              <dd class='overdue-days'>{{@model.daysOverdue}} days</dd>
+            {{#if this.showDueness}}
+              <dd><@fields.dueDate /></dd>
+            {{else}}
+              <dd>{{this.dueLabel}}</dd>
             {{/if}}
             {{#if @model.owner}}
               <dt>Owner</dt>
@@ -639,10 +664,6 @@ export class Invoice extends CardDef {
         }
         .t-total {
           font-size: 1.125rem;
-        }
-        .overdue-days {
-          color: var(--state-overdue-fg, #991b1b);
-          font-weight: 600;
         }
         .sub-row td {
           border-top: none;

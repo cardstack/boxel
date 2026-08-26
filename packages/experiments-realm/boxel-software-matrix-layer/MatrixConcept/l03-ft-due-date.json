@@ -17,10 +17,10 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "Quest Log stage 1a: block + Spec live 2026-08-26; in-use example wired when Quest Log stage 2 lands (Task.dueDate). Invoice fitted rows evaluated and deliberately not swapped — terminal lifecycles render the raw date (see Spec Non-goals).",
+      "notes": "Quest Log stage 1a: block + Spec live 2026-08-26; first consumer Invoice.dueDate (live invoices mount the pill, paid/void render the plain date). Second consumer lands with Quest Log stage 2 (Task.dueDate).",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/due-date-field",
       "specTarget": "shared block",
-      "consumers": null,
+      "consumers": "invoice",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -37,9 +37,9 @@
       "specUsageRef": null,
       "verifiedAt": "2026-08-26T07:16:07.000Z",
       "specKind": "field",
-      "specExampleCount": 0,
-      "specReadmeChars": 1408,
-      "specExampleIds": null
+      "specExampleCount": 1,
+      "specReadmeChars": 1631,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-061\"]"
     },
     "meta": {
       "adoptsFrom": {
