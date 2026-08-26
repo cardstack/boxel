@@ -21,6 +21,7 @@ import {
   FieldContainer,
   BoxelInput,
   Pill,
+  Switch,
 } from '@cardstack/boxel-ui/components';
 import {
   and,
@@ -955,34 +956,19 @@ export class ModeToggle extends GlimmerComponent<{
     toggleDarkMode: () => void;
     isDarkMode: boolean;
   };
-  Element: HTMLButtonElement;
+  Element: HTMLLabelElement;
 }> {
   <template>
-    <Button
-      class='mode-toggle'
-      @kind='primary'
-      @size='small'
-      {{on 'click' @toggleDarkMode}}
+    <Switch
+      @isEnabled={{@isDarkMode}}
+      @onChange={{@toggleDarkMode}}
+      @size='touch'
+      @checkedIcon={{Moon}}
+      @uncheckedIcon={{Sun}}
+      @label='Dark mode'
       data-test-mode={{if @isDarkMode 'toggle-light' 'toggle-dark'}}
       ...attributes
-    >
-      {{#if @isDarkMode}}
-        <Sun width='16' height='16' class='toggle-icon' role='presentation' />
-        Light Mode
-      {{else}}
-        <Moon width='16' height='16' class='toggle-icon' role='presentation' />
-        Dark Mode
-      {{/if}}
-    </Button>
-    <style scoped>
-      .mode-toggle {
-        gap: var(--boxel-sp-xs);
-        transition: none;
-      }
-      .toggle-icon {
-        flex-shrink: 0;
-      }
-    </style>
+    />
   </template>
 }
 
