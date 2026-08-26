@@ -218,7 +218,6 @@ export default class RenderRoute extends Route<Model> {
     if (attemptedCardId) {
       this.#lastAttemptedCardId = attemptedCardId;
     }
-    this.#recordBeforeModelDiag(transition, attemptedCardId);
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
     if (!isTesting()) {
@@ -1440,15 +1439,10 @@ export default class RenderRoute extends Route<Model> {
     } catch {
       parsedReason = undefined;
     }
-    let diagDeps = this.#preModelDiagDeps(transition);
     if (parsedReason && typeof parsedReason === 'object') {
       if (parsedReason.error && typeof parsedReason.error === 'object') {
         parsedReason.error.deps = [
-          ...new Set([
-            ...(parsedReason.error.deps ?? []),
-            ...fallbackDeps,
-            ...diagDeps,
-          ]),
+          ...new Set([...(parsedReason.error.deps ?? []), ...fallbackDeps]),
         ];
       }
       parsedReason.evict = true;
@@ -1462,7 +1456,7 @@ export default class RenderRoute extends Route<Model> {
             title: 'Render failed',
             message: reason || 'Render failed before model hook',
             additionalErrors: null,
-            deps: [...fallbackDeps, ...diagDeps],
+            deps: fallbackDeps,
           },
           evict: true,
         },
@@ -1521,24 +1515,12 @@ export default class RenderRoute extends Route<Model> {
   // error listeners (which can be the LAST writer of the prerender error
   // element) and the pre-model early-failure path.
   #windowErrorFallbackDeps(): string[] {
-    let deps = this.#fallbackDepsFromIds([
+    return this.#fallbackDepsFromIds([
       this.renderBaseParams?.[0],
       this.#lastAttemptedCardId,
       this.#renderParamsId(),
       lastAttemptedRenderCardId(),
     ]);
-    // TEMP CS-12090 diagnostics (remove after CI verification)
-    return [
-      ...deps,
-      `diag:weh:${JSON.stringify({
-        base: this.renderBaseParams?.[0] ?? null,
-        stash: this.#lastAttemptedCardId ?? null,
-        paramsFor: this.#renderParamsId() ?? null,
-        global: lastAttemptedRenderCardId() ?? null,
-        loc: typeof window !== 'undefined' ? window.location.pathname : null,
-        beforeModel: this.#diagBeforeModel ?? null,
-      })}`,
-    ];
   }
 
   // The transition's serialized state params for this route, readable even
@@ -1554,74 +1536,6 @@ export default class RenderRoute extends Route<Model> {
         : undefined;
     } catch {
       return undefined;
-    }
-  }
-
-  // TEMP CS-12090 diagnostics (remove after CI verification): snapshot every
-  // candidate card-id source at beforeModel entry so a pre-model failure's
-  // error doc can report why deps derivation came up empty.
-  #diagBeforeModel: string | undefined;
-
-  #recordBeforeModelDiag(
-    transition: Transition | undefined,
-    attemptedCardId: string | undefined,
-  ) {
-    try {
-      let chain: unknown[] = [];
-      let current: Transition['to'] | null | undefined = transition?.to;
-      while (current) {
-        chain.push({
-          name: (current as any).name,
-          params: current.params ? { ...current.params } : null,
-        });
-        current = current.parent;
-      }
-      let intent = (transition as any)?.intent;
-      this.#diagBeforeModel = JSON.stringify({
-        stash: attemptedCardId ?? null,
-        chain,
-        intent: intent
-          ? {
-              url: intent.url ?? null,
-              name: intent.name ?? null,
-              contexts: Array.isArray(intent.contexts)
-                ? intent.contexts.length
-                : null,
-            }
-          : null,
-        loc: typeof window !== 'undefined' ? window.location.pathname : null,
-        paramsFor: this.#renderParamsId() ?? null,
-      });
-    } catch (e: any) {
-      this.#diagBeforeModel = `diag-error:${e?.message}`;
-    }
-  }
-
-  #preModelDiagDeps(transition?: Transition): string[] {
-    try {
-      let chain: unknown[] = [];
-      let current: Transition['to'] | null | undefined = transition?.to;
-      while (current) {
-        chain.push({
-          name: (current as any).name,
-          params: current.params ? { ...current.params } : null,
-        });
-        current = current.parent;
-      }
-      return [
-        `diag:beforeModel:${this.#diagBeforeModel ?? 'unset'}`,
-        `diag:errorPath:${JSON.stringify({
-          hasTransition: Boolean(transition),
-          chain,
-          stash: this.#lastAttemptedCardId ?? null,
-          base: this.renderBaseParams?.[0] ?? null,
-          paramsFor: this.#renderParamsId() ?? null,
-          global: lastAttemptedRenderCardId() ?? null,
-          loc: typeof window !== 'undefined' ? window.location.pathname : null,
-        })}`,
-      ];
-    } catch (e: any) {
-      return [`diag:error:${e?.message}`];
     }
   }
 
