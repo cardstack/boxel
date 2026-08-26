@@ -3285,6 +3285,483 @@ html[data-gm-dragging] * {
   bottom: 16%;
 }
 
+/* ── Magic Move stress — /crossing-stress, not /crossing-reel ──────────
+   Three looping slides, distinct grounds, a cut at any phase. Shared
+   identities stay mounted; data-slide is the rest home, data-phase
+   freezes intra-slide CSS loops for the span of a crossing. */
+.xstress-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow: hidden;
+  background: #0b2e34;
+  color: #f3ece3;
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+.xstress-hud {
+  position: absolute;
+  z-index: 5;
+  top: 4.5%;
+  right: 5%;
+  left: auto;
+  max-width: min(42ch, 46vw);
+  text-align: right;
+  pointer-events: auto;
+}
+
+.xstress-index {
+  display: flex;
+  gap: 0.8em;
+  justify-content: flex-end;
+  align-items: baseline;
+  margin: 0 0 0.35em;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.05vw, 18px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #c8c0b6;
+}
+
+.xstress-phase {
+  letter-spacing: 0.2em;
+  color: #8fd0c4;
+}
+
+.xstress-viewport[data-phase='crossing'] .xstress-phase {
+  color: #ffb089;
+}
+
+.xstress-lede {
+  margin: 0 0 0.85em;
+  font-size: clamp(11px, 0.95vw, 15px);
+  line-height: 1.35;
+  color: #b8aea3;
+}
+
+.xstress-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45em;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.xstress-controls button {
+  appearance: none;
+  margin: 0;
+  padding: 0.35em 0.7em;
+  border: 1px solid rgb(243 236 227 / 22%);
+  border-radius: 999px;
+  background: rgb(12 18 22 / 35%);
+  color: #f3ece3;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.xstress-controls button.is-on {
+  background: rgb(243 236 227 / 16%);
+  border-color: rgb(243 236 227 / 55%);
+}
+
+.xstress-dot {
+  width: 11px;
+  height: 11px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+
+.xstress-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.xstress-stage[data-slide='0'] {
+  background: #0b2e34;
+}
+
+.xstress-stage[data-slide='1'] {
+  background: #2c140e;
+}
+
+.xstress-stage[data-slide='2'] {
+  background: #16102c;
+}
+
+.xstress-wash,
+.xstress-orb,
+.xstress-spark,
+.xstress-hero,
+.xstress-title,
+.xstress-chip {
+  position: absolute;
+}
+
+/* Frozen for the flight: loops would write transform on the same node
+   Move is flying. Restarts from 0 when data-phase returns to looping. */
+.xstress-stage[data-phase='crossing'] .xstress-wash,
+.xstress-stage[data-phase='crossing'] .xstress-orb,
+.xstress-stage[data-phase='crossing'] .xstress-spark,
+.xstress-stage[data-phase='crossing'] .xstress-hero,
+.xstress-stage[data-phase='crossing'] .xstress-title,
+.xstress-stage[data-phase='crossing'] .xstress-chip {
+  animation: none !important;
+}
+
+.xstress-wash {
+  inset: -18%;
+  border-radius: 40%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.xstress-stage[data-slide='0'] .xstress-wash {
+  background: radial-gradient(
+    circle at 40% 45%,
+    #1f7c86 0%,
+    rgb(14 58 66 / 0%) 68%
+  );
+  animation: xstress-wash-tide 7.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-wash {
+  background: radial-gradient(
+    circle at 62% 40%,
+    #c44a22 0%,
+    rgb(44 20 14 / 0%) 70%
+  );
+  animation: xstress-wash-ember 5.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-wash {
+  background: radial-gradient(
+    circle at 30% 60%,
+    #6b48c4 0%,
+    rgb(22 16 44 / 0%) 66%
+  );
+  animation: xstress-wash-violet 8s ease-in-out infinite alternate;
+}
+
+.xstress-orb {
+  width: 18vmin;
+  height: 18vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(1px);
+  z-index: 1;
+}
+
+.xstress-stage[data-slide='0'] .xstress-orb {
+  top: 14%;
+  left: 12%;
+  background: rgb(90 210 198 / 28%);
+  animation: xstress-orb-tide 4.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-orb {
+  top: auto;
+  bottom: 10%;
+  left: 8%;
+  background: rgb(255 140 70 / 30%);
+  animation: xstress-orb-ember 3.4s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-orb {
+  top: 18%;
+  right: 10%;
+  left: auto;
+  background: rgb(180 140 255 / 32%);
+  animation: xstress-orb-violet 5.2s ease-in-out infinite alternate;
+}
+
+.xstress-spark {
+  width: 2.4vmin;
+  height: 2.4vmin;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.xstress-stage[data-slide='0'] .xstress-spark {
+  top: 28%;
+  right: 22%;
+  background: #dff7f2;
+  box-shadow: 0 0 18px #8fd0c4;
+  animation: xstress-spark-tide 1.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-spark {
+  top: 22%;
+  left: 18%;
+  background: #ffe0c2;
+  box-shadow: 0 0 18px #ff8a4a;
+  animation: xstress-spark-ember 1.15s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-spark {
+  bottom: 18%;
+  right: 28%;
+  top: auto;
+  background: #eadbff;
+  box-shadow: 0 0 18px #b48cff;
+  animation: xstress-spark-violet 1.35s ease-in-out infinite alternate;
+}
+
+.xstress-hero {
+  border-radius: 28px;
+  overflow: clip;
+  background: linear-gradient(160deg, #f4efe6 0%, #e8d9c4 52%, #d4b48a 100%);
+  box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
+  z-index: 2;
+}
+
+.xstress-title,
+.xstress-chip {
+  width: fit-content;
+  z-index: 3;
+}
+
+.xstress-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+}
+
+.xstress-chip {
+  padding: 0.35em 0.85em;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.05vw, 16px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+/* 01 Tide — small hero, gentle orbit, type centred */
+.xstress-stage[data-slide='0'] .xstress-hero {
+  top: 28%;
+  left: calc(50% - 11vmin);
+  width: 22vmin;
+  height: 22vmin;
+  animation: xstress-hero-tide 2.8s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-title {
+  top: 62%;
+  left: 50%;
+  translate: -50% 0;
+  font-size: clamp(3.2rem, 9vw, 7.2rem);
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-chip {
+  top: 22%;
+  left: 12%;
+  color: #0b2e34;
+  background: #8fd0c4;
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+/* 02 Ember — tall plate on the right, larger bob */
+.xstress-stage[data-slide='1'] .xstress-hero {
+  top: 10%;
+  right: 7%;
+  bottom: 10%;
+  left: auto;
+  width: 38%;
+  border-radius: 36px;
+  animation: xstress-hero-ember 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-title {
+  top: 18%;
+  left: 7%;
+  translate: none;
+  font-size: clamp(2.4rem, 6.4vw, 5.6rem);
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-chip {
+  left: 7%;
+  bottom: 14%;
+  top: auto;
+  color: #2c140e;
+  background: #ffb089;
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+/* 03 Violet — wide slab up top, a drifting scale */
+.xstress-stage[data-slide='2'] .xstress-hero {
+  top: 8%;
+  left: 8%;
+  width: 54%;
+  height: 28%;
+  border-radius: 0;
+  animation: xstress-hero-violet 3.1s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-title {
+  top: auto;
+  bottom: 22%;
+  left: 8%;
+  translate: none;
+  font-size: clamp(2.6rem, 6.8vw, 5.8rem);
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-chip {
+  right: 8%;
+  bottom: 12%;
+  left: auto;
+  top: auto;
+  color: #16102c;
+  background: #c4b0ff;
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+@keyframes xstress-hero-tide {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate(28px, -36px) rotate(8deg);
+  }
+}
+
+@keyframes xstress-hero-ember {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-24px, 56px);
+  }
+}
+
+@keyframes xstress-hero-violet {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(48px, 18px) scale(1.08);
+  }
+}
+
+@keyframes xstress-title-drift {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(0, -10px);
+  }
+}
+
+@keyframes xstress-chip-bob {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(16px, 12px);
+  }
+}
+
+@keyframes xstress-wash-tide {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.14) translate(4%, -3%);
+  }
+}
+
+@keyframes xstress-wash-ember {
+  from {
+    transform: scale(1.05) translate(0, 0);
+  }
+  to {
+    transform: scale(0.92) translate(-5%, 4%);
+  }
+}
+
+@keyframes xstress-wash-violet {
+  from {
+    transform: scale(0.96) translate(0, 0);
+  }
+  to {
+    transform: scale(1.18) translate(6%, 5%);
+  }
+}
+
+@keyframes xstress-orb-tide {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(70px, 40px);
+  }
+}
+
+@keyframes xstress-orb-ember {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(50px, -64px);
+  }
+}
+
+@keyframes xstress-orb-violet {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-80px, 36px);
+  }
+}
+
+@keyframes xstress-spark-tide {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-28px, 46px) scale(1.6);
+  }
+}
+
+@keyframes xstress-spark-ember {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(36px, 22px) scale(0.6);
+  }
+}
+
+@keyframes xstress-spark-violet {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-22px, -40px) scale(1.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xstress-wash,
+  .xstress-orb,
+  .xstress-spark,
+  .xstress-hero,
+  .xstress-title,
+  .xstress-chip {
+    animation: none !important;
+  }
+}
+
 /* four columns on a roomy glass — a library, not a contact strip.
    Narrower glass gets fewer, bigger columns, so a dived print is always
    tall enough to sit inside instead of spilling past the edge.
