@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "JPEG File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/jpg-image-def",
+        "name": "JpgDef"
+      },
+      "readMe": "# JPEG File\n\n## Summary\nThe raster-image specialization for JPEG.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `RasterImageDef`. Adds no fields of its own — `width`, `height`, `exif` and `colorProfile` come from\n`RasterImageDef`. What it contributes is the extraction pass: it reads the first\n64 KB, which is wide enough to clear large EXIF/ICC segments and still reach the\nSOF frame header, then fills dimensions plus EXIF and colour profile in one go.\n\nAccepts: `.jpg, .jpeg, image/jpeg`\n\n## Example\n```ts\nimport { JpgDef } from 'https://cardstack.com/base/jpg-image-def';\n\n@field attachment = linksTo(JpgDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "JPEG File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

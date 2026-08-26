@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 2,
       "specReadmeChars": 1597,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Incident/1234-dashboard-access\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Incident/1234-dashboard-access\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

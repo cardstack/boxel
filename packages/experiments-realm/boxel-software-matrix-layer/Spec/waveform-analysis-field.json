@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Waveform Analysis",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "WaveformMetadataField"
+      },
+      "readMe": "# Waveform Analysis\n\n## Summary\nA precomputed amplitude envelope so a player can draw a waveform without decoding audio.\n\n## Shape\n`barsJson` holds the envelope and `barCount` its length; `algorithm` names the producer\n(`rms-peak-v1` from a full decode, `mp3-side-info-v1` read from frame side info) so a consumer can\ntell an old envelope from a new one when the algorithm changes. `decodeStatus` is `ok`, `skipped`\nor `failed` with `decodeError` carrying the reason — a file whose audio would not decode records\nthat fact rather than silently having no waveform.\n\n## Example\n```ts\nimport { WaveformMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(WaveformMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "decodeStatus": "ok",
+          "algorithm": "rms-peak-v1",
+          "barCount": 120,
+          "durationSeconds": 263.4,
+          "sampleRateHz": 44100,
+          "channelCount": 2,
+          "peakAmplitude": 0.98,
+          "rmsAmplitude": 0.21,
+          "barsJson": "[0.04,0.11,0.28,0.52,0.71,0.66,0.49,0.33,0.18,0.07]"
+        }
+      ],
+      "cardInfo": {
+        "name": "Waveform Analysis",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "WaveformMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

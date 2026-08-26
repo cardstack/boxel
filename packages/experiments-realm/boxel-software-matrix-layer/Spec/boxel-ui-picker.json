@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Picker",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "Picker"
+      },
+      "readMe": "# Picker\n\n## Summary\nA labelled selection control built for large or remote option sets.\n\n## Shape\nWhere `Select` assumes the options are in hand, `Picker` is built for when they are not:\n`@isLoading`, `@isLoadingMore` and `@hasMore` express paging state, and\n`@disableClientSideSearch` hands filtering to the caller so a server-side search does not fight\na local one. `@label` is required, `@maxSelectedDisplay` bounds how much of a long selection is\nshown, `@matchTriggerWidth` and `@destination` control dropdown placement, and\n`@afterOptionsComponent` allows a footer such as a load-more control.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/picker/usage.gts`.\n\n```gts\nimport { Picker } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/picker/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Picker",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

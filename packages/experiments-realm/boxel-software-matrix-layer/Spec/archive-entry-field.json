@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Archive Entry",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/zip-file-def",
+        "name": "ArchiveEntryField"
+      },
+      "readMe": "# Archive Entry\n\n## Summary\nOne member of an archive: its path, both sizes and its timestamp.\n\n## Shape\n`size` and `compressedSize` are both kept — the pair is what shows a compression ratio, and a\nstored (uncompressed) member is visible as the two being equal. `name` is computed as the last\npath segment so a listing can show names rather than full paths, and a trailing directory-marker\nslash resolves to its own last segment rather than an empty string.\n\nRead from the ZIP central directory, so listing an archive never inflates the payload. Consumed\nby `ZipDef.archiveContents` as a `containsMany`, bounded by `FITTED_ARCHIVE_ENTRY_BUDGET`.\n\n## Example\n```ts\nimport { ArchiveEntryField } from 'https://cardstack.com/base/zip-file-def';\n\n@field metadata = contains(ArchiveEntryField);\n```\n",
+      "containedExamples": [
+        {
+          "path": "src/components/waveform-player.gts",
+          "size": 8452,
+          "compressedSize": 2310,
+          "modifiedAt": "2026-07-14T16:42:03.000Z"
+        }
+      ],
+      "cardInfo": {
+        "name": "Archive Entry",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/zip-file-def",
+              "name": "ArchiveEntryField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

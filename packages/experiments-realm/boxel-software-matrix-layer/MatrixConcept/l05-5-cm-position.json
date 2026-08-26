@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 3,
       "specReadmeChars": 2353,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/platform-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/senior-backend-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/frontend-engineer\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/platform-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/senior-backend-engineer\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Position/frontend-engineer\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

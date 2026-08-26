@@ -20,7 +20,7 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/host-save-card",
       "specTarget": "platform package",
-      "consumers": null,
+      "consumers": "advance-to-offer-command, apply-sla-policy-command, approve-chain-step-command, approve-offer-command, approve-service-request-command, auto-assign-ticket-command, board-demo, check-in-booking, close-won, confirm-booking, content-calendar, convert-lead, create-onboarding-checklist-command, credit-points, duplicate, escalate-ticket-command, extend-offer-command, extract-resume-command, generate-interview-questions-command, generate-offer-letter-command, import, interview-plan, isolated-template, merge-tickets-command, record-payment, reject-candidate-command, reply-to-ticket-command, revenue-os, schedule-interview-command, screen-application-command, suggest-kb-articles-command, talent-resource-tracker, ticket-workspace, transition-ticket-status-command",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -32,7 +32,13 @@
       "specKind": "command",
       "specExampleCount": 0,
       "specReadmeChars": 489,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "command",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

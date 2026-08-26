@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "PDF File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/pdf-file-def",
+        "name": "PdfDef"
+      },
+      "readMe": "# PDF File\n\n## Summary\nThe FileDef specialization for PDF documents.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `documentInfo` (`DocumentInfoField`) and extracts it on upload — page count,\ntitle, author, producer and creation date read from the document catalogue and\ninfo dictionary. Its `previewComponent` is the paged PDF viewer, so an instance\nis readable in place rather than only downloadable.\n\nAccepts: `.pdf, application/pdf`\n\n## Example\n```ts\nimport { PdfDef } from 'https://cardstack.com/base/pdf-file-def';\n\n@field attachment = linksTo(PdfDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "PDF File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

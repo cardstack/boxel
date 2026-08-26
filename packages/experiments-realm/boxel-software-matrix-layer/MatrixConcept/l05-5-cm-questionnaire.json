@@ -32,7 +32,13 @@
       "specKind": "field",
       "specExampleCount": 3,
       "specReadmeChars": 1060,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Survey/event-feedback\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Survey/event-feedback\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

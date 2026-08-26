@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "STL Mesh File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/stl-model-def",
+        "name": "StlDef"
+      },
+      "readMe": "# STL Mesh File\n\n## Summary\nThe 3D-model specialization for STL meshes.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `ThreeDModelDef`. Inherits `model3d` (`Model3dMetadataField`) from `ThreeDModelDef` and supplies the\nextraction pass, which handles both STL encodings: binary, where the triangle\ncount is a header field, and ASCII, where it must be counted. Triangle count and\nbounding box are what the model preview uses to frame the mesh.\n\nAccepts: `.stl, model/stl, application/sla`\n\n## Example\n```ts\nimport { StlDef } from 'https://cardstack.com/base/stl-model-def';\n\n@field attachment = linksTo(StlDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "STL Mesh File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

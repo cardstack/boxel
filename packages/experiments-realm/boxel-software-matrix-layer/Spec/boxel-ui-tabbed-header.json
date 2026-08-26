@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Tabbed Header",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "TabbedHeader"
+      },
+      "readMe": "# Tabbed Header\n\n## Summary\nA card header that carries a tab strip for switching between views of one card.\n\n## Shape\nCombines the identity row with a tab list, so a multi-view card gets both without stacking two\nheaders. `@tabs` is an array of `{ displayName, tabId }`, `@activeTabId` names the current one\nand `@setActiveTab(tabId)` is called to change it — selection state stays with the consumer.\n`@headerTitle` and `@headerBackgroundColor` cover presentation, and the `headerIcon` and\n`sideContent` blocks carry the icon and any trailing controls. It owns the tab affordance\nitself, so tabs behave alike in every card that has them.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/tabbed-header/usage.gts`.\n\n```gts\nimport { TabbedHeader } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/tabbed-header/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Tabbed Header",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

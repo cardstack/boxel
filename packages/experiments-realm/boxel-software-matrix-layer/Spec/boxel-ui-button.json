@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Button",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "Button"
+      },
+      "readMe": "# Button\n\n## Summary\nThe primary action control, which also renders as a link or a LinkTo without changing appearance.\n\n## Shape\nEmphasis is `@kind` — `default`, `primary`, `secondary`, `muted`, `destructive`, `text-only`,\n`primary-dark`, `link`, `link-primary`, `link-muted` (with `danger` and the `secondary-light`/\n`-dark` pair kept as deprecated aliases). `@size` runs `auto`, `extra-small`, `small`, `base`\nupward. Passing `@href` renders an anchor and `@route`/`@models`/`@query` render a LinkTo, all\nwith identical styling, so navigation and mutation share one affordance. `@loading` keeps the\nlabel while blocking input; `@disabled` removes the affordance. `@pill` and `@rectangular`\nadjust the shape.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/button/usage.gts`.\n\n```gts\nimport { Button } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/button/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Button",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

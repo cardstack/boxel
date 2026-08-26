@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Document Info",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "DocumentInfoField"
+      },
+      "readMe": "# Document Info\n\n## Summary\nThe document catalogue facts of a PDF: authorship, page count and version.\n\n## Shape\n`producer` and `creator` are kept separate because they answer different questions — which\napplication authored the content versus which wrote the PDF bytes — and they routinely disagree.\n`pageCount` is what lets a fitted card state a document's size without opening it, and `encrypted`\nrecords when the catalogue is readable but the content stream is not. Consumed by\n`PdfDef.documentInfo`.\n\n## Example\n```ts\nimport { DocumentInfoField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(DocumentInfoField);\n```\n",
+      "containedExamples": [
+        {
+          "title": "Boxel Software Layer Matrix",
+          "author": "Cardstack",
+          "subject": "Architecture overview",
+          "keywords": "boxel, matrix, layers",
+          "creator": "Typst 0.12",
+          "producer": "Typst 0.12",
+          "pageCount": 24,
+          "pdfVersion": "1.7",
+          "created": "2026-06-02T11:05:00.000Z",
+          "encrypted": false
+        }
+      ],
+      "cardInfo": {
+        "name": "Document Info",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "DocumentInfoField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

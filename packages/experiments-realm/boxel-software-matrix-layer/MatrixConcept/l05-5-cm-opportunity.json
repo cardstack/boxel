@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 2,
       "specReadmeChars": 1318,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/brightleaf-workspace\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/acme-plant-expansion\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Opportunity/brightleaf-workspace\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

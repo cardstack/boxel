@@ -1,0 +1,76 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "EXIF Metadata",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "ExifMetadataField"
+      },
+      "readMe": "# EXIF Metadata\n\n## Summary\nThe EXIF pair: how the photo was taken and where.\n\n## Shape\nDeliberately thin — two contained fields, `capture` (`CameraCaptureField`) and `location`\n(`GeoLocationField`). The split matters because the two halves have different privacy weight and\ndifferent availability: a studio photo has capture data and no location, and a location may survive\nstripping that removes body and lens. Consumed by `RasterImageDef.exif`, so every raster format\ninherits the same shape.\n\n## Example\n```ts\nimport { ExifMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(ExifMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "capture": {
+            "make": "Apple",
+            "cameraModel": "iPhone 15 Pro",
+            "focalLength": {
+              "value": 24,
+              "unit": "mm"
+            },
+            "aperture": {
+              "value": 1.78,
+              "unit": "f/"
+            },
+            "exposureTime": {
+              "value": 0.0166,
+              "unit": "s"
+            },
+            "iso": 80,
+            "flash": {
+              "code": "16",
+              "scheme": "exif-flash"
+            },
+            "orientation": {
+              "code": "1",
+              "scheme": "exif-orientation"
+            }
+          },
+          "location": {
+            "latitude": 48.8584,
+            "longitude": 2.2945,
+            "placeName": "Champ de Mars",
+            "city": "Paris",
+            "country": "France",
+            "source": {
+              "code": "ios-photos",
+              "scheme": "geo-source"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": "EXIF Metadata",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "ExifMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

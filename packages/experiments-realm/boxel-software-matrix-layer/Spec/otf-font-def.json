@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "OpenType Font File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/otf-font-def",
+        "name": "OtfDef"
+      },
+      "readMe": "# OpenType Font File\n\n## Summary\nThe font specialization for OpenType (`.otf`).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FontDef`. Adds no fields and no extraction of its own: `FontDef` already reads the sfnt tables\nthat OpenType and TrueType share, so this def exists to pin the accept types\nand display identity for CFF-outline fonts. The distinction that matters\ndownstream is glyph outline format, not metadata shape.\n\nAccepts: `.otf, font/otf`\n\n## Example\n```ts\nimport { OtfDef } from 'https://cardstack.com/base/otf-font-def';\n\n@field attachment = linksTo(OtfDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "OpenType Font File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/priority-field.gts (priorityField factory — generic; ticket-taxonomy.gts TicketPriorityField is a consumer)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/priority-field.gts (priorityField factory \u2014 generic; ticket-taxonomy.gts TicketPriorityField is a consumer)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Priority",
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "field",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

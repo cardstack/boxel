@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "3D Model Info",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "Model3dMetadataField"
+      },
+      "readMe": "# 3D Model Info\n\n## Summary\nThe geometry and provenance facts of a 3D model, across mesh and scene formats.\n\n## Shape\nOne field spans formats that carry very different amounts: an STL contributes `triangles`,\n`vertices`, `solidName` and `dimensions`, while a glTF scene adds `nodes`, `animations`,\n`textures`, `materials` and `materialNames`. The 3MF print fields (`plateCount`,\n`printPartCount`, `extruderCount`, `hasColorData`) live here too, which is why the taxonomy's\nseparate STL-mesh and 3MF-package metadata rows have no distinct implementation — they are views\nof this one field. `unit` is required to read `dimensions` at all.\n\n## Example\n```ts\nimport { Model3dMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(Model3dMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "format": "binary-stl",
+          "meshes": 1,
+          "triangles": 12960,
+          "vertices": 6482,
+          "materials": 0,
+          "materialNames": [],
+          "unit": "mm",
+          "dimensions": "120 × 80 × 45",
+          "solidName": "mount-bracket",
+          "hasColorData": false
+        }
+      ],
+      "cardInfo": {
+        "name": "3D Model Info",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "Model3dMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

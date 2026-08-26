@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "TypeScript File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/ts-file-def",
+        "name": "TsFileDef"
+      },
+      "readMe": "# TypeScript File\n\n## Summary\nThe FileDef specialization for TypeScript modules.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `title`, `excerpt`, `content` and `lineCount`, filled on upload. Its\n`previewComponent` is the syntax-highlighted source view, and it is the parent of\n`GtsFileDef` — a `.gts` module is a TypeScript module with a template dialect,\nso the identity, facts and preview are shared rather than duplicated.\n\nAccepts: `.ts`\n\n## Example\n```ts\nimport { TsFileDef } from 'https://cardstack.com/base/ts-file-def';\n\n@field attachment = linksTo(TsFileDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "TypeScript File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

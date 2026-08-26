@@ -6,6 +6,29 @@
         "module": "@cardstack/base/workspace",
         "name": "Workspace"
       }
+    },
+    "attributes": {
+      "hideAbout": false,
+      "hideBrowse": false,
+      "searchIncludesSystem": false,
+      "defaultView": null,
+      "signage": null,
+      "purpose": null,
+      "moduleOrder": null,
+      "pinnedSize": null,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "entryPoints.0": {
+        "links": {
+          "self": "./MatrixTracker/home"
+        }
+      }
     }
   }
 }

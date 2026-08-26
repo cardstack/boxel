@@ -20,7 +20,7 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/host-patch-card-instance",
       "specTarget": "platform package",
-      "consumers": null,
+      "consumers": "apply-sla-policy-command, close-won, dispatch-shipment-command, duplicate, fulfil-order-command, import, record-payment, revenue-os",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -32,7 +32,13 @@
       "specKind": "command",
       "specExampleCount": 0,
       "specReadmeChars": 978,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "command",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

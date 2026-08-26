@@ -18,8 +18,8 @@
       "owner": null,
       "workState": null,
       "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/boxel-ui-button",
+      "specTarget": "platform package",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -28,7 +28,18 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": "packages/boxel-ui/src/components/button/usage.gts",
+      "specKind": "component",
+      "specExampleCount": 0,
+      "specReadmeChars": 896,
+      "specExampleIds": "",
+      "verifiedAt": "2026-08-24T00:00:00.000Z"
     },
     "meta": {
       "adoptsFrom": {

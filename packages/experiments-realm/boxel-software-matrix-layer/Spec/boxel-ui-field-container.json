@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Field Container",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "FieldContainer"
+      },
+      "readMe": "# Field Container\n\n## Summary\nThe label-and-control pairing that lays out one field in a form.\n\n## Shape\nOwns the relationship between a label and its control: `@label` with `@fieldId` for the\nassistive-technology association, `@tag` to render as a `<label>` or a `<div>` depending on\nwhether the control inside is natively labelable, and `@vertical`, `@inline`,\n`@horizontalLabelSize` and `@centeredDisplay` for arrangement. `@icon` with `@iconWidth`/\n`@iconHeight` prefixes the label. Validation text is deliberately not here — that belongs to\nthe control, so the two never render an error twice.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/field-container/usage.gts`.\n\n```gts\nimport { FieldContainer } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/field-container/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Field Container",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

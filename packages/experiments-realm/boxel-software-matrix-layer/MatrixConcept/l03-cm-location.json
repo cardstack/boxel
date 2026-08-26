@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 2,
       "specReadmeChars": 1278,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/meridian-park-stadium\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/northgate-fulfillment-centre\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/meridian-park-stadium\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Location/northgate-fulfillment-centre\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

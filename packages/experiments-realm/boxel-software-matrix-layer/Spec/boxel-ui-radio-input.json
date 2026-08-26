@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Radio Input",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "RadioInput"
+      },
+      "readMe": "# Radio Input\n\n## Summary\nA grouped radio control where the whole option area is the hit target.\n\n## Shape\nRenders a fieldset with `@groupDescription` as its legend and yields each of `@items`, so the\nlabel, description and any rich content sit inside the clickable region rather than beside it.\n`@checkedId` and `@keyName` identify the selection, `@orientation` and `@spacing` shape the\ngroup, and `@invalid` with `@errorMessage` covers the error state. `@hideRadio` and\n`@hideBorder` allow a card-style selection that keeps native radio semantics — so keyboard\narrow traversal and form submission still behave as expected.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/radio-input/usage.gts`.\n\n```gts\nimport { RadioInput } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/radio-input/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Radio Input",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

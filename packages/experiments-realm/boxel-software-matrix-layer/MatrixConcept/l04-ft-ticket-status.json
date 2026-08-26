@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ticket-taxonomy.gts (TicketStatusField — 7 states + transition table)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ticket-taxonomy.gts (TicketStatusField \u2014 7 states + transition table)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "field",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

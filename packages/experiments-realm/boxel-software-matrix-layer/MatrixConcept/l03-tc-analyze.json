@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "command",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

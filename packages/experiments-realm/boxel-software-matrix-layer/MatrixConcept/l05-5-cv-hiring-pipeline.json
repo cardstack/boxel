@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/talent-resource-tracker.gts — the Pipeline tab inside the app shell, not a separate component file",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/talent-resource-tracker/talent-resource-tracker.gts \u2014 the Pipeline tab inside the app shell, not a separate component file",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

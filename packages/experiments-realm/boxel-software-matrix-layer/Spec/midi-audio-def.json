@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "MIDI File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/midi-audio-def",
+        "name": "MidiDef"
+      },
+      "readMe": "# MIDI File\n\n## Summary\nThe FileDef specialization for MIDI sequences.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `duration` and `midi` (`MidiMetadataField`) and extracts them from the header and\ntrack chunks — format type, division, track count, tempo and time signature.\nUnlike the sampled audio defs it carries no waveform: a MIDI file is\ninstructions, not samples, so its `previewComponent` renders the track\nstructure.\n\nAccepts: `.mid, .midi, audio/midi, audio/x-midi`\n\n## Example\n```ts\nimport { MidiDef } from 'https://cardstack.com/base/midi-audio-def';\n\n@field attachment = linksTo(MidiDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "MIDI File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

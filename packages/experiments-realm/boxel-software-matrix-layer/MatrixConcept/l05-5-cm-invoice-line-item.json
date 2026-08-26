@@ -32,7 +32,13 @@
       "specKind": "field",
       "specExampleCount": 2,
       "specReadmeChars": 1348,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

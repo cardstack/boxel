@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Card Container",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "CardContainer"
+      },
+      "readMe": "# Card Container\n\n## Summary\nThe bounded surface a card's content sits on, and the seam where a theme is applied.\n\n## Shape\nProvides the card's ground — background, border, radius and the boundary separating one card\nfrom the page. `@displayBoundaries` makes that boundary explicit, which lets one component\nserve both a standalone isolated card and an embedded one inside a list. It is also where\ntheming enters: `@isThemed`, `@themeCss`, `@themeScope` and `@cssImports` scope a theme's CSS to\nthis subtree, so a themed card does not leak styles into its host. `@tag` sets the element and\n`...attributes` lets the caller size it from outside.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/card-container/usage.gts`.\n\n```gts\nimport { CardContainer } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/card-container/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Card Container",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

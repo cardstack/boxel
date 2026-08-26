@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Camera Capture",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "CameraCaptureField"
+      },
+      "readMe": "# Camera Capture\n\n## Summary\nHow a photograph was taken: body, lens, and the three exposure settings.\n\n## Shape\nExposure values travel as `QuantityField` (`focalLength`, `aperture`, `exposureTime`) so a unit\nrides with each number instead of being implied by the field name. `flash` and `orientation` are\n`CodedValueField`, because EXIF stores them as integers whose meaning lives in a vocabulary.\n`cameraName` is computed from make and model.\n\nShared per metadata family rather than per file extension, so a capture reads the same whether the\nbytes came from a JPEG, a HEIC or a raw file.\n\n## Example\n```ts\nimport { CameraCaptureField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(CameraCaptureField);\n```\n",
+      "containedExamples": [
+        {
+          "make": "FUJIFILM",
+          "cameraModel": "X-T5",
+          "lensModel": "XF33mmF1.4 R LM WR",
+          "focalLength": {
+            "value": 33,
+            "unit": "mm"
+          },
+          "aperture": {
+            "value": 1.4,
+            "unit": "f/"
+          },
+          "exposureTime": {
+            "value": 0.004,
+            "unit": "s"
+          },
+          "iso": 320,
+          "flash": {
+            "code": "16",
+            "scheme": "exif-flash"
+          },
+          "orientation": {
+            "code": "1",
+            "scheme": "exif-orientation"
+          },
+          "capturedAt": "2026-04-18T09:24:11.000Z",
+          "software": "Capture One 23"
+        }
+      ],
+      "cardInfo": {
+        "name": "Camera Capture",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "CameraCaptureField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

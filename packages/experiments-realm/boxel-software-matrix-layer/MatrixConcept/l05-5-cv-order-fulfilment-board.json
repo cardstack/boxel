@@ -32,7 +32,13 @@
       "specKind": "component",
       "specExampleCount": 1,
       "specReadmeChars": 1615,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OrderFulfilmentApp/northlight\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/OrderFulfilmentApp/northlight\"]",
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

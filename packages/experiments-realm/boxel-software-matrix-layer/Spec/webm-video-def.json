@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "WebM File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/webm-video-def",
+        "name": "WebmDef"
+      },
+      "readMe": "# WebM File\n\n## Summary\nThe video specialization for WebM.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `VideoDef`. Adds no fields of its own — `duration`, `width`, `height` and `encoding` come from\n`VideoDef`. It supplies its own extraction pass because WebM is Matroska/EBML,\nnot an ISO base-media container: duration and track geometry are read from EBML\nelements, so none of the MP4 box-tree walk applies.\n\nAccepts: `.webm, video/webm`\n\n## Example\n```ts\nimport { WebmDef } from 'https://cardstack.com/base/webm-video-def';\n\n@field attachment = linksTo(WebmDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "WebM File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

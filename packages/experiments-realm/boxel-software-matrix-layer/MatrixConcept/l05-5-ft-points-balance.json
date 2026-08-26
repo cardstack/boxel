@@ -32,7 +32,13 @@
       "specKind": "field",
       "specExampleCount": 1,
       "specReadmeChars": 1075,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/LoyaltyAccount/jason-lim\"]",
+      "conceptKind": "field",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

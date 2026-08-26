@@ -8,8 +8,8 @@
       "concept": "Glimmer TypeScript File",
       "symbol": "GT",
       "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "evidenceTier": null,
+      "auditStatus": "Missing",
       "whereImplemented": null,
       "reference": "chris/filedef-developer-handoff realm (app.boxel.ai)",
       "catalogMatch": null,
@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": null,
+      "notes": "Absorbed into GTS File: both rows resolve to the same class (GtsFileDef), and GTS File carries the Spec. Bare name kept as a search alias.",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "card",
+      "scope": "alias",
+      "aliasOf": "GTS File",
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

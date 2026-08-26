@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "PPTX File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/pptx-file-def",
+        "name": "PptxDef"
+      },
+      "readMe": "# PPTX File\n\n## Summary\nThe FileDef specialization for PowerPoint presentations (OOXML `.pptx`).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `officeMetadata` (`OfficeMetadataField`) and extracts it from the OOXML package —\nauthor, title, revision and slide count from `docProps`. Shares the document\npreview with the other Office defs; the slide count is what lets a fitted card\nsay how large the deck is without opening it.\n\nAccepts: `.pptx, application/vnd.openxmlformats-officedocument.presentationml.presentation`\n\n## Example\n```ts\nimport { PptxDef } from 'https://cardstack.com/base/pptx-file-def';\n\n@field attachment = linksTo(PptxDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "PPTX File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

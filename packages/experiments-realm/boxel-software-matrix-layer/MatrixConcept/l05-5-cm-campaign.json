@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 3,
       "specReadmeChars": 1468,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/q3-webinar-series\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/always-on-search-ads\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/logistics-expo-2026\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/q3-webinar-series\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/always-on-search-ads\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/logistics-expo-2026\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

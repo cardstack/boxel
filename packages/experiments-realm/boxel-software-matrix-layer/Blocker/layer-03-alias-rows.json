@@ -2,13 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "blockerTitle": "22 layer-03 alias rows may double-count the gap",
-      "detail": "Layer 03 carries bare original-table labels (Grid, List, Chart, Create, Notify, Run\u2026) whose precise siblings exist as separate cells (Cards Grid, Card List, Line Chart\u2026). They read as Missing and inflate the layer-03 numbers on this dashboard; the demand-side audit speaks in the same bare names, so they are not pure noise. Resolution is open (boxel-catalog/docs/bottom-up-block-strategy.md \u00a77.5) \u2014 until then, read layer 03 coverage with that caveat.",
-      "status": "open",
+      "blockerTitle": "Alias rows resolved \u2014 layer-03 gap is genuine",
+      "detail": "Tested 2026-08-24 against the concept data. Of 174 bare single-word rows matrix-wide, only **3** are defensible absorptions (`List \u2192 Card List`, `Chart \u2192 Line Chart`, `Search \u2192 Search Cards`), now carrying `scope: alias`. Thirteen more have a sibling that is itself unbuilt, so collapsing them moves no number, and **40 bare rows have no sibling anywhere** \u2014 they are an unexpanded vocabulary (Money, Quote, Proposal, Plan, Email, Call, Role, Workflow, Filter, Sort, Group\u2026), not double-counting. The layer-03 numbers can be read at face value and the demand-weighted build list does not shrink. Decision recorded in bottom-up-block-strategy.md \u00a77.5.",
+      "status": "resolved",
       "source": "",
       "cardInfo": {
-        "name": "22 layer-03 alias rows may double-count the gap",
-        "summary": "Layer-03 coverage numbers carry known double-counting"
+        "name": "Alias rows resolved \u2014 layer-03 gap is genuine",
+        "summary": "Only 3 real aliases; layer-03 coverage needs no caveat"
       }
     },
     "meta": {

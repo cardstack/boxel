@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 3,
       "specReadmeChars": 994,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/farah-zulkifli\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/jason-lim\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/mei-fong\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/farah-zulkifli\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/jason-lim\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Contact/mei-fong\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "MIDI Metadata",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "MidiMetadataField"
+      },
+      "readMe": "# MIDI Metadata\n\n## Summary\nThe structure of a MIDI sequence: timing, tracks, notes and the programs used.\n\n## Shape\nA MIDI file is instructions rather than samples, so there is no waveform here and no codec —\nwhat matters is `format` (0, 1 or 2), `ppq` (pulses per quarter note) and the derived\n`durationSeconds`. `tempoMap`, `timeSignatures` and `keySignatures` are string lists because a\nsequence can change all three mid-piece. `fileTrackCount` and `trackCount` differ when the file\ndeclares more tracks in its header than actually carry events.\n\n## Example\n```ts\nimport { MidiMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(MidiMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "format": 1,
+          "ppq": 480,
+          "durationSeconds": 184.6,
+          "fileTrackCount": 9,
+          "trackCount": 8,
+          "noteCount": 3412,
+          "tempoMap": ["0:120"],
+          "timeSignatures": ["0:4/4", "96:3/4"],
+          "keySignatures": ["0:Dm"],
+          "programs": [0, 33, 48, 73],
+          "channels": [0, 1, 2, 9],
+          "pitchRange": "E1-C7",
+          "hasPercussion": true
+        }
+      ],
+      "cardInfo": {
+        "name": "MIDI Metadata",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "MidiMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

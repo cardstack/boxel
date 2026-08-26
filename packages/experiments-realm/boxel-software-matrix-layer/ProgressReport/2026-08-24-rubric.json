@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roundDate": "2026-08-24T15:00:00.000Z",
+      "summary": "Rubric round, not a build round. The flat six-check standard was applying two unpassable checks to two kinds of concept, so **57 rows were reported as liftable work that nothing could lift**. The standard is now per-kind with an applicable denominator (`spec-quality-standard.md`, amended 2026-08-24), and 21 rows that are not adoptable blocks \u2014 6 JSON wire primitives, 12 platform internals, 3 absorbed aliases \u2014 left the count.\n\nTwo real signals were stamped for the first time. **Code fences in readMes** cleared all 49 command example-failures: those specs already showed the call, which is what a command's example is. **Command call-site scanning** (`new XCommand(`) found consumers for six commands that the import-based crawl is blind to \u2014 Save Card 0\u219234, Get Card 0\u219217, Patch Card Instance 0\u21928, Search Cards 0\u21924.\n\nNet: Gold 47\u219256, Thin 96\u219235, without a single spec being edited. The remaining 35 Thin rows are genuine stage-2 gaps \u2014 specced blocks nothing consumes yet.\n\nTwo blockers filed, both the same shape: the standard asks for an artifact base will not let an author create. A Spec cannot hold a file as its example (`FileDef` is a `BaseDef` sibling of `CardDef`/`FieldDef`), which strands 16 file defs; and primitive fields cannot have Spec examples at all (`spec.gts:115`), which strands 8 field specs with 2\u201326 consumers each. Together they are 24 of the 38 rows sitting one check from Gold.\n\nThe alias blocker is resolved rather than carried: only 3 of 174 bare rows are real absorptions, so the layer-03 gap is genuine and the build list does not shrink.",
+      "metrics": "{\"concepts\": 590, \"blocks\": 569, \"outOfScope\": 21, \"verified\": 216, \"consumed\": 111, \"reused\": 86, \"gold\": 56, \"solid\": 65, \"adequate\": 60, \"thin\": 35, \"none\": 353, \"perKind\": {\"field\": 153, \"command\": 157, \"card\": 140, \"component\": 118, \"filedef\": 22}}",
+      "deltas": "{\"gold\": \"+9\", \"solid\": \"+11\", \"adequate\": \"+41\", \"thin\": \"-61\", \"consumed\": \"+5\", \"reused\": \"+6\", \"note\": \"no spec was edited this round \\u2014 every move is a measurement correction\"}",
+      "cardInfo": {
+        "name": "Progress \u2014 2026-08-24",
+        "summary": "Per-kind rubric; 57 unpassable rows retired"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../progress-report",
+        "name": "ProgressReport"
+      }
+    }
+  }
+}

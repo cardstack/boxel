@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Fitted Card",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "FittedCard"
+      },
+      "readMe": "# Fitted Card\n\n## Summary\nThe presentation shell for a card rendered in its fitted format.\n\n## Shape\nFitted is the hardest format because the box size is not the card's choice — the same card must\nread correctly in a wide table row and a small tile. This shell resolves that: `@layout` takes a\n`FittedCardLayout` and `@titleTag` a `FittedCardTitleTag` so heading semantics stay right at\nevery size, while `@imageUrl` with `@imageAlt` and `@imageLoading` handle the thumbnail. The\nyielded blocks — `background`, `badge`, `badgeLeft`, `badgeRight`, `badgeRow` — are what let a\nconsumer decorate the card without re-implementing the layout it just picked.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/fitted-card/usage.gts`.\n\n```gts\nimport { FittedCard } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/fitted-card/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Fitted Card",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

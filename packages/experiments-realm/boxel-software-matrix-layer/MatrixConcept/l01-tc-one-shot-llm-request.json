@@ -20,7 +20,7 @@
       "notes": null,
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/host-one-shot-llm-request",
       "specTarget": "platform package",
-      "consumers": null,
+      "consumers": "classify, extract-resume-command, generate-interview-questions-command",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -32,7 +32,13 @@
       "specKind": "command",
       "specExampleCount": 0,
       "specReadmeChars": 558,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "command",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

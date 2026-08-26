@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "JSON File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/json-file-def",
+        "name": "JsonFileDef"
+      },
+      "readMe": "# JSON File\n\n## Summary\nThe FileDef specialization for JSON documents.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `title`, `excerpt`, `content`, `rootType`, `keyCount` and `lineCount`, filled by an\nextraction pass that parses the document and records its shape rather than only\nits bytes. Its `previewComponent` renders a structured, collapsible view, and\n`rootType`/`keyCount` are what let a fitted card describe the payload without\nreading it.\n\nAccepts: `.json, application/json`\n\n## Example\n```ts\nimport { JsonFileDef } from 'https://cardstack.com/base/json-file-def';\n\n@field attachment = linksTo(JsonFileDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "JSON File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

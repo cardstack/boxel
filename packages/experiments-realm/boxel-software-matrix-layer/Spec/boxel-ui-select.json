@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Select",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "BoxelSelect"
+      },
+      "readMe": "# Select\n\n## Summary\nThe single-select dropdown, wrapping ember-power-select with Boxel styling and behavior.\n\n## Shape\n`@options`, `@selected` and `@onChange` are the contract, and `@selected` accepts a promise so\na trigger can render while the current value is still loading. The option block is yielded, so\na consumer controls how each row renders while the trigger, dropdown chrome, keyboard traversal\nand search stay consistent. The yielded `select` API exposes `choose`, `close`, `highlight` and\n`select` for callers driving the dropdown themselves. `BoxelSelectOptions` is exported for the\nshared option-shape type.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/select/usage.gts`.\n\n```gts\nimport { BoxelSelect } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/select/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Select",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

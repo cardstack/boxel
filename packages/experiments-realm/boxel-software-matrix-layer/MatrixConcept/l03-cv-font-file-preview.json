@@ -7,10 +7,10 @@
       "lane": "Components & Views",
       "concept": "Font File Preview",
       "symbol": "FF",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Platform",
+      "auditStatus": "Implemented",
+      "whereImplemented": "base: base/file-formats/font-specimen.gts",
       "reference": "chris/filedef-developer-handoff realm (app.boxel.ai)",
       "catalogMatch": null,
       "provenance": "FileDef-handoff",
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

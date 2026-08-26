@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "TrueType Font File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/ttf-font-def",
+        "name": "TtfDef"
+      },
+      "readMe": "# TrueType Font File\n\n## Summary\nThe font specialization for TrueType (`.ttf`).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FontDef`. Adds no fields and no extraction of its own: `FontDef` reads the sfnt tables that\nTrueType and OpenType share, so this def pins the accept types and display\nidentity for quadratic-outline fonts. The font specimen preview and name/OS-2\nmetadata are inherited unchanged.\n\nAccepts: `.ttf, font/ttf`\n\n## Example\n```ts\nimport { TtfDef } from 'https://cardstack.com/base/ttf-font-def';\n\n@field attachment = linksTo(TtfDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "TrueType Font File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

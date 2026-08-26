@@ -8,9 +8,9 @@
       "concept": "Quantity",
       "symbol": "Qu",
       "implemented": true,
-      "evidenceTier": "Catalog shared",
+      "evidenceTier": "Platform",
       "auditStatus": "Implemented",
-      "whereImplemented": "catalog: fields/quantity/quantity.gts",
+      "whereImplemented": "base: base/file-formats/metadata-fields.gts",
       "reference": null,
       "catalogMatch": "catalog: fields/quantity/quantity.gts",
       "provenance": "FileDef-handoff",
@@ -32,7 +32,13 @@
       "specKind": "field",
       "specExampleCount": 0,
       "specReadmeChars": 631,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "field",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

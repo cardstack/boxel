@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "HTML Metadata",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "HtmlMetadataField"
+      },
+      "readMe": "# HTML Metadata\n\n## Summary\nA structural census of an HTML document rather than its text.\n\n## Shape\nCounts what the parse found — elements, words, headings, links, images, form controls, scripts,\nstylesheets and external resources — plus the flags that decide how the preview should behave:\n`hasDoctype`, `hasViewportMeta`, `hasInlineScript`, `hasModuleScript` and `isInteractive`, with\n`interactivityLabel` computed for display. Those flags matter because the HTML preview is\nsandboxed: whether a document is inert or wants to execute changes how it is framed.\n\n## Example\n```ts\nimport { HtmlMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(HtmlMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "documentTitle": "Release notes — 2026.08",
+          "documentLanguage": "en",
+          "elementCount": 412,
+          "wordCount": 2180,
+          "headingCount": 14,
+          "linkCount": 63,
+          "imageCount": 8,
+          "formControlCount": 0,
+          "scriptCount": 2,
+          "styleSheetCount": 1,
+          "externalResourceCount": 9,
+          "hasDoctype": true,
+          "hasViewportMeta": true,
+          "hasInlineScript": true,
+          "hasModuleScript": false,
+          "isInteractive": false
+        }
+      ],
+      "cardInfo": {
+        "name": "HTML Metadata",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "HtmlMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

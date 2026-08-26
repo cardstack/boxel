@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "XLSX File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/xlsx-file-def",
+        "name": "XlsxDef"
+      },
+      "readMe": "# XLSX File\n\n## Summary\nThe FileDef specialization for Excel workbooks (OOXML `.xlsx`).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `officeMetadata` (`OfficeMetadataField`) and extracts it from the OOXML package —\nauthor, title, revision and sheet count from `docProps`. Shares the document\npreview with the other Office defs. Note it indexes workbook metadata, not cell\ncontents: tabular data belongs in `CsvFileDef`, which extracts columns and rows.\n\nAccepts: `.xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`\n\n## Example\n```ts\nimport { XlsxDef } from 'https://cardstack.com/base/xlsx-file-def';\n\n@field attachment = linksTo(XlsxDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "XLSX File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

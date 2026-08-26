@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Multi Select",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "BoxelMultiSelect"
+      },
+      "readMe": "# Multi Select\n\n## Summary\nThe multiple-selection dropdown, with chosen values shown as removable pills.\n\n## Shape\nSame option and selection contract as `BoxelSelect` over power-select's multiple mode, so\n`@selected` is an array. Each choice renders as a pill carrying its own remove affordance,\nwhich means deselection does not require reopening the dropdown — the difference that matters\nmost when a selection is long. `BoxelMultiSelectBasic` is exported for callers that want the\nbehavior without the pill presentation.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/multi-select/usage.gts`.\n\n```gts\nimport { BoxelMultiSelect } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/multi-select/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Multi Select",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 3,
       "specReadmeChars": 510,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-041\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-052-1\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-070-1\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-041\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-052-1\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Payment/pay-inv-2026-070-1\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

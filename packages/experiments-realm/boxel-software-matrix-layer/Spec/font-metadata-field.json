@@ -1,0 +1,56 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Font Metadata",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "FontMetadataField"
+      },
+      "readMe": "# Font Metadata\n\n## Summary\nThe naming and classification tables of a font: family, weight, outlines and axes.\n\n## Shape\nRead from the sfnt `name`, `OS/2`, `head` and `maxp` tables, which OpenType and TrueType share —\nwhich is why one field serves both, and why `outlineType` records the actual difference (CFF\nversus quadratic). `isVariable` plus `axes` describe a variable font's design space. A WOFF\nindexes with all of this available; a WOFF2 does not, because its Brotli-transformed `glyf` cannot\nbe recovered by inflating alone.\n\n## Example\n```ts\nimport { FontMetadataField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(FontMetadataField);\n```\n",
+      "containedExamples": [
+        {
+          "familyName": "Inter",
+          "subfamilyName": "Regular",
+          "fullName": "Inter Regular",
+          "postscriptName": "Inter-Regular",
+          "versionName": "Version 4.000",
+          "foundry": "Rasmus Andersson",
+          "vendorId": "RSMS",
+          "weightClass": 400,
+          "widthName": "Normal",
+          "glyphCount": 2548,
+          "unitsPerEm": 2048,
+          "outlineType": "TrueType",
+          "isVariable": true,
+          "isItalic": false,
+          "isBold": false,
+          "axes": ["wght 100-900", "slnt 0--10"]
+        }
+      ],
+      "cardInfo": {
+        "name": "Font Metadata",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "FontMetadataField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

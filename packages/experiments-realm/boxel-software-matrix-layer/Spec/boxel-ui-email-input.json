@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Email Input",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "EmailInput"
+      },
+      "readMe": "# Email Input\n\n## Summary\nA text input specialized for email addresses, reporting format validation to its caller.\n\n## Shape\n`@value`, `@onChange`, `@placeholder`, `@required` and `@disabled` are the contract. What makes\nit its own component is the `@onChange` shape: it receives the value *and* an\n`EmailFormatValidationError | null` alongside the event, so the consuming card decides how to\npresent an invalid address instead of each form re-deriving the rules. Email validation is\nwhere hand-rolled forms diverge most, which is the reason to reach for this rather than a bare\ntext input.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/email-input/usage.gts`.\n\n```gts\nimport { EmailInput } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/email-input/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Email Input",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

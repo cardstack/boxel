@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "WOFF Font File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/woff-font-def",
+        "name": "WoffDef"
+      },
+      "readMe": "# WOFF Font File\n\n## Summary\nThe font specialization for WOFF (Web Open Font Format).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FontDef`. Adds no fields of its own. WOFF wraps an sfnt for the web with per-table zlib\ncompression, which the extract pass inflates on demand — so unlike WOFF2, a WOFF\nindexes with full name, OS/2 and glyph metadata available. That difference in\nindexing depth is the reason the two web font formats are separate defs.\n\nAccepts: `.woff, font/woff`\n\n## Example\n```ts\nimport { WoffDef } from 'https://cardstack.com/base/woff-font-def';\n\n@field attachment = linksTo(WoffDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "WOFF Font File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

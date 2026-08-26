@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 4,
       "specReadmeChars": 852,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/kenji-tanaka\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/imani-adeyemi\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/pavel-novak\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/sara-okafor\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/kenji-tanaka\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/imani-adeyemi\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/pavel-novak\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Lead/sara-okafor\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

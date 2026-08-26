@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Icon Button",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "IconButton"
+      },
+      "readMe": "# Icon Button\n\n## Summary\nA button whose label is an icon.\n\n## Shape\n`@icon` with `@width`/`@height`, plus `@variant` and `@size` shared with `Button`, `@round` for\nthe circular form, and `@loading`/`@disabled` for state. Note it takes no `ariaLabel` of its\nown: because the visible content is a glyph, the accessible name has to arrive from the caller\nvia `...attributes` (an `aria-label` or `title` on the element). That is worth stating plainly,\nsince an icon-only control with no accessible name is the most common way this component is\nmisused.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/icon-button/usage.gts`.\n\n```gts\nimport { IconButton } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/icon-button/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Icon Button",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "MP4 File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/mp4-video-def",
+        "name": "Mp4Def"
+      },
+      "readMe": "# MP4 File\n\n## Summary\nThe video specialization for MP4 / M4V.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `VideoDef`. Adds no fields of its own — `duration`, `width`, `height` and `encoding` come from\n`VideoDef`. It supplies the extraction pass over the ISO base-media box tree,\nreading `moov`/`mvhd` for duration and `tkhd` for track dimensions, and it is\nalso the parent of `MovDef`, since QuickTime shares the same container.\n\nAccepts: `.mp4, .m4v, video/mp4`\n\n## Example\n```ts\nimport { Mp4Def } from 'https://cardstack.com/base/mp4-video-def';\n\n@field attachment = linksTo(Mp4Def);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "MP4 File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Media Tags",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "MediaTagsField"
+      },
+      "readMe": "# Media Tags\n\n## Summary\nThe descriptive tags on a track — title, artist, album and the rest.\n\n## Shape\n`scheme` is a `CodedValueField` over `tag-scheme` and it is load-bearing: the conventions disagree\nabout what a field means. An ID3v2 `TRCK` is the string `4/12` while an MP4 `trkn` atom is a pair\nof integers, so `track` and `disc` are `StringField` and a consumer comparing two files needs to\nknow which convention it is reading. Schemes: `id3v2`, `riff-info`, `mp4-atoms`,\n`vorbis-comment`, `xmp`.\n\n## Example\n```ts\nimport { MediaTagsField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(MediaTagsField);\n```\n",
+      "containedExamples": [
+        {
+          "scheme": {
+            "code": "vorbis-comment",
+            "scheme": "tag-scheme"
+          },
+          "trackTitle": "Pyramid Song",
+          "artist": "Radiohead",
+          "album": "Amnesiac",
+          "albumArtist": "Radiohead",
+          "composer": "Thom Yorke",
+          "year": 2001,
+          "track": "2/11",
+          "disc": "1/1",
+          "genre": "Alternative"
+        }
+      ],
+      "cardInfo": {
+        "name": "Media Tags",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "MediaTagsField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

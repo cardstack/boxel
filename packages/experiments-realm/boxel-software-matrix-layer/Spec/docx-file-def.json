@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "DOCX File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/docx-file-def",
+        "name": "DocxDef"
+      },
+      "readMe": "# DOCX File\n\n## Summary\nThe FileDef specialization for Word documents (OOXML `.docx`).\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. Adds `officeMetadata` (`OfficeMetadataField`) and overrides `extractAttributes` to read the\nOOXML package on upload — author, title, revision and word counts come from\n`docProps` rather than the byte stream. Carries a `previewComponent`, so the\ndocument routes to the shared document preview.\n\nAccepts: `.docx, application/vnd.openxmlformats-officedocument.wordprocessingml.document`\n\n## Example\n```ts\nimport { DocxDef } from 'https://cardstack.com/base/docx-file-def';\n\n@field attachment = linksTo(DocxDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "DOCX File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

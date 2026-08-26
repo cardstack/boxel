@@ -32,7 +32,13 @@
       "specKind": "command",
       "specExampleCount": 0,
       "specReadmeChars": 549,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "command",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

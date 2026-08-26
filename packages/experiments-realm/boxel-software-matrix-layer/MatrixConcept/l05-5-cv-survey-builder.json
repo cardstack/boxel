@@ -17,7 +17,7 @@
       "domainKit": "Forms",
       "owner": "richard",
       "workState": "Backlog",
-      "notes": "App 4: Club Membership & Ticketing — deliberately NOT shipped: Survey.edit already covers questionnaire editing; a dedicated builder component waits for real demand (a block must do what its name says, or not ship)",
+      "notes": "App 4: Club Membership & Ticketing \u2014 deliberately NOT shipped: Survey.edit already covers questionnaire editing; a dedicated builder component waits for real demand (a block must do what its name says, or not ship)",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,
@@ -28,7 +28,13 @@
         "summary": null,
         "notes": null,
         "cardThumbnailURL": null
-      }
+      },
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 0,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

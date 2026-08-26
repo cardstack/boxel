@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "blockerTitle": "A Spec cannot hold a file as its example",
+      "detail": "The 22 file-def concepts (`PNG File`, `WAV File`, `GTS File`\u2026) are shown properly by an actual file, not by a card. `Spec.linkedExamples` is `linksToMany(CardDef)` and `containedExamples` is `containsMany(FieldDef)`, while `FileDef extends BaseDef` (`packages/base/card-api.gts:3080`) is a **sibling** of both \u2014 so neither field accepts a file instance.\n\nFix: add `fileExamples = linksToMany(FileDef)` to Spec, surfaced when the spec kind is a file. `linksToMany(FileDef)` is already a supported primitive (`base/markdown-file-def.gts:390`, `base/rich-markdown.gts:111`). `specType` also needs a `file` value \u2014 it is a free StringField carrying card/field/app/component today. Until this lands the 22 file defs sit one check short of Gold with nothing their authors can do about it.",
+      "status": "open",
+      "source": "",
+      "cardInfo": {
+        "name": "A Spec cannot hold a file as its example",
+        "summary": "16 file defs stuck one check short; needs one field on Spec in base"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blocker",
+        "name": "Blocker"
+      }
+    }
+  }
+}

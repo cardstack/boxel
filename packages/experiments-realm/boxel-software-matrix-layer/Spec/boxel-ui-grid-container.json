@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Grid Container",
+      "specType": "component",
+      "ref": {
+        "module": "@cardstack/boxel-ui/components",
+        "name": "GridContainer"
+      },
+      "readMe": "# Grid Container\n\n## Summary\nA layout wrapper that arranges items as a grid or a list and yields each one its own container.\n\n## Shape\nMore than a `display: grid` wrapper: `@items` with `@viewFormat` (`list` or `grid`) switches\narrangement, `@size` takes a `FittedFormatId` so the cells match a known fitted footprint, and\nthe block yields both the item and a `GridItemContainer` component to wrap it in.\n`@fullWidthItem` lets one entry span the row. Consuming it is what stops cards re-declaring\ngrid gaps with slightly different numbers — the spacing comes from theme tokens.\n\n## Usage\nRendered in its states by the freestyle usage page at `packages/boxel-ui/src/components/grid-container/usage.gts`.\n\n```gts\nimport { GridContainer } from '@cardstack/boxel-ui/components';\n```\n",
+      "specUsageRef": "packages/boxel-ui/src/components/grid-container/usage.gts",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Grid Container",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

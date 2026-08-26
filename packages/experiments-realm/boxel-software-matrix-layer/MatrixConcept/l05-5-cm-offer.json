@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 1,
       "specReadmeChars": 3938,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Offer/df5b8208-9ecc-4132-b595-700dd0a73d77\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

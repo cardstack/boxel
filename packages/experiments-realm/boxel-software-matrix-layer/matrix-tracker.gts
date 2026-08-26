@@ -32,7 +32,10 @@ import { ProgressReport } from './progress-report';
 import { Blocker } from './blocker';
 import {
   qualityBucket,
+  qualityChecks,
   qualityScore,
+  qualityApplicable,
+  isInScope,
   bucketLabel,
   consumerList,
   BUCKETS,
@@ -164,6 +167,18 @@ export class MatrixTracker extends CardDef {
     get total() {
       return this.concepts.length;
     }
+    // Only block-scoped rows are scored. Wire primitives, platform internals
+    // and absorbed alias labels are matrix rows, not blocks anyone can adopt,
+    // so counting them as work overstates the gap.
+    get blocks(): MatrixConcept[] {
+      return this.concepts.filter((c) => isInScope(c));
+    }
+    get blockTotal() {
+      return this.blocks.length;
+    }
+    get outOfScopeCount() {
+      return this.total - this.blockTotal;
+    }
 
     specState = (c: MatrixConcept): string => {
       if (c.sharedSpec) return 'verified';
@@ -180,16 +195,16 @@ export class MatrixTracker extends CardDef {
     bucketOf = (c: MatrixConcept): QualityBucket => qualityBucket(c);
 
     get specVerifiedCount() {
-      return this.concepts.filter((c) => c.sharedSpec).length;
+      return this.blocks.filter((c) => c.sharedSpec).length;
     }
     get consumedCount() {
-      return this.concepts.filter((c) => consumerList(c).length >= 1).length;
+      return this.blocks.filter((c) => consumerList(c).length >= 1).length;
     }
     get reusedCount() {
-      return this.concepts.filter((c) => consumerList(c).length >= 2).length;
+      return this.blocks.filter((c) => consumerList(c).length >= 2).length;
     }
     get goldCount() {
-      return this.concepts.filter((c) => this.bucketOf(c) === 'gold').length;
+      return this.blocks.filter((c) => this.bucketOf(c) === 'gold').length;
     }
 
     get recentlyVerified(): MatrixConcept[] {
@@ -285,17 +300,23 @@ export class MatrixTracker extends CardDef {
     }
 
     get catalogAvailable(): MatrixConcept[] {
-      return this.concepts.filter((c) => this.specState(c) === 'catalog');
+      return this.blocks.filter((c) => this.specState(c) === 'catalog');
     }
     get platformAvailable(): MatrixConcept[] {
-      return this.concepts.filter((c) => this.specState(c) === 'platform');
+      return this.blocks.filter((c) => this.specState(c) === 'platform');
     }
     get thinCount() {
-      return this.concepts.filter((c) => this.bucketOf(c) === 'thin').length;
+      return this.blocks.filter((c) => this.bucketOf(c) === 'thin').length;
     }
+    // Counted against each kind's own example rule, so a command without a
+    // fixture is only missing an example when its readMe shows no call either.
     get missingExampleCount() {
-      return this.concepts.filter(
-        (c) => c.sharedSpec && (c.specExampleCount ?? 0) === 0,
+      return this.blocks.filter(
+        (c) =>
+          c.sharedSpec &&
+          qualityChecks(c).some(
+            (x) => x.key === 'example' && x.state === 'fail',
+          ),
       ).length;
     }
 
@@ -359,6 +380,9 @@ export class MatrixTracker extends CardDef {
         lane: c.lane,
         tier: c.evidenceTier ?? '—',
         score: c.sharedSpec ? qualityScore(c) : -1,
+        scoreLabel: c.sharedSpec
+          ? `${qualityScore(c)}/${qualityApplicable(c)}`
+          : '—',
         quality: bucketLabel(this.bucketOf(c)),
         qkey: this.bucketOf(c),
         consumers: consumerList(c).length,
@@ -452,9 +476,11 @@ export class MatrixTracker extends CardDef {
             <LayoutGridIcon class='brand-icon' />
             <h1>{{@model.cardTitle}}</h1>
           </div>
-          <p class='sub'>{{this.total}}
-            concepts · a concept counts as done when a Spec in this realm
-            resolves to shared code — quality is six mechanical checks, no
+          <p class='sub'>{{this.blockTotal}}
+            blocks of {{this.total}}
+            matrix rows ({{this.outOfScopeCount}}
+            out of scope) · a block counts as done when a Spec in this realm
+            resolves to shared code — quality is a per-kind checklist, no
             approval step</p>
         </header>
 
@@ -483,7 +509,7 @@ export class MatrixTracker extends CardDef {
             <Stat
               @label='Spec-verified'
               @value={{this.specVerifiedCount}}
-              @hint='of {{this.total}} concepts'
+              @hint='of {{this.blockTotal}} blocks'
             />
           </button>
           <button
@@ -632,7 +658,7 @@ export class MatrixTracker extends CardDef {
 
         <section class='two-col'>
           <div class='panel'>
-            <h2>Spec quality — six checks, computed live</h2>
+            <h2>Spec quality — per-kind checks, computed live</h2>
             <div class='state-list'>
               {{#each this.qualityRows as |row|}}
                 <button
@@ -649,10 +675,11 @@ export class MatrixTracker extends CardDef {
                 </button>
               {{/each}}
             </div>
-            <p class='tier-note'>Gold = verified Spec, populated example,
-              substantial readMe, consumed, reused, right spec kind. The bar
-              is set by the top-10 exemplars in
-              spec-quality-standard.md.</p>
+            <p class='tier-note'>Gold = every check that applies to the
+              concept's kind passes. A file def is shown by an attached file
+              and a command by a call in its readMe, so their denominators
+              differ — the chip carries both numbers. The prose bar is set by
+              the exemplars in spec-quality-standard.md.</p>
           </div>
 
           <div class='panel'>
@@ -686,14 +713,16 @@ export class MatrixTracker extends CardDef {
                 class='state-row'
                 {{on 'click' (fn this.drillBucket 'thin')}}
               >
-                <span class='state-name'>Thin specs to lift (≤3 checks)</span>
+                <span class='state-name'>Thin specs to lift (3+ checks
+                  short)</span>
                 <span class='state-count'>{{this.thinCount}}
                   <span class='chev'>›</span></span>
               </button>
             </div>
             <p class='tier-note'>{{this.missingExampleCount}}
-              verified specs still lack an example — the single biggest
-              quality gap, and each is one fixture away from moving up.</p>
+              verified specs still fail their kind's example check — a
+              fixture for a field or card, an attached file for a file def, a
+              call in the readMe for a command.</p>
           </div>
         </section>
 
@@ -772,7 +801,7 @@ export class MatrixTracker extends CardDef {
                   {{else if (eq column.key 'score')}}
                     <span class='q-chip q-{{row.qkey}}'>{{row.quality}}
                       {{#if (isScored row.score)}}·
-                        {{row.score}}/6{{/if}}</span>
+                        {{row.scoreLabel}}{{/if}}</span>
                   {{else}}
                     {{get row column.key}}
                   {{/if}}

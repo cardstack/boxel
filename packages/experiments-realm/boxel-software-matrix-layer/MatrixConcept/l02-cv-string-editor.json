@@ -32,7 +32,13 @@
       "specKind": "component",
       "specExampleCount": 0,
       "specReadmeChars": 801,
-      "specExampleIds": ""
+      "specExampleIds": "",
+      "conceptKind": "component",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 2,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

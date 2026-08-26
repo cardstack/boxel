@@ -32,7 +32,13 @@
       "specKind": "card",
       "specExampleCount": 3,
       "specReadmeChars": 1243,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/nadia-rahman\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/brightleaf-studio\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/nadia-rahman\", \"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/brightleaf-studio\"]",
+      "conceptKind": "card",
+      "scope": "block",
+      "aliasOf": null,
+      "specReadmeCodeBlocks": 1,
+      "specFileExampleCount": 0,
+      "specUsageRef": null
     },
     "meta": {
       "adoptsFrom": {

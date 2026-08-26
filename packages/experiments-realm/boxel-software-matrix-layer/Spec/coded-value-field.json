@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Coded Value",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "CodedValueField"
+      },
+      "readMe": "# Coded Value\n\n## Summary\nA machine code plus the vocabulary it came from, so a stored value stays interpretable.\n\n## Shape\n`code` and `scheme` are stored; `label` is computed via `labelForCode`, which looks the pair up in\n`METADATA_VOCABULARIES` and falls back to the raw code. An unrecognized vendor extension therefore\nstill renders as itself rather than disappearing.\n\nThe most reused field in the metadata family — six call sites: `CameraCapture.flash`,\n`CameraCapture.orientation`, `GeoLocation.source`, `ColorProfile.colorSpace`,\n`MediaEncoding.channelMode` and `MediaTags.scheme`. Known schemes: `exif-orientation`,\n`exif-flash`, `geo-source`, `tag-scheme`, `channel-mode`, `color-space`.\n\n## Example\n```ts\nimport { CodedValueField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(CodedValueField);\n```\n",
+      "containedExamples": [
+        {
+          "code": "6",
+          "scheme": "exif-orientation"
+        }
+      ],
+      "cardInfo": {
+        "name": "Coded Value",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "CodedValueField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

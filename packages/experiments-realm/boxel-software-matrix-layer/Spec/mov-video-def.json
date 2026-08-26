@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "QuickTime MOV File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/mov-video-def",
+        "name": "MovDef"
+      },
+      "readMe": "# QuickTime MOV File\n\n## Summary\nThe video specialization for QuickTime `.mov`.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `Mp4Def`. Extends `Mp4Def` rather than `VideoDef`, because QuickTime and MP4 are both ISO\nbase-media containers — the box tree walk that reads duration and track\ndimensions is identical, so this def inherits the whole extraction pass and only\npins the accept types and display identity.\n\nAccepts: `.mov, video/quicktime`\n\n## Example\n```ts\nimport { MovDef } from 'https://cardstack.com/base/mov-video-def';\n\n@field attachment = linksTo(MovDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "QuickTime MOV File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

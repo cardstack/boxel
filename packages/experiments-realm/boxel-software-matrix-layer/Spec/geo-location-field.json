@@ -1,0 +1,54 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Geo Location",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "GeoLocationField"
+      },
+      "readMe": "# Geo Location\n\n## Summary\nWhere a file was captured, with the convention that supplied the coordinates.\n\n## Shape\n`latitude` and `longitude` are plain numbers; `altitude` is a `QuantityField` so its unit is\nexplicit. `source` is a `CodedValueField` over the `geo-source` vocabulary — EXIF GPS IFD, iOS\nPhotos and Android Photos disagree about sign and reference conventions, so recording which one\nwrote the values is what makes them comparable. `coordinates` and `place` are computed for display.\n\n## Example\n```ts\nimport { GeoLocationField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(GeoLocationField);\n```\n",
+      "containedExamples": [
+        {
+          "latitude": 3.1478,
+          "longitude": 101.6953,
+          "altitude": {
+            "value": 56,
+            "unit": "m"
+          },
+          "placeName": "Batu Caves",
+          "city": "Selayang",
+          "region": "Selangor",
+          "country": "Malaysia",
+          "source": {
+            "code": "exif-gps",
+            "scheme": "geo-source"
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": "Geo Location",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "GeoLocationField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

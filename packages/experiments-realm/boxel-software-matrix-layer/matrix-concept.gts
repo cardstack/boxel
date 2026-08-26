@@ -19,7 +19,9 @@ import {
   qualityChecks,
   qualityBucket,
   qualityScore,
+  qualityApplicable,
   bucketLabel,
+  type CheckState,
   type QualityCheck,
 } from './spec-quality';
 
@@ -56,6 +58,19 @@ const SpecTargetField = enumField(StringField, {
 const CatalogDispositionField = enumField(StringField, {
   options: ['pure listing', 'needs block'],
   displayName: 'Catalog Disposition',
+});
+
+const ConceptKindField = enumField(StringField, {
+  options: ['field', 'card', 'app', 'component', 'command', 'filedef'],
+  displayName: 'Concept Kind',
+});
+
+// Only 'block' rows are scored and counted. The rest are matrix rows that are
+// not blocks anyone can adopt: wire-format primitives, platform internals, and
+// bare labels absorbed by a more precise sibling.
+const ConceptScopeField = enumField(StringField, {
+  options: ['block', 'primitive', 'internal', 'alias'],
+  displayName: 'Scope',
 });
 
 function tierClass(tier: string | undefined): string {
@@ -95,6 +110,10 @@ export function displayState(state: string | undefined): string | undefined {
   return state === 'Done' ? 'Built' : state;
 }
 
+function checkMark(state: CheckState): string {
+  return state === 'pass' ? '\u2713' : state === 'na' ? '\u2013' : '\u2717';
+}
+
 export class MatrixConcept extends CardDef {
   static prefersWideFormat = true;
   static displayName = 'Matrix Concept';
@@ -128,6 +147,17 @@ export class MatrixConcept extends CardDef {
   @field specKind = contains(StringField);
   @field specExampleCount = contains(NumberField);
   @field specReadmeChars = contains(NumberField);
+  // Crawl-stamped, kind-specific example evidence: files attached to the Spec
+  // (a file def is shown by a file), fenced code blocks in the readMe (how a
+  // command is called), and the module that renders a component's states.
+  @field specFileExampleCount = contains(NumberField);
+  @field specReadmeCodeBlocks = contains(NumberField);
+  @field specUsageRef = contains(StringField);
+  // What kind of thing this concept is, which rubric it scores against, and —
+  // when scope is 'alias' — the concept that absorbed it.
+  @field conceptKind = contains(ConceptKindField);
+  @field scope = contains(ConceptScopeField);
+  @field aliasOf = contains(StringField);
   // Crawl-stamped: the Spec's linked-example instance URLs (JSON array), so
   // the card can render the examples live without loading the Spec's links.
   @field specExampleIds = contains(StringField);
@@ -521,6 +551,9 @@ export class MatrixConcept extends CardDef {
     get score() {
       return qualityScore(this.model);
     }
+    get applicable() {
+      return qualityApplicable(this.model);
+    }
     get bucket() {
       return qualityBucket(this.model);
     }
@@ -660,7 +693,7 @@ export class MatrixConcept extends CardDef {
                 <span
                   class='state {{this.qualityClass}}'
                 >{{this.bucketName}}
-                  · {{this.score}}/6</span>
+                  · {{this.score}}/{{this.applicable}}</span>
               {{/if}}
               {{#if @model.workState}}
                 <span
@@ -686,20 +719,16 @@ export class MatrixConcept extends CardDef {
                 <h2>Spec quality</h2>
                 <Meter
                   @level={{this.score}}
-                  @segments={{6}}
-                  @label='{{this.score}} of 6 checks pass'
+                  @segments={{this.applicable}}
+                  @label='{{this.score}} of {{this.applicable}} checks pass'
                   @hue={{if this.hasSpec '#ca8a04' '#9ca3af'}}
                   @heights={{meterHeights}}
                 />
               </div>
               <ul class='checklist'>
                 {{#each this.checks as |check|}}
-                  <li class='check {{if check.pass "is-pass" "is-fail"}}'>
-                    <span class='check-mark'>{{if
-                        check.pass
-                        '✓'
-                        '✗'
-                      }}</span>
+                  <li class='check is-{{check.state}}'>
+                    <span class='check-mark'>{{checkMark check.state}}</span>
                     <span class='check-label'>{{check.label}}</span>
                     <span class='check-detail'>{{check.detail}}</span>
                   </li>
@@ -1006,6 +1035,13 @@ export class MatrixConcept extends CardDef {
         }
         .check.is-fail .check-mark {
           color: var(--state-blocked-fg, #991b1b);
+        }
+        .check.is-na .check-mark {
+          color: var(--muted-foreground, #9ca3af);
+        }
+        .check.is-na .check-label,
+        .check.is-na .check-detail {
+          color: var(--muted-foreground, #9ca3af);
         }
         .check-label {
           font-weight: 600;

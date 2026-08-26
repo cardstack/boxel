@@ -1,0 +1,61 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Media Encoding",
+      "specType": "field",
+      "ref": {
+        "module": "https://cardstack.com/base/file-formats/metadata-fields",
+        "name": "MediaEncodingField"
+      },
+      "readMe": "# Media Encoding\n\n## Summary\nThe codec and rate facts shared by audio and video files.\n\n## Shape\nRates travel as `QuantityField` (`frameRate` in fps, `sampleRate` in Hz, `bitrate` in bps) so the\nunit is carried rather than assumed, and the field's own formatting adds the separators —\nbitrates read in the thousands and sample rates in the tens of thousands. `channelMode` is a\n`CodedValueField` over `channel-mode`. One field serves both media kinds: `audioCodec` and\n`videoCodec` are separate so a video with sound fills both.\n\n## Example\n```ts\nimport { MediaEncodingField } from 'https://cardstack.com/base/file-formats/metadata-fields';\n\n@field metadata = contains(MediaEncodingField);\n```\n",
+      "containedExamples": [
+        {
+          "container": "MP4",
+          "audioCodec": "AAC LC",
+          "videoCodec": "H.264 High",
+          "frameRate": {
+            "value": 30,
+            "unit": "fps"
+          },
+          "sampleRate": {
+            "value": 48000,
+            "unit": "Hz"
+          },
+          "bitrate": {
+            "value": 8400000,
+            "unit": "bps"
+          },
+          "channels": 2,
+          "channelMode": {
+            "code": "stereo",
+            "scheme": "channel-mode"
+          },
+          "isVariableBitrate": false
+        }
+      ],
+      "cardInfo": {
+        "name": "Media Encoding",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "https://cardstack.com/base/file-formats/metadata-fields",
+              "name": "MediaEncodingField"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

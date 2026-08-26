@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "ZIP File",
+      "specType": "card",
+      "ref": {
+        "module": "https://cardstack.com/base/zip-file-def",
+        "name": "ZipDef"
+      },
+      "readMe": "# ZIP File\n\n## Summary\nThe FileDef specialization for ZIP archives.\nAn instance is an uploaded realm file with card semantics: the binary lives at\nthe file URL while the card carries extracted metadata and renders with\nformat-aware templates.\n\n## Shape\nExtends `FileDef`. The richest of the archive defs. Adds `archiveContents` (`containsMany(ArchiveEntryField)`),\n`uncompressedSize`, `compressedSize` and `truncatedListing`, filled by reading the\ncentral directory rather than inflating the payload. `truncatedListing` is\nload-bearing: a large archive is listed up to a budget, and the flag records\nthat the listing is partial rather than letting a consumer read it as complete.\n\nAccepts: `.zip, application/zip`\n\n## Example\n```ts\nimport { ZipDef } from 'https://cardstack.com/base/zip-file-def';\n\n@field attachment = linksTo(ZipDef);\n```\nInstances are created by upload (`createFileDef` wires the type from the\nMIME type). Live examples need uploaded fixtures — `Spec` has no field that\naccepts a file today (`linkedExamples` is `linksToMany(CardDef)`, and\n`FileDef` is a sibling of `CardDef`), so the example check stays open for\nevery file def until `fileExamples` lands.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "ZIP File",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
