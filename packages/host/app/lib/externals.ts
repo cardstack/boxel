@@ -13,6 +13,8 @@ import * as emberTemplateFactory from '@ember/template-factory';
 import * as emberTestHelpers from '@ember/test-helpers';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
+// @ts-ignore - no types for @glimmer/validator
+import * as glimmerValidator from '@glimmer/validator';
 
 import * as viewTransitions from '@cardstack/view-transitions';
 import * as floatingUiDom from '@floating-ui/dom';
@@ -97,6 +99,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   );
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);
+  virtualNetwork.shimModule('@glimmer/validator', glimmerValidator);
   virtualNetwork.shimModule('@ember/component', emberComponent);
   virtualNetwork.shimModule(
     '@ember/component/template-only',
