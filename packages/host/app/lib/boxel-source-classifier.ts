@@ -233,6 +233,45 @@ const pinnedBabelOptions = {
   configFile: false,
 } as const;
 
+/**
+ * The accept-set: the syntax a Boxel module may use and still be read as
+ * itself here. It is not chosen, it is MIRRORED — a module the realm serves
+ * but this parse refuses is reported `source-parse-pending`, an unfinished
+ * draft, which classifies it Capsule with no signals at all. That direction is
+ * right for a genuine draft and wrong for working code, and its only symptom
+ * is a card rendering in the wrong cage.
+ *
+ * What is being mirrored is `transpile.ts`'s `realmBabelPlugins`. A Babel
+ * plugin widens the parser only through `manipulateOptions`, and exactly two
+ * of the realm's plugins do: this same TypeScript plugin, contributing
+ * `typescript` (along with `objectRestSpread` and `classProperties`), and
+ * `decorator-transforms`, contributing `decorators-legacy`. The rest — the
+ * template compiler, scoped CSS, the concurrency and loader plugins — carry no
+ * syntax. So `decorators-legacy` is here because `decorator-transforms` puts
+ * it there, and moving the realm to a different decorator proposal has to move
+ * this too.
+ *
+ * Nothing about that reasoning is self-enforcing, which is why it is exported
+ * rather than written inline: `RP-6.4: the parser accept-set is the realm's,
+ * plugin for plugin` drives Babel over both lists and compares what each
+ * contributes, so a plugin added to the realm's pipeline fails a comparison
+ * instead of quietly serving syntax this file cannot read.
+ *
+ * A function, not a constant, because Babel appends every plugin's
+ * contribution to the very `parserOpts.plugins` array it is handed — a shared
+ * one would accumulate `typescript` once per parse and report an accept-set
+ * that grows with use.
+ */
+export function sourceParseOptions(): {
+  plugins: babel.PluginItem[];
+  parserOpts: NonNullable<babel.TransformOptions['parserOpts']>;
+} {
+  return {
+    plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+    parserOpts: { plugins: ['decorators-legacy'] },
+  };
+}
+
 // The one import content-tag adds to a module that contains a template, to
 // compile the blocks it replaced. It is not an authored edge, so it is not a
 // graph member — and it is named here rather than pattern-matched so a
@@ -492,23 +531,9 @@ function analyzeJavaScript(source: string): {
    */
   hasEagerGlobal: boolean;
 } {
-  // These two lines ARE the accept-set, and it has to stay the realm's. A
-  // Babel plugin can only widen the parser through `manipulateOptions`, and in
-  // `transpile.ts` exactly two of its plugins do: this same TypeScript plugin
-  // contributes `typescript`, and `decorator-transforms` contributes
-  // `decorators-legacy`. The rest — the template compiler, scoped CSS, the
-  // concurrency and loader plugins — contribute no syntax.
-  //
-  // So `decorators-legacy` is mirrored from `decorator-transforms`, not chosen.
-  // If the realm ever moves to a different decorator proposal, narrowing this
-  // list turns servable modules into drafts, which classifies them Capsule with
-  // no signals — and the shape of that failure is a card that renders wrong
-  // rather than a test that goes red. `RP-6.4: syntax the realm serves is
-  // analyzed, not mistaken for a draft` is what holds the current set.
   let ast = babel.parseSync(source, {
     ...pinnedBabelOptions,
-    plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
-    parserOpts: { plugins: ['decorators-legacy'] },
+    ...sourceParseOptions(),
   });
   if (!ast) {
     throw new Error('the parser returned no AST');
@@ -710,10 +735,7 @@ function analyzeJavaScript(source: string): {
     // Only the traverse is wanted; nothing reads generated code.
     code: false,
     cloneInputAst: false,
-    plugins: [
-      [typescriptPlugin, { allowDeclareFields: true }],
-      collectBrowserSignals,
-    ],
+    plugins: [...sourceParseOptions().plugins, collectBrowserSignals],
   });
 
   return {

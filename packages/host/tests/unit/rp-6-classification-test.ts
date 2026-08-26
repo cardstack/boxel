@@ -4,11 +4,16 @@ import typescriptPlugin from '@babel/plugin-transform-typescript';
 import { module, test } from 'qunit';
 
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
+import {
+  realmBabelPlugins,
+  transpileJS,
+} from '@cardstack/runtime-common/transpile';
 
 import {
   BoxelModuleGraphClassifier,
   CLASSIFICATION_REASON_KINDS,
   classifyBoxelSource,
+  sourceParseOptions,
 } from '@cardstack/host/lib/boxel-source-classifier';
 import {
   isTrustedImport,
@@ -32,6 +37,50 @@ function transformedByRealm(source: string): string {
       plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
     })?.code ?? ''
   );
+}
+
+// What a Babel plugin list widens the parser to, computed BY Babel rather than
+// read off the plugins: `manipulateOptions` is the only hook that can widen the
+// parser, and Babel calls each plugin's before parsing, accumulating into the
+// one `parserOpts.plugins` array it also seeds from the caller's own. So a
+// recorder placed last in the list sees the finished accept-set without this
+// file knowing which plugin contributed what — which is the point, since the
+// contributions are what is under comparison.
+//
+// The array handed in is copied because Babel appends to the one it is given,
+// and both lists here are the values the shipping code parses with.
+function parserPluginsContributedBy(options: babel.TransformOptions): string[] {
+  let recorded: unknown[] = [];
+  babel.transformSync('', {
+    cwd: '/',
+    root: '/',
+    envName: 'production',
+    filename: 'accept-set.ts',
+    babelrc: false,
+    configFile: false,
+    parserOpts: { plugins: [...(options.parserOpts?.plugins ?? [])] },
+    plugins: [
+      ...(options.plugins ?? []),
+      () => ({
+        name: 'record-accept-set',
+        manipulateOptions(
+          _options: unknown,
+          parserOpts: { plugins: unknown[] },
+        ) {
+          recorded = [...parserOpts.plugins];
+        },
+        visitor: {},
+      }),
+    ],
+  });
+  // A contribution is either a bare name or a `[name, options]` tuple, and the
+  // two spellings widen the parser identically — so both normalize to the tuple
+  // form. The options stay in the comparison: a plugin can widen differently
+  // depending on them. Sorted because reaching the same syntax in a different
+  // order is not a difference.
+  return recorded
+    .map((entry) => JSON.stringify(Array.isArray(entry) ? entry : [entry, {}]))
+    .sort();
 }
 
 // A card module around whatever the case under test is, so every row of the
@@ -825,6 +874,144 @@ module('Unit | RP-6 classification', function () {
         `${shape} is analyzed, so its read is seen`,
       );
     }
+  });
+
+  test("RP-6.4: the parser accept-set is the realm's, plugin for plugin", async function (assert) {
+    // The mirroring the classifier's parse rests on, compared rather than
+    // restated. `the realm and the classifier agree on which source is
+    // servable` covers the syntax someone thought to write a fixture for; this
+    // covers the syntax nobody has written one for yet, because it reads the
+    // accept-set off the plugin lists themselves.
+    //
+    // Both sides are the values the shipping code parses with — `transpile.ts`'s
+    // plugin array and the classifier's own parse options — so a plugin added
+    // to the realm's pipeline, or swapped for one that widens differently,
+    // moves one side and fails here. Narrowing the classifier's list fails here
+    // too, from the other direction.
+    let realm = parserPluginsContributedBy({ plugins: realmBabelPlugins });
+    let classifier = parserPluginsContributedBy(sourceParseOptions());
+    assert.deepEqual(
+      classifier,
+      realm,
+      'the two lists widen the parser to the same syntax',
+    );
+    // Two empty sets compare equal, so the comparison above passes for a
+    // reading that failed to read anything — a recorder Babel never calls, or
+    // a plugin list it declines to instantiate. Both come back bare.
+    assert.true(
+      realm.length > 0,
+      'the realm contributes syntax, so the comparison above is not vacuous',
+    );
+  });
+
+  test('RP-6.4: the realm and the classifier agree on which source is servable', async function (assert) {
+    // The mirroring, checked end to end: each fixture goes through the realm's
+    // own `transpileJS` and through classification, and the two have to agree
+    // that it is servable. Whatever the realm transpiles, the classifier must
+    // parse — the reverse slack is harmless, since source the realm refuses
+    // never reaches a render.
+    //
+    // Asserting the agreement rather than the syntax is what keeps this honest
+    // as the pipeline moves: a fixture the realm stops serving switches to the
+    // negative branch by itself, and one it starts serving becomes a demand on
+    // the classifier without anyone editing a list.
+    let served = 0;
+    let refused = 0;
+    for (let [shape, source] of [
+      [
+        'a type-only import and an annotated field',
+        `import type { Scene } from 'three';\nexport class C { s?: Scene; t = document.title; }`,
+      ],
+      [
+        'a declare field',
+        'export class C { declare id: string; t = document.title; }',
+      ],
+      [
+        'a legacy decorator on a class',
+        'const dec = (t: unknown) => t;\n@dec\nexport class C { t = document.title; }',
+      ],
+      [
+        'a legacy decorator on a field',
+        'const field = (..._a: unknown[]) => {};\nexport class C { @field y = document.title; }',
+      ],
+      [
+        'a legacy decorator on a method',
+        'const action = (..._a: unknown[]) => {};\nexport class C { @action run() { return document.title; } }',
+      ],
+      [
+        'a template as a class member',
+        'export class C { static isolated = class { <template>hi</template> }; t = document.title; }',
+      ],
+      [
+        'a template in expression position',
+        'const Row = <template>hi</template>;\nexport const t = [Row, document.title];',
+      ],
+      [
+        'a constrained type parameter',
+        'export function f<T extends object>(v: T): T { void document.title; return v; }',
+      ],
+      [
+        'a parameter property',
+        'export class C { constructor(private x: string) { void [x, document.title]; } }',
+      ],
+      [
+        'an enum',
+        'export enum E { A }\nexport const t = [E.A, document.title];',
+      ],
+      [
+        'an abstract member',
+        'export abstract class C { abstract go(): void; t = document.title; }',
+      ],
+      [
+        'a namespace',
+        'export namespace N { export const x = 1; }\nexport const t = [N.x, document.title];',
+      ],
+      [
+        'a satisfies expression',
+        'export const t = document.title satisfies string;',
+      ],
+      // The negative cases. `accessor` needs a decorator proposal the realm's
+      // `decorator-transforms` does not enable, and JSX is syntax content-tag
+      // refuses ahead of Babel — so the realm serves neither, and the
+      // classifier reading them as drafts is the answer it should give.
+      ['an accessor field', 'export class C { accessor x = document.title; }'],
+      ['a JSX element', 'export const t = <div>{document.title}</div>;'],
+    ] as [string, string][]) {
+      let servable = true;
+      try {
+        await transpileJS(source, '/accept-set.gts');
+      } catch {
+        servable = false;
+      }
+      if (servable) {
+        served++;
+      } else {
+        refused++;
+      }
+      let parsed =
+        (await classifyBoxelSource(source)).reason !== 'source-parse-pending';
+      // The one combination the mirroring forbids: source the realm hands out
+      // that classification cannot read. The other three are all fine — the
+      // realm refusing it makes the classifier's answer moot either way.
+      let holeInTheMirror = servable && !parsed;
+      assert.false(
+        holeInTheMirror,
+        `${shape} — the realm ${servable ? 'transpiles' : 'refuses'} it and the classifier ${parsed ? 'parses' : 'reads it as a draft'}`,
+      );
+    }
+    // Each row above rules out one combination, which a fixture the realm
+    // refuses does without demanding anything of the classifier. So the table
+    // has to keep exercising both branches: an all-refused table would pass
+    // while checking nothing, and an all-served one would drop the negative
+    // case the mirroring is allowed to miss.
+    assert.true(
+      served > 0,
+      `some fixture is servable (${served} of ${served + refused})`,
+    );
+    assert.true(
+      refused > 0,
+      `some fixture is not, so the negative case is still exercised (${refused} of ${served + refused})`,
+    );
   });
 
   test('RP-6.4: the import content-tag adds to compile a template is not a graph edge', async function (assert) {

@@ -62,6 +62,15 @@ jobs:
         # set the harness knows about.
         if: ${{ !cancelled() }}
         run: pnpm run lint:tier-registry
+      - name: Check content-tag parity across the packages that preprocess templates
+        # The realm transpiles authored `<template>` source with
+        # runtime-common's content-tag, and the source classifier analyzes what
+        # host's own copy emits. Two versions read the compiled form
+        # differently, which shows up as servable modules classifying as
+        # drafts — never as a failing test, since a suite bundles whatever it
+        # resolved.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:content-tag-parity
       - name: Lint Boxel Icons
         if: ${{ !cancelled() }}
         run: pnpm run lint

@@ -46,6 +46,30 @@ const compiler = {
   },
 };
 
+const templateOptions: EmberTemplatePluginOptions = {
+  compiler,
+  transforms: [scopedCSSTransform],
+};
+
+// The Babel half of the realm's pipeline, a value rather than an inline literal
+// because the SYNTAX the realm serves is a property of this list and of nothing
+// else. A Babel plugin can widen the parser only through `manipulateOptions`,
+// so driving Babel over this array reports the accept-set a module has to fall
+// inside to be transpiled at all.
+//
+// The Boxel source classifier in `packages/host` parses card source with a
+// hand-written mirror of these contributions, and a mirror that falls behind
+// reads servable modules as unfinished drafts. It holds itself to this array
+// rather than to a restatement of it, so adding a plugin here that contributes
+// syntax fails that comparison instead of passing silently.
+export const realmBabelPlugins: babel.PluginItem[] = [
+  emberConcurrencyAsyncPlugin,
+  [typescriptPlugin, { allowDeclareFields: true }],
+  [decoratorTransforms],
+  [makeEmberTemplatePlugin, templateOptions],
+  loaderPlugin,
+];
+
 export async function transpileJS(
   content: string,
   debugFilename: string,
@@ -69,21 +93,10 @@ export async function transpileJS(
     inline_source_map: true,
   }).code;
 
-  const templateOptions: EmberTemplatePluginOptions = {
-    compiler,
-    transforms: [scopedCSSTransform],
-  };
-
   const transformed = await babel.transformAsync(content, {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
-    plugins: [
-      emberConcurrencyAsyncPlugin,
-      [typescriptPlugin, { allowDeclareFields: true }],
-      [decoratorTransforms],
-      [makeEmberTemplatePlugin, templateOptions],
-      loaderPlugin,
-    ],
+    plugins: realmBabelPlugins,
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });
   const src = transformed?.code;
