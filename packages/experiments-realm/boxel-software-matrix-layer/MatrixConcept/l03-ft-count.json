@@ -15,12 +15,12 @@
       "catalogMatch": null,
       "provenance": "periodic:Count",
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1a: built 2026-08-26; first consumer Match.ticketsSold.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/count-field",
+      "specTarget": "shared block",
+      "consumers": "club-membership/match",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 1187,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Match/harrow-vale-home\"]"
     },
     "meta": {
       "adoptsFrom": {

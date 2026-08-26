@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Status field",
+      "specType": "field",
+      "ref": {
+        "module": "../status-field",
+        "name": "default"
+      },
+      "readMe": "# Status\n\n## Summary\nThe generic lifecycle status block: an option set, a colour per option, and the legal moves between them — all supplied by the consumer via the `statusField` factory. A neutral four-state default (`Draft → Active → Done/Cancelled`) ships as the default export for consumers without opinions yet. Extracted from the blog listing's hardcoded Published/Draft status into its general form.\n\n## API\n- `statusField(config)` — build a FieldDef bound to one lifecycle. `config.options`: `{ value, label?, hue?, terminal?, holds?, meaning? }[]`; `config.transitions`: `value → values that may follow`.\n- `canTransition(fieldClass, from, to)` / `nextStatuses(fieldClass, from)` — what an action menu should offer.\n- `statusOption` / `statusHue` — option lookup for custom renders.\n- Edit format is the constrained dropdown from `enumField`; embedded/atom render a hue-checked `StatePill`.\n\n## Usage\n```ts\nimport { statusField } from './status-field';\n\nconst TicketStatusField = statusField({\n  displayName: 'Ticket Status',\n  options: [\n    { value: 'Open', hue: 'teal' },\n    { value: 'Pending', hue: 'amber', holds: true },\n    { value: 'Resolved', hue: 'green', terminal: true },\n  ],\n  transitions: { Open: ['Pending', 'Resolved'], Pending: ['Open', 'Resolved'], Resolved: ['Open'] },\n});\n```\nThe linked example is a ServiceDesk Ticket whose status field is a `statusField` consumer. Being a primitive (StringField-based) field, inline `containedExamples` are unsupported in base — the in-use instance stands in (see the \"Primitive fields cannot have Spec examples\" blocker).\n\n## Non-goals\nThe block never ships a domain's option set — Open/Pending/Resolved belongs to the ticket app, planned/in_progress/done to the content calendar. How urgent something is belongs to the sibling Priority block; whether the record itself is part of the working set belongs to Record Status (layer 05). Enforcement of transitions is the consumer's command's job — the block only answers \"may I?\".",
+      "cardInfo": {
+        "name": "Status",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1288-invoice-download"
+        }
+      }
+    }
+  }
+}

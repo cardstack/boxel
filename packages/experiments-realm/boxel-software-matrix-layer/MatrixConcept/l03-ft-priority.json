@@ -10,17 +10,17 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/priority-field.gts (priorityField factory \u2014 generic; ticket-taxonomy.gts TicketPriorityField is a consumer)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/priority-field.gts (priorityField factory — generic; ticket-taxonomy.gts TicketPriorityField is a consumer)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Priority",
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Promoted from POC: Spec live 2026-08-26 (priorityField factory + neutral default).",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/priority-field",
+      "specTarget": "shared block",
+      "consumers": "ticket-taxonomy",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 1671,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]"
     },
     "meta": {
       "adoptsFrom": {

@@ -17,10 +17,10 @@
       "domainKit": null,
       "owner": "lucas",
       "workState": "Done",
-      "notes": "App 2: Talent & Resource Tracker (v1)",
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": null,
+      "notes": "App 2: Talent & Resource Tracker (v1) — Spec + default export added by richard 2026-08-26.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/score-field",
+      "specTarget": "shared block",
+      "consumers": "meeting, candidate, scorecard-field",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 1227,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Meeting/interview-amara-1\"]"
     },
     "meta": {
       "adoptsFrom": {

@@ -11,6 +11,7 @@ import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import OctagonAlertIcon from '@cardstack/boxel-icons/octagon-alert';
 import { MatrixConcept } from './matrix-concept';
+import CreatedAtField from './created-at-field';
 
 const BlockerStatusField = enumField(StringField, {
   options: ['open', 'resolved'],
@@ -26,6 +27,7 @@ export class Blocker extends CardDef {
   @field status = contains(BlockerStatusField);
   // Where this blocker is recorded in prose — a doc, an issue, a memory.
   @field source = contains(StringField);
+  @field filedAt = contains(CreatedAtField);
   @field concepts = linksToMany(() => MatrixConcept);
 
   @field cardTitle = contains(StringField, {
@@ -127,6 +129,9 @@ export class Blocker extends CardDef {
           <div>
             <p class='doc-kind'>Known blocker</p>
             <h1>{{@model.blockerTitle}}</h1>
+            {{#if @model.filedAt}}
+              <p class='filed'>Filed <@fields.filedAt @format='atom' /></p>
+            {{/if}}
           </div>
         </header>
         {{#if @model.detail}}
@@ -188,6 +193,11 @@ export class Blocker extends CardDef {
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.14em;
+          color: var(--muted-foreground, #6b7280);
+        }
+        .filed {
+          margin: 0.25rem 0 0;
+          font-size: 0.75rem;
           color: var(--muted-foreground, #6b7280);
         }
         h1 {

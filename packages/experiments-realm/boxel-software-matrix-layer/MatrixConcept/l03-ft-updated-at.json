@@ -15,11 +15,11 @@
       "catalogMatch": null,
       "provenance": "periodic:Updated At | BSL",
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1a: block + Spec live 2026-08-26; in-use example + first consumer wired when Quest Log stage 2 lands (Quest.updatedAt).",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/updated-at-field",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 0,
+      "specReadmeChars": 1165,
+      "specExampleIds": null
     },
     "meta": {
       "adoptsFrom": {

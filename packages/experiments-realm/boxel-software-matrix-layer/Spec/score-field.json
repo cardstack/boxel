@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Score field",
+      "specType": "field",
+      "ref": {
+        "module": "../score-field",
+        "name": "default"
+      },
+      "readMe": "# Score\n\n## Summary\nA 1–5 star rating with an explicit unset state. Renders stars in every format: edit is a clickable star row (with a small pop on select), embedded shows the full five-star readout with `n/5`, atom compresses to `★ n` for dense rows. An explicit 0 renders as a number; only null/undefined renders as the em-dash \"not scored\" — so an unrated criterion never reads as a zero.\n\n## Usage\n```ts\nimport { ScoreField } from './score-field';\n\n@field interviewScore = contains(ScoreField);\n```\nConsumed in the shared realm by App 2's Meeting (`interviewScore`), Candidate (`overallScore`) and the Scorecard compound field (per-criterion `score`). The linked example is an interview Meeting whose scorecard carries three scored criteria. Primitive (NumberField-based) field — inline `containedExamples` unsupported in base; the in-use instance stands in.\n\n## Non-goals\nThe scale is fixed at 5 — a configurable-max variant is a deliberate non-feature until a real consumer needs one (a 10-point scale reads as a different UI, not a longer star row). Aggregation (average of criteria) belongs to the consumer's computed field, not the display block. Free-form sentiment (mood emoji) is a different concept and stays out.",
+      "cardInfo": {
+        "name": "Score",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Meeting/interview-amara-1"
+        }
+      }
+    }
+  }
+}

@@ -4,12 +4,12 @@ import {
   field,
   StringField,
 } from '@cardstack/base/card-api';
-import NumberField from '@cardstack/base/number';
 import enumField from '@cardstack/base/enum';
 import { htmlSafe } from '@ember/template';
 import BallFootballIcon from '@cardstack/boxel-icons/ball-football';
 
 import { Event, datePart } from '../event';
+import CountField from '../count-field';
 
 export const HomeAwayField = enumField(StringField, {
   displayName: 'Home / Away',
@@ -67,7 +67,7 @@ export class Match extends Event {
   @field opponent = contains(StringField);
   @field homeAway = contains(HomeAwayField);
   @field competition = contains(CompetitionField);
-  @field ticketsSold = contains(NumberField);
+  @field ticketsSold = contains(CountField);
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: Match) {

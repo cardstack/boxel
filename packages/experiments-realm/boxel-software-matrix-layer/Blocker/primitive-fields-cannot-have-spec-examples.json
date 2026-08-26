@@ -3,13 +3,14 @@
     "type": "card",
     "attributes": {
       "blockerTitle": "Primitive fields cannot have Spec examples",
-      "detail": "`packages/base/spec.gts:115` states it outright \u2014 \"Examples are not currently supported for primitive fields\" \u2014 and the examples section is gated on `isPrimitive(this.cardDef)` at line 408. That blocks the example check for every primitive field spec: String, Number, Boolean, Date, DateTime, Markdown, Enum and Percentage (which extends NumberField). Eight of them are otherwise one check from Gold, with 2\u201326 real consumers each.\n\nThis is the same class of problem as the file defs: the standard asks for an artifact base will not let the author create. Either base gains primitive-field example support, or the standard exempts primitive fields and their denominator drops to 5. Deciding this is cheaper than either build.",
+      "detail": "`packages/base/spec.gts:115` states it outright — \"Examples are not currently supported for primitive fields\" — and the examples section is gated on `isPrimitive(this.cardDef)` at line 408. That blocks the example check for every primitive field spec: String, Number, Boolean, Date, DateTime, Markdown, Enum and Percentage (which extends NumberField). Eight of them are otherwise one check from Gold, with 2–26 real consumers each.\n\nThis is the same class of problem as the file defs: the standard asks for an artifact base will not let the author create. Either base gains primitive-field example support, or the standard exempts primitive fields and their denominator drops to 5. Deciding this is cheaper than either build.",
       "status": "open",
       "source": "",
       "cardInfo": {
         "name": "Primitive fields cannot have Spec examples",
         "summary": "The 8 primitive-field specs cannot pass the example check at all"
-      }
+      },
+      "filedAt": "2026-08-26T02:00:00.000Z"
     },
     "meta": {
       "adoptsFrom": {

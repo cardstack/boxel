@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Due Date field",
+      "specType": "field",
+      "ref": {
+        "module": "../due-date-field",
+        "name": "default"
+      },
+      "readMe": "# Due Date\n\n## Summary\nA calendar day something is expected by. The block states calendar facts and nothing else: `dueDays` (whole days from today, negative = past) and `dueness` (`overdue / today / soon / later`) are exported for consumers to sort and filter on, and the templates render them — embedded as the date plus a phrase pill (\"due tomorrow\", \"3 days overdue\"), atom as a short-date pill hued by dueness with the phrase as tooltip. A far-off date renders quiet (no fill) — information, not signal. Unset renders an em-dash: absent means \"no deadline\", never \"overdue\".\n\n## Usage\n```ts\nimport DueDateField, { dueDays, dueness } from './due-date-field';\n\n@field dueDate = contains(DueDateField);\n```\nSerializes exactly like `DateField` (`YYYY-MM-DD`), so an existing `dueDate: DateField` upgrades in place. The in-use example is wired when Quest Log (the layer-05 POC app) lands — its Task card carries the optional soft deadline this block was prioritized for. Primitive field — inline `containedExamples` unsupported in base.\n\n## Non-goals\nThe block cannot know the record completed, was paid, or was cancelled — a consumer whose lifecycle ends renders the raw date itself instead of mounting these templates (an invoice's tight fitted rows do exactly that). Reminders and nagging are a scheduler's job, not a field's. Date-with-time deadlines are `DateTimeField` territory; this is a calendar day.",
+      "cardInfo": {
+        "name": "Due Date",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

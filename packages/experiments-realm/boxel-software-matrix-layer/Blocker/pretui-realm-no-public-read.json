@@ -9,7 +9,8 @@
       "cardInfo": {
         "name": "Pretui realm has no public read",
         "summary": "Local render of pretui consumers fails; verify on staging"
-      }
+      },
+      "filedAt": "2026-08-21T09:00:00.000Z"
     },
     "meta": {
       "adoptsFrom": {

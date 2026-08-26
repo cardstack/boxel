@@ -15,11 +15,11 @@
       "catalogMatch": null,
       "provenance": null,
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1a: layer-05 configuration of the layer-03 statusField block; Spec live 2026-08-26; in-use example wired when Quest Log stage 2 lands (Quest.recordStatus, quest archiving).",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/record-status-field",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 0,
+      "specReadmeChars": 1394,
+      "specExampleIds": null
     },
     "meta": {
       "adoptsFrom": {

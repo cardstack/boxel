@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Created At field",
+      "specType": "field",
+      "ref": {
+        "module": "../created-at-field",
+        "name": "default"
+      },
+      "readMe": "# Created At\n\n## Summary\nWhen the record came into existence. Write-once by convention: the command or author that creates the record stamps it, and nothing rewrites it — the block renders the fact, it cannot enforce the discipline. Embedded shows the audit-precision form with relative recency (\"26 Aug 2026, 02:00 (4h ago)\"); atom is the compact relative form (\"4h ago\") with the absolute stamp as its tooltip. Unset renders an em-dash.\n\n## Usage\n```ts\nimport CreatedAtField from './created-at-field';\n\n@field createdAt = contains(CreatedAtField);\n```\nSerializes exactly like `DateTimeField` (ISO datetime), so an existing `createdAt: DateTimeField` upgrades in place with no instance migration. Consumed in this realm by the tracker's Blocker card (`filedAt`); the linked example is a filed blocker. Primitive field — inline `containedExamples` unsupported in base; the in-use instance stands in.\n\n## Non-goals\nAuto-stamping on save is a command/host concern, not a FieldDef's — a field cannot see writes. Last-change tracking is the sibling Updated At block. Calendar-day semantics (a hire date, a publish date) belong to `DateField`-family blocks; this is an instant.",
+      "cardInfo": {
+        "name": "Created At",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Blocker/primitive-fields-cannot-have-spec-examples"
+        }
+      }
+    }
+  }
+}

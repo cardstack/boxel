@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Updated At field",
+      "specType": "field",
+      "ref": {
+        "module": "../updated-at-field",
+        "name": "default"
+      },
+      "readMe": "# Updated At\n\n## Summary\nWhen the record last meaningfully changed. Monotonic by convention: whatever writes the record moves it forward on each meaningful edit, and decides what counts as meaningful (an index-driven touch usually should not). The atom leads with recency (\"2d ago\") because \"how fresh is this?\" is the question dense rows answer; embedded pairs the absolute stamp with the relative form. Unset renders an em-dash — a record never updated since creation shows Created At alone.\n\n## Usage\n```ts\nimport UpdatedAtField from './updated-at-field';\n\n@field updatedAt = contains(UpdatedAtField);\n```\nSerializes exactly like `DateTimeField`, so an existing `updatedAt: DateTimeField` upgrades in place. The in-use example is wired when Quest Log (the layer-05 POC app) lands — its Quest card carries `updatedAt` as the freshness signal on the quest board. Primitive field — inline `containedExamples` unsupported in base.\n\n## Non-goals\nThe block does not write itself — auto-touch on save is a command/host concern. It is not an audit trail: one timestamp, not a history (an Audit Timeline is its own concept). Creation time is the sibling Created At block.",
+      "cardInfo": {
+        "name": "Updated At",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

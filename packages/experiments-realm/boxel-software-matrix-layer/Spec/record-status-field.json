@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Record Status field",
+      "specType": "field",
+      "ref": {
+        "module": "../record-status-field",
+        "name": "default"
+      },
+      "readMe": "# Record Status\n\n## Summary\nThe record's own existence lifecycle — `Draft → Active → Archived`, with Archived always reversible. Deliberately distinct from any domain status: a quest can be mid-flight and archived, an invoice paid and archived. This field answers only \"is this record part of the working set?\", which is what makes generic Archive/Restore commands and working-view filters possible across domains. Built as a layer-05 configuration of the layer-03 `statusField` block, so it inherits the constrained dropdown, the hue-checked pills, and the transition graph (`canTransition`/`nextStatuses`) for free.\n\n## Usage\n```ts\nimport RecordStatusField from './record-status-field';\n\n@field recordStatus = contains(RecordStatusField);\n```\nArchived is a soft delete: kept, queryable, hidden from working views — a consumer's list query filters `recordStatus != 'Archived'` rather than deleting anything. The in-use example is wired when Quest Log (the layer-05 POC app) lands — quest archiving is an explicit acceptance criterion there. Primitive field — inline `containedExamples` unsupported in base.\n\n## Non-goals\nDomain process states (Open/Resolved, planned/done) belong in a consumer-configured `statusField` — never mixed into this set. Hard deletion is the platform's file-delete, not a status. Visibility/permissions are not lifecycle; a Draft is not \"private\", it is \"not ready\".",
+      "cardInfo": {
+        "name": "Record Status",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

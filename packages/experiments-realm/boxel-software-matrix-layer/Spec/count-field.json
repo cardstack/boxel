@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Count field",
+      "specType": "field",
+      "ref": {
+        "module": "../count-field",
+        "name": "default"
+      },
+      "readMe": "# Count\n\n## Summary\nA whole-number tally — things sold, sessions logged, pieces in a bundle. The block owns the display problem counts share: digit grouping at full size (\"47,200\") and compact notation where space is scarce (\"47.2K\" in the atom, full number as tooltip), with tabular numerals so columns of counts align. An explicit zero renders as a number; only null/undefined renders as the em-dash \"not counted\".\n\n## Usage\n```ts\nimport CountField from './count-field';\n\n@field ticketsSold = contains(CountField);\n```\nSerializes exactly like `NumberField`, so an existing count upgrades in place with no instance migration. Consumed in the shared realm by App 4's Match card (`ticketsSold`); the linked example is a match with 47,200 sold. Primitive field — inline `containedExamples` unsupported in base; the in-use instance stands in.\n\n## Non-goals\nThe block does not round or coerce — a fractional value is a writer bug the display should expose, not launder. Counting is the consumer's job (stored baseline or a computed rollup, per the decision-B rule); this block only displays the number. Quantities with units (3 kg, 2 hrs) belong to Quantity/Duration; money belongs to Money.",
+      "cardInfo": {
+        "name": "Count",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Match/harrow-vale-home"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Priority field",
+      "specType": "field",
+      "ref": {
+        "module": "../priority-field",
+        "name": "default"
+      },
+      "readMe": "# Priority\n\n## Summary\nHow urgent a record is, on a scale the consumer defines — deliberately separate from Status (where the record is in its process). The block carries the ORDER, not just labels: `priorityRank` makes queues sort by urgency instead of alphabetically, and unset sorts last so an untriaged record never outranks a deliberate P1. A neutral default (`Urgent / High / Normal / Low`) ships as the default export.\n\n## API\n- `priorityField(config)` — `config.options`: `{ value, label?, hue?, rank?, factor?, meaning? }[]`; `shortAtom` controls whether dense rows show the bare value.\n- `priorityRank(fieldClass, value)` — sort key; unset → MAX_SAFE_INTEGER.\n- `priorityFactor(fieldClass, value)` — multiplies a target duration (ServiceDesk uses it for SLA maths).\n- Embedded/atom render a `StatePill`; only the top priority gets the solid fill, so P1s pop in a queue without reading a word.\n\n## Usage\n```ts\nimport { priorityField } from './priority-field';\n\nconst TicketPriorityField = priorityField({\n  displayName: 'Ticket Priority',\n  options: [\n    { value: 'P1', hue: 'red', factor: 0.25 },\n    { value: 'P2', hue: 'orange', factor: 0.5 },\n    { value: 'P3', hue: 'amber', factor: 1 },\n    { value: 'P4', hue: 'slate', factor: 2 },\n  ],\n});\n```\nThe linked example is a ServiceDesk Ticket carrying a `priorityField` consumer. Primitive field — inline `containedExamples` unsupported in base; the in-use instance stands in.\n\n## Non-goals\nThe block has no opinion on what P1 means — the consumer supplies each level's `meaning`. Lifecycle state is the sibling Status block. SLA deadline computation is a command's job; the block only contributes the factor.",
+      "cardInfo": {
+        "name": "Priority",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Ticket/1288-invoice-download"
+        }
+      }
+    }
+  }
+}

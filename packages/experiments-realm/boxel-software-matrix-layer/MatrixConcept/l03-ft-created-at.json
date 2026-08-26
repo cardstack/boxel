@@ -15,12 +15,12 @@
       "catalogMatch": null,
       "provenance": "periodic:Created At | BSL",
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
-      "consumers": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1a (layer-05 POC app): built 2026-08-26; first consumer Blocker.filedAt.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/created-at-field",
+      "specTarget": "shared block",
+      "consumers": "blocker",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T07:16:07.000Z",
+      "specKind": "field",
+      "specExampleCount": 1,
+      "specReadmeChars": 1172,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Blocker/primitive-fields-cannot-have-spec-examples\"]"
     },
     "meta": {
       "adoptsFrom": {

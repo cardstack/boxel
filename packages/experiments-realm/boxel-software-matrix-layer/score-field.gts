@@ -206,3 +206,5 @@ export class ScoreField extends NumberField {
     </template>
   };
 }
+
+export default ScoreField;
