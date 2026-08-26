@@ -313,7 +313,6 @@ export interface RaiseStep extends StepBase {
  * size (damped by default — the relative-scale research's curves, §6.4).
  */
 export interface CameraStep extends StepBase {
-  ease?: Easing;
   /**
    * Dive on this sprite and centre it: the library computes zoom AND pan
    * from the sprite's rest-layout box and the frame's own size — the same
@@ -322,6 +321,9 @@ export interface CameraStep extends StepBase {
    * says "fit nothing": back to the resting identity. `@zoom` alongside
    * overrides the computed magnification but keeps the centring.
    */
+  /** recentre on this sprite, zoom held — the Aim preset's field */
+  aim?: Query;
+  ease?: Easing;
   fit?: Query | null;
   kind: 'camera';
   /**
@@ -332,12 +334,16 @@ export interface CameraStep extends StepBase {
   ms?: number;
   /** aim the zoom at this sprite's centre — held in place, not recentred */
   origin?: Query;
+  /** shift the pose in force by this many px — the Pan preset's field */
+  panBy?: { x?: number; y?: number };
   spring?: SpringSpec;
   /** sprites that hold their size against the zoom, damped */
   steady?: Query | Query[];
   x?: number;
   y?: number;
   zoom?: number;
+  /** multiply the zoom in force by this factor — the SlowZoom preset */
+  zoomBy?: number;
 }
 
 /**
@@ -510,6 +516,8 @@ export interface Cue {
   borrow?: boolean;
   /** camera: drive the region's frame */
   camera?: {
+    /** relative move: resolved against the pose in force at cue start */
+    by?: { x?: number; y?: number; zoom?: number };
     /** the frame's centre in the same final layout `origin` was measured in */
     centre?: { x: number; y: number };
     origin?: { x: number; y: number };

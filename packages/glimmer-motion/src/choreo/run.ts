@@ -257,6 +257,9 @@ interface Track {
   cameraFrom?: CameraState;
   /** camera: eased progress of the live step, for the aim-term lerp */
   cameraP?: number;
+  /** camera: the resolved absolute target — relative cues (`by`) resolve
+   * against the pose in force at start, absolute cues fill from it */
+  cameraTo?: CameraState;
   controls?: AnimationPlaybackControls[];
   cue: Cue;
   delivery?: Delivery;
@@ -845,8 +848,10 @@ export class ChoreoRun implements Run {
           t.aimFrom = this.cameraAim ?? aimTo;
           t.aimTo = aimTo;
           this.cameraAim = aimTo;
+          t.cameraTo = ChoreoRun.resolveCameraTo(cue.camera, t.cameraFrom!);
         } else if (!inside && t.started && now < t.start) {
           t.started = false;
+          t.cameraTo = undefined;
           t.cameraAnimation?.cancel();
           t.cameraAnimation = undefined;
           if (t.cameraFrom) {
@@ -867,12 +872,12 @@ export class ChoreoRun implements Run {
           // guard downstream never sees the same state twice.
           const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
-          const to = cue.camera.to;
+          const to = t.cameraTo ?? ChoreoRun.resolveCameraTo(cue.camera, from);
           t.cameraP = p;
           this.camera = {
-            x: from.x + ((to.x ?? from.x) - from.x) * p,
-            y: from.y + ((to.y ?? from.y) - from.y) * p,
-            zoom: from.zoom + ((to.zoom ?? from.zoom) - from.zoom) * p,
+            x: from.x + (to.x - from.x) * p,
+            y: from.y + (to.y - from.y) * p,
+            zoom: from.zoom + (to.zoom - from.zoom) * p,
           };
           // the platform draws the frame while playing (§6.3 on WAAPI): the
           // whole scene composites off the main thread. Stills stay inline.
@@ -1124,6 +1129,26 @@ export class ChoreoRun implements Run {
    */
   cameraAim: { x: number; y: number } | null = null;
 
+  /**
+   * The absolute pose a camera cue lands on, resolved against the pose it
+   * starts from. Absolute fields pass through; missing fields hold; a
+   * relative cue (Pan / SlowZoom) offsets and multiplies the pose in
+   * force — which is why resolution happens AT START (live) or during the
+   * prefix fold (reconstruction), never at compile.
+   */
+  private static resolveCameraTo(
+    cue: NonNullable<Cue['camera']>,
+    from: CameraState,
+  ): CameraState {
+    const { by, to } = cue;
+    return {
+      x: by?.x !== undefined ? from.x + by.x : (to.x ?? from.x),
+      y: by?.y !== undefined ? from.y + by.y : (to.y ?? from.y),
+      zoom:
+        by?.zoom !== undefined ? from.zoom * by.zoom : (to.zoom ?? from.zoom),
+    };
+  }
+
   private cameraProgress(t: Track, ms: number): number {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
@@ -1176,6 +1201,7 @@ export class ChoreoRun implements Run {
         t.started = false;
         t.passed = false;
         t.cameraP = 0;
+        t.cameraTo = undefined;
         t.aimFrom = aim ?? undefined;
         t.aimTo = aim ?? undefined;
         t.cameraAnimation?.cancel();
@@ -1191,14 +1217,14 @@ export class ChoreoRun implements Run {
       // a track that had already passed under live play paints nothing
       t.passed = false;
       t.cameraFrom = { ...state };
+      t.cameraTo = ChoreoRun.resolveCameraTo(cue, t.cameraFrom);
       t.aimFrom = aim ?? aimTo;
       t.aimTo = aimTo;
       aim = aimTo;
       if (now >= t.end) {
-        const { to } = cue;
-        state.x = to.x ?? state.x;
-        state.y = to.y ?? state.y;
-        state.zoom = to.zoom ?? state.zoom;
+        state.x = t.cameraTo.x;
+        state.y = t.cameraTo.y;
+        state.zoom = t.cameraTo.zoom;
         t.cameraP = 1;
         // its flight is over: the inline still owns the frame again
         t.cameraAnimation?.cancel();
@@ -1270,15 +1296,12 @@ export class ChoreoRun implements Run {
   private startCameraAnimation(t: Track, now: number) {
     const host = this.options.cameraFrame;
     const from = t.cameraFrom;
-    const to = t.cue.camera?.to;
-    if (!host || !from || !to) {
+    const cue = t.cue.camera;
+    if (!host || !from || !cue) {
       return;
     }
-    const final: CameraState = {
-      x: to.x ?? from.x,
-      y: to.y ?? from.y,
-      zoom: to.zoom ?? from.zoom,
-    };
+    const final: CameraState =
+      t.cameraTo ?? ChoreoRun.resolveCameraTo(cue, from);
     const span = Math.max(1, t.end - t.start);
     const anim = host.animate(
       [

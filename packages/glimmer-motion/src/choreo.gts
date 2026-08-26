@@ -41,17 +41,21 @@ import {
 import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
 import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
+  Aim,
   Camera,
   collect,
   Crossing,
   Follow,
+  Frame,
   Gate,
   Hold,
   Move,
+  Pan,
   Parallel,
   Raise,
   Scroll,
   Sequence,
+  SlowZoom,
   Spring,
   Tether,
   Tween,
@@ -81,16 +85,20 @@ const selector = (type?: Query['type']): Selector =>
 
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
+  Aim: typeof Aim;
   Camera: typeof Camera;
   Crossing: typeof Crossing;
   Follow: typeof Follow;
+  Frame: typeof Frame;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Move: typeof Move;
+  Pan: typeof Pan;
   Parallel: typeof Parallel;
   Raise: typeof Raise;
   Scroll: typeof Scroll;
   Sequence: typeof Sequence;
+  SlowZoom: typeof SlowZoom;
   Spring: typeof Spring;
   Tether: typeof Tether;
   Tween: typeof Tween;
@@ -127,16 +135,20 @@ export interface ChoreoContext {
 
 function contextFor(region: Choreo): ChoreoContext {
   return {
+    Aim,
     Camera,
     Crossing,
     Follow,
+    Frame,
     Gate,
     Hold,
     Move,
+    Pan,
     Parallel,
     Raise,
     Scroll,
     Sequence,
+    SlowZoom,
     Spring,
     Tether,
     Tween,

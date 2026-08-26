@@ -19,6 +19,19 @@ const DURATION = 15;
  * the camera and the titles.
  */
 const GLIDE = [0.65, 0, 0.35, 1] as const;
+/** the clock plane's pulse returns exactly whence it came */
+const UNPULSE = 1 / 1.3;
+
+/** SMPTE timecode at the composition's 60fps: HH:MM:SS:FF */
+const timecode = (t: number): string => {
+  // derive from whole frames, not float remainders: 5.1 % 1 is
+  // 0.0999…964, and a floor there drops a frame the clock never skipped
+  const frames = Math.round(Math.max(0, t) * 60);
+  const f = frames % 60;
+  const sec = Math.floor(frames / 60);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(Math.floor(sec / 3600))}:${pad(Math.floor(sec / 60) % 60)}:${pad(sec % 60)}:${pad(f)}`;
+};
 
 interface SeekableDemoElement extends HTMLElement {
   seekDemo?: (time: number) => PromiseLike<void> | void;
@@ -37,12 +50,17 @@ export class FeatureReel extends Component {
   private c?: { run: ChoreoRun | null };
   private t?: { run: ChoreoRun | null };
   private b?: { run: ChoreoRun | null };
+  private k?: { run: ChoreoRun | null };
   private score: ChoreoRun | null = null;
   private titleScore: ChoreoRun | null = null;
   private brandScore: ChoreoRun | null = null;
+  private clockScore: ChoreoRun | null = null;
   private externallyDriven = false;
   private raf = 0;
-  private previewStart = 0;
+  /** the preview's own clock: clamped per-frame deltas, so a hidden tab
+   * (where rAF stalls but wall time marches) pauses instead of skipping */
+  private previewClock = 0;
+  private lastTick = 0;
   private resolveReady!: () => void;
   private ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
@@ -53,7 +71,7 @@ export class FeatureReel extends Component {
    * preview the demos play their own engines.
    */
   private compositor = createCompositor({
-    automations: [],
+    automations: [{ name: 'time', sample: (t: number) => t, target: 'clock' }],
     // the reel's editorial structure IS clips now: each demo take is a
     // declared source-time window instead of a hand-rolled offset, and
     // the poster is the hard cut — a plate that opens the film and cuts
@@ -119,6 +137,14 @@ export class FeatureReel extends Component {
         }
         runs.push(brand);
       }
+      const clock = this.k?.run ?? this.clockScore;
+      if (clock) {
+        if (clock !== this.clockScore) {
+          clock.pause();
+          this.clockScore = clock;
+        }
+        runs.push(clock);
+      }
       return runs;
     },
     // cue-driven state is ordinary tracked state; two macrotasks let
@@ -170,14 +196,25 @@ export class FeatureReel extends Component {
         time: (v) =>
           void q<SeekableDemoElement>('.reel-beacons .ex')?.seekDemo?.(v),
       },
-      // no reset: the inbox has no cheap return to its seed rows; the
-      // compose port is idempotent, so a backward replay cannot double it
+      reset: () => {
+        // the composed row goes back out the way everything here moves:
+        // through the demo's own delete control, flight and all
+        this.root
+          ?.querySelectorAll<HTMLElement>('.reel-beacons .mail')[3]
+          ?.querySelector<HTMLButtonElement>('button')
+          ?.click();
+      },
     });
     this.compositor.register('poster', {
       presence: (present) => {
         if (this.poster !== present) {
           this.poster = present;
         }
+      },
+    });
+    this.compositor.register('clock', {
+      parameters: {
+        time: (v) => this.paintClock(v),
       },
     });
     this.compositor.register('build', {
@@ -228,6 +265,12 @@ export class FeatureReel extends Component {
     }
   );
 
+  wireClock = modifier(
+    (_el: Element, [k]: [{ run: ChoreoRun | null }, number]) => {
+      this.k = k;
+    }
+  );
+
   register = modifier((el: HTMLElement) => {
     this.root = el;
     const shell = el.closest<HTMLElement>('.app-shell');
@@ -271,14 +314,29 @@ export class FeatureReel extends Component {
     if (this.externallyDriven || this.isDestroying) {
       return;
     }
-    this.previewStart ||= performance.now();
-    const previewTime = Math.min(
-      DURATION,
-      Math.max(0, (performance.now() - this.previewStart) / 1000)
-    );
+    const nowMs = performance.now();
+    const dt = this.lastTick
+      ? Math.min((nowMs - this.lastTick) / 1000, 0.1)
+      : 0;
+    this.lastTick = nowMs;
+    this.previewClock += dt;
+    if (this.previewClock >= DURATION + 1.2) {
+      // the film loops: hold the lockup a beat, fold the commands home
+      // (the lightbox closes, the composed row goes back out through the
+      // demo's own delete), and a take bump compiles every plane a fresh
+      // score — the same first-render-plays-nothing rule as a new visit
+      this.previewClock = 0;
+      void this.compositor.foldTo(0, { parameters: false });
+      this.take++;
+      this.raf = requestAnimationFrame(this.tick);
+      return;
+    }
+    const previewTime = Math.min(DURATION, this.previewClock);
     this.adoptForPreview(this.c?.run ?? null, 'score', previewTime);
     this.adoptForPreview(this.t?.run ?? null, 'titleScore', previewTime);
     this.adoptForPreview(this.b?.run ?? null, 'brandScore', previewTime);
+    this.adoptForPreview(this.k?.run ?? null, 'clockScore', previewTime);
+    this.paintClock(previewTime);
     void this.compositor.foldTo(previewTime, { parameters: false });
     if (this.root) {
       this.root.dataset.scoreTime = previewTime.toFixed(3);
@@ -286,9 +344,18 @@ export class FeatureReel extends Component {
     this.raf = requestAnimationFrame(this.tick);
   };
 
+  private paintClock(t: number) {
+    const tc = this.root?.querySelector('.reel-clock-tc');
+    if (tc) {
+      // the last frame of a 15s/60fps film is 14:59f59 — a clock that
+      // reads 15:00 names a frame the film does not have
+      tc.textContent = timecode(Math.min(t, DURATION - 1 / 60));
+    }
+  }
+
   private adoptForPreview(
     run: ChoreoRun | null,
-    key: 'brandScore' | 'score' | 'titleScore',
+    key: 'brandScore' | 'clockScore' | 'score' | 'titleScore',
     previewTime: number
   ) {
     if (!run || run === this[key]) {
@@ -390,61 +457,63 @@ export class FeatureReel extends Component {
             docs/external-clock-camera-seek-handoff.md records. The score
             staying Wait-based IS the proof the transport reconstructs. }}
         <c.Sequence>
-          <c.Camera
-            @fit={{c.id "reel-lightbox-scene"}}
-            @margin={{1}}
+          <c.Frame
+            @of={{c.id "reel-lightbox-scene"}}
+            @padding={{1}}
             @duration={{0.01}}
           />
           <c.Wait @duration={{0.44}} />
-          <c.Camera
-            @fit={{c.id "reel-lightbox-aim"}}
-            @margin={{0.82}}
+          <c.Frame
+            @of={{c.id "reel-lightbox-aim"}}
+            @padding={{0.82}}
             @duration={{1}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{1.2}} />
-          <c.Camera
-            @fit={{c.id "reel-beacons-scene"}}
-            @margin={{1}}
+          <c.Frame
+            @of={{c.id "reel-beacons-scene"}}
+            @padding={{1}}
             @duration={{1.15}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{0.55}} />
-          <c.Camera
-            @fit={{c.id "reel-beacon-aim"}}
-            @margin={{0.84}}
+          <c.Frame
+            @of={{c.id "reel-beacon-aim"}}
+            @padding={{0.84}}
             @duration={{1}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{1.1}} />
-          <c.Camera
-            @fit={{c.id "reel-build-scene"}}
-            @margin={{1}}
+          <c.Frame
+            @of={{c.id "reel-build-scene"}}
+            @padding={{1}}
             @duration={{1.2}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{0.1}} />
-          <c.Camera
-            @fit={{c.id "reel-build-logo-aim"}}
-            @margin={{0.82}}
+          <c.Frame
+            @of={{c.id "reel-build-logo-aim"}}
+            @padding={{0.82}}
             @duration={{1}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{1}} />
-          <c.Camera
-            @fit={{c.id "reel-build-panel-aim"}}
-            @margin={{0.8}}
+          <c.Frame
+            @of={{c.id "reel-build-panel-aim"}}
+            @padding={{0.8}}
             @duration={{1.05}}
             @ease={{GLIDE}}
           />
           <c.Wait @duration={{1}} />
-          <c.Camera
-            @fit={{c.id "reel-build-logo-aim"}}
-            @margin={{0.82}}
+          <c.Frame
+            @of={{c.id "reel-build-logo-aim"}}
+            @padding={{0.82}}
             @duration={{1.1}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{2.1}} />
+          {{! the hold gets its life from a push-in: 5% over the whole
+              lockup, toward the aim in force — the logo }}
+          <c.SlowZoom @by={{1.05}} @duration={{2.1}} @ease={{GLIDE}} />
         </c.Sequence>
       </Choreo>
 
@@ -454,7 +523,12 @@ export class FeatureReel extends Component {
           with the inserted chip, and the flight is part of this plane's
           own seekable score. The plate leaves as an ordinary removed
           sprite the score fades. }}
-      <Choreo class="reel-brand" @quiet={{true}} as |b|>
+      <Choreo
+        class="reel-plane reel-brand"
+        data-plane="brand"
+        @quiet={{true}}
+        as |b|
+      >
         <div
           class="reel-brand-strip"
           data-take={{this.take}}
@@ -506,7 +580,12 @@ export class FeatureReel extends Component {
           world — viewport-anchored typography the demo camera cannot drag.
           Its fade is a plain tween on the plane's actors: the experiment
           that keeps the addressable control channel unbuilt. }}
-      <Choreo class="reel-titles" @quiet={{true}} as |lt|>
+      <Choreo
+        class="reel-plane reel-titles"
+        data-plane="titles"
+        @quiet={{true}}
+        as |lt|
+      >
         <div
           class="reel-titles-strip"
           data-take={{this.take}}
@@ -601,6 +680,45 @@ export class FeatureReel extends Component {
           />
           <lt.Wait @duration={{1.4}} />
         </lt.Sequence>
+      </Choreo>
+
+      {{! The clock plane: a debug SMPTE readout with its OWN camera —
+          independent zoom on an overlay plane, pulsing in during scene
+          transitions while the world's camera flies its own path. The
+          aim is set once (a zero-length cue with an @origin and no pose)
+          so every relative pulse zooms about the clock itself. }}
+      <Choreo
+        class="reel-plane reel-clock"
+        data-plane="clock"
+        @quiet={{true}}
+        as |k|
+      >
+        <div
+          class="reel-clock-strip"
+          data-take={{this.take}}
+          {{this.wireClock k this.take}}
+        >
+          <div class="reel-clock-face" {{motion id="clock-face" role="clock"}}>
+            <span class="reel-clock-label">SMPTE 60</span>
+            <span class="reel-clock-tc">00:00:00:00</span>
+          </div>
+        </div>
+        <k.Sequence>
+          <k.Camera @origin={{k.id "clock-face"}} @duration={{0.01}} />
+          <k.Wait @duration={{2.64}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.45}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{2.65}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.5}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{4.15}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.4}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{2.1}} />
+        </k.Sequence>
       </Choreo>
     </div>
   </template>

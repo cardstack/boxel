@@ -116,12 +116,21 @@ module('Acceptance | feature reel transport', function (hooks) {
     );
 
     // the closing shot RETURNS to the logo aim: a different time, the same
-    // declared pose — reconstruction must land both on the identical pixel
-    await reel().renderAt(14.5);
+    // declared pose — reconstruction must land both on the identical pixel.
+    // 12.9s is the re-frame's landing, the instant before the push-in
+    await reel().renderAt(12.9);
     assert.strictEqual(
       worldTransform(),
       buildLogo,
-      '14.5s and 8.9s declare the same aim and paint the same frame'
+      '12.9s and 8.9s declare the same aim and paint the same frame'
+    );
+
+    // the lockup's SlowZoom is RELATIVE and must fold under random access:
+    // deeper into the hold, the zoom has grown past the landed pose
+    await reel().renderAt(14.5);
+    assert.true(
+      zoomOf(worldTransform()) > zoomOf(buildLogo) * 1.005,
+      `14.5s: the push-in is under way (${worldTransform()})`
     );
 
     // random access must agree with itself: back to the failure time after
@@ -240,6 +249,39 @@ module('Acceptance | feature reel transport', function (hooks) {
     assert.true(
       reflight !== '' && reflight !== 'none',
       `0.8s after a recross: a fresh forward pair flies again (${reflight})`
+    );
+  });
+
+  test('the clock plane keeps SMPTE time and pulses on its own camera', async function (assert) {
+    await visit('/_feature-reel');
+
+    // the readout is a parameter channel: pure function of the clock
+    await reel().renderAt(8.9);
+    assert.strictEqual(
+      (find('.reel-clock-tc') as HTMLElement).textContent,
+      '00:00:08:54',
+      '8.9s is frame 54 of second 8'
+    );
+
+    // mid-transition (the world camera crossing to Build Order) the clock
+    // plane's OWN camera is pulsed in — independent zoom on an overlay
+    await reel().renderAt(7.0);
+    const clockPlane = find('.reel-clock[data-choreo]') as HTMLElement;
+    assert.true(
+      Math.abs(zoomOf(clockPlane.style.transform) - 1.3) < 0.02,
+      `7.0s: the clock plane stands pulsed (${clockPlane.style.transform})`
+    );
+
+    // and between transitions the pulse has returned whence it came
+    await reel().renderAt(5.1);
+    assert.true(
+      Math.abs(zoomOf(clockPlane.style.transform) - 1) < 0.005,
+      `5.1s: the clock plane is at rest (${clockPlane.style.transform})`
+    );
+    assert.strictEqual(
+      (find('.reel-clock-tc') as HTMLElement).textContent,
+      '00:00:05:06',
+      '5.1s is frame 6 of second 5'
     );
   });
 });

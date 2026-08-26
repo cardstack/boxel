@@ -9075,3 +9075,48 @@ html[data-gm-dragging] * {
     sans-serif;
   letter-spacing: -0.02em;
 }
+
+/* ── The plane family and the clock plane ────────────────────────────────
+   Every overlay is a named plane: its own Choreo region, its own camera.
+   The clock is the debug member — an SMPTE readout whose plane camera
+   pulses in during scene transitions, independent of the world's dive. */
+.reel-plane {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.reel-clock {
+  z-index: 18;
+}
+
+.reel-clock-face {
+  position: absolute;
+  bottom: 3.4%;
+  left: 50%;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border: 1px solid rgba(243, 236, 227, 0.28);
+  border-radius: 4px;
+  background: rgba(9, 11, 16, 0.72);
+  color: #f3ece3;
+  transform: translateX(-50%);
+}
+
+.reel-clock-label {
+  color: #ff3b1f;
+  font:
+    500 12px/1 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.18em;
+}
+
+.reel-clock-tc {
+  font:
+    500 20px/1 'IBM Plex Mono',
+    monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
