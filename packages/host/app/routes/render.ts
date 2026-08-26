@@ -1505,7 +1505,25 @@ export default class RenderRoute extends Route<Model> {
         current = current?.parent;
       }
     } while (current && !id);
-    return id;
+    if (id) {
+      return id;
+    }
+    // The RouteInfo params aren't always resolved when this runs — most
+    // importantly at `beforeModel` entry (where the stash is taken) and on a
+    // pre-model rejection, whose `transition.to` is the leaf RouteInfo that
+    // never carries `:id`. `window.location` is no help there either: it is
+    // still the standby page mid in-app transition. The URL the transition is
+    // *heading to* is the one reliable record — `/render/:id/:nonce/:options`
+    // — so recover the id from it directly.
+    let intentUrl = (transition as { intent?: { url?: string } } | undefined)
+      ?.intent?.url;
+    if (intentUrl) {
+      let match = /\/render\/([^/]+)\//.exec(intentUrl);
+      if (match?.[1]) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return undefined;
   }
 
   #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
