@@ -71,6 +71,11 @@ toPage(localBox, cam)  = localBox × z + applied(cam)
 toLocal(pageBox, cam)  = (pageBox − applied(cam)) / z
 ```
 
+A plane that scrolls (a shelf's row, a list) adds its scroll offset to
+the same arithmetic — `local = (page − applied)/z + scroll` — which is
+the one place a DOM read (the scroll position) legitimately enters, read
+once per conversion, never per frame.
+
 These two functions ARE the compositor ⇄ plane-local ⇄ viewport
 conversion the composition doc promised. They should ship as exported
 pure functions (unit-testable with no browser), and they are the entire
@@ -155,6 +160,60 @@ demo-recording.md apply unchanged. The one caveat carried over from the
 brand crossing: recrossing a boundary backward pairs the reverse flight
 — interactive scrub semantics; a monotonic capture never recrosses.
 
+## Interactive planes (the shelf is the reference)
+
+A plane is not only a surface to direct — it is a surface to USE. The
+reference case is bento-boxel's shelf (`app/components/shelf.gts`
+there): a tray that reveals in levels, yields a slot to a card in hand,
+and materializes the card on release. Its concepts, abstracted, are the
+interactive half of the plane contract — and every one of them is app
+state plus existing machinery, not a new engine concept.
+
+**Reveal levels.** A plane presents itself: hidden / peek / full. The
+shelf's law is the one to keep: **one sheet, never one pane per level**
+— the level is a class and a content swap on the same element, so two
+panes can never cross-fade and a level change cannot strand one
+mid-exit. The plane's own arrival and departure is ordinary Presence;
+its levels are ordinary tracked state. Under the compositor, reveal is a
+semantic action port (`shelf.reveal { level }`) — idempotent, foldable,
+so a directed cut or a recorded session drives the same shelf a finger
+does.
+
+**The plane as a drop target.** While a sprite is in hand (pointer
+capture, moving in compositor space), the receiving plane declares its
+intent with a **ghost slot**: hit-test the pointer through the
+coordinate contract (`toLocal`, scroll included) to a slot index, splice
+a ghost cell there, and let the plane's own layout yield — the shelf
+gives the ghost a sprung width, so the row physically makes room. The
+ghost is a preview WITHOUT commitment: pure receiving-plane state,
+trivially reversible by removing the cell, and expressible as a
+parameter port (`shelf.hoverIndex`) so a recorded drag replays through
+the same fold as a live one.
+
+**Materialization at the boundary.** The shelf's rule generalizes: the
+in-hand representation persists until release; the receiving
+representation is born AT the boundary pass and receives the flight —
+"the fly-down finishes the materialization." In plane terms this is the
+cross-plane move (§ above) with one addition: the two halves of the pair
+are DIFFERENT RENDERINGS of one identity (board card ⇄ shelf tile), so
+the flight is a counterpart crossfade riding the Move, exactly the
+brand-crossing shape. Commit happens as one semantic command on release
+— the single boundary pass — and the ghost cell it lands in is already
+holding the layout open, which is what makes the landing relayout-free.
+
+**The duality is the point.** Every interactive concept above has a
+directed twin through the compositor's ports: reveal is an action, the
+hover index is a parameter, the drop is a command. A shelf built this
+way is simultaneously a UI a person uses, a scene a director can cue,
+and a replay a recorder can seek — the composition doc's
+interactive-first table, made concrete.
+
+The shelf is also the natural **second composition** the packaging
+checkpoint asks for: a different plane family (workspace / shelf /
+in-hand escort) with different policies (yield, levels, drop) — if the
+plane convention and the coordinate contract hold there too, THAT is
+the evidence that promotes them.
+
 ## Direction across planes (the hand-in-hand table)
 
 What the reel already stages, as the pattern to generalize:
@@ -182,8 +241,16 @@ world geometry, so nothing couples except the clock.
    a sprite between two reel planes; both reflows declared in the plane
    scores; capture parity at checkpoints. This is the vertical-slice
    proof and the second real user of the plane convention.
-4. **Escort flight** — only when a composition needs to cross above
+4. **Ghost slot + hit test** — pointer → `toLocal` → slot index → a
+   sprung ghost cell in the receiving plane; proven interactively AND
+   through the parameter port with a replayed drag.
+5. **Materializing drop** — the release command: one boundary pass,
+   different renderings paired as counterparts, the flight landing in
+   the held-open slot. The shelf case, in the second composition.
+6. **Escort flight** — only when a composition needs to cross above
    unrelated planes; two far matches, a top plane, no new engine types.
+   (An in-hand sprite during a drag is the escort's natural first
+   customer — the ghost/drop steps will tell us if it can wait.)
 
 Out of scope, restated: no core `Plane` type, no plane registry, no
 cross-plane drag engine (drag = pointer capture + these same coordinate
