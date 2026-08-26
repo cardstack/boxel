@@ -8,10 +8,10 @@ import {
   type ChoreoContext,
   createArming,
   motion,
-  spring,
   styles,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
+import { factor } from 'test-app/lib/tempo';
 
 const slides = [0, 1, 2] as const;
 type Slide = (typeof slides)[number];
@@ -19,8 +19,21 @@ type Mode = 'manual' | 'auto' | 'stress';
 
 const labels = ['01  Tide', '02  Ember', '03  Violet'] as const;
 
-/** Loose on purpose: a stiff spring lands before you can cut into it. */
-const flight = spring({ bounce: 0.12, visualDuration: 0.58 });
+/**
+ * Same morph as the gallery ⇄ demo crossing in `application.gts`: one
+ * duration, one ease. A spring lands before you can read the skins swap.
+ */
+const BASE = 0.9;
+const EASE = [0.2, 0, 0, 1] as const;
+
+function t() {
+  const m = BASE * factor();
+  return {
+    arrive: 0.55 * m,
+    leave: 0.42 * m,
+    move: m,
+  };
+}
 
 function radiusFor(slide: Slide) {
   return ['28px', '36px', '0px'][slide]!;
@@ -65,9 +78,10 @@ const STRESS = 0.72;
  *
  * Three full-viewport slides as counterpart trees: same ids (`xstress-hero`,
  * `xstress-title`, `xstress-chip`) in each, unique washes and ornaments. One
- * `<c.Crossing>` is the whole move — Keynote's rule: whatever paired, flies;
- * whatever didn't, fades. The canned step does not care whether the sprite
- * is a plate, a word, or a pill.
+ * `<c.Crossing>` is the whole move — Keynote's rule, the same canned step
+ * as the homepage: whatever paired, flies, the old skin riding above the
+ * new one so type, pills, and plates crossfade (and the radius travels
+ * because it was declared to the engine). Whatever didn't pair, fades.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
  * Loops are CSS transforms on the motion nodes themselves, so the pass
@@ -279,10 +293,18 @@ export class CrossingStress extends Component {
         <span hidden {{this.wire c}}></span>
 
         {{#if this.crossing}}
-          {{! One composite, every matched id — plate, type, chip. Unmatched
-              washes and sparks leave/arrive. @swap="none": each identity
-              is one skin; a during-crossfade of identical fills dims. }}
-          <c.Crossing @swap="none" @spring={{flight}} />
+          {{#let (t) as |tt|}}
+            {{! Same canned crossing as application.gts: default @swap="during"
+                so the leaving title/chip/hero ride the flight and dissolve
+                above the arriving ones — a @swap="none" cut is a jump. }}
+            <c.Crossing
+              @duration={{tt.move}}
+              @ease={{EASE}}
+              @leave={{tt.leave}}
+              @arrive={{tt.arrive}}
+              @overlap={{0.18}}
+            />
+          {{/let}}
         {{/if}}
 
         {{#each deck as |s|}}
@@ -318,7 +340,11 @@ export class CrossingStress extends Component {
               <small
                 class="xstress-chip {{s.tone}}"
                 data-test-chip
-                {{motion id="xstress-chip" role="chip"}}
+                {{motion
+                  id="xstress-chip"
+                  role="chip"
+                  style=(styles borderRadius="999px")
+                }}
               >{{s.chip}}</small>
             </section>
           {{/if}}

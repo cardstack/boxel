@@ -70,6 +70,18 @@ module('Acceptance | crossing stress', function (hooks) {
     await settled();
     assert.strictEqual(root.dataset.phase, 'crossing', 'a cut arms the flight');
     assert.strictEqual(root.dataset.slide, '1', 'Ember is the destination');
+    assert.ok(
+      document.querySelector('[data-choreo-orphans] [data-test-title]'),
+      'the leaving title rides the flight as a skin (homepage swap=during)'
+    );
+    assert.ok(
+      document.querySelector('[data-choreo-orphans] [data-test-chip]'),
+      'the leaving chip rides the flight as a skin'
+    );
+    assert.ok(
+      document.querySelector('[data-choreo-orphans] [data-test-hero]'),
+      'the leaving plate rides the flight as a skin'
+    );
 
     await animationsSettled();
     assert.strictEqual(

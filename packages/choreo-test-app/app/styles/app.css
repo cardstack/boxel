@@ -3533,7 +3533,15 @@ html[data-gm-dragging] * {
   width: 22vmin;
   height: 22vmin;
   overflow: clip;
-  background: linear-gradient(160deg, #f4efe6 0%, #e8d9c4 52%, #d4b48a 100%);
+  /* solid paint so the crossing's color-true crossfade has an rgb() to
+     tween — a gradient-only plate reports transparent and the pair dips */
+  background-color: #e8d9c4;
+  background-image: linear-gradient(
+    160deg,
+    #f4efe6 0%,
+    #e8d9c4 52%,
+    #d4b48a 100%
+  );
   box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
   z-index: 2;
 }
