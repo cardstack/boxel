@@ -16,6 +16,7 @@ import { setupApplicationTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import { resetCrossing } from 'test-app/lib/crossing';
 import { setTempo } from 'test-app/lib/tempo';
+import { setThemeMode } from 'test-app/lib/theme';
 
 const frames = (n: number) =>
   new Promise<void>((resolve) => {
@@ -36,6 +37,27 @@ const blurOf = () => {
   const filter = getComputedStyle(find('[data-test-escort-shadow]')!).filter;
   return Number(/blur\(([\d.]+)px\)/.exec(filter)?.[1] ?? NaN);
 };
+
+/** the three channels the follower writes, as the page has resolved them */
+const castStyle = () => {
+  const s = getComputedStyle(find('[data-test-escort-shadow]')!);
+  return { filter: s.filter, opacity: s.opacity, transform: s.transform };
+};
+
+/** the ink at the centre of the cast, out of the resolved gradient */
+const castAlpha = () => {
+  const { backgroundImage } = getComputedStyle(
+    find('[data-test-escort-shadow]')!
+  );
+  const rgba =
+    /rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)/.exec(
+      backgroundImage
+    );
+  return rgba ? Number(rgba[1]) : 1;
+};
+
+const numberVar = (name: string) =>
+  Number(getComputedStyle(document.documentElement).getPropertyValue(name));
 
 module('Acceptance | escort', function (hooks) {
   setupApplicationTest(hooks);
@@ -62,6 +84,7 @@ module('Acceptance | escort', function (hooks) {
   });
   hooks.afterEach(function () {
     viewport?.remove();
+    setThemeMode('dark');
     resetCrossing();
   });
 
@@ -129,6 +152,72 @@ module('Acceptance | escort', function (hooks) {
       Math.abs(shadow().width - restWidth) < 2,
       `and its resting width (${shadow().width.toFixed(1)})`
     );
+  });
+
+  // CAST_REST in escort.gts is a copy of what the stylesheet already says
+  // the shadow is. Nothing in either file makes the copy true, and the two
+  // are edited for different reasons — restyle the cast and the follower
+  // keeps handing back last month's values. The handover is only seamless
+  // where they agree, so this pins the agreement to the page itself: the
+  // state the stylesheet paints BEFORE any flight is the state the window
+  // closing must put back, string for string.
+  test('the follower hands the shadow back to exactly the stylesheet it took it from', async function (assert) {
+    await visit('/escort');
+    await frames(6);
+    const stylesheet = castStyle();
+    assert.strictEqual(
+      stylesheet.transform,
+      'none',
+      'the untouched shadow has no transform to match'
+    );
+
+    await click('[data-test-bay="2"]');
+    await frames(4);
+    assert.notDeepEqual(
+      castStyle(),
+      stylesheet,
+      'the follower is driving it (or this test proves nothing)'
+    );
+
+    // past the follow window (1.6s), which deliberately outlives the spring
+    await frames(120);
+    assert.deepEqual(
+      castStyle(),
+      stylesheet,
+      'and the window closing put back what the stylesheet had'
+    );
+  });
+
+  // Light mode's palette scales every shadow in app.css by --shadow-a,
+  // because the alphas were all picked against a near-black page and land
+  // on the cream one as grey smears. The cast was the single shadow that
+  // opted out — rgba(…, 0.8) under opacity 0.72, an effective 0.58 ink
+  // where light mode's darkest is 0.18 — and a blurred fill that dark keeps
+  // a saturated core, so it read as a hard bar under the parcel rather than
+  // contact with the floor.
+  test('the cast is on light mode’s shadow ladder, not beside it', async function (assert) {
+    setThemeMode('light');
+    await visit('/escort');
+    await frames(6);
+
+    const a = numberVar('--shadow-a');
+    assert.true(a > 0 && a < 1, `light mode softens its shadows (${a})`);
+
+    // no magic number to argue with: turn the palette's dial and the cast
+    // has to turn with it. A literal alpha — which is what this was — sits
+    // there unmoved while every other shadow on the page halves.
+    const before = castAlpha();
+    const root = document.documentElement;
+    try {
+      root.style.setProperty('--shadow-a', String(a / 2));
+      const after = castAlpha();
+      assert.true(
+        Math.abs(after - before / 2) < 0.01,
+        `halving --shadow-a halves the cast (${before} → ${after})`
+      );
+    } finally {
+      root.style.removeProperty('--shadow-a');
+    }
   });
 
   test('a retarget mid-flight is followed too — nothing is re-aimed', async function (assert) {
