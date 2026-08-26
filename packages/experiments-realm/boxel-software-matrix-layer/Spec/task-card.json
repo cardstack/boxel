@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Task card",
+      "specType": "card",
+      "ref": {
+        "module": "../task",
+        "name": "default"
+      },
+      "readMe": "# Task\n\n## Summary\nThe generic actionable item — Records-layer block, composed entirely from the layer-03 field blocks instead of hand-rolling its own compounds: `status` is a `statusField` configuration (Not Started → In Progress → Blocked/Done, with re-open), `priority` the shared PriorityField, `dueDate` the shared DueDateField, `createdAt` the shared CreatedAtField. Assignee links User, tags link base Tag.\n\n## Nesting\nSubtasks are `linksToMany(Task)` on the parent — the decision-B shape: the set is bounded, the \"3 of 5 done\" rollup belongs on the card, one editor maintains the list. There is no parentTask back-pointer (two stored sources of one fact drift). Any depth works because each task carries its own subtasks. The separate matrix row \"Subtask\" is satisfied by this field, not by another card.\n\n## Usage\n```ts\nimport Task, { TaskStatusField } from './task';\n\nexport class QuestTask extends Task {\n  static displayName = 'Quest Task';\n  @field quest = linksTo(() => Quest);\n  @field completionCriteria = contains(StringField);\n}\n```\nApps extend Task additively and never override the lifecycle — a task needing a different lifecycle is a different card. The linked example is a real work item (this stage's own ship-list) with two linked subtasks at different statuses.\n\n## Non-goals\nNo time tracking (a Session/work-log card links the task, not the reverse). No recurrence — that is the Schedule concept's job. No ordering field: display order is the consumer's list concern. Completion is whatever the person doing it says it is; the block never second-guesses a Done.",
+      "cardInfo": {
+        "name": "Task",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Task/ship-stage-1b-card-blocks"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

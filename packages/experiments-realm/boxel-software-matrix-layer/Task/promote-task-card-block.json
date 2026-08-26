@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Promote Task to a shared card block",
+      "details": "Rebuild the experiments-realm POC Task in the shared realm, consuming the stage-1a field blocks instead of its private status/priority compounds.\n",
+      "status": "In Progress",
+      "priority": "High",
+      "dueDate": "2026-08-27",
+      "createdAt": "2026-08-26T03:00:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "default"
+      }
+    }
+  }
+}

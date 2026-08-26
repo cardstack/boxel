@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Note card",
+      "specType": "card",
+      "ref": {
+        "module": "../note",
+        "name": "default"
+      },
+      "readMe": "# Note\n\n## Summary\nA freeform written record, usually about something. Deliberately small: `title`, markdown `body`, `author` (links User), `createdAt` (the shared Created At block), and the link that gives a note its power — `about`, the card it annotates (`linksTo(CardDef)`, so a note can attach to anything). The card title falls back to a cleaned excerpt of the body, so untitled quick notes still list legibly; embedded and fitted formats lead with the excerpt.\n\n## Why it exists\ncontent-calendar recorded the gap directly on the tracker: there was no Note CardDef to extend, so ContentIdea extended CardDef and the finding sat in the concept's notes. This block closes it — the extension surface is the point.\n\n## Usage\n```ts\nimport Note from './note';\n\nexport class SessionNote extends Note {\n  static displayName = 'Session Note';\n  @field session = linksTo(() => Session);\n}\n```\nThe linked example is a real coordination note (the Template-row discrepancy) attached via `about` to the MatrixConcept card it concerns.\n\n## Non-goals\nNot a message: no recipient, no thread, no visibility flag — the ticket-message FieldDef the crawl once matched here is a different concept and stays with tickets. Not a document: no sections, no attachments (Document is its own layer-05 row). Editing history is the platform's, not the card's.",
+      "cardInfo": {
+        "name": "Note",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Note/template-row-discrepancy"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

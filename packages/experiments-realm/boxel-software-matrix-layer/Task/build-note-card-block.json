@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Build the Note card block",
+      "details": "A base Note CardDef apps can extend — the gap content-calendar recorded when ContentIdea had nothing to extend.\n",
+      "status": "Done",
+      "priority": "High",
+      "dueDate": "2026-08-26",
+      "createdAt": "2026-08-26T03:00:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "default"
+      }
+    }
+  }
+}

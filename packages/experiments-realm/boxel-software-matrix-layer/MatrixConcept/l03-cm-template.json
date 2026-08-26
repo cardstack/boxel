@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "lucas",
       "workState": "Done",
-      "notes": "App 2: Talent & Resource Tracker (v1.1)",
+      "notes": "App 2: Talent & Resource Tracker (v1.1) | 2026-08-26 check: row marked Done but no sharedSpec/whereImplemented and no Template Spec under any name (crawl auditStatus still Missing). Three domain templates exist (onboarding/offer-letter/contract), no generic block. Quest Log needs Template (P1) — coordinate with lucas before building; see Note/template-row-discrepancy.",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,

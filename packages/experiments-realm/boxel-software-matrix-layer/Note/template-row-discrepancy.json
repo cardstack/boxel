@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Template row: Done claim has no artifact",
+      "body": "The `Template` concept (layer 03, Cards & Models) is marked **Done** with owner `lucas` (App 2 v1.1 note), but the 2026-08-26 check found no `sharedSpec`, no `whereImplemented`, and no Spec named Template under any alias. The crawl's own audit status is still **Missing**.\n\nThree *domain* templates exist in the realm — `onboarding-template.gts`, `offer-letter-template.gts`, `contract-template.gts` — but no generic Template block anyone can adopt.\n\nQuest Log needs Template (P1, template library is a core feature). Per the matrix-first gate this row is owned, so no parallel build: **coordinate with lucas** — either the row's state is corrected, or the generic block gets built with his App 2 templates as its first consumers. Until then Quest Log's stage 2 falls back to an app-local QuestTemplate, recorded as a gap (the ContentStatusField precedent).",
+      "createdAt": "2026-08-26T05:00:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../note",
+        "name": "default"
+      }
+    },
+    "relationships": {
+      "about": {
+        "links": {
+          "self": "../MatrixConcept/l03-cm-template"
+        }
+      }
+    }
+  }
+}

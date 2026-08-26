@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Ship stage 1b card blocks",
+      "details": "The cards stage of the Quest Log block rounds: promote Task, build Note, settle Subtask's modeling, flag the Template row discrepancy.\n",
+      "status": "In Progress",
+      "priority": "Normal",
+      "dueDate": "2026-08-28",
+      "createdAt": "2026-08-26T02:30:00.000Z"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "default"
+      }
+    },
+    "relationships": {
+      "subtasks.0": {
+        "links": {
+          "self": "./promote-task-card-block"
+        }
+      },
+      "subtasks.1": {
+        "links": {
+          "self": "./build-note-card-block"
+        }
+      }
+    }
+  }
+}
