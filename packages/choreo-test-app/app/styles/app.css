@@ -3386,6 +3386,11 @@ html[data-gm-dragging] * {
   inset: 0;
 }
 
+.xstress-slide {
+  position: absolute;
+  inset: 0;
+}
+
 .xstress-stage[data-slide='0'] {
   background: #0b2e34;
 }
@@ -3412,9 +3417,7 @@ html[data-gm-dragging] * {
 .xstress-stage[data-phase='crossing'] .xstress-wash,
 .xstress-stage[data-phase='crossing'] .xstress-orb,
 .xstress-stage[data-phase='crossing'] .xstress-spark,
-.xstress-stage[data-phase='crossing'] .xstress-hero,
-.xstress-stage[data-phase='crossing'] .xstress-title,
-.xstress-stage[data-phase='crossing'] .xstress-chip {
+.xstress-stage[data-phase='crossing'] .xstress-loop {
   animation: none !important;
 }
 
@@ -3518,11 +3521,23 @@ html[data-gm-dragging] * {
 }
 
 .xstress-hero {
-  border-radius: 28px;
-  overflow: clip;
+  /* never a 0×0 empty span — crop-scale of that is invisible */
+  top: 28%;
+  left: calc(50% - 11vmin);
+  width: 22vmin;
+  height: 22vmin;
+  overflow: visible;
   background: linear-gradient(160deg, #f4efe6 0%, #e8d9c4 52%, #d4b48a 100%);
   box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
   z-index: 2;
+}
+
+.xstress-hero-skin {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  box-shadow: inherit;
 }
 
 .xstress-title,
@@ -3549,20 +3564,36 @@ html[data-gm-dragging] * {
   font-style: normal;
 }
 
+.xstress-loop {
+  display: inline-block;
+}
+
+.xstress-hero-skin.xstress-loop {
+  display: block;
+}
+
 /* 01 Tide — small hero, gentle orbit, type centred */
 .xstress-stage[data-slide='0'] .xstress-hero {
   top: 28%;
   left: calc(50% - 11vmin);
   width: 22vmin;
   height: 22vmin;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-skin {
   animation: xstress-hero-tide 2.8s ease-in-out infinite alternate;
 }
 
 .xstress-stage[data-slide='0'] .xstress-title {
   top: 62%;
-  left: 50%;
-  translate: -50% 0;
+  left: 0;
+  right: 0;
+  width: auto;
+  text-align: center;
   font-size: clamp(3.2rem, 9vw, 7.2rem);
+}
+
+.xstress-stage[data-slide='0'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3571,6 +3602,9 @@ html[data-gm-dragging] * {
   left: 12%;
   color: #0b2e34;
   background: #8fd0c4;
+}
+
+.xstress-stage[data-slide='0'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
@@ -3581,15 +3615,23 @@ html[data-gm-dragging] * {
   bottom: 10%;
   left: auto;
   width: 38%;
-  border-radius: 36px;
+  height: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-skin {
   animation: xstress-hero-ember 2.2s ease-in-out infinite alternate;
 }
 
 .xstress-stage[data-slide='1'] .xstress-title {
   top: 18%;
   left: 7%;
-  translate: none;
+  right: auto;
+  width: fit-content;
+  text-align: left;
   font-size: clamp(2.4rem, 6.4vw, 5.6rem);
+}
+
+.xstress-stage[data-slide='1'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3599,6 +3641,9 @@ html[data-gm-dragging] * {
   top: auto;
   color: #2c140e;
   background: #ffb089;
+}
+
+.xstress-stage[data-slide='1'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
@@ -3606,9 +3651,13 @@ html[data-gm-dragging] * {
 .xstress-stage[data-slide='2'] .xstress-hero {
   top: 8%;
   left: 8%;
+  right: auto;
+  bottom: auto;
   width: 54%;
   height: 28%;
-  border-radius: 0;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-skin {
   animation: xstress-hero-violet 3.1s ease-in-out infinite alternate;
 }
 
@@ -3616,8 +3665,13 @@ html[data-gm-dragging] * {
   top: auto;
   bottom: 22%;
   left: 8%;
-  translate: none;
+  right: auto;
+  width: fit-content;
+  text-align: left;
   font-size: clamp(2.6rem, 6.8vw, 5.8rem);
+}
+
+.xstress-stage[data-slide='2'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3628,6 +3682,9 @@ html[data-gm-dragging] * {
   top: auto;
   color: #16102c;
   background: #c4b0ff;
+}
+
+.xstress-stage[data-slide='2'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
