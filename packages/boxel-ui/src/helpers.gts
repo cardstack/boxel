@@ -48,6 +48,12 @@ import {
   entriesToCssRuleMap,
   normalizeCssRuleMap,
 } from './helpers/theme-css.ts';
+import {
+  fontStacksFromCss,
+  googleFontImportsFor,
+  googleFontImportUrl,
+  webFontFamiliesFrom,
+} from './helpers/theme-fonts.ts';
 import { themeScope, themeScopedCss } from './helpers/theme-scoped-css.ts';
 import {
   and,
@@ -87,6 +93,7 @@ export {
   entriesToCssRuleMap,
   eq,
   extractCssVariables,
+  fontStacksFromCss,
   formatAge,
   formatCountdown,
   formatCurrency,
@@ -101,6 +108,8 @@ export {
   formatRelativeTime,
   generateCssVariables,
   getContrastColor,
+  googleFontImportsFor,
+  googleFontImportUrl,
   gt,
   gte,
   lt,
@@ -125,6 +134,7 @@ export {
   themeScope,
   themeScopedCss,
   toMenuItems,
+  webFontFamiliesFrom,
 };
 
 export type {
