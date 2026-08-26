@@ -8,6 +8,7 @@ import { module, skip, test } from 'qunit';
 
 import {
   buildToolFunctionNameFromResolvedRef,
+  isCardInstance,
   skillCardRef,
 } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
@@ -2282,12 +2283,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   // card's id, so the store must not adopt it: one instance per id means the
   // snapshot would replace the live instance and its autosave would write the
   // stale state back over the newer file.
-  function simulateShowCardResult(roomId: string, snapshotFirstName: string) {
+  function simulateShowCardResult(
+    roomId: string,
+    snapshotFirstName: string,
+    cardId = `${testRealmURL}Person/fadhlan`,
+  ) {
     let matrixService = getService('matrix-service');
     matrixService.downloadCardFileDef = async () =>
       ({
         data: {
-          id: `${testRealmURL}Person/fadhlan`,
+          id: cardId,
           type: 'card',
           attributes: { firstName: snapshotFirstName },
           meta: {
@@ -2306,7 +2311,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
           id: commandRequestId,
           name: 'showCard',
           arguments: JSON.stringify({
-            attributes: { cardId: `${testRealmURL}Person/fadhlan` },
+            attributes: { cardId },
           }),
         },
       ],
@@ -2325,7 +2330,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         data: {
           card: {
             url: 'mxc://mock-server/fadhlan-snapshot',
-            sourceUrl: `${testRealmURL}Person/fadhlan`,
+            sourceUrl: cardId,
             name: 'Fadhlan',
             contentType: 'application/vnd.card+json',
           },
@@ -2387,5 +2392,30 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-boxel-tool-call-result]')
       .containsText('Fadhlan', 'the tool result renders the live card');
+  });
+
+  test<TestContextWithSave>('rendering a tool result whose live card no longer exists renders the snapshot without installing it under the card id', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    this.onSave(() => {
+      assert.ok(false, 'rendering a tool result must not trigger a save');
+    });
+    let deletedId = `${testRealmURL}Person/deleted`;
+
+    simulateShowCardResult(roomId, 'Snapshot', deletedId);
+
+    await waitFor('[data-test-boxel-tool-call-result]');
+    await settled();
+
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText(
+        'Snapshot',
+        'the tool result falls back to rendering the snapshot',
+      );
+    let store = getService('store');
+    assert.false(
+      isCardInstance(store.peek(deletedId)),
+      'the snapshot is not installed in the store under the realm id',
+    );
   });
 });
