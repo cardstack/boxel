@@ -3565,7 +3565,15 @@ html[data-gm-dragging] * {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
+  opacity: 0;
   will-change: opacity;
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-cast.tide,
+.xstress-stage[data-slide='1'] .xstress-hero-cast.ember,
+.xstress-stage[data-slide='2'] .xstress-hero-cast.violet {
+  opacity: 1;
 }
 
 .xstress-hero-cast.tide {

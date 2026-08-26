@@ -43,11 +43,6 @@ function radiusFor(slide: Slide) {
   return ['28px', '36px', '0px'][slide]!;
 }
 
-/** 1 on the live slide, 0 on the rest — the only honest shadow blend */
-function castFor(slide: Slide, current: Slide) {
-  return slide === current ? 1 : 0;
-}
-
 const deck = [
   {
     chip: 'drift',
@@ -347,11 +342,6 @@ export class CrossingStress extends Component {
             <span
               class="xstress-hero-cast {{s.tone}}"
               data-test-cast={{s.n}}
-              {{motion
-                style=(styles opacity=(castFor s.n this.slide))
-                animate=(to opacity=(castFor s.n this.slide))
-                transition=plateTween
-              }}
             ></span>
           {{/each}}
           <div class="xstress-hero-face">
