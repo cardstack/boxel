@@ -3152,7 +3152,8 @@ html[data-gm-dragging] * {
   position: absolute;
   z-index: 2;
   top: 6%;
-  left: 6%;
+  right: 6%;
+  left: auto;
   margin: 0;
   font-family: var(--font-mono);
   font-size: clamp(11px, 1.05vw, 18px);
@@ -3238,7 +3239,6 @@ html[data-gm-dragging] * {
   bottom: 8%;
   left: auto;
   width: 48%;
-  height: auto;
 }
 
 .xreel-stage[data-clip='1'] .xreel-title {
@@ -3265,7 +3265,6 @@ html[data-gm-dragging] * {
   left: 0;
   bottom: 0;
   width: 32%;
-  height: auto;
 }
 
 .xreel-stage[data-clip='2'] .xreel-title {
