@@ -8,5 +8,6 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('feature-reel', { path: '/_feature-reel' });
+  this.route('crossing-reel', { path: '/_crossing-reel' });
   this.route('demo', { path: '/:demo_id' });
 });

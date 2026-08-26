@@ -3135,6 +3135,157 @@ html[data-gm-dragging] * {
   height: 58%;
 }
 
+/* ── Kiln Magic Move reel (separate from /_feature-reel) ────────────────
+   Three compositions of the same four things, full-bleed. The conductor
+   only changes data-clip; c.Move + layout projection play the trip. */
+.xreel-viewport {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow: hidden;
+  background: #2a2521;
+  color: #f3ece3;
+  font-family: var(--font-sans);
+}
+
+.xreel-index {
+  position: absolute;
+  z-index: 2;
+  top: 6%;
+  left: 6%;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.05vw, 18px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #b8aea3;
+  pointer-events: none;
+}
+
+.xreel-stage {
+  position: absolute;
+  inset: 0;
+  /* not a container: this is the projection ancestor, same as .slide */
+}
+
+.xreel-plate,
+.xreel-title,
+.xreel-kicker,
+.xreel-note {
+  position: absolute;
+}
+
+.xreel-plate {
+  border-radius: 18px;
+  overflow: clip;
+  background: linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%);
+  box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
+}
+
+.xreel-title,
+.xreel-kicker {
+  width: fit-content;
+}
+
+.xreel-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+}
+
+.xreel-kicker {
+  color: #d2c9bf;
+  font-size: clamp(14px, 1.6vw, 28px);
+  letter-spacing: 0.04em;
+}
+
+.xreel-note {
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.2vw, 20px);
+  font-style: normal;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ff6a3a;
+}
+
+/* 01 — title card: a small mark, everything centred */
+.xreel-stage[data-clip='0'] .xreel-plate {
+  top: 18%;
+  left: calc(50% - 3.6vmin);
+  width: 7.2vmin;
+  height: 7.2vmin;
+}
+
+.xreel-stage[data-clip='0'] .xreel-title {
+  top: 36%;
+  left: 50%;
+  translate: -50% 0;
+  font-size: clamp(4rem, 12vw, 9.5rem);
+}
+
+.xreel-stage[data-clip='0'] .xreel-kicker {
+  top: 68%;
+  left: 50%;
+  translate: -50% 0;
+}
+
+/* 02 — the plate takes the right half, type on the left */
+.xreel-stage[data-clip='1'] .xreel-plate {
+  top: 8%;
+  right: 6%;
+  bottom: 8%;
+  left: auto;
+  width: 48%;
+  height: auto;
+}
+
+.xreel-stage[data-clip='1'] .xreel-title {
+  top: 22%;
+  left: 7%;
+  translate: none;
+  font-size: clamp(2.4rem, 6.2vw, 5.4rem);
+}
+
+.xreel-stage[data-clip='1'] .xreel-kicker {
+  top: 48%;
+  left: 7%;
+  translate: none;
+}
+
+.xreel-stage[data-clip='1'] .xreel-note {
+  left: 7%;
+  bottom: 12%;
+}
+
+/* 03 — full-bleed down the left edge, square corners */
+.xreel-stage[data-clip='2'] .xreel-plate {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 32%;
+  height: auto;
+}
+
+.xreel-stage[data-clip='2'] .xreel-title {
+  top: 28%;
+  left: 40%;
+  translate: none;
+  font-size: clamp(2.8rem, 7vw, 6rem);
+}
+
+.xreel-stage[data-clip='2'] .xreel-kicker {
+  top: 52%;
+  left: 40%;
+  translate: none;
+}
+
+.xreel-stage[data-clip='2'] .xreel-note {
+  left: 40%;
+  bottom: 16%;
+}
+
 /* four columns on a roomy glass — a library, not a contact strip.
    Narrower glass gets fewer, bigger columns, so a dived print is always
    tall enough to sit inside instead of spilling past the edge.
