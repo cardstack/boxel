@@ -63,14 +63,18 @@ export const realmTypescriptPlugin: babel.PluginItem = Object.freeze([
   Object.freeze({ allowDeclareFields: true }),
 ]) as babel.PluginItem;
 
-// The Babel half of the realm's pipeline. Which JavaScript syntax survives
-// transpilation is a property of this array: a Babel plugin can widen the
-// parser only through `manipulateOptions`, so driving Babel over these plugins
-// reports the accept-set the Babel stage admits. content-tag's preprocessor
-// runs ahead of it with an accept-set of its own, so this is the second of two
-// gates rather than the only one — and Babel additionally merges any config
-// file it finds from the working directory, which a caller transpiling inside
-// someone else's project can move.
+// The Babel half of the realm's pipeline, and the second of two gates on which
+// JavaScript syntax survives transpilation. Two things widen that accept-set
+// from outside this array, so it is not the whole of it: content-tag's
+// preprocessor runs ahead with an accept-set of its own, and Babel merges any
+// config file it discovers from the working directory — under Node, a caller
+// transpiling inside someone else's project inherits that project's Babel
+// config (the browser build stubs config-file discovery out, so it cannot
+// happen there).
+//
+// What IS a property of this array is the syntax the Babel stage itself admits:
+// a plugin can widen the parser only through `manipulateOptions`, so driving
+// Babel over these plugins reports exactly that.
 //
 // The Boxel source classifier in `packages/host` parses card source with a
 // hand-written mirror of these contributions, and a mirror that falls behind
@@ -78,10 +82,12 @@ export const realmTypescriptPlugin: babel.PluginItem = Object.freeze([
 // rather than to a restatement of it, so adding a plugin here that contributes
 // syntax fails that comparison instead of passing silently.
 //
-// One array and one options object serve every transpile, which is also what
-// lets Babel instantiate each plugin once for the life of the process instead
-// of per module. They are frozen because a plugin instance shared that widely
-// must not be reachable for mutation; nothing writes to them today
+// The options objects here are hoisted, not rebuilt per call, and that is what
+// lets Babel instantiate each plugin once for the life of the process: it caches
+// an instantiated plugin against the `(plugin, options)` pair it was handed, so
+// a fresh options literal per transpile builds a fresh instance per module.
+// Everything is frozen because an instance shared that widely must not be
+// reachable for mutation; nothing writes to them today
 // (`babel-plugin-ember-template-compilation` normalizes its options into a
 // fresh object and never writes back).
 export const realmBabelPlugins: readonly babel.PluginItem[] = Object.freeze([
@@ -118,9 +124,9 @@ export async function transpileJS(
   const transformed = await babel.transformAsync(content, {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
-    // Cast rather than spread: Babel caches instantiated plugins against the
-    // identity of the array it is handed, so a fresh copy per call would build
-    // five plugin instances per module.
+    // The cast only discards `readonly`; Babel accepts a copy of this array
+    // just as happily. What earns the shared plugin instances is the options
+    // objects above being hoisted, not the array.
     plugins: realmBabelPlugins as babel.PluginItem[],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });

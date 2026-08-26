@@ -233,6 +233,10 @@ const pinnedBabelOptions = {
   configFile: false,
 } as const;
 
+// Frozen and shared by every parse, because the plugin instance Babel builds
+// against it outlives any one of them.
+const typescriptPluginOptions = Object.freeze({ allowDeclareFields: true });
+
 /**
  * The accept-set: the syntax a Boxel module may use and still be read as
  * itself here. It is not chosen, it is MIRRORED — a module the realm serves
@@ -257,18 +261,28 @@ const pinnedBabelOptions = {
  * configuration each produces, so a plugin added to the realm's pipeline fails
  * a comparison instead of quietly serving syntax this file cannot read.
  *
- * A function, not a constant, because Babel appends every plugin's
- * contribution to the very `parserOpts.plugins` array it is handed. A shared
- * one would take on three more entries per parse — `objectRestSpread`,
- * `classProperties` and `typescript` — and report an accept-set that grows with
- * use.
+ * What that comparison cannot see: the realm's Babel stage is not the only gate
+ * on what it serves. content-tag preprocesses first with an accept-set of its
+ * own, and under Node the realm's Babel merges any config file it discovers from
+ * the working directory — so a caller transpiling inside another project's tree
+ * can serve syntax this parse refuses, with no comparison going red. A false
+ * negative traceable to neither list is worth checking there.
+ *
+ * A function, not a constant, because Babel appends every plugin's contribution
+ * to the very `parserOpts.plugins` array it is handed. A shared array would take
+ * on three more entries per parse — `objectRestSpread`, `classProperties` and
+ * `typescript` — and report an accept-set that grows with use.
  */
 export function sourceParseOptions(): {
   plugins: babel.PluginItem[];
   parserOpts: NonNullable<babel.TransformOptions['parserOpts']>;
 } {
   return {
-    plugins: [[typescriptPlugin, { allowDeclareFields: true }]],
+    // Fresh arrays, shared options. Babel caches an instantiated plugin against
+    // the `(plugin, options)` pair it was handed, so reusing the options object
+    // is what keeps this from building a new TypeScript plugin on every call —
+    // twice per module classified. The arrays cannot be shared, per above.
+    plugins: [[typescriptPlugin, typescriptPluginOptions]],
     parserOpts: { plugins: ['decorators-legacy'] },
   };
 }

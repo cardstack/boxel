@@ -70,7 +70,15 @@ function acceptSetContributedBy(options: babel.TransformOptions): {
     // Neither side's real filename: a probe reports what a plugin list
     // contributes, and no plugin in either list varies that by filename.
     filename: 'accept-set.ts',
-    parserOpts: { plugins: [...(options.parserOpts?.plugins ?? [])] },
+    // Every field the side under test passes, not just its plugin list: a
+    // `parserOpts` flag set directly is as real a widening as one a plugin
+    // contributes, and rebuilding the object from `plugins` alone would drop it
+    // before the comparison ever saw it. Only the array is copied, because
+    // Babel appends to the one it is handed.
+    parserOpts: {
+      ...options.parserOpts,
+      plugins: [...(options.parserOpts?.plugins ?? [])],
+    },
     plugins: [
       ...(options.plugins ?? []),
       () => ({
