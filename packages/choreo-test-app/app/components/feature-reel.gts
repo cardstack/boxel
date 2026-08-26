@@ -10,7 +10,6 @@ import { Lightbox } from 'test-app/components/examples/lightbox';
 
 const DURATION = 15;
 const EASE = [0.2, 0, 0, 1] as const;
-const HOLD = () => 1;
 
 interface SeekableDemoElement extends HTMLElement {
   seekDemo?: (time: number) => PromiseLike<void> | void;
@@ -266,102 +265,67 @@ export class FeatureReel extends Component {
           ></div>
         </section>
 
+        {{! the natural authoring contract: a move, then a wait. Every
+            wait here once had to be a constant-easing camera duplicate so a
+            random-access seek would land on the pose — the workaround
+            docs/external-clock-camera-seek-handoff.md records. The score
+            staying Wait-based IS the proof the transport reconstructs. }}
         <c.Sequence>
           <c.Camera
             @fit={{c.id "reel-lightbox-scene"}}
             @margin={{1}}
             @duration={{0.01}}
           />
-          <c.Camera
-            @fit={{c.id "reel-lightbox-scene"}}
-            @margin={{1}}
-            @duration={{0.44}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{0.44}} />
           <c.Camera
             @fit={{c.id "reel-lightbox-aim"}}
             @margin={{0.82}}
             @duration={{0.65}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-lightbox-aim"}}
-            @margin={{0.82}}
-            @duration={{1.55}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{1.55}} />
           <c.Camera
             @fit={{c.id "reel-beacons-scene"}}
             @margin={{1}}
             @duration={{0.8}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-beacons-scene"}}
-            @margin={{1}}
-            @duration={{0.9}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{0.9}} />
           <c.Camera
             @fit={{c.id "reel-beacon-aim"}}
             @margin={{0.84}}
             @duration={{0.65}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-beacon-aim"}}
-            @margin={{0.84}}
-            @duration={{1.45}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{1.45}} />
           <c.Camera
             @fit={{c.id "reel-build-scene"}}
             @margin={{1}}
             @duration={{0.85}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-build-scene"}}
-            @margin={{1}}
-            @duration={{0.45}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{0.45}} />
           <c.Camera
             @fit={{c.id "reel-build-logo-aim"}}
             @margin={{0.82}}
             @duration={{0.65}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-build-logo-aim"}}
-            @margin={{0.82}}
-            @duration={{1.35}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{1.35}} />
           <c.Camera
             @fit={{c.id "reel-build-panel-aim"}}
             @margin={{0.8}}
             @duration={{0.75}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-build-panel-aim"}}
-            @margin={{0.8}}
-            @duration={{1.3}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{1.3}} />
           <c.Camera
             @fit={{c.id "reel-build-logo-aim"}}
             @margin={{0.82}}
             @duration={{0.75}}
             @ease={{EASE}}
           />
-          <c.Camera
-            @fit={{c.id "reel-build-logo-aim"}}
-            @margin={{0.82}}
-            @duration={{2.45}}
-            @ease={{HOLD}}
-          />
+          <c.Wait @duration={{2.45}} />
         </c.Sequence>
       </Choreo>
     </div>

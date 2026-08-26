@@ -351,6 +351,9 @@ export class ChoreoRun implements Run {
     this.options = options;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
     this.cameraAim = options.cameraAim ?? null;
+    // frozen: the fold a random-access seek reconstructs the camera from
+    this.initialCamera = { ...this.camera };
+    this.initialAim = this.cameraAim ? { ...this.cameraAim } : null;
     this.cues = compiled.cues;
     this.pending = new Set(options.removed);
     const s = this.scale;
@@ -733,6 +736,7 @@ export class ChoreoRun implements Run {
     const wasPlaying = this.playing;
     this.playing = false;
     this.setPaused(true);
+    this.reconstructCameraAt(gate ? gate.at : Infinity);
     this.evaluate(gate ? gate.at : Infinity);
     if (gate) {
       this.park(gate);
@@ -1135,6 +1139,80 @@ export class ChoreoRun implements Run {
     return easingDefinitionToFunction(
       (transition?.ease as never) ?? 'easeInOut',
     )(raw);
+  }
+
+  /** the camera and aim this run inherited, frozen at construction */
+  private readonly initialCamera: CameraState;
+  private readonly initialAim: { x: number; y: number } | null;
+
+  /**
+   * Rebuild the camera fold from the score prefix before a seek's still
+   * (docs/external-clock-camera-seek-handoff.md). Forward playback folds
+   * each camera cue's landing into the run's cumulative camera as the
+   * clock crosses it — but a random-access seek can jump clean over a
+   * window, and a cue that never starts never folds: the clock reads `t`
+   * while the picture holds an earlier shot. So every camera track's
+   * bookkeeping (started, cameraFrom, aimFrom/aimTo, cameraP) is
+   * re-derived here in timeline order from the run's initial camera;
+   * evaluate() then recomputes exactly the numbers forward playback would
+   * have produced, and play-after-scrub resumes from them. Pure
+   * arithmetic over frozen numbers, like the rest of the camera: no DOM
+   * is read, so backward and repeated seeks agree to the pixel.
+   */
+  private reconstructCameraAt(limit: number) {
+    const cams = this.tracks.filter((t) => t.cue.camera);
+    if (!cams.length) {
+      return;
+    }
+    const now = this.master;
+    cams.sort((a, b) => a.start - b.start);
+    const state = { ...this.initialCamera };
+    let aim = this.initialAim ? { ...this.initialAim } : null;
+    for (const t of cams) {
+      if (!(now >= t.start && t.start < limit)) {
+        // ahead of the playhead (or behind an unopened gate): this shot
+        // contributes nothing, and whatever it acquired on an earlier
+        // pass is stale — including a platform animation mid-flight
+        t.started = false;
+        t.passed = false;
+        t.cameraP = 0;
+        t.aimFrom = aim ?? undefined;
+        t.aimTo = aim ?? undefined;
+        t.cameraAnimation?.cancel();
+        t.cameraAnimation = undefined;
+        continue;
+      }
+      const cue = t.cue.camera!;
+      // the same aim algebra evaluate() uses at a live start: a cue with
+      // no origin of its own holds the point in force
+      const aimTo = cue.origin ?? aim ?? cue.centre ?? { x: 0, y: 0 };
+      t.started = true;
+      // passed is cleared so evaluate() re-applies this shot's still —
+      // a track that had already passed under live play paints nothing
+      t.passed = false;
+      t.cameraFrom = { ...state };
+      t.aimFrom = aim ?? aimTo;
+      t.aimTo = aimTo;
+      aim = aimTo;
+      if (now >= t.end) {
+        const { to } = cue;
+        state.x = to.x ?? state.x;
+        state.y = to.y ?? state.y;
+        state.zoom = to.zoom ?? state.zoom;
+        t.cameraP = 1;
+        // its flight is over: the inline still owns the frame again
+        t.cameraAnimation?.cancel();
+        t.cameraAnimation = undefined;
+      }
+    }
+    this.camera = state;
+    this.cameraAim = aim;
+    // evaluate() repaints through every started track; only a seek that
+    // leaves NO shot behind the playhead must put the frame back itself,
+    // or the last-painted transform would stand at a time before any cue
+    if (!cams.some((t) => t.started)) {
+      this.applyCamera(cams[0]!);
+    }
   }
 
   /**
