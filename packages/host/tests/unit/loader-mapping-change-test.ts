@@ -62,11 +62,12 @@ module('Unit | loader mapping change during traversal', function () {
   //
   // Anyone restructuring this module must re-verify it still has teeth. A
   // `registered` case that records a completing-dep only when the dep is
-  // already registered drops `/b`'s edge to `/a`, and every test here rejects
-  // on the length invariant, which catches the drop before the factory is ever
-  // called — `bug: dependency list for http://mapping.example/b recorded 1 of
-  // the 2 dependencies it declares` for the two-module cycle, and the same for
-  // `/c.js` at 2 of 3 in the mixed-spelling one. Remove that invariant too and
+  // already registered, and otherwise falls through without either recording
+  // the edge or advancing the dep, drops `/b`'s edge to `/a`. Every test here
+  // then rejects on the length invariant, which catches the drop before the
+  // factory is ever called — `bug: dependency list for http://mapping.example/b
+  // recorded 1 of the 2 dependencies it declares` for the two-module cycle, and
+  // the same for `/c.js` at 2 of 3 in the mixed-spelling one. Remove that invariant too and
   // the rejection becomes the mis-binding it exists to prevent:
   // `Cannot read properties of undefined (reading 'a')`.
   let cycleSources: Record<string, string> = {
