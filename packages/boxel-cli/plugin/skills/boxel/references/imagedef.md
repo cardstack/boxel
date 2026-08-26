@@ -4,23 +4,23 @@ The canonical reference for stored / uploaded / linked image fields in Boxel. Fo
 
 ## What ImageDef is
 
-`ImageDef extends FileDef` — defined in `https://cardstack.com/base/card-api` (line 2854 of the source). It's the file-backed image type: an `ImageDef` instance is a real realm file with content-type `image/*`, a URL, and metadata. `linksTo(ImageDef)` says "this field holds a reference to that realm file."
+`ImageDef extends FileDef` — defined in `@cardstack/base/card-api` (line 2854 of the source). It's the file-backed image type: an `ImageDef` instance is a real realm file with content-type `image/*`, a URL, and metadata. `linksTo(ImageDef)` says "this field holds a reference to that realm file."
 
-`ImageCard` is a separate, deprecated class — defined in `https://cardstack.com/base/image`. It's a URL-holding CardDef, not file-backed. **Do not use `ImageCard` for new schemas.** The two are commonly confused because they both render images.
+`ImageCard` is a separate, deprecated class — defined in `@cardstack/base/image`. It's a URL-holding CardDef, not file-backed. **Do not use `ImageCard` for new schemas.** The two are commonly confused because they both render images.
 
 ## Import — three equivalent valid forms
 
 ```ts
 // Recommended for new code — explicit about which class you want
-import ImageDef from 'https://cardstack.com/base/image-file-def';
+import ImageDef from '@cardstack/base/image-file-def';
 
 // Equivalent — named import from the source module
-import { ImageDef } from 'https://cardstack.com/base/card-api';
+import { ImageDef } from '@cardstack/base/card-api';
 ```
 
 ```ts
 // FORBIDDEN — this gets ImageCard (deprecated), not ImageDef
-import ImageDef from 'https://cardstack.com/base/image';   // ← WRONG
+import ImageDef from '@cardstack/base/image';   // ← WRONG
 ```
 
 The local alias `ImageDef` makes lint happy on the wrong form. At runtime you get ImageCard, the field schema mismatches what your template expects, and downstream loads fail. Verify the right module by probing:
@@ -28,7 +28,7 @@ The local alias `ImageDef` makes lint happy on the wrong form. At runtime you ge
 ```sh
 npx boxel run-command @cardstack/boxel-host/tools/get-card-type-schema/default \
   --realm "$REALM" \
-  --input '{"codeRef":{"module":"https://cardstack.com/base/image-file-def","name":"default"}}' \
+  --input '{"codeRef":{"module":"@cardstack/base/image-file-def","name":"default"}}' \
   --json
 # status: ready → the file-backed ImageDef exists at that URL
 ```

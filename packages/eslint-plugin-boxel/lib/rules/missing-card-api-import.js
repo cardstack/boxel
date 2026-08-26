@@ -102,9 +102,27 @@ module.exports = {
         // Skip identifiers that are part of import declarations
         if (
           node.parent &&
-          (node.parent.type === 'ImportSpecifier' || 
+          (node.parent.type === 'ImportSpecifier' ||
            node.parent.type === 'ImportDefaultSpecifier' ||
            node.parent.type === 'ImportNamespaceSpecifier')
+        ) {
+          return;
+        }
+
+        // Skip identifiers that name class members (e.g. a method named
+        // `contains`). A member key is not a scope reference, so an
+        // injected import can never satisfy it — the new binding would
+        // have no references, the unused-import fix would remove it, and
+        // the two autofixes would ping-pong until ESLint gives up.
+        if (
+          node.parent &&
+          (node.parent.type === 'MethodDefinition' ||
+            node.parent.type === 'PropertyDefinition' ||
+            node.parent.type === 'AccessorProperty' ||
+            node.parent.type === 'TSAbstractMethodDefinition' ||
+            node.parent.type === 'TSAbstractPropertyDefinition') &&
+          node.parent.key === node &&
+          !node.parent.computed
         ) {
           return;
         }

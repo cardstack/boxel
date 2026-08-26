@@ -14,7 +14,7 @@ validated: source-proven
 
 When a card has `cardInfo.theme` set, the CardContainer injects those CSS variables and imports the fonts. Your templates then reference `var(--background)`, `var(--foreground)`, `var(--primary)`, `var(--font-sans)` etc. and "just work".
 
-`BrandGuide` is the richest theme shape. Use it when the theme needs logo/mark usage, brand colors, brand voice, or other identity material. When you are developing Boxel built-in features, base cards, or Boxel-branded catalog output, the style source is the built-in Boxel Brand Guide at `https://cardstack.com/base/Theme/boxel-brand-guide`.
+`BrandGuide` is the richest theme shape. Use it when the theme needs logo/mark usage, brand colors, brand voice, or other identity material. When you are developing Boxel built-in features, base cards, or Boxel-branded catalog output, the style source is the built-in Boxel Brand Guide at `@cardstack/base/Theme/boxel-brand-guide`.
 
 If you skip this step and build the card with hard-coded colors, you've wasted that effort — you'll be ripping them out when the user picks a theme.
 
@@ -27,10 +27,10 @@ Three options, in order of preference:
 1. **Reuse an existing Theme.** Most realms already have a couple. Browse `<realm>/Theme/*.json` or search with `npx boxel search` filtered on the Theme class. Pick by `styleName` / `visualDNA` fields.
 2. **Copy and edit.** Take an existing Theme, `copy-card` it, modify the `cssVariables` and `cssImports`. Catalog Themes have a "Copy and Edit" menu item built in.
 3. **Author a new Theme.** Choose the narrowest base that preserves the design intent:
-   - `https://cardstack.com/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance.
-   - `https://cardstack.com/base/detailed-style-reference` for a full style system without logo/mark material.
-   - `https://cardstack.com/base/style-reference` for a compact visual DNA reference with inspirations and wallpapers.
-   - `https://cardstack.com/base/structured-theme` for a token-only theme.
+   - `@cardstack/base/brand-guide` for a full brand system with logo/mark usage, functional palette, color palette, typography, voice, and detailed style guidance.
+   - `@cardstack/base/detailed-style-reference` for a full style system without logo/mark material.
+   - `@cardstack/base/style-reference` for a compact visual DNA reference with inspirations and wallpapers.
+   - `@cardstack/base/structured-theme` for a token-only theme.
 
 ### Step 1 — Link the theme on every instance
 
@@ -130,7 +130,7 @@ After writing the card and a sample instance, preview it in the live app to conf
 - **Without a resolved `cardTheme`, CSS variables fall back to Boxel defaults** (the `--boxel-*` chain). Your card won't crash, but it won't look distinctive.
 - **Do not flatten rich themes unnecessarily.** Minimal Themes can store raw `cssVariables`, but `StructuredTheme`, `StyleReference`, `DetailedStyleReference`, and `BrandGuide` carry structured fields that compute `cssVariables`. Preserve those fields when editing.
 - **Brand assets live on Brand Guide, not arbitrary strings.** Logo and mark material belongs in `markUsage`; brand colors belong in `brandColorPalette` and `functionalPalette`; templates consume the generated `--brand-*` variables and semantic theme variables.
-- **Boxel built-in feature work uses the Boxel Brand Guide.** For base cards, host-facing UI, and Boxel-branded catalog material, start from `https://cardstack.com/base/Theme/boxel-brand-guide` and its style rules.
+- **Boxel built-in feature work uses the Boxel Brand Guide.** For base cards, host-facing UI, and Boxel-branded catalog material, start from `@cardstack/base/Theme/boxel-brand-guide` and its style rules.
 
 **Source:** `boxel-catalog/blog-app/Theme/{modern-magazine,warm-editorial,neon-brutalist}.json` (production Themes), `packages/base/theme.gts`, `packages/base/structured-theme.gts`, `packages/base/style-reference.gts`, `packages/base/detailed-style-reference.gts`, `packages/base/brand-guide.gts`, `packages/base/brand-logo.gts`, `packages/base/brand-functional-palette.gts`, `packages/base/structured-theme-variables.gts`, and `packages/base/Theme/boxel-brand-guide.json`.
 

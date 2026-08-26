@@ -25,6 +25,7 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 import { createRemotePrerenderer } from './prerender/remote-prerenderer.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
+import { createMediaCacheAdapterFromEnv } from './media-cache/index.ts';
 import {
   isEnvironmentMode,
   getEnvironmentSlug,
@@ -518,6 +519,10 @@ const reportHostShellToManager = async () => {
     moduleCacheCoordinator,
   );
 
+  // One store shared by every realm this server mounts; the `_screenshot/`
+  // route serves every request as an uncaptured miss when none is configured.
+  let mediaCacheAdapter = createMediaCacheAdapterFromEnv();
+
   if (SKIP_MODULES_CACHE_CLEAR_ON_STARTUP) {
     log.info('Skipping modules cache clear on startup (opted out via env)');
   } else {
@@ -629,6 +634,7 @@ const reportHostShellToManager = async () => {
             process.env.VIDEO_SIZE_LIMIT_BYTES ??
               DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
           ),
+          mediaCacheAdapter,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -662,6 +668,7 @@ const reportHostShellToManager = async () => {
   let server = new RealmServer({
     realms,
     reconciler,
+    mediaCacheAdapter,
     virtualNetwork,
     matrixClient,
     realmsRootPath,

@@ -65,8 +65,8 @@ Here is an example where we are:
 Do not import `perform` from `ember-concurrency/helpers/perform`; that subpath is not fetchable in realms. Also do not use `(perform this.taskName)` directly in strict-mode templates. Define a synchronous local handler that calls `.perform()`, then bind that handler with `{{on}}`.
 
 ```
-import { CardDef, field, contains, Component } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { Button } from '@cardstack/boxel-ui/components';

@@ -151,7 +151,7 @@ Sample command from the shell:
 expected=$(find <kit-dir> -name "*.json" -not -path "*/Theme/*" -not -name "_*" | wc -l)
 # Currently indexed CardDef instances
 indexed=$(npx boxel search --realm <url> --query \
-  '{"filter":{"type":{"module":"https://cardstack.com/base/card-api","name":"CardDef"}}}' --json \
+  '{"filter":{"type":{"module":"@cardstack/base/card-api","name":"CardDef"}}}' --json \
   | jq '.data | length')
 echo "$indexed / $expected indexed"
 ```

@@ -1368,7 +1368,29 @@ module('Unit | audio metadata extractors', function (hooks) {
       assert.strictEqual(
         bars[3],
         1,
-        'bars are normalized to the track peak, so the loudest reaches 1',
+        'bars are normalized to the loudest bar, so the loudest reaches 1',
+      );
+    });
+
+    test('a single transient still leaves the loudest bar at full scale', function (assert) {
+      // The spike frame's granules share their bar with quiet granules, so
+      // that bar's RMS sits well below the spike's own amplitude. The bars
+      // must be normalized to the loudest BAR: scaling by the loudest single
+      // granule instead would leave every bar — this one included — far below
+      // full scale, rendering the whole waveform as near-zero slivers.
+      let frames = Array.from({ length: 16 }, (_, index) =>
+        frameWithGain(index === 12 ? 230 : 170),
+      ).flat();
+      let envelope = extractMp3Envelope(new Uint8Array(frames), 4);
+      let bars = envelope!.bars;
+      assert.strictEqual(
+        Math.max(...bars),
+        1,
+        'the loudest bar reaches full scale',
+      );
+      assert.true(
+        bars[3]! > bars[0]!,
+        'the bar holding the transient is the tallest',
       );
     });
 

@@ -29,11 +29,11 @@ Example adding an import:
 ```gts
 https://example.com/attached-file-example.gts
 ╔═══ SEARCH ════╗
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 import { or } from '@cardstack/boxel-ui/helpers';
 ╠═══════════════╣
-import { Component } from 'https://cardstack.com/base/card-api';
-import { MarkdownField } from 'https://cardstack.com/base/markdown';
+import { Component } from '@cardstack/base/card-api';
+import { MarkdownField } from '@cardstack/base/markdown';
 import { or } from '@cardstack/boxel-ui/helpers';
 ╚═══ REPLACE ═══╝
 ```
@@ -83,8 +83,8 @@ Example creating a new file (in this case it is *CRUCIAL* to include "(new)" in 
 http://users-realm/new-file-example.gts (new)
 ╔═══ SEARCH ════╗
 ╠═══════════════╣
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
+import { CardDef } from '@cardstack/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 export class NewFileExample extends CardDef {
   static displayName = "New file example";
 }
@@ -107,7 +107,11 @@ Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character
 If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
 
 *SEARCH/REPLACE* blocks will *only* replace the first match occurrence.
-Including multiple unique *SEARCH/REPLACE* blocks if needed.
+
+**Put every file a piece of work needs in one reply.** Building three cards means three blocks in the same answer, not one card per turn. They are applied together, and the correctness check then runs once over the finished result.
+
+Handing back after each file is what breaks a multi-file build. Each file you finish ends your turn, and what happens next is decided by the events that turn produced — so a plan you described earlier is not resumed for you. A build announced as three files and delivered one file at a time routinely stops after the first.
+
 Include enough lines in each SEARCH section to uniquely match each set of lines that need to change.
 
 Keep *SEARCH/REPLACE* blocks concise.

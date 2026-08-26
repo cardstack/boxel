@@ -10,6 +10,7 @@ on:
       - "packages/base/**"
       - "packages/boxel-icons/**"
       - "packages/boxel-ui/**"
+      - "packages/bxl/**"
       - "packages/eslint-plugin-boxel/**"
       - "packages/realm-server/**"
       - "packages/runtime-common/**"

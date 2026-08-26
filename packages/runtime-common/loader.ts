@@ -45,6 +45,19 @@ type RegisteredWithDepsModule = {
   implementation: Function;
 };
 
+// Import edges that were still completing when a module's dependency list was
+// frozen — recorded apart from `consumedModules`, which holds only the edges
+// that had resolved by then.
+//
+// The two readers want different halves, deliberately. Eviction reads both,
+// through `directModuleDependencies`: an edge that was still completing is an
+// import, and a module holding another's exports goes stale with it.
+// Dependency tracking — `getConsumedModules` and
+// `collectKnownModuleDependencies` — reads only `consumedModules`, because
+// that set is what the index records module dependencies from, and widening
+// it widens invalidation fan-out across indexing.
+type CompletingDependencies = { completingDependencies: string[] };
+
 type PreparingModule = {
   // this state represents the *synchronous* window of time where this
   // module's dependencies are moving from registered to preparing to
@@ -55,19 +68,19 @@ type PreparingModule = {
   implementation: Function;
   moduleInstance: object;
   consumedModules: Set<string>;
-};
+} & CompletingDependencies;
 
 type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
   consumedModules: Set<string>;
-};
+} & CompletingDependencies;
 
 type BrokenModule = {
   state: 'broken';
   exception: any;
   consumedModules: Set<string>;
-};
+} & CompletingDependencies;
 
 type Module =
   | FetchingModule
@@ -105,6 +118,56 @@ type EvaluatableDep =
 export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 type Fetch = typeof fetch;
+
+export interface ModuleRegistration {
+  dependencyList: string[];
+  implementation: Function;
+}
+
+// Evaluates the AMD registration wrapper `transpileAmd` produces and hands
+// back what the module registered. This is the seam that decides *where* a
+// module's code runs: the default evaluates it in the loader's own realm,
+// while a caller that must run authored code somewhere else supplies an
+// evaluator whose `define` binding lives there.
+//
+// The contract is synchronous, which bounds where the seam applies: an
+// evaluation context reachable synchronously from this loader — a SES
+// Compartment is one. A context that can only be reached by message passing
+// runs its own Loader on its own side of the boundary and injects its
+// evaluator there, rather than answering this one.
+export type ModuleEvaluator = (
+  source: string,
+  moduleIdentifier: string,
+) => ModuleRegistration;
+
+// The parameter names are deliberately unlikely ones: `eval` runs the module
+// inside this function's scope, so every local here is a name the module can
+// read instead of getting the ReferenceError an undeclared identifier owes it.
+function evaluateModuleInCurrentRealm(
+  amdSource: string,
+  amdModuleIdentifier: string,
+): ModuleRegistration {
+  type DefineFunc = ((
+    mid: string,
+    dependencyList: string[],
+    impl: Function,
+  ) => void) & {
+    registration?: ModuleRegistration;
+  };
+
+  // this local is here for the evals to see. We're sticking the registration
+  // onto the function itself because that's a convenient way to ensure that
+  // build tools like Rollup don't optimize it away. Rollup violates the JS
+  // spec by removing a local that's visible to `eval`.
+  let define = ((_mid: string, dependencyList: string[], impl: Function) => {
+    define.registration = { dependencyList, implementation: impl };
+  }) as DefineFunc;
+  eval(amdSource);
+  if (!define.registration) {
+    throw new Error(`Module ${amdModuleIdentifier} did not register itself`);
+  }
+  return define.registration;
+}
 
 // Transient upstream statuses that we briefly retry on module-source fetches
 // (e.g. nginx returning 502/503/504 while the single-writer realm server is
@@ -195,12 +258,32 @@ export class Loader {
   private modules = new Map<string, Module>();
 
   private moduleShims = new Map<string, Record<string, any>>();
+  // Cache keys of modules whose fetch answered with a host-registered value
+  // instead of source (a realm or the package-shim handler marks the response
+  // with `Symbol.for('shimmed-module')`). Recorded so `isShimmedModule` is
+  // truthful about every shim this loader has loaded, not only the ones
+  // registered here through `shimModule`. This is where nearly every shim
+  // lands, because the host registers its externals on the virtual network
+  // rather than on the loader.
+  //
+  // Deliberately not `moduleShims`, which is read for three other decisions a
+  // shim discovered over the network must not change: `_fetch` answers from
+  // it without going to the network, `cloneLoader` re-registers all of it into
+  // the clone, and `import` skips dependency tracking for anything in it — so
+  // writing there would drop index dependency edges for every realm-served
+  // module after its first load.
+  //
+  // Keys are only stable between realm-mapping changes, so this is discarded
+  // with the other mapping-derived caches when a mapping changes.
+  private fetchedModuleShims = new Set<string>();
   private moduleCanonicalURLs = new Map<string, string>();
   // Cache the flattened dependency sets for evaluated modules. Once a module is
   // evaluated its consumedModules never change, so the result of
   // collectKnownModuleDependencies is stable and can be reused across repeated
   // loader.import() calls (e.g. when deserializing 22 cards of the same type).
   private knownDepsCache = new Map<string, Set<string>>();
+  // Module identifier → the key it is tracked under (see trackingKey).
+  private trackingKeyCache = new Map<string, string>();
   private identities = new WeakMap<
     Function,
     { module: string; name: string }
@@ -224,6 +307,8 @@ export class Loader {
   // host injects a sleep that goes through the native (unblocked)
   // setTimeout so the retry actually fires.
   private retrySleep: ((ms: number) => Promise<void>) | undefined;
+  private moduleEvaluator: ModuleEvaluator;
+  private moduleMeta: ((moduleURL: string) => object) | undefined;
 
   constructor(
     fetch: Fetch,
@@ -231,6 +316,10 @@ export class Loader {
     options?: {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
+      moduleEvaluator?: ModuleEvaluator;
+      // Receives what `import.meta.url` carries for the module: its canonical
+      // URL where one is known, otherwise the identifier it was reached by.
+      moduleMeta?: (moduleURL: string) => object;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -266,6 +355,9 @@ export class Loader {
       : rawResolveImport;
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
+    this.moduleEvaluator =
+      options?.moduleEvaluator ?? evaluateModuleInCurrentRealm;
+    this.moduleMeta = options?.moduleMeta;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -274,6 +366,8 @@ export class Loader {
       this.modules.clear();
       this.moduleCanonicalURLs.clear();
       this.knownDepsCache.clear();
+      this.trackingKeyCache.clear();
+      this.fetchedModuleShims.clear();
     });
   }
 
@@ -294,6 +388,8 @@ export class Loader {
     let clone = new Loader(loader.fetchImplementation, loader.resolveImport, {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
+      moduleEvaluator: loader.moduleEvaluator,
+      moduleMeta: loader.moduleMeta,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -364,7 +460,138 @@ export class Loader {
       state: 'evaluated',
       moduleInstance: module,
       consumedModules: new Set(),
+      completingDependencies: [],
     });
+  }
+
+  // A shimmed module's executable identity IS a host-registered value: the
+  // module object itself is what this loader holds, whether it was registered
+  // here through `shimModule` or arrived on a response that carried the value
+  // in place of source. There is no source to fetch, classify, or evaluate
+  // anywhere else, so callers that route execution use this to keep a shim in
+  // the host runtime.
+  //
+  // Spelling-insensitive over the identity family `moduleCacheKey` collapses
+  // (`.gts` / `.ts` / extensionless), because a shim can be registered under
+  // one spelling while a captured class identity carries another.
+  isShimmedModule(moduleIdentifier: string): boolean {
+    let resolved = this.resolveImport(moduleIdentifier);
+    if (this.moduleShims.has(resolved)) {
+      return true;
+    }
+    let key = this.moduleCacheKey(resolved);
+    if (this.fetchedModuleShims.has(key)) {
+      return true;
+    }
+    // `moduleShims` is keyed by the identifier it was registered under, so
+    // reaching the rest of the identity family means folding each one.
+    for (let shimIdentifier of this.moduleShims.keys()) {
+      if (this.moduleCacheKey(shimIdentifier) === key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Evicts one module and the modules that transitively import it, leaving
+  // every other cached module — including the ones the evicted module
+  // imported — in place. Returns how many cached modules were removed.
+  //
+  // Importers go too because an evaluated module closed over the exports of
+  // the one being replaced and would keep serving the old code. The fan-in
+  // reaches only modules this loader has cached: one it never loaded holds
+  // nothing that can go stale.
+  invalidateModule(moduleIdentifier: string): number {
+    let resolved = this.resolveImport(moduleIdentifier);
+    let target: string;
+    try {
+      // Normalize through `URL` so a caller holding a non-canonical URL
+      // spelling still names the key the module was stored under. An
+      // identifier that is not a URL — what a loader with no import
+      // resolution is handed, and the form `shimModule` accepts — is already
+      // the key form and passes through untouched.
+      target = this.moduleCacheKey(new URL(resolved).href);
+    } catch (error) {
+      if (!(error instanceof TypeError)) {
+        throw error;
+      }
+      target = this.moduleCacheKey(resolved);
+    }
+
+    // Reverse the import edges in one pass over the module map, then walk out
+    // from the target, so the map is scanned once rather than once per level
+    // of the dependent chain.
+    let importers = new Map<string, string[]>();
+    for (let [key, module] of this.modules) {
+      for (let dependency of this.directModuleDependencies(module)) {
+        let dependencyKey = this.moduleCacheKey(dependency);
+        let existing = importers.get(dependencyKey);
+        if (existing) {
+          existing.push(key);
+        } else {
+          importers.set(dependencyKey, [key]);
+        }
+      }
+    }
+
+    let invalidated = new Set([target]);
+    let frontier = [target];
+    while (frontier.length > 0) {
+      for (let importer of importers.get(frontier.pop()!) ?? []) {
+        if (!invalidated.has(importer)) {
+          invalidated.add(importer);
+          frontier.push(importer);
+        }
+      }
+    }
+
+    let removed = 0;
+    for (let key of invalidated) {
+      if (this.modules.delete(key)) {
+        removed++;
+      }
+      this.moduleCanonicalURLs.delete(key);
+      // What a module's last fetch answered with is part of what is being
+      // evicted: a module that answered with a host-registered value once may
+      // answer with source next time, and `isShimmedModule` would otherwise
+      // keep routing that source away from evaluation. A shim registered
+      // through `shimModule` is a standing registration rather than something
+      // learned from a fetch, so it survives and re-serves the next import.
+      this.fetchedModuleShims.delete(key);
+    }
+    // Any cached dependency set that reached an evicted module is stale, and
+    // deciding which ones costs the same walk as recomputing them on demand.
+    this.knownDepsCache.clear();
+    return removed;
+  }
+
+  // The modules a cached module imports, in whatever state it is in. The
+  // registered states carry their dependency list; the states past them carry
+  // it split in two, because `consumedModules` — the set the dependency
+  // tracker reads — holds only the edges that had resolved when the list was
+  // frozen. A module still fetching has named nothing yet.
+  private directModuleDependencies(module: Module): string[] {
+    switch (module.state) {
+      case 'evaluated':
+      case 'preparing':
+      case 'broken':
+        return [...module.consumedModules, ...module.completingDependencies];
+      case 'registered':
+        return module.dependencyList.flatMap((entry) =>
+          entry.type === 'dep' ? [entry.moduleURL.href] : [],
+        );
+      case 'registered-completing-deps':
+      case 'registered-with-deps':
+        return module.dependencies.flatMap((entry) =>
+          entry.type === 'dep' || entry.type === 'completing-dep'
+            ? [entry.moduleURL.href]
+            : [],
+        );
+      case 'fetching':
+        return [];
+      default:
+        throw assertNever(module);
+    }
   }
 
   // Returns the transitive consumed modules of `moduleIdentifier` in
@@ -475,35 +702,32 @@ export class Loader {
     let resolvedModule = new URL(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     if (!this.moduleShims.has(resolvedModuleIdentifier)) {
-      // Normalize tracker keys to the virtual-alias URL form when one
-      // exists (the dependency tracker requires `http://`/`https://`
-      // URLs — see `canonicalURL` in dependency-tracker.ts — so RRI
-      // prefix forms can't be used as keys). Without this, a base
-      // module imported via the virtual alias
-      // (`https://cardstack.com/base/X`) and the same module imported
-      // via the RRI prefix (`@cardstack/base/X` → resolveImport →
-      // resolved real URL `https://localhost:4201/base/X`) get tracked
-      // as two separate entries.
-      let trackingKey = this.canonicalizeTrackingKey(resolvedModuleIdentifier);
-      trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+      // Tracked under the form the index names this module's realm by, so a
+      // module reached by any of its spellings is one node rather than several.
+      trackRuntimeModuleDependency(
+        this.trackingKey(resolvedModuleIdentifier),
+        dependencyTrackingContext,
+      );
     }
 
-    await this.advanceToState(resolvedModule, 'evaluated');
-    this.trackKnownModuleDependencies(
-      resolvedModuleIdentifier,
-      dependencyTrackingContext,
-    );
-    let module = this.getModule(resolvedModuleIdentifier);
-    switch (module?.state) {
-      case 'evaluated':
-      case 'preparing':
-        return module.moduleInstance as T;
-      case 'broken':
-        throw module.exception;
-      default:
-        throw new Error(
-          `bug: advanceToState('${moduleIdentifier}', 'evaluated') resulted in state ${module?.state}`,
-        );
+    // `advanceToState` re-reads the module map after each of its own awaits,
+    // but this read happens after it has resolved. An eviction landing in
+    // between leaves nothing to return, so advance the replacement rather than
+    // reporting the state the eviction produced as a bug.
+    for (;;) {
+      await this.advanceToState(resolvedModule, 'evaluated');
+      this.trackKnownModuleDependencies(
+        resolvedModuleIdentifier,
+        dependencyTrackingContext,
+      );
+      let module = this.getModule(resolvedModuleIdentifier);
+      switch (module?.state) {
+        case 'evaluated':
+        case 'preparing':
+          return module.moduleInstance as T;
+        case 'broken':
+          throw module.exception;
+      }
     }
   }
 
@@ -592,18 +816,6 @@ export class Loader {
     return result;
   }
 
-  // The runtime dependency tracker keys module nodes by http(s) URL — its
-  // canonicalURL guard drops realm-prefix identifiers (see
-  // dependency-tracker.ts) — and this loader collapses each tracked module
-  // onto its virtual-alias URL when one is registered (see
-  // canonicalizeTrackingKey). Converts any module identifier, canonical RRI
-  // form included, into that tracking-key form. Callers recording
-  // loader-derived module identifiers with the tracker must cross this
-  // boundary; identifiers stay in canonical RRI form everywhere else.
-  dependencyTrackingKey(moduleIdentifier: string): string {
-    return this.canonicalizeTrackingKey(this.resolveImport(moduleIdentifier));
-  }
-
   private trackKnownModuleDependencies(
     rootModuleIdentifier: string,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -626,11 +838,10 @@ export class Loader {
       rootModuleIdentifier,
     )) {
       if (!this.moduleShims.has(moduleIdentifier)) {
-        // Same canonicalization as the top-level import-time tracking
-        // call — collapse virtual-alias / resolved real URL forms onto
-        // the virtual-alias URL.
-        let trackingKey = this.canonicalizeTrackingKey(moduleIdentifier);
-        trackRuntimeModuleDependency(trackingKey, dependencyTrackingContext);
+        trackRuntimeModuleDependency(
+          this.trackingKey(moduleIdentifier),
+          dependencyTrackingContext,
+        );
       }
     }
   }
@@ -645,6 +856,15 @@ export class Loader {
 
     let pending = [rootModuleIdentifier];
     let visited = new Set<string>();
+    // A walk that reached a module whose dependencies this loader does not know
+    // yet — one it does not hold at all, or one still fetching — saw only part
+    // of the graph. Memoizing that would outlive the gap: the cache is
+    // consulted before the module map and nothing clears it when a module
+    // registers, so a set collected during the gap would still be answered
+    // afterwards. Every other state names its dependencies, `broken` included:
+    // a module that failed before it could name any has none to know, and it
+    // cannot gain any without an invalidation, which clears this cache.
+    let complete = true;
 
     while (pending.length > 0) {
       let moduleIdentifier = pending.pop()!;
@@ -665,6 +885,7 @@ export class Loader {
 
       let module = this.getModule(moduleIdentifier);
       if (!module) {
+        complete = false;
         continue;
       }
 
@@ -692,13 +913,16 @@ export class Loader {
           }
           break;
         case 'fetching':
+          complete = false;
           break;
         default:
           throw assertNever(module);
       }
     }
 
-    this.knownDepsCache.set(rootModuleIdentifier, visited);
+    if (complete) {
+      this.knownDepsCache.set(rootModuleIdentifier, visited);
+    }
     return visited;
   }
 
@@ -973,6 +1197,50 @@ export class Loader {
       : trimmed;
   }
 
+  // The key a module is recorded under with the dependency tracker: the form
+  // the index carries for that module's realm, so a dep here matches the rows
+  // invalidation searches.
+  //
+  // A realm reached through a registered prefix is named by its RRI. A realm
+  // that has only a URL mapping — the alias a test or deployment serves it
+  // under — is named by that alias, not by the host actually serving it.
+  // `unresolveURL` covers the first and leaves the second alone (it maps an
+  // alias *to* the real URL, never back), so the alias case needs its own fold.
+  // Memoized because the dependency walk re-derives the key for every module in
+  // a root's transitive set on every import of that root, and the alias branch
+  // below allocates a URL. Keyed by the raw identifier so the trim is memoized
+  // too. Discarded with the other mapping-derived caches when a realm mapping
+  // changes, since the key it produces is only stable between those changes.
+  private trackingKey(moduleIdentifier: string): string {
+    let cached = this.trackingKeyCache.get(moduleIdentifier);
+    if (cached !== undefined) {
+      return cached;
+    }
+    let key = this.computeTrackingKey(moduleIdentifier);
+    this.trackingKeyCache.set(moduleIdentifier, key);
+    return key;
+  }
+
+  private computeTrackingKey(moduleIdentifier: string): string {
+    let trimmed = trimModuleIdentifier(moduleIdentifier);
+    if (!this.virtualNetwork) {
+      return trimmed;
+    }
+    let unresolved = this.virtualNetwork.unresolveURL(trimmed);
+    if (unresolved !== trimmed) {
+      return unresolved;
+    }
+    try {
+      let virtual = this.virtualNetwork.mapURL(trimmed, 'real-to-virtual');
+      if (virtual) {
+        return virtual.href;
+      }
+    } catch {
+      // Not a parseable URL — a prefix-form identifier, already canonical.
+    }
+    return trimmed;
+  }
+
   private getModule(moduleIdentifier: string): Module | undefined {
     return this.modules.get(this.moduleCacheKey(moduleIdentifier));
   }
@@ -1000,18 +1268,6 @@ export class Loader {
   // virtual-alias (`https://cardstack.com/base/X`) and resolved real URL
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
-  private canonicalizeTrackingKey(moduleIdentifier: string): string {
-    if (!this.virtualNetwork) {
-      return moduleIdentifier;
-    }
-    try {
-      let parsed = new URL(moduleIdentifier);
-      let virtual = this.virtualNetwork.mapURL(parsed, 'real-to-virtual');
-      return virtual ? virtual.href : moduleIdentifier;
-    } catch {
-      return moduleIdentifier;
-    }
-  }
 
   private vnShimIdentitiesCaptured = false;
 
@@ -1085,6 +1341,14 @@ export class Loader {
     try {
       loaded = await this.load(moduleURL);
     } catch (exception) {
+      // `invalidateModule` may have dropped this fetch while transport was in
+      // flight, and a later import may already have installed a replacement.
+      // The fetching record is the generation token: a stale failure must not
+      // delete or reject the newer generation.
+      if (this.getModule(moduleIdentifier) !== module) {
+        module.deferred.fulfill();
+        return;
+      }
       // A failure to OBTAIN the module — a network failure or an error
       // HTTP response — is never cached as `broken`. The modules map keys
       // entries by the extension-trimmed identifier (see
@@ -1105,6 +1369,14 @@ export class Loader {
       throw exception;
     }
 
+    // Same generation check for a response that arrives after its fetch was
+    // invalidated: without it an old response restores its source and
+    // dependency edges over the entry that replaced it.
+    if (this.getModule(moduleIdentifier) !== module) {
+      module.deferred.fulfill();
+      return;
+    }
+
     let canonicalURL =
       loaded.url ||
       this.getCanonicalModuleURL(moduleIdentifier) ||
@@ -1122,11 +1394,13 @@ export class Loader {
       // individual shim's capture.
       this.captureVirtualNetworkShimIdentities();
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
+      this.fetchedModuleShims.add(this.moduleCacheKey(moduleIdentifier));
 
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance: loaded.module,
         consumedModules: new Set(),
+        completingDependencies: [],
       });
       module.deferred.fulfill();
       return;
@@ -1141,42 +1415,14 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
     }
 
-    type DefineFunc = ((
-      mid: string,
-      depList: string[],
-      impl: Function,
-    ) => void) & {
-      dependencyList: UnregisteredDep[];
-      implementation: Function;
-    };
-
-    // this local is here for the evals to see. We're sticking the
-    // dependencyList and implementation onto the function itself because that's
-    // a convenient way to ensure that build tools like Rollup don't optimize it
-    // away. Rollup violates the JS spec by removing a local that's visible to `eval`.
-    let define = ((_mid: string, depList: string[], impl: Function) => {
-      define.dependencyList = depList.map((depId) => {
-        if (depId === 'exports') {
-          return { type: 'exports' };
-        } else if (depId === '__import_meta__') {
-          return { type: '__import_meta__' };
-        } else {
-          return {
-            type: 'dep',
-            moduleURL: new URL(
-              this.resolveImport(depId),
-              new URL(moduleIdentifier),
-            ),
-          };
-        }
-      });
-      define.implementation = impl;
-    }) as DefineFunc;
+    let registration: ModuleRegistration;
+    let dependencyList: UnregisteredDep[];
 
     try {
       // Append `sourceURL` so stack traces from inside the eval-ed AMD
@@ -1184,12 +1430,48 @@ export class Loader {
       // Strip any CR/LF from the identifier so a maliciously-crafted
       // module URL can't terminate the comment and inject extra source
       // text into the eval-ed program.
-      eval(src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''));
+      registration = this.moduleEvaluator(
+        src + '\n//# sourceURL=' + moduleIdentifier.replace(/[\r\n]/g, ''),
+        moduleIdentifier,
+      );
+      // An evaluator is arbitrary injected code, so what comes back is
+      // checked before it becomes a cached module: a registration the loader
+      // can't use has to name itself here rather than surface later as a
+      // shapeless failure while the module is being evaluated.
+      if (
+        !registration ||
+        !Array.isArray(registration.dependencyList) ||
+        !registration.dependencyList.every(
+          (entry) => typeof entry === 'string',
+        ) ||
+        typeof registration.implementation !== 'function'
+      ) {
+        throw new Error(
+          `Module evaluator returned an invalid registration for ${moduleIdentifier}`,
+        );
+      }
+      dependencyList = registration.dependencyList.map(
+        (depId): UnregisteredDep => {
+          if (depId === 'exports') {
+            return { type: 'exports' };
+          } else if (depId === '__import_meta__') {
+            return { type: '__import_meta__' };
+          }
+          return {
+            type: 'dep',
+            moduleURL: new URL(
+              this.resolveImport(depId),
+              new URL(moduleIdentifier),
+            ),
+          };
+        },
+      );
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
@@ -1197,8 +1479,8 @@ export class Loader {
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
-      dependencyList: define.dependencyList,
-      implementation: define.implementation,
+      dependencyList,
+      implementation: registration.implementation,
     };
 
     this.setModule(moduleIdentifier, registeredModule);
@@ -1221,12 +1503,21 @@ export class Loader {
         dep.type === 'dep' ? [dep.moduleURL.href] : [],
       ),
     );
+    // A dependency that was still completing when this module's list was
+    // frozen is an import all the same, and this is the last place it is
+    // written down: the entry is dropped as the module leaves the registered
+    // states. Invalidation reads it, so a module does not survive the
+    // eviction of something whose exports it holds.
+    let completingDependencies = flatMap(module.dependencies, (dep) =>
+      dep.type === 'completing-dep' ? [dep.moduleURL.href] : [],
+    );
 
     this.setModule(moduleIdentifier, {
       state: 'preparing',
       implementation: module.implementation,
       moduleInstance: moduleProxy,
       consumedModules,
+      completingDependencies,
     });
 
     try {
@@ -1234,13 +1525,17 @@ export class Loader {
         switch (entry.type) {
           case 'exports':
             return privateModuleInstance;
-          case '__import_meta__':
-            return {
-              url:
-                this.getCanonicalModuleURL(moduleIdentifier) ??
-                moduleIdentifier,
-              loader: this,
-            };
+          case '__import_meta__': {
+            let url =
+              this.getCanonicalModuleURL(moduleIdentifier) ?? moduleIdentifier;
+            // Whoever evaluates a module decides what `import.meta` exposes
+            // to it. The default hands over the Loader itself, which is only
+            // safe because the default evaluates the module in the loader's
+            // own realm — code already holding everything the loader has.
+            return this.moduleMeta
+              ? this.moduleMeta(url)
+              : { url, loader: this };
+          }
           case 'completing-dep':
           case 'dep': {
             let depModule = this.getModule(entry.moduleURL.href);
@@ -1287,6 +1582,7 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: moduleProxy,
         consumedModules,
+        completingDependencies,
       });
       return moduleProxy;
     } catch (exception) {
@@ -1294,6 +1590,7 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules,
+        completingDependencies,
       });
       throw exception;
     }

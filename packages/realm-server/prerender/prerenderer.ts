@@ -7,6 +7,7 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
@@ -21,6 +22,8 @@ import { toAffinityKey } from './affinity.ts';
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
+import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
   type BatchOwner,
   computeBatchClearCacheGate,
@@ -623,6 +626,7 @@ export class Prerenderer {
     url,
     auth,
     format,
+    captureSpec,
     priority,
     opts,
     signal,
@@ -631,6 +635,7 @@ export class Prerenderer {
     url: string;
     auth: string;
     format: 'isolated' | 'embedded';
+    captureSpec?: ScreenshotCaptureSpec;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
@@ -655,6 +660,7 @@ export class Prerenderer {
         url,
         auth,
         format,
+        ...(captureSpec ? { captureSpec } : {}),
         priority,
         opts,
         signal,
@@ -989,8 +995,33 @@ export class Prerenderer {
       return;
     }
     this.#queueSnapshotInterval = setInterval(() => {
+      // Emitted before the quiet-path return below, and on its own line
+      // rather than appended to the snapshot. The heap holds memory from
+      // work already finished and keeps growing with the pool idle, so
+      // gating this on current load would hide exactly the growth that
+      // has no queue behind it to explain it. Kept separate from the
+      // snapshot line so existing greps of that line are unaffected.
+      let snap = this.#pagePool.getQueueDepthSnapshot();
       try {
-        let snap = this.#pagePool.getQueueDepthSnapshot();
+        let telemetry = heapTelemetry();
+        log.info('prerender-heap %s', formatHeapTelemetry(telemetry));
+        // Reuses the reading just taken, so the instance that crosses the
+        // threshold captures itself off the same tick that reports it. The
+        // pool snapshot comes with it because the capture stops the world,
+        // and doing that while renders are in flight charges the pause to
+        // them.
+        let busy = snap.affinities.reduce(
+          (n, a) => n + a.byQueue.file + a.byQueue.module + a.byQueue.command,
+          0,
+        );
+        maybeAutoCaptureHeapSnapshot(
+          telemetry.heapUsedMB,
+          snap.totalPending === 0 && busy === 0,
+        );
+      } catch (e) {
+        log.warn('heap telemetry log failed:', e);
+      }
+      try {
         if (snap.affinities.length === 0 && snap.totalPending === 0) {
           // Quiet path: no active affinities and no pending work. Skip the
           // log entirely so grep-able lines all describe real load.

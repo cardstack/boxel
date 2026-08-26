@@ -66,6 +66,7 @@ import type {
   Saved,
   EntryResource,
 } from './resource-types.ts';
+import { fileMetaTimestamps } from './resource-types.ts';
 import {
   buildCssResource,
   parseUsedRenderType,
@@ -774,6 +775,23 @@ export class RealmIndexQueryEngine {
     opts?: QueryOptions,
   ): Promise<InstanceOrError | undefined> {
     return await this.#indexQueryEngine.getInstance(url, opts);
+  }
+
+  // Liveness probe matching `instance()`'s row predicate (including the
+  // effective-error channel) without hydrating the row — for gates that
+  // need only existence, not content.
+  async hasLiveInstance(url: URL, opts?: QueryOptions): Promise<boolean> {
+    return await this.#indexQueryEngine.hasLiveInstance(url, opts);
+  }
+
+  // The live instance's index generation (undefined when not live) — the
+  // liveness gate and the cache-key generation in one narrow read, without
+  // hydrating the row.
+  async liveInstanceGeneration(
+    url: URL,
+    opts?: QueryOptions,
+  ): Promise<number | undefined> {
+    return await this.#indexQueryEngine.liveInstanceGeneration(url, opts);
   }
 
   async file(url: URL, opts?: QueryOptions): Promise<IndexedFile | undefined> {
@@ -2239,6 +2257,7 @@ function fileResourceFromIndex(
     meta: {
       adoptsFrom: adoptsFrom as CodeRef,
       realmURL: fileEntry.realmURL as RealmIdentifier,
+      ...fileMetaTimestamps(lastModified, createdAt),
     },
     links: { self: fileURL.href },
   };

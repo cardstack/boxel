@@ -6,12 +6,12 @@ import {
   field,
   linksTo,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
-import StringField from 'https://cardstack.com/base/string';
-import UrlField from 'https://cardstack.com/base/url';
-import ThemeCard from 'https://cardstack.com/base/theme';
+} from '@cardstack/base/card-api';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
+import StringField from '@cardstack/base/string';
+import UrlField from '@cardstack/base/url';
+import ThemeCard from '@cardstack/base/theme';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 export class PageConfig extends CardDef {

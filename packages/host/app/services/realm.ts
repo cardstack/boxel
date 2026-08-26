@@ -316,7 +316,10 @@ class RealmResource {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               if (!this.indexingWaiterToken) {
-                this.indexingWaiterToken = indexingWaiter.beginAsync();
+                this.indexingWaiterToken = indexingWaiter.beginAsync(
+                  undefined,
+                  this.realmURL,
+                );
               }
               break;
             case 'full':

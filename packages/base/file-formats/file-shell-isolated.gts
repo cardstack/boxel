@@ -9,16 +9,7 @@ import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 
 import { copyCardURLToClipboard, eq, gt } from '@cardstack/boxel-ui/helpers';
-// Provenance markers come from the boxel-ui icon barrel, a single module every
-// card already depends on: `Folder` for a fact the realm supplied, `IconSearch`
-// for one a parser read out of the bytes, `IconInherit` for one derived from
-// those, and `IconCircle` for one that is absent.
-import {
-  Folder,
-  IconCircle,
-  IconInherit,
-  IconSearch,
-} from '@cardstack/boxel-ui/icons';
+import { IconSearch } from '@cardstack/boxel-ui/icons';
 
 import { isSampledContentHash } from '@cardstack/runtime-common';
 
@@ -281,7 +272,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
 
   get hasModel3d() {
     let m = this.args.model?.model3d;
-    return Boolean(m?.meshes || m?.triangles);
+    return Boolean(m?.meshes || m?.triangles || m?.vertices || m?.dimensions);
   }
 
   get hasFontMetadata() {
@@ -441,43 +432,23 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <div class='insp-row'>
               <dt>Kind</dt>
               <dd>{{@model.kind}}</dd>
-              <span class='mark' title='Realm-provided'><Folder
-                  width='11'
-                  height='11'
-                  aria-hidden='true'
-                /></span>
             </div>
             {{#if this.size}}
               <div class='insp-row'>
                 <dt>Size</dt>
                 <dd>{{this.size}}</dd>
-                <span class='mark' title='Realm-provided'><Folder
-                    width='11'
-                    height='11'
-                    aria-hidden='true'
-                  /></span>
               </div>
             {{/if}}
             {{#if this.created}}
               <div class='insp-row'>
                 <dt>Created</dt>
                 <dd>{{this.created}}</dd>
-                <span class='mark' title='Realm-provided'><Folder
-                    width='11'
-                    height='11'
-                    aria-hidden='true'
-                  /></span>
               </div>
             {{/if}}
             {{#if this.modified}}
               <div class='insp-row'>
                 <dt>Modified</dt>
                 <dd>{{this.modified}}</dd>
-                <span class='mark' title='Realm-provided'><Folder
-                    width='11'
-                    height='11'
-                    aria-hidden='true'
-                  /></span>
               </div>
             {{/if}}
           </dl>
@@ -492,11 +463,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                     class='{{if row.mono "mono"}}'
                     title={{row.value}}
                   >{{row.value}}</dd>
-                  <span class='mark' title='Parsed from the file'><IconSearch
-                      width='11'
-                      height='11'
-                      aria-hidden='true'
-                    /></span>
                 </div>
               {{/each}}
             </dl>
@@ -533,14 +499,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
                 <div class='insp-row'>
                   <dt>{{row.label}}</dt>
                   <dd class='{{if row.mono "mono"}}'>{{row.value}}</dd>
-                  <span
-                    class='mark'
-                    title='Computed from parser output'
-                  ><IconInherit
-                      width='13'
-                      height='13'
-                      aria-hidden='true'
-                    /></span>
                 </div>
               {{/each}}
             </dl>
@@ -605,33 +563,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             <h2 class='insp-group'>Office document</h2>
             <div class='insp-family'><@fields.officeMetadata /></div>
           {{/if}}
-
-          <div class='legend'>
-            <span class='legend-item'><IconSearch
-                width='10'
-                height='10'
-                aria-hidden='true'
-              />
-              extracted</span>
-            <span class='legend-item'><Folder
-                width='10'
-                height='10'
-                aria-hidden='true'
-              />
-              realm</span>
-            <span class='legend-item'><IconInherit
-                width='12'
-                height='12'
-                aria-hidden='true'
-              />
-              computed</span>
-            <span class='legend-item'><IconCircle
-                width='10'
-                height='10'
-                aria-hidden='true'
-              />
-              missing</span>
-          </div>
         </section>
       </div>
     </article>
@@ -969,7 +900,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       }
       .insp-row {
         display: grid;
-        grid-template-columns: 92px minmax(0, 1fr) auto;
+        grid-template-columns: 92px minmax(0, 1fr);
         gap: 10px;
         align-items: baseline;
         padding: 5px 0;
@@ -995,37 +926,6 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
       .insp-row dd.mono {
         font-family: var(--font-mono);
         font-size: 0.65625rem;
-      }
-      .mark {
-        display: inline-grid;
-        place-items: center;
-        width: 20px;
-        height: 20px;
-        border-radius: 5px;
-        border: 1px solid var(--border);
-        color: var(--muted-foreground);
-        /* Some barrel glyphs paint from `--icon-color` rather than
-           `currentColor`, so hand them the inherited color explicitly. */
-        --icon-color: currentColor;
-      }
-      .legend {
-        margin-top: 16px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border);
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-family: var(--font-mono);
-        font-size: 0.5rem;
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        color: var(--muted-foreground);
-        --icon-color: currentColor;
       }
     </style>
   </template>

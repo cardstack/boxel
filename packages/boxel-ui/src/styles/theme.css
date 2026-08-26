@@ -60,7 +60,7 @@
 
   /* form + focus */
   --border: var(--boxel-border-color);
-  --input: var(--boxel-light);
+  --input: var(--boxel-400);
   --ring: var(--boxel-highlight);
 
   /* charts */
@@ -118,7 +118,6 @@
   --warning: var(--boxel-warning);
 
   /* other */
-  --boxel-switch-background: var(--boxel-400);
   --boxel-button-default-border: var(--boxel-button-border-color);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);
@@ -135,38 +134,16 @@
   --boxel-button-disabled-foreground: var(--boxel-450);
 }
 
-/* Themed-card boundary reset for the --theme-* knobs (typography roles, base
-   font size, typescale) that theme cards may define and CardContainer consumes
-   through var() fallbacks. They have no defaults here, so `initial` (the
-   guaranteed-invalid value for a custom property) stops an outer theme card's
-   values from inheriting into a nested one and lets those fallbacks apply. A
-   card's own theme stylesheet overrides this — `:where()` keeps it at zero
-   specificity. (--theme-spacing is excluded: CardContainer derives it from
-   --spacing, which the token reset above already covers.) */
+/* Themed-card boundary reset. The --theme-* typography knobs are deliberately
+   NOT reset here: a nested theme that omits them inherits the ambient
+   typography, and one that wants its own simply sets them — whereas a reset
+   would make inheriting impossible to express. */
 :where([data-boxel-theme-scope]) {
-  --theme-font-size: initial;
-  --theme-scale: initial;
-  --theme-heading-font-family: initial;
-  --theme-heading-font-size: initial;
-  --theme-heading-font-weight: initial;
-  --theme-heading-line-height: initial;
-  --theme-section-heading-font-family: initial;
-  --theme-section-heading-font-size: initial;
-  --theme-section-heading-font-weight: initial;
-  --theme-section-heading-line-height: initial;
-  --theme-subheading-font-family: initial;
-  --theme-subheading-font-size: initial;
-  --theme-subheading-font-weight: initial;
-  --theme-subheading-line-height: initial;
-  --theme-body-font-family: initial;
-  --theme-body-font-size: initial;
-  --theme-body-font-weight: initial;
-  --theme-body-line-height: initial;
-  --theme-caption-font-family: initial;
-  --theme-caption-font-size: initial;
-  --theme-caption-font-weight: initial;
-  --theme-caption-line-height: initial;
   --boxel-switch-background: initial;
+  --boxel-switch-thumb: initial;
+  --boxel-switch-active-thumb: initial;
+  --boxel-switch-thumb-icon: initial;
+  --boxel-switch-active-thumb-icon: initial;
   --boxel-button-default-border: initial;
   --boxel-button-default-active-background: initial;
   --boxel-button-default-active-foreground: initial;
@@ -215,7 +192,7 @@
   --destructive: var(--boxel-danger);
   --destructive-foreground: var(--boxel-light-100);
   --border: var(--boxel-550);
-  --input: var(--boxel-dark);
+  --input: var(--boxel-550);
   --ring: var(--boxel-highlight);
   --sidebar: #555366;
   --sidebar-foreground: var(--boxel-light);
@@ -225,6 +202,8 @@
   --sidebar-accent-foreground: var(--boxel-light);
   --sidebar-border: var(--boxel-550);
   --sidebar-ring: var(--boxel-highlight);
+  --boxel-switch-thumb: var(--boxel-light);
+  --boxel-switch-thumb-icon: var(--background);
   --boxel-button-default-border: var(--border);
   --boxel-button-default-active-background: var(--background);
   --boxel-button-default-active-foreground: var(--foreground);

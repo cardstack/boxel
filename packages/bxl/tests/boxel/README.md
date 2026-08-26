@@ -28,6 +28,7 @@ rules, so a failing case name points straight at the one that broke.
 | `fielddef-threading.ts`     | Multi-stage `{ as: Cls }` threading — the insurance pipeline pattern                                                     |
 | `card-source-mutation.ts`   | The card-source mutation adapter: schema derivation, computed-field skips, relationship serialization, stale-plan safety |
 | `update-via-bxl.ts`         | The `updateViaBxl` adapter                                                                                               |
+| `authoring-skill-claims.ts` | Drift guard for the `bxl-authoring` agent skill: every behavior it teaches, plus the repo paths it cites                 |
 
 ## Running
 

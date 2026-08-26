@@ -1,2 +1,9 @@
 # Local benchmark artifacts.
 .perf/
+
+# Publish artifact — JavaScript + declarations emitted from src/ by
+# `pnpm build`, shipped in the npm tarball, never committed.
+dist/
+
+# Tarballs from `pnpm pack` and `pnpm verify:package`.
+*.tgz

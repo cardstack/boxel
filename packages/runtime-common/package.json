@@ -11,6 +11,10 @@
     "#fetch": {
       "node": "./fetch-node.ts",
       "browser": "./fetch-browser.ts"
+    },
+    "#media-cache-stream": {
+      "node": "./media-cache-stream-node.ts",
+      "browser": "./media-cache-stream-browser.ts"
     }
   },
   "exports": {
@@ -60,7 +64,7 @@
     "decorator-transforms": "catalog:",
     "diff": "catalog:",
     "ember-concurrency-async-plugin": "workspace:*",
-    "ember-eslint-parser": "^0.13.0",
+    "ember-eslint-parser": "catalog:",
     "ember-source": "catalog:",
     "eslint": "catalog:",
     "ethers": "catalog:",

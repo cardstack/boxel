@@ -64,6 +64,21 @@ const headLog = logger('realm-server:head');
 const isolatedLog = logger('realm-server:isolated');
 const scopedCSSLog = logger('realm-server:scoped-css');
 
+// An <object>/<embed> load advertises text/html in its Accept header (the
+// browser issues it as a frame-style navigation), but it is always embedding
+// a document, never the app — answering with the shell boots the host app
+// recursively inside the preview. Sec-Fetch-Dest is the only place these
+// loads are distinguishable from an address-bar navigation (which carries
+// `document` and must keep opening the app); browsers stamp it on requests
+// to trustworthy origins (HTTPS and localhost). The distinction has to be
+// drawn here on the server: service workers are spec-required to pass
+// <object>/<embed> loads straight to the network without a fetch event, so
+// no client-side layer ever sees these requests.
+function isDocumentEmbedRequest(ctxt: Koa.Context): boolean {
+  let destination = ctxt.header['sec-fetch-dest'];
+  return destination === 'embed' || destination === 'object';
+}
+
 export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   let {
     serverURL,
@@ -212,6 +227,11 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   }
 
   let serveIndex = async (ctxt: Koa.Context, next: Koa.Next) => {
+    if (isDocumentEmbedRequest(ctxt)) {
+      // Fall through to the realm, which serves the file's own bytes and
+      // lets its content type decide what the embed renders.
+      return next();
+    }
     let acceptHeader = ctxt.header.accept ?? '';
     let lowerAcceptHeader = acceptHeader.toLowerCase();
     let includesVndMimeType = lowerAcceptHeader.includes('application/vnd.');
@@ -377,6 +397,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
         ctxt.set('ETag', etag);
         ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
         ctxt.vary('Accept');
+        // The shell is withheld from document embeds (see
+        // isDocumentEmbedRequest), so a cached copy must not satisfy them.
+        ctxt.vary('Sec-Fetch-Dest');
         return;
       }
     }
@@ -607,6 +630,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
       ctxt.set('ETag', etag);
       ctxt.set('Cache-Control', 'public, max-age=0, must-revalidate');
       ctxt.vary('Accept');
+      // The shell is withheld from document embeds (see
+      // isDocumentEmbedRequest), so a cached copy must not satisfy them.
+      ctxt.vary('Sec-Fetch-Dest');
     }
 
     ctxt.body = responseHTML;
@@ -616,6 +642,9 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
   let serveHostApp = async (ctxt: Koa.Context, next: Koa.Next) => {
     let acceptHeader = (ctxt.header.accept ?? '').toLowerCase();
     let isHead = ctxt.method === 'HEAD';
+    if (isDocumentEmbedRequest(ctxt)) {
+      return next();
+    }
     if (!isHead && !acceptHeader.includes('text/html')) {
       return next();
     }

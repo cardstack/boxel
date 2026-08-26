@@ -48,8 +48,10 @@ import {
   ThemeDashboardHeader,
   NavSection,
   ModeToggle,
-  CssFieldEditor,
   CardContainerCss,
+  ThemeImporter,
+  ResetButton,
+  ThemeDashboardEmptyState,
 } from './default-templates/theme-dashboard';
 
 const sharedBrandVarsMap: Record<string, string> = {
@@ -71,6 +73,23 @@ const darkToBrandVariableMapping: Record<string, string> = {
 };
 
 class BrandGuideIsolated extends Component<typeof BrandGuide> {
+  // Edit extends this template with the field editors swapped in
+  protected editMode = false;
+
+  private get hasThemeCss() {
+    return Boolean(this.args.model?.cssVariables);
+  }
+
+  // A theme-less isolated view shows the dashboard empty state instead of
+  // any sections; importing happens in edit mode.
+  private get showEmptyState() {
+    return !this.editMode && !this.hasThemeCss;
+  }
+
+  private get showBrandColorPalette() {
+    return this.editMode || Boolean(this.args.model?.brandColorPalette?.length);
+  }
+
   <template>
     <ThemeDashboard
       class='brand-guide'
@@ -84,8 +103,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           class='brand-guide-dashboard-header'
           @title={{@model.cardTitle}}
           @description={{@model.cardDescription}}
-          @isDarkMode={{this.isDarkMode}}
           @version={{@model.version}}
+          @metaLabel='Brand Guide'
+          @model={{@model}}
+          @fields={{@fields}}
+          @mode={{if this.editMode 'edit' 'isolated'}}
         >
           <:meta>
             {{#if @model.markUsage.primaryMark1}}
@@ -101,395 +123,464 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         </ThemeDashboardHeader>
       </:header>
       <:default>
-        <ModeToggle
-          class='brand-guide-mode-toggle'
-          @toggleDarkMode={{this.toggleDarkMode}}
-          @isDarkMode={{this.isDarkMode}}
-        />
-        <GridContainer class='brand-guide-grid'>
-          {{#each this.sectionsWithContent as |section|}}
-            <NavSection
-              @id={{section.id}}
-              @title={{section.title}}
-              data-test-brand-guide-section={{section.id}}
-            >
-              {{#if (eq section.id 'brand-palette')}}
-                <GridContainer>
-                  {{#if @model.brandColorPalette.length}}
-                    <h3>Brand Color Palette</h3>
-                    <@fields.brandColorPalette class='brand-palette' />
-                  {{/if}}
-                  <h3>Functional Palette</h3>
-                  <@fields.functionalPalette class='functional-palette' />
-                  <h3 class='color-system-title'>Color System</h3>
-                  <div class='color-system-container'>
-                    {{#if this.isDarkMode}}
-                      <@fields.darkModeVariables />
-                    {{else}}
-                      <@fields.rootVariables />
+        {{#if this.showEmptyState}}
+          <ThemeDashboardEmptyState />
+        {{else}}
+          <ModeToggle
+            class='brand-guide-mode-toggle'
+            @toggleDarkMode={{this.toggleDarkMode}}
+            @isDarkMode={{this.isDarkMode}}
+          />
+          <GridContainer class='brand-guide-grid'>
+            {{#each this.sectionsWithContent as |section|}}
+              <NavSection
+                @id={{section.id}}
+                @title={{section.title}}
+                data-test-brand-guide-section={{section.id}}
+              >
+                {{#if (eq section.id 'brand-palette')}}
+                  <GridContainer>
+                    {{#if this.showBrandColorPalette}}
+                      <h3>Brand Color Palette</h3>
+                      <@fields.brandColorPalette class='brand-palette' />
                     {{/if}}
-                  </div>
-                </GridContainer>
-              {{else if (eq section.id 'typography')}}
-                <GridContainer class='typography-grid'>
-                  {{#if @model.typography.heading}}
-                    <div class='typography-block'>
-                      <div class='typography-preview'>
-                        <h1
-                          style={{this.headingPreviewStyle}}
-                          {{this.captureHeadingEl}}
-                        >
-                          {{#if @model.typography.heading.sampleText}}
-                            {{@model.typography.heading.sampleText}}
-                          {{else}}
-                            The quick brown fox
-                          {{/if}}
-                        </h1>
-                      </div>
-                      <div class='typography-meta'>
-                        <span class='typography-label'>Headline</span>
-                        {{#if this.headingComputedStyles}}
-                          <dl class='style-details'>
-                            <dt>Family</dt>
-                            <dd>{{this.headingComputedStyles.fontFamily}}</dd>
-                            <dt>Size</dt>
-                            <dd>{{this.headingComputedStyles.fontSize}}</dd>
-                            <dt>Weight</dt>
-                            <dd>{{this.headingComputedStyles.fontWeight}}</dd>
-                            <dt>Line Height</dt>
-                            <dd>{{this.headingComputedStyles.lineHeight}}</dd>
-                          </dl>
-                        {{/if}}
-                      </div>
+                    <h3>Functional Palette</h3>
+                    <@fields.functionalPalette class='functional-palette' />
+                    <h3 class='color-system-title'>Color System</h3>
+                    <div class='color-system-container'>
+                      {{#if this.isDarkMode}}
+                        <@fields.darkModeVariables />
+                      {{else}}
+                        <@fields.rootVariables />
+                      {{/if}}
                     </div>
-                  {{/if}}
-                  {{#if @model.typography.body}}
-                    <div class='typography-block'>
-                      <div class='typography-preview'>
-                        <p
-                          style={{this.bodyPreviewStyle}}
-                          {{this.captureBodyEl}}
-                        >
-                          {{#if @model.typography.body.sampleText}}
-                            {{@model.typography.body.sampleText}}
-                          {{else}}
-                            The quick brown fox
-                          {{/if}}
+                  </GridContainer>
+                {{else if (eq section.id 'typography')}}
+                  {{#unless this.editMode}}
+                    <GridContainer class='typography-grid'>
+                      {{#if @model.typography.heading}}
+                        <div class='typography-block'>
+                          <div class='typography-preview'>
+                            <h1
+                              style={{this.headingPreviewStyle}}
+                              {{this.captureHeadingEl}}
+                            >
+                              {{#if @model.typography.heading.sampleText}}
+                                {{@model.typography.heading.sampleText}}
+                              {{else}}
+                                The quick brown fox
+                              {{/if}}
+                            </h1>
+                          </div>
+                          <div class='typography-meta'>
+                            <span class='typography-label'>Headline</span>
+                            {{#if this.headingComputedStyles}}
+                              <dl class='style-details'>
+                                <dt>Family</dt>
+                                <dd
+                                >{{this.headingComputedStyles.fontFamily}}</dd>
+                                <dt>Size</dt>
+                                <dd>{{this.headingComputedStyles.fontSize}}</dd>
+                                <dt>Weight</dt>
+                                <dd
+                                >{{this.headingComputedStyles.fontWeight}}</dd>
+                                <dt>Line Height</dt>
+                                <dd
+                                >{{this.headingComputedStyles.lineHeight}}</dd>
+                              </dl>
+                            {{/if}}
+                          </div>
+                        </div>
+                      {{/if}}
+                      {{#if @model.typography.body}}
+                        <div class='typography-block'>
+                          <div class='typography-preview'>
+                            <p
+                              style={{this.bodyPreviewStyle}}
+                              {{this.captureBodyEl}}
+                            >
+                              {{#if @model.typography.body.sampleText}}
+                                {{@model.typography.body.sampleText}}
+                              {{else}}
+                                The quick brown fox
+                              {{/if}}
+                            </p>
+                          </div>
+                          <div class='typography-meta'>
+                            <span class='typography-label'>Body</span>
+                            {{#if this.bodyComputedStyles}}
+                              <dl class='style-details'>
+                                <dt>Family</dt>
+                                <dd>{{this.bodyComputedStyles.fontFamily}}</dd>
+                                <dt>Size</dt>
+                                <dd>{{this.bodyComputedStyles.fontSize}}</dd>
+                                <dt>Weight</dt>
+                                <dd>{{this.bodyComputedStyles.fontWeight}}</dd>
+                                <dt>Line Height</dt>
+                                <dd>{{this.bodyComputedStyles.lineHeight}}</dd>
+                              </dl>
+                            {{/if}}
+                          </div>
+                        </div>
+                      {{/if}}
+                    </GridContainer>
+                  {{/unless}}
+                  <@fields.typography class='brand-typography-preview' />
+                {{else if (eq section.id 'ui-components')}}
+                  <GridContainer class='cta-grid'>
+                    <FieldContainer @label='Primary CTA' @vertical={{true}}>
+                      <div class='preview-container cta-preview-container'>
+                        <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
+                      </div>
+                    </FieldContainer>
+                    <FieldContainer @label='Secondary CTA' @vertical={{true}}>
+                      <div class='preview-container cta-preview-container'>
+                        <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
+                      </div>
+                    </FieldContainer>
+                    <FieldContainer @label='Disabled CTA' @vertical={{true}}>
+                      <div class='preview-container cta-preview-container'>
+                        <Button @disabled={{true}} @size='extra-small'>Sample
+                          CTA</Button>
+                      </div>
+                    </FieldContainer>
+                  </GridContainer>
+                  <FieldContainer
+                    @label='Corner Radius for holding shapes'
+                    @vertical={{true}}
+                  >
+                    <GridContainer class='ui-grid'>
+                      <div class='preview-container ui-preview-container'>
+                        <p>Lorem ipsum dolor sit amet, consectetur adipiscing
+                          elit, sed do eiusmod tempor incididunt ut labore et
+                          dolore magna aliqua. Ut enim ad minim veniam, quis
+                          nostrud exercitation ullamco laboris nisi ut aliquip
+                          ex ea commodo consequat. Duis aute irure dolor in
+                          reprehenderit in voluptate velit esse cillum dolore eu
+                          fugiat nulla pariatur. Excepteur sint occaecat
+                          cupidatat non proident, sunt in culpa qui officia
+                          deserunt mollit anim id est laborum.
                         </p>
                       </div>
-                      <div class='typography-meta'>
-                        <span class='typography-label'>Body</span>
-                        {{#if this.bodyComputedStyles}}
-                          <dl class='style-details'>
-                            <dt>Family</dt>
-                            <dd>{{this.bodyComputedStyles.fontFamily}}</dd>
-                            <dt>Size</dt>
-                            <dd>{{this.bodyComputedStyles.fontSize}}</dd>
-                            <dt>Weight</dt>
-                            <dd>{{this.bodyComputedStyles.fontWeight}}</dd>
-                            <dt>Line Height</dt>
-                            <dd>{{this.bodyComputedStyles.lineHeight}}</dd>
-                          </dl>
-                        {{/if}}
-                      </div>
-                    </div>
-                  {{/if}}
-                </GridContainer>
-                <@fields.typography class='brand-typography-preview' />
-              {{else if (eq section.id 'ui-components')}}
-                <GridContainer class='cta-grid'>
-                  <FieldContainer @label='Primary CTA' @vertical={{true}}>
-                    <div class='preview-container cta-preview-container'>
-                      <Button @kind='primary' @size='extra-small'>Sample CTA</Button>
-                    </div>
+                      <div
+                        class='preview-container ui-preview-container photo-container'
+                      />
+                    </GridContainer>
                   </FieldContainer>
-                  <FieldContainer @label='Secondary CTA' @vertical={{true}}>
-                    <div class='preview-container cta-preview-container'>
-                      <Button @kind='secondary' @size='extra-small'>Sample CTA</Button>
-                    </div>
-                  </FieldContainer>
-                  <FieldContainer @label='Disabled CTA' @vertical={{true}}>
-                    <div class='preview-container cta-preview-container'>
-                      <Button @disabled={{true}} @size='extra-small'>Sample CTA</Button>
-                    </div>
-                  </FieldContainer>
-                </GridContainer>
-                <FieldContainer
-                  @label='Corner Radius for holding shapes'
-                  @vertical={{true}}
-                >
-                  <GridContainer class='ui-grid'>
-                    <div class='preview-container ui-preview-container'>
-                      <p>Lorem ipsum dolor sit amet, consectetur adipiscing
-                        elit, sed do eiusmod tempor incididunt ut labore et
-                        dolore magna aliqua. Ut enim ad minim veniam, quis
-                        nostrud exercitation ullamco laboris nisi ut aliquip ex
-                        ea commodo consequat. Duis aute irure dolor in
-                        reprehenderit in voluptate velit esse cillum dolore eu
-                        fugiat nulla pariatur. Excepteur sint occaecat cupidatat
-                        non proident, sunt in culpa qui officia deserunt mollit
-                        anim id est laborum.
-                      </p>
-                    </div>
-                    <div
-                      class='preview-container ui-preview-container photo-container'
-                    />
-                  </GridContainer>
-                </FieldContainer>
-              {{else if (eq section.id 'visual-dna')}}
-                <div class='dsr-section-content'>
-                  {{#if @model.colorPalette}}
-                    <div class='subsection'>
-                      <h3 class='subsection-title'>Color Palette</h3>
-                      <div class='content-prose'>
+                {{else if (eq section.id 'visual-dna')}}
+                  <div class='dsr-section-content'>
+                    {{#if this.editMode}}
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Color Palette</h3>
                         <@fields.colorPalette />
                       </div>
-                    </div>
-                  {{/if}}
-
-                  {{#if @model.typographySystem}}
-                    <div class='dsr-subsection'>
-                      <h3 class='dsr-subsection-title'>Typography System</h3>
-                      <div class='dsr-content-prose'>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Typography System</h3>
                         <@fields.typographySystem />
                       </div>
-                    </div>
-                  {{/if}}
-
-                  {{#if @model.geometricLanguage}}
-                    <div class='dsr-subsection'>
-                      <h3 class='dsr-subsection-title'>Geometric Language</h3>
-                      <div class='dsr-content-prose'>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Geometric Language</h3>
                         <@fields.geometricLanguage />
                       </div>
-                    </div>
-                  {{/if}}
-
-                  {{#if @model.materialVocabulary}}
-                    <div class='dsr-subsection'>
-                      <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
-                      <div class='dsr-content-prose'>
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
                         <@fields.materialVocabulary />
                       </div>
-                    </div>
-                  {{/if}}
-
-                  {{#if @model.wallpaperImages.length}}
-                    <div class='dsr-subsection'>
-                      <h3 class='dsr-subsection-title'>Visual References</h3>
-                      <div class='dsr-image-gallery'>
-                        {{#each @model.wallpaperImages as |imageUrl|}}
-                          <figure class='dsr-gallery-item'>
-                            <img
-                              src='{{imageUrl}}'
-                              alt='Style reference'
-                              class='dsr-gallery-image'
-                            />
-                          </figure>
-                        {{/each}}
+                      <div class='dsr-subsection'>
+                        <h3 class='dsr-subsection-title'>Visual References</h3>
+                        <@fields.wallpaperImages />
                       </div>
+                    {{else}}
+                      {{#if @model.colorPalette}}
+                        <div class='subsection'>
+                          <h3 class='subsection-title'>Color Palette</h3>
+                          <div class='content-prose'>
+                            <@fields.colorPalette />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.typographySystem}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Typography System</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.typographySystem />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.geometricLanguage}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Geometric Language</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.geometricLanguage />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.materialVocabulary}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Material Vocabulary</h3>
+                          <div class='dsr-content-prose'>
+                            <@fields.materialVocabulary />
+                          </div>
+                        </div>
+                      {{/if}}
+
+                      {{#if @model.wallpaperImages.length}}
+                        <div class='dsr-subsection'>
+                          <h3 class='dsr-subsection-title'>Visual References</h3>
+                          <div class='dsr-image-gallery'>
+                            {{#each @model.wallpaperImages as |imageUrl|}}
+                              <figure class='dsr-gallery-item'>
+                                <img
+                                  src='{{imageUrl}}'
+                                  alt='Style reference'
+                                  class='dsr-gallery-image'
+                                />
+                              </figure>
+                            {{/each}}
+                          </div>
+                        </div>
+                      {{/if}}
+                    {{/if}}
+                  </div>
+                {{else if (eq section.id 'card-container-css')}}
+                  {{#if @model.cssVariables}}
+                    <CardContainerCss @cssVariables={{@model.cssVariables}} />
+                    <hr class='brand-guide-vars-divider' />
+                    <h3 class='brand-guide-vars-heading'>Brand Guide-Specific
+                      Variables</h3>
+                    <p class='brand-guide-vars-description'>These variables are
+                      only available for Brand Guides. They are not available as
+                      general Theme Card variables.</p>
+                    <div class='brand-guide-vars-box'>
+                      <h4 class='brand-guide-vars-title'>Functional Palette
+                        Variables</h4>
+                      <dl class='brand-guide-vars'>
+                        <dt><code>--brand-primary</code></dt>
+                        <dd>Primary brand color</dd>
+                        <dt><code>--brand-secondary</code></dt>
+                        <dd>Secondary brand color</dd>
+                        <dt><code>--brand-accent</code></dt>
+                        <dd>Accent brand color</dd>
+                        <dt><code>--brand-light</code></dt>
+                        <dd>Light brand color — used as
+                          <code>--background</code>
+                          in light mode and
+                          <code>--foreground</code>
+                          in dark mode</dd>
+                        <dt><code>--brand-dark</code></dt>
+                        <dd>Dark brand color — used as
+                          <code>--foreground</code>
+                          in light mode and
+                          <code>--background</code>
+                          in dark mode</dd>
+                      </dl>
+                    </div>
+                    <div class='brand-guide-vars-box'>
+                      <h4 class='brand-guide-vars-title'>Brand Mark Variables</h4>
+                      <p class='brand-guide-vars-description'>These variables
+                        are automatically set from your brand mark fields. Use
+                        them in card CSS to reference the correct mark for the
+                        current color scheme without manual light/dark
+                        switching.</p>
+                      <dl class='brand-guide-vars'>
+                        <dt><code>--brand-primary-mark</code></dt>
+                        <dd>Primary mark URL —
+                          <code>--brand-primary-mark-1</code>
+                          in light mode,
+                          <code>--brand-primary-mark-2</code>
+                          in dark mode</dd>
+                        <dt><code>--brand-secondary-mark</code></dt>
+                        <dd>Secondary mark URL —
+                          <code>--brand-secondary-mark-1</code>
+                          in light mode,
+                          <code>--brand-secondary-mark-2</code>
+                          in dark mode</dd>
+                        <dt><code>--brand-primary-mark-greyscale</code></dt>
+                        <dd>Primary mark greyscale URL —
+                          <code>--brand-primary-mark-greyscale-1</code>
+                          in light mode,
+                          <code>--brand-primary-mark-greyscale-2</code>
+                          in dark mode</dd>
+                        <dt><code>--brand-secondary-mark-greyscale</code></dt>
+                        <dd>Secondary mark greyscale URL —
+                          <code>--brand-secondary-mark-greyscale-1</code>
+                          in light mode,
+                          <code>--brand-secondary-mark-greyscale-2</code>
+                          in dark mode</dd>
+                        <dt><code>--brand-social-media-profile-icon</code></dt>
+                        <dd>Social media profile icon URL</dd>
+                        <dt><code>--brand-primary-mark-min-height</code></dt>
+                        <dd>Minimum display height for the primary mark</dd>
+                        <dt><code
+                          >--brand-primary-mark-clearance-ratio</code></dt>
+                        <dd>Clear-space ratio around the primary mark
+                          (multiplied by
+                          <code>--brand-primary-mark-min-height</code>)</dd>
+                        <dt><code>--brand-secondary-mark-min-height</code></dt>
+                        <dd>Minimum display height for the secondary mark</dd>
+                        <dt><code
+                          >--brand-secondary-mark-clearance-ratio</code></dt>
+                        <dd>Clear-space ratio around the secondary mark
+                          (multiplied by
+                          <code>--brand-secondary-mark-min-height</code>)</dd>
+                      </dl>
                     </div>
                   {{/if}}
-                </div>
-              {{else if (eq section.id 'card-container-css')}}
-                {{#if @model.cssVariables}}
-                  <CardContainerCss @cssVariables={{@model.cssVariables}} />
-                  <hr class='brand-guide-vars-divider' />
-                  <h3 class='brand-guide-vars-heading'>Brand Guide-Specific
-                    Variables</h3>
-                  <p class='brand-guide-vars-description'>These variables are
-                    only available for Brand Guides. They are not available as
-                    general Theme Card variables.</p>
-                  <div class='brand-guide-vars-box'>
-                    <h4 class='brand-guide-vars-title'>Functional Palette
-                      Variables</h4>
-                    <dl class='brand-guide-vars'>
-                      <dt><code>--brand-primary</code></dt>
-                      <dd>Primary brand color</dd>
-                      <dt><code>--brand-secondary</code></dt>
-                      <dd>Secondary brand color</dd>
-                      <dt><code>--brand-accent</code></dt>
-                      <dd>Accent brand color</dd>
-                      <dt><code>--brand-light</code></dt>
-                      <dd>Light brand color — used as
-                        <code>--background</code>
-                        in light mode and
-                        <code>--foreground</code>
-                        in dark mode</dd>
-                      <dt><code>--brand-dark</code></dt>
-                      <dd>Dark brand color — used as
-                        <code>--foreground</code>
-                        in light mode and
-                        <code>--background</code>
-                        in dark mode</dd>
-                    </dl>
-                  </div>
-                  <div class='brand-guide-vars-box'>
-                    <h4 class='brand-guide-vars-title'>Brand Mark Variables</h4>
+                {{else if (eq section.id 'brand-image-attachments')}}
+                  {{#if this.editMode}}
+                    <@fields.brandImageAttachments />
+                  {{else}}
+                    <p class='brand-guide-vars-description'>Custom CSS variables
+                      for image attachments:</p>
+                    <div
+                      class='brand-guide-vars-box brand-guide-custom-css-block'
+                    >
+                      <CopyButton
+                        class='brand-guide-custom-css-block-copy-button'
+                        @textToCopy={{this.brandImageAttachmentCssBlock}}
+                      />
+                      <dl class='brand-guide-vars'>
+                        {{#each this.brandImageAttachmentVarEntries as |entry|}}
+                          <dt
+                            class='var-row'
+                            data-test-brand-image-attachment-var
+                          >
+                            <code
+                              data-test-brand-image-attachment-varname
+                            >{{entry.varName}}</code>
+                          </dt>
+                          <dd
+                            class='var-row brand-image-attachment-var-dd'
+                            data-test-brand-image-attachment-url
+                          >
+                            <img
+                              src={{entry.url}}
+                              alt={{entry.altText}}
+                              class='brand-image-attachment-thumb-mini'
+                              data-test-brand-image-attachment-thumb
+                            />
+                            <code
+                              class='css-var-value'
+                            >url({{entry.url}})</code>
+                          </dd>
+                        {{/each}}
+                      </dl>
+                    </div>
+                  {{/if}}
+                {{else if (eq section.id 'custom-css')}}
+                  {{#if this.editMode}}
+                    <@fields.customCssVariables />
+                  {{else}}
                     <p class='brand-guide-vars-description'>These variables are
-                      automatically set from your brand mark fields. Use them in
-                      card CSS to reference the correct mark for the current
-                      color scheme without manual light/dark switching.</p>
-                    <dl class='brand-guide-vars'>
-                      <dt><code>--brand-primary-mark</code></dt>
-                      <dd>Primary mark URL —
-                        <code>--brand-primary-mark-1</code>
-                        in light mode,
-                        <code>--brand-primary-mark-2</code>
-                        in dark mode</dd>
-                      <dt><code>--brand-secondary-mark</code></dt>
-                      <dd>Secondary mark URL —
-                        <code>--brand-secondary-mark-1</code>
-                        in light mode,
-                        <code>--brand-secondary-mark-2</code>
-                        in dark mode</dd>
-                      <dt><code>--brand-primary-mark-greyscale</code></dt>
-                      <dd>Primary mark greyscale URL —
-                        <code>--brand-primary-mark-greyscale-1</code>
-                        in light mode,
-                        <code>--brand-primary-mark-greyscale-2</code>
-                        in dark mode</dd>
-                      <dt><code>--brand-secondary-mark-greyscale</code></dt>
-                      <dd>Secondary mark greyscale URL —
-                        <code>--brand-secondary-mark-greyscale-1</code>
-                        in light mode,
-                        <code>--brand-secondary-mark-greyscale-2</code>
-                        in dark mode</dd>
-                      <dt><code>--brand-social-media-profile-icon</code></dt>
-                      <dd>Social media profile icon URL</dd>
-                      <dt><code>--brand-primary-mark-min-height</code></dt>
-                      <dd>Minimum display height for the primary mark</dd>
-                      <dt><code>--brand-primary-mark-clearance-ratio</code></dt>
-                      <dd>Clear-space ratio around the primary mark (multiplied
-                        by
-                        <code>--brand-primary-mark-min-height</code>)</dd>
-                      <dt><code>--brand-secondary-mark-min-height</code></dt>
-                      <dd>Minimum display height for the secondary mark</dd>
-                      <dt><code
-                        >--brand-secondary-mark-clearance-ratio</code></dt>
-                      <dd>Clear-space ratio around the secondary mark
-                        (multiplied by
-                        <code>--brand-secondary-mark-min-height</code>)</dd>
-                    </dl>
-                  </div>
+                      all of the custom CSS properties for usage by this theme
+                      only.</p>
+                    <div
+                      class='brand-guide-vars-box brand-guide-custom-css-block'
+                    >
+                      <CopyButton
+                        class='brand-guide-custom-css-block-copy-button'
+                        @textToCopy={{this.customCssVarsBlock}}
+                      />
+                      <dl class='brand-guide-vars'>
+                        {{#each this.paletteVarEntries as |entry|}}
+                          <dt class='var-row' data-test-brand-guide-palette-var>
+                            <code
+                              data-test-brand-guide-palette-var-name
+                            >{{entry.varName}}</code>
+                          </dt>
+                          <dd
+                            class='color-entry var-row'
+                            data-test-brand-guide-palette-swatch
+                          >
+                            <Swatch
+                              class='color-swatch-mini'
+                              @color={{entry.color.value}}
+                              @style='round'
+                            />
+                          </dd>
+                        {{/each}}
+                        {{#each this.customCssVarEntries as |entry|}}
+                          <dt class='var-row' data-test-brand-guide-css-var>
+                            <code
+                              data-test-brand-guide-css-var-name
+                            >{{entry.name}}</code>
+                          </dt>
+                          <dd class='var-row'>
+                            <code
+                              class='css-var-value'
+                              data-test-brand-guide-css-var-value
+                            >{{entry.value}}</code>
+                          </dd>
+                        {{/each}}
+                        {{#each this.brandImageAttachmentVarEntries as |entry|}}
+                          <dt
+                            class='var-row'
+                            data-test-brand-guide-image-attachment-var
+                          >
+                            <code
+                              data-test-brand-guide-image-attachment-varname
+                            >{{entry.varName}}</code>
+                          </dt>
+                          <dd
+                            class='var-row brand-image-attachment-var-dd'
+                            data-test-brand-guide-image-attachment-url
+                          >
+                            <img
+                              src={{entry.url}}
+                              alt={{entry.altText}}
+                              class='brand-image-attachment-thumb-mini'
+                            />
+                            <code
+                              class='css-var-value'
+                            >url({{entry.url}})</code>
+                          </dd>
+                        {{/each}}
+                      </dl>
+                    </div>
+                  {{/if}}
+                {{else if (eq section.id 'import-css')}}
+                  {{! the cardInfo editor in the header owns the name and
+                  description, so the importer only handles CSS here }}
+                  <ThemeImporter @setCss={{@model.setCss}} />
+                {{else if (eq section.id 'inspirations')}}
+                  {{#if this.editMode}}
+                    <@fields.inspirations />
+                  {{else}}
+                    <div class='dsr-inspiration-tags'>
+                      {{#each @model.inspirations as |inspiration|}}
+                        <span class='dsr-inspiration-tag'>{{inspiration}}</span>
+                      {{/each}}
+                    </div>
+                  {{/if}}
+                {{else if section.fieldName}}
+                  {{#let (get @fields section.fieldName) as |FieldContent|}}
+                    <div class='dsr-content-prose'>
+                      {{! @glint-ignore }}
+                      <FieldContent />
+                    </div>
+                  {{/let}}
                 {{/if}}
-              {{else if (eq section.id 'brand-image-attachments')}}
-                <p class='brand-guide-vars-description'>Custom CSS variables for
-                  image attachments:</p>
-                <div class='brand-guide-vars-box brand-guide-custom-css-block'>
-                  <CopyButton
-                    class='brand-guide-custom-css-block-copy-button'
-                    @textToCopy={{this.brandImageAttachmentCssBlock}}
-                  />
-                  <dl class='brand-guide-vars'>
-                    {{#each this.brandImageAttachmentVarEntries as |entry|}}
-                      <dt class='var-row' data-test-brand-image-attachment-var>
-                        <code
-                          data-test-brand-image-attachment-varname
-                        >{{entry.varName}}</code>
-                      </dt>
-                      <dd
-                        class='var-row brand-image-attachment-var-dd'
-                        data-test-brand-image-attachment-url
-                      >
-                        <img
-                          src={{entry.url}}
-                          alt={{entry.altText}}
-                          class='brand-image-attachment-thumb-mini'
-                          data-test-brand-image-attachment-thumb
-                        />
-                        <code class='css-var-value'>url({{entry.url}})</code>
-                      </dd>
-                    {{/each}}
-                  </dl>
+              </NavSection>
+            {{/each}}
+            {{#if this.editMode}}
+              <GridContainer>
+                <h2>Reset CSS</h2>
+                <div>
+                  <ResetButton @reset={{@model.resetCss}} />
                 </div>
-              {{else if (eq section.id 'custom-css')}}
-                <p class='brand-guide-vars-description'>These variables are all
-                  of the custom CSS properties for usage by this theme only.</p>
-                <div class='brand-guide-vars-box brand-guide-custom-css-block'>
-                  <CopyButton
-                    class='brand-guide-custom-css-block-copy-button'
-                    @textToCopy={{this.customCssVarsBlock}}
-                  />
-                  <dl class='brand-guide-vars'>
-                    {{#each this.paletteVarEntries as |entry|}}
-                      <dt class='var-row' data-test-brand-guide-palette-var>
-                        <code
-                          data-test-brand-guide-palette-var-name
-                        >{{entry.varName}}</code>
-                      </dt>
-                      <dd
-                        class='color-entry var-row'
-                        data-test-brand-guide-palette-swatch
-                      >
-                        <Swatch
-                          class='color-swatch-mini'
-                          @color={{entry.color.value}}
-                          @style='round'
-                        />
-                      </dd>
-                    {{/each}}
-                    {{#each this.customCssVarEntries as |entry|}}
-                      <dt class='var-row' data-test-brand-guide-css-var>
-                        <code
-                          data-test-brand-guide-css-var-name
-                        >{{entry.name}}</code>
-                      </dt>
-                      <dd class='var-row'>
-                        <code
-                          class='css-var-value'
-                          data-test-brand-guide-css-var-value
-                        >{{entry.value}}</code>
-                      </dd>
-                    {{/each}}
-                    {{#each this.brandImageAttachmentVarEntries as |entry|}}
-                      <dt
-                        class='var-row'
-                        data-test-brand-guide-image-attachment-var
-                      >
-                        <code
-                          data-test-brand-guide-image-attachment-varname
-                        >{{entry.varName}}</code>
-                      </dt>
-                      <dd
-                        class='var-row brand-image-attachment-var-dd'
-                        data-test-brand-guide-image-attachment-url
-                      >
-                        <img
-                          src={{entry.url}}
-                          alt={{entry.altText}}
-                          class='brand-image-attachment-thumb-mini'
-                        />
-                        <code class='css-var-value'>url({{entry.url}})</code>
-                      </dd>
-                    {{/each}}
-                  </dl>
-                </div>
-              {{else if (eq section.id 'import-css')}}
-                <CssFieldEditor @setCss={{@model.setCss}} />
-              {{else if (eq section.id 'inspirations')}}
-                <div class='dsr-inspiration-tags'>
-                  {{#each @model.inspirations as |inspiration|}}
-                    <span class='dsr-inspiration-tag'>{{inspiration}}</span>
-                  {{/each}}
-                </div>
-              {{else if section.fieldName}}
-                {{#let (get @fields section.fieldName) as |FieldContent|}}
-                  <div class='dsr-content-prose'>
-                    {{! @glint-ignore }}
-                    <FieldContent />
-                  </div>
-                {{/let}}
-              {{/if}}
-            </NavSection>
-          {{/each}}
-        </GridContainer>
+              </GridContainer>
+            {{/if}}
+          </GridContainer>
+        {{/if}}
       </:default>
     </ThemeDashboard>
 
     <style scoped>
       .brand-guide {
-        --brand-guide-border: 1px solid var(--dsr-border);
+        --brand-guide-border: 1px solid var(--border);
         --brand-guide-spacing: var(--boxel-sp-xl);
         --boxel-container-padding: var(--brand-guide-spacing);
         /* Pin tooltip colors so brand theme vars don't bleed into the overlay */
@@ -537,12 +628,16 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       .color-system-title {
         margin-top: var(--brand-guide-spacing);
       }
+      .functional-palette.edit-format > :deep(*) {
+        grid-template-columns: repeat(auto-fill, minmax(8.75rem, 1fr));
+        gap: var(--boxel-sp-2xs);
+      }
       .color-system-container {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
+        background-color: var(--card);
+        color: var(--card-foreground);
         border-radius: var(--boxel-border-radius);
         padding: calc(var(--boxel-sp) * 2);
-        border: 1px solid var(--dsr-border);
+        border: 1px solid var(--border);
       }
       :deep(h3) {
         font-size: var(--boxel-font-size-md);
@@ -556,7 +651,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         align-items: center;
         justify-content: center;
         max-width: 100%;
-        background-color: var(--dsr-muted);
+        background-color: var(--muted);
         color: var(--dsr-foreground);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
@@ -656,7 +751,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .dsr-subsection-title {
         margin-bottom: var(--boxel-sp);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
 
       /* Image Gallery */
@@ -671,9 +766,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         aspect-ratio: 16 / 10;
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
       }
       .dsr-gallery-image {
         width: 100%;
@@ -686,13 +781,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
 
       /* Inspirations */
-      .dsr-inspirations-section {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border-radius: var(--boxel-border-radius);
-        padding: calc(var(--boxel-sp) * 2);
-        border: 1px solid var(--dsr-border);
-      }
       .dsr-inspiration-tags {
         display: flex;
         flex-wrap: wrap;
@@ -701,21 +789,21 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       .dsr-inspiration-tag {
         display: inline-block;
         padding: calc(var(--boxel-sp) * 0.375) calc(var(--boxel-sp) * 0.75);
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
         border-radius: calc(var(--boxel-border-radius) * 0.5);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
       }
       .dsr-inspiration-tag:hover {
-        border-color: var(--dsr-fg);
+        border-color: var(--foreground);
       }
 
       /* Brand Guide Variables */
       .brand-guide-vars-divider {
         border: none;
-        border-top: 1px solid var(--dsr-border);
+        border-top: 1px solid var(--border);
         margin-block: var(--boxel-sp-xl) 0;
       }
       .brand-guide-vars-heading {
@@ -725,11 +813,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         margin-top: var(--boxel-sp);
       }
       .brand-guide-vars-box {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
+        background-color: var(--card);
+        color: var(--card-foreground);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp);
-        border: 1px solid var(--dsr-border);
+        border: 1px solid var(--border);
         margin-top: var(--boxel-sp-lg);
       }
       .brand-guide-vars-title {
@@ -741,7 +829,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-guide-vars-description {
         font-size: var(--boxel-font-size-sm);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin-block: 0 var(--boxel-sp);
       }
       .brand-guide-vars {
@@ -755,7 +843,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-guide-vars dd {
         margin: 0;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
       .brand-guide-vars code {
         font-family: var(
@@ -789,7 +877,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
           var(--boxel-monospace-font-family, monospace)
         );
         font-size: 0.9em;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
 
       /* Attachments */
@@ -804,7 +892,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         object-fit: cover;
         border-radius: var(--boxel-border-radius-sm);
         flex-shrink: 0;
-        border: 1px solid var(--dsr-border);
+        border: 1px solid var(--border);
       }
       .brand-image-attachment-vars {
         align-items: center;
@@ -930,7 +1018,20 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
 
   private get sectionsWithContent() {
     return this.sections.filter((section) => {
-      let idsToInclude = ['ui-components', 'import-css', 'view-code'];
+      // every field stays editable in edit mode, theme or content or not;
+      // the Card Container CSS reference and the UI component samples are
+      // display-only and stay out of the editor
+      if (this.editMode) {
+        return (
+          section.id !== 'card-container-css' && section.id !== 'ui-components'
+        );
+      }
+
+      if (!this.hasThemeCss) {
+        return false;
+      }
+
+      let idsToInclude = ['ui-components', 'view-code'];
 
       if (idsToInclude.includes(section.id)) {
         return true;
@@ -1068,6 +1169,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   }
 }
 
+class BrandGuideEdit extends BrandGuideIsolated {
+  protected editMode = true;
+}
+
 export class CompoundColorField extends FieldDef {
   static displayName = 'Color';
   @field name = contains(StringField);
@@ -1179,8 +1284,8 @@ export class CompoundImageField extends FieldDef {
           margin: 0;
           border-radius: var(--boxel-border-radius);
           overflow: hidden;
-          background-color: var(--dsr-card);
-          border: 1px solid var(--dsr-border);
+          background-color: var(--card);
+          border: 1px solid var(--border);
           display: flex;
           flex-direction: column;
         }
@@ -1193,7 +1298,7 @@ export class CompoundImageField extends FieldDef {
         .brand-image-attachment-varname {
           padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
           font-size: var(--boxel-font-size-xs);
-          color: var(--dsr-muted-fg);
+          color: var(--muted-foreground);
         }
         .brand-image-attachment-varname code {
           font-family: var(
@@ -1465,6 +1570,7 @@ export default class BrandGuide extends DetailedStyleRef {
   });
 
   static isolated = BrandGuideIsolated;
+  static edit = BrandGuideEdit;
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <BasicFitted

@@ -684,6 +684,29 @@ module(basename(import.meta.filename), function () {
       let item = itemIn(doc, fileUrl)!;
       assert.strictEqual(item.type, 'file-meta');
       assert.strictEqual(item.attributes?.name, 'hello.md');
+      // A file's timestamps ride in `meta` (mirroring a card), so a hydrated
+      // FileDef reads them through `getCardMeta` / its getters — not just in the
+      // legacy `attributes` spelling.
+      assert.strictEqual(
+        typeof item.meta?.lastModified,
+        'number',
+        'file item carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof item.meta?.resourceCreatedAt,
+        'number',
+        'file item carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        item.meta?.lastModified,
+        item.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        item.meta?.resourceCreatedAt,
+        item.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
 
       // default fieldset: a file's rendering is its own (no renderType in
       // the composite id — files render natively)
@@ -989,6 +1012,74 @@ module(basename(import.meta.filename), function () {
         entryFor(doc, johnId),
         'the bare-id card instance row is not matched by the `.json` id',
       );
+    });
+
+    test('a pure base-FileDef type filter matches every file row across subtypes', async function (assert) {
+      // Every file indexes with its full FileDef adoption chain (subtype →
+      // base FileDef → BaseDef), so a bare base-FileDef anchor enumerates all
+      // files regardless of concrete subtype — MarkdownDef, GtsFileDef,
+      // JsonFileDef alike. `scope: 'files'` pins the file rows so the
+      // dual-indexed card `.json` rows stay in play without their instance
+      // rows.
+      let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          scope: 'files',
+          filter: {
+            'item.on': { module: baseRRI('card-api'), name: 'FileDef' },
+          },
+          fields: { entry: ['item'] },
+        }),
+      );
+      let expectedFiles = [
+        `${realmHref}hello.md`,
+        `${realmHref}person.gts`,
+        `${realmHref}webpage.gts`,
+        `${johnId}.json`,
+        `${janeId}.json`,
+        `${realmHref}home.json`,
+        `${realmHref}home-slash.json`,
+      ];
+      for (let url of expectedFiles) {
+        assert.ok(entryFor(doc, url), `${url} matches the base FileDef anchor`);
+      }
+      assert.strictEqual(
+        doc.meta.page.total,
+        expectedFiles.length,
+        'every file row (and nothing else) matches',
+      );
+      assert.notOk(
+        entryFor(doc, johnId),
+        'card instance rows stay out of a files-scoped search',
+      );
+    });
+
+    test('the file-api re-export spelling of FileDef matches the same rows as the canonical card-api spelling', async function (assert) {
+      // `@cardstack/base/file-api` re-exports FileDef from
+      // `@cardstack/base/card-api`, and index rows stamp the canonical
+      // (defining-module) key. A filter carrying the re-export spelling must
+      // match the same rows — a code ref that resolves to the class cannot be
+      // a silent dead end just because it names the re-exporting module.
+      for (let module of [
+        baseRRI('file-api'),
+        'https://cardstack.com/base/file-api',
+      ]) {
+        let doc = await testRealm.realmIndexQueryEngine.searchEntries(
+          parseSearchEntryQueryFromPayload({
+            scope: 'files',
+            filter: { 'item.on': { module, name: 'FileDef' } },
+            fields: { entry: ['item'] },
+          }),
+        );
+        assert.strictEqual(
+          doc.meta.page.total,
+          7,
+          `the ${module} spelling matches all 7 file rows`,
+        );
+        assert.ok(
+          entryFor(doc, `${realmHref}hello.md`),
+          `hello.md matches via the ${module} spelling`,
+        );
+      }
     });
 
     test('A-Z `_title` sort gives file rows real sort values (not a NULL that sinks them)', async function (assert) {

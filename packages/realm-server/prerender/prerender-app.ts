@@ -7,10 +7,12 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  parseScreenshotCaptureSpec,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -22,6 +24,8 @@ import {
 import { Prerenderer } from './index.ts';
 import type { Timings } from './render-runner.ts';
 import { resolvePrerenderManagerURL } from './config.ts';
+import { heapTelemetry } from './heap-telemetry.ts';
+import { captureHeapSnapshot } from './heap-snapshot.ts';
 import {
   PRERENDER_HOST_SHELL_HASH_HEADER,
   PRERENDER_JOB_ID_HEADER,
@@ -86,6 +90,99 @@ export function decideHostShellRecycle(
   return { recycle: true, nextWarmed: reported };
 }
 
+// A one-shot notification that shutdown has begun, which the holder releases
+// when it no longer needs it.
+type DrainSubscription = {
+  promise: Promise<{ draining: true }>;
+  dispose: () => void;
+};
+// What a caller needs in order to wait: `raceAgainstDrain` only calls this, so
+// it asks for nothing more.
+type SubscribeToDrain = () => DrainSubscription;
+
+// What `createDrainSubscriber` hands back. `waiterCount` is the one thing it
+// exposes beyond subscribing, so the release property can be asserted against
+// this implementation rather than against a stand-in that reimplements it.
+type DrainSubscriber = SubscribeToDrain & { waiterCount: () => number };
+
+// Fans one settlement of the shutdown promise out to per-request subscribers.
+//
+// Latched rather than only broadcast: a subscriber taken after the broadcast
+// has happened would otherwise join a set nobody iterates again, leaving its
+// promise pending forever. The race in `raceAgainstDrain` would then quietly
+// degrade to a plain await, and the request would render on instead of
+// reporting that the server is going away — which can hold `server.close()`
+// open for the length of a render. Requests do arrive after draining starts:
+// the guard ahead of the routes only turns away POSTs to `/prerender-*`, so
+// `/run-command` and `/release-batch` reach their handlers regardless, and
+// even a guarded path can cross the line between that check and its
+// subscription.
+export function createDrainSubscriber(
+  drainingPromise: Promise<void>,
+): DrainSubscriber {
+  let waiters = new Set<() => void>();
+  let drained = false;
+  let settle = () => {
+    drained = true;
+    for (let notify of waiters) {
+      notify();
+    }
+    waiters.clear();
+  };
+  // Both settlements latch. Nothing rejects the deferred the server wires in,
+  // but this is exported and takes any promise, and an unhandled rejection
+  // here reaches the handler that exits the process. A shutdown signal that
+  // errored is still a shutdown signal.
+  drainingPromise.then(settle, settle);
+  let subscribe = (() => {
+    if (drained) {
+      return {
+        promise: Promise.resolve({ draining: true as const }),
+        dispose: () => {},
+      };
+    }
+    let notify!: () => void;
+    let promise = new Promise<{ draining: true }>((resolve) => {
+      notify = () => resolve({ draining: true });
+    });
+    waiters.add(notify);
+    return { promise, dispose: () => waiters.delete(notify) };
+  }) as DrainSubscriber;
+  subscribe.waiterCount = () => waiters.size;
+  return subscribe;
+}
+
+// Run `execPromise`, giving up early if the server starts draining.
+//
+// The subscription is released in `finally` because the alternative — each
+// request calling `.then()` on a promise that only settles at shutdown —
+// leaks far more than the reaction itself. The shutdown promise holds that
+// reaction forever; the reaction holds the promise `.then()` derived from it;
+// that derived promise never settles either. `Promise.race` chains onto it,
+// so it holds the race's resolve capability, which holds the race promise —
+// and the race promise is fulfilled with this request's render output. One
+// render's worth of HTML therefore stays reachable per render, for the life
+// of the process. Taking a waiter and dropping it leaves nothing behind.
+//
+// The handler passed to `.then()` captured nothing, so blaming the closure
+// would point at a rule that already held: measured over 2000 renders, that
+// shape alone costs ~0.4 MB, while the same shape fed into a race costs the
+// full ~196 MB of payload.
+export async function raceAgainstDrain<T>(
+  execPromise: Promise<T>,
+  subscribeToDrain: SubscribeToDrain | undefined,
+): Promise<T | { draining: true }> {
+  if (!subscribeToDrain) {
+    return await execPromise;
+  }
+  let drain = subscribeToDrain();
+  try {
+    return await Promise.race([execPromise, drain.promise]);
+  } finally {
+    drain.dispose();
+  }
+}
+
 export function buildPrerenderApp(options: {
   serverURL: string;
   maxPages?: number;
@@ -102,6 +199,13 @@ export function buildPrerenderApp(options: {
     maxPages,
     serverURL: options.serverURL,
   });
+
+  // One reaction on the shutdown promise for the whole process. Requests take
+  // a waiter and drop it when they finish, so what accumulates is bounded by
+  // the number of renders in flight rather than by the number ever served.
+  let subscribeToDrain: SubscribeToDrain | undefined = options.drainingPromise
+    ? createDrainSubscriber(options.drainingPromise)
+    : undefined;
 
   router.head('/', (ctxt: Koa.Context) => {
     if (options.isDraining?.()) {
@@ -122,12 +226,53 @@ export function buildPrerenderApp(options: {
         PRERENDER_SERVER_STATUS_DRAINING,
       );
       ctxt.set('Content-Type', 'application/json');
-      ctxt.body = JSON.stringify({ ready: false, draining: true });
+      ctxt.body = JSON.stringify({
+        ready: false,
+        draining: true,
+        memory: heapTelemetry(),
+      });
       return;
     }
     ctxt.set('Content-Type', 'application/json');
-    ctxt.body = JSON.stringify({ ready: true });
+    // `memory` makes a single task's heap readable on demand — including
+    // `heapLimitMB`, which is the only way to confirm from outside what
+    // `--max-old-space-size` a running process actually took. The Docker
+    // HEALTHCHECK discards this body, so the extra fields cost it nothing.
+    ctxt.body = JSON.stringify({ ready: true, memory: heapTelemetry() });
     ctxt.status = 200;
+  });
+
+  // Dumps this process's heap to the artifact sink, for working out what is
+  // holding memory across renders. Off unless `PRERENDER_HEAP_SNAPSHOT` is
+  // set, because the write stops the world for its whole duration.
+  //
+  // The same capture also fires on its own once an instance's heap crosses
+  // the auto-capture threshold, which is how it is normally reached: a leak
+  // takes hours to develop and any deploy resets it, so waiting to be asked
+  // means usually not being asked in time. This route is the override for
+  // choosing the moment instead — at a particular heap size, or on an
+  // instance that has already spent its one automatic capture. Reach it the
+  // way any VPC-internal endpoint is reached: SSM port-forward, then POST.
+  router.post('/heap-snapshot', async (ctxt: Koa.Context) => {
+    let outcome = await captureHeapSnapshot();
+    ctxt.set('Content-Type', 'application/json');
+    ctxt.body = JSON.stringify(outcome);
+    switch (outcome.status) {
+      case 'captured':
+        ctxt.status = 200;
+        break;
+      case 'disabled':
+      case 'no-sink':
+        // Not an error in the caller's request — the capability is simply
+        // switched off on this instance, which is the resting state.
+        ctxt.status = 404;
+        break;
+      case 'busy':
+        ctxt.status = 409;
+        break;
+      default:
+        ctxt.status = 500;
+    }
   });
 
   type RouteBaseArgs = {
@@ -160,6 +305,10 @@ export function buildPrerenderApp(options: {
     realm: string;
     url: string;
     format: 'isolated' | 'embedded';
+    // Pass-through of the caller's per-capture overrides. Already validated by
+    // the realm-server handler; the capture path guards the one hard invariant
+    // (fullPage + clip) defensively.
+    captureSpec?: ScreenshotCaptureSpec;
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -311,6 +460,13 @@ export function buildPrerenderApp(options: {
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
     let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    // Same strict parse + bounds as the realm-server's POST /_screenshot-card
+    // body: this route is its own HTTP surface, and an unvalidated spec here
+    // would reach `page.setViewport` on a pooled page with none of the cost
+    // caps applied. The parse also normalizes (defaults elided, empty spec
+    // -> null), so the capture path sees one canonical shape from every
+    // caller.
+    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },
@@ -325,6 +481,9 @@ export function buildPrerenderApp(options: {
         name: 'format',
       },
     ]);
+    if (captureSpecParse.error !== undefined) {
+      missing = [...missing, 'captureSpec'];
+    }
     return {
       args:
         missing.length > 0
@@ -337,11 +496,16 @@ export function buildPrerenderApp(options: {
               auth: rawAuth as string,
               format: rawFormat as 'isolated' | 'embedded',
               renderOptions,
+              ...(captureSpecParse.captureSpec
+                ? { captureSpec: captureSpecParse.captureSpec }
+                : {}),
               ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
-        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+        captureSpecParse.error !== undefined
+          ? captureSpecParse.error
+          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${
@@ -371,7 +535,6 @@ export function buildPrerenderApp(options: {
       afterResponse?: (target: string, response: R) => void;
       parseAttributes: (attrs: any) => RouteParseResult<A>;
       errorMessage?: string | ((err: any) => string);
-      drainingPromise?: Promise<void>;
     },
   ) {
     router.post(path, async (ctxt: Koa.Context) => {
@@ -463,12 +626,7 @@ export function buildPrerenderApp(options: {
         let execPromise = options
           .execute(routeArgs, { signal: ac.signal })
           .then((result) => ({ result }));
-        let drainPromise = options.drainingPromise
-          ? options.drainingPromise.then(() => ({ draining: true as const }))
-          : null;
-        let raceResult = drainPromise
-          ? await Promise.race([execPromise, drainPromise])
-          : await execPromise;
+        let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
         if ('draining' in raceResult) {
           // Ensure execute completion does not raise unhandled rejections after we respond.
           execPromise.catch((e) =>
@@ -588,7 +746,6 @@ export function buildPrerenderApp(options: {
     parseAttributes: parseDefaultPrerenderAttributes,
     execute: (args, { signal }) =>
       prerenderer.prerenderModule({ ...args, signal }),
-    drainingPromise: options.drainingPromise,
     afterResponse: (url, response) => {
       const moduleResponse = response as ModuleRenderResponse;
       if (moduleResponse.status === 'error' && moduleResponse.error) {
@@ -618,7 +775,6 @@ export function buildPrerenderApp(options: {
           ...(args.priority !== undefined ? { priority: args.priority } : {}),
           signal,
         }),
-      drainingPromise: options.drainingPromise,
     },
   );
 
@@ -637,10 +793,10 @@ export function buildPrerenderApp(options: {
           url: args.url,
           auth: args.auth,
           format: args.format,
+          ...(args.captureSpec ? { captureSpec: args.captureSpec } : {}),
           priority: args.priority,
           signal,
         }),
-      drainingPromise: options.drainingPromise,
     },
   );
 
@@ -818,12 +974,7 @@ export function buildPrerenderApp(options: {
           signal: ac.signal,
         })
         .then((result) => ({ result }));
-      let drainPromise = options.drainingPromise
-        ? options.drainingPromise.then(() => ({ draining: true as const }))
-        : null;
-      let raceResult = drainPromise
-        ? await Promise.race([execPromise, drainPromise])
-        : await execPromise;
+      let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
       if ('draining' in raceResult) {
         execPromise.catch((e) =>
           log.debug(

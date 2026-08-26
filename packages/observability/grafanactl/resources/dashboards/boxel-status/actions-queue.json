@@ -1,0 +1,1285 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-actions-queue"
+  },
+  "spec": {
+    "annotations": {
+      "list": []
+    },
+    "description": "GitHub Actions queue depth, wait times and runner consumption, sampled from the Actions REST API and shipped as JSON log lines on channel boxel:actions-queue.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+      {
+        "id": 2,
+        "type": "row",
+        "title": "Queue depth",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 0,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 3,
+        "type": "stat",
+        "title": "Jobs queued now",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 1,
+          "w": 4,
+          "h": 4
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap queued_jobs [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "queued"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "description": "Jobs waiting for a runner at the most recent sample.",
+        "interval": "5m"
+      },
+      {
+        "id": 4,
+        "type": "stat",
+        "title": "Jobs running now",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 4,
+          "y": 1,
+          "w": 4,
+          "h": 4
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap running_jobs [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "running"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "description": "Jobs currently holding a runner.",
+        "interval": "5m"
+      },
+      {
+        "id": 5,
+        "type": "stat",
+        "title": "Active runs",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 1,
+          "w": 4,
+          "h": 4
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap active_runs [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "runs"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "description": "Workflow runs in queued or in_progress state.",
+        "interval": "5m"
+      },
+      {
+        "id": 6,
+        "type": "timeseries",
+        "title": "Queue depth over time",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 1,
+          "w": 12,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap queued_jobs [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "queued"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap running_jobs [$__interval]) by ()",
+            "refId": "B",
+            "queryType": "range",
+            "legendFormat": "running"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap active_runs [$__interval]) by ()",
+            "refId": "C",
+            "queryType": "range",
+            "legendFormat": "active runs"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Queued depth rising while running stays flat means the pool is saturated rather than slow.\n\nCarries the same three values as the stat tiles beside it, because a stat panel has no hover tooltip — read the headline there, hover here.",
+        "interval": "5m"
+      },
+      {
+        "id": 7,
+        "type": "stat",
+        "title": "Longest current wait",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 5,
+          "w": 12,
+          "h": 4
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"queued\" | unwrap queued_seconds [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "longest wait"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {},
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          },
+          "textMode": "auto",
+          "wideLayout": true
+        },
+        "description": "Age of the oldest job still waiting for a runner.",
+        "interval": "5m"
+      },
+      {
+        "id": 8,
+        "type": "row",
+        "title": "Wait times",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 18,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 9,
+        "type": "timeseries",
+        "title": "Queue wait percentiles",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 19,
+          "w": 24,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.5, {service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"queued\" | unwrap queued_seconds [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "p50"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "quantile_over_time(0.9, {service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"queued\" | unwrap queued_seconds [$__interval]) by ()",
+            "refId": "B",
+            "queryType": "range",
+            "legendFormat": "p90"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"queued\" | unwrap queued_seconds [$__interval]) by ()",
+            "refId": "C",
+            "queryType": "range",
+            "legendFormat": "max"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            },
+            "unit": "s"
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "How long jobs have been waiting, measured from job creation.",
+        "interval": "5m"
+      },
+      {
+        "id": 10,
+        "type": "row",
+        "title": "Who is consuming the pool",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 27,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 11,
+        "type": "timeseries",
+        "title": "Queued jobs by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 28,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap queued [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Queued jobs grouped by branch, from the collector's per-group snapshot lines.",
+        "interval": "5m"
+      },
+      {
+        "id": 12,
+        "type": "timeseries",
+        "title": "Queued jobs by author",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 28,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap queued [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Queued jobs grouped by actor, from the collector's per-group snapshot lines.",
+        "interval": "5m"
+      },
+      {
+        "id": 13,
+        "type": "timeseries",
+        "title": "Queued jobs by workflow",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 28,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap queued [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Queued jobs grouped by workflow, from the collector's per-group snapshot lines.",
+        "interval": "5m"
+      },
+      {
+        "id": 14,
+        "type": "timeseries",
+        "title": "Running jobs by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 36,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap running [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Runners currently held, grouped by branch.",
+        "interval": "5m"
+      },
+      {
+        "id": 15,
+        "type": "timeseries",
+        "title": "Running jobs by author",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 8,
+          "y": 36,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap running [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Runners currently held, grouped by actor.",
+        "interval": "5m"
+      },
+      {
+        "id": 16,
+        "type": "timeseries",
+        "title": "Running jobs by workflow",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 16,
+          "y": 36,
+          "w": 8,
+          "h": 8
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(10, sum by (key) (max_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"workflow\" | unwrap running [$__interval])))",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "{{key}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Runners currently held, grouped by workflow.",
+        "interval": "5m"
+      },
+      {
+        "id": 17,
+        "type": "row",
+        "title": "Long-running steps",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 44,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 18,
+        "type": "table",
+        "title": "In-progress jobs by current step duration",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 45,
+          "w": 24,
+          "h": 10
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "topk(25, max by (job, head_branch, workflow, actor, current_step, run_id, job_id) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"job\" | status=\"in_progress\" | unwrap current_step_seconds [4m])))",
+            "refId": "A",
+            "queryType": "instant"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {},
+            "unit": "s"
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "job"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Open this job on GitHub",
+                      "url": "https://github.com/cardstack/boxel/actions/runs/${__data.fields.run_id}/job/${__data.fields.job_id}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "head_branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "actor"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "GitHub profile",
+                      "url": "https://github.com/${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "options": {},
+        "description": "Ranked by how long a job's current step has been running. A job whose step has run far longer than the same step on its siblings is the wedge signal — compare before concluding it is stuck.\n\nThe window is four minutes against a two-minute sample interval, so a row can be up to that stale: a job that finished moments ago may still appear, and a job that just changed step may briefly show both. Neither distorts what this panel is for, since a stall worth acting on is measured in hours.",
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "run_id": true,
+                "job_id": true
+              },
+              "renameByName": {
+                "Value": "in step",
+                "Value #A": "in step"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 19,
+        "type": "row",
+        "title": "Collector health",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 55,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 20,
+        "type": "timeseries",
+        "title": "GitHub API requests remaining",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 56,
+          "w": 12,
+          "h": 6
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "min_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"snapshot\" | unwrap rate_limit_remaining [$__interval]) by ()",
+            "refId": "A",
+            "queryType": "range",
+            "legendFormat": "remaining"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "table",
+            "placement": "bottom",
+            "showLegend": true,
+            "calcs": [
+              "lastNotNull",
+              "max"
+            ],
+            "sortBy": "Last *",
+            "sortDesc": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "description": "Sampling stops rather than reporting partial depth when this nears the reserve.",
+        "interval": "5m"
+      },
+      {
+        "id": 21,
+        "type": "logs",
+        "title": "Collector errors and throttling",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 12,
+          "y": 56,
+          "w": 12,
+          "h": 6
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "expr": "{service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=~\"collector-error|collector-throttled\"",
+            "refId": "A",
+            "queryType": "range"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {},
+        "description": "Gaps in the series above should have a matching line here."
+      },
+      {
+        "id": 1,
+        "type": "text",
+        "title": "About this dashboard",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "gridPos": {
+          "x": 0,
+          "y": 62,
+          "w": 24,
+          "h": 4
+        },
+        "targets": [],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": []
+        },
+        "options": {
+          "mode": "markdown",
+          "content": "Sampled from the GitHub Actions REST API by `packages/observability/collectors/actions-queue.ts`, which emits one JSON line per observation on channel `boxel:actions-queue`.\n\nThe collector runs **outside** GitHub Actions on purpose — a scheduled workflow would queue behind the backlog it measures and go blind during the incident it exists for.\n\nDepth and grouped depth come from periodic snapshots, so each point is a sample rather than a continuous measure; gaps mean the collector was down or throttled (see *Collector health*)."
+        }
+      },
+      {
+        "id": 40,
+        "type": "row",
+        "title": "Right now",
+        "collapsed": false,
+        "gridPos": {
+          "x": 0,
+          "y": 9,
+          "w": 24,
+          "h": 1
+        },
+        "panels": []
+      },
+      {
+        "id": 41,
+        "type": "table",
+        "title": "Queued now, by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "A point-in-time count, unlike the timeseries above — a branch whose jobs have finished disappears from this table instead of leaving a line behind.",
+        "gridPos": {
+          "x": 0,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap queued [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "branch",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      {
+        "id": 42,
+        "type": "table",
+        "title": "Runners held now, by branch",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "Which branches are occupying the pool at this moment.",
+        "gridPos": {
+          "x": 8,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"branch\" | unwrap running [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "branch",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "branch"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "Actions runs for this branch",
+                      "url": "https://github.com/cardstack/boxel/actions?query=branch%3A${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      },
+      {
+        "id": 43,
+        "type": "table",
+        "title": "Queued now, by author",
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "description": "The same instant count grouped by whoever triggered the run.",
+        "gridPos": {
+          "x": 16,
+          "y": 10,
+          "w": 8,
+          "h": 8
+        },
+        "interval": "5m",
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "editorMode": "code",
+            "refId": "A",
+            "queryType": "instant",
+            "expr": "sum by (key) (last_over_time({service=\"actions-collector\", env=\"$env\"} |= \"boxel:actions-queue\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:actions-queue\" | event_type=\"group\" | dimension=\"actor\" | unwrap queued [5m])) > 0"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "key": "author",
+                "Value": "jobs",
+                "Value #A": "jobs"
+              }
+            }
+          },
+          {
+            "id": "sortBy",
+            "options": {
+              "fields": {},
+              "sort": [
+                {
+                  "field": "jobs",
+                  "desc": true
+                }
+              ]
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {}
+          },
+          "overrides": [
+            {
+              "matcher": {
+                "id": "byName",
+                "options": "author"
+              },
+              "properties": [
+                {
+                  "id": "links",
+                  "value": [
+                    {
+                      "title": "GitHub profile",
+                      "url": "https://github.com/${__value.raw}",
+                      "targetBlank": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "options": {}
+      }
+    ],
+    "refresh": "1m",
+    "schemaVersion": 42,
+    "tags": [
+      "ci",
+      "actions",
+      "forensics"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "GitHub Actions Queue",
+    "weekStart": ""
+  }
+}

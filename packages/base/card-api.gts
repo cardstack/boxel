@@ -3117,6 +3117,20 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
+  // Server-managed timestamps (epoch seconds), read off the resource `meta`
+  // (stamped at serialization under the same key names a card uses, so
+  // `createFromSerialized` carries them onto `this[meta]`) — not `@field`s, so
+  // they never round-trip on a write. These mirror the names a card exposes
+  // through `getCardMeta`, so a consumer reads a file's timestamps the same way
+  // it reads a card's without reaching for `getCardMeta` on a FileDef.
+  get lastModified(): number | undefined {
+    return this[meta]?.lastModified;
+  }
+
+  get resourceCreatedAt(): number | undefined {
+    return this[meta]?.resourceCreatedAt;
+  }
+
   // The four shared format shells own identity, facts, budgets, and state for
   // every file family. What they can't know is how to draw the file itself — a
   // waveform, a page, a 3D scene — so a family supplies that one renderer here
@@ -4082,24 +4096,17 @@ function trackRuntimeRelationshipModuleDependencies(
     return;
   }
 
-  // Loader identities and dependency lists are in canonical RRI form, while
-  // the dependency tracker keys module nodes by http(s) URL and drops
-  // anything else — so convert at this boundary via the loader's
-  // tracking-key form.
+  // Loader identities and dependency lists are already in canonical RRI form,
+  // which is what the tracker records — so they are passed through as they are.
+  trackRuntimeModuleDependency(identity.module, dependencyTrackingContext);
+
   let loader = Loader.getLoaderFor(ctor);
-  trackRuntimeModuleDependency(
-    loader ? loader.dependencyTrackingKey(identity.module) : identity.module,
-    dependencyTrackingContext,
-  );
   if (!loader) {
     return;
   }
 
   for (let dep of loader.getKnownConsumedModules(identity.module)) {
-    trackRuntimeModuleDependency(
-      loader.dependencyTrackingKey(dep),
-      dependencyTrackingContext,
-    );
+    trackRuntimeModuleDependency(dep, dependencyTrackingContext);
   }
 }
 

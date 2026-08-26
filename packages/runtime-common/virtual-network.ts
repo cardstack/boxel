@@ -151,6 +151,11 @@ export class VirtualNetwork {
     this.toURLHrefCache.clear();
     this.unresolveURLCache.clear();
     this.realURLHrefCache.clear();
+    // Consumers keying caches by a mapping-derived identifier need to hear about
+    // this too, not just about realm mappings: a URL mapping changes which alias
+    // an identifier folds onto, so a key derived before this call can name a
+    // spelling nothing else uses afterwards.
+    this.notifyMappingChange();
   }
 
   mapURL(

@@ -1,9 +1,11 @@
-import { click, waitUntil } from '@ember/test-helpers';
+import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm, specRef } from '@cardstack/runtime-common';
+
+import type FileUploadService from '@cardstack/host/services/file-upload';
 
 import {
   setupLocalIndexing,
@@ -388,7 +390,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
     });
     await click('[data-test-new-file-button]');
-    assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-menu-item]').exists({ count: 5 });
     assert
       .dom(
         '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Author"]',
@@ -459,7 +461,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     });
     await click('[data-test-new-file-button]');
     // new cards will be created in test realm (has write-permission)
-    assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-menu-item]').exists({ count: 5 });
     assert
       .dom(
         '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Garden"]',
@@ -494,7 +496,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       stacks: [[{ id: `${baseRealm.url}index`, format: 'isolated' }]],
     });
     await click('[data-test-new-file-button]');
-    assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-menu-item]').exists({ count: 5 });
     assert
       .dom(
         '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Spec"]',
@@ -537,7 +539,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       ],
     });
     await click('[data-test-new-file-button]');
-    assert.dom('[data-test-boxel-menu-item]').exists({ count: 4 });
+    assert.dom('[data-test-boxel-menu-item]').exists({ count: 5 });
     assert
       .dom(
         '[data-test-boxel-menu-item]:nth-of-type(1) [data-test-boxel-menu-item-text="Garden"]',
@@ -565,5 +567,126 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     assert
       .dom(`[data-test-operator-mode-stack="0"] [data-test-stack-card-index]`)
       .exists({ count: 2 });
+  });
+
+  test('can upload a file via the New menu', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-new-file-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    fileUpload.__queueLocalFileBatchForTesting([
+      new File(['hello upload'], 'uploaded-in-interact.txt', {
+        type: 'text/plain',
+      }),
+    ]);
+
+    await click('[data-test-boxel-menu-item-text="Upload File…"]');
+
+    await waitFor(
+      `[data-test-stack-card="${testRealmURL}uploaded-in-interact.txt"]`,
+      { timeout: 10000 },
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}uploaded-in-interact.txt"]`)
+      .exists('uploaded file opened on the stack');
+    assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
+  });
+
+  test('uploading multiple files opens the first uploaded file', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-new-file-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    fileUpload.__queueLocalFileBatchForTesting([
+      new File(['file one'], 'interact-multi-first.txt', {
+        type: 'text/plain',
+      }),
+      new File(['file two'], 'interact-multi-second.txt', {
+        type: 'text/plain',
+      }),
+    ]);
+
+    await click('[data-test-boxel-menu-item-text="Upload File…"]');
+
+    await waitUntil(() => fileUpload.activeUploads.length === 0, {
+      timeout: 20000,
+      timeoutMessage: 'uploads did not all complete',
+    });
+
+    await waitFor(
+      `[data-test-stack-card="${testRealmURL}interact-multi-first.txt"]`,
+      { timeout: 10000 },
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}interact-multi-first.txt"]`)
+      .exists('first uploaded file opened on the stack');
+    assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
+
+    // The second file never opens on the stack, and a settled upload task is
+    // removed from `activeUploads` whether it succeeded or failed — so the
+    // realm itself is the only place its upload can be verified.
+    let second = await getService('card-service').getSource(
+      new URL(`${testRealmURL}interact-multi-second.txt`),
+    );
+    assert.strictEqual(
+      second.status,
+      200,
+      'second uploaded file is served by the realm',
+    );
+    assert.strictEqual(
+      second.content,
+      'file two',
+      'second uploaded file holds its content',
+    );
+  });
+
+  test('uploads land in the default writable realm when the current realm is read-only', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [[{ id: `${baseRealm.url}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-new-file-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    fileUpload.__queueLocalFileBatchForTesting([
+      new File(['read-only realm upload'], 'interact-readonly-upload.txt', {
+        type: 'text/plain',
+      }),
+    ]);
+
+    await click('[data-test-boxel-menu-item-text="Upload File…"]');
+
+    await waitFor(
+      `[data-test-stack-card="${userRealm}interact-readonly-upload.txt"]`,
+      { timeout: 10000 },
+    );
+    assert
+      .dom(`[data-test-stack-card="${userRealm}interact-readonly-upload.txt"]`)
+      .exists('uploaded file landed in the writable realm');
+  });
+
+  test('cancelling upload file picker does not cause errors', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-new-file-button]');
+
+    let fileUpload = getService('file-upload') as FileUploadService;
+    // Simulate cancelling the native file picker - empty batch
+    fileUpload.__queueLocalFileBatchForTesting([]);
+
+    await click('[data-test-boxel-menu-item-text="Upload File…"]');
+
+    assert.dom(`[data-test-stack-card-index]`).exists({ count: 1 });
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}index"]`)
+      .exists('stack still shows the original card');
   });
 });

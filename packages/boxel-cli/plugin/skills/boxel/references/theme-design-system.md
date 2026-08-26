@@ -9,8 +9,8 @@
 ### 3.1 Theme Linking Rules
 Pick the source first:
 
-- **Boxel built-in feature work:** use `https://cardstack.com/base/Theme/boxel-brand-guide`. This is the Boxel style guide and brand material source.
-- **Cardstack-branded work:** use `https://cardstack.com/base/Theme/cardstack-brand-guide`.
+- **Boxel built-in feature work:** use `@cardstack/base/Theme/boxel-brand-guide`. This is the Boxel style guide and brand material source.
+- **Cardstack-branded work:** use `@cardstack/base/Theme/cardstack-brand-guide`.
 - **User/custom realm work:** choose or create a theme that fits the requested domain. Do not force Boxel styling onto an unrelated app unless the user asks for Boxel-branded output.
 - **Logo, mark, brand color, or brand material needed:** use a `BrandGuide`, not a plain `StructuredTheme`.
 
@@ -20,7 +20,7 @@ For an instance that should use the Boxel Brand Guide:
 "relationships": {
   "cardInfo.theme": {
     "links": {
-      "self": "https://cardstack.com/base/Theme/boxel-brand-guide"
+      "self": "@cardstack/base/Theme/boxel-brand-guide"
     }
   }
 }
@@ -36,19 +36,19 @@ For an instance that should use the Boxel Brand Guide:
   },
 }
 ```
-- IMPORTANT: Never set `cardInfo.theme` on ThemeCards (cards adopting from `https://cardstack.com/base/theme` or its subclasses) to avoid cycles.
+- IMPORTANT: Never set `cardInfo.theme` on ThemeCards (cards adopting from `@cardstack/base/theme` or its subclasses) to avoid cycles.
 
 #### ThemeCard Types
 
-A ThemeCard is an instance of a card definition that inherits from `https://cardstack.com/base/theme` or from one of its subclasses.
+A ThemeCard is an instance of a card definition that inherits from `@cardstack/base/theme` or from one of its subclasses.
 
-| Type | URL | Description |
+| Type | Module | Description |
 |------|-----|-------------|
-| Base Theme | `https://cardstack.com/base/theme` | Root base class |
-| Structured Theme | `https://cardstack.com/base/structured-theme` | Structured token theme. Adds `typography`, `rootVariables`, `darkModeVariables`, `version`, and computed `cssVariables`. Use for pure token systems with no brand assets. |
-| Style Reference | `https://cardstack.com/base/style-reference` | Extends `StructuredTheme`. Adds `styleName`, `inspirations`, `visualDNA`, and `wallpaperImages`. Use when the visual language matters. |
-| Detailed Style Reference | `https://cardstack.com/base/detailed-style-reference` | Extends `StyleReference`. Adds long-form guidance for context, palette, typography, geometry, material, composition, motion, components, voice, technical specs, scenarios, quality standards, and design mindset. Use for a complete design system without logo/mark assets. |
-| Brand Guide | `https://cardstack.com/base/brand-guide` | Extends `DetailedStyleReference`. Adds `brandColorPalette`, `functionalPalette`, `typography`, and `markUsage` for logo/mark material. Use whenever brand assets or brand governance matter. |
+| Base Theme | `@cardstack/base/theme` | Root base class |
+| Structured Theme | `@cardstack/base/structured-theme` | Structured token theme. Adds `typography`, `rootVariables`, `darkModeVariables`, `version`, and computed `cssVariables`. Use for pure token systems with no brand assets. |
+| Style Reference | `@cardstack/base/style-reference` | Extends `StructuredTheme`. Adds `styleName`, `inspirations`, `visualDNA`, and `wallpaperImages`. Use when the visual language matters. |
+| Detailed Style Reference | `@cardstack/base/detailed-style-reference` | Extends `StyleReference`. Adds long-form guidance for context, palette, typography, geometry, material, composition, motion, components, voice, technical specs, scenarios, quality standards, and design mindset. Use for a complete design system without logo/mark assets. |
+| Brand Guide | `@cardstack/base/brand-guide` | Extends `DetailedStyleReference`. Adds `brandColorPalette`, `functionalPalette`, `typography`, and `markUsage` for logo/mark material. Use whenever brand assets or brand governance matter. |
 
 > **When creating a Theme card:** Prefer `BrandGuide` if the output has a brand, logo, marks, or other brand material. Prefer `DetailedStyleReference` for a rich visual system without logo material. Use `StructuredTheme` only for a minimal token-only theme. At minimum, fill in `rootVariables` and `typography`. Add font URLs to `cssImports` as a string array - no `@import` needed (the system handles imports).
 
@@ -89,7 +89,7 @@ Brand Guide fallback mapping:
 - `--primary-foreground`, `--secondary-foreground`, and `--accent-foreground` are generated for contrast when absent.
 - `--font-sans` comes from root variables or the Brand Guide typography body font.
 
-The built-in Boxel Brand Guide lives at `https://cardstack.com/base/Theme/boxel-brand-guide` in shipped base content. It defines the Boxel "box element" design language: high-density UI, visible 1px frames, 8px grid discipline, color as status instead of decoration, Boxel Teal for action/selection, Cardstack Lime for rare success/highlight, and precise builder-language voice.
+The built-in Boxel Brand Guide lives at `@cardstack/base/Theme/boxel-brand-guide` in shipped base content. It defines the Boxel "box element" design language: high-density UI, visible 1px frames, 8px grid discipline, color as status instead of decoration, Boxel Teal for action/selection, Cardstack Lime for rare success/highlight, and precise builder-language voice.
 
 Current Boxel Brand Guide palette variables include `--boxel-teal`, `--boxel-cyan`, `--boxel-slate`, `--boxel-light`, `--boxel-black`, `--boxel-dove`, `--cardstack-red`, `--cardstack-lime`, `--cardstack-magenta`, `--cardstack-purple`, and `--cardstack-dark-blue`. Treat these as brand identity variables; ordinary UI should still prefer semantic roles like `--primary`, `--accent`, `--background`, and `--foreground`.
 

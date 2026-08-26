@@ -59,7 +59,7 @@ When you need the list to refresh as the realm changes mid-session, or when the 
 **The only working call signature** is the context-injected one:
 
 ```ts
-import { Component } from 'https://cardstack.com/base/card-api';
+import { Component } from '@cardstack/base/card-api';
 
 import { codeRef, realmURL } from '@cardstack/runtime-common';
 
@@ -103,7 +103,7 @@ static isolated = class extends Component<typeof MyCard> {
 **Source proven correct against:** `~/Projects/boxel/packages/catalog-realm/sprint-planner/components/base-task-planner.gts:214-235`, `~/Projects/boxel/packages/catalog-realm/calendar/calendar.gts:496`, `~/Projects/boxel/packages/catalog-realm/gaming-hub/gaming-hub.gts:121`, and ~10 other catalog cards. Every working in-component query in the catalog uses this exact signature.
 
 **Critical — what NOT to do:**
-- ❌ `import { getCards } from 'https://cardstack.com/base/card-api';` — compiles but `getCards` is undefined at runtime; it's only re-exported as a type.
+- ❌ `import { getCards } from '@cardstack/base/card-api';` — compiles but `getCards` is undefined at runtime; it's only re-exported as a type.
 - ❌ `import { getCards } from '@cardstack/runtime-common/get-cards';` — that module path doesn't exist at all.
 - ❌ `await getCards(query, { realmURL })` — wrong shape; no working free-function variant exists.
 - ❌ `model.id.split('/').slice(0, -2).join('/')` — fragile string parsing; use `model[realmURL]` (with `realmURL` imported as a Symbol from `@cardstack/runtime-common`) instead.
@@ -163,8 +163,8 @@ Mark each kit-internal link in the DataModelPlan with a ● in a "thunk" column.
 
 `cardOrThunk was undefined` is a general "this binding is undefined at thunk-deref time" error. Common causes besides cycles:
 
-- **Named-import of a default-only export.** `import { DateField } from 'https://cardstack.com/base/date'` resolves `DateField` to undefined; `contains(DateField)` then fails. Probe with `get-card-type-schema --input '{"codeRef":{"module":"https://cardstack.com/base/date","name":"DateField"}}'` — `Export "X" not found in module "Y"` means you need the default import (`import DateField from '...'`).
-- **Default-import from a module whose default is a DIFFERENT class.** `import ImageDef from 'https://cardstack.com/base/image'` actually gets `ImageCard` (the deprecated default of that module). Use `/base/image-file-def` or `import { ImageDef } from '/base/card-api'` (both work).
+- **Named-import of a default-only export.** `import { DateField } from '@cardstack/base/date'` resolves `DateField` to undefined; `contains(DateField)` then fails. Probe with `get-card-type-schema --input '{"codeRef":{"module":"@cardstack/base/date","name":"DateField"}}'` — `Export "X" not found in module "Y"` means you need the default import (`import DateField from '...'`).
+- **Default-import from a module whose default is a DIFFERENT class.** `import ImageDef from '@cardstack/base/image'` actually gets `ImageCard` (the deprecated default of that module). Use `@cardstack/base/image-file-def` or `import { ImageDef } from '@cardstack/base/card-api'` (both work).
 - **Bare `linksTo(X)` without thunk** when X is a kit-local class with any back-edge — see above.
 
 **Source:**

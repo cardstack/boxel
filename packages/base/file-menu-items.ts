@@ -116,17 +116,8 @@ export function getDefaultFileMenuItems(
       icon: Eye,
     });
   }
-  if (params.menuContext === 'code-mode-playground') {
-    menuItems.push({
-      label: 'Open in Code Mode',
-      action: async () => {
-        await new SwitchSubmodeTool(params.toolContext).execute({
-          submode: 'code',
-          codePath: fileDefInstanceId,
-        });
-      },
-      icon: CodeIcon,
-    });
-  }
+  // No "Open in Code Mode" for the code-mode-playground context: that panel
+  // already lives inside code submode, so the entry would be a no-op switch to
+  // the mode we're in.
   return menuItems;
 }

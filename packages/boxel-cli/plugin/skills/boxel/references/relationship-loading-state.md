@@ -3,7 +3,7 @@
 A `linksTo` / `linksToMany` field loads its linked card(s) lazily, and a **query-backed** `linksToMany` resolves by running a search. Until that load or search finishes, the field has no data to show. `getRelationshipMembershipState` lets a card author render a live progress indicator for that window — a spinner that appears while the field is in flight and clears the moment it resolves.
 
 ```ts
-import { getRelationshipMembershipState } from 'https://cardstack.com/base/card-api';
+import { getRelationshipMembershipState } from '@cardstack/base/card-api';
 ```
 
 ## The shape

@@ -1,10 +1,20 @@
 // Smoke check that BXL_BUILD_INFO has the expected shape and that the
 // feature list isn't accidentally empty.
 
+import { readFileSync } from 'node:fs';
 import { ok, strictEqual } from 'node:assert';
 import { BXL_BUILD_INFO, VERSION } from '../../src/index.ts';
 
 strictEqual(BXL_BUILD_INFO.version, VERSION, 'version mirrors VERSION');
+
+// The runtime version and the published version are separate declarations, and
+// a release bumps both (scripts/set-version.ts). Drift would ship a package
+// that misreports itself to any consumer reading BXL_BUILD_INFO, so hold them
+// equal here rather than trusting the release path to have done it.
+const manifestVersion = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+).version;
+strictEqual(VERSION, manifestVersion, 'VERSION mirrors package.json');
 
 ok(Array.isArray(BXL_BUILD_INFO.features));
 ok(BXL_BUILD_INFO.features.length > 0, 'features list is non-empty');

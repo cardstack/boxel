@@ -11,7 +11,6 @@ import OpenCreateListingModalTool from '@cardstack/boxel-host/commands/open-crea
 import OpenInInteractModeTool from '@cardstack/boxel-host/commands/open-in-interact-mode';
 import PopulateWithSampleDataTool from '@cardstack/boxel-host/commands/populate-with-sample-data';
 import ShowCardTool from '@cardstack/boxel-host/commands/show-card';
-import SwitchSubmodeTool from '@cardstack/boxel-host/commands/switch-submode';
 import type {
   ToolContext,
   Format,
@@ -26,7 +25,6 @@ import {
 } from '@cardstack/runtime-common';
 import { resolveAdoptsFrom } from '@cardstack/runtime-common';
 
-import CodeIcon from '@cardstack/boxel-icons/code';
 import ArrowLeft from '@cardstack/boxel-icons/arrow-left';
 import ClipboardCopy from '@cardstack/boxel-icons/clipboard-copy';
 import Eye from '@cardstack/boxel-icons/eye';
@@ -200,17 +198,8 @@ export function getDefaultCardMenuItems(
     });
   }
   if (params.menuContext === 'code-mode-playground') {
-    menuItems.push({
-      label: 'Open in Code Mode',
-      action: async () => {
-        await new SwitchSubmodeTool(params.toolContext).execute({
-          submode: 'code',
-          codePath: cardId,
-        });
-      },
-      icon: CodeIcon,
-      disabled: !cardId,
-    });
+    // No "Open in Code Mode" here: the playground panel already lives inside
+    // code submode, so the entry would be a no-op switch to the mode we're in.
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
     if (cardId && !isRealmIndexCard(card)) {
       menuItems.push({

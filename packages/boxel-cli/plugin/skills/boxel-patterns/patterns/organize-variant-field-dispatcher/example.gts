@@ -1,4 +1,4 @@
-import { FieldDef, StringField, contains, field, Component } from 'https://cardstack.com/base/card-api';
+import { FieldDef, StringField, contains, field, Component } from '@cardstack/base/card-api';
 
 // 🧩 PATTERN: Variant-configuration FieldDef dispatcher
 //

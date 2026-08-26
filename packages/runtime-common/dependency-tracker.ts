@@ -44,8 +44,18 @@ interface ContextStackEntry {
 // These are called on every dependency tracking operation (field getter access)
 // so performance is critical.
 
+// Accepts the two canonical remote forms and nothing else. A URL starts with
+// `http://`/`https://` and a prefix-form RRI starts with `@`, which tells them
+// apart without a VirtualNetwork — the same syntactic test `isLocalId` relies
+// on. Everything else (bare specifiers, relative references, `data:`/`blob:`
+// URLs) has no stable identity for a dependency edge and is dropped.
 function canonicalURL(url: string): string | undefined {
-  if (!url || (!url.startsWith('http://') && !url.startsWith('https://'))) {
+  if (
+    !url ||
+    (!url.startsWith('http://') &&
+      !url.startsWith('https://') &&
+      !url.startsWith('@'))
+  ) {
     return undefined;
   }
   // Strip query string and hash using string ops instead of new URL()

@@ -29,7 +29,7 @@ For AI image APIs that return a `data:image/...;base64,...`, strip the `data:mim
 
 ```gts
 import WriteBinaryFileCommand from '@cardstack/boxel-host/tools/write-binary-file';
-import { ImageDef, linksTo } from 'https://cardstack.com/base/card-api';
+import { ImageDef, linksTo } from '@cardstack/base/card-api';
 
 @field generatedImage = linksTo(ImageDef);
 
@@ -57,7 +57,7 @@ This is the same host-command family used by `packages/host/app/tools/screenshot
 `realms-staging.stack.cards/ctse/personal/a-million-dreams-karaoke.gts` handles MP3 and cover art correctly:
 
 ```gts
-import { FileDef, ImageDef, linksTo } from 'https://cardstack.com/base/card-api';
+import { FileDef, ImageDef, linksTo } from '@cardstack/base/card-api';
 
 @field mp3FileDef = linksTo(FileDef);
 @field coverArt = linksTo(ImageDef);

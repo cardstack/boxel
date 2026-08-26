@@ -114,8 +114,8 @@ export interface FileViewModel {
   contentPreview: string;
   previewTruncated: boolean;
   durationSeconds?: number;
-  lastModified?: string | Date;
-  createdAt?: string | Date;
+  lastModified?: string | Date | number;
+  createdAt?: string | Date | number;
   realmPath?: string;
   width?: number;
   height?: number;
@@ -196,8 +196,8 @@ function waveformBarsFor(model: FileModelLike, format: FileFormat): number[] {
     return [];
   }
   // Every producer persists bars as 0..1 amplitudes — decoded RMS of float
-  // samples, MP3's side-info envelope normalized to its own peak, the WAV
-  // streaming envelope — while the renderers draw bar heights from 0–100.
+  // samples, MP3's side-info envelope normalized to its own loudest bar, the
+  // WAV streaming envelope — while the renderers draw bar heights from 0–100.
   // The projection owns that scale conversion; a renderer given raw
   // amplitudes would crush every bar to its minimum sliver height and draw
   // silence.
@@ -540,7 +540,10 @@ export function fileViewModel(
         archiveEntries.length < completeArchiveEntries.length),
     durationSeconds: durationOf(file),
     lastModified: file.lastModified,
-    createdAt: file.createdAt,
+    // A FileDef exposes its created timestamp as `resourceCreatedAt` (the card
+    // key name); `createdAt` is the legacy attribute spelling a plain wire
+    // object may still carry. Prefer the explicit field, fall back to the getter.
+    createdAt: file.createdAt ?? file.resourceCreatedAt,
     realmPath: file.realmPath,
     width,
     height,
@@ -589,4 +592,32 @@ export function fileViewModel(
     posterMetadata: file.posterMetadata,
     thumbnailMetadata: file.thumbnailMetadata,
   };
+}
+
+// A projection produced by `fileViewModel`, as opposed to a FileDef instance.
+// The projection is always a plain object literal, and a card instance never
+// is, so the constructor check can't be fooled by a family that happens to
+// declare fields with these names.
+export function isFileViewModel(value: unknown): value is FileViewModel {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    value.constructor === Object &&
+    'source' in value &&
+    'fileState' in value
+  );
+}
+
+// Accept either side of the projection. The format shells hand their preview
+// renderers a prebuilt FileViewModel; a content-only consumer passes the
+// FileDef instance itself and this projects it, including the profile axes the
+// instance's own class pins (`static fileFamily` and friends).
+export function ensureFileViewModel(
+  model: object | undefined | null,
+  format: FileFormat = 'embedded',
+): FileViewModel {
+  if (isFileViewModel(model)) {
+    return model;
+  }
+  return fileViewModel(model, format, fileProfileSource(model));
 }

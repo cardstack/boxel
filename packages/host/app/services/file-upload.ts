@@ -123,6 +123,19 @@ export default class FileUploadService extends Service {
     return this._openNativeFilePickerMulti(opts?.acceptTypes);
   }
 
+  // Opens the multi-file picker and uploads every chosen file to the realm.
+  // Parallel POSTs are safe: the realm advisory lock serializes writes
+  // server-side (packages/runtime-common/realm.ts). Each entry resolves to
+  // the uploaded FileDef, or undefined for a file whose upload failed — the
+  // per-file failure detail stays on the task in `activeUploads`.
+  async pickAndUploadFiles(
+    realm: RealmIdentifier,
+  ): Promise<(FileDef | undefined)[]> {
+    let files = await this.pickLocalFiles({});
+    let tasks = files.map((file) => this.uploadProvidedFile({ realm, file }));
+    return Promise.all(tasks.map((task) => task.result));
+  }
+
   // Test seam for local-file attachment flow
   __queueLocalFileForTesting(file: File | null) {
     this.queuedLocalFilesForTesting.push(file);

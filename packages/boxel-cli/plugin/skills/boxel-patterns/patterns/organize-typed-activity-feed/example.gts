@@ -15,12 +15,12 @@ import {
   field,
   contains,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
+import DatetimeField from '@cardstack/base/datetime';
+import MarkdownField from '@cardstack/base/markdown';
 
 // Minimal "subject" + "actor" stand-ins. In a real domain these are
 // the cards the feed is *about* (Subject) and *by* (Actor).

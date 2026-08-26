@@ -10,6 +10,7 @@ import type {
   VirtualNetwork,
 } from '../index.ts';
 import type { JobInfo, IndexingProgressEvent } from '../worker.ts';
+import type { MediaCacheAdapter } from '../media-cache.ts';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 export type * from './lint.ts';
 export * from '#lint-task';
@@ -17,6 +18,7 @@ export * from './full-reindex.ts';
 export * from './daily-credit-grant.ts';
 export * from './copy.ts';
 export * from './indexer.ts';
+export * from './media-cache-gc.ts';
 export * from './prerender-html.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './run-command.ts';
@@ -33,6 +35,9 @@ export interface TaskArgs {
   virtualNetwork: VirtualNetwork;
   log: LoggerInstance;
   matrixURL: string;
+  // The MediaCache's object store. Optional: a worker process without one
+  // configured still registers media-cache jobs, whose tasks then no-op.
+  mediaCacheAdapter?: MediaCacheAdapter;
   getReader(fetch: typeof global.fetch, realmURL: string): Reader;
   getAuthedFetch(args: WorkerArgs): Promise<typeof globalThis.fetch>;
   createPrerenderAuth(userId: string, permissions: RealmPermissions): string;

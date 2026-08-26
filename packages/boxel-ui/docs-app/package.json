@@ -71,6 +71,7 @@
     "ember-cli-htmlbars": "^6.3.0",
     "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
+    "ember-eslint-parser": "catalog:",
     "ember-freestyle": "catalog:",
     "ember-load-initializers": "^3.0.0",
     "ember-modifier": "^4.1.0",

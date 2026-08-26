@@ -87,7 +87,7 @@ export class Mp3Def extends AudioDef {
           ? {}
           : { sampleRateHz: envelope.sampleRateHz }),
         // A quantizer scale carries no calibrated amplitude, so the envelope is
-        // normalized to the track's own peak and the absolute figures are left
+        // normalized to its own loudest bar and the absolute figures are left
         // unset rather than reported on a scale that isn't comparable with a
         // decoded one.
       };
