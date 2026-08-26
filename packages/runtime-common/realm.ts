@@ -134,6 +134,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
+  fileMetaTimestamps,
   type IndexedFile,
   type LooseCardResource,
   type FileMetaResource,
@@ -4221,6 +4222,10 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
+        // The GET DSL's spec is canonical by construction (viewport / scale /
+        // clip params are reserved), so there are never capture overrides on
+        // this lane.
+        captureSpec: null,
         persist: { ...entryKey, lane: 'on-demand' },
       },
       this.#queue,
@@ -5095,6 +5100,12 @@ export class Realm {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // This un-indexed fallback must stamp the timestamps too, so a file's
+          // `meta` timestamps don't hinge on whether the row is in the index yet.
+          ...fileMetaTimestamps(
+            fileRef.lastModified,
+            createdAt ?? fileRef.lastModified,
+          ),
         },
         links: { self: fileURL },
       },
@@ -5190,6 +5201,10 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          ...fileMetaTimestamps(
+            baseAttributes.lastModified,
+            baseAttributes.createdAt,
+          ),
           // Per-field subclass overrides for nested polymorphic fields (e.g.
           // `frontmatter` → SkillFrontmatterField). Without this the field
           // rehydrates as its declared base type when the document is read.

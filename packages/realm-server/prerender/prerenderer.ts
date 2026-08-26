@@ -7,6 +7,7 @@ import {
   type RenderVisitResponse,
   logger,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import { BrowserManager } from './browser-manager.ts';
@@ -625,6 +626,7 @@ export class Prerenderer {
     url,
     auth,
     format,
+    captureSpec,
     priority,
     opts,
     signal,
@@ -633,6 +635,7 @@ export class Prerenderer {
     url: string;
     auth: string;
     format: 'isolated' | 'embedded';
+    captureSpec?: ScreenshotCaptureSpec;
     priority?: number;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     signal?: AbortSignal;
@@ -657,6 +660,7 @@ export class Prerenderer {
         url,
         auth,
         format,
+        ...(captureSpec ? { captureSpec } : {}),
         priority,
         opts,
         signal,

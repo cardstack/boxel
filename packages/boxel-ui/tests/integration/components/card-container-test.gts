@@ -12,8 +12,9 @@ const OUTER_THEME = `:root {
   --primary: #445566;
 }`;
 
-// Defines --accent only; --primary and --theme-body-font-size must come from
-// the boundary reset, not from an enclosing theme.
+// Defines --accent only; --primary must come from the boundary reset, not
+// from an enclosing theme, while the optional --theme-* typography knobs
+// intentionally inherit from it.
 const INNER_THEME = `:root { --accent: #aabbcc; } .dark { --accent: #ddeeff; }`;
 
 function propertyOf(selector: string, property: string): string {
@@ -96,7 +97,7 @@ module('Integration | Component | card-container', function (hooks) {
     );
   });
 
-  test('an outer theme does not leak into a nested themed card', async function (assert) {
+  test('an outer theme leaks only its optional --theme-* knobs into a nested themed card, never its colors', async function (assert) {
     await render(
       <template>
         <CardContainer data-test-reference>reference</CardContainer>
@@ -126,8 +127,8 @@ module('Integration | Component | card-container', function (hooks) {
     );
     assert.strictEqual(
       propertyOf('[data-test-inner]', '--theme-body-font-size'),
-      '',
-      'inner card resets --theme-* knobs to initial instead of inheriting the outer theme',
+      '18px',
+      'inner card inherits the optional --theme-* typography knobs it does not set itself',
     );
   });
 

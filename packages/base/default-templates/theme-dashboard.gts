@@ -6,10 +6,13 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 
+import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
+import PaletteIcon from '@cardstack/boxel-icons/palette';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
 import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
 import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
+import VersionIcon from '@cardstack/boxel-icons/book-text';
 
 import {
   Button,
@@ -17,15 +20,29 @@ import {
   BoxelContainer,
   FieldContainer,
   BoxelInput,
+  Pill,
 } from '@cardstack/boxel-ui/components';
 import {
+  and,
   bool,
   cn,
+  eq,
   themeScope,
   themeScopedCss,
 } from '@cardstack/boxel-ui/helpers';
 
-import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
+import {
+  DEFAULT_THEME_SCALE,
+  FontPreviews,
+} from '../structured-theme-variables';
+import CardInfoTemplates from '../default-templates/card-info';
+
+import type {
+  BoxComponent,
+  CardDef,
+  FieldsTypeFor,
+  PartialBaseInstanceType,
+} from '../card-api';
 
 function scrollToSection(sectionId: string, event: Event) {
   event.preventDefault();
@@ -71,15 +88,18 @@ export interface SectionSignature {
   fieldName?: string | null /* optional field to render */;
 }
 
-export class CssFieldEditor extends GlimmerComponent<{
+export class ThemeImporter extends GlimmerComponent<{
   Args: {
     label?: string;
     placeholder?: string;
-    setCss?: (content: string) => void;
+    setCss?: (content: string) => boolean | void;
   };
+  Blocks: { default: [] };
   Element: HTMLElement;
 }> {
-  defaultLabel = 'Paste your CSS below to customize the theme variables:';
+  @tracked private draftCss = '';
+  @tracked private error: string | undefined;
+
   defaultPlaceholder = `:root {
   --background: hsl(0 0% 100%);
   --foreground: oklch(0.52 0.13 144.17);
@@ -94,35 +114,103 @@ export class CssFieldEditor extends GlimmerComponent<{
   /* ... */
 }`;
 
+  private get isDraftEmpty() {
+    return !this.draftCss.trim().length;
+  }
+
+  private updateDraft = (value: string) => {
+    this.draftCss = value;
+    this.error = undefined;
+  };
+
+  private applyCss = () => {
+    if (this.args.setCss?.(this.draftCss) === false) {
+      this.error = 'No :root or .dark variables found in that CSS.';
+    }
+  };
+
   <template>
-    <FieldContainer
-      class='css-field-editor'
-      @vertical={{true}}
-      @label={{if @label.length @label this.defaultLabel}}
-      @tag='label'
-      ...attributes
-    >
-      <BoxelInput
-        @type='textarea'
-        @onInput={{@setCss}}
-        @placeholder={{if
-          @placeholder.length
-          @placeholder
-          this.defaultPlaceholder
-        }}
-        class='css-textarea'
-        data-test-custom-css-variables
-      />
-    </FieldContainer>
+    <div class='css-field-editor-panel' ...attributes>
+      <p class='css-field-editor-hint'>
+        {{#if (has-block)}}
+          {{yield}}
+        {{else}}
+          Paste a theme export (<a
+            class='css-field-editor-hint-link'
+            href='https://tweakcn.com'
+            target='_blank'
+            rel='noopener noreferrer'
+          >tweakcn</a>,
+          <a
+            class='css-field-editor-hint-link'
+            href='https://ui.shadcn.com/themes'
+            target='_blank'
+            rel='noopener noreferrer'
+          >shadcn</a>, or any CSS with
+          <code>:root</code>
+          and
+          <code>.dark</code>
+          blocks). Its font families are imported alongside the variables.
+        {{/if}}
+      </p>
+      <FieldContainer
+        class='css-field-editor'
+        @vertical={{true}}
+        @label={{if @label.length @label 'Theme CSS'}}
+        @tag='label'
+      >
+        <BoxelInput
+          @type='textarea'
+          @value={{this.draftCss}}
+          @onInput={{this.updateDraft}}
+          @placeholder={{if
+            @placeholder.length
+            @placeholder
+            this.defaultPlaceholder
+          }}
+          class='css-textarea'
+          data-test-custom-css-variables
+        />
+      </FieldContainer>
+      {{#if this.error}}
+        <p class='css-field-editor-error' role='alert'>{{this.error}}</p>
+      {{/if}}
+      <div class='css-field-editor-actions'>
+        <Button
+          @kind='primary'
+          @size='small'
+          @disabled={{this.isDraftEmpty}}
+          {{on 'click' this.applyCss}}
+          data-test-import-theme
+        >
+          Import Theme
+        </Button>
+      </div>
+    </div>
     <style scoped>
+      .css-field-editor-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      .css-field-editor-hint {
+        margin: 0;
+        max-width: 45rem;
+        color: var(--muted-foreground);
+      }
+      .css-field-editor-hint-link {
+        color: inherit;
+        text-decoration: underline;
+      }
+      .css-field-editor-hint-link:hover,
+      .css-field-editor-hint-link:focus-visible {
+        color: var(--primary);
+      }
       .css-field-editor {
         gap: var(--boxel-sp);
       }
       .css-textarea {
         min-height: 15rem;
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
         font-size: var(--boxel-font-size-xs);
         font-family: var(
           --font-mono,
@@ -131,6 +219,14 @@ export class CssFieldEditor extends GlimmerComponent<{
       }
       .css-textarea::placeholder {
         opacity: 0.5;
+      }
+      .css-field-editor-error {
+        margin: 0;
+        color: var(--destructive, var(--boxel-error-200));
+      }
+      .css-field-editor-actions {
+        display: flex;
+        justify-content: flex-end;
       }
     </style>
   </template>
@@ -416,7 +512,7 @@ export class CardContainerCss extends GlimmerComponent<{
     <style scoped>
       .card-container-description {
         font-size: var(--boxel-font-size-sm);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin-block: 0 var(--boxel-sp-lg);
       }
       .card-container-description code,
@@ -434,9 +530,9 @@ export class CardContainerCss extends GlimmerComponent<{
         margin-bottom: var(--boxel-sp-lg);
       }
       .card-container-mapping-group {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
         border-radius: var(--boxel-border-radius);
         padding: var(--boxel-sp);
       }
@@ -445,7 +541,7 @@ export class CardContainerCss extends GlimmerComponent<{
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin-bottom: var(--boxel-sp-xs);
       }
       .card-container-mapping-group dl {
@@ -458,7 +554,7 @@ export class CardContainerCss extends GlimmerComponent<{
       }
       .card-container-mapping-note {
         font-size: var(--boxel-font-size-xs);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin-bottom: var(--boxel-sp-xs);
       }
       .card-container-mapping-group dt {
@@ -466,17 +562,17 @@ export class CardContainerCss extends GlimmerComponent<{
       }
       .card-container-mapping-group dd {
         margin: 0;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
       .computed-vars-heading {
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
         padding-top: var(--boxel-sp-lg);
-        border-top: 1px solid var(--dsr-border);
+        border-top: 1px solid var(--border);
       }
       .computed-vars-section {
         display: grid;
@@ -484,10 +580,10 @@ export class CardContainerCss extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
       }
       .computed-vars-group {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        border-radius: var(--boxel-border-radius);
+        background-color: var(--card);
+        color: var(--card-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
         padding: var(--boxel-sp);
         display: flex;
         flex-direction: column;
@@ -498,16 +594,13 @@ export class CardContainerCss extends GlimmerComponent<{
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         margin: 0;
-      }
-      .computed-vars-group--full {
-        grid-column: 1 / -1;
       }
       .computed-vars-description {
         margin: 0;
         font-size: var(--boxel-font-size-sm);
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
       }
       .computed-vars-description code {
         font-family: var(
@@ -602,13 +695,13 @@ export class NavSection extends GlimmerComponent<{
           align-items: center;
           gap: var(--boxel-sp);
           padding-bottom: var(--boxel-sp);
-          border-bottom: 2px solid var(--dsr-border);
+          border-bottom: 2px solid var(--border);
         }
         .nav-section-number {
           display: inline-block;
           font-size: var(--boxel-font-size-sm);
           font-weight: 700;
-          color: var(--dsr-muted-fg);
+          color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
           min-width: 2rem;
         }
@@ -680,7 +773,7 @@ export class SimpleNavBar extends GlimmerComponent<{
         align-items: center;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp) calc(var(--boxel-sp) * 2);
-        border-bottom: 1px solid var(--dsr-border);
+        border-bottom: 1px solid var(--border);
       }
       .structured-theme-nav-list {
         list-style-type: none;
@@ -735,7 +828,7 @@ export class NavBar extends GlimmerComponent<{
       .dsr-nav {
         position: sticky;
         top: 0;
-        border-bottom: 1px solid var(--dsr-border);
+        border-bottom: 1px solid var(--border);
         z-index: 10;
         backdrop-filter: blur(8px);
         display: flex;
@@ -758,7 +851,7 @@ export class NavBar extends GlimmerComponent<{
       .nav-item {
         font-size: var(--boxel-font-size-sm);
         font-weight: 500;
-        color: var(--dsr-fg);
+        color: var(--foreground);
         text-decoration: none;
         white-space: nowrap;
         padding: calc(var(--boxel-sp) * 0.5) calc(var(--boxel-sp) * 0.75);
@@ -773,7 +866,7 @@ export class NavBar extends GlimmerComponent<{
         flex-shrink: 0;
         border: none;
         background: none;
-        color: var(--dsr-muted-fg);
+        color: var(--muted-foreground);
         width: 2.25rem;
         height: 5rem;
         display: flex;
@@ -789,9 +882,9 @@ export class NavBar extends GlimmerComponent<{
       }
       .nav-scroll:hover,
       .nav-scroll:focus-visible {
-        color: var(--dsr-fg);
+        color: var(--foreground);
         outline: none;
-        background: color-mix(in lab, var(--dsr-fg) 10%, transparent);
+        background: color-mix(in lab, var(--foreground) 10%, transparent);
       }
       .nav-scroll--left {
         order: -1;
@@ -817,11 +910,15 @@ export class NavBar extends GlimmerComponent<{
       }
       .nav-container::before {
         left: 0;
-        background: linear-gradient(to right, var(--dsr-bg) 5%, transparent);
+        background: linear-gradient(
+          to right,
+          var(--background) 5%,
+          transparent
+        );
       }
       .nav-container::after {
         right: 0;
-        background: linear-gradient(to left, var(--dsr-bg) 5%, transparent);
+        background: linear-gradient(to left, var(--background) 5%, transparent);
       }
 
       @media (max-width: 768px) {
@@ -896,44 +993,79 @@ export class ModeToggle extends GlimmerComponent<{
 
 export class ThemeDashboardHeader extends GlimmerComponent<{
   Args: {
+    mode?: 'isolated' | 'edit';
     title?: string;
     description?: string;
-    isDarkMode?: boolean;
     metaLabel?: string;
+    // the version field lives on StructuredTheme, not CardDef, and this
+    // template can't import the card without a cycle
+    fields?: FieldsTypeFor<CardDef> & { version: BoxComponent };
+    model?: PartialBaseInstanceType<typeof CardDef>;
     version?: string;
   };
   Element: HTMLElement;
   Blocks: { meta: []; default: [] };
 }> {
-  <template>
-    <header class='theme-dashboard-header' ...attributes>
-      {{#if (has-block 'meta')}}
-        {{yield to='meta'}}
-      {{else}}
-        <div class='theme-dashboard-header-meta'>
-          <span class='theme-dashboard-header-meta-label'>
-            {{if @metaLabel @metaLabel 'Style Guide'}}
-          </span>
-          <span class='theme-dashboard-header-meta-version'>
-            Version
-            {{if @version @version '1.0'}}
-          </span>
-        </div>
-      {{/if}}
-      <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
-      {{#if @description}}
-        <p class='theme-dashboard-header-tagline'>{{@description}}</p>
-      {{/if}}
+  // CardInfoTemplates.edit insists on a strict `CardDef` for `@model`; the
+  // partial model card templates pass in only exercises the loose shape, so
+  // cast here rather than in every caller
+  private get cardInfoModel(): CardDef {
+    return this.args.model as unknown as CardDef;
+  }
 
+  <template>
+    <header
+      class='theme-dashboard-header {{if @mode @mode "isolated"}}'
+      ...attributes
+    >
+      {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
+        <CardInfoTemplates.edit
+          @fields={{@fields}}
+          @model={{this.cardInfoModel}}
+          @hideThemeChooser={{true}}
+        />
+        <FieldContainer
+          class='theme-dashboard-version-edit-field'
+          @icon={{VersionIcon}}
+          @label='Version No'
+          @tag='label'
+        >
+          <@fields.version />
+        </FieldContainer>
+      {{else}}
+        {{#if (has-block 'meta')}}
+          {{yield to='meta'}}
+        {{else}}
+          <div class='theme-dashboard-header-meta'>
+            <span class='theme-dashboard-header-meta-label'>
+              {{if @metaLabel @metaLabel 'Style Guide'}}
+            </span>
+            <span class='theme-dashboard-header-meta-version'>
+              Version
+              {{if @version @version '1.0'}}
+            </span>
+          </div>
+        {{/if}}
+        <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
+        {{#if @description}}
+          <p class='theme-dashboard-header-tagline'>{{@description}}</p>
+        {{/if}}
+      {{/if}}
       {{yield}}
     </header>
     <style scoped>
       @layer baseComponent {
         .theme-dashboard-header {
-          border-bottom: 1px solid var(--dsr-border);
+          border-bottom: 1px solid var(--border);
+          background-color: var(--muted);
+          color: var(--muted-foreground);
+          text-wrap: pretty;
+        }
+        .isolated {
           padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
-          background-color: var(--dsr-muted);
-          color: var(--dsr-muted-fg);
+        }
+        .edit {
+          padding: var(--boxel-sp-xl);
         }
         .theme-dashboard-header-meta {
           display: flex;
@@ -947,10 +1079,74 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
         }
         .theme-dashboard-header-title {
           margin-bottom: calc(var(--boxel-sp) * 0.75);
-          color: var(--dsr-fg);
+          color: var(--foreground);
         }
         .theme-dashboard-header-tagline {
           max-width: 48rem;
+        }
+        .theme-dashboard-version-edit-field {
+          margin-top: var(--boxel-sp);
+        }
+      }
+    </style>
+  </template>
+}
+
+// Shown in a dashboard's body while the card has no theme CSS yet
+export class ThemeDashboardEmptyState extends GlimmerComponent<{
+  Args: {
+    message?: string;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <div
+      class='dashboard-empty-state'
+      ...attributes
+      data-test-dashboard-empty-state
+    >
+      <PaletteIcon
+        class='dashboard-empty-state-icon'
+        width='48'
+        height='48'
+        aria-hidden='true'
+      />
+      <h2 class='dashboard-empty-state-title'>No theme yet</h2>
+      <p class='dashboard-empty-state-message'>
+        {{#if @message}}
+          {{@message}}
+        {{else}}
+          Switch to edit mode to import a theme or build one field by field.
+        {{/if}}
+      </p>
+    </div>
+    <style scoped>
+      @layer baseComponent {
+        .dashboard-empty-state {
+          /* fills the grown content area so the footer below stays pinned
+             to the bottom of the card; the message itself stays at the top */
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xl) calc(var(--boxel-sp) * 2);
+          text-align: center;
+          text-wrap: pretty;
+          color: var(--muted-foreground);
+        }
+        .dashboard-empty-state-icon {
+          flex-shrink: 0;
+        }
+        .dashboard-empty-state-title {
+          margin: 0;
+          color: var(--foreground);
+          font-size: var(--boxel-font-size);
+        }
+        .dashboard-empty-state-message {
+          margin: 0;
+          max-width: 30rem;
+          text-wrap: balance;
         }
       }
     </style>
@@ -961,10 +1157,21 @@ export class ThemeVisualizer extends GlimmerComponent<{
   Args: {
     toggleDarkMode?: () => void;
     isDarkMode?: boolean;
+    fontStack?: { label: string; stack?: string }[];
+    cssImports?: string[] | null;
+    editMode?: boolean;
   };
-  Blocks: { colorPalette: []; typography: [] };
+  Blocks: { colorPalette: []; cssImports: []; typography: [] };
   Element: HTMLElement;
 }> {
+  private get hasNoImports() {
+    return !this.args.cssImports?.length;
+  }
+
+  private get showFontsSection() {
+    return Boolean(this.args.fontStack?.length || this.hasNoImports);
+  }
+
   <template>
     <section class='dsr-theme-visualizer' ...attributes>
       <div class='dsr-theme-visualizer-header'>
@@ -980,7 +1187,63 @@ export class ThemeVisualizer extends GlimmerComponent<{
         {{#if (has-block 'colorPalette')}}
           <div>
             <h3 class='structured-theme-visualizer-subtitle'>Color System</h3>
+            <div class='preview-pills'>
+              <Pill data-test-pill-preview='default'>Default</Pill>
+              <Pill @variant='primary' data-test-pill-preview='primary'>
+                Primary
+              </Pill>
+              <Pill @variant='secondary' data-test-pill-preview='secondary'>
+                Secondary
+              </Pill>
+              <Pill @variant='accent' data-test-pill-preview='accent'>
+                Accent
+              </Pill>
+              <Pill @variant='muted' data-test-pill-preview='muted'>
+                Muted
+              </Pill>
+              <Pill @variant='destructive' data-test-pill-preview='destructive'>
+                Destructive
+              </Pill>
+            </div>
             {{yield to='colorPalette'}}
+          </div>
+        {{/if}}
+        {{#if @editMode}}
+          {{yield to='cssImports'}}
+        {{else if this.showFontsSection}}
+          <div data-test-font-imports-section>
+            <h3 class='structured-theme-visualizer-subtitle'>Fonts</h3>
+            <FontPreviews @fontStack={{@fontStack}} />
+            {{#if @cssImports.length}}
+              <FieldContainer
+                class='css-imports-preview'
+                @label='CSS Imports'
+                @vertical={{true}}
+              >
+                <ul class='font-import-links'>
+                  {{#each @cssImports as |importUrl|}}
+                    <li>
+                      <a
+                        class='font-import-link'
+                        href={{importUrl}}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                      >
+                        <ExternalLinkIcon
+                          class='font-import-link-icon'
+                          width='14'
+                          height='14'
+                          aria-hidden='true'
+                        />
+                        {{importUrl}}
+                      </a>
+                    </li>
+                  {{/each}}
+                </ul>
+              </FieldContainer>
+            {{else if this.hasNoImports}}
+              <p class='font-import-empty'><em>No web fonts referenced.</em></p>
+            {{/if}}
           </div>
         {{/if}}
         {{#if (has-block 'typography')}}
@@ -989,40 +1252,59 @@ export class ThemeVisualizer extends GlimmerComponent<{
             {{yield to='typography'}}
           </div>
         {{/if}}
-        <div>
-          <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
-          <div class='structured-theme-component-samples'>
-            <Button @kind='primary' @size='small' @rectangular={{true}}>
-              Primary Action
-            </Button>
-            <Button @kind='secondary' @size='small' @rectangular={{true}}>
-              Secondary Action
-            </Button>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='structured-theme-component-sample-card'
-            >
-              <BoxelContainer @display='grid'>
-                <h3>Sample Card</h3>
-                <p>
-                  Card component showcasing background, borders, and shadows
-                  from the theme system.
-                </p>
-              </BoxelContainer>
-            </CardContainer>
+        {{#unless @editMode}}
+          <div>
+            <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
+            <div class='structured-theme-component-samples'>
+              <Button
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='default'
+              >
+                Default Action
+              </Button>
+              <Button
+                @kind='primary'
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='primary'
+              >
+                Primary Action
+              </Button>
+              <Button
+                @kind='secondary'
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='secondary'
+              >
+                Secondary Action
+              </Button>
+              <CardContainer
+                @displayBoundaries={{true}}
+                class='structured-theme-component-sample-card'
+              >
+                <BoxelContainer @display='grid'>
+                  <h3>Sample Card</h3>
+                  <p>
+                    Card component showcasing background, borders, and shadows
+                    from the theme system.
+                  </p>
+                </BoxelContainer>
+              </CardContainer>
+            </div>
           </div>
-        </div>
+        {{/unless}}
       </div>
     </section>
 
     <style scoped>
       @layer baseComponent {
         .dsr-theme-visualizer {
-          background-color: var(--dsr-card);
-          color: var(--dsr-card-fg);
-          border-radius: var(--boxel-border-radius);
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border-radius: var(--radius);
           padding: calc(var(--boxel-sp) * 2);
-          border: 1px solid var(--dsr-border);
+          border: 1px solid var(--border);
         }
         .dsr-theme-visualizer + :deep(*) {
           margin-top: calc(var(--boxel-sp) * 2);
@@ -1035,17 +1317,17 @@ export class ThemeVisualizer extends GlimmerComponent<{
           gap: var(--boxel-sp-xs);
           margin-bottom: calc(var(--boxel-sp) * 2);
           padding-bottom: var(--boxel-sp);
-          border-bottom: 2px solid var(--dsr-border);
+          border-bottom: 2px solid var(--border);
         }
         .structured-theme-visualizer {
           display: flex;
           flex-direction: column;
           gap: calc(var(--boxel-sp) * 4);
-          background-color: var(--dsr-bg);
-          color: var(--dsr-fg);
-          border-radius: var(--boxel-border-radius);
+          background-color: var(--background);
+          color: var(--foreground);
+          border-radius: var(--radius);
           padding: calc(var(--boxel-sp) * 2);
-          border: 2px solid var(--dsr-border);
+          border: 2px solid var(--border);
         }
         .structured-theme-visualizer-subtitle {
           border-bottom: var(--boxel-border);
@@ -1057,12 +1339,53 @@ export class ThemeVisualizer extends GlimmerComponent<{
           gap: var(--boxel-sp);
           align-items: flex-start;
         }
+        .preview-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+          margin-bottom: var(--boxel-sp);
+        }
       }
       .structured-theme-component-sample-card {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        box-shadow: var(--boxel-box-shadow);
+        background-color: var(--card);
+        color: var(--card-foreground);
+      }
+      .css-imports-preview {
+        margin-top: var(--boxel-sp-xl);
+      }
+      .font-import-links {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xs);
+      }
+      .font-import-link {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .font-import-link:hover,
+      .font-import-link:focus-visible {
+        text-decoration: underline;
+      }
+      .font-import-link-icon {
+        flex-shrink: 0;
+        align-self: center;
+      }
+      .font-import-empty {
+        margin: var(--boxel-sp) 0 0;
+        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -1105,7 +1428,7 @@ export class ThemeDashboard extends GlimmerComponent<{
     >
       <article
         id='top'
-        class={{cn 'detailed-style-reference' dsr--dark=@isDarkMode}}
+        class='detailed-style-reference'
         data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
         ...attributes
       >
@@ -1121,15 +1444,6 @@ export class ThemeDashboard extends GlimmerComponent<{
         {{/if}}
         {{#if (has-block 'header')}}
           {{yield to='header'}}
-        {{else}}
-          <ThemeDashboardHeader
-            class='dsr-header'
-            @title={{@title}}
-            @description={{@description}}
-            @isDarkMode={{@isDarkMode}}
-            @metaLabel={{@headerLabel}}
-            @version={{@version}}
-          />
         {{/if}}
 
         {{#if (has-block 'navBar')}}
@@ -1159,44 +1473,12 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
-          --dsr-bg: var(--background, var(--boxel-light));
-          --dsr-fg: var(--foreground, var(--boxel-700));
-          --dsr-muted: var(
-            --muted,
-            color-mix(in oklab, var(--dsr-fg) 10%, var(--dsr-bg))
-          );
-          --dsr-muted-fg: var(
-            --muted-foreground,
-            color-mix(in oklab, var(--dsr-fg) 60%, var(--dsr-bg))
-          );
-          --dsr-border: var(
-            --border,
-            color-mix(in oklab, var(--dsr-fg) 20%, var(--dsr-bg))
-          );
-          --dsr-card: var(
-            --card,
-            color-mix(in oklab, var(--dsr-fg) 5%, var(--dsr-bg))
-          );
-          --dsr-card-fg: var(--card-foreground, var(--dsr-fg));
-
-          min-height: 100vh;
-          background-color: var(--dsr-bg);
-          color: var(--dsr-fg);
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background-color: var(--background);
+          color: var(--foreground);
           overflow-y: auto;
-        }
-        .dsr--dark {
-          --dsr-bg: var(--background, var(--boxel-700));
-          --dsr-fg: var(--foreground, var(--boxel-light));
-        }
-        .dsr--dark :deep(input),
-        .dsr--dark :deep(textarea),
-        .dsr--dark :deep(pre) {
-          background-color: color-mix(
-            in oklab,
-            var(--dsr-bg),
-            var(--boxel-dark) 20%
-          );
-          color: var(--foreground, var(--boxel-light));
         }
 
         .dsr-header :deep(h1) {
@@ -1208,6 +1490,12 @@ export class ThemeDashboard extends GlimmerComponent<{
 
         /* Content */
         .dsr-content {
+          /* fills the space above the footer so it stays pinned to the
+             bottom of the card when the body is short */
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          width: 100%;
           max-width: 56rem;
           margin: 0 auto;
           padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
@@ -1216,10 +1504,10 @@ export class ThemeDashboard extends GlimmerComponent<{
 
         /* Footer */
         .dsr-footer {
-          border-top: 1px solid var(--dsr-border);
+          border-top: 1px solid var(--border);
           padding: calc(var(--boxel-sp) * 2);
-          background-color: var(--dsr-muted);
-          color: var(--dsr-muted-fg);
+          background-color: var(--muted);
+          color: var(--muted-foreground);
         }
         .footer-content {
           max-width: 56rem;
@@ -1237,15 +1525,8 @@ export class ThemeDashboard extends GlimmerComponent<{
           .dsr-header {
             padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
           }
-          .style-title {
-            font-size: clamp(1.75rem, 8vw, 2.5rem);
-          }
           .dsr-content {
             padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
-          }
-          .theme-toggle {
-            width: 100%;
-            justify-content: center;
           }
         }
       }

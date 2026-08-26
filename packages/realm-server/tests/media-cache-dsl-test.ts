@@ -391,6 +391,51 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a job carrying both a persist target and captureSpec overrides never persists', async function (assert) {
+      // No producer publishes this pairing — the POST handler sets
+      // `persist: null` whenever a spec has overrides — but the task is the
+      // last line of defense: the persist identity is the canonical
+      // capture's, so persisting an override render under it would serve
+      // that render on the canonical `_screenshot/` URL.
+      await seedInstanceRow('card-1');
+      await startWorker();
+
+      let entryKey = {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+      };
+      let job = await publisher.publish<ScreenshotPrerenderResponse>({
+        jobType: 'screenshot-card',
+        concurrencyGroup: `screenshot:${REALM_URL}`,
+        timeout: 60,
+        priority: 0,
+        args: {
+          realmURL: REALM_URL,
+          realmUsername: OWNER,
+          runAs: OWNER,
+          cardId: `${REALM_URL}card-1`,
+          format: 'isolated',
+          captureSpec: { viewport: { width: 1280, height: 800 } },
+          persist: { ...entryKey, lane: 'on-demand' },
+        },
+      });
+      let result = await job.done;
+
+      assert.strictEqual(result.status, 'ready', 'the capture itself ran');
+      assert.strictEqual(
+        result.base64,
+        PNG_BASE64,
+        'the bytes still reach the caller',
+      );
+      assert.strictEqual(
+        await findMediaCacheEntry(dbAdapter, entryKey),
+        undefined,
+        'nothing was persisted under the canonical ledger identity',
+      );
+    });
+
     test('concurrent misses for one spec coalesce onto one capture', async function (assert) {
       await seedInstanceRow('card-1');
       await seedRealmConfigRow(true);
