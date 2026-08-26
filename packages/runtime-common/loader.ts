@@ -586,8 +586,20 @@ export class Loader {
         }
         module = this.getModule(href);
       }
-      if (module?.state === 'evaluated' || module?.state === 'broken') {
-        for (let consumedModule of module.consumedModules) {
+      // Every state a module can be holding past `fetching` names the modules
+      // it imports — the registered states in their dependency list, the states
+      // past them in `consumedModules` — so every one of them has edges to
+      // descend. Stopping at the two terminal states instead would truncate the
+      // walk at exactly the modules an import failure leaves behind: a module
+      // whose own import threw is `broken` and reports its edges, but the
+      // siblings that import threw *past* are stranded in a registered state,
+      // and dropping their subtrees is what leaves a failed module indexed
+      // without the dependency that broke it. Editing that dependency would
+      // then never invalidate it. `directModuleDependencies` reads the same
+      // per-state shapes `collectKnownModuleDependencies` does, so the two
+      // walks describe one loader the same way at any instant.
+      if (module) {
+        for (let consumedModule of this.directModuleDependencies(module)) {
           await walk(consumedModule, resolveHref(consumedModule));
         }
       }
