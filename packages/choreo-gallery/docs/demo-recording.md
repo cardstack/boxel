@@ -139,6 +139,25 @@ The same applies to gating on focus, on hover, on `document.hidden`, or
 on any other "is a person here?" signal. A recorder is not a person and
 answers `false` to all of them.
 
+## Workers slice at clip boundaries, or not at all
+
+A parallel render gives each worker a fresh page and a slice of frames.
+Every state a worker cannot reconstruct by folding through `t` REPLAYS
+from its cue on that worker's first frames — and a demo's own wall-clock
+springs (a lightbox opening, a beacon flight) are exactly such state:
+they live on the engine's real-time loop, not on any seekable run. The
+symptom in the encode is unmistakable: the lightbox opens again at every
+slice boundary, and the film "restarts" every N frames.
+
+The rule: **never let worker slices land inside a clip whose motion is
+wall-clock.** Until the renderer can be told to split at clip
+boundaries, render such compositions with `--workers 1` — a single page
+walking the film monotonically plays every spring exactly once, which is
+also precisely what the recorded genre wants. (Scene-change scanning
+finds the violations fast: `ffmpeg -vf "select='gt(scene,0.03)',showinfo"`
+lists every discontinuity; slice-boundary restarts appear at exact
+multiples of the slice length.)
+
 ## Checklist
 
 Before calling a demo recordable:
