@@ -239,6 +239,16 @@ export class FeatureReel extends Component {
     (window as Window & { __choreoReel?: FeatureReel }).__choreoReel = this;
     el.dataset.captureHandle = 'ready';
     this.installPorts();
+    if (
+      (window as Window & { __choreoRecording?: boolean }).__choreoRecording
+    ) {
+      // a recorder owns this page from birth: the first render plays
+      // nothing (docs/demo-recording.md) — no preview clock ever starts,
+      // no cue fires on wall time, and the score mounts through the
+      // player's own prepare barrier when the first seek arrives
+      this.externallyDriven = true;
+      return;
+    }
     requestAnimationFrame(() => {
       if (!this.isDestroying && this.take === 0) {
         this.take++;
@@ -473,10 +483,13 @@ export class FeatureReel extends Component {
             {{! move-only: display type cannot hold proportions across a
                 6.5× FLIP — the mark condenses into the corner instead of
                 stretching a texture across the frame }}
+            {{! quick: the engine crossfades the outgoing word across the
+                flight at its natural size — a 0.4s flight makes that a
+                flash of type instead of a passenger }}
             <b.Move
               @of={{b.received "brand"}}
               @size={{false}}
-              @duration={{0.7}}
+              @duration={{0.4}}
               @ease={{GLIDE}}
             />
             <b.Tween
