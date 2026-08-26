@@ -9,8 +9,12 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 // the SW environment. The actual SW is at public/auth-service-worker.js.
 //
 // We duplicate the core logic here (token matching, fetch interception,
-// on-miss client fallback) to test it in a standard QUnit context where
-// service workers aren't available.
+// on-miss client fallback, `_screenshot/` 503 absorption) to test it in a
+// standard QUnit context where service workers aren't available. The
+// mirrored logic can drift from the shipped file, so the "shipped worker"
+// module at the bottom evaluates the real public/auth-service-worker.js
+// bytes and exercises the same behavior against them — a change to the
+// shipped constants or helpers that the mirror misses fails there.
 
 function createServiceWorkerEnv(
   opts: {
@@ -35,6 +39,11 @@ function createServiceWorkerEnv(
     // Mirrors TOKEN_REQUEST_REFRESH_TIMEOUT_MS — the extended budget
     // applied after the client posts `{type:'pending'}`.
     tokenRequestRefreshTimeoutMs?: number;
+    // Network stub for the `_screenshot/` 503-absorption loop. Receives the
+    // Request the SW would fetch on each attempt. Absorption paths require
+    // it; leaving it unset makes any unexpected engagement of the loop fail
+    // loudly.
+    screenshotFetch?: (request: Request) => Promise<Response>;
   } = {},
 ) {
   const realmTokens = new Map<string, string>();
@@ -153,20 +162,89 @@ function createServiceWorkerEnv(
     return promise;
   }
 
-  function buildAuthedRequest(request: Request, token: string): Request {
+  function buildRealmRequest(request: Request, token?: string): Request {
     let headers = new Headers(request.headers);
-    headers.set('Authorization', `Bearer ${token}`);
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
     return new Request(request, { headers, mode: 'cors' });
+  }
+
+  // Mirrors the SCREENSHOT_* constants and helpers in auth-service-worker.js.
+  const SCREENSHOT_PATH_SEGMENT = '/_screenshot/';
+  const SCREENSHOT_RETRY_BUDGET_MS = 90000;
+
+  function isScreenshotRoute(request: Request): boolean {
+    if (request.method !== 'GET') {
+      return false;
+    }
+    try {
+      return new URL(request.url).pathname.includes(SCREENSHOT_PATH_SEGMENT);
+    } catch {
+      return false;
+    }
+  }
+
+  function screenshotRetryDelayMs(response: Response): number | undefined {
+    if (response.status !== 503) {
+      return undefined;
+    }
+    let retryAfter = response.headers.get('Retry-After');
+    if (retryAfter === null) {
+      return undefined;
+    }
+    let seconds = Number(retryAfter);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      return undefined;
+    }
+    return Math.max(1000, seconds * 1000);
+  }
+
+  // Virtual clock for the absorption loop: sleeps advance it instantly and
+  // are recorded so tests can assert on the server-suggested pacing without
+  // holding real time.
+  let clock = 0;
+  let sleeps: number[] = [];
+  let now = () => clock;
+  let sleep = async (ms: number) => {
+    sleeps.push(ms);
+    clock += ms;
+  };
+
+  async function fetchScreenshotAbsorbing503s(
+    buildRequest: () => Request,
+  ): Promise<Response> {
+    let doFetch = opts.screenshotFetch;
+    if (!doFetch) {
+      throw new Error(
+        'screenshot absorption engaged but no screenshotFetch was configured',
+      );
+    }
+    let deadline = now() + SCREENSHOT_RETRY_BUDGET_MS;
+    for (;;) {
+      let response = await doFetch(buildRequest());
+      let delayMs = screenshotRetryDelayMs(response);
+      if (delayMs === undefined) {
+        return response;
+      }
+      let remainingMs = deadline - now();
+      if (remainingMs <= 0) {
+        return response;
+      }
+      await sleep(Math.min(delayMs, remainingMs));
+    }
   }
 
   // Returns:
   //   - Request: the SW would respondWith fetch of this authed Request
+  //   - Response: the `_screenshot/` absorption loop ran the network via
+  //     opts.screenshotFetch and this is what the page would receive
   //   - 'pass-through': the SW would not intercept (returns from fetch handler)
   //   - 'fallthrough-fetch': the SW called respondWith but with the original
   //     request (client had no token); will hit the network unauth'd
   let processFetch = async (
     request: Request,
-  ): Promise<Request | 'pass-through' | 'fallthrough-fetch'> => {
+  ): Promise<Request | Response | 'pass-through' | 'fallthrough-fetch'> => {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return 'pass-through';
     }
@@ -177,7 +255,12 @@ function createServiceWorkerEnv(
     let url = request.url;
     let matchedToken = lookupToken(url);
     if (matchedToken) {
-      return buildAuthedRequest(request, matchedToken);
+      if (isScreenshotRoute(request)) {
+        return fetchScreenshotAbsorbing503s(() =>
+          buildRealmRequest(request, lookupToken(url)),
+        );
+      }
+      return buildRealmRequest(request, matchedToken);
     }
 
     let origin: string;
@@ -192,7 +275,17 @@ function createServiceWorkerEnv(
 
     let token = await requestTokenFromClient(url);
     if (token) {
-      return buildAuthedRequest(request, token);
+      if (isScreenshotRoute(request)) {
+        return fetchScreenshotAbsorbing503s(() =>
+          buildRealmRequest(request, lookupToken(url) ?? token),
+        );
+      }
+      return buildRealmRequest(request, token);
+    }
+    if (isScreenshotRoute(request) && realmHosts.has(origin)) {
+      return fetchScreenshotAbsorbing503s(() =>
+        buildRealmRequest(request, lookupToken(url)),
+      );
     }
     return 'fallthrough-fetch';
   };
@@ -203,6 +296,7 @@ function createServiceWorkerEnv(
     realmTokens,
     realmHosts,
     inflightTokenRequests,
+    sleeps,
   };
 }
 
@@ -674,6 +768,301 @@ module('Unit | auth-service-worker', function () {
       assert.strictEqual(result, 'fallthrough-fetch');
     });
   });
+
+  module('_screenshot/ 503 absorption', function () {
+    const REALM_URL = 'http://localhost:4201/user/realm/';
+    const SCREENSHOT_URL = `${REALM_URL}_screenshot/Card/1.png?w=800&h=600`;
+
+    function response(status: number, retryAfter?: string) {
+      return new Response(null, {
+        status,
+        headers: retryAfter !== undefined ? { 'Retry-After': retryAfter } : {},
+      });
+    }
+
+    // Builds a SW env whose network answers the given responses in order,
+    // recording each Request the absorption loop actually sent.
+    function makeSw(responses: Response[], extraOpts = {}) {
+      let fetched: Request[] = [];
+      let sw = createServiceWorkerEnv({
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          let next = responses.shift();
+          if (!next) {
+            throw new Error('screenshotFetch called more times than expected');
+          }
+          return next;
+        },
+        ...extraOpts,
+      });
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: REALM_URL,
+        token: 'realm-token',
+      });
+      return { sw, fetched };
+    }
+
+    test('injects Authorization on query-param _screenshot URLs and resolves with the eventual 200 after absorbing 503s', async function (assert) {
+      let { sw, fetched } = makeSw([
+        response(503, '2'),
+        response(503, '3'),
+        response(200),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.ok(result instanceof Response, 'the page receives a Response');
+      assert.strictEqual((result as Response).status, 200);
+      assert.strictEqual(fetched.length, 3, 'fetched until the capture landed');
+      for (let request of fetched) {
+        assert.strictEqual(
+          request.headers.get('Authorization'),
+          'Bearer realm-token',
+          'every attempt carries the realm JWT',
+        );
+        assert.strictEqual(request.mode, 'cors');
+      }
+      assert.deepEqual(
+        sw.sleeps,
+        [2000, 3000],
+        'retries pace at the server-suggested Retry-After',
+      );
+    });
+
+    test('a 503 without Retry-After is let through untouched', async function (assert) {
+      let { sw, fetched } = makeSw([response(503)]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('a 503 with an unparseable Retry-After is let through untouched', async function (assert) {
+      let { sw, fetched } = makeSw([
+        response(503, 'Wed, 21 Oct 2026 07:28:00 GMT'),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('404s are never retried', async function (assert) {
+      // An uncaptured `name=` miss answers 404; retrying it from a fitted
+      // template rendered across a large grid would multiply into that many
+      // synchronized poll loops.
+      let { sw, fetched } = makeSw([response(404, '1')]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 404);
+      assert.strictEqual(fetched.length, 1, 'no retry');
+    });
+
+    test('the 503 is let through once the absorption budget is exhausted', async function (assert) {
+      // Budget is 90s; each 503 asks for a 30s pause. Attempts at t=0, 30s,
+      // 60s, 90s; the window is closed after the t=90s attempt, so its 503
+      // goes to the page.
+      let { sw, fetched } = makeSw([
+        response(503, '30'),
+        response(503, '30'),
+        response(503, '30'),
+        response(503, '30'),
+      ]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual(
+        (result as Response).status,
+        503,
+        'exhaustion surfaces the 503 so the <img> errors visibly',
+      );
+      assert.strictEqual(fetched.length, 4);
+    });
+
+    test('a Retry-After beyond the whole budget clamps to one deadline retry', async function (assert) {
+      // The congestion 503's Retry-After can far overshoot the real wait
+      // (it is pending × a coarse capture-time average), so the pause is
+      // clamped to the remaining budget and retried once at the deadline
+      // rather than surfacing the 503 immediately.
+      let { sw, fetched } = makeSw([response(503, '600'), response(200)]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 200);
+      assert.strictEqual(fetched.length, 2, 'exactly one deadline retry');
+      assert.deepEqual(
+        sw.sleeps,
+        [90000],
+        'the pause is clamped to the remaining budget',
+      );
+    });
+
+    test('a 503 on the deadline retry is let through', async function (assert) {
+      let { sw, fetched } = makeSw([response(503, '600'), response(503, '30')]);
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.strictEqual((result as Response).status, 503);
+      assert.strictEqual(fetched.length, 2, 'no retries past the deadline');
+    });
+
+    test('sub-second Retry-After values are clamped to a 1s pause', async function (assert) {
+      let { sw } = makeSw([response(503, '0'), response(200)]);
+
+      await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.deepEqual(sw.sleeps, [1000]);
+    });
+
+    test('each retry rebuilds the request with the freshest token', async function (assert) {
+      let swRef: { sw?: ReturnType<typeof createServiceWorkerEnv> } = {};
+      let fetched: Request[] = [];
+      let responses = [response(503, '1'), response(200)];
+      let sw = createServiceWorkerEnv({
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          if (fetched.length === 1) {
+            // Token rotates while the first attempt is being absorbed.
+            swRef.sw!.processMessage({
+              type: 'set-realm-token',
+              realmURL: REALM_URL,
+              token: 'rotated-token',
+            });
+          }
+          return responses.shift()!;
+        },
+      });
+      swRef.sw = sw;
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: REALM_URL,
+        token: 'original-token',
+      });
+
+      await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.deepEqual(
+        fetched.map((r) => r.headers.get('Authorization')),
+        ['Bearer original-token', 'Bearer rotated-token'],
+      );
+    });
+
+    test('a token removal mid-loop stops presenting the old JWT', async function (assert) {
+      // Logout clears the token map while a grid may still be absorbing.
+      // The next attempt must go out tokenless — a private realm then
+      // answers an unabsorbable 401 and the loop ends — rather than keep
+      // sending the pre-logout session token for the rest of the budget.
+      let swRef: { sw?: ReturnType<typeof createServiceWorkerEnv> } = {};
+      let fetched: Request[] = [];
+      let responses = [response(503, '1'), response(401)];
+      let sw = createServiceWorkerEnv({
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          if (fetched.length === 1) {
+            swRef.sw!.processMessage({ type: 'clear-tokens' });
+          }
+          return responses.shift()!;
+        },
+      });
+      swRef.sw = sw;
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: REALM_URL,
+        token: 'original-token',
+      });
+
+      let result = await sw.processFetch(new Request(SCREENSHOT_URL));
+
+      assert.deepEqual(
+        fetched.map((r) => r.headers.get('Authorization')),
+        ['Bearer original-token', null],
+        'the attempt after removal carries no Authorization header',
+      );
+      assert.strictEqual(
+        (result as Response).status,
+        401,
+        'the unabsorbable 401 ends the loop and reaches the page',
+      );
+    });
+
+    test('non-_screenshot GETs never engage absorption', async function (assert) {
+      // The screenshotFetch stub would throw if invoked with no responses
+      // queued; a plain image URL must instead come back as an authed
+      // Request for the ordinary single-fetch path.
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request(`${REALM_URL}images/photo.png`),
+      );
+
+      assert.ok(
+        result instanceof Request,
+        'ordinary single-fetch interception',
+      );
+    });
+
+    test('HEAD requests to _screenshot URLs keep single-fetch behavior', async function (assert) {
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request(SCREENSHOT_URL, { method: 'HEAD' }),
+      );
+
+      assert.ok(
+        result instanceof Request,
+        'ordinary single-fetch interception',
+      );
+    });
+
+    test('tokenless _screenshot requests on a known realm origin absorb via a cors request without Authorization', async function (assert) {
+      // A public realm the page holds no session for: the client lookup
+      // yields nothing, but the origin is a known realm host. The request
+      // is rebuilt as cors (a no-cors response would be opaque, hiding the
+      // 503) with no auth header.
+      let fetched: Request[] = [];
+      let responses = [response(503, '1'), response(200)];
+      let sw = createServiceWorkerEnv({
+        clientTokenLookup: async () => undefined,
+        screenshotFetch: async (request) => {
+          fetched.push(request);
+          return responses.shift()!;
+        },
+      });
+      // Seed realmHosts via a different realm on the same origin.
+      sw.processMessage({
+        type: 'set-realm-token',
+        realmURL: 'http://localhost:4201/other/realm/',
+        token: 'other-token',
+      });
+
+      let result = await sw.processFetch(
+        new Request(
+          'http://localhost:4201/public/realm/_screenshot/Card/1.png?w=800',
+        ),
+      );
+
+      assert.strictEqual((result as Response).status, 200);
+      assert.strictEqual(fetched.length, 2);
+      for (let request of fetched) {
+        assert.strictEqual(request.headers.get('Authorization'), null);
+        assert.strictEqual(request.mode, 'cors');
+      }
+    });
+
+    test('_screenshot requests on unknown origins pass through untouched', async function (assert) {
+      let { sw } = makeSw([]);
+
+      let result = await sw.processFetch(
+        new Request('https://unrelated.example.com/x/_screenshot/Card/1.png'),
+      );
+
+      assert.strictEqual(result, 'pass-through');
+    });
+  });
 });
 
 // Direct tests of the page-side `request-realm-token` handler factory.
@@ -845,3 +1234,271 @@ module(
     });
   },
 );
+
+// Evaluates the REAL public/auth-service-worker.js — the bytes the browser
+// registers — inside a stubbed SW global scope, so the shipped constants and
+// helpers are what these assertions run against. The scaffold modules above
+// exercise a mirror of the worker's logic; this module is the drift guard:
+// an edit to the shipped parse/clamp/loop that the mirror misses fails here.
+module('Unit | auth-service-worker | shipped worker', function () {
+  interface ShippedWorker {
+    isScreenshotRoute: (request: Request) => boolean;
+    screenshotRetryDelayMs: (response: Response) => number | undefined;
+    fetchScreenshotAbsorbing503s: (
+      buildRequest: () => Request,
+    ) => Promise<Response>;
+    SCREENSHOT_RETRY_BUDGET_MS: number;
+    dispatchMessage: (data: unknown) => void;
+    // Drives the shipped fetch listener; resolves with the Response the SW
+    // would respondWith, or 'pass-through' when the listener declined to
+    // intercept.
+    dispatchFetch: (request: Request) => Promise<Response | 'pass-through'>;
+    fetched: Request[];
+    // Virtual-clock sleep log: the worker's `setTimeout`/`Date` are bound to
+    // a clock that sleeps advance instantly, so budget arithmetic runs
+    // against shipped bytes without holding real time.
+    sleeps: number[];
+  }
+
+  async function loadShippedWorker(
+    networkResponses: Response[],
+  ): Promise<ShippedWorker> {
+    let source = await (await fetch('/auth-service-worker.js')).text();
+    let listeners = new Map<string, ((event: unknown) => void)[]>();
+    let selfStub = {
+      addEventListener: (type: string, fn: (event: unknown) => void) => {
+        let list = listeners.get(type) ?? [];
+        list.push(fn);
+        listeners.set(type, list);
+      },
+      skipWaiting: () => {},
+      clients: {
+        claim: async () => {},
+        get: async () => undefined,
+        matchAll: async () => [],
+      },
+    };
+    let fetched: Request[] = [];
+    // Bound over the worker source's free `fetch` identifier, so the shipped
+    // absorption loop fetches from this queue.
+    let fetchStub = async (request: Request) => {
+      fetched.push(request);
+      let next = networkResponses.shift();
+      if (!next) {
+        throw new Error('network stub called more times than expected');
+      }
+      return next;
+    };
+    // Virtual clock: the worker's free `Date` and `setTimeout` identifiers
+    // bind to these stubs, so retry sleeps advance the clock instantly and
+    // the shipped budget arithmetic is testable without real waits.
+    let clock = 0;
+    let sleeps: number[] = [];
+    let setTimeoutStub = ((fn: () => void, ms?: number) => {
+      sleeps.push(ms ?? 0);
+      clock += ms ?? 0;
+      fn();
+      return 0;
+    }) as unknown as typeof setTimeout;
+    let dateStub = { now: () => clock };
+    // The worker source declares its helpers at (function-body) top level, so
+    // appending a return statement exposes them without any module plumbing —
+    // a classic `public/` SW cannot be imported as ESM.
+    let factory = new Function(
+      'self',
+      'fetch',
+      'setTimeout',
+      'Date',
+      `${source}
+      ;return { isScreenshotRoute, screenshotRetryDelayMs,
+        fetchScreenshotAbsorbing503s, SCREENSHOT_RETRY_BUDGET_MS };`,
+    );
+    let exported = factory(
+      selfStub,
+      fetchStub,
+      setTimeoutStub,
+      dateStub,
+    ) as Pick<
+      ShippedWorker,
+      | 'isScreenshotRoute'
+      | 'screenshotRetryDelayMs'
+      | 'fetchScreenshotAbsorbing503s'
+      | 'SCREENSHOT_RETRY_BUDGET_MS'
+    >;
+    return {
+      ...exported,
+      fetched,
+      sleeps,
+      dispatchMessage: (data: unknown) => {
+        for (let fn of listeners.get('message') ?? []) {
+          fn({ data });
+        }
+      },
+      dispatchFetch: async (request: Request) => {
+        let responded: Promise<Response> | undefined;
+        let event = {
+          request,
+          clientId: '',
+          respondWith: (promise: Promise<Response>) => {
+            responded = promise;
+          },
+          waitUntil: () => {},
+        };
+        for (let fn of listeners.get('fetch') ?? []) {
+          fn(event);
+        }
+        return responded ? await responded : 'pass-through';
+      },
+    };
+  }
+
+  test('shipped screenshotRetryDelayMs implements the 503 + numeric Retry-After contract', async function (assert) {
+    let sw = await loadShippedWorker([]);
+    let response = (status: number, retryAfter?: string) =>
+      new Response(null, {
+        status,
+        headers: retryAfter !== undefined ? { 'Retry-After': retryAfter } : {},
+      });
+
+    assert.strictEqual(sw.screenshotRetryDelayMs(response(503, '2')), 2000);
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503, '0')),
+      1000,
+      'sub-second values clamp to 1s',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503)),
+      undefined,
+      'a 503 without Retry-After is not absorbable',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(503, 'Wed, 21 Oct 2026 07:28:00 GMT')),
+      undefined,
+      'an HTTP-date Retry-After is not absorbable',
+    );
+    assert.strictEqual(
+      sw.screenshotRetryDelayMs(response(404, '1')),
+      undefined,
+      'only status 503 absorbs',
+    );
+  });
+
+  test('shipped isScreenshotRoute matches GET _screenshot/ requests only', async function (assert) {
+    let sw = await loadShippedWorker([]);
+
+    assert.true(
+      sw.isScreenshotRoute(
+        new Request(
+          'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800',
+        ),
+      ),
+    );
+    assert.false(
+      sw.isScreenshotRoute(
+        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png', {
+          method: 'HEAD',
+        }),
+      ),
+    );
+    assert.false(
+      sw.isScreenshotRoute(
+        new Request('http://localhost:4201/user/realm/images/photo.png'),
+      ),
+    );
+  });
+
+  test('shipped absorption loop exhausts the budget at the shipped constant', async function (assert) {
+    // Budget is 90s; each 503 asks for a 30s pause. Attempts at t=0, 30s,
+    // 60s, 90s; the window is closed after the t=90s attempt, so its 503
+    // goes to the page. Runs against the shipped loop and constant — a
+    // change to either that the mirror module misses fails here.
+    let retryAfter30 = () =>
+      new Response(null, { status: 503, headers: { 'Retry-After': '30' } });
+    let sw = await loadShippedWorker([
+      retryAfter30(),
+      retryAfter30(),
+      retryAfter30(),
+      retryAfter30(),
+    ]);
+
+    let result = await sw.fetchScreenshotAbsorbing503s(
+      () =>
+        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png'),
+    );
+
+    assert.strictEqual(sw.SCREENSHOT_RETRY_BUDGET_MS, 90000);
+    assert.strictEqual(result.status, 503, 'exhaustion surfaces the 503');
+    assert.strictEqual(sw.fetched.length, 4);
+    assert.deepEqual(sw.sleeps, [30000, 30000, 30000]);
+  });
+
+  test('shipped absorption loop clamps an oversized Retry-After to one deadline retry', async function (assert) {
+    let sw = await loadShippedWorker([
+      new Response(null, { status: 503, headers: { 'Retry-After': '600' } }),
+      new Response(null, { status: 200 }),
+    ]);
+
+    let result = await sw.fetchScreenshotAbsorbing503s(
+      () =>
+        new Request('http://localhost:4201/user/realm/_screenshot/Card/1.png'),
+    );
+
+    assert.strictEqual(result.status, 200);
+    assert.strictEqual(sw.fetched.length, 2, 'exactly one deadline retry');
+    assert.deepEqual(
+      sw.sleeps,
+      [90000],
+      'the pause is clamped to the remaining budget',
+    );
+  });
+
+  test('shipped fetch listener absorbs a 503 end-to-end and resolves with the 200', async function (assert) {
+    let sw = await loadShippedWorker([
+      new Response(null, { status: 503, headers: { 'Retry-After': '0' } }),
+      new Response(null, { status: 200 }),
+    ]);
+    sw.dispatchMessage({
+      type: 'set-realm-token',
+      realmURL: 'http://localhost:4201/user/realm/',
+      token: 'shipped-token',
+    });
+
+    let result = await sw.dispatchFetch(
+      new Request(
+        'http://localhost:4201/user/realm/_screenshot/Card/1.png?w=800&h=600',
+      ),
+    );
+
+    assert.ok(result instanceof Response, 'the listener intercepted');
+    assert.strictEqual((result as Response).status, 200);
+    assert.strictEqual(sw.fetched.length, 2, 'retried once, per Retry-After');
+    for (let request of sw.fetched) {
+      assert.strictEqual(
+        request.headers.get('Authorization'),
+        'Bearer shipped-token',
+      );
+    }
+  });
+
+  test('shipped fetch listener leaves non-screenshot requests on the single-fetch path', async function (assert) {
+    let sw = await loadShippedWorker([
+      new Response(null, { status: 503, headers: { 'Retry-After': '1' } }),
+    ]);
+    sw.dispatchMessage({
+      type: 'set-realm-token',
+      realmURL: 'http://localhost:4201/user/realm/',
+      token: 'shipped-token',
+    });
+
+    let result = await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/images/photo.png'),
+    );
+
+    assert.strictEqual(
+      (result as Response).status,
+      503,
+      'the 503 reaches the page unabsorbed',
+    );
+    assert.strictEqual(sw.fetched.length, 1, 'no retry outside _screenshot/');
+  });
+});

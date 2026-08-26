@@ -1832,15 +1832,15 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           .exists('playground switches to edit format');
 
         await fillIn(
-          '[data-test-card-format="edit"] [data-test-field="styleName"] input',
-          'Updated Style Reference',
+          '[data-test-card-format="edit"] [data-test-contains-many="inspirations"] [data-test-item="0"] input',
+          'Updated Inspiration',
         );
 
         assert
           .dom(
-            '[data-test-card-format="edit"] [data-test-field="styleName"] input',
+            '[data-test-card-format="edit"] [data-test-contains-many="inspirations"] [data-test-item="0"] input',
           )
-          .isNotDisabled('styleName input is enabled for editing');
+          .isNotDisabled('inspirations input is enabled for editing');
       } finally {
         removePlaygroundSelections();
         removeRecentFiles();

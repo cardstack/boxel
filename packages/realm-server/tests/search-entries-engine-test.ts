@@ -684,6 +684,29 @@ module(basename(import.meta.filename), function () {
       let item = itemIn(doc, fileUrl)!;
       assert.strictEqual(item.type, 'file-meta');
       assert.strictEqual(item.attributes?.name, 'hello.md');
+      // A file's timestamps ride in `meta` (mirroring a card), so a hydrated
+      // FileDef reads them through `getCardMeta` / its getters — not just in the
+      // legacy `attributes` spelling.
+      assert.strictEqual(
+        typeof item.meta?.lastModified,
+        'number',
+        'file item carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof item.meta?.resourceCreatedAt,
+        'number',
+        'file item carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        item.meta?.lastModified,
+        item.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        item.meta?.resourceCreatedAt,
+        item.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
 
       // default fieldset: a file's rendering is its own (no renderType in
       // the composite id — files render natively)

@@ -1,6 +1,7 @@
 import {
   normalizeQueryForSignature,
   type Query,
+  type SearchEntryScope,
 } from '@cardstack/runtime-common';
 
 // Stable digest key for the store-side resolved-doc search cache.
@@ -20,12 +21,18 @@ export function searchCacheKey(
   jobId: string,
   consumingRealm: string,
   query: Query,
+  // The *resolved* wire scope (see `StoreService.resolveWireScope`), not the
+  // caller's raw scope, so two spellings of a byte-identical request share a
+  // key. Two requests that differ by wire scope are different result sets, so
+  // scope is part of the key.
+  scope?: SearchEntryScope,
 ): string | undefined {
   try {
     return JSON.stringify([
       jobId,
       consumingRealm,
       normalizeQueryForSignature(query),
+      scope ?? null,
     ]);
   } catch {
     return undefined;
