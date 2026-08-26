@@ -614,6 +614,11 @@ piece is at gallery quality.
 5. Camera presets (`frame`/`aim`/`pan`/`slowZoom`/`follow`) as sugar over
    the existing seekable step — after Clip, not before.
 
+The plane-and-camera pairing has its own design:
+[planes-and-cameras.md](planes-and-cameras.md) — independent pan and zoom
+per plane (shipped in the reel's clock plane), the coordinate contract,
+and sprites moving between planes without relayout.
+
 **Deferred until the film is the quality bar:** event journals and recorded
 gameplay, the 3D/film camera expansion, Three.js planes, Blueprint/Director
 tooling, and any compositor package. The pointer plane waits for the first
