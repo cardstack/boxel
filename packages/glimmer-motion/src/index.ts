@@ -7,6 +7,8 @@ export type { ChoreoContext } from './choreo.gts';
 export { Choreo } from './choreo.gts';
 export type { AnchorRef } from './choreo/anchors.ts';
 export { after, at } from './choreo/anchors.ts';
+export type { Arming, ArmingOptions, ArmingRegion } from './choreo/arming.ts';
+export { createArming } from './choreo/arming.ts';
 export type { BeaconRef } from './choreo/beacons.ts';
 export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';

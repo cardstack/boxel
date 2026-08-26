@@ -10,23 +10,41 @@
  * cover their own ground; and nothing pauses the rest of the page, because
  * only what a viewport can see animates (`onstage`).
  *
- * What is left here is the part that is genuinely the app's: KNOWING a
- * crossing has begun (the region stays router-agnostic by design — §9), and
+ * The LIFECYCLE — arm before the run exists, hand over when a run is replaced
+ * mid-flight, stand down on the survivor or on a deadline — belongs to the
+ * library too, as `createArming()`: this file was one of two hand-written
+ * copies of it, and the second copy is what made it a library part.
+ *
+ * What is left here is the part that is genuinely the app's: knowing WHAT
+ * this crossing is (the region stays router-agnostic by design — §9), and
  * knowing where the arriving page wants the window.
  */
 import type Transition from '@ember/routing/transition';
 import { tracked } from '@glimmer/tracking';
-import type { ChoreoContext } from 'glimmer-motion';
+import { type ChoreoContext, createArming } from 'glimmer-motion';
 import { factor, setCrossing } from 'test-app/lib/tempo';
 
 const DEMO_ROUTE = 'demo';
 
 class State {
-  @tracked active = false;
   /** the card a RETURN crossing lands on, null any other time */
   @tracked closingId: string | null = null;
 }
 const state = new State();
+
+/**
+ * The crossing's own lifecycle. Everything app-specific about standing down
+ * — the counterpart card, the entrance gate the cards check — hangs off the
+ * one hook.
+ */
+const crossing = createArming({
+  onStandDown: () => {
+    if (state.closingId !== null) {
+      state.closingId = null;
+    }
+    setCrossing(false);
+  },
+});
 
 /**
  * Where the gallery was standing, so the back button can put it back.
@@ -45,21 +63,18 @@ let landing: { closing: boolean; id: string | undefined } = {
 /** the application region's context, for watching the crossing's run */
 let region: ChoreoContext | null = null;
 
-/** which crossing is current — a stale run's settle must not stand down a newer one */
-let generation = 0;
-
 function demoIdOf(info: Transition['to']): string | undefined {
   return (info?.params as Record<string, string> | undefined)?.['demo_id'];
 }
 
 /** a crossing pass is in flight — the region's timeline renders only then */
 export function crossingActive(): boolean {
-  return state.active;
+  return crossing.active();
 }
 
 /** a crossing is in flight AND it is the trip home to the gallery */
 export function returningHome(): boolean {
-  return state.active && state.closingId !== null;
+  return crossing.active() && state.closingId !== null;
 }
 
 /**
@@ -78,7 +93,7 @@ export function wireRegion(c: ChoreoContext): void {
 
 /** routeWillChange: remember what this crossing is, and arm the timeline */
 export function beginCrossing(transition: Transition): void {
-  if (transition.isAborted || !transition.from || !transition.to) {
+  if (transition.isAborted || !transition.from || !transition.to || !region) {
     return;
   }
   const leaving = transition.from.name;
@@ -96,15 +111,11 @@ export function beginCrossing(transition: Transition): void {
     return;
   }
   state.closingId = closing ? (landing.id ?? null) : null;
-  state.active = true;
   // cards mounting mid-crossing skip their entrance: twenty-six springs
   // firing as the flight lands is a kink at the end of a smooth move
   setCrossing(true);
-  watchRun(++generation);
+  crossing.begin(region);
 }
-
-/** resolvers waiting on the current crossing's settle */
-let settlers: (() => void)[] = [];
 
 /**
  * Resolves when the crossing in flight stands down — immediately if none
@@ -114,18 +125,12 @@ let settlers: (() => void)[] = [];
  * exactly the jank the crossing exists to avoid.
  */
 export function crossingSettled(): Promise<void> {
-  if (!state.active) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => settlers.push(resolve));
+  return crossing.settled();
 }
 
 /** the crossing's run has finished (or never materialised): stand down */
 export function endCrossing(): void {
-  state.active = false;
-  state.closingId = null;
-  setCrossing(false);
-  settlers.splice(0).forEach((resolve) => resolve());
+  crossing.end();
 }
 
 /**
@@ -164,52 +169,5 @@ export function scrollIntent(): number {
 export function resetCrossing(): void {
   galleryScroll = null;
   landing = { closing: false, id: undefined };
-  generation++;
-  endCrossing();
-}
-
-/**
- * Stand down when the crossing's run finishes. The run does not exist yet
- * when the route hook fires — it is born after the swap renders — so this
- * latches the first live run the region produces. Region runs only exist
- * while the timeline is rendered, and the timeline renders only during a
- * crossing, so the first live run IS the crossing's. The deadline is a
- * backstop for a transition that never produced a pass (aborted, or
- * rendered identically).
- */
-function watchRun(gen: number): void {
-  const started = performance.now();
-  const latch = (run: NonNullable<ChoreoContext['run']>) => {
-    void run.finished.then(() => {
-      // an interrupted crossing's run resolves as the NEXT crossing
-      // begins; only the current generation may stand the timeline down —
-      // and a run REPLACED mid-flight (a real interruption recompiles the
-      // score) hands over to its successor instead of ending anything
-      if (gen !== generation) {
-        return;
-      }
-      const current = region?.run;
-      if (current && current !== run && !current.isDone()) {
-        latch(current);
-        return;
-      }
-      endCrossing();
-    });
-  };
-  const look = () => {
-    if (!state.active || gen !== generation) {
-      return;
-    }
-    const run = region?.run;
-    if (run && !run.isDone()) {
-      latch(run);
-      return;
-    }
-    if (performance.now() - started > 4000) {
-      endCrossing();
-      return;
-    }
-    requestAnimationFrame(look);
-  };
-  requestAnimationFrame(look);
+  crossing.end();
 }
