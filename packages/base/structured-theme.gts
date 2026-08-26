@@ -435,11 +435,17 @@ export default class StructuredTheme extends Theme {
     return true;
   };
 
+  // bound property so templates can pass it around; subclasses extend the
+  // reset by overriding resetCssFields
   resetCss = () => {
+    this.resetCssFields();
+  };
+
+  protected resetCssFields() {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
     resetTypographyVariables(this.typography);
-  };
+  }
 
   static isolated: BaseDefComponent = Isolated;
   static edit: BaseDefComponent = Edit;

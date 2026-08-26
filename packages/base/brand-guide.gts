@@ -598,6 +598,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         position: absolute;
         top: var(--boxel-sp-xs);
         right: var(--boxel-sp-xs);
+        /* paint above the sticky nav (z-index 10) while scrolling past it */
+        z-index: 11;
       }
       .brand-guide-grid {
         gap: var(--boxel-sp-2xl);
@@ -1152,8 +1154,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   }
 
   private get hasCustomVariables() {
+    // match what the custom-css section renders: unnamed palette entries
+    // emit no variables, so they must not count
     return Boolean(
-      this.args.model?.brandColorPalette?.length ||
+      this.paletteVarEntries.length ||
       this.customCssVarEntries.length ||
       this.brandImageAttachmentVarEntries.length,
     );
@@ -1476,6 +1480,11 @@ export default class BrandGuide extends DetailedStyleRef {
   @field markUsage = contains(BrandLogo);
   @field brandImageAttachments = containsMany(CompoundImageField);
   @field customCssVariables = containsMany(CustomCssVariable);
+
+  protected resetCssFields() {
+    super.resetCssFields();
+    this.customCssVariables = [];
+  }
 
   // CSS Variables computed from field entries
   @field cssVariables = contains(CSSField, {
