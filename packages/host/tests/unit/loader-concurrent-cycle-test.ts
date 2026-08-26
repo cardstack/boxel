@@ -8,10 +8,11 @@ import { Deferred, Loader } from '@cardstack/runtime-common';
 // handling; another is a dep left in 'registered-completing-deps' by a
 // suspended import root, which is how an edge to a module in no cycle at all
 // comes to be marked completing. Either way it leaves a window where the dep
-// has not advanced yet: the recording task must resume before it does. A *concurrent* import root that reaches the
-// recorded module during that window completes the dep itself rather than
-// treating the not-yet-advanced dep as a broken invariant, since state
-// transitions are monotonic and re-entrant. Regression guard against
+// has not advanced yet: the recording task must resume before it does. A
+// *concurrent* import root that reaches the recorded module during that
+// window completes the dep itself rather than treating the not-yet-advanced
+// dep as a broken invariant, since state transitions are monotonic and
+// re-entrant. Regression guard against
 // `expected <url> to be 'registered-completing-deps' but was 'registered'`.
 module('Unit | loader concurrent cycle completion', function () {
   test('a second import root completes a cycle participant that a suspended root left mid-completion', async function (assert) {
