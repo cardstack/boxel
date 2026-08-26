@@ -24,6 +24,14 @@ import { isTrustedImport, isTrustedModule } from './trusted-modules';
  * walk could not establish the graph, which RP-6.7 fails closed: the module
  * graph is a read-authorization list, so a truncated one would refuse fetches
  * the render needs rather than merely render something stale.
+ *
+ * Which failure a given cause reports depends on the resolver it is given, and
+ * the Host's does not throw: `VirtualNetwork.resolveImport` answers an unknown
+ * bare specifier with a `packages` pseudo-origin URL rather than refusing it,
+ * so such an import is reported as `module-load:` when nothing serves that URL.
+ * `module-resolve:` is for a resolver that refuses outright. Both fail closed;
+ * a consumer that presents these to an author should treat them as one
+ * condition with two spellings rather than as two different diagnoses.
  */
 export const MODULE_CLASSIFICATION_REASON_KINDS = [
   'trusted-module',
