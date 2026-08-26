@@ -914,9 +914,18 @@ export class Loader {
               // discarded by a realm-mapping change while this walk was
               // suspended — has named nothing yet, so it is work like any other
               // dep, and re-entering the state machine is what re-establishes
-              // it. Recursing on it terminates for the same reason the first
-              // walk did: the fetch registers it, and the walk it starts finds
-              // this module on the stack and registered.
+              // it.
+              //
+              // What bounds that recursion is the cache clear itself, not the
+              // graph. A clear landing inside the re-fetch trips the generation
+              // check in `fetchModule`, which abandons the response without
+              // registering, so the level retries and finds the ancestor gone
+              // again — one extra level per clear that lands inside a single
+              // walk, and one more unit of work for every level, since each
+              // copies and rescans the stack. Realm mappings are registered as
+              // realms are mounted, so a walk normally spans zero or one of
+              // them; a walk racing an unbounded stream of them descends
+              // without a bound.
               if (
                 isRegistered(depModule) &&
                 stack['registered-completing-deps'].includes(

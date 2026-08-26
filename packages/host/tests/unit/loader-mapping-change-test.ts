@@ -58,10 +58,15 @@ module('Unit | loader mapping change during traversal', function () {
   // on the stack), and the mapping change landing inside that suspension. The
   // drop it reproduces also only commits because `/a` is the last dep `/b`
   // declares — a dep after it that still needs work would leave through
-  // `break outer_switch` and discard the truncated list. Anyone restructuring
-  // this module must re-verify it fails with the branch in `advanceToState`'s
-  // `registered` case narrowed back to recording a completing-dep only
-  // `else if (isRegistered(depModule))`, which should reject both tests with
+  // `break outer_switch` and discard the truncated list.
+  //
+  // Anyone restructuring this module must re-verify it still has teeth. A
+  // `registered` case that records a completing-dep only when the dep is
+  // already registered drops `/b`'s edge to `/a`, and both tests reject with
+  // `bug: dependency list for http://mapping.example/b recorded 1 of the 2
+  // dependencies it declares` — the length invariant catches the drop before
+  // the factory is ever called. Remove that invariant too and the rejection
+  // becomes the mis-binding it exists to prevent:
   // `Cannot read properties of undefined (reading 'a')`.
   let cycleSources: Record<string, string> = {
     '/a': `import { b } from './b'; export const a = 'a' + b;`,
@@ -142,6 +147,79 @@ module('Unit | loader mapping change during traversal', function () {
       (await loader.getConsumedModules('http://mapping.example/a')).sort(),
       ['http://mapping.example/b'],
       'its importer reports the edge it was walked through',
+    );
+  });
+
+  // The cache key folds every spelling of a module onto one entry, so a cycle
+  // whose two edges name the shared module differently is still one cycle, and
+  // still resolves to one module instance across both spellings — which is what
+  // this pins, alongside the same mid-walk cache clear as the tests above.
+  //
+  // Note what it cannot pin. Comparing the completing stack by cache key
+  // rather than by raw href only changes how many levels the walk descends: by
+  // raw href the edge spelled `./b` does not match the ancestor pushed as
+  // `./b.js`, so the cycle reads as unvisited and the walk takes a level it
+  // does not need, reaching the same result by more work. The outcome is
+  // identical either way, so no assertion here distinguishes the two — the
+  // difference is visible only in the level count.
+  test('a cycle whose edges spell the shared module differently is walked as one cycle', async function (assert) {
+    // `/b` is reached as `./b.js` from the root and as `./b` from `/c`; `/slow`
+    // is what suspends the walk so the mapping change lands inside it.
+    let mixedSources: Record<string, string> = {
+      '/a.js': `import { b } from './b.js'; export const a = 'a' + b;`,
+      '/b.js': `import { c } from './c.js'; export const b = 'b' + c;`,
+      '/c.js': `import { b } from './b'; import { slow } from './slow.js';
+                export const c = 'c' + String(b) + slow;`,
+      '/slow.js': `export const slow = 'S';`,
+    };
+    // The loader trims executable extensions to build a cache key, but a fetch
+    // still goes out under the spelling the importer used, so both answer.
+    let sources = new Proxy(mixedSources, {
+      get(target, path: string) {
+        return target[path] ?? target[`${path}.js`];
+      },
+      has(target, path: string) {
+        return path in target || `${path}.js` in target;
+      },
+    });
+    let { fetchImpl, requested, release } = parkedFetch(sources, '/slow.js');
+    let virtualNetwork = new VirtualNetwork(fetchImpl);
+    let loader = new Loader(
+      virtualNetwork.fetch,
+      virtualNetwork.resolveImport,
+      {
+        virtualNetwork,
+      },
+    );
+
+    let root = loader.import<{ a: string }>('http://mapping.example/a.js');
+    await requested.promise;
+    virtualNetwork.addURLMapping(
+      new URL('http://alias.example/'),
+      new URL('http://real.example/'),
+    );
+    release.fulfill();
+    await root;
+
+    // One cache entry, so one module instance — the property the fold exists
+    // for. Two instances here would diverge under `instanceof` and
+    // polymorphic-field identity checks across the two spellings.
+    let viaExtension = await loader.import('http://mapping.example/b.js');
+    let viaBare = await loader.import('http://mapping.example/b');
+    assert.strictEqual(
+      viaExtension,
+      viaBare,
+      'both spellings resolve to one module instance',
+    );
+
+    // Consumed edges carry the spelling the importer wrote, which is a
+    // different question from cache identity: the fold gives the two spellings
+    // one module instance, and each importer still reports the one it named.
+    // `/c` closing the cycle keeps both of its edges either way.
+    assert.deepEqual(
+      (await loader.getConsumedModules('http://mapping.example/c.js')).sort(),
+      ['http://mapping.example/b', 'http://mapping.example/slow.js'],
+      'the module closing the cycle reports both of its imports',
     );
   });
 });
