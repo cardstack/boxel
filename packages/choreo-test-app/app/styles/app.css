@@ -3549,7 +3549,7 @@ html[data-gm-dragging] * {
 
 .xstress-title,
 .xstress-chip {
-  width: fit-content;
+  width: max-content;
   z-index: 3;
 }
 
@@ -3559,6 +3559,7 @@ html[data-gm-dragging] * {
   font-weight: 800;
   letter-spacing: -0.05em;
   line-height: 0.92;
+  white-space: nowrap;
 }
 
 .xstress-chip {
@@ -3585,10 +3586,14 @@ html[data-gm-dragging] * {
 }
 
 .xstress-title.tide {
+  /* Crossing crop scales from WIDTH. A `left:0; right:0; width:auto`
+     box is the stage, so Violet's word explodes into a viewport strip.
+     Centre the WORD without `translate` — that fights the flight. */
   top: 62%;
   left: 0;
   right: 0;
-  width: auto;
+  width: max-content;
+  margin-inline: auto;
   text-align: center;
   font-size: clamp(3.2rem, 9vw, 7.2rem);
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
@@ -3617,7 +3622,7 @@ html[data-gm-dragging] * {
   top: 18%;
   left: 8%;
   right: auto;
-  width: fit-content;
+  width: max-content;
   text-align: left;
   font-size: clamp(2.4rem, 6.4vw, 5.6rem);
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
@@ -3648,7 +3653,7 @@ html[data-gm-dragging] * {
   bottom: 22%;
   left: 8%;
   right: auto;
-  width: fit-content;
+  width: max-content;
   text-align: left;
   font-size: clamp(2.6rem, 6.8vw, 5.8rem);
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;

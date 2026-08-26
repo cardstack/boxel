@@ -58,11 +58,15 @@ MPA/cross-document transitions where snapshotting is the point.
   travelling `clipPath` window, iOS's rule. Never write layout size in a
   grid: `@size={{true}}` stretches the card's whole row mid-flight, and
   `@size='scale'` (transform-only, per-axis) still squashes a mismatched
-  aspect. Crop does neither.
+  aspect. Crop does neither. Overridable on `c.Crossing` as `@size`.
 - `data-choreo-substance` — the shape match is computed between the
   SUBSTANCE boxes, not the padded frames. `.cam-sheet` inside the camera
   stage, `.pres-stage` inside the presentation: mark the thing the eye
   actually follows, on either end, and the other is derived.
+- `pack="content"` — same idea for type, without an extra node. Crossing
+  matches the shrink-wrap (the ink) even when the layout box is a
+  full-bleed strip. Default is `'box'` (the layout border box) because
+  plates and cards ARE their frame. Do not auto-pack every participant.
 - Tempo composes: every duration derives from `BASE * factor()`;
   `factor() === 0` renders no steps at all — no run, and the scroll
   still lands (the region applies it regardless of cues).

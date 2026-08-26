@@ -85,7 +85,10 @@ const STRESS = 0.72;
  * radius — crop-scale of a wide slab onto a square is how Violet→Tide
  * blew up. Titles and chips are different strings, so they pair as
  * counterparts and `<c.Crossing>` crossfades the skins (homepage grammar).
- * Unique washes fade.
+ * Type is `pack="content"`: Crossing crop matches the shrink-wrap (the
+ * ink), not a stretched layout box — a full-bleed title still flies as a
+ * word. Unique washes fade. Title CSS is also max-content, so the rest
+ * pose is the word too.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
  * Loops are CSS transforms on the motion nodes themselves, so the pass
@@ -348,7 +351,7 @@ export class CrossingStress extends Component {
               <b
                 class="xstress-title {{s.tone}}"
                 data-test-title
-                {{motion id="xstress-title" role="type"}}
+                {{motion id="xstress-title" role="type" pack="content"}}
               >{{s.title}}</b>
               <small
                 class="xstress-chip {{s.tone}}"

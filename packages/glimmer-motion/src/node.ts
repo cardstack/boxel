@@ -67,6 +67,14 @@ export type MotionProps = Omit<MotionNodeOptions, 'dragConstraints'> & {
   dragConstraints?: MotionNodeOptions['dragConstraints'] | Element | null;
   /** choreography: identity across renders, and the group a <Choreo> step selects by */
   id?: string;
+  /**
+   * How Choreo measures this element for a shape-matched flight.
+   * `'box'` (default) is the layout border box — right for plates, cards,
+   * stages. `'content'` is the shrink-wrap (the ink): a full-bleed title
+   * still matches as a word. Written as `data-choreo-pack`; an explicit
+   * `[data-choreo-substance]` descendant still wins.
+   */
+  pack?: 'box' | 'content';
   presence?: PresenceHandle;
   role?: string;
   style?: Record<string, unknown>;
@@ -425,9 +433,14 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
 
   /** React render: the element's props for this pass */
   update(element: MotionEl, named: MotionProps) {
-    const { presence: ownPresence, id, role, ...rest } = named;
+    const { presence: ownPresence, id, role, pack, ...rest } = named;
     this.id = id ?? null;
     this.role = role ?? null;
+    if (pack === 'content') {
+      element.setAttribute('data-choreo-pack', 'content');
+    } else {
+      element.removeAttribute('data-choreo-pack');
+    }
     const props = { ...rest } as MotionNodeOptions;
     // dragConstraints given as an element → the ref object the gesture code expects
     if (named.dragConstraints instanceof Element) {

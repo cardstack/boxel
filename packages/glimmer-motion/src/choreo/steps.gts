@@ -498,6 +498,12 @@ export class Crossing extends StepComponent<
     leave?: number;
     /** arrivals start at this fraction of the flight — near the settle */
     overlap?: number;
+    /**
+     * The flight's size mode. Default `'crop'` — uniform scale from
+     * width, tops pinned, extra height clipped. `'scale'` stretches
+     * per-axis; `true` writes layout width/height (reflows a grid row).
+     */
+    size?: boolean | 'crop' | 'scale';
     spring?: SpringSpec;
     /** the counterpart-skin policy, forwarded to the flight */
     swap?: 'during' | 'none' | 'settle';
@@ -520,6 +526,7 @@ export class Crossing extends StepComponent<
       ease,
       leave = 0.18,
       overlap = 0.7,
+      size = 'crop',
       spring,
       swap,
     } = this.args;
@@ -546,8 +553,9 @@ export class Crossing extends StepComponent<
           // iOS's rule: uniform scale matched by cover, the aspect mismatch
           // cropped by the interpolating window — never a stretch, and
           // never layout (a receiver animating real width/height reflows
-          // its whole row for the flight)
-          size: 'crop',
+          // its whole row for the flight). Overridable; the default stays
+          // crop so a crossing in a grid cannot stretch the row.
+          size,
           spring,
           swap,
         },

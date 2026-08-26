@@ -24,6 +24,9 @@ const stress = () =>
 const heroBox = () =>
   (find('[data-test-hero]') as HTMLElement).getBoundingClientRect();
 
+const titleBox = () =>
+  (find('[data-test-title]') as HTMLElement).getBoundingClientRect();
+
 const frames = (n: number) =>
   new Promise<void>((resolve) => {
     const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
@@ -43,6 +46,10 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.strictEqual(root.dataset.phase, 'looping', 'idle loops run');
     assert.dom('[data-test-title]').hasText('Tide');
     assert.dom('[data-test-chip]').hasText('drift');
+    assert.true(
+      titleBox().width < window.innerWidth * 0.55,
+      `Tide's title is the word, not a stage-wide strip (${titleBox().width.toFixed(0)} in ${window.innerWidth})`
+    );
 
     const atRest = heroBox();
     await frames(36);
@@ -70,9 +77,17 @@ module('Acceptance | crossing stress', function (hooks) {
     await settled();
     assert.strictEqual(root.dataset.phase, 'crossing', 'a cut arms the flight');
     assert.strictEqual(root.dataset.slide, '1', 'Ember is the destination');
+    const leavingTitle = document.querySelector(
+      '[data-choreo-orphans] [data-test-title]'
+    ) as HTMLElement | null;
     assert.ok(
-      document.querySelector('[data-choreo-orphans] [data-test-title]'),
+      leavingTitle,
       'the leaving title rides the flight as a skin (homepage swap=during)'
+    );
+    const leavingTitleWidth = leavingTitle?.getBoundingClientRect().width ?? 0;
+    assert.true(
+      leavingTitleWidth < window.innerWidth * 0.55,
+      `the flying Tide title stays a word (${leavingTitleWidth.toFixed(0)} in ${window.innerWidth})`
     );
     assert.ok(
       document.querySelector('[data-choreo-orphans] [data-test-chip]'),
@@ -129,6 +144,10 @@ module('Acceptance | crossing stress', function (hooks) {
     await animationsSettled();
     assert.strictEqual(root.dataset.slide, '0', 'back to Tide');
     assert.dom('[data-test-title]').hasText('Tide');
+    assert.true(
+      titleBox().width < window.innerWidth * 0.55,
+      `Violet→Tide title is still the word (${titleBox().width.toFixed(0)} in ${window.innerWidth})`
+    );
     const tideAgain = heroBox();
     assert.true(
       Math.abs(tideAgain.width - violet.width) > 30 ||

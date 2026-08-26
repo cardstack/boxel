@@ -37,6 +37,39 @@ export interface Snapshot {
   substance?: DOMRect;
 }
 
+/**
+ * The shrink-wrap of `el`'s contents — the ink — not the stretched layout
+ * box. A full-bleed title (`left:0; right:0; width:auto`) still has a
+ * word-sized range; Crossing crop must match THAT, or the type explodes
+ * into a viewport strip. Empty / collapsed → undefined, so the frame wins.
+ */
+export const inkBox = (el: Element): DOMRect | undefined => {
+  const doc = el.ownerDocument;
+  if (!doc) {
+    return undefined;
+  }
+  const range = doc.createRange();
+  range.selectNodeContents(el);
+  const r = range.getBoundingClientRect();
+  if (r.width < 0.5 && r.height < 0.5) {
+    return undefined;
+  }
+  return r;
+};
+
+const substanceOf = (el: Element): DOMRect | undefined => {
+  const marked = el
+    .querySelector('[data-choreo-substance]')
+    ?.getBoundingClientRect();
+  if (marked) {
+    return marked;
+  }
+  if (el.getAttribute('data-choreo-pack') === 'content') {
+    return inkBox(el);
+  }
+  return undefined;
+};
+
 /** the containing block a `position: absolute` child would be placed against */
 export const offsetBox = (el: Element): DOMRect =>
   (
@@ -52,12 +85,10 @@ export const measure = (el: Element): Snapshot => ({
   paint: getComputedStyle(el).backgroundColor,
   parent: offsetBox(el),
   // Keynote matches OBJECTS, not slide frames: an element may declare its
-  // visible subject with [data-choreo-substance], and a shape-matched
-  // flight aligns THAT box instead of the frame. Captured with the
-  // geometry for the same reason paint is.
-  substance: el
-    .querySelector('[data-choreo-substance]')
-    ?.getBoundingClientRect(),
+  // visible subject with [data-choreo-substance], or pack="content" (the
+  // shrink-wrap / ink, no extra node). Captured with the geometry for
+  // the same reason paint is.
+  substance: substanceOf(el),
 });
 
 /** the three spaces, from a snapshot and the region's own box */
