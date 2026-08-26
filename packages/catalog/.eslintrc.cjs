@@ -65,10 +65,23 @@ module.exports = {
         '@typescript-eslint/no-explicit-any': 'off',
         '@typescript-eslint/no-unused-vars': [
           'error',
-          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+          {
+            argsIgnorePattern: '^_',
+            varsIgnorePattern: '^_',
+            caughtErrors: 'none',
+          },
         ],
         '@typescript-eslint/ban-ts-comment': 'off',
-        '@typescript-eslint/ban-types': 'off',
+        // This override re-extends `@typescript-eslint/recommended`, which
+        // resets whatever the monorepo root turned off — so the rules card
+        // content relies on have to be turned off again here. `{}` type
+        // plumbing and bare member reads that register a tracked dependency
+        // are both ordinary in card content.
+        '@typescript-eslint/no-empty-object-type': 'off',
+        '@typescript-eslint/no-unsafe-function-type': 'off',
+        '@typescript-eslint/no-wrapper-object-types': 'off',
+        '@typescript-eslint/no-require-imports': 'off',
+        '@typescript-eslint/no-unused-expressions': 'off',
         '@typescript-eslint/consistent-type-imports': 'off',
         '@typescript-eslint/no-import-type-side-effects': 'off',
         'ember/no-empty-glimmer-component-classes': 'off',

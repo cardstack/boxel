@@ -34,15 +34,11 @@ module.exports = {
     'import/no-unresolved': 'off',
     'prefer-const': 'off',
     '@typescript-eslint/ban-ts-comment': 'off',
-    '@typescript-eslint/ban-types': 'off',
-    // The three rules `ban-types` was split into. Off for the same reason it is:
     // `{}` and `Function` are used deliberately, mostly in type plumbing.
     '@typescript-eslint/no-empty-object-type': 'off',
     '@typescript-eslint/no-unsafe-function-type': 'off',
     '@typescript-eslint/no-wrapper-object-types': 'off',
-    // Successor to `no-var-requires`, which this repo also leaves off (see the
-    // override below): config files and a few CJS interop points require by
-    // design.
+    // Config files and a few CJS interop points require by design.
     '@typescript-eslint/no-require-imports': 'off',
     '@typescript-eslint/prefer-as-const': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
@@ -77,9 +73,7 @@ module.exports = {
       env: {
         node: true,
       },
-      rules: {
-        '@typescript-eslint/no-var-requires': 'off',
-      },
+      rules: {},
     },
     {
       // Disallow data-test-* CSS selectors in app code across all packages.
