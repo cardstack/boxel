@@ -1187,6 +1187,70 @@ module('Integration | choreo | contract', function (hooks) {
    * ------------------------------------------------------------------ */
 
   module('orphans', function () {
+    /**
+     * The external-scale rule, at the orphan lock: a leaver is locked at
+     * its PAGE coordinates, but those are client-space measurements that
+     * carry every ancestor transform, and the offsets are written as
+     * local pixels inside the (equally transformed) orphan layer. Inside
+     * a scaled ancestor — a page crossing carrying the region — the
+     * subtraction bakes the scale in twice and the leaver jumps the
+     * moment it is lifted.
+     */
+    test('a leaver orphaned inside a scaled ancestor is locked where it stood', async function (assert) {
+      class App extends Component {
+        @tracked show = true;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          app = this;
+        }
+        <template>
+          {{! the crossing, reduced to the one wrapper that matters }}
+          <div style="transform:scale(0.5);transform-origin:0 0">
+            <Choreo
+              class="stage"
+              style="position:relative;width:400px;height:200px"
+              as |c|
+            >
+              {{#if this.show}}
+                <div
+                  id="bye"
+                  style="margin:60px 0 0 140px;width:120px;height:60px;background:#0af"
+                  {{motion id="bye" role="bye"}}
+                ></div>
+              {{/if}}
+              <c.Tween
+                @of={{c.removed "bye"}}
+                @opacity={{0}}
+                @duration={{0.4}}
+              />
+            </Choreo>
+          </div>
+        </template>
+      }
+      let app: App | undefined;
+      await render(<template><App /></template>);
+      await animationsSettled();
+      const before = el('#bye').getBoundingClientRect();
+
+      app!.show = false;
+      await settled();
+      await nextFrame();
+      assert.strictEqual(orphanCount(), 1, 'the leaver was lifted');
+      const after = el('#bye').getBoundingClientRect();
+      assert.true(
+        Math.abs(after.left - before.left) < 2 &&
+          Math.abs(after.top - before.top) < 2,
+        `locked where it stood on the page (${Math.round(before.left)},${Math.round(
+          before.top
+        )} → ${Math.round(after.left)},${Math.round(after.top)})`
+      );
+      assert.true(
+        Math.abs(after.width - before.width) < 2,
+        `at its own size (${Math.round(before.width)} → ${Math.round(after.width)})`
+      );
+      await animationsSettled();
+    });
+
     test('only the topmost removed element is orphaned; its children go with it', async function (assert) {
       class App extends Component {
         @tracked show = true;

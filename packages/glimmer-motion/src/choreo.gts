@@ -942,24 +942,32 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     if (!layer || !root) {
       return;
     }
+    // Page measurements carry every transform above the region — its own
+    // camera, and whatever is carrying the whole region this frame (a
+    // page crossing scaling the stage). The lock is written as LOCAL
+    // pixels inside the equally-transformed orphan layer, so the scale
+    // must come back out or it is applied twice and the leaver jumps the
+    // moment it is lifted — the raise learned this same rule.
+    const now = root.getBoundingClientRect();
+    const sx = root.offsetWidth ? now.width / root.offsetWidth : 1;
+    const sy = root.offsetHeight ? now.height / root.offsetHeight : 1;
     if (inside) {
       // hold the seat: the ancestor is itself a leaver, and without this its
       // remaining children reflow into the gap mid-fade. The placeholder
       // lives only inside that doomed subtree, so it leaves with it.
       const seat = document.createElement('div');
-      seat.style.width = `${s.initial.page.width}px`;
-      seat.style.height = `${s.initial.page.height}px`;
+      seat.style.width = `${s.initial.page.width / sx}px`;
+      seat.style.height = `${s.initial.page.height / sy}px`;
       s.element.parentElement?.insertBefore(seat, s.element);
     }
     // locked where it was ON THE PAGE: the region itself may have moved in the same pass
     const { page } = s.initial;
-    const now = root.getBoundingClientRect();
     const el = s.element;
     el.style.position = 'absolute';
-    el.style.left = `${page.x - now.left}px`;
-    el.style.top = `${page.y - now.top}px`;
-    el.style.width = `${page.width}px`;
-    el.style.height = `${page.height}px`;
+    el.style.left = `${(page.x - now.left) / sx}px`;
+    el.style.top = `${(page.y - now.top) / sy}px`;
+    el.style.width = `${page.width / sx}px`;
+    el.style.height = `${page.height / sy}px`;
     el.style.boxSizing = 'border-box';
     el.style.margin = '0';
     el.style.pointerEvents = 'none';

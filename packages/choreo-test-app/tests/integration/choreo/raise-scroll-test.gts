@@ -161,6 +161,66 @@ module('Integration | choreo | raise and scroll', function (hooks) {
     await animationsSettled();
   });
 
+  /**
+   * The same external-scale rule the raise learned: a scroll target is
+   * computed from client rects but written as scrollTop/scrollLeft,
+   * which are LAYOUT pixels. Inside a scaled ancestor the rect deltas
+   * carry the scale and the landing misses by exactly that factor.
+   */
+  test('a scroll inside a scaled ancestor still lands the sprite at @align', async function (assert) {
+    class App extends Component {
+      @tracked cited = 0;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        {{! the crossing, reduced to the one wrapper that matters }}
+        <div style="transform:scale(0.5);transform-origin:0 0">
+          <Choreo class="stage" style="position:relative;width:200px" as |c|>
+            <div id="scroller2" style="overflow-y:scroll;height:100px">
+              {{#each (array 0 1 2 3 4 5 6 7 8 9) as |i|}}
+                <div
+                  id="srow-{{i}}"
+                  data-c={{this.cited}}
+                  style="height:40px"
+                  {{motion id=(concat "srow-" i) role="srow"}}
+                >row {{i}}</div>
+              {{/each}}
+            </div>
+            <c.Sequence>
+              <c.Scroll
+                @of={{c.id "srow-8"}}
+                @align="center"
+                @duration={{0.08}}
+              />
+            </c.Sequence>
+          </Choreo>
+        </div>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await animationsSettled();
+    const scroller = find('#scroller2') as HTMLElement;
+    assert.strictEqual(scroller.scrollTop, 0);
+    app!.cited = 1;
+    await animationsSettled();
+    // the same landing as the unscaled case: scroll coordinates are
+    // layout pixels, and the wrapper's scale must cancel out of them
+    assert.strictEqual(
+      Math.round(scroller.scrollTop),
+      290,
+      'the container ends with the sprite centered, scale cancelled'
+    );
+    const rBox = (find('#srow-8') as HTMLElement).getBoundingClientRect();
+    const cBox = scroller.getBoundingClientRect();
+    assert.true(
+      Math.abs(rBox.top + rBox.height / 2 - (cBox.top + cBox.height / 2)) < 3,
+      'and the sprite truly sits at the viewport centre'
+    );
+  });
+
   test('a scroll step lands the sprite at @align and occupies the sequence', async function (assert) {
     class App extends Component {
       @tracked cited = 0;

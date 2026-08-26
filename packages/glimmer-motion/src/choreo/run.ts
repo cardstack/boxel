@@ -1491,15 +1491,23 @@ export class ChoreoRun implements Run {
     }
     const box = el.getBoundingClientRect();
     const cBox = container.getBoundingClientRect();
+    // scrollTop/scrollLeft are LAYOUT pixels; the rect deltas carry every
+    // transform above the container (the region's camera, a crossing
+    // scaling the whole stage) and must have it divided back out — the
+    // raise and the orphan lock live by the same rule
+    const s = ChoreoRun.layerScale(container, cBox);
     const align = t.cue.scroll!.align;
-    const offsetY = box.top - cBox.top + container.scrollTop;
-    const offsetX = box.left - cBox.left + container.scrollLeft;
+    const offsetY = (box.top - cBox.top) / s.y + container.scrollTop;
+    const offsetX = (box.left - cBox.left) / s.x + container.scrollLeft;
     const factor = align === 'center' ? 0.5 : align === 'end' ? 1 : 0;
     const to = {
-      left: Math.max(0, offsetX - (container.clientWidth - box.width) * factor),
+      left: Math.max(
+        0,
+        offsetX - (container.clientWidth - box.width / s.x) * factor,
+      ),
       top: Math.max(
         0,
-        offsetY - (container.clientHeight - box.height) * factor,
+        offsetY - (container.clientHeight - box.height / s.y) * factor,
       ),
     };
     // the user's own wheel takes the container back: the step cancels, the
