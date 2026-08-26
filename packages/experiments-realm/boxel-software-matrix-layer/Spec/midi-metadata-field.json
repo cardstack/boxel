@@ -17,11 +17,28 @@
           "fileTrackCount": 9,
           "trackCount": 8,
           "noteCount": 3412,
-          "tempoMap": ["0:120"],
-          "timeSignatures": ["0:4/4", "96:3/4"],
-          "keySignatures": ["0:Dm"],
-          "programs": [0, 33, 48, 73],
-          "channels": [0, 1, 2, 9],
+          "tempoMap": [
+            "0:120"
+          ],
+          "timeSignatures": [
+            "0:4/4",
+            "96:3/4"
+          ],
+          "keySignatures": [
+            "0:Dm"
+          ],
+          "programs": [
+            0,
+            33,
+            48,
+            73
+          ],
+          "channels": [
+            0,
+            1,
+            2,
+            9
+          ],
           "pitchRange": "E1-C7",
           "hasPercussion": true
         }

@@ -26,7 +26,10 @@
           "isVariable": true,
           "isItalic": false,
           "isBold": false,
-          "axes": ["wght 100-900", "slnt 0--10"]
+          "axes": [
+            "wght 100-900",
+            "slnt 0--10"
+          ]
         }
       ],
       "cardInfo": {

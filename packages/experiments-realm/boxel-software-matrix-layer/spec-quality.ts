@@ -14,13 +14,7 @@ export interface QualityCheck {
 }
 
 export type CheckState = 'pass' | 'fail' | 'na';
-export type QualityBucket =
-  | 'gold'
-  | 'solid'
-  | 'adequate'
-  | 'thin'
-  | 'none'
-  | 'out';
+export type QualityBucket = 'gold' | 'solid' | 'adequate' | 'thin' | 'none' | 'out';
 export type ConceptKind =
   | 'field'
   | 'card'
