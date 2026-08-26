@@ -1380,10 +1380,11 @@ async function captureOneEntry(
 ): Promise<ScreenshotCaptureItem | RenderError> {
   // A `target` is an element-handle screenshot, a capture call distinct from
   // the page-level one below: it crops to the first match's box and honors no
-  // clip/fullPage (rejected above). A selector that matches nothing, or is not
-  // a valid CSS selector, is a capture error naming the selector rather than an
-  // uncaught throw. The parse bounds length and forbids `//` before we get
-  // here; catching a `page.$` throw covers a caller that bypassed the parse.
+  // clip/fullPage (rejected above). `page.$` runs the selector through
+  // `document.querySelector`, so a selector that matches nothing, or is not a
+  // valid CSS selector (including an XPath-shaped string, which querySelector
+  // cannot execute), is a capture error naming the selector rather than an
+  // uncaught throw or a wrong crop.
   if (entry.target) {
     let handle: ElementHandle<Element> | null;
     try {

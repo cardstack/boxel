@@ -709,15 +709,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('rejects an XPath-shaped target', async function (assert) {
-      // `//` is the XPath descendant axis; `target` is only ever a CSS selector.
-      await expectCaptureSpecRejected(
-        assert,
-        { target: '//div[@data-card-field]' },
-        'target',
-      );
-    });
-
     test('rejects an over-long target selector', async function (assert) {
       await expectCaptureSpecRejected(
         assert,

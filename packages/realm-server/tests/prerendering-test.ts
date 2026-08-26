@@ -1168,6 +1168,20 @@ module(basename(import.meta.filename), function () {
         `the error names the selector (got: ${response.error})`,
       );
     });
+
+    test('an XPath-shaped target is a named capture error, not a wrong crop', async function (assert) {
+      // The parse does not special-case XPath; the capture path resolves the
+      // selector with `document.querySelector`, which cannot execute XPath, so
+      // an XPath-shaped string dead-ends as a named "invalid selector" error.
+      let { response } = await screenshot(`${realmURL}disco-card`, {
+        target: '//div[@data-card-field]',
+      });
+      assert.strictEqual(response.status, 'error', 'an XPath target errors');
+      assert.ok(
+        response.error?.includes('//div[@data-card-field]'),
+        `the error names the selector (got: ${response.error})`,
+      );
+    });
   });
 
   function defineNonMutatingRunnerTests() {

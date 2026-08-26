@@ -73,8 +73,9 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
 // A `target` is a CSS selector, not an arbitrary program: bound its length so a
-// pathological selector can't be smuggled through, and (checked separately) it
-// may not contain `//` so it can never be an XPath.
+// pathological selector can't be smuggled through. It needs no XPath guard —
+// the capture path runs it through `document.querySelector`, which executes
+// only CSS.
 export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
 
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
@@ -258,11 +259,12 @@ function parseOverrideFields(
       return {
         error: `${path}.target must be at most ${SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH} characters`,
       };
-    } else if (target.includes('//')) {
-      // `//` is the XPath descendant axis; refuse it so `target` can only ever
-      // be the CSS selector the capture path passes to `page.$`.
-      return { error: `${path}.target must be a CSS selector, not an XPath` };
     } else {
+      // No XPath guard: the capture path passes `target` to `page.$`
+      // (`document.querySelector`), which can only execute CSS, so an
+      // XPath-shaped string already dead-ends as a named "invalid selector"
+      // capture error. A syntactic `//` check would instead reject valid CSS
+      // whose attribute value happens to contain `//` (e.g. `a[href="https://…"]`).
       overrides.target = target;
     }
   }

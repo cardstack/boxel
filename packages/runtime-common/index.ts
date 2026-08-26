@@ -939,8 +939,9 @@ export type ScreenshotCaptureOverrides = {
   // CSS selector for a single element to capture — an element-handle
   // screenshot of the first match, tightly cropped to its box. Mutually
   // exclusive with `clip` and `fullPage` (an element screenshot honors
-  // neither). The selector is bounded in length and may not contain `//`, so
-  // it is a CSS selector and never an XPath. A batch entry may set
+  // neither). The selector is bounded in length; the capture path resolves it
+  // with `document.querySelector`, so a non-CSS (e.g. XPath-shaped) string is a
+  // named capture error rather than a wrong crop. A batch entry may set
   // `target: null` to drop a batch-wide target default, the same "back to no
   // target" spelling `clip` has; it elides away after the merge.
   target?: string | null;
