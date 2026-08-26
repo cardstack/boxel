@@ -40,6 +40,10 @@ import {
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import {
+  lastAttemptedRenderCardId,
+  recordAttemptedRenderCardId,
+} from '../utils/register-boxel-transition';
 import { runDomDesyncCheck } from '../utils/render-desync-detector';
 import {
   RenderCardTypeTracker,
@@ -141,6 +145,7 @@ export default class RenderRoute extends Route<Model> {
       setError: (error) =>
         this.#writePrerenderError(elements.errorElement, error),
       currentURL: this.router.currentURL,
+      fallbackDeps: this.#windowErrorFallbackDeps(),
     });
     this.#setAllModelStatuses('unusable');
     if (isTesting()) {
@@ -207,7 +212,9 @@ export default class RenderRoute extends Route<Model> {
     // in-app transition) this stash is then the only surviving record of
     // which card the error doc's deps must name.
     let attemptedCardId =
-      this.#transitionCardId(transition) ?? this.#renderParamsId();
+      this.#transitionCardId(transition) ??
+      this.#renderParamsId() ??
+      lastAttemptedRenderCardId();
     if (attemptedCardId) {
       this.#lastAttemptedCardId = attemptedCardId;
     }
@@ -883,6 +890,7 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
+      (globalThis as any).__boxelLastAttemptedRenderCardId = undefined;
     });
   }
 
@@ -893,6 +901,7 @@ export default class RenderRoute extends Route<Model> {
       routeName: Parameters<RouterService['transitionTo']>[0],
       ...params: any[]
     ) => {
+      recordAttemptedRenderCardId(routeName, params[0]);
       if (routeName === 'render') {
         if (params.length >= 3) {
           baseParams = params.slice(0, 3) as [string, string, string];
@@ -1058,6 +1067,7 @@ export default class RenderRoute extends Route<Model> {
       this.renderBaseParams?.[0],
       this.#lastAttemptedCardId,
       this.#renderParamsId(),
+      lastAttemptedRenderCardId(),
     ]);
     let normalizationContext = {
       cardId: context?.cardId,
@@ -1422,7 +1432,8 @@ export default class RenderRoute extends Route<Model> {
         params?.id ??
         this.#transitionCardId(transition) ??
         this.#lastAttemptedCardId ??
-        this.#renderParamsId(),
+        this.#renderParamsId() ??
+        lastAttemptedRenderCardId(),
     });
     try {
       parsedReason = JSON.parse(reason);
@@ -1505,6 +1516,31 @@ export default class RenderRoute extends Route<Model> {
     return this.#fallbackDepsFromIds([id]);
   }
 
+  // Every card-id fallback source this route holds, in shape-expanded dep
+  // form, for the error writers that run with no model state: the window
+  // error listeners (which can be the LAST writer of the prerender error
+  // element) and the pre-model early-failure path.
+  #windowErrorFallbackDeps(): string[] {
+    let deps = this.#fallbackDepsFromIds([
+      this.renderBaseParams?.[0],
+      this.#lastAttemptedCardId,
+      this.#renderParamsId(),
+      lastAttemptedRenderCardId(),
+    ]);
+    // TEMP CS-12090 diagnostics (remove after CI verification)
+    return [
+      ...deps,
+      `diag:weh:${JSON.stringify({
+        base: this.renderBaseParams?.[0] ?? null,
+        stash: this.#lastAttemptedCardId ?? null,
+        paramsFor: this.#renderParamsId() ?? null,
+        global: lastAttemptedRenderCardId() ?? null,
+        loc: typeof window !== 'undefined' ? window.location.pathname : null,
+        beforeModel: this.#diagBeforeModel ?? null,
+      })}`,
+    ];
+  }
+
   // The transition's serialized state params for this route, readable even
   // when the public RouteInfo chain has not materialized `params` yet.
   // `paramsFor` reads the router's active transition state directly, which is
@@ -1580,6 +1616,7 @@ export default class RenderRoute extends Route<Model> {
           stash: this.#lastAttemptedCardId ?? null,
           base: this.renderBaseParams?.[0] ?? null,
           paramsFor: this.#renderParamsId() ?? null,
+          global: lastAttemptedRenderCardId() ?? null,
           loc: typeof window !== 'undefined' ? window.location.pathname : null,
         })}`,
       ];
