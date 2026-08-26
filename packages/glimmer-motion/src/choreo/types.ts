@@ -473,6 +473,13 @@ export interface GateMark {
 export interface Compiled {
   cues: Cue[];
   gates: GateMark[];
+  /**
+   * The score has no length of its own: every cue in it is an OPEN step
+   * (a tether, hold, raise or follow without `@duration`) and there is no
+   * enclosing span for them to borrow. Such a score is an annotation that
+   * is simply on, and its run stands rather than ending — see Cue.standing.
+   */
+  open?: boolean;
 }
 
 /** where the region's frame stands — yielded, tracked, updated at step boundaries */
@@ -533,6 +540,13 @@ export interface Cue {
   /** scroll: animate the sprite's scroll container to this alignment */
   scroll?: { align: 'center' | 'end' | 'start' };
   sprite: Sprite;
+  /**
+   * An open step in a score with no span to borrow: it holds from its start
+   * until the run is cancelled or replaced, and its (infinite) duration is
+   * excluded from the run's length. The standing wire, the standing raise —
+   * an annotation whose lifetime is the scene's, not a step's.
+   */
+  standing?: boolean;
   start: number;
   /** tween / spring / move: the engine target… */
   target?: Record<string, unknown>;

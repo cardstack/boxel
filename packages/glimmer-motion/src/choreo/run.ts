@@ -94,6 +94,13 @@ export interface Run {
   readonly segment: number;
   /** playback rate: 1 is normal, 0.5 half, as Motion's controls */
   speed: number;
+  /**
+   * This run has no end of its own: its score is nothing but OPEN steps, so
+   * it holds them — drawing its wires, keeping its holds — until it is
+   * cancelled or replaced. A standing run is SETTLED, not in flight: there
+   * is nothing to wait for, and `finished` will not resolve until a cancel.
+   */
+  readonly standing: boolean;
   /** the clock, in seconds at 1× — settable; setting it across a gate parks there */
   time: number;
   /** what every driven value was doing at the moment of interruption */
@@ -295,6 +302,7 @@ export class ChoreoRun implements Run {
   private rate = 1;
 
   private readonly scale = motionSpeed();
+  readonly standing: boolean;
   private readonly total: number;
   private readonly gates: (GateMark & { opened: boolean })[];
   private tracks: Track[] = [];
@@ -351,6 +359,7 @@ export class ChoreoRun implements Run {
       auto: g.auto === undefined ? undefined : g.auto * s,
       opened: false,
     }));
+    this.standing = compiled.open ?? false;
     let total = 0;
     for (const cue of this.cues) {
       const start = cue.start * s;
@@ -362,12 +371,18 @@ export class ChoreoRun implements Run {
         start,
         started: false,
       });
-      if (!cue.loop) {
+      // an ambient loop plays past the run's end and a STANDING cue has no
+      // end at all: neither may lend the run a length
+      if (!cue.loop && !cue.standing) {
         total = Math.max(total, start + duration);
       }
+      // …and neither may hold a leaver's row open forever
       this.rowEnd.set(
         cue.sprite,
-        Math.max(this.rowEnd.get(cue.sprite) ?? 0, start + duration),
+        Math.max(
+          this.rowEnd.get(cue.sprite) ?? 0,
+          cue.standing ? start : start + duration,
+        ),
       );
     }
     for (const g of this.gates) {
@@ -510,7 +525,7 @@ export class ChoreoRun implements Run {
     // Keynote's click-through. Past the last gate, complete the run.
     const next = this.gates.find((g) => !g.opened && g.at >= this.master);
     this.seekTo(next ? next.at : this.total);
-    if (!next && this.master >= this.total) {
+    if (!next && this.master >= this.total && !this.standing) {
       this.finish();
     }
   }
@@ -599,7 +614,10 @@ export class ChoreoRun implements Run {
         }
       }
     }
-    if (this.master >= this.total) {
+    // A standing run has played everything it has and still is not over:
+    // its open cues are the picture, and they hold until something replaces
+    // them. It keeps ticking so the wires it draws keep following.
+    if (this.master >= this.total && !this.standing) {
       this.finish();
     }
   };
