@@ -11,7 +11,14 @@ import { LowerThird } from 'test-app/components/reel/lower-third';
 import { createCompositor } from 'test-app/lib/compositor';
 
 const DURATION = 15;
-const EASE = [0.2, 0, 0, 1] as const;
+/**
+ * The genre's curve, not the app's: recorded motion glides — a long,
+ * symmetric ease with soft ends — where interactive motion snaps and
+ * bounces. The demos inside the frame keep their own snappy springs
+ * (they ARE the product); this curve belongs to the editorial layer,
+ * the camera and the titles.
+ */
+const GLIDE = [0.65, 0, 0.35, 1] as const;
 
 interface SeekableDemoElement extends HTMLElement {
   seekDemo?: (time: number) => PromiseLike<void> | void;
@@ -344,52 +351,52 @@ export class FeatureReel extends Component {
           <c.Camera
             @fit={{c.id "reel-lightbox-aim"}}
             @margin={{0.82}}
-            @duration={{0.65}}
-            @ease={{EASE}}
+            @duration={{1}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.55}} />
+          <c.Wait @duration={{1.2}} />
           <c.Camera
             @fit={{c.id "reel-beacons-scene"}}
             @margin={{1}}
-            @duration={{0.8}}
-            @ease={{EASE}}
+            @duration={{1.15}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{0.9}} />
+          <c.Wait @duration={{0.55}} />
           <c.Camera
             @fit={{c.id "reel-beacon-aim"}}
             @margin={{0.84}}
-            @duration={{0.65}}
-            @ease={{EASE}}
+            @duration={{1}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.45}} />
+          <c.Wait @duration={{1.1}} />
           <c.Camera
             @fit={{c.id "reel-build-scene"}}
             @margin={{1}}
-            @duration={{0.85}}
-            @ease={{EASE}}
+            @duration={{1.2}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{0.45}} />
+          <c.Wait @duration={{0.1}} />
           <c.Camera
             @fit={{c.id "reel-build-logo-aim"}}
             @margin={{0.82}}
-            @duration={{0.65}}
-            @ease={{EASE}}
+            @duration={{1}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.35}} />
+          <c.Wait @duration={{1}} />
           <c.Camera
             @fit={{c.id "reel-build-panel-aim"}}
             @margin={{0.8}}
-            @duration={{0.75}}
-            @ease={{EASE}}
+            @duration={{1.05}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.3}} />
+          <c.Wait @duration={{1}} />
           <c.Camera
             @fit={{c.id "reel-build-logo-aim"}}
             @margin={{0.82}}
-            @duration={{0.75}}
-            @ease={{EASE}}
+            @duration={{1.1}}
+            @ease={{GLIDE}}
           />
-          <c.Wait @duration={{2.45}} />
+          <c.Wait @duration={{2.1}} />
         </c.Sequence>
       </Choreo>
 
@@ -436,59 +443,59 @@ export class FeatureReel extends Component {
           <lt.Tween
             @of={{lt.id "lt-lightbox"}}
             @opacity={{array 0 1}}
-            @y={{array 14 0}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 24 0}}
+            @duration={{0.55}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{1.85}} />
+          <lt.Wait @duration={{1.6}} />
           <lt.Tween
             @of={{lt.id "lt-lightbox"}}
             @opacity={{array 1 0}}
-            @y={{array 0 -10}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 0 -14}}
+            @duration={{0.45}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{1}} />
+          <lt.Wait @duration={{0.85}} />
           <lt.Tween
             @of={{lt.id "lt-beacons"}}
             @opacity={{array 0 1}}
-            @y={{array 14 0}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 24 0}}
+            @duration={{0.55}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{2.2}} />
+          <lt.Wait @duration={{1.95}} />
           <lt.Tween
             @of={{lt.id "lt-beacons"}}
             @opacity={{array 1 0}}
-            @y={{array 0 -10}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 0 -14}}
+            @duration={{0.45}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{1.2}} />
+          <lt.Wait @duration={{1.05}} />
           <lt.Tween
             @of={{lt.id "lt-build"}}
             @opacity={{array 0 1}}
-            @y={{array 14 0}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 24 0}}
+            @duration={{0.55}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{2.4}} />
+          <lt.Wait @duration={{2.15}} />
           <lt.Tween
             @of={{lt.id "lt-build"}}
             @opacity={{array 1 0}}
-            @y={{array 0 -10}}
-            @duration={{0.3}}
-            @ease={{EASE}}
+            @y={{array 0 -14}}
+            @duration={{0.45}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{2.3}} />
+          <lt.Wait @duration={{2.15}} />
           <lt.Tween
             @of={{lt.id "lt-logo"}}
             @opacity={{array 0 1}}
-            @y={{array 14 0}}
-            @duration={{0.4}}
-            @ease={{EASE}}
+            @y={{array 24 0}}
+            @duration={{0.7}}
+            @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{1.7}} />
+          <lt.Wait @duration={{1.4}} />
         </lt.Sequence>
       </Choreo>
     </div>
