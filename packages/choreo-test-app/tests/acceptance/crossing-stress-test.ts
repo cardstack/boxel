@@ -48,21 +48,21 @@ module('Acceptance | crossing stress', function (hooks) {
     await frames(36);
     const hero = find('[data-test-hero]') as HTMLElement;
     const reduced = window.matchMedia(
-      '(prefers-reduced-motion: reduce)',
+      '(prefers-reduced-motion: reduce)'
     ).matches;
     const liveTransform = getComputedStyle(hero).transform;
     if (reduced) {
       assert.strictEqual(
         liveTransform,
         'none',
-        'prefers-reduced-motion stills the intra-slide loops',
+        'prefers-reduced-motion stills the intra-slide loops'
       );
     } else {
       const live = heroBox();
       assert.true(
         liveTransform !== 'none' ||
           Math.hypot(live.left - atRest.left, live.top - atRest.top) > 2,
-        `Tide's loop displaced the hero (${atRest.left.toFixed(0)},${atRest.top.toFixed(0)} → ${live.left.toFixed(0)},${live.top.toFixed(0)}; transform=${liveTransform})`,
+        `Tide's loop displaced the hero (${atRest.left.toFixed(0)},${atRest.top.toFixed(0)} → ${live.left.toFixed(0)},${live.top.toFixed(0)}; transform=${liveTransform})`
       );
     }
 
@@ -72,14 +72,18 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.strictEqual(root.dataset.slide, '1', 'Ember is the destination');
 
     await animationsSettled();
-    assert.strictEqual(root.dataset.phase, 'looping', 'loops resume on landing');
+    assert.strictEqual(
+      root.dataset.phase,
+      'looping',
+      'loops resume on landing'
+    );
     assert.dom('[data-test-title]').hasText('Ember');
     assert.dom('[data-test-chip]').hasText('heat');
     const ember = heroBox();
     assert.true(
       Math.abs(ember.left - atRest.left) > 30 ||
         Math.abs(ember.width - atRest.width) > 30,
-      `hero travelled into Ember's rest (${atRest.left.toFixed(0)}×${atRest.width.toFixed(0)} → ${ember.left.toFixed(0)}×${ember.width.toFixed(0)})`,
+      `hero travelled into Ember's rest (${atRest.left.toFixed(0)}×${atRest.width.toFixed(0)} → ${ember.left.toFixed(0)}×${ember.width.toFixed(0)})`
     );
 
     stress().go(2);
@@ -92,13 +96,13 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.true(
       Math.abs(violet.top - ember.top) > 20 ||
         Math.abs(violet.left - ember.left) > 20,
-      `hero travelled into Violet's rest (${ember.left.toFixed(0)},${ember.top.toFixed(0)} → ${violet.left.toFixed(0)},${violet.top.toFixed(0)})`,
+      `hero travelled into Violet's rest (${ember.left.toFixed(0)},${ember.top.toFixed(0)} → ${violet.left.toFixed(0)},${violet.top.toFixed(0)})`
     );
     assert.strictEqual(orphanCount(), 0, 'no orphans after the last landing');
     assert.deepEqual(
       strandedTransforms(),
       [],
-      'nothing wearing a leftover transform',
+      'nothing wearing a leftover transform'
     );
   });
 
@@ -116,7 +120,7 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.strictEqual(
       (find('[data-test-crossing-stress]') as HTMLElement).dataset.slide,
       '2',
-      'the second cut won',
+      'the second cut won'
     );
     assert.dom('[data-test-title]').hasText('Violet');
     assert.strictEqual(orphanCount(), 0);

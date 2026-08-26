@@ -88,7 +88,7 @@ export class CrossingStress extends Component {
   register = modifier((el: HTMLElement) => {
     el.closest<HTMLElement>('.app-shell')?.setAttribute(
       'data-layout-ignore',
-      '',
+      ''
     );
     Object.defineProperty(el, 'choreoCrossingStress', {
       configurable: true,
@@ -108,7 +108,7 @@ export class CrossingStress extends Component {
       delete (window as Window & { __choreoCrossingStress?: CrossingStress })
         .__choreoCrossingStress;
       el.closest<HTMLElement>('.app-shell')?.removeAttribute(
-        'data-layout-ignore',
+        'data-layout-ignore'
       );
     };
   });
@@ -209,8 +209,8 @@ export class CrossingStress extends Component {
           <span class="xstress-phase" data-test-phase>{{this.phase}}</span>
         </p>
         <p class="xstress-lede">
-          Cut at any time — the matching tile flies from wherever it is to
-          the next slide's start.
+          Cut at any time — the matching tile flies from wherever it is to the
+          next slide's start.
         </p>
         <div class="xstress-controls">
           <button
