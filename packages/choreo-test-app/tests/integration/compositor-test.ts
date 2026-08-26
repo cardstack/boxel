@@ -123,6 +123,16 @@ module('Integration | compositor host', function () {
       Math.abs(values.progress![0]! - 1.7) < 1e-9,
       `sampled at t - from (${String(values.progress![0])})`
     );
+
+    // the preview fold: cues would fire, but parameters are capture
+    // reconstruction and must not touch a demo that is PLAYING
+    values.time!.length = 0;
+    await compositor.foldTo(11, { parameters: false });
+    assert.deepEqual(
+      values.time,
+      [],
+      'a parameters-off fold leaves every channel untouched'
+    );
   });
 
   test('renderAt is a transaction: runs are paused and seeked around the fold', async function (assert) {

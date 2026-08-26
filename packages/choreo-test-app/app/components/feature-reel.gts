@@ -1,12 +1,14 @@
+import { array } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { createChoreoPlayer } from 'choreo-player';
 import { modifier } from 'ember-modifier';
 import type { ChoreoRun } from 'glimmer-motion';
 import { Choreo, motion } from 'glimmer-motion';
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Inbox } from 'test-app/components/examples/inbox';
 import { Lightbox } from 'test-app/components/examples/lightbox';
+import { LowerThird } from 'test-app/components/reel/lower-third';
+import { createCompositor } from 'test-app/lib/compositor';
 
 const DURATION = 15;
 const EASE = [0.2, 0, 0, 1] as const;
@@ -24,34 +26,131 @@ export class FeatureReel extends Component {
   @tracked take = 0;
   private root?: HTMLElement;
   private c?: { run: ChoreoRun | null };
+  private t?: { run: ChoreoRun | null };
   private score: ChoreoRun | null = null;
+  private titleScore: ChoreoRun | null = null;
   private externallyDriven = false;
-  private lightboxFired = false;
-  private inboxFired = false;
   private raf = 0;
   private previewStart = 0;
   private resolveReady!: () => void;
   private ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
-  private player = createChoreoPlayer({
+  /**
+   * The composition host (docs/choreo-composition.md, Phase C1). Cues are
+   * idempotent semantic commands folded through the composition clock in
+   * BOTH modes; parameter channels are capture-only reconstruction — in
+   * preview the demos play their own engines.
+   */
+  private compositor = createCompositor({
+    automations: [
+      {
+        name: 'time',
+        sample: (t: number) => Math.max(0, t - 0.55),
+        target: 'lightbox',
+      },
+      {
+        name: 'time',
+        sample: (t: number) => Math.max(0, t - 3.45),
+        target: 'inbox',
+      },
+      {
+        from: 7.3,
+        name: 'progress',
+        sample: (t: number) => Math.max(0, t - 7.3),
+        target: 'build',
+      },
+    ],
+    cues: [
+      { action: 'photo.open', at: 0.55, payload: 3, target: 'lightbox' },
+      { action: 'compose', at: 4.35, target: 'inbox' },
+    ],
     duration: DURATION,
     prepare: () => this.prepareScore(),
     runs: () => {
-      // Child demos can legitimately cause the enclosing Choreo region to
-      // publish a replacement all-kept run. Always drive the run currently
-      // owned by the region; requiring object identity here made the capture
+      // Child demos legitimately cause either region to publish a
+      // replacement all-kept run. Always drive the runs the regions
+      // currently own; identity-pinning here once made the capture
       // silently stop seeking the camera after the first demo updated.
-      const run = this.c?.run ?? this.score;
-      if (!run) {
-        return [];
+      const runs: ChoreoRun[] = [];
+      const world = this.c?.run ?? this.score;
+      if (world) {
+        if (world !== this.score) {
+          world.pause();
+          this.score = world;
+        }
+        runs.push(world);
       }
-      if (run !== this.score) {
-        run.pause();
-        this.score = run;
+      const titles = this.t?.run ?? this.titleScore;
+      if (titles) {
+        if (titles !== this.titleScore) {
+          titles.pause();
+          this.titleScore = titles;
+        }
+        runs.push(titles);
       }
-      return [run];
+      return runs;
     },
+    // cue-driven state is ordinary tracked state; two macrotasks let
+    // Glimmer commit it before the closing reassertion seek. Not rAF on
+    // purpose: the capture barrier must never depend on the frame pump.
+    settle: () =>
+      new Promise<void>((resolve) => {
+        setTimeout(() => setTimeout(resolve, 0), 0);
+      }),
   });
+
+  /**
+   * Sidecar ports: the composition speaks to each demo through the same
+   * controls a person clicks. Every action is an ENSURE, never a toggle —
+   * a replayed fold must be able to hit a port twice without doubling.
+   */
+  private installPorts() {
+    const q = <T extends HTMLElement>(sel: string) =>
+      this.root?.querySelector<T>(sel) ?? null;
+    this.compositor.register('lightbox', {
+      actions: {
+        'photo.open': (index) => {
+          if (!q('.reel-lightbox .overlay')) {
+            this.root
+              ?.querySelectorAll<HTMLButtonElement>('.reel-lightbox .shot')
+              [Number(index)]?.click();
+          }
+        },
+      },
+      parameters: {
+        time: (v) =>
+          void q<SeekableDemoElement>('.reel-lightbox .ex')?.seekDemo?.(v),
+      },
+      reset: () =>
+        q<HTMLButtonElement>('.reel-lightbox .lightbox-close')?.click(),
+    });
+    this.compositor.register('inbox', {
+      actions: {
+        compose: () => {
+          // ensure the composed row exists; the demo seeds three
+          const rows =
+            this.root?.querySelectorAll('.reel-beacons .mail').length ?? 0;
+          if (rows <= 3) {
+            q<HTMLButtonElement>('.reel-beacons .inbox-compose')?.click();
+          }
+        },
+      },
+      parameters: {
+        time: (v) =>
+          void q<SeekableDemoElement>('.reel-beacons .ex')?.seekDemo?.(v),
+      },
+      // no reset: the inbox has no cheap return to its seed rows; the
+      // compose port is idempotent, so a backward replay cannot double it
+    });
+    this.compositor.register('build', {
+      parameters: {
+        progress: (v) =>
+          q<BuildOrderElement>('.reel-build .bo-stage')?.buildOrder?.scrub({
+            target: { value: String(v) },
+          } as unknown as Event),
+      },
+    });
+  }
 
   private async prepareScore() {
     if (this.take === 0) {
@@ -79,6 +178,12 @@ export class FeatureReel extends Component {
     this.c = c;
   });
 
+  wireTitles = modifier(
+    (_el: Element, [t]: [{ run: ChoreoRun | null }, number]) => {
+      this.t = t;
+    }
+  );
+
   register = modifier((el: HTMLElement) => {
     this.root = el;
     const shell = el.closest<HTMLElement>('.app-shell');
@@ -89,6 +194,7 @@ export class FeatureReel extends Component {
     });
     (window as Window & { __choreoReel?: FeatureReel }).__choreoReel = this;
     el.dataset.captureHandle = 'ready';
+    this.installPorts();
     requestAnimationFrame(() => {
       if (!this.isDestroying && this.take === 0) {
         this.take++;
@@ -100,108 +206,66 @@ export class FeatureReel extends Component {
     // the element itself becomes unreachable when the route is removed.
   });
 
-  /** Live preview presses the real demo controls at score cues. */
+  /**
+   * Live preview: the runs PLAY — play() is GPU, renderAt(t) is a still
+   * (docs/choreo-composition.md, scope decisions). This clock only fires
+   * cues through the same fold capture uses, and retimes a newly compiled
+   * replacement run to the composition clock ONCE; it never pauses or
+   * seeks a run that is already playing.
+   */
   private tick = () => {
-    const live = this.c?.run ?? null;
+    if (this.externallyDriven || this.isDestroying) {
+      return;
+    }
     this.previewStart ||= performance.now();
     const previewTime = Math.min(
       DURATION,
       Math.max(0, (performance.now() - this.previewStart) / 1000)
     );
-    if (live && live !== this.score) {
-      this.score = live;
-      if (this.root) {
-        this.root.dataset.scoreDuration = String(live.duration);
-      }
-      this.resolveReady();
-      live.pause();
-    }
-    if (live && !this.externallyDriven) {
-      live.pause();
-      live.time = Math.min(previewTime, live.duration);
-    }
-    const time = this.externallyDriven ? (this.score?.time ?? 0) : previewTime;
+    this.adoptForPreview(this.c?.run ?? null, 'score', previewTime);
+    this.adoptForPreview(this.t?.run ?? null, 'titleScore', previewTime);
+    void this.compositor.foldTo(previewTime, { parameters: false });
     if (this.root) {
-      this.root.dataset.scoreTime = time.toFixed(3);
+      this.root.dataset.scoreTime = previewTime.toFixed(3);
     }
-    if (time >= 0.55 && !this.lightboxFired) {
-      this.lightboxFired = true;
-      this.root
-        ?.querySelectorAll<HTMLButtonElement>('.reel-lightbox .shot')[3]
-        ?.click();
-    }
-    if (time >= 4.35 && !this.inboxFired) {
-      this.inboxFired = true;
-      this.root
-        ?.querySelector<HTMLButtonElement>('.reel-beacons .inbox-compose')
-        ?.click();
-    }
-    if (!this.isDestroying && !this.externallyDriven) {
-      this.raf = requestAnimationFrame(this.tick);
-    }
+    this.raf = requestAnimationFrame(this.tick);
   };
 
-  /** HyperFrames seeks the outer score and each mounted demo's real engine. */
+  private adoptForPreview(
+    run: ChoreoRun | null,
+    key: 'score' | 'titleScore',
+    previewTime: number
+  ) {
+    if (!run || run === this[key]) {
+      return;
+    }
+    this[key] = run;
+    this.resolveReady();
+    if (this.root && key === 'score') {
+      this.root.dataset.scoreDuration = String(run.duration);
+    }
+    // a replacement run compiles parked at ITS zero mid-film: retime it to
+    // the composition clock once, then hand it back its own clock
+    if (previewTime > 0.05 && previewTime < run.duration) {
+      run.time = previewTime;
+    }
+    run.play();
+  }
+
+  /** HyperFrames' transaction: one call stands the composition at `t`. */
   async renderAt(time: number) {
-    const trace: string[] = [];
-    const mark = (label: string) =>
-      trace.push(`${label}:${this.score?.time ?? -1}`);
     this.externallyDriven = true;
     cancelAnimationFrame(this.raf);
-    // The capture engine's opening seek arrives before its first browser
-    // frame. Let that frame mount/compile the score instead of making frame 0
-    // wait for work that only frame 0 can advance.
-    if (!this.score) {
-      if (this.take === 0) {
-        this.take++;
-      }
-      const run = this.c?.run;
-      if (!run) {
-        return;
-      }
-      this.score = run;
-      run.pause();
-      this.resolveReady();
-    }
-    mark('ready');
-    await this.player.renderAt(time, { settle: false });
-    mark('outer-1');
-    const lightbox =
-      this.root?.querySelector<SeekableDemoElement>('.reel-lightbox .ex');
-    const inbox =
-      this.root?.querySelector<SeekableDemoElement>('.reel-beacons .ex');
-    await Promise.all([
-      lightbox?.seekDemo?.(time),
-      inbox?.seekDemo?.(Math.max(0, time - 3.45)),
-    ]);
-    mark('children');
-    // A real demo state change is a real Glimmer render, so the enclosing
-    // region legitimately compiles a replacement all-kept camera run. Adopt
-    // that run before sampling the requested editorial frame.
-    const refreshed = this.c?.run;
-    if (refreshed && refreshed !== this.score) {
-      refreshed.pause();
-      this.score = refreshed;
-    }
-    mark('refreshed');
-    const build = this.root?.querySelector<BuildOrderElement>(
-      '.reel-build .bo-stage'
-    )?.buildOrder;
-    if (build && time >= 7.3) {
-      build.scrub({
-        target: { value: String(Math.max(0, time - 7.3)) },
-      } as unknown as Event);
-    }
-    // The capture event itself is the frame barrier. Waiting for another rAF
-    // here would deadlock the renderer between frame N and N+1.
-    await this.player.renderAt(time, { settle: false });
-    mark('outer-2');
+    // The host's prepare barrier (prepareScore) bumps the take and polls
+    // for the compiled score, so an opening seek that arrives before the
+    // first browser frame waits for the mount instead of painting nothing.
+    await this.compositor.renderAt(time);
     if (this.root) {
       this.root.dataset.scoreTime = String(this.score?.time ?? -1);
       this.root.dataset.scoreDuration = String(this.score?.duration ?? -1);
       (this.root as HTMLElement & { choreoRun?: ChoreoRun }).choreoRun =
         this.score ?? undefined;
-      this.root.dataset.captureTrace = trace.join('|');
+      this.root.dataset.captureTrace = `t:${String(this.score?.time ?? -1)}`;
     }
   }
 
@@ -212,7 +276,7 @@ export class FeatureReel extends Component {
     }
     cancelAnimationFrame(this.raf);
     this.resolveReady();
-    this.player.pause();
+    this.compositor.pause();
     delete (window as Window & { __choreoReel?: FeatureReel }).__choreoReel;
     this.root
       ?.closest<HTMLElement>('.app-shell')
@@ -327,6 +391,105 @@ export class FeatureReel extends Component {
           />
           <c.Wait @duration={{2.45}} />
         </c.Sequence>
+      </Choreo>
+
+      {{! The title plane: its own Choreo region, a sibling of the camera'd
+          world — viewport-anchored typography the demo camera cannot drag.
+          Its fade is a plain tween on the plane's actors: the experiment
+          that keeps the addressable control channel unbuilt. }}
+      <Choreo class="reel-titles" @quiet={{true}} as |lt|>
+        <div
+          class="reel-titles-strip"
+          data-take={{this.take}}
+          {{this.wireTitles lt this.take}}
+        >
+          <LowerThird
+            @id="lt-lightbox"
+            @variant="feature"
+            @label="01 · Lightbox"
+            @title="Magic move, for real"
+            @detail="The gallery's layoutId demo, live"
+          />
+          <LowerThird
+            @id="lt-beacons"
+            @variant="feature"
+            @label="02 · Beacons"
+            @title="A point, not an identity"
+            @detail="Compose flies from the real button"
+          />
+          <LowerThird
+            @id="lt-build"
+            @variant="feature"
+            @label="03 · Build Order"
+            @title="Nine cues, one logo"
+            @detail="Scored, scrubbed, interruptible"
+          />
+          <LowerThird
+            @id="lt-logo"
+            @variant="proof"
+            @label="Choreo"
+            @title="Motion. Choreographed."
+          />
+        </div>
+        <lt.Sequence>
+          <lt.Wait @duration={{0.15}} />
+          <lt.Tween
+            @of={{lt.id "lt-lightbox"}}
+            @opacity={{array 0 1}}
+            @y={{array 14 0}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{1.85}} />
+          <lt.Tween
+            @of={{lt.id "lt-lightbox"}}
+            @opacity={{array 1 0}}
+            @y={{array 0 -10}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{1}} />
+          <lt.Tween
+            @of={{lt.id "lt-beacons"}}
+            @opacity={{array 0 1}}
+            @y={{array 14 0}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{2.2}} />
+          <lt.Tween
+            @of={{lt.id "lt-beacons"}}
+            @opacity={{array 1 0}}
+            @y={{array 0 -10}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{1.2}} />
+          <lt.Tween
+            @of={{lt.id "lt-build"}}
+            @opacity={{array 0 1}}
+            @y={{array 14 0}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{2.4}} />
+          <lt.Tween
+            @of={{lt.id "lt-build"}}
+            @opacity={{array 1 0}}
+            @y={{array 0 -10}}
+            @duration={{0.3}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{2.3}} />
+          <lt.Tween
+            @of={{lt.id "lt-logo"}}
+            @opacity={{array 0 1}}
+            @y={{array 14 0}}
+            @duration={{0.4}}
+            @ease={{EASE}}
+          />
+          <lt.Wait @duration={{1.7}} />
+        </lt.Sequence>
       </Choreo>
     </div>
   </template>

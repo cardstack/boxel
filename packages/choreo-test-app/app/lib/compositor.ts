@@ -89,7 +89,10 @@ export class Compositor {
   private applied = 0; // cues[0..applied) are folded into current state
   private lastTime = 0;
   private readonly recent: SemanticAction[] = [];
-  private readonly player: { renderAt(t: number, o?: object): Promise<void> };
+  private readonly player: {
+    pause(): void;
+    renderAt(t: number, o?: object): Promise<void>;
+  };
 
   constructor(options: CompositorOptions) {
     this.options = options;
@@ -156,11 +159,19 @@ export class Compositor {
   }
 
   /**
-   * Fold cues and parameters through `t` — state only, no run transport.
-   * Live preview shares this with the capture path, so the two can never
-   * disagree about what the composition looks like at a time.
+   * Fold cues (and, by default, parameters) through `t` — state only, no
+   * run transport. Live preview shares this with the capture path, so the
+   * two can never disagree about which commands have happened by a time.
+   * Preview passes `parameters: false`: a parameter channel is capture
+   * reconstruction — it stands a demo's own engine at a still, which
+   * would fight the very playback the preview exists to show. play() is
+   * GPU; renderAt(t) is a still (docs/choreo-composition.md, scope
+   * decisions).
    */
-  async foldTo(time: number): Promise<void> {
+  async foldTo(
+    time: number,
+    options?: { parameters?: boolean }
+  ): Promise<void> {
     const target = this.countAt(time);
     if (target < this.applied) {
       // backward across at least one cue: commands cannot be un-executed,
@@ -181,13 +192,22 @@ export class Compositor {
       }
       await port(cue.payload);
     }
-    for (const auto of this.options.automations) {
-      if (auto.from !== undefined && time < auto.from) {
-        continue;
+    if (options?.parameters !== false) {
+      for (const auto of this.options.automations) {
+        if (auto.from !== undefined && time < auto.from) {
+          continue;
+        }
+        this.ports
+          .get(auto.target)
+          ?.parameters?.[auto.name]?.(auto.sample(time));
       }
-      this.ports.get(auto.target)?.parameters?.[auto.name]?.(auto.sample(time));
     }
     this.lastTime = time;
+  }
+
+  /** Hand the transport back (teardown, or a preview reclaiming its runs). */
+  pause(): void {
+    this.player.pause();
   }
 
   /**

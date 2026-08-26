@@ -28,6 +28,7 @@ export const LowerThird: TOC<Signature> = <template>
   <aside
     class="reel-lower-third"
     data-variant={{@variant}}
+    data-lt={{@id}}
     {{motion id=@id role="lower-third"}}
   >
     <span class="reel-lower-third__rule" aria-hidden="true"></span>

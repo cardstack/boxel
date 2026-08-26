@@ -29,8 +29,44 @@ const zoomOf = (transform: string): number => {
   return m ? parseFloat(m[1]!) : 1;
 };
 
+const frames = (n: number) =>
+  new Promise<void>((resolve) => {
+    const step = () => (n-- <= 0 ? resolve() : requestAnimationFrame(step));
+    requestAnimationFrame(step);
+  });
+
+const opacityOf = (sel: string) =>
+  getComputedStyle(find(sel) as HTMLElement).opacity;
+
 module('Acceptance | feature reel transport', function (hooks) {
   setupApplicationTest(hooks);
+
+  test('the preview PLAYS: WAAPI composites the camera, and cues fire with no recorder', async function (assert) {
+    await visit('/_feature-reel');
+    const world = find('.reel-world') as HTMLElement;
+
+    // play() is GPU: during the live camera move a platform animation owns
+    // the frame — the old preview paused and seeked every rAF and never
+    // had one
+    let running = false;
+    for (let i = 0; i < 240 && !running; i++) {
+      await frames(1);
+      running = world.getAnimations().some((a) => a.playState === 'running');
+    }
+    assert.true(
+      running,
+      'a platform animation composites the camera during live preview'
+    );
+
+    // the 0.55s cue opens the lightbox through its real shot button, on
+    // the preview clock, through the same fold capture uses
+    let open = false;
+    for (let i = 0; i < 240 && !open; i++) {
+      await frames(1);
+      open = Boolean(find('.reel-lightbox .overlay'));
+    }
+    assert.true(open, 'the photo.open cue fired on the preview clock');
+  });
 
   test('the doc checkpoints land their shots from direct, out-of-order seeks', async function (assert) {
     await visit('/_feature-reel');
@@ -96,6 +132,52 @@ module('Acceptance | feature reel transport', function (hooks) {
       worldTransform(),
       buildLogo,
       'walking 0 → 8.9 sequentially lands on the same frame as jumping there'
+    );
+  });
+
+  test('the title plane and the demo fold reconstruct at every checkpoint', async function (assert) {
+    await visit('/_feature-reel');
+
+    // each checkpoint has exactly one third up — the plane's own score,
+    // seeked by the same transaction that stands the camera
+    await reel().renderAt(1.5);
+    assert.strictEqual(opacityOf('[data-lt="lt-lightbox"]'), '1', '1.5s: 01');
+    assert.true(
+      Boolean(find('.reel-lightbox .overlay')),
+      '1.5s: the photo.open cue folded in'
+    );
+
+    await reel().renderAt(5.1);
+    assert.strictEqual(opacityOf('[data-lt="lt-beacons"]'), '1', '5.1s: 02');
+    assert.strictEqual(
+      opacityOf('[data-lt="lt-lightbox"]'),
+      '0',
+      '5.1s: 01 has left'
+    );
+
+    await reel().renderAt(8.9);
+    assert.strictEqual(opacityOf('[data-lt="lt-build"]'), '1', '8.9s: 03');
+
+    await reel().renderAt(14.5);
+    assert.strictEqual(opacityOf('[data-lt="lt-logo"]'), '1', '14.5s: lockup');
+
+    // the backward fold: photo.open cannot be un-clicked, so the lightbox
+    // actor resets through its real close button and the empty prefix
+    // replays — before the cue the lightbox is semantically CLOSED. Its
+    // Presence exit then plays out on the demo's own engine (a monotonic
+    // capture never walks backward, so the transient is preview-only).
+    // 0.05s also predates the first title's 0.15s entrance, so the plane
+    // must stand at its stylesheet rest
+    await reel().renderAt(0.05);
+    const overlay = find('.reel-lightbox .overlay');
+    assert.true(
+      !overlay || overlay.classList.contains('is-closing'),
+      '0.05s after 14.5s: the lightbox folded back shut'
+    );
+    assert.strictEqual(
+      opacityOf('[data-lt="lt-lightbox"]'),
+      '0',
+      '0.05s: no third is up yet'
     );
   });
 });
