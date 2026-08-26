@@ -838,7 +838,11 @@ summary,
   min-height: min(72vh, 680px);
   border: 1px solid var(--line);
   border-radius: 22px;
-  overflow: hidden;
+  /* `clip`, not `hidden`: a hidden box is still a scroll container, and the
+     browser will happily scroll it to reveal a focused control that a demo's
+     own transform has carried past the edge — shearing the crop without a
+     scrollbar in sight. `clip` crops without becoming scrollable at all. */
+  overflow: clip;
   /* same recessed well as .card-stage — the demo sits on --bg, not a lifted
      tint of the page, so its own chrome (and a presentation's chin) can pop */
   background:
@@ -2601,7 +2605,11 @@ html[data-gm-dragging] * {
 .cam-stage {
   position: absolute;
   inset: 0;
-  overflow: hidden;
+  /* the zoomed sheet is bigger than the glass BY DESIGN — `clip` crops it
+     without making the glass scrollable, so a click on a half-visible print
+     can never make the browser "helpfully" scroll the crop off its box
+     (see .stage-wrap for the full rule) */
+  overflow: clip;
 }
 
 .cam-stage.is-zoomed {
@@ -6548,6 +6556,10 @@ html[data-gm-dragging] * {
   inset: 0;
   border-radius: 12px;
   background: linear-gradient(180deg, var(--ember-hot), var(--ember));
+  /* dark until the score (or a live hand) lights it — the wrap starts off,
+     and the rest pose must not depend on the run's frame-0 pin landing
+     (same rule as .ph-receipt above) */
+  opacity: 0;
 }
 
 .ph-knob {
@@ -6593,7 +6605,13 @@ html[data-gm-dragging] * {
   box-shadow: 0 24px 60px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
   text-align: center;
   /* invisible until the score places the order, and not in the way until then
-     — but still measurable, which is how the hand knows where Done is */
+     — but still measurable, which is how the hand knows where Done is.
+     The stylesheet states the rest pose itself (like .ph-ring): the score's
+     frame-0 pin writes the same inline `opacity: 0`, but on a slow first
+     load that pin can lose the race to the parked pause — and a receipt
+     hidden only by the pin would sit white over the card until the first
+     interaction forced an evaluation */
+  opacity: 0;
   pointer-events: none;
 }
 

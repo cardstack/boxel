@@ -163,12 +163,22 @@ export class Camera extends Component {
       // know about), so a corner dive can still land partly below the
       // fold. This is the one place scroll position is a legitimate
       // part of "does the result fit" — nudge the glass fully into
-      // view along with the dive, not after it.
+      // view along with the dive, not after it. `nearest`, not
+      // `center`: a glass already fully on screen must not move — the
+      // dive changes the world INSIDE the crop, never the page around
+      // it.
       (event.currentTarget as HTMLElement)
         .closest('.cam-stage')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     this.focus = opening ? id : null;
+  };
+
+  /** a print half past the crop is still a focusable button, and focusing
+   * it makes the browser scroll the page chasing a corner the crop has
+   * already spoken for — swallow the mousedown's focus, keep the click */
+  quellFocus = (event: Event) => {
+    event.preventDefault();
   };
 
   clear = () => {
@@ -240,9 +250,12 @@ export class Camera extends Component {
   };
 
   /** where the glass actually stands — the library's own landed camera
-   * state, read back instead of a number this component computed */
+   * state, read back instead of a number this component computed. Guarded:
+   * a camera measured against a stage that had no box yet (mid-crossing)
+   * can read back non-finite, and "NaN×" is not a magnification */
   get power() {
-    return `${(this.c?.camera.zoom ?? 1).toFixed(2)}×`;
+    const zoom = this.c?.camera.zoom ?? 1;
+    return `${(Number.isFinite(zoom) ? zoom : 1).toFixed(2)}×`;
   }
 
   /** the graded shot, if any — the dock's own content, not a per-frame one */
@@ -270,6 +283,7 @@ export class Camera extends Component {
                 class={{this.frameClass shot}}
                 {{motion id=shot.id role="frame"}}
                 {{on "click" (fn this.loupe shot.id)}}
+                {{on "mousedown" this.quellFocus}}
               >
                 <span class="cam-wash" style={{washOf shot.wash}}></span>
                 <span
