@@ -30,26 +30,29 @@ const deck = [
   {
     chip: 'drift',
     n: 0 as Slide,
-    orb: 'orb-0',
-    spark: 'spark-0',
+    orb: 'xstress-orb-0',
+    spark: 'xstress-spark-0',
     title: 'Tide',
-    wash: 'wash-0',
+    tone: 'tide',
+    wash: 'xstress-wash-0',
   },
   {
     chip: 'heat',
     n: 1 as Slide,
-    orb: 'orb-1',
-    spark: 'spark-1',
+    orb: 'xstress-orb-1',
+    spark: 'xstress-spark-1',
     title: 'Ember',
-    wash: 'wash-1',
+    tone: 'ember',
+    wash: 'xstress-wash-1',
   },
   {
     chip: 'arc',
     n: 2 as Slide,
-    orb: 'orb-2',
-    spark: 'spark-2',
+    orb: 'xstress-orb-2',
+    spark: 'xstress-spark-2',
     title: 'Violet',
-    wash: 'wash-2',
+    tone: 'violet',
+    wash: 'xstress-wash-2',
   },
 ] as const;
 
@@ -60,16 +63,17 @@ const STRESS = 0.72;
  * Magic Move stress — `/crossing-stress`, not the Kiln film at
  * `/crossing-reel`.
  *
- * Three full-viewport slides as counterpart trees: same ids (hero, title,
- * chip) in each, unique washes and ornaments. One `<c.Crossing>` is the
- * whole move — Keynote's rule: whatever paired, flies; whatever didn't,
- * fades. The canned step does not care whether the sprite is a plate, a
- * word, or a pill.
+ * Three full-viewport slides as counterpart trees: same ids (`xstress-hero`,
+ * `xstress-title`, `xstress-chip`) in each, unique washes and ornaments. One
+ * `<c.Crossing>` is the whole move — Keynote's rule: whatever paired, flies;
+ * whatever didn't, fades. The canned step does not care whether the sprite
+ * is a plate, a word, or a pill.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
- * Loops live on INNER skins so they do not fight the flight's transform;
- * `data-phase="crossing"` freezes them for the run, and they restart from
- * rest on landing.
+ * Loops are CSS transforms on the motion nodes themselves, so the pass
+ * snapshots the live box — not a rest frame with a wiggling child inside.
+ * `data-phase="crossing"` stills them for the run (`@quiet` pauses the
+ * rest); they restart from rest on landing.
  */
 export class CrossingStress extends Component {
   @tracked slide: Slide = 0;
@@ -285,39 +289,37 @@ export class CrossingStress extends Component {
           {{#if (this.on s.n)}}
             <section class="xstress-slide" data-slide={{s.n}}>
               <div
-                class="xstress-wash"
+                class="xstress-wash {{s.tone}}"
                 data-test-wash
                 {{motion id=s.wash role="ambient"}}
               ></div>
               <div
-                class="xstress-orb is-back"
+                class="xstress-orb {{s.tone}}"
                 {{motion id=s.orb role="ambient"}}
               ></div>
               <div
-                class="xstress-spark"
+                class="xstress-spark {{s.tone}}"
                 {{motion id=s.spark role="ambient"}}
               ></div>
               <div
-                class="xstress-hero"
+                class="xstress-hero {{s.tone}}"
                 data-test-hero
                 {{motion
-                  id="hero"
+                  id="xstress-hero"
                   role="hero"
                   style=(styles borderRadius=(radiusFor s.n))
                 }}
-              >
-                <span class="xstress-loop xstress-hero-skin"></span>
-              </div>
+              ></div>
               <b
-                class="xstress-title"
+                class="xstress-title {{s.tone}}"
                 data-test-title
-                {{motion id="title" role="type"}}
-              ><span class="xstress-loop">{{s.title}}</span></b>
+                {{motion id="xstress-title" role="type"}}
+              >{{s.title}}</b>
               <small
-                class="xstress-chip"
+                class="xstress-chip {{s.tone}}"
                 data-test-chip
-                {{motion id="chip" role="chip"}}
-              ><span class="xstress-loop">{{s.chip}}</span></small>
+                {{motion id="xstress-chip" role="chip"}}
+              >{{s.chip}}</small>
             </section>
           {{/if}}
         {{/each}}

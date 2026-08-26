@@ -85,6 +85,11 @@ module('Acceptance | crossing stress', function (hooks) {
         Math.abs(ember.width - atRest.width) > 30,
       `hero travelled into Ember's rest (${atRest.left.toFixed(0)}×${atRest.width.toFixed(0)} → ${ember.left.toFixed(0)}×${ember.width.toFixed(0)})`
     );
+    assert.true(
+      ember.width < window.innerWidth * 0.55 &&
+        ember.height < window.innerHeight * 0.7,
+      `Ember's hero stays a tile (${ember.width.toFixed(0)}×${ember.height.toFixed(0)} in ${window.innerWidth}×${window.innerHeight})`
+    );
 
     stress().go(2);
     await settled();

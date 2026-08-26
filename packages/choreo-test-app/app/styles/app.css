@@ -3286,9 +3286,10 @@ html[data-gm-dragging] * {
 }
 
 /* ── Magic Move stress — /crossing-stress, not /crossing-reel ──────────
-   Three looping slides, distinct grounds, a cut at any phase. Shared
-   identities stay mounted; data-slide is the rest home, data-phase
-   freezes intra-slide CSS loops for the span of a crossing. */
+   Three looping slides, distinct grounds, a cut at any phase. Counterpart
+   trees share ids; data-slide is the rest home; data-phase stills the
+   intra-slide CSS loops for the span of a crossing. Tone classes travel
+   with each sprite so an orphan keeps its own box. */
 .xstress-viewport {
   position: fixed;
   inset: 0;
@@ -3302,7 +3303,7 @@ html[data-gm-dragging] * {
 
 .xstress-hud {
   position: absolute;
-  z-index: 5;
+  z-index: 2;
   top: 3%;
   right: 4%;
   left: auto;
@@ -3384,6 +3385,8 @@ html[data-gm-dragging] * {
 .xstress-stage {
   position: absolute;
   inset: 0;
+  /* a stacking context, so a flying crop-scale cannot cover the HUD */
+  z-index: 0;
 }
 
 .xstress-slide {
@@ -3413,11 +3416,14 @@ html[data-gm-dragging] * {
 }
 
 /* Frozen for the flight: loops would write transform on the same node
-   Move is flying. Restarts from 0 when data-phase returns to looping. */
+   Crossing is flying. Restarts from 0 when data-phase returns to looping.
+   Scoped to the stage so an orphan lifted into the layer is still stilled. */
 .xstress-stage[data-phase='crossing'] .xstress-wash,
 .xstress-stage[data-phase='crossing'] .xstress-orb,
 .xstress-stage[data-phase='crossing'] .xstress-spark,
-.xstress-stage[data-phase='crossing'] .xstress-loop {
+.xstress-stage[data-phase='crossing'] .xstress-hero,
+.xstress-stage[data-phase='crossing'] .xstress-title,
+.xstress-stage[data-phase='crossing'] .xstress-chip {
   animation: none !important;
 }
 
@@ -3428,7 +3434,7 @@ html[data-gm-dragging] * {
   z-index: 0;
 }
 
-.xstress-stage[data-slide='0'] .xstress-wash {
+.xstress-wash.tide {
   background: radial-gradient(
     circle at 40% 45%,
     #1f7c86 0%,
@@ -3437,7 +3443,7 @@ html[data-gm-dragging] * {
   animation: xstress-wash-tide 7.2s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='1'] .xstress-wash {
+.xstress-wash.ember {
   background: radial-gradient(
     circle at 62% 40%,
     #c44a22 0%,
@@ -3446,7 +3452,7 @@ html[data-gm-dragging] * {
   animation: xstress-wash-ember 5.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='2'] .xstress-wash {
+.xstress-wash.violet {
   background: radial-gradient(
     circle at 30% 60%,
     #6b48c4 0%,
@@ -3464,14 +3470,14 @@ html[data-gm-dragging] * {
   z-index: 1;
 }
 
-.xstress-stage[data-slide='0'] .xstress-orb {
+.xstress-orb.tide {
   top: 14%;
   left: 12%;
   background: rgb(90 210 198 / 28%);
   animation: xstress-orb-tide 4.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='1'] .xstress-orb {
+.xstress-orb.ember {
   top: auto;
   bottom: 10%;
   left: 8%;
@@ -3479,7 +3485,7 @@ html[data-gm-dragging] * {
   animation: xstress-orb-ember 3.4s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='2'] .xstress-orb {
+.xstress-orb.violet {
   top: 18%;
   right: 10%;
   left: auto;
@@ -3495,7 +3501,7 @@ html[data-gm-dragging] * {
   z-index: 4;
 }
 
-.xstress-stage[data-slide='0'] .xstress-spark {
+.xstress-spark.tide {
   top: 28%;
   right: 22%;
   background: #dff7f2;
@@ -3503,7 +3509,7 @@ html[data-gm-dragging] * {
   animation: xstress-spark-tide 1.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='1'] .xstress-spark {
+.xstress-spark.ember {
   top: 22%;
   left: 18%;
   background: #ffe0c2;
@@ -3511,7 +3517,7 @@ html[data-gm-dragging] * {
   animation: xstress-spark-ember 1.15s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='2'] .xstress-spark {
+.xstress-spark.violet {
   bottom: 18%;
   right: 28%;
   top: auto;
@@ -3526,18 +3532,10 @@ html[data-gm-dragging] * {
   left: calc(50% - 11vmin);
   width: 22vmin;
   height: 22vmin;
-  overflow: visible;
+  overflow: clip;
   background: linear-gradient(160deg, #f4efe6 0%, #e8d9c4 52%, #d4b48a 100%);
   box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
   z-index: 2;
-}
-
-.xstress-hero-skin {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: inherit;
-  box-shadow: inherit;
 }
 
 .xstress-title,
@@ -3564,104 +3562,79 @@ html[data-gm-dragging] * {
   font-style: normal;
 }
 
-.xstress-loop {
-  display: inline-block;
-}
-
-.xstress-hero-skin.xstress-loop {
-  display: block;
-}
+/* Tone classes travel with the element, so an orphan keeps its own box
+   instead of inheriting the destination slide. Tiles stay tiles — crop-scale
+   of an 80vh cream plate fills the viewport. */
 
 /* 01 Tide — small hero, gentle orbit, type centred */
-.xstress-stage[data-slide='0'] .xstress-hero {
+.xstress-hero.tide {
   top: 28%;
   left: calc(50% - 11vmin);
   width: 22vmin;
   height: 22vmin;
-}
-
-.xstress-stage[data-slide='0'] .xstress-hero-skin {
   animation: xstress-hero-tide 2.8s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='0'] .xstress-title {
+.xstress-title.tide {
   top: 62%;
   left: 0;
   right: 0;
   width: auto;
   text-align: center;
   font-size: clamp(3.2rem, 9vw, 7.2rem);
-}
-
-.xstress-stage[data-slide='0'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='0'] .xstress-chip {
+.xstress-chip.tide {
   top: 22%;
   left: 12%;
   color: #0b2e34;
   background: #8fd0c4;
-}
-
-.xstress-stage[data-slide='0'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
-/* 02 Ember — tall plate on the right, larger bob */
-.xstress-stage[data-slide='1'] .xstress-hero {
-  top: 10%;
-  right: 7%;
-  bottom: 10%;
+/* 02 Ember — tall tile on the right, not a wall */
+.xstress-hero.ember {
+  top: 18%;
+  right: 10%;
+  bottom: auto;
   left: auto;
-  width: 38%;
-  height: auto;
-}
-
-.xstress-stage[data-slide='1'] .xstress-hero-skin {
+  width: 28vmin;
+  height: 44vmin;
   animation: xstress-hero-ember 2.2s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='1'] .xstress-title {
+.xstress-title.ember {
   top: 18%;
-  left: 7%;
+  left: 8%;
   right: auto;
   width: fit-content;
   text-align: left;
   font-size: clamp(2.4rem, 6.4vw, 5.6rem);
-}
-
-.xstress-stage[data-slide='1'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='1'] .xstress-chip {
-  left: 7%;
-  bottom: 14%;
+.xstress-chip.ember {
+  left: 8%;
+  bottom: 16%;
   top: auto;
   color: #2c140e;
   background: #ffb089;
-}
-
-.xstress-stage[data-slide='1'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
-/* 03 Violet — wide slab up top, a drifting scale */
-.xstress-stage[data-slide='2'] .xstress-hero {
-  top: 8%;
-  left: 8%;
+/* 03 Violet — wide slab up top */
+.xstress-hero.violet {
+  top: 12%;
+  left: 10%;
   right: auto;
   bottom: auto;
-  width: 54%;
-  height: 28%;
-}
-
-.xstress-stage[data-slide='2'] .xstress-hero-skin {
+  width: 48vmin;
+  height: 22vmin;
   animation: xstress-hero-violet 3.1s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='2'] .xstress-title {
+.xstress-title.violet {
   top: auto;
   bottom: 22%;
   left: 8%;
@@ -3669,22 +3642,16 @@ html[data-gm-dragging] * {
   width: fit-content;
   text-align: left;
   font-size: clamp(2.6rem, 6.8vw, 5.8rem);
-}
-
-.xstress-stage[data-slide='2'] .xstress-title .xstress-loop {
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
-.xstress-stage[data-slide='2'] .xstress-chip {
+.xstress-chip.violet {
   right: 8%;
   bottom: 12%;
   left: auto;
   top: auto;
   color: #16102c;
   background: #c4b0ff;
-}
-
-.xstress-stage[data-slide='2'] .xstress-chip .xstress-loop {
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
 }
 
