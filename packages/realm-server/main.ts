@@ -49,6 +49,7 @@ import { startHealthSampler } from './health-sampler.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
 import { resolveFullIndexOnStartup } from './lib/full-index-on-startup.ts';
+import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 import { PUBLISHED_DIRECTORY_NAME } from '@cardstack/runtime-common';
 
 // FD-level synchronous stderr write — `writeSync(2, ...)` calls the
@@ -638,6 +639,12 @@ const reportHostShellToManager = async () => {
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
+          // The boot index is system-initiated work, so it inherits the same
+          // per-realm tier the post-deploy sweep uses: the base realm above
+          // the system tier, every other realm at it. Without this the base
+          // realm's boot reindex can only be served by the all-priority pool,
+          // behind any backlog already queued there.
+          fromScratchIndexPriority: systemInitiatedIndexPriority(row.url),
           ...(SKIP_BOOT_INDEX ? { skipBootIndex: true as const } : {}),
           ...(process.env.DISABLE_MODULE_CACHING === 'true'
             ? { disableModuleCaching: true }

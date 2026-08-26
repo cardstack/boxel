@@ -11,12 +11,16 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   archiveRealm,
+  baseRealm,
   fullReindex,
   insertPermissions,
   logger,
+  systemInitiatedPriority,
   unarchiveRealm,
+  userInitiatedPriority,
   uuidv4,
 } from '@cardstack/runtime-common';
+import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
 
 import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
 import {
@@ -181,6 +185,39 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('enqueues the base realm above the system tier, every other realm at it', async function (assert) {
+    const sourceRealmURL = 'http://example.com/source/';
+
+    await insertPermissions(dbAdapter, new URL(sourceRealmURL), {
+      '@owner:localhost': ['read', 'realm-owner'],
+    });
+    await insertPermissions(dbAdapter, new URL(baseRealm.url), {
+      '@base_realm:localhost': ['read', 'realm-owner'],
+    });
+
+    let reindex = buildFullReindexTask();
+    await reindex({ realmUrls: [baseRealm.url, sourceRealmURL] });
+
+    type JobRow = { priority: number; args: { realmURL: string } };
+    let jobs = (await dbAdapter.execute('select * from jobs')) as JobRow[];
+    let priorityByRealm = new Map(
+      jobs.map((job) => [job.args.realmURL, job.priority]),
+    );
+
+    // The sweep's own jobs are the backlog base would otherwise queue behind,
+    // so base has to be reachable by a pool the backlog can't reach.
+    assert.strictEqual(
+      priorityByRealm.get(baseRealm.url),
+      userInitiatedPriority,
+      'the base realm is enqueued at the tier the high-priority pool serves',
+    );
+    assert.strictEqual(
+      priorityByRealm.get(sourceRealmURL),
+      systemInitiatedPriority,
+      'other realms stay at the system tier',
+    );
+  });
+
   module('getFullReindexRealmUrls', function () {
     async function seedSourceRealm(realmURL: string) {
       await insertSourceRealmInRegistry(dbAdapter, {
@@ -188,6 +225,17 @@ module(basename(import.meta.filename), function (hooks) {
         diskId: uuidv4(),
         ownerUsername: '@owner:localhost',
       });
+    }
+
+    // Bootstrap rows are written by the boot-time registry backfill, not by
+    // any of the mutation helpers (which all refuse to touch kind='bootstrap'
+    // rows), so seed one directly.
+    async function seedBootstrapRealm(realmURL: string) {
+      await dbAdapter.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, pinned)
+         VALUES ($1, 'bootstrap', $2, 'system', true)`,
+        { bind: [realmURL, `/persistent/${uuidv4()}`] },
+      );
     }
 
     test('returns only active realms from realm_registry', async function (assert) {
@@ -223,6 +271,58 @@ module(basename(import.meta.filename), function (hooks) {
         (await getFullReindexRealmUrls(dbAdapter)).includes(realmURL),
         'unarchived realm reappears',
       );
+    });
+
+    test('bootstrap realms sort ahead of every other realm', async function (assert) {
+      // Both user realms sort before the base realm's url — the shape that
+      // puts base last in a fleet-wide sweep under url ordering alone.
+      const userRealm = 'https://app.boxel.ai/alice/notes/';
+      const publishedRealm = 'https://boxel.site/zeta/';
+      const catalogRealm = 'https://app.boxel.ai/catalog/';
+
+      await seedSourceRealm(userRealm);
+      await seedSourceRealm(publishedRealm);
+      await seedBootstrapRealm(catalogRealm);
+      await seedBootstrapRealm(baseRealm.url);
+
+      assert.deepEqual(
+        await getFullReindexRealmUrls(dbAdapter),
+        [catalogRealm, baseRealm.url, userRealm, publishedRealm],
+        'bootstrap realms come first, then each group ordered by url',
+      );
+    });
+  });
+
+  module('systemInitiatedIndexPriority', function () {
+    test('the base realm is elevated above the system tier', function (assert) {
+      assert.strictEqual(
+        systemInitiatedIndexPriority(baseRealm.url),
+        userInitiatedPriority,
+        'the url form every deployment configures base with',
+      );
+      assert.strictEqual(
+        systemInitiatedIndexPriority('@cardstack/base/'),
+        userInitiatedPriority,
+        'the alias form main.ts registers as the same realm',
+      );
+    });
+
+    test('every other realm stays at the system tier', function (assert) {
+      for (let realmURL of [
+        'https://app.boxel.ai/catalog/',
+        'https://app.boxel.ai/skills/',
+        'https://boxel.site/zeta/',
+        'http://example.com/source/',
+        // Containing the base realm's path is not being the base realm: the
+        // comparison is against the whole realm url, not a path segment.
+        'https://app.boxel.ai/alice/base/',
+      ]) {
+        assert.strictEqual(
+          systemInitiatedIndexPriority(realmURL),
+          systemInitiatedPriority,
+          `${realmURL} stays at the system tier`,
+        );
+      }
     });
   });
 });

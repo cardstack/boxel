@@ -7,6 +7,8 @@ import type {
 } from '../tasks/indexer.ts';
 import { param, query, type PgPrimitive } from '../expression.ts';
 import type { DBAdapter } from '../db.ts';
+import { baseRealm, baseRealmRRI } from '../constants.ts';
+import { systemInitiatedPriority, userInitiatedPriority } from '../queue.ts';
 import { Deferred } from '../deferred.ts';
 import { v4 as uuidv4 } from '@lukeed/uuid';
 import { isObjectLike } from 'lodash-es';
@@ -19,6 +21,50 @@ export const INCREMENTAL_INDEX_JOB_TIMEOUT_SEC = 10 * 60;
 // teardown, quiescence) must use this same name.
 export function indexingConcurrencyGroup(realmURL: string): string {
   return `indexing:${realmURL}`;
+}
+
+// The priority a system-initiated index of `realmURL` is enqueued at.
+//
+// Priority is a worker pool's dequeue floor, never a sort key: within a pool
+// jobs are claimed in strict arrival order (see the tier table in queue.ts).
+// A system-tier index is therefore reachable only by the all-priority pool,
+// behind everything already queued at any tier — survivable for a realm whose
+// stale index affects only itself.
+//
+// Not survivable for the base realm. Every card in the system imports from it,
+// so for as long as its index carries an error row, anonymous `card+json`
+// reads fail on every realm that links a base card. Its repair must not be
+// able to queue behind a backlog, and a sweep that reindexes every realm is
+// exactly such a backlog — one can hold a millisecond-scale base-realm repair
+// for over an hour.
+// At the user-initiated tier the high-priority pool can serve base while the
+// sweep occupies the all-priority pool.
+//
+// Base is the only realm elevated this way. The high-priority pool is a rescue
+// lane for latency-sensitive user work, so handing it a large system index
+// would defeat the lane exactly when the backlog is worst; base is small
+// (definitions, few instances) and can't hold it for long. The other bootstrap
+// realms (catalog, skills, ...) stay at the system tier and get FIFO position
+// instead — the sweep enqueues them first (see `getFullReindexRealmUrls`).
+//
+// The elevation is only as good as the high-priority pool's existence: a
+// deployment running `--highPriorityCount=0` has no pool that floors above the
+// system tier, so base's job still waits its turn in the all-priority pool's
+// FIFO. The sweep ordering is what covers that case.
+export function systemInitiatedIndexPriority(realmURL: string): number {
+  return isBaseRealm(realmURL)
+    ? userInitiatedPriority
+    : systemInitiatedPriority;
+}
+
+// Every deployment configures the base realm with
+// `--fromUrl https://cardstack.com/base/`, so that is the URL its registry row
+// and its index jobs carry. The `@cardstack/base/` alias is matched too:
+// main.ts registers it as an equivalent realm mapping for base, so a caller
+// holding that form names the same realm and must not silently fall back to
+// the system tier.
+function isBaseRealm(realmURL: string): boolean {
+  return realmURL === baseRealm.url || realmURL === baseRealmRRI;
 }
 
 // Await a realm's index lane holding no outstanding work. The in-process
