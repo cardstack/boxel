@@ -70,7 +70,9 @@ export class ModuleSyntax {
   ) {
     this.virtualNetwork = virtualNetwork;
     let normalized = url instanceof URL ? url : virtualNetwork.toURL(url);
-    this.url = new URL(trimExecutableExtension(rri(normalized.href)));
+    // `normalized` is a URL, so its href is one too — trimming it keeps a
+    // plain string and there is no identifier here to mis-parse.
+    this.url = new URL(trimExecutableExtension(normalized.href));
     this.analyze(src);
   }
 
