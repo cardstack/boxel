@@ -550,7 +550,14 @@ module('Acceptance | operator mode tests', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
 
-    await percySnapshot(assert); /* snapshot for special styling */
+    // This second snapshot covers the opened card's own isolated styling. Its
+    // name is spelled out because `percySnapshot(assert)` derives a name from
+    // the module and test name alone, so a second bare call would upload under
+    // the same name as the snapshot above and Percy would keep only one of the
+    // two.
+    await percySnapshot(
+      'Acceptance | operator mode tests | visiting operator mode - pet card opened in stack',
+    );
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [
         [
