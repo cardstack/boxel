@@ -922,10 +922,11 @@ export class Loader {
               // registering, so the level retries and finds the ancestor gone
               // again — one extra level per clear that lands inside a single
               // walk, and one more unit of work for every level, since each
-              // copies and rescans the stack. Realm mappings are registered as
-              // realms are mounted, so a walk normally spans zero or one of
-              // them; a walk racing an unbounded stream of them descends
-              // without a bound.
+              // copies and rescans the stack. Only adding or removing a realm
+              // mapping fires a clear, and that happens as the process wires up
+              // its realms rather than while it serves them, so a walk normally
+              // spans zero of them; a walk racing an unbounded stream of them
+              // descends without a bound.
               if (
                 isRegistered(depModule) &&
                 stack['registered-completing-deps'].includes(
