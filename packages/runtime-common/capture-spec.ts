@@ -1,6 +1,10 @@
 import { computeMediaCacheKey } from './media-cache.ts';
 
-import type { ScreenshotCaptureSpec } from './index.ts';
+import type {
+  ScreenshotCaptureEntry,
+  ScreenshotCaptureOverrides,
+  ScreenshotCaptureSpec,
+} from './index.ts';
 
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
@@ -56,15 +60,38 @@ export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
 // parse time, so the capture path checks it against this cap itself.
 export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
+// Cap on batch size. Every entry captures on the same settled render, so this
+// bounds only the number of screenshots taken after one settle, not renders.
+// Sized so a full batch finishes within the handler's sync-wait budget
+// (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s): a batch is capture-only (persist:
+// null), so a batch that misses the sync wait is discarded on the 503 and the
+// retry re-renders from scratch — nothing resumes. Budget: one shared settle +
+// the initial paint wait, then per entry a bounded viewport-switch paint wait
+// (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) + screenshot. Deliberately conservative;
+// the ceiling can rise once incremental persistence lets a batch resume instead
+// of discard.
+export const SCREENSHOT_MAX_CAPTURES = 12;
+
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
 // overrides (default-valued fields are elided), so `null` exactly means
-// "the canonical capture"; on failure `error` names the offending field.
+// "the canonical capture"; a batch spec normalizes to `{ captures }` with
+// the singular batch-wide defaults folded into every entry, so the capture
+// path iterates self-contained specs. On failure `error` names the
+// offending field.
 export type ScreenshotCaptureSpecParse =
   | { captureSpec: ScreenshotCaptureSpec | null; error?: undefined }
   | { captureSpec?: undefined; error: string };
 
 const CAPTURE_SPEC_FIELDS = new Set([
+  'viewport',
+  'deviceScaleFactor',
+  'fullPage',
+  'clip',
+  'captures',
+]);
+const CAPTURE_ENTRY_FIELDS = new Set([
+  'name',
   'viewport',
   'deviceScaleFactor',
   'fullPage',
@@ -79,6 +106,240 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+type OverrideFieldsParse =
+  | { overrides: ScreenshotCaptureOverrides; error?: undefined }
+  | { overrides?: undefined; error: string };
+
+// Per-field shape + bounds validation for the override fields present on
+// `raw`, with `path`-prefixed errors ("captureSpec" or
+// "captureSpec.captures[i]"). Values are kept verbatim — default elision
+// happens after the batch merge, so an entry can explicitly override a
+// batch-wide default back to the engine default. Cross-field constraints
+// (fullPage×clip, clip within viewport, physical-pixel caps) run against
+// the merged effective spec in `checkMergedOverrides`.
+function parseOverrideFields(
+  raw: Record<string, unknown>,
+  path: string,
+): OverrideFieldsParse {
+  let overrides: ScreenshotCaptureOverrides = {};
+
+  if (raw.viewport !== undefined) {
+    let viewport = raw.viewport;
+    if (!isPlainObject(viewport)) {
+      return {
+        error: `${path}.viewport must have positive integer width and height`,
+      };
+    }
+    for (let key of Object.keys(viewport)) {
+      if (!CAPTURE_SPEC_VIEWPORT_FIELDS.has(key)) {
+        return {
+          error: `${path}.viewport.${key} is not a supported field`,
+        };
+      }
+    }
+    if (
+      !isPositiveInteger(viewport.width) ||
+      !isPositiveInteger(viewport.height)
+    ) {
+      return {
+        error: `${path}.viewport must have positive integer width and height`,
+      };
+    }
+    if (viewport.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      return {
+        error: `${path}.viewport.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+      };
+    }
+    if (viewport.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      return {
+        error: `${path}.viewport.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+      };
+    }
+    overrides.viewport = { width: viewport.width, height: viewport.height };
+  }
+
+  if (raw.deviceScaleFactor !== undefined) {
+    let scale = raw.deviceScaleFactor;
+    if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) {
+      return {
+        error: `${path}.deviceScaleFactor must be a positive number`,
+      };
+    }
+    if (scale > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR) {
+      return {
+        error: `${path}.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+      };
+    }
+    overrides.deviceScaleFactor = scale;
+  }
+
+  if (raw.fullPage !== undefined) {
+    if (typeof raw.fullPage !== 'boolean') {
+      return { error: `${path}.fullPage must be a boolean` };
+    }
+    overrides.fullPage = raw.fullPage;
+  }
+
+  if (raw.clip !== undefined) {
+    let clip = raw.clip;
+    // `clip: null` is an explicit unset — the only way a batch entry can drop a
+    // batch-wide clip default, since object-valued fields have no scalar
+    // "back to default" spelling the way fullPage/deviceScaleFactor do. It
+    // elides away after the merge, so a normalized spec never carries it.
+    if (clip === null) {
+      overrides.clip = null;
+    } else if (!isPlainObject(clip)) {
+      return {
+        error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+      };
+    } else {
+      for (let key of Object.keys(clip)) {
+        if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
+          return { error: `${path}.clip.${key} is not a supported field` };
+        }
+      }
+      if (
+        typeof clip.x !== 'number' ||
+        typeof clip.y !== 'number' ||
+        !Number.isFinite(clip.x) ||
+        !Number.isFinite(clip.y) ||
+        clip.x < 0 ||
+        clip.y < 0 ||
+        !isPositiveInteger(clip.width) ||
+        !isPositiveInteger(clip.height)
+      ) {
+        return {
+          error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+        };
+      }
+      // The clip's extent is bounded by the same caps as the viewport whether
+      // or not one was sent: Puppeteer captures beyond the viewport by default
+      // (`captureBeyondViewport`), so an unbounded clip would be a way around
+      // the viewport cost caps.
+      if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+        return {
+          error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+        };
+      }
+      if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+        return {
+          error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+        };
+      }
+      overrides.clip = {
+        x: clip.x,
+        y: clip.y,
+        width: clip.width,
+        height: clip.height,
+      };
+    }
+  }
+
+  return { overrides };
+}
+
+// Cross-field checks against a fully-merged effective spec.
+function checkMergedOverrides(
+  spec: ScreenshotCaptureOverrides,
+  path: string,
+): string | undefined {
+  if (spec.fullPage && spec.clip) {
+    return `${path} cannot set both fullPage and clip`;
+  }
+
+  // Tighter containment when a viewport was declared: the layout was
+  // requested at that size, so a clip past its edge is caller error — the
+  // region would be unstyled overflow or blank area past the document edge.
+  if (spec.clip && spec.viewport) {
+    if (spec.clip.x + spec.clip.width > spec.viewport.width) {
+      return `${path}.clip exceeds the viewport width`;
+    }
+    if (spec.clip.y + spec.clip.height > spec.viewport.height) {
+      return `${path}.clip exceeds the viewport height`;
+    }
+  }
+
+  // The CSS caps compose with the scale factor: what Chromium renders is
+  // physical pixels, and each capture edge must stay under the texture cap.
+  // fullPage's extent (the document scroll size) isn't knowable here; the
+  // capture path enforces the same cap on it at capture time.
+  let effectiveScale = spec.deviceScaleFactor ?? 1;
+  if (spec.viewport) {
+    if (
+      spec.viewport.width * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return `${path}.viewport.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+    if (
+      spec.viewport.height * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return `${path}.viewport.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+  }
+  if (spec.clip) {
+    if (spec.clip.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.clip.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+    if (spec.clip.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
+      return `${path}.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+  }
+  return undefined;
+}
+
+// Engine defaults are elided so equal capture intents key identically:
+// `{ deviceScaleFactor: 1 }` and `{ fullPage: false }` mean the same capture
+// as no spec at all. Runs after the batch merge, so an entry that explicitly
+// sets a field back to its default wins over a batch-wide override first.
+function elideDefaults(
+  spec: ScreenshotCaptureOverrides,
+): ScreenshotCaptureOverrides {
+  let out: ScreenshotCaptureOverrides = {};
+  if (spec.viewport) {
+    out.viewport = spec.viewport;
+  }
+  if (spec.deviceScaleFactor !== undefined && spec.deviceScaleFactor !== 1) {
+    out.deviceScaleFactor = spec.deviceScaleFactor;
+  }
+  if (spec.fullPage) {
+    out.fullPage = true;
+  }
+  if (spec.clip) {
+    out.clip = spec.clip;
+  }
+  return out;
+}
+
+// Merge an entry's overrides onto the singular batch-wide defaults, per field.
+function mergeOverrides(
+  base: ScreenshotCaptureOverrides,
+  entry: ScreenshotCaptureOverrides,
+): ScreenshotCaptureOverrides {
+  let merged: ScreenshotCaptureOverrides = {};
+  let viewport = entry.viewport ?? base.viewport;
+  if (viewport) {
+    merged.viewport = viewport;
+  }
+  let deviceScaleFactor = entry.deviceScaleFactor ?? base.deviceScaleFactor;
+  if (deviceScaleFactor !== undefined) {
+    merged.deviceScaleFactor = deviceScaleFactor;
+  }
+  let fullPage = entry.fullPage ?? base.fullPage;
+  if (fullPage !== undefined) {
+    merged.fullPage = fullPage;
+  }
+  // An entry that sets `clip` at all (including `clip: null` to unset) wins over
+  // the batch-wide default; only an absent entry clip inherits the base. `??`
+  // would wrongly treat `clip: null` as "inherit".
+  let clip = entry.clip !== undefined ? entry.clip : base.clip;
+  if (clip) {
+    merged.clip = clip;
+  }
+  return merged;
 }
 
 export function parseScreenshotCaptureSpec(
@@ -101,186 +362,78 @@ export function parseScreenshotCaptureSpec(
     }
   }
 
-  let spec: ScreenshotCaptureSpec = {};
-
-  if (raw.viewport !== undefined) {
-    let viewport = raw.viewport;
-    if (!isPlainObject(viewport)) {
-      return {
-        error:
-          'captureSpec.viewport must have positive integer width and height',
-      };
-    }
-    for (let key of Object.keys(viewport)) {
-      if (!CAPTURE_SPEC_VIEWPORT_FIELDS.has(key)) {
-        return {
-          error: `captureSpec.viewport.${key} is not a supported field`,
-        };
-      }
-    }
-    if (
-      !isPositiveInteger(viewport.width) ||
-      !isPositiveInteger(viewport.height)
-    ) {
-      return {
-        error:
-          'captureSpec.viewport must have positive integer width and height',
-      };
-    }
-    if (viewport.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
-      return {
-        error: `captureSpec.viewport.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
-      };
-    }
-    if (viewport.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
-      return {
-        error: `captureSpec.viewport.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
-      };
-    }
-    spec.viewport = { width: viewport.width, height: viewport.height };
+  let singular = parseOverrideFields(raw, 'captureSpec');
+  if (singular.error !== undefined) {
+    return { error: singular.error };
   }
 
-  if (raw.deviceScaleFactor !== undefined) {
-    let scale = raw.deviceScaleFactor;
-    if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) {
-      return {
-        error: 'captureSpec.deviceScaleFactor must be a positive number',
-      };
+  if (raw.captures === undefined) {
+    let crossError = checkMergedOverrides(singular.overrides, 'captureSpec');
+    if (crossError !== undefined) {
+      return { error: crossError };
     }
-    if (scale > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR) {
-      return {
-        error: `captureSpec.deviceScaleFactor must be <= ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
-      };
-    }
-    // 1 is the engine default: elide it so `{ deviceScaleFactor: 1 }` means
-    // the same capture as no spec at all and keeps the canonical fast path.
-    if (scale !== 1) {
-      spec.deviceScaleFactor = scale;
-    }
+    let spec = elideDefaults(singular.overrides);
+    // A spec whose every field matched an engine default normalizes to null:
+    // it means the canonical capture, and null is what consumers key that
+    // classification on.
+    return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
   }
 
-  if (raw.fullPage !== undefined) {
-    if (typeof raw.fullPage !== 'boolean') {
-      return { error: 'captureSpec.fullPage must be a boolean' };
-    }
-    // false is the engine default: elide it (see deviceScaleFactor above).
-    if (raw.fullPage) {
-      spec.fullPage = true;
-    }
+  // Batch: up to SCREENSHOT_MAX_CAPTURES named entries, each capturing the
+  // same settled render. The singular fields act as batch-wide defaults and
+  // are folded into every entry, so the normalized spec's entries are
+  // self-contained. A batch spec always has overrides (the `captures` key),
+  // so it can never classify as canonical.
+  if (!Array.isArray(raw.captures)) {
+    return { error: 'captureSpec.captures must be an array' };
   }
-
-  if (raw.clip !== undefined) {
-    let clip = raw.clip;
-    if (!isPlainObject(clip)) {
-      return {
-        error:
-          'captureSpec.clip must have non-negative x/y and positive integer width/height',
-      };
-    }
-    for (let key of Object.keys(clip)) {
-      if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
-        return { error: `captureSpec.clip.${key} is not a supported field` };
-      }
-    }
-    if (
-      typeof clip.x !== 'number' ||
-      typeof clip.y !== 'number' ||
-      !Number.isFinite(clip.x) ||
-      !Number.isFinite(clip.y) ||
-      clip.x < 0 ||
-      clip.y < 0 ||
-      !isPositiveInteger(clip.width) ||
-      !isPositiveInteger(clip.height)
-    ) {
-      return {
-        error:
-          'captureSpec.clip must have non-negative x/y and positive integer width/height',
-      };
-    }
-    // The clip's extent is bounded by the same caps as the viewport whether
-    // or not one was sent: Puppeteer captures beyond the viewport by default
-    // (`captureBeyondViewport`), so an unbounded clip would be a way around
-    // the viewport cost caps.
-    if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
-      return {
-        error: `captureSpec.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
-      };
-    }
-    if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
-      return {
-        error: `captureSpec.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
-      };
-    }
-    spec.clip = {
-      x: clip.x,
-      y: clip.y,
-      width: clip.width,
-      height: clip.height,
-    };
+  if (raw.captures.length === 0) {
+    return { error: 'captureSpec.captures must not be empty' };
   }
-
-  if (spec.fullPage && spec.clip) {
+  if (raw.captures.length > SCREENSHOT_MAX_CAPTURES) {
     return {
-      error: 'captureSpec cannot set both fullPage and clip',
+      error: `captureSpec.captures must have at most ${SCREENSHOT_MAX_CAPTURES} entries`,
     };
   }
 
-  // Tighter containment when the caller declared a viewport: the layout was
-  // requested at that size, so a clip past its edge is caller error — the
-  // region would be unstyled overflow or blank area past the document edge.
-  if (spec.clip && spec.viewport) {
-    if (spec.clip.x + spec.clip.width > spec.viewport.width) {
-      return {
-        error: 'captureSpec.clip exceeds captureSpec.viewport.width',
-      };
+  let seenNames = new Set<string>();
+  let entries: ScreenshotCaptureEntry[] = [];
+  for (let i = 0; i < raw.captures.length; i++) {
+    let rawEntry: unknown = raw.captures[i];
+    let path = `captureSpec.captures[${i}]`;
+    if (!isPlainObject(rawEntry)) {
+      return { error: `${path} must be an object` };
     }
-    if (spec.clip.y + spec.clip.height > spec.viewport.height) {
-      return {
-        error: 'captureSpec.clip exceeds captureSpec.viewport.height',
-      };
-    }
-  }
-
-  // The CSS caps compose with the scale factor: what Chromium renders is
-  // physical pixels, and each capture edge must stay under the texture cap.
-  // fullPage's extent (the document scroll size) isn't knowable here; the
-  // capture path enforces the same cap on it at capture time.
-  let effectiveScale = spec.deviceScaleFactor ?? 1;
-  if (spec.viewport) {
-    if (
-      spec.viewport.width * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
-    ) {
-      return {
-        error: `captureSpec.viewport.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
-      };
+    for (let key of Object.keys(rawEntry)) {
+      if (!CAPTURE_ENTRY_FIELDS.has(key)) {
+        return { error: `${path}.${key} is not a supported field` };
+      }
     }
     if (
-      spec.viewport.height * effectiveScale >
-      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+      typeof rawEntry.name !== 'string' ||
+      rawEntry.name.trim().length === 0
     ) {
-      return {
-        error: `captureSpec.viewport.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
-      };
+      return { error: `${path}.name must be a non-empty string` };
     }
-  }
-  if (spec.clip) {
-    if (spec.clip.width * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
-      return {
-        error: `captureSpec.clip.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
-      };
+    let name = rawEntry.name;
+    if (seenNames.has(name)) {
+      return { error: `${path}.name "${name}" is duplicated` };
     }
-    if (spec.clip.height * effectiveScale > SCREENSHOT_MAX_PHYSICAL_EDGE_PX) {
-      return {
-        error: `captureSpec.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`,
-      };
+    seenNames.add(name);
+
+    let parsed = parseOverrideFields(rawEntry, path);
+    if (parsed.error !== undefined) {
+      return { error: parsed.error };
     }
+    let merged = mergeOverrides(singular.overrides, parsed.overrides);
+    let crossError = checkMergedOverrides(merged, path);
+    if (crossError !== undefined) {
+      return { error: crossError };
+    }
+    entries.push({ name, ...elideDefaults(merged) });
   }
 
-  // A spec whose every field matched an engine default normalizes to null:
-  // it means the canonical capture, and null is what consumers key that
-  // classification on.
-  return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
+  return { captureSpec: { captures: entries } };
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are

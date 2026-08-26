@@ -916,13 +916,9 @@ export type RunCommandResponse = {
   meta?: PrerenderResponseMeta;
 };
 
-// Optional per-capture overrides for a screenshot render. All fields are
-// JSON-serializable so this rides through the worker queue on
-// `ScreenshotCardArgs`. Bounds are enforced by the realm-server handler
-// (`handle-screenshot-card.ts`) before the job is enqueued; the capture path
-// (`captureScreenshot`) treats these as already-validated but still rejects the
-// mutually-exclusive `fullPage` + `clip` combination defensively.
-export type ScreenshotCaptureSpec = {
+// The individual capture overrides shared by the singular spec and each batch
+// entry. All fields optional and JSON-serializable.
+export type ScreenshotCaptureOverrides = {
   // CSS-pixel render viewport applied via `page.setViewport` before the render
   // settles, then restored so pooled pages don't leak the size into later index
   // prerenders.
@@ -935,8 +931,34 @@ export type ScreenshotCaptureSpec = {
   fullPage?: boolean;
   // CSS-pixel region to capture, passed straight to `page.screenshot`. Its
   // extent is bounded by the same caps as the viewport (and must sit within
-  // the viewport when one is given). Mutually exclusive with `fullPage`.
-  clip?: { x: number; y: number; width: number; height: number };
+  // the viewport when one is given). Mutually exclusive with `fullPage`. A
+  // batch entry may set `clip: null` to drop a batch-wide clip default (the
+  // only "back to no clip" spelling an object-valued field has); it elides
+  // away after the merge, so a normalized spec never carries null.
+  clip?: { x: number; y: number; width: number; height: number } | null;
+};
+
+// One entry in a batch capture: a name plus the same per-capture overrides. An
+// entry's fields override the singular spec fields, which act as batch-wide
+// defaults.
+export type ScreenshotCaptureEntry = ScreenshotCaptureOverrides & {
+  name: string;
+};
+
+// Optional per-capture overrides for a screenshot render. All fields are
+// JSON-serializable so this rides through the worker queue on
+// `ScreenshotCardArgs`. Bounds are enforced by the shared strict parse in
+// `capture-spec.ts` before the job is enqueued (both the realm-server POST
+// body and the prerender server's screenshot route run it); the capture path
+// (`captureScreenshot`) treats these as already-validated but still rejects
+// the mutually-exclusive `fullPage` + `clip` combination defensively and
+// bounds a fullPage capture's document extent, which no parse can know.
+//
+// When `captures` is present the render is captured once per entry (after a
+// single settle); each entry's overrides win over the singular fields. When it
+// is absent the singular fields describe a single capture.
+export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
+  captures?: ScreenshotCaptureEntry[];
 };
 
 export type ScreenshotPrerenderArgs = {
@@ -951,8 +973,25 @@ export type ScreenshotPrerenderArgs = {
   priority?: number;
 };
 
+// One captured image in a screenshot response. `deviceScaleFactor` is the
+// effective scale used for this capture, so a consumer can reconstruct physical
+// vs CSS pixel dimensions.
+export type ScreenshotCaptureResult = {
+  name: string;
+  base64: string;
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+};
+
 export type ScreenshotPrerenderResponse = {
   status: 'ready' | 'error' | 'unusable';
+  // Present on every ready response (a single entry named "default" when the
+  // request used the singular fields); error and unusable responses carry
+  // none. The top-level `base64`/`width`/`height` mirror `captures[0]` for
+  // back-compat with the shipped host tool and the staging capture command,
+  // which read the singular fields.
+  captures?: ScreenshotCaptureResult[];
   base64?: string;
   width?: number;
   height?: number;
