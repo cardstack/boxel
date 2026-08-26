@@ -36,8 +36,10 @@ export class FeatureReel extends Component {
   private root?: HTMLElement;
   private c?: { run: ChoreoRun | null };
   private t?: { run: ChoreoRun | null };
+  private b?: { run: ChoreoRun | null };
   private score: ChoreoRun | null = null;
   private titleScore: ChoreoRun | null = null;
+  private brandScore: ChoreoRun | null = null;
   private externallyDriven = false;
   private raf = 0;
   private previewStart = 0;
@@ -108,6 +110,14 @@ export class FeatureReel extends Component {
           this.titleScore = titles;
         }
         runs.push(titles);
+      }
+      const brand = this.b?.run ?? this.brandScore;
+      if (brand) {
+        if (brand !== this.brandScore) {
+          brand.pause();
+          this.brandScore = brand;
+        }
+        runs.push(brand);
       }
       return runs;
     },
@@ -212,6 +222,12 @@ export class FeatureReel extends Component {
     }
   );
 
+  wireBrand = modifier(
+    (_el: Element, [b]: [{ run: ChoreoRun | null }, number]) => {
+      this.b = b;
+    }
+  );
+
   register = modifier((el: HTMLElement) => {
     this.root = el;
     const shell = el.closest<HTMLElement>('.app-shell');
@@ -252,6 +268,7 @@ export class FeatureReel extends Component {
     );
     this.adoptForPreview(this.c?.run ?? null, 'score', previewTime);
     this.adoptForPreview(this.t?.run ?? null, 'titleScore', previewTime);
+    this.adoptForPreview(this.b?.run ?? null, 'brandScore', previewTime);
     void this.compositor.foldTo(previewTime, { parameters: false });
     if (this.root) {
       this.root.dataset.scoreTime = previewTime.toFixed(3);
@@ -261,7 +278,7 @@ export class FeatureReel extends Component {
 
   private adoptForPreview(
     run: ChoreoRun | null,
-    key: 'score' | 'titleScore',
+    key: 'brandScore' | 'score' | 'titleScore',
     previewTime: number
   ) {
     if (!run || run === this[key]) {
@@ -421,16 +438,56 @@ export class FeatureReel extends Component {
         </c.Sequence>
       </Choreo>
 
-      {{! The hard cut: a full-frame poster plate, mounted by a clip's
-          presence fold — on screen from the first frame, cut away exactly
-          as the opening camera move begins. }}
-      {{#if this.poster}}
-        <div class="reel-poster">
-          <span class="reel-poster-rule" aria-hidden="true"></span>
-          <p class="reel-poster-word">Choreo</p>
-          <p class="reel-poster-tag">Motion. Choreographed.</p>
+      {{! The brand plane: poster → corner chip is a CROSSING, not a cut.
+          One region, one identity — the boundary fold flips both clips in
+          a single render pass, the changeset pairs the removed wordmark
+          with the inserted chip, and the flight is part of this plane's
+          own seekable score. The plate leaves as an ordinary removed
+          sprite the score fades. }}
+      <Choreo class="reel-brand" @quiet={{true}} as |b|>
+        <div
+          class="reel-brand-strip"
+          data-take={{this.take}}
+          {{this.wireBrand b this.take}}
+        >
+          {{#if this.poster}}
+            <div class="reel-poster" {{motion id="poster-plate" role="plate"}}>
+              <span class="reel-poster-rule" aria-hidden="true"></span>
+              <p class="reel-poster-word" {{motion id="brand" role="brand"}}>
+                Choreo
+              </p>
+              <p class="reel-poster-tag">Motion. Choreographed.</p>
+            </div>
+          {{else}}
+            <div class="reel-brand-chip">
+              <span
+                class="reel-brand-mark"
+                {{motion id="brand" role="brand"}}
+              >Choreo</span>
+            </div>
+          {{/if}}
         </div>
-      {{/if}}
+        <b.Sequence>
+          <b.Wait @duration={{0.45}} />
+          <b.Parallel>
+            {{! move-only: display type cannot hold proportions across a
+                6.5× FLIP — the mark condenses into the corner instead of
+                stretching a texture across the frame }}
+            <b.Move
+              @of={{b.received "brand"}}
+              @size={{false}}
+              @duration={{0.7}}
+              @ease={{GLIDE}}
+            />
+            <b.Tween
+              @of={{b.removed "plate"}}
+              @opacity={{array 1 0}}
+              @duration={{0.3}}
+              @ease={{GLIDE}}
+            />
+          </b.Parallel>
+        </b.Sequence>
+      </Choreo>
 
       {{! The title plane: its own Choreo region, a sibling of the camera'd
           world — viewport-anchored typography the demo camera cannot drag.
@@ -471,7 +528,9 @@ export class FeatureReel extends Component {
           />
         </div>
         <lt.Sequence>
-          <lt.Wait @duration={{0.15}} />
+          {{! the first third holds for the poster: type enters AFTER the
+              cut, never underneath the plate }}
+          <lt.Wait @duration={{0.55}} />
           <lt.Tween
             @of={{lt.id "lt-lightbox"}}
             @opacity={{array 0 1}}
@@ -479,7 +538,7 @@ export class FeatureReel extends Component {
             @duration={{0.55}}
             @ease={{GLIDE}}
           />
-          <lt.Wait @duration={{1.6}} />
+          <lt.Wait @duration={{1.2}} />
           <lt.Tween
             @of={{lt.id "lt-lightbox"}}
             @opacity={{array 1 0}}

@@ -38,6 +38,17 @@ const frames = (n: number) =>
 const opacityOf = (sel: string) =>
   getComputedStyle(find(sel) as HTMLElement).opacity;
 
+/**
+ * Gone from the PICTURE. A removed participant the score names is a
+ * Choreo leaver, and only a playing clock releases leavers — a scrub is
+ * a still and must stay reversible — so under an external clock the
+ * element may stand in the DOM at the opacity its fade landed on: zero.
+ */
+const visuallyGone = (sel: string) => {
+  const el = find(sel);
+  return !el || getComputedStyle(el).opacity === '0';
+};
+
 module('Acceptance | feature reel transport', function (hooks) {
   setupApplicationTest(hooks);
 
@@ -146,8 +157,8 @@ module('Acceptance | feature reel transport', function (hooks) {
       Boolean(find('.reel-lightbox .overlay')),
       '1.5s: the photo.open cue folded in'
     );
-    assert.false(
-      Boolean(find('.reel-poster')),
+    assert.true(
+      visuallyGone('.reel-poster'),
       '1.5s: the poster clip cut away at 0.45s'
     );
 
@@ -186,6 +197,49 @@ module('Acceptance | feature reel transport', function (hooks) {
     assert.true(
       Boolean(find('.reel-poster')),
       '0.05s: the poster clip re-derives PRESENT from a backward fold'
+    );
+  });
+
+  test('the poster crosses to the brand chip, and the flight is seekable', async function (assert) {
+    await visit('/_feature-reel');
+
+    // FIRST op on a fresh page lands mid-flight (window 0.45–1.15): the
+    // boundary fold flips both clips in one pass, the changeset pairs the
+    // wordmark with the chip, and the Move is sampled mid-journey
+    await reel().renderAt(0.8);
+    const chip = find('.reel-brand-mark') as HTMLElement;
+    assert.ok(chip, '0.8s: the chip is mounted');
+    const midFlight = chip.style.transform;
+    assert.true(
+      midFlight !== '' && midFlight !== 'none',
+      `0.8s: the crossing is mid-flight (${midFlight})`
+    );
+
+    // past the flight: the chip rests in the corner, the poster is gone
+    await reel().renderAt(5);
+    assert.true(visuallyGone('.reel-poster'), '5s: the poster has left');
+    assert.ok(find('.reel-brand-mark'), '5s: the chip holds the corner');
+
+    // the same mid-flight time, revisited without recrossing the
+    // boundary: the pair is unchanged and the sample must be identical
+    await reel().renderAt(0.8);
+    assert.strictEqual(
+      (find('.reel-brand-mark') as HTMLElement).style.transform,
+      midFlight,
+      '0.8s revisited: the flight resamples identically'
+    );
+
+    // backward across the boundary: the poster is re-derived, standing —
+    // and the region pairs the REVERSE crossing (chip → poster), which is
+    // interactive scrub semantics: a monotonic capture never recrosses,
+    // so the forward pair's geometry is the recorded one
+    await reel().renderAt(0.1);
+    assert.ok(find('.reel-poster'), '0.1s: the poster stands again');
+    await reel().renderAt(0.8);
+    const reflight = (find('.reel-brand-mark') as HTMLElement).style.transform;
+    assert.true(
+      reflight !== '' && reflight !== 'none',
+      `0.8s after a recross: a fresh forward pair flies again (${reflight})`
     );
   });
 });

@@ -123,6 +123,10 @@ export class Compositor {
   private lastTime = 0;
   private readonly clipPresence = new Map<string, boolean>();
   private readonly clipStates = new Map<string, ClipState>();
+  /** last value written per channel: channels are edge-triggered, so a
+   * re-fold at the same time writes nothing and a port only ever hears
+   * changes */
+  private readonly channelValues = new Map<string, number>();
   private readonly recent: SemanticAction[] = [];
   private readonly player: {
     pause(): void;
@@ -231,6 +235,20 @@ export class Compositor {
       }
       await port(cue.payload);
     }
+    // clips fold in two phases. Phase 1 computes every clip's state and,
+    // for a take LEAVING the screen in this fold, stands it at its edited
+    // sourceOut sample and lets it PAINT — a transition at the boundary
+    // pairs against the sample the edit chose, never a stale or natural
+    // pose. Phase 2 then lands every presence flip together, so a region's
+    // changeset sees the removal and the insertion in ONE render pass —
+    // which is exactly what lets it compile them as a crossing.
+    const resolved: {
+      clip: ClipSpec;
+      ports: ActorPorts;
+      present: boolean;
+      sample: number | null;
+    }[] = [];
+    const boundary: (() => void)[] = [];
     for (const clip of this.options.clips ?? []) {
       const ports = this.ports.get(clip.target);
       if (!ports) {
@@ -257,14 +275,48 @@ export class Compositor {
       }
       this.clipStates.set(clip.id, state);
       const present = state !== 'absent';
+      resolved.push({ clip, ports, present, sample });
+      // only a REAL present→absent transition owns an edited sample — a
+      // clip first seen already past its window was never up on this page
+      const leaving = this.clipPresence.get(clip.id) === true && !present;
+      // in preview the demo PLAYED to the boundary — its painted state is
+      // already the edited sample, and seeking it would fight playback
+      if (leaving && options?.parameters !== false) {
+        const port = ports.parameters?.[clip.parameter ?? 'time'];
+        if (port) {
+          boundary.push(() => {
+            this.writeChannel(`clip:${clip.id}`, port, clip.sourceOut);
+          });
+        }
+      }
+    }
+    if (boundary.length) {
+      for (const sampleOut of boundary) {
+        sampleOut();
+      }
+      await this.options.settle?.();
+    }
+    for (const { clip, ports, present, sample } of resolved) {
+      let mountedNow = false;
       if (this.clipPresence.get(clip.id) !== present) {
         this.clipPresence.set(clip.id, present);
         ports.presence?.(present);
+        // a fresh mount's subtree does not exist until Glimmer commits:
+        // its first clock write waits for the re-fold after settle, and a
+        // fresh unmount forgets its channel so a remount writes anew
+        if (present) {
+          mountedNow = true;
+        }
+        this.channelValues.delete(`clip:${clip.id}`);
       }
       // presence is structure and folds in every mode; SEEKING an actor's
       // engine is capture reconstruction, so preview skips it
-      if (sample !== null && options?.parameters !== false) {
-        ports.parameters?.[clip.parameter ?? 'time']?.(sample);
+      if (sample !== null && !mountedNow && options?.parameters !== false) {
+        this.writeChannel(
+          `clip:${clip.id}`,
+          ports.parameters?.[clip.parameter ?? 'time'],
+          sample
+        );
       }
     }
     if (options?.parameters !== false) {
@@ -272,12 +324,26 @@ export class Compositor {
         if (auto.from !== undefined && time < auto.from) {
           continue;
         }
-        this.ports
-          .get(auto.target)
-          ?.parameters?.[auto.name]?.(auto.sample(time));
+        this.writeChannel(
+          `${auto.target}::${auto.name}`,
+          this.ports.get(auto.target)?.parameters?.[auto.name],
+          auto.sample(time)
+        );
       }
     }
     this.lastTime = time;
+  }
+
+  private writeChannel(
+    key: string,
+    port: ((value: number) => void) | undefined,
+    value: number
+  ): void {
+    if (!port || this.channelValues.get(key) === value) {
+      return;
+    }
+    this.channelValues.set(key, value);
+    port(value);
   }
 
   /** Hand the transport back (teardown, or a preview reclaiming its runs). */
@@ -295,6 +361,11 @@ export class Compositor {
     await this.player.renderAt(t, { settle: false });
     await this.foldTo(t);
     await this.options.settle?.();
+    // the fold may have MOUNTED a clip; its first seek in the loop above
+    // hit a subtree that did not exist yet. Folding again is cheap (cues
+    // and presence are deduped) and re-writes every clock against the DOM
+    // that will actually be sampled.
+    await this.foldTo(t);
     await this.player.renderAt(t, { settle: false });
   }
 

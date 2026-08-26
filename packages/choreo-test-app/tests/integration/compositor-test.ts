@@ -370,4 +370,103 @@ module('Integration | compositor host', function () {
     await compositor.renderAt(3);
     assert.deepEqual(values, [1], 'the named port receives source time');
   });
+
+  test('a clip boundary is two-phase: the edited sample paints before any flip', async function (assert) {
+    const log: string[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [
+        { at: 0, id: 'a-take', sourceOut: 1, target: 'a' },
+        { at: 1, end: 'hold', id: 'b-take', sourceOut: 2, target: 'b' },
+      ],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+      settle: () => {
+        log.push('settle');
+      },
+    });
+    compositor.register('a', {
+      parameters: {
+        time: (v) => {
+          log.push(`a:${String(v)}`);
+        },
+      },
+      presence: (p) => {
+        log.push(`a-present:${String(p)}`);
+      },
+    });
+    compositor.register('b', {
+      presence: (p) => {
+        log.push(`b-present:${String(p)}`);
+      },
+    });
+
+    await compositor.renderAt(0.5);
+    log.length = 0;
+    await compositor.renderAt(1.5);
+
+    // the outgoing take stands at its edited sourceOut and PAINTS —
+    // then removal and insertion land adjacent, one render pass, so a
+    // region's changeset can pair them as a crossing
+    const sample = log.indexOf('a:1');
+    const settle = log.indexOf('settle');
+    const out = log.indexOf('a-present:false');
+    const incoming = log.indexOf('b-present:true');
+    assert.true(sample !== -1, 'the edited sourceOut sample is written');
+    assert.true(sample < settle, 'the sample precedes the paint barrier');
+    assert.true(settle < out, 'nothing unmounts before the sample painted');
+    assert.strictEqual(
+      Math.abs(out - incoming),
+      1,
+      'the flip lands as one adjacent pair — one render pass'
+    );
+  });
+
+  test('a preview fold flips the boundary without sampling or settling', async function (assert) {
+    const log: string[] = [];
+    const run = new FakeRun();
+    const compositor = createCompositor({
+      automations: [],
+      clips: [
+        { at: 0, id: 'a-take', sourceOut: 1, target: 'a' },
+        { at: 1, end: 'hold', id: 'b-take', sourceOut: 2, target: 'b' },
+      ],
+      cues: [],
+      duration: 15,
+      runs: () => [run],
+      settle: () => {
+        log.push('settle');
+      },
+    });
+    compositor.register('a', {
+      parameters: {
+        time: (v) => {
+          log.push(`a:${String(v)}`);
+        },
+      },
+      presence: (p) => {
+        log.push(`a-present:${String(p)}`);
+      },
+    });
+    compositor.register('b', {
+      presence: (p) => {
+        log.push(`b-present:${String(p)}`);
+      },
+    });
+    await compositor.foldTo(0.5, { parameters: false });
+    log.length = 0;
+    await compositor.foldTo(1.5, { parameters: false });
+    assert.false(
+      log.some((l) => l.startsWith('a:')),
+      'a playing demo already stands at the boundary — preview never seeks'
+    );
+    assert.false(log.includes('settle'), 'and never waits a paint barrier');
+    assert.deepEqual(
+      log.filter((l) => l.includes('present')),
+      ['a-present:false', 'b-present:true'],
+      'the flip itself is structure and folds in preview too'
+    );
+  });
 });

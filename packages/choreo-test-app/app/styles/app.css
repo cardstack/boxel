@@ -9049,3 +9049,29 @@ html[data-gm-dragging] * {
   letter-spacing: 0.22em;
   text-transform: uppercase;
 }
+
+/* ── The brand plane ─────────────────────────────────────────────────────
+   Poster and corner chip share one identity; the flight between them is
+   the brand region's own score. The chip rests where the crossing lands. */
+.reel-brand {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  pointer-events: none;
+}
+
+.reel-brand-chip {
+  position: absolute;
+  top: 4.5%;
+  right: 4.2%;
+}
+
+.reel-brand-mark {
+  display: inline-block;
+  color: #f3ece3;
+  opacity: 0.85;
+  font:
+    800 26px/1 'Syne',
+    sans-serif;
+  letter-spacing: -0.02em;
+}
