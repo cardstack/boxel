@@ -3,7 +3,7 @@ import { htmlSafe } from '@ember/template';
 import FileCodeIcon from '@cardstack/boxel-icons/file-code';
 import GlimmerComponent from '@glimmer/component';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   NumberField,
   StringField,

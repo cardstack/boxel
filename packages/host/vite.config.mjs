@@ -236,6 +236,11 @@ export default defineConfig(({ mode }) => ({
   build: {
     minify: false,
     rolldownOptions: {
+      // Bundled base-realm modules may import directly from an https URL
+      // (e.g. currency.gts's esm.run import). Leave those imports verbatim
+      // in the output; the browser fetches them at chunk load, matching how
+      // the loader-served module behaves.
+      external: [/^https:\/\//],
       output: {
         keepNames: true,
         ...(mode === 'production' ? { minify: true } : {}),
@@ -269,6 +274,15 @@ export default defineConfig(({ mode }) => ({
   },
   resolve: {
     alias: [
+      // Base-realm modules (bundled via app/lib/bundled-base.ts) import
+      // host tools as `@cardstack/boxel-host/tools/*` (and the pre-rename
+      // `commands/*` spelling). At runtime the virtual network shims those
+      // specifiers to app/tools modules (see app/tools/index.ts); this
+      // alias gives the bundler the same 1:1 mapping.
+      {
+        find: /^@cardstack\/boxel-host\/(?:tools|commands)\//,
+        replacement: `${__dirname}/app/tools/`,
+      },
       { find: 'path', replacement: require.resolve('path-browserify') },
       { find: 'stream', replacement: require.resolve('stream-browserify') },
       { find: /^util$/, replacement: require.resolve('util/') },

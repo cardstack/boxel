@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   FieldDef,
   NumberField,

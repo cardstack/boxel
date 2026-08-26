@@ -22,8 +22,25 @@ export function setupQUnit() {
     ) {
       return true;
     }
+    // QUnit reports a global error as message + the asset line it surfaced
+    // at, which for a bundled chunk names neither the failing request nor
+    // the call site. The stack lands in the failure's browser log instead.
+    let error = args[3];
+    if (error && error.stack) {
+      console.error(`[global-error] ${error.stack}`);
+    }
     return _originalOnError ? _originalOnError(message, ...args) : false;
   };
+
+  // Same reasoning for a rejection that reaches the window: the reported
+  // message alone doesn't identify what rejected. Listening (without
+  // preventDefault) only logs — QUnit still fails the test.
+  window.addEventListener('unhandledrejection', (event) => {
+    let reason = event.reason;
+    console.error(
+      `[global-rejection] ${(reason && (reason.stack || reason.message)) || String(reason)}`,
+    );
+  });
 
   QUnit.dump.maxDepth = 20;
   useTestWaiters(TestWaiters);

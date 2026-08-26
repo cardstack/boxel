@@ -13,10 +13,10 @@ import type { ColorFieldConfiguration } from '../util/color-utils';
 import { parseCssColor, parseCssColorSafe } from '../util/color-utils';
 import {
   detectColorFormat,
-  RichColorFormat,
+  type RichColorFormat,
   hexToRgba,
   hsvToRgb,
-  RGBA,
+  type RGBA,
   rgbaToFormatString,
   rgbaToHexString,
   rgbaToHsl,

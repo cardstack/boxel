@@ -13,6 +13,18 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 
+// Names the pending operation in a stuck-waiter dump. A query the worker
+// never answers otherwise reports as a bare `sqlite running`, which says
+// nothing about which statement (or which of several concurrent queries)
+// stalled — and since these run behind an in-page realm's request handler,
+// a stall here surfaces as a test timing out on unrelated-looking fetches.
+function sqliteWaiterLabel(args: unknown[]): string {
+  let [command, payload] = args as [unknown, { sql?: unknown } | undefined];
+  let label = `sqlite running ${String(command)}`;
+  let sql = typeof payload?.sql === 'string' ? payload.sql : undefined;
+  return sql ? `${label} ${sql.replace(/\s+/g, ' ').slice(0, 160)}` : label;
+}
+
 export default class SQLiteAdapter implements DBAdapter {
   readonly kind = 'sqlite';
   private _sqlite: typeof SQLiteWorker | undefined;
@@ -122,7 +134,7 @@ export default class SQLiteAdapter implements DBAdapter {
       );
     }
     return (async (...args: Parameters<typeof SQLiteWorker>) => {
-      return await waitForPromise(worker(...args), 'sqlite running');
+      return await waitForPromise(worker(...args), sqliteWaiterLabel(args));
     }) as typeof SQLiteWorker;
   }
 

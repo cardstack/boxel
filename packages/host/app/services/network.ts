@@ -13,6 +13,7 @@ import {
 
 import config from '@cardstack/host/config/environment';
 
+import { shimBundledBase } from '../lib/bundled-base';
 import { shimExternals } from '../lib/externals';
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
@@ -82,7 +83,14 @@ export default class NetworkService extends Service {
       '@cardstack/base/',
       resolvedBaseRealmURL.href,
     );
+    // Externals shim first: identity capture replays shims in registration
+    // order, and base modules re-export values whose declaring modules are
+    // externals (runtime-common, boxel-ui) — declaring modules must
+    // register ahead of their re-exporters.
     shimExternals(virtualNetwork);
+    // Base-realm modules ship inside the host bundle; any loader on this
+    // network serves them without fetching from the base realm.
+    shimBundledBase(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });

@@ -2,7 +2,7 @@ import { byteStreamToUint8Array } from '@cardstack/runtime-common';
 import TextFileIcon from '@cardstack/boxel-icons/file-text';
 import GlimmerComponent from '@glimmer/component';
 import {
-  BaseDefComponent,
+  type BaseDefComponent,
   Component,
   NumberField,
   StringField,

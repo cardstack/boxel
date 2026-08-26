@@ -323,8 +323,36 @@ export class Loader {
     },
   ) {
     this.fetchImplementation = fetch;
-    this.resolveImport =
-      resolveImport ?? ((moduleIdentifier) => moduleIdentifier);
+    let rawResolveImport =
+      resolveImport ?? ((moduleIdentifier: string) => moduleIdentifier);
+    let virtualNetwork = options?.virtualNetwork;
+    // Fold virtual-alias URL forms (e.g. https://cardstack.com/base/…) onto
+    // the real URL the network would serve them from, so both spellings of a
+    // module converge on one module-state entry, one shim lookup key, and one
+    // captured export identity. `resolveImport` itself only rewrites RRI /
+    // bare-package prefixes and passes full URLs through, so without this a
+    // virtual-alias import keys its own separate module state — and card
+    // serialization requires identities in real-URL form (module refs
+    // relativize against instance ids, which are real-form). Mapping an
+    // already-real URL is a no-op, so composed resolvers (cloneLoader wraps
+    // the parent's) stay idempotent.
+    this.resolveImport = virtualNetwork
+      ? (moduleIdentifier: string) => {
+          let resolved = rawResolveImport(moduleIdentifier);
+          // mapURL constructs a URL, so only URL-shaped identifiers can be
+          // folded; anything else (an unmapped prefix form, a relative
+          // specifier) passes through untouched.
+          if (
+            !resolved.startsWith('http://') &&
+            !resolved.startsWith('https://')
+          ) {
+            return resolved;
+          }
+          return (
+            virtualNetwork.mapURL(resolved, 'virtual-to-real')?.href ?? resolved
+          );
+        }
+      : rawResolveImport;
     this.retrySleep = options?.retrySleep;
     this.virtualNetwork = options?.virtualNetwork;
     this.moduleEvaluator =
@@ -646,6 +674,24 @@ export class Loader {
       return Loader.loaders.get(value);
     }
     return undefined;
+  }
+
+  // Realm modules that a Loader evaluates discover their loader via
+  // `import.meta.loader`, which the Loader injects at eval time. Modules
+  // compiled into the host bundle instead (and registered as loader shims —
+  // see the host's bundled-base registration) are evaluated by the
+  // platform's module system, where `import.meta.loader` does not exist.
+  // The host publishes its active loader here so bundled modules can fall
+  // back to it; module code reads this only when `import.meta.loader` is
+  // absent.
+  static #forBundledModules: Loader | undefined;
+
+  static setForBundledModules(loader: Loader) {
+    Loader.#forBundledModules = loader;
+  }
+
+  static forBundledModules(): Loader | undefined {
+    return Loader.#forBundledModules;
   }
 
   async import<T extends object>(
@@ -1087,9 +1133,16 @@ export class Loader {
     init?: RequestInit,
   ): Promise<MaybeCachedResponse> => {
     try {
-      let shimmedModule = this.moduleShims.get(
-        this.asRequest(urlOrRequest, init).url,
-      );
+      let shimmedModule =
+        this.moduleShims.get(this.asRequest(urlOrRequest, init).url) ??
+        // Modules shimmed on the virtual network (e.g. base modules
+        // compiled into the host bundle) are served to every loader
+        // sharing that network, including loaders constructed outside the
+        // host's loader service. This is a module-fetch path, so a shim
+        // registered under a realm URL can't shadow a card-instance GET.
+        (await this.virtualNetwork?.getShimmedModule(
+          this.asRequest(urlOrRequest, init).url,
+        ));
       if (shimmedModule) {
         let response = new Response();
         (response as any)[Symbol.for('shimmed-module')] = shimmedModule;
@@ -1216,6 +1269,18 @@ export class Loader {
   // (`https://localhost:4201/base/X`) for the same module. Returns the
   // input unchanged when no virtual alias is registered.
 
+  private vnShimIdentitiesCaptured = false;
+
+  private captureVirtualNetworkShimIdentities() {
+    if (this.vnShimIdentitiesCaptured || !this.virtualNetwork) {
+      return;
+    }
+    this.vnShimIdentitiesCaptured = true;
+    for (let [id, module] of this.virtualNetwork.syncShimEntries()) {
+      this.captureIdentitiesOfModuleExports(module, id);
+    }
+  }
+
   private captureIdentitiesOfModuleExports(
     module: any,
     moduleIdentifier: string,
@@ -1319,6 +1384,15 @@ export class Loader {
     this.setCanonicalModuleURL(moduleIdentifier, canonicalURL);
 
     if (loaded.type === 'shimmed') {
+      // Loader-evaluated modules capture export identities dependency-first
+      // (a re-exporting module always evaluates after the module that
+      // declares the export, so first-wins capture lands on the declaring
+      // module). Shims carry no dependency chain, so a loader whose first
+      // shim load is a re-exporter would mis-attribute identities. Replay
+      // the network's whole sync-shim inventory once, in registration
+      // order (registrars put declaring modules first), before any
+      // individual shim's capture.
+      this.captureVirtualNetworkShimIdentities();
       this.captureIdentitiesOfModuleExports(loaded.module, moduleIdentifier);
       this.fetchedModuleShims.add(this.moduleCacheKey(moduleIdentifier));
 
