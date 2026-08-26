@@ -9,6 +9,7 @@ import {
   createArming,
   motion,
   styles,
+  to,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { factor } from 'test-app/lib/tempo';
@@ -34,6 +35,9 @@ function t() {
     move: m,
   };
 }
+
+/** the corner radius, on its own short curve — Kiln's rule, not a skin swap */
+const radiusTween = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
 
 function radiusFor(slide: Slide) {
   return ['28px', '36px', '0px'][slide]!;
@@ -76,18 +80,17 @@ const STRESS = 0.72;
  * Magic Move stress — `/crossing-stress`, not the Kiln film at
  * `/crossing-reel`.
  *
- * Three full-viewport slides as counterpart trees: same ids (`xstress-hero`,
- * `xstress-title`, `xstress-chip`) in each, unique washes and ornaments. One
- * `<c.Crossing>` is the whole move — Keynote's rule, the same canned step
- * as the homepage: whatever paired, flies, the old skin riding above the
- * new one so type, pills, and plates crossfade (and the radius travels
- * because it was declared to the engine). Whatever didn't pair, fades.
+ * Three full-viewport slides. The beige plate is ONE element: `c.Move`
+ * tweens its real box (left/top/width/height) and `animate` tweens its
+ * radius — crop-scale of a wide slab onto a square is how Violet→Tide
+ * blew up. Titles and chips are different strings, so they pair as
+ * counterparts and `<c.Crossing>` crossfades the skins (homepage grammar).
+ * Unique washes fade.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
  * Loops are CSS transforms on the motion nodes themselves, so the pass
- * snapshots the live box — not a rest frame with a wiggling child inside.
- * `data-phase="crossing"` stills them for the run (`@quiet` pauses the
- * rest); they restart from rest on landing.
+ * snapshots the live box. `data-phase="crossing"` stills them for the run;
+ * they restart from rest on landing.
  */
 export class CrossingStress extends Component {
   @tracked slide: Slide = 0;
@@ -286,7 +289,6 @@ export class CrossingStress extends Component {
         class="xstress-stage"
         data-slide={{this.slide}}
         data-phase={{this.phase}}
-        @quiet={{true}}
         {{on "click" this.advance}}
         as |c|
       >
@@ -294,18 +296,38 @@ export class CrossingStress extends Component {
 
         {{#if this.crossing}}
           {{#let (t) as |tt|}}
-            {{! Same canned crossing as application.gts: default @swap="during"
-                so the leaving title/chip/hero ride the flight and dissolve
-                above the arriving ones — a @swap="none" cut is a jump. }}
-            <c.Crossing
-              @duration={{tt.move}}
-              @ease={{EASE}}
-              @leave={{tt.leave}}
-              @arrive={{tt.arrive}}
-              @overlap={{0.18}}
-            />
+            <c.Parallel>
+              {{! Type and pills: different content, so two skins in one
+                  flying box — the homepage crossing. }}
+              <c.Crossing
+                @duration={{tt.move}}
+                @ease={{EASE}}
+                @leave={{tt.leave}}
+                @arrive={{tt.arrive}}
+                @overlap={{0.18}}
+              />
+              {{! The plate is the same beige rect on every slide. Real box
+                  + radius tween, never crop-cover (Violet's width would
+                  scale Tide into a 48×48 square). }}
+              <c.Move
+                @of={{c.moved "hero"}}
+                @duration={{tt.move}}
+                @ease={{EASE}}
+              />
+            </c.Parallel>
           {{/let}}
         {{/if}}
+
+        <div
+          class="xstress-hero"
+          data-test-hero
+          {{motion
+            id="xstress-hero"
+            role="hero"
+            animate=(to borderRadius=(radiusFor this.slide))
+            transition=radiusTween
+          }}
+        ></div>
 
         {{#each deck as |s|}}
           {{#if (this.on s.n)}}
@@ -322,15 +344,6 @@ export class CrossingStress extends Component {
               <div
                 class="xstress-spark {{s.tone}}"
                 {{motion id=s.spark role="ambient"}}
-              ></div>
-              <div
-                class="xstress-hero {{s.tone}}"
-                data-test-hero
-                {{motion
-                  id="xstress-hero"
-                  role="hero"
-                  style=(styles borderRadius=(radiusFor s.n))
-                }}
               ></div>
               <b
                 class="xstress-title {{s.tone}}"

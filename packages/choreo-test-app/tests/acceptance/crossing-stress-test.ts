@@ -78,9 +78,11 @@ module('Acceptance | crossing stress', function (hooks) {
       document.querySelector('[data-choreo-orphans] [data-test-chip]'),
       'the leaving chip rides the flight as a skin'
     );
-    assert.ok(
-      document.querySelector('[data-choreo-orphans] [data-test-hero]'),
-      'the leaving plate rides the flight as a skin'
+    assert.strictEqual(
+      document.querySelectorAll('[data-choreo-orphans] [data-test-hero]')
+        .length,
+      0,
+      'the beige plate is the same node — it moves, it is not a counterpart skin'
     );
 
     await animationsSettled();
@@ -114,6 +116,33 @@ module('Acceptance | crossing stress', function (hooks) {
       Math.abs(violet.top - ember.top) > 20 ||
         Math.abs(violet.left - ember.left) > 20,
       `hero travelled into Violet's rest (${ember.left.toFixed(0)},${ember.top.toFixed(0)} → ${violet.left.toFixed(0)},${violet.top.toFixed(0)})`
+    );
+    assert.true(
+      parseFloat(getComputedStyle(hero).borderRadius) < 4,
+      `Violet's plate is square-cornered (${getComputedStyle(hero).borderRadius})`
+    );
+
+    // wrap-around: crop-scale of Violet's width onto Tide's square is
+    // the flight that used to explode; a real-box + radius tween must not
+    stress().go(0);
+    await settled();
+    await animationsSettled();
+    assert.strictEqual(root.dataset.slide, '0', 'back to Tide');
+    assert.dom('[data-test-title]').hasText('Tide');
+    const tideAgain = heroBox();
+    assert.true(
+      Math.abs(tideAgain.width - violet.width) > 30 ||
+        Math.abs(tideAgain.height - violet.height) > 20,
+      `hero tweened out of Violet's slab (${violet.width.toFixed(0)}×${violet.height.toFixed(0)} → ${tideAgain.width.toFixed(0)}×${tideAgain.height.toFixed(0)})`
+    );
+    assert.true(
+      tideAgain.width < window.innerWidth * 0.45 &&
+        tideAgain.height < window.innerHeight * 0.55,
+      `Violet→Tide stays a tile (${tideAgain.width.toFixed(0)}×${tideAgain.height.toFixed(0)})`
+    );
+    assert.true(
+      parseFloat(getComputedStyle(hero).borderRadius) > 16,
+      `radius tweened back from 0 (${getComputedStyle(hero).borderRadius})`
     );
     assert.strictEqual(orphanCount(), 0, 'no orphans after the last landing');
     assert.deepEqual(

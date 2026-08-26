@@ -3533,8 +3533,9 @@ html[data-gm-dragging] * {
   width: 22vmin;
   height: 22vmin;
   overflow: clip;
-  /* solid paint so the crossing's color-true crossfade has an rgb() to
-     tween — a gradient-only plate reports transparent and the pair dips */
+  border-radius: 28px;
+  /* solid paint so a crossing skin has an rgb() to tween; the gradient
+     re-renders at every real-box size instead of being stretched */
   background-color: #e8d9c4;
   background-image: linear-gradient(
     160deg,
@@ -3570,12 +3571,12 @@ html[data-gm-dragging] * {
   font-style: normal;
 }
 
-/* Tone classes travel with the element, so an orphan keeps its own box
-   instead of inheriting the destination slide. Tiles stay tiles — crop-scale
-   of an 80vh cream plate fills the viewport. */
+/* Same-DOM plate: layout keyed on the stage, not a tone class — it is
+   never orphaned. Titles/chips keep tone classes so a leaving skin
+   keeps its own box. */
 
 /* 01 Tide — small hero, gentle orbit, type centred */
-.xstress-hero.tide {
+.xstress-stage[data-slide='0'] .xstress-hero {
   top: 28%;
   left: calc(50% - 11vmin);
   width: 22vmin;
@@ -3602,7 +3603,7 @@ html[data-gm-dragging] * {
 }
 
 /* 02 Ember — tall tile on the right, not a wall */
-.xstress-hero.ember {
+.xstress-stage[data-slide='1'] .xstress-hero {
   top: 18%;
   right: 10%;
   bottom: auto;
@@ -3632,7 +3633,7 @@ html[data-gm-dragging] * {
 }
 
 /* 03 Violet — wide slab up top */
-.xstress-hero.violet {
+.xstress-stage[data-slide='2'] .xstress-hero {
   top: 12%;
   left: 10%;
   right: auto;
