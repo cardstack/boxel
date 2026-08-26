@@ -16,10 +16,10 @@
       "provenance": "periodic:Tree",
       "domainKit": null,
       "owner": "lucas",
-      "workState": "In Progress",
-      "notes": "App 2: Talent & Resource Tracker | 2026-08-26: needed by Quest Log (nested-task view) — lucas owns, not parallel-building. Quest Log stage 2 consumes it when it lands or falls back to in-app recursion as a recorded gap.",
-      "sharedSpec": null,
-      "specTarget": null,
+      "workState": "Done",
+      "notes": "App 2: Talent & Resource Tracker | 2026-08-26: needed by Quest Log (nested-task view) — lucas owns, not parallel-building. Quest Log stage 2 consumes it when it lands or falls back to in-app recursion as a recorded gap. | 2026-08-26 (richard assisting, per Richard: don’t wait on the spec): generic Tree built at components/tree.gts — flat-DFS render, path-keyed expansion, row block yielded; buildTree re-exported from utils. org-tree.gts is the named retrofit consumer (owner unchanged: lucas). Usage page TreeDemo/task-tree.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/tree",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -32,9 +32,14 @@
       "conceptKind": "component",
       "scope": "block",
       "aliasOf": null,
-      "specReadmeCodeBlocks": 0,
+      "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TreeDemo/task-tree",
+      "verifiedAt": "2026-08-26T08:30:32.000Z",
+      "specKind": "component",
+      "specExampleCount": 1,
+      "specReadmeChars": 1521,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TreeDemo/task-tree\"]"
     },
     "meta": {
       "adoptsFrom": {

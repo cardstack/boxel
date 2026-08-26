@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Sort utility",
+      "specType": "command",
+      "ref": {
+        "module": "../utils/sort",
+        "name": "default"
+      },
+      "readMe": "# Sort\n\n## Summary\nThe shared sort verb: one type-aware comparator so every list orders the same way. `sortBy(items, accessor, direction)` sorts stably; `compareValues` compares numbers numerically, Dates by time, strings with numeric-aware locale rules (\"2\" before \"10\"), booleans false-first. The two rules apps kept getting wrong are pinned: null/undefined/empty sort LAST in either direction (an unfilled field never floats to the top because the column flipped), and ties keep incoming order so a secondary sort survives. Holes in the item list (unloaded links) are skipped, not crashed on.\n\n## Usage\n```ts\nimport sortBy from './utils/sort';\n\nlet byDue = sortBy(tasks, (t) => t.dueDate, 'asc');      // undated tasks last\nlet byPriority = sortBy(byDue, (t) => priorityRank(PriorityField, t.priority));\n```\nFour shipped apps re-derived per-column sorting before this existed (the second-highest demand count on the P1 list); the Table block's `sortValue` columns are the natural feed.\n\n## Non-goals\nNot a query: server-side ordering belongs to the search index's `sort` expressions — this is for lists already in hand. No natural-language collation options beyond locale defaults; a consumer with a bespoke collation passes a pre-computed sort key through the accessor instead.",
+      "cardInfo": {
+        "name": "Sort",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

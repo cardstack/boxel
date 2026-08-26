@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Recommend command",
+      "specType": "command",
+      "ref": {
+        "module": "../recommend",
+        "name": "default"
+      },
+      "readMe": "# Recommend\n\n## Summary\nThe generic suggestion verb: \"given where I am, what next?\" Wraps the kernel's `OneShotLlmRequestCommand` with a grounded-suggestions contract — `goal` (direction), optional `context` (JSON facts about current state; suggestions must not invent progress), `count` (default 3) — and returns a JSON array of `{title, reason}`, validated or thrown. The tone is pinned in the system prompt: a knowledgeable friend, not a manager.\n\n## Usage\n```ts\nimport RecommendCommand from './recommend';\n\nlet { suggestions } = await new RecommendCommand(commandContext).execute({\n  goal: 'Learn to play rock songs on electric guitar',\n  context: JSON.stringify({ done: ['basic chords'], inProgress: ['pentatonic scale'] }),\n  count: 3,\n} as any);\nlet next = JSON.parse(suggestions); // [{title, reason}, …]\n```\nQuest Log's \"what should I learn next?\" is the first consumer; the Contract Generator's clause suggestions are the named second.\n\n## Non-goals\nIt does not act on suggestions — creating the recommended task is the caller's move, because acceptance is the user's. It does not rank against a catalog or search anything; grounding facts arrive in `context` or not at all.",
+      "cardInfo": {
+        "name": "Recommend",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

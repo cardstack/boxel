@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Summarize command",
+      "specType": "command",
+      "ref": {
+        "module": "../summarize",
+        "name": "default"
+      },
+      "readMe": "# Summarize\n\n## Summary\nThe generic AI summarization verb: content in, faithful summary out. Wraps the kernel's `OneShotLlmRequestCommand`; the contract is that `content` is the only source of facts, with optional `focus` (the angle) and `style` (\"one sentence\", \"bullets\"). Distinct from the kernel's Summarize Session host tool, which summarizes an AI room — this one takes whatever material the caller gathers: session notes, a thread, a document body.\n\n## Usage\n```ts\nimport SummarizeCommand from './summarize';\n\nlet { summary } = await new SummarizeCommand(commandContext).execute({\n  content: sessions.map((s) => s.notes).join('\\n---\\n'),\n  focus: 'what was accomplished this week',\n  style: 'short paragraph',\n} as any);\n```\nThe linked example is a real Note card whose body is natural summarization material. Quest Log's \"summarize my practice\" is the first consumer through the block.\n\n## Non-goals\nGathering the content is the caller's job — the block does not walk links or run queries. It does not store the summary anywhere; where a summary lives (a field, a note, a message) is app knowledge.",
+      "cardInfo": {
+        "name": "Summarize",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Note/template-row-discrepancy"
+        }
+      }
+    }
+  }
+}

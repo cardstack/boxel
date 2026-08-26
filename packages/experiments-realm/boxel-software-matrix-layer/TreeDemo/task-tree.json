@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Stage 1 task tree"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tree-demo",
+        "name": "TreeDemo"
+      }
+    },
+    "relationships": {
+      "records.0": {
+        "links": {
+          "self": "../Task/ship-stage-1b-card-blocks"
+        }
+      }
+    }
+  }
+}

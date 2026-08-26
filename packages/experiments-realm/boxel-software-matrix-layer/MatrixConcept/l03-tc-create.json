@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "lucas",
       "workState": "Done",
-      "notes": "App 2: Talent & Resource Tracker (v1.1)",
+      "notes": "App 2: Talent & Resource Tracker (v1.1) | 2026-08-26 check: row marked Done (lucas) but no sharedSpec/whereImplemented and auditStatus Missing — same discrepancy as Template. Kernel Instantiate/Save/POST cover the mechanics; coordinate before treating this row as open work.",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,

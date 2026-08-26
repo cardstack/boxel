@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Generate command",
+      "specType": "command",
+      "ref": {
+        "module": "../generate",
+        "name": "default"
+      },
+      "readMe": "# Generate\n\n## Summary\nThe generic AI generation verb: instructions in, artifact out. Wraps the kernel's `OneShotLlmRequestCommand` with the three-part contract every generation call ends up needing — `instructions` (the only authority on content), optional `context` (JSON facts the output must not contradict), optional `shape` (when the output must be machine-readable JSON). A shaped request returns valid JSON or throws; an unshaped one returns plain text with no preamble.\n\n## Usage\n```ts\nimport GenerateCommand from './generate';\n\nlet { output } = await new GenerateCommand(commandContext).execute({\n  instructions: 'Create a beginner learning plan for electric guitar, 4 phases, each with 3-5 concrete tasks.',\n  shape: '[{\"title\": string, \"children\": [{\"title\": string}]}]',\n} as any);\nlet plan = JSON.parse(output);\n```\nSix shipped apps hand-rolled this call before the block existed (the highest demand count on the P1 list). Quest Log's template generation is the first consumer through the block.\n\n## Non-goals\nIt does not create cards from the output — parsing the artifact into instances is the caller's (or Import's) job, because only the caller knows the target types. It is not conversational: one shot, no room, no history. Model choice defaults sensibly and stays a caller override.",
+      "cardInfo": {
+        "name": "Generate",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

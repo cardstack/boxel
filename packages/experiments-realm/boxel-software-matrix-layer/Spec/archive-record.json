@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Archive Record command",
+      "specType": "command",
+      "ref": {
+        "module": "../archive-record",
+        "name": "default"
+      },
+      "readMe": "# Archive Record\n\n## Summary\nThe single writer for sending any record out of the working set: writes `recordStatus` to Archived on the card it is given, legality checked against the Record Status block's transition graph before the write. A record that never carried a status is treated as live, so first-time archiving needs no backfill. Re-fetches the card before reading (a caller's copy may have unloaded links) and is idempotent — archiving an archived record reports, it does not throw.\n\n## Usage\n```ts\nimport ArchiveRecordCommand from './archive-record';\n\nawait new ArchiveRecordCommand(commandContext).execute({ card: quest } as any);\n```\nRestore Record is the way back. The natural target is any card carrying the Record Status field — Quest Log's Quest is the first (quest archiving is an explicit acceptance criterion there), so the linked in-use example lands with stage 2.\n\n## Non-goals\nHiding archived records is each consumer's query filter — the command writes one fact and nothing else. Hard deletion stays the platform's file-delete. Domain lifecycles (a paid invoice, a done task) are untouched; record lifecycle is deliberately a separate axis.",
+      "cardInfo": {
+        "name": "Archive Record",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Tree component",
+      "specType": "component",
+      "ref": {
+        "module": "../components/tree",
+        "name": "Tree"
+      },
+      "readMe": "# Tree\n\n## Summary\nThe generic tree view: expand/collapse over any parent-child structure. The block owns the mechanics every tree re-derives — carets, indentation, per-node expansion that survives data refreshes (keyed by path, not object identity), descendant rollup counts — and yields each row's content to the consumer, because what a node LOOKS like is domain knowledge (an employee with an avatar, a task with a status pill). `buildTree` (the cycle-safe forest builder already shared in utils) turns a flat list plus a parent edge into the node shape; consumers with links-based nesting map their structure directly.\n\n## Usage\n```gts\n<Tree @roots={{this.roots}} @defaultExpanded={{true}}>\n  <:row as |task meta|>\n    <span>{{task.cardTitle}}</span>\n    {{#if meta.hasChildren}}<span>{{meta.descendantCount}} subtasks</span>{{/if}}\n  </:row>\n</Tree>\n```\nWithout a `row` block, CardDef items render as their atom. The linked example is a usage page over the real stage-1 Task cards and their subtasks. The App 2 org chart (`components/org-tree.gts`) hand-rolls these mechanics with employee-specific rows and is the named retrofit consumer; Quest Log's nested-task view is the second.\n\n## Non-goals\nNo drag-to-reparent — mutation is a command's job, and the first consumer that needs it names the interaction. No selection model beyond what the consumer's own row content wires. Not virtualized: a tree past a few hundred visible rows wants a different component, and pretending otherwise here would hide that cliff.",
+      "cardInfo": {
+        "name": "Tree",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../TreeDemo/task-tree"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

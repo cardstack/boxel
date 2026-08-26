@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Filter utility",
+      "specType": "command",
+      "ref": {
+        "module": "../utils/filter",
+        "name": "default"
+      },
+      "readMe": "# Filter\n\n## Summary\nThe shared filter verb: predicate builders every list view composes instead of re-deriving. `filterBy(items, ...predicates)` AND-composes and skips holes; `textMatch(needle, ...accessors)` is the case-insensitive \"does any field mention this?\" every search box wants; `oneOf(allowed, accessor)` is the chip/facet filter where an empty selection means \"no filter\"; `withinRange(min, max, accessor)` covers numbers and dates with open bounds. The invariant: a filter never throws on a hole — an unloaded link or empty field simply doesn't match.\n\n## Usage\n```ts\nimport filterBy, { textMatch, oneOf } from './utils/filter';\n\nlet visible = filterBy(\n  tasks,\n  textMatch(query, (t) => t.title, (t) => t.details),\n  oneOf(selectedTags, (t) => t.tags?.[0]?.name),\n  (t) => t.recordStatus !== 'Archived',\n);\n```\nThree shipped apps re-derived exactly these predicates (P1 list); Quest Log's tag/status task filtering is the first consumer through the block.\n\n## Non-goals\nNot a query: index-backed filtering belongs to search `filter` expressions — this is for lists already in hand, where the two must agree the consumer derives both from one definition (the queue-lens pattern). No OR-composition helper yet — the first real consumer that needs OR names its shape.",
+      "cardInfo": {
+        "name": "Filter",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

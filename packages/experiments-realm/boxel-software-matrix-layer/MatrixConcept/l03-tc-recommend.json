@@ -16,10 +16,10 @@
       "provenance": "periodic:Recommend",
       "domainKit": null,
       "owner": "richard",
-      "workState": "Next",
-      "notes": "v1.1 \u00b7 Open, NOT blocked \u2014 contract templates for Contract Generator. Same LLM primitive as Classify (OneShotLlmRequestCommand); depends on Contract existing first",
-      "sharedSpec": null,
-      "specTarget": null,
+      "workState": "Done",
+      "notes": "v1.1 · Open, NOT blocked — contract templates for Contract Generator. Same LLM primitive as Classify (OneShotLlmRequestCommand); depends on Contract existing first | Quest Log stage 1d: built 2026-08-26 as the generic verb (supersedes the Contract-Generator-first plan; contract clauses become the second consumer). UI exercise deferred to stage 2.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/recommend",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -32,9 +32,14 @@
       "conceptKind": "command",
       "scope": "block",
       "aliasOf": null,
-      "specReadmeCodeBlocks": 0,
+      "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T08:27:39.000Z",
+      "specKind": "command",
+      "specExampleCount": 0,
+      "specReadmeChars": 1184,
+      "specExampleIds": null
     },
     "meta": {
       "adoptsFrom": {

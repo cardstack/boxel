@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice \u2192 new draft | content-calendar did NOT use Duplicate for recurring-series materialisation: a series is not a ContentPiece, so there is no source card to clone. Occurrences are minted via createCard instead. Duplicate stays unexercised by this app.",
+      "notes": "v1 · Built — experiments-realm/duplicate.gts, POC tier. Clones any card (contained fields + links, not computeds); the consumer patches the copy to decide what differs. Exercised live: invoice → new draft | content-calendar did NOT use Duplicate for recurring-series materialisation: a series is not a ContentPiece, so there is no source card to clone. Occurrences are minted via createCard instead. Duplicate stays unexercised by this app.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/duplicate",
       "specTarget": "shared block",
       "consumers": "revenue-os",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 2,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T08:27:39.000Z"
     },
     "meta": {
       "adoptsFrom": {

@@ -15,11 +15,11 @@
       "catalogMatch": null,
       "provenance": "periodic:Summarize",
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1d: built 2026-08-26. Distinct from kernel Summarize Session (AI-room tool). UI exercise deferred to stage 2.",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/summarize",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -32,9 +32,14 @@
       "conceptKind": "command",
       "scope": "block",
       "aliasOf": null,
-      "specReadmeCodeBlocks": 0,
+      "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T08:27:39.000Z",
+      "specKind": "command",
+      "specExampleCount": 1,
+      "specReadmeChars": 1106,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Note/template-row-discrepancy\"]"
     },
     "meta": {
       "adoptsFrom": {

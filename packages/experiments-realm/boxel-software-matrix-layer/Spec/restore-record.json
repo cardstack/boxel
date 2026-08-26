@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Restore Record command",
+      "specType": "command",
+      "ref": {
+        "module": "../restore-record",
+        "name": "default"
+      },
+      "readMe": "# Restore Record\n\n## Summary\nThe way back from Archive Record: returns a record to the working set by writing `recordStatus` to Active, legality checked against the Record Status transition graph. The pair are separate commands on purpose — a consumer surfaces Archive on live records and Restore on archived ones, and no call site carries a \"which direction?\" argument. Same safety rails as its sibling: re-fetch before read, idempotent on an already-active record.\n\n## Usage\n```ts\nimport RestoreRecordCommand from './restore-record';\n\nawait new RestoreRecordCommand(commandContext).execute({ card: quest } as any);\n```\nFirst consumer lands with Quest Log stage 2 (un-archiving a quest from the archived view).\n\n## Non-goals\nEverything Archive Record excludes: no query filtering, no hard-delete recovery, no domain-status changes. Restoring a record says nothing about where its domain lifecycle left off — that field was never touched.",
+      "cardInfo": {
+        "name": "Restore Record",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
