@@ -1,3 +1,8 @@
+---
+name: boxel-workspace-cardinal-rules
+description: Silent-failure traps to check when authoring Boxel cards and fields, including date formats, relationship JSON, media, queries, indexing batches, and base-card references.
+---
+
 # Boxel cardinal rules — silent-failure traps
 
 Rules discovered the hard way in a downstream Boxel workspace: each one passes lint and
