@@ -17,7 +17,7 @@ import {
 import {
   chooseScreenshotCardCoalesceDecision,
   estimateScreenshotQueueWait,
-  screenshotCardJobTimeoutSec,
+  SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
 } from '@cardstack/runtime-common/jobs/screenshot-card';
 import type {
   DBAdapter,
@@ -354,6 +354,56 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('an entry can unset a batch-wide clip with clip: null', async function (assert) {
+      // Object-valued fields have no scalar "back to default" spelling, so
+      // without `clip: null` a batch that declares a batch-wide clip could have
+      // no fullPage entry — the inherited clip would collide with fullPage. The
+      // unset drops the clip for that entry while the others still inherit it.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              captureSpec: {
+                clip: { x: 0, y: 0, width: 200, height: 150 },
+                captures: [
+                  { name: 'full', fullPage: true, clip: null },
+                  { name: 'thumb' },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.deepEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        {
+          captures: [
+            { name: 'full', fullPage: true },
+            { name: 'thumb', clip: { x: 0, y: 0, width: 200, height: 150 } },
+          ],
+        },
+        'the null entry drops the batch-wide clip; the bare entry inherits it',
+      );
+    });
+
     test('includeBase64: false strips capture-entry bytes on the capture-only path', async function (assert) {
       // A capture-only response's `captures` come straight from the engine
       // with per-entry base64; the canonical path rebuilds captures[0]
@@ -428,13 +478,19 @@ module(basename(import.meta.filename), function () {
         ['wide', 'thumb'],
         'entries keep their names and order',
       );
+      assert.true(
+        attrs.captures.every(
+          (capture: Record<string, unknown>) => capture.url === null,
+        ),
+        'capture-only entries carry url: null (one shape with the canonical path), never an absent url',
+      );
     });
 
     test('rejects a batch over the capture cap', async function (assert) {
-      let captures = Array.from({ length: 25 }, (_v, i) => ({
+      let captures = Array.from({ length: 13 }, (_v, i) => ({
         name: `c${i}`,
       }));
-      await expectCaptureSpecRejected(assert, { captures }, 'at most 24');
+      await expectCaptureSpecRejected(assert, { captures }, 'at most 12');
     });
 
     test('rejects an empty captures array', async function (assert) {
@@ -492,21 +548,45 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('scales the job timeout by capture count', function (assert) {
-      assert.strictEqual(
-        screenshotCardJobTimeoutSec(1),
-        60,
-        'a single capture keeps the 60s floor',
+    test('a batch job carries the flat timeout, not one scaled by capture count', async function (assert) {
+      // The batch ceiling is sized to finish within the sync wait, so the job
+      // timeout no longer scales with entry count — a batch and a singular
+      // capture both enqueue at the flat backstop.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
       );
+      let realmURL = 'http://example.test/';
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              captureSpec: {
+                captures: Array.from({ length: 12 }, (_v, i) => ({
+                  name: `c${i}`,
+                })),
+              },
+            },
+          },
+        })
+        .expect(201);
+
       assert.strictEqual(
-        screenshotCardJobTimeoutSec(3),
-        60,
-        'a small batch stays at the floor',
-      );
-      assert.strictEqual(
-        screenshotCardJobTimeoutSec(24),
-        78,
-        'a full 24-entry batch scales to 30 + 2*24',
+        published[0]?.timeout,
+        SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
+        'a full 12-entry batch enqueues at the flat 60s timeout',
       );
     });
 

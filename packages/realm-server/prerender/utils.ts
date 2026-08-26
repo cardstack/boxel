@@ -1214,10 +1214,29 @@ export interface ScreenshotCapture {
 // screenshot a broken-image placeholder than hang the capture. Internal
 // timeout (10s) guards against a slow or auth-failing image stalling the
 // whole flow indefinitely.
-async function waitForImagePaint(page: Page): Promise<void> {
+// The full budget for the pre-loop wait that covers the initial resource load.
+const IMAGE_PAINT_WAIT_MS = 10_000;
+// A far tighter budget for the per-viewport-switch re-wait inside a batch. This
+// call runs once per switch (up to `SCREENSHOT_MAX_CAPTURES - 1` times), so a
+// single slow or hanging image must not spend the full initial budget here and
+// multiply across entries — that would blow past the render timeout and fail
+// the whole batch instead of returning one stale capture among good ones.
+const VIEWPORT_SWITCH_PAINT_WAIT_MS = 2_000;
+
+// Wait for `<img>` element loads, CSS background-image fetches, and fonts that
+// the settle hook does not track, so the screenshot doesn't race them. The
+// browser-side work (a `document.querySelectorAll('*')` walk to find background
+// URLs, a probe `Image()` per distinct URL, `document.fonts.ready`) runs every
+// call regardless of whether anything is pending, all raced against
+// `timeoutMs`; the timeout bounds the combined wait, so one slow/hanging
+// resource costs the whole budget. Callers pass a small budget where this runs
+// repeatedly (see `VIEWPORT_SWITCH_PAINT_WAIT_MS`).
+async function waitForImagePaint(
+  page: Page,
+  timeoutMs = IMAGE_PAINT_WAIT_MS,
+): Promise<void> {
   let log = logger('prerenderer');
-  let summary = await page.evaluate(async () => {
-    const TIMEOUT_MS = 10_000;
+  let summary = await page.evaluate(async (TIMEOUT_MS) => {
     let race = <T>(p: Promise<T>): Promise<T | 'timeout'> =>
       Promise.race([
         p,
@@ -1269,7 +1288,7 @@ async function waitForImagePaint(page: Page): Promise<void> {
       bgUrls: bgUrls.size,
       timedOut: outcome === 'timeout',
     };
-  });
+  }, timeoutMs);
   log.debug(
     `waitForImagePaint done url=${page.url()} pendingImgs=${summary.pendingImgs} bgUrls=${summary.bgUrls} timedOut=${summary.timedOut}`,
   );
@@ -1649,12 +1668,13 @@ export async function captureScreenshot(
         // Reflow first so the resize's srcset / media-query re-evaluation has
         // kicked off, then wait out any image loads it started — a width or
         // scale change can begin fetches that two animation frames alone
-        // would race, capturing half-loaded imagery. When nothing new loads,
-        // the paint wait finds zero pending images and resolves after a
-        // single frame.
+        // would race, capturing half-loaded imagery. Bounded far tighter than
+        // the initial wait: this runs once per switch, so a slow/hanging image
+        // can't spend the full budget and multiply across entries. When
+        // nothing new loads, the wait costs only the DOM walk plus a frame.
         await page.setViewport(entryViewport);
         await waitForReflow(page);
-        await waitForImagePaint(page);
+        await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
         currentViewport = entryViewport;
       }
       let item = await captureOneEntry(

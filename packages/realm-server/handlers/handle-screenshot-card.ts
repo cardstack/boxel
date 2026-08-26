@@ -35,16 +35,20 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 
-// One entry of the response's `captures` array: the durable served URL is
-// the reference callers should embed (a re-capture rotates its bytes, never
-// the URL); `base64` rides along by default until callers migrate to URLs
-// (`includeBase64: false` opts out). `name` is null for ad-hoc captures —
-// it populates for declared-screenshot batches. `deviceScaleFactor` is the
-// effective scale the capture engine reports, or null when serving from the
-// ledger, which does not record it.
+// One entry of the response's `captures` array — one shape across both paths so
+// a caller can read a field without first knowing how the capture was produced.
+// `url` is the durable served URL to embed when the capture persisted under its
+// ledger identity (a re-capture rotates its bytes, never the URL); it is null on
+// a capture-only response (any custom spec, so every batch), whose bytes have no
+// durable reference — embed the `base64` instead. `base64` rides along by
+// default until callers migrate to URLs (`includeBase64: false` opts out).
+// `name` is null on the persisted canonical capture (the ledger identity carries
+// no caller name) and the caller's entry name (or "default") on a capture-only
+// response. `deviceScaleFactor` is the effective scale the capture engine
+// reports, or null when serving from the ledger, which does not record it.
 interface CaptureResult {
   name: string | null;
-  url: string;
+  url: string | null;
   width: number | null;
   height: number | null;
   deviceScaleFactor: number | null;
@@ -75,10 +79,11 @@ interface CaptureResult {
  * Response (201): `data.attributes` carries the raw capture fields —
  * `status`, `base64`, `width`, `height`, `contentType` — for
  * byte-compatibility with current-shape callers, plus `captures:
- * [{name, url, width, height, deviceScaleFactor, base64?}]` when the
- * capture persisted. A card the index doesn't know (or a server without a
- * MediaCache store) still captures and returns the raw fields, just
- * without `captures`.
+ * [{name, url, width, height, deviceScaleFactor, base64?}]` on every ready
+ * response. `url` is the durable served URL when the capture persisted under
+ * its ledger identity, and null otherwise (a capture-only custom spec / batch,
+ * or a card the index doesn't know / a server without a MediaCache store) —
+ * embed the `base64` in that case.
  *
  * Request body (JSON:API):
  * ```json
@@ -129,15 +134,17 @@ interface CaptureResult {
  * normalizes each entry to its fully-merged spec so the capture path iterates
  * them directly — viewport-filling entries against one settled render, while
  * each distinct fitted envelope re-lays-out the same hydrated card (see
- * `SCREENSHOT_MAX_CAPTURES` for the cost contract). The response's `captures` then
- * carries one `{ name, base64, width, height, deviceScaleFactor }` entry per
- * capture, with the top-level `base64`/`width`/`height` mirroring
- * `captures[0]` for byte-compatibility with singular-shape callers.
+ * `SCREENSHOT_MAX_CAPTURES` for the cost contract). The response's `captures`
+ * then carries one `{ name, url, width, height, deviceScaleFactor, base64? }`
+ * entry per capture — the same shape the canonical path emits, with `url: null`
+ * since a batch is never persisted — and the top-level `base64`/`width`/`height`
+ * mirror `captures[0]` for byte-compatibility with singular-shape callers.
  *
  * A spec with overrides — a batch always is one — is capture-only: the
  * ledger's canonical capture identity cannot represent it yet (the GET DSL
  * reserves those params), so it always renders fresh and returns raw bytes —
- * no ledger fast path, no MediaCache persist, no `captures` URL.
+ * no ledger fast path, no MediaCache persist, and every `captures` entry's
+ * `url` is null.
  *
  * The `runAs` user is derived from the authenticated JWT.
  */
@@ -379,13 +386,24 @@ export default function handleScreenshotCard({
       let attributes: Record<string, unknown> = { ...result };
       if (!withBase64) {
         delete attributes.base64;
-        // The capture engine's captures[] entries carry their own base64;
-        // honor the opt-out there too.
-        if (Array.isArray(attributes.captures)) {
-          attributes.captures = attributes.captures.map(
-            ({ base64: _dropped, ...rest }) => rest,
-          );
-        }
+      }
+      if (
+        Array.isArray(result.captures) &&
+        !(entryKey && result.status === 'ready')
+      ) {
+        // Capture-only response (any custom spec, so every batch): the engine's
+        // byte-only entries have no durable served URL. Normalize them into the
+        // one captures[] shape callers build on — url: null marks "no durable
+        // reference, embed the base64" — so captures[i].url is never a
+        // silently-undefined read. Honors the base64 opt-out here too.
+        attributes.captures = result.captures.map((c) => ({
+          name: c.name,
+          url: null,
+          width: c.width ?? null,
+          height: c.height ?? null,
+          deviceScaleFactor: c.deviceScaleFactor ?? null,
+          ...(withBase64 && c.base64 !== undefined ? { base64: c.base64 } : {}),
+        }));
       }
       if (entryKey && spec && result.status === 'ready') {
         // A canonical capture persisted under its ledger identity: replace

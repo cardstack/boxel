@@ -76,16 +76,19 @@ export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
 // parse time, so the capture path checks it against this cap itself.
 export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
-// Cap on batch size. For the viewport-filling formats every entry captures
-// on the same settled render, so the cap bounds screenshots-per-settle. A
-// fitted batch is costlier: each DISTINCT envelope re-lays-out the hydrated
-// card (route re-transition, settle, envelope-box and image-paint waits —
-// each individually bounded), and the whole batch shares one render timeout,
-// so a batch that outruns it returns nothing. 24 keeps the full standard
-// fitted-size gallery capturable in one request while the happy-path
-// per-envelope cost stays far inside that timeout; callers batching many
-// image-heavy envelopes should split the batch rather than raise this.
-export const SCREENSHOT_MAX_CAPTURES = 24;
+// Cap on batch size. A batch is capture-only (persist: null), so it must finish
+// within the handler's sync-wait budget (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s)
+// or it's discarded on the 503 and the retry re-renders from scratch — nothing
+// resumes. Viewport-filling entries share one settled render, so each costs only
+// a bounded viewport-switch paint wait (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) +
+// screenshot. A fitted batch is costlier: each DISTINCT envelope re-lays-out the
+// hydrated card (route re-transition, settle, envelope-box and image-paint waits
+// — each individually bounded), so it eats the budget faster. 12 keeps the
+// viewport-filling case well inside the window and leaves headroom for fitted
+// re-layout; callers batching many image-heavy envelopes should split the batch
+// rather than raise this. The ceiling can rise once incremental persistence lets
+// a batch resume instead of discard.
+export const SCREENSHOT_MAX_CAPTURES = 12;
 
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
@@ -202,50 +205,57 @@ function parseOverrideFields(
 
   if (raw.clip !== undefined) {
     let clip = raw.clip;
-    if (!isPlainObject(clip)) {
+    // `clip: null` is an explicit unset — the only way a batch entry can drop a
+    // batch-wide clip default, since object-valued fields have no scalar
+    // "back to default" spelling the way fullPage/deviceScaleFactor do. It
+    // elides away after the merge, so a normalized spec never carries it.
+    if (clip === null) {
+      overrides.clip = null;
+    } else if (!isPlainObject(clip)) {
       return {
         error: `${path}.clip must have non-negative x/y and positive integer width/height`,
       };
-    }
-    for (let key of Object.keys(clip)) {
-      if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
-        return { error: `${path}.clip.${key} is not a supported field` };
+    } else {
+      for (let key of Object.keys(clip)) {
+        if (!CAPTURE_SPEC_CLIP_FIELDS.has(key)) {
+          return { error: `${path}.clip.${key} is not a supported field` };
+        }
       }
-    }
-    if (
-      typeof clip.x !== 'number' ||
-      typeof clip.y !== 'number' ||
-      !Number.isFinite(clip.x) ||
-      !Number.isFinite(clip.y) ||
-      clip.x < 0 ||
-      clip.y < 0 ||
-      !isPositiveInteger(clip.width) ||
-      !isPositiveInteger(clip.height)
-    ) {
-      return {
-        error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+      if (
+        typeof clip.x !== 'number' ||
+        typeof clip.y !== 'number' ||
+        !Number.isFinite(clip.x) ||
+        !Number.isFinite(clip.y) ||
+        clip.x < 0 ||
+        clip.y < 0 ||
+        !isPositiveInteger(clip.width) ||
+        !isPositiveInteger(clip.height)
+      ) {
+        return {
+          error: `${path}.clip must have non-negative x/y and positive integer width/height`,
+        };
+      }
+      // The clip's extent is bounded by the same caps as the viewport whether
+      // or not one was sent: Puppeteer captures beyond the viewport by default
+      // (`captureBeyondViewport`), so an unbounded clip would be a way around
+      // the viewport cost caps.
+      if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+        return {
+          error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+        };
+      }
+      if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+        return {
+          error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+        };
+      }
+      overrides.clip = {
+        x: clip.x,
+        y: clip.y,
+        width: clip.width,
+        height: clip.height,
       };
     }
-    // The clip's extent is bounded by the same caps as the viewport whether
-    // or not one was sent: Puppeteer captures beyond the viewport by default
-    // (`captureBeyondViewport`), so an unbounded clip would be a way around
-    // the viewport cost caps.
-    if (clip.x + clip.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
-      return {
-        error: `${path}.clip x + width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
-      };
-    }
-    if (clip.y + clip.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
-      return {
-        error: `${path}.clip y + height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
-      };
-    }
-    overrides.clip = {
-      x: clip.x,
-      y: clip.y,
-      width: clip.width,
-      height: clip.height,
-    };
   }
 
   if (raw.envelope !== undefined) {
@@ -410,7 +420,10 @@ function mergeOverrides(
   if (fullPage !== undefined) {
     merged.fullPage = fullPage;
   }
-  let clip = entry.clip ?? base.clip;
+  // An entry that sets `clip` at all (including `clip: null` to unset) wins over
+  // the batch-wide default; only an absent entry clip inherits the base. `??`
+  // would wrongly treat `clip: null` as "inherit".
+  let clip = entry.clip !== undefined ? entry.clip : base.clip;
   if (clip) {
     merged.clip = clip;
   }

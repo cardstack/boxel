@@ -932,8 +932,11 @@ export type ScreenshotCaptureOverrides = {
   fullPage?: boolean;
   // CSS-pixel region to capture, passed straight to `page.screenshot`. Its
   // extent is bounded by the same caps as the viewport (and must sit within
-  // the viewport when one is given). Mutually exclusive with `fullPage`.
-  clip?: { x: number; y: number; width: number; height: number };
+  // the viewport when one is given). Mutually exclusive with `fullPage`. A
+  // batch entry may set `clip: null` to drop a batch-wide clip default (the
+  // only "back to no clip" spelling an object-valued field has); it elides
+  // away after the merge, so a normalized spec never carries null.
+  clip?: { x: number; y: number; width: number; height: number } | null;
   // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
   // parent-owned box rather than the viewport, so it needs this to lay out
   // and fire its `@container fitted-card` queries. Required for fitted
@@ -1439,7 +1442,12 @@ export type getCardCollection<T extends CardDef = CardDef> = (
   cardErrors: CardErrorJSONAPI[];
   isLoaded: boolean;
 };
-export type getCards<T extends CardDef = CardDef> = (
+// Generic over `CardDef | FileDef` (defaulting to `CardDef`) to match the
+// resource backing it — `StoreService.getSearchResource`, `SearchResource`, and
+// `getSearch` are all `<T extends CardDef | FileDef = CardDef>`. A file-typed
+// search (`getCards<FileDef>(...)`) is then `FileDef`-typed end to end instead
+// of a `CardDef[]` the caller has to cast.
+export type getCards<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -1513,7 +1521,33 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
+  // `scope` pins which rows the search returns and drives the element type:
+  // 'files' → `FileDef[]`, 'all' → `(CardDef | FileDef)[]`, and 'cards' (or
+  // omitted) → `CardDef[]`. When omitted the scope is inferred from the filter —
+  // an untyped query defaults to 'cards'. Prefer passing it explicitly over
+  // shaping the filter to coax a scope. Note: 'all' returns a card's instance
+  // row *and* its dual-indexed `.json` file row, so an untyped `scope: 'all'`
+  // search yields each card twice unless the caller dedups
+  // (e.g. `excludeCardInstanceFileRows()`).
+  //
+  // The element type follows the runtime `scope` argument rather than a free
+  // caller-supplied type parameter, so a file-scoped search is `FileDef`-typed
+  // without a cast and a card-scoped search cannot be mis-asserted as files.
+  search(
+    query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'files' },
+  ): Promise<FileDef[]>;
+  search(
+    query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'all' },
+  ): Promise<(CardDef | FileDef)[]>;
+  search<T extends CardDef = CardDef>(
+    query: Query,
+    realmURLs?: string[],
+    opts?: { scope?: 'cards' },
+  ): Promise<T[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 
