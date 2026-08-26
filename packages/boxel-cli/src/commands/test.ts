@@ -15,6 +15,7 @@ interface TestCliOptions {
   hostDistDir?: string;
   debug?: boolean;
   json?: boolean;
+  timeout?: string;
 }
 
 export function registerTestCommand(program: Command): void {
@@ -41,7 +42,21 @@ export function registerTestCommand(program: Command): void {
     )
     .option('--debug', 'Stream browser console output to stderr')
     .option('--json', 'Output structured JSON result')
+    .option(
+      '--timeout <ms>',
+      'Maximum time to wait for the whole QUnit suite to finish, in milliseconds. Defaults to 300000 (5 minutes).',
+    )
     .action(async (pathArg: string | undefined, opts: TestCliOptions) => {
+      let timeoutMs: number | undefined;
+      if (opts.timeout !== undefined) {
+        timeoutMs = Number(opts.timeout);
+        if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+          console.error(
+            `${FG_RED}Error:${RESET} --timeout must be a positive integer number of milliseconds`,
+          );
+          process.exit(1);
+        }
+      }
       let result: RunTestsResult;
       try {
         if (opts.realm) {
@@ -49,6 +64,7 @@ export function registerTestCommand(program: Command): void {
             ...(opts.hostAppUrl ? { hostAppUrl: opts.hostAppUrl } : {}),
             ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
             ...(opts.debug ? { debug: true } : {}),
+            ...(timeoutMs ? { timeoutMs } : {}),
           });
         } else {
           let workspaceDir = resolve(pathArg ?? process.cwd());
@@ -56,6 +72,7 @@ export function registerTestCommand(program: Command): void {
             workspaceDir,
             ...(opts.hostDistDir ? { hostDistDir: opts.hostDistDir } : {}),
             ...(opts.debug ? { debug: true } : {}),
+            ...(timeoutMs ? { timeoutMs } : {}),
           });
         }
       } catch (err) {

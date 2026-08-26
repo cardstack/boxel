@@ -179,6 +179,8 @@ export interface RunTestsOptions {
   hostDistDir?: string;
   /** Stream browser console output to stderr for debugging. */
   debug?: boolean;
+  /** Wait-for-runEnd timeout in ms; defaults to 300_000. */
+  timeoutMs?: number;
   profileManager?: ProfileManager;
 }
 
@@ -248,6 +250,7 @@ export async function runTestsForRealm(
       hostAppUrl,
       hostDistDir: options?.hostDistDir,
       debug: options?.debug,
+      timeoutMs: options?.timeoutMs,
     });
 
     let summary = summarizeQunitResults(qunitResults);
@@ -279,6 +282,8 @@ export interface RunTestsLocallyOptions {
   workspaceDir: string;
   hostDistDir?: string;
   debug?: boolean;
+  /** Wait-for-runEnd timeout in ms; defaults to 300_000. */
+  timeoutMs?: number;
   /** Override the bundled-realms root for tests; defaults to the CLI's vendored copy. */
   bundledRealmsDir?: string;
 }
@@ -317,6 +322,7 @@ export async function runTestsLocally(
       hostAppUrl: '__local__:',
       hostDistDir: options.hostDistDir,
       debug: options.debug,
+      timeoutMs: options.timeoutMs,
       realmMounts: [
         { prefix: 'workspace', root: workspaceDir },
         { prefix: 'base', root: baseDir },
