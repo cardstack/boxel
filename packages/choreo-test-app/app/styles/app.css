@@ -3135,6 +3135,84 @@ html[data-gm-dragging] * {
   height: 58%;
 }
 
+/* ── The title plane ─────────────────────────────────────────────────────
+   Its own Choreo region, a sibling of the camera'd world: viewport-
+   anchored on purpose, so the demo camera can dive without dragging the
+   typography with it. Ported from videos/choreo-feature-reel. */
+.reel-titles {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.reel-lower-third {
+  position: absolute;
+  top: 8.5%;
+  left: 4.2%;
+  width: min(680px, 48%);
+  color: #f3ece3;
+  pointer-events: none;
+  text-shadow: 0 2px 14px rgba(12, 9, 8, 0.5);
+  /* the rest pose is the stylesheet's: a lower third rests invisible and
+     slightly low; only the plane's score brings it up */
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.reel-lower-third__rule {
+  display: block;
+  width: 64px;
+  height: 2px;
+  margin-bottom: 16px;
+  background: #ff3b1f;
+  transform-origin: left center;
+}
+
+.reel-lower-third__label,
+.reel-lower-third__title,
+.reel-lower-third__detail {
+  margin: 0;
+}
+
+.reel-lower-third__label {
+  font:
+    500 20px/1.1 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.reel-lower-third__title {
+  max-width: 12ch;
+  margin-top: 12px;
+  font:
+    700 58px/0.96 'Syne',
+    sans-serif;
+  letter-spacing: -0.035em;
+}
+
+.reel-lower-third__detail {
+  margin-top: 10px;
+  color: #d2c9bf;
+  font:
+    400 26px/1.3 'IBM Plex Sans',
+    sans-serif;
+}
+
+.reel-lower-third[data-variant='eyebrow'] {
+  width: auto;
+}
+
+.reel-lower-third[data-variant='eyebrow'] .reel-lower-third__rule {
+  width: 42px;
+}
+
+.reel-lower-third[data-variant='proof'] {
+  top: auto;
+  bottom: 19%;
+}
+
 /* four columns on a roomy glass — a library, not a contact strip.
    Narrower glass gets fewer, bigger columns, so a dived print is always
    tall enough to sit inside instead of spilling past the edge.
