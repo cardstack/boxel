@@ -67,4 +67,67 @@ module('Unit | loader concurrent cycle completion', function () {
     assert.strictEqual(modA.a, 'a', 'the suspended root still evaluates');
     assert.strictEqual(modB.b, 'b', 'the concurrent root evaluates the cycle');
   });
+
+  test('a module evaluated out of the completing state reports every module it imported', async function (assert) {
+    let releaseSlow = new Deferred<void>();
+    let slowRequested = new Deferred<void>();
+    // The concurrent-root interleaving this module is built around, kept
+    // whole because it is what leaves `/a` evaluating straight out of
+    // 'registered-completing-deps' with every one of its edges still marked
+    // completing — the state in which a module's imports are recorded from
+    // nowhere else. `/slow` carries the assertion that matters most: it
+    // participates in no cycle, so a dependency record that keeps only
+    // cycle-free edges loses it too.
+    let sources: Record<string, string> = {
+      '/a': `import './b'; import './slow'; export const a = 'a';`,
+      '/b': `import './a'; export const b = 'b';`,
+      '/slow': `export const slow = 'slow';`,
+    };
+    let fetchImpl: typeof globalThis.fetch = async (input) => {
+      let url =
+        typeof input === 'string'
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url;
+      let path = new URL(url).pathname;
+      if (path === '/slow') {
+        slowRequested.fulfill();
+        await releaseSlow.promise;
+      }
+      let source = sources[path];
+      if (!source) {
+        return new Response('not found', { status: 404 });
+      }
+      return new Response(source, {
+        status: 200,
+        headers: { 'content-type': 'text/javascript' },
+      });
+    };
+    let loader = new Loader(fetchImpl);
+
+    let root1 = loader.import<{ a: string }>('http://race.example/a');
+    await slowRequested.promise;
+    let root2 = loader.import<{ b: string }>('http://race.example/b');
+    releaseSlow.fulfill();
+    await Promise.all([root1, root2]);
+
+    // The index records module dependencies from this, so an edge missing
+    // here is an edit to that module never invalidating its importer.
+    assert.deepEqual(
+      (await loader.getConsumedModules('http://race.example/a')).sort(),
+      ['http://race.example/b', 'http://race.example/slow'],
+      'the module that evaluated out of the completing state reports both imports',
+    );
+    assert.deepEqual(
+      (await loader.getConsumedModules('http://race.example/b')).sort(),
+      ['http://race.example/a', 'http://race.example/slow'],
+      'the concurrent root reports its import and what it reaches through the cycle',
+    );
+    assert.deepEqual(
+      await loader.getConsumedModules('http://race.example/slow'),
+      [],
+      'a leaf module consumes nothing',
+    );
+  });
 });
