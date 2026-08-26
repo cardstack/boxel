@@ -76,8 +76,14 @@ module('Unit | loader concurrent cycle completion', function () {
     // 'registered-completing-deps' with every one of its edges still marked
     // completing — the state in which a module's imports are recorded from
     // nowhere else. `/slow` carries the assertion that matters most: it
-    // participates in no cycle, so a dependency record that keeps only
-    // cycle-free edges loses it too.
+    // participates in no cycle, so a record that treats a completing edge as
+    // a cycle edge and discards it loses `/slow` too.
+    //
+    // The assertions below are just the true import closure, which the loader
+    // also produces when this interleaving does not happen — so the test only
+    // means something while the interleaving holds. Anyone restructuring it
+    // must re-verify it fails with `evaluate` narrowed back to
+    // `dep.type === 'dep'`, which should leave `/a` reporting nothing.
     let sources: Record<string, string> = {
       '/a': `import './b'; import './slow'; export const a = 'a';`,
       '/b': `import './a'; export const b = 'b';`,
