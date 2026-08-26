@@ -243,11 +243,26 @@ export async function settlePrerenderHtmlJobs(
   let lastState = '';
   await waitUntil(
     async () => {
+      // Only id/status/active_reservations drive the wait; the rest are what
+      // the timeout message needs to be actionable. The two ways this wait
+      // ends up stuck present identically in the first three — one unfulfilled
+      // row holding one reservation — and separate cleanly in the rest. A
+      // render still working through a large realm shows files_completed
+      // climbing against total_files and a small progress_age_sec. A worker
+      // that died or wedged mid-render shows a frozen files_completed, a
+      // progress_age_sec that keeps growing, and a reservation that ages past
+      // its locked_until.
       let rows = (await query(dbAdapter, [
-        `SELECT j.id, j.status,
+        `SELECT j.id, j.status, j.job_type,
+           EXTRACT(EPOCH FROM (NOW() - j.created_at))::int AS job_age_sec,
            (SELECT COUNT(*)::int FROM job_reservations r
-             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations
-         FROM jobs j WHERE`,
+             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations,
+           (SELECT COUNT(*)::int FROM job_reservations r
+             WHERE r.job_id = j.id AND r.completed_at IS NULL
+               AND r.locked_until <= NOW()) AS expired_reservations,
+           jp.files_completed, jp.total_files,
+           EXTRACT(EPOCH FROM (NOW() - jp.last_progress_at))::int AS progress_age_sec
+         FROM jobs j LEFT JOIN job_progress jp ON jp.job_id = j.id WHERE`,
         ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
       ] as Expression)) as {
         id: number;
@@ -276,7 +291,10 @@ export async function settlePrerenderHtmlJobs(
       timeout: opts?.timeout ?? 30000,
       interval: 50,
       timeoutMessage: () =>
-        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; last state: ${lastState}`,
+        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; ` +
+        `last state (a rising files_completed with a low progress_age_sec is a render that needs longer; ` +
+        `a frozen files_completed, a growing progress_age_sec, or expired_reservations > 0 is a wedged or dead worker): ` +
+        lastState,
     },
   );
 }

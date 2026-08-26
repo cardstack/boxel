@@ -30,6 +30,48 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
+// Wait for a freshly published realm to be both indexed and rendered.
+//
+// `awaitPrerenderHtml=true` is the gate every publish consumer uses
+// (boxel-cli's publish command, the host app, the publish handler's own
+// Location header): a published realm's deliverable is its HTML, and the
+// index pass spawns the prerender_html job fire-and-forget, so index-only
+// readiness answers ready while the render is still running. Holding here is
+// what keeps the render's duration off whatever budget the caller's next wait
+// carries — a from-scratch published-realm render runs the module pre-warm
+// sweep and takes as long as the realm is large and the runner is loaded.
+//
+// Poll rather than asking once: readiness bounds how long it holds a single
+// request and answers 503 with `Retry-After` once that budget is spent, so a
+// pass longer than the budget takes more than one request to observe.
+// `X-Boxel-Not-Ready` names the stage still outstanding, which is the whole
+// diagnosis when this times out — index vs prerender-html are different
+// failures with different causes.
+async function waitForPublishedRealmReady(
+  request: SuperTest<Test>,
+  publishedRealmPath: string,
+  publishedRealmHost: string,
+): Promise<void> {
+  let lastStatus = 'no response';
+  await waitUntil(
+    async () => {
+      let response = await request
+        .get(`${publishedRealmPath}_readiness-check?awaitPrerenderHtml=true`)
+        .set('Host', publishedRealmHost)
+        .set('Accept', 'application/vnd.api+json');
+      let stage = response.headers['x-boxel-not-ready'];
+      lastStatus = `HTTP ${response.status}${stage ? ` (not ready: ${stage})` : ''}`;
+      return response.status === 200;
+    },
+    {
+      timeout: 120_000,
+      interval: 1000,
+      timeoutMessage: () =>
+        `published realm ${publishedRealmHost}${publishedRealmPath} never passed its readiness check; last response: ${lastStatus}`,
+    },
+  );
+}
+
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module(
     'Realm Server Endpoints (not specific to one realm)',
@@ -1615,31 +1657,20 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           }
 
           // `_publish-realm` returns 202 before indexing finishes. Drive a
-          // reconcile pass to mount the published realm, then poll its
-          // readiness check until it reports ready, so the assertions below
-          // query indexed content. Poll rather than asking once: readiness
-          // bounds how long it will hold a single request and answers 503 with
-          // `Retry-After` once that budget is spent, so a from-scratch index
-          // longer than the budget takes more than one request to observe.
+          // reconcile pass to mount the published realm, then wait for it to
+          // report ready, so the assertions below query indexed, rendered
+          // content.
           await testRealmServer.testingOnlyReconcile();
-          await waitUntil(
-            async () =>
-              (
-                await request
-                  .get(`${publishedRealmPath}_readiness-check`)
-                  .set('Host', publishedRealmHost)
-                  .set('Accept', 'application/vnd.api+json')
-              ).status === 200,
-            {
-              timeout: 120_000,
-              interval: 1000,
-              timeoutMessage:
-                'published realm never passed its readiness check',
-            },
+          await waitForPublishedRealmReady(
+            request,
+            publishedRealmPath,
+            publishedRealmHost,
           );
-          // Readiness drains the index channel only; head HTML lands via the
-          // realm's prerender_html job, so settle that channel before the
-          // assertions read it.
+          // Readiness clears once every row's HTML is live for its generation;
+          // the job that wrote it finalizes a moment later. Settle the channel
+          // so the assertions never race that tail, and so a render that
+          // rejected fails here instead of surfacing as a missing-markup
+          // assertion.
           await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
@@ -1905,15 +1936,16 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           }
 
           await testRealmServer.testingOnlyReconcile();
-          let readinessResponse = await request
-            .get(`${publishedRealmPath}_readiness-check`)
-            .set('Host', publishedRealmHost)
-            .set('Accept', 'application/vnd.api+json');
-          if (readinessResponse.status !== 200) {
-            throw new Error(
-              `Published realm not ready: ${readinessResponse.status} ${readinessResponse.text}`,
-            );
-          }
+          await waitForPublishedRealmReady(
+            request,
+            publishedRealmPath,
+            publishedRealmHost,
+          );
+          // Readiness clears once every row's HTML is live for its generation;
+          // the job that wrote it finalizes a moment later. Settle the channel
+          // so the assertions never race that tail, and so a render that
+          // rejected fails here instead of surfacing as a wrong-status
+          // assertion.
           await settlePrerenderHtmlJobs(dbAdapter, publishedRealmURLString);
         },
         afterEach: async () => {
