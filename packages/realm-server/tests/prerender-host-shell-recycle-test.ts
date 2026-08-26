@@ -9,8 +9,10 @@ import {
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
-// server recycles its browser when that token differs from the one it warmed
-// against (the host was redeployed). See PRERENDER_HOST_SHELL_HASH_HEADER.
+// server recycles its browser for any token that isn't the one it warmed
+// against — including the first token it ever sees, since a server that boots
+// mid-deploy has warmed against the outgoing host bundle. See
+// PRERENDER_HOST_SHELL_HASH_HEADER.
 module(basename(import.meta.filename), function () {
   module('decideHostShellRecycle', function () {
     test('no token reported yet → no recycle, baseline unchanged', function (assert) {
@@ -24,9 +26,17 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('first token seen → adopt as baseline, no recycle', function (assert) {
+    // The regression this guards is the one that disarms the whole mechanism.
+    // A prerender server has no record of which host shell its pages loaded,
+    // and the deploy train restarts it before the realm server it loads that
+    // shell from — so on the first token it sees, "I warmed against something
+    // else" is the assumption that keeps stale pages out of the pool. Silently
+    // adopting the token as a baseline instead leaves a server rendering new
+    // realm source against an old bundle until ordinary pool churn replaces
+    // the tab.
+    test('first token seen → recycle, since the warm predates knowing the token', function (assert) {
       assert.deepEqual(decideHostShellRecycle('aaa', undefined), {
-        recycle: false,
+        recycle: true,
         nextWarmed: 'aaa',
       });
     });
