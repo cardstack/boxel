@@ -337,7 +337,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
           {{on 'click' @add}}
           data-test-add-new={{@field.name}}
         >
-          <IconPlus class='icon' width='12px' height='12px' role='presentation' />
+          <IconPlus
+            class='icon'
+            width='12px'
+            height='12px'
+            role='presentation'
+          />
           Add
           {{getPlural @field.card.displayName}}
         </Button>
@@ -703,6 +708,7 @@ export function getLinksToManyComponent({
                 {{effectiveFormat}}-effectiveFormat
                 {{unless arrayField.children.length "empty"}}
                 display-container-{{displayContainer}}'
+              data-card-field={{field.name}}
               data-test-plural-view-field={{field.name}}
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}

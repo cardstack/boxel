@@ -358,6 +358,15 @@ export function getBoxComponent(
                 }}
                   {{#if (isCard model.value)}}
                     {{#let model.value as |card|}}
+                      {{! Every rendered field boundary carries
+                          data-card-field=<fieldName> — here, on the
+                          compound-field wrapper below, and on the plural-field
+                          wrappers in contains-many-component and
+                          links-to-many-component — so selector-based screenshot
+                          capture and region discovery can address fields in
+                          templates that never opted in. Stamped
+                          unconditionally; inert for CSS. Omitted when no field
+                          context exists (a card rendered as the root). }}
                       <DefaultFormatsProvider
                         @value={{defaultFieldFormats effectiveFormats.cardDef}}
                       >
@@ -380,6 +389,7 @@ export function getBoxComponent(
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
+                          data-card-field={{field.name}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card
@@ -420,6 +430,7 @@ export function getBoxComponent(
                       <div
                         class='compound-field
                           {{effectiveFormats.fieldDef}}-format'
+                        data-card-field={{field.name}}
                         data-test-compound-field-format={{effectiveFormats.fieldDef}}
                         data-test-compound-field-component
                         ...attributes
