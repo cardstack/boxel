@@ -27,6 +27,7 @@ import {
   bool,
   cn,
   eq,
+  not,
   themeScope,
   themeScopedCss,
 } from '@cardstack/boxel-ui/helpers';
@@ -47,7 +48,7 @@ import type {
 function scrollToSection(sectionId: string, event: Event) {
   event.preventDefault();
   let navEl = event.currentTarget as HTMLElement;
-  let card = navEl.closest('.detailed-style-reference');
+  let card = navEl.closest('[data-theme-dashboard]');
   let section = card?.querySelector(
     `[id="${sectionId}"]`,
   ) as HTMLElement | null;
@@ -64,7 +65,8 @@ function scrollToSection(sectionId: string, event: Event) {
     scrollContainer.getBoundingClientRect().top -
     stickyNavHeight;
   scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
-  history.pushState(null, '', `#${sectionId}`);
+  // replaceState keeps the hash without polluting the host app's history
+  history.replaceState(null, '', `#${sectionId}`);
 }
 
 function findScrollableParent(el: HTMLElement): HTMLElement | null {
@@ -741,87 +743,81 @@ export class NavSection extends GlimmerComponent<{
   }
 }
 
-export class SimpleNavBar extends GlimmerComponent<{
-  Args: {
-    items?: SectionSignature[];
-  };
-  Element: HTMLElement;
-}> {
-  <template>
-    <nav class='structured-theme-nav' ...attributes>
-      <ul class='structured-theme-nav-list'>
-        {{#each @items as |navItem|}}
-          <li>
-            <Button
-              @as='anchor'
-              @href='#{{navItem.id}}'
-              @kind='secondary'
-              @size='small'
-              class='boxel-ellipsize'
-              {{on 'click' (fn scrollToSection navItem.id)}}
-            >
-              {{navItem.navTitle}}
-            </Button>
-          </li>
-        {{/each}}
-      </ul>
-    </nav>
-    <style scoped>
-      .structured-theme-nav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp) calc(var(--boxel-sp) * 2);
-        border-bottom: 1px solid var(--border);
-      }
-      .structured-theme-nav-list {
-        list-style-type: none;
-        padding: 0;
-        margin: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xs);
-      }
-    </style>
-  </template>
-}
-
 export class NavBar extends GlimmerComponent<{
   Args: {
     sections?: SectionSignature[];
   };
   Element: HTMLElement;
 }> {
+  @tracked private canScrollLeft = false;
+  @tracked private canScrollRight = false;
+
+  private navGrid: HTMLElement | null = null;
+
+  private get hasOverflow() {
+    return this.canScrollLeft || this.canScrollRight;
+  }
+
+  private trackOverflow = modifier((el: HTMLElement) => {
+    this.navGrid = el;
+    let update = () => this.updateScrollState(el);
+    el.addEventListener('scroll', update, { passive: true });
+    let observer = new ResizeObserver(update);
+    observer.observe(el);
+    update();
+    return () => {
+      el.removeEventListener('scroll', update);
+      observer.disconnect();
+      this.navGrid = null;
+    };
+  });
+
+  private updateScrollState(el: HTMLElement) {
+    let maxScrollLeft = el.scrollWidth - el.clientWidth;
+    let scrollLeft = Math.abs(el.scrollLeft);
+    this.canScrollLeft = scrollLeft > 1;
+    this.canScrollRight = scrollLeft < maxScrollLeft - 1;
+  }
+
   <template>
-    <nav class='dsr-nav' ...attributes>
-      <button
-        type='button'
-        class='nav-scroll nav-scroll--left'
-        aria-label='Scroll navigation left'
-        {{on 'click' (fn this.scrollTo 'left')}}
-      >
-        <ChevronCompactLeft />
-      </button>
-      <div class='nav-container'>
-        <div class='nav-grid'>
+    <nav class='dsr-nav' aria-label='Sections' ...attributes>
+      {{#if this.hasOverflow}}
+        <button
+          type='button'
+          class='nav-scroll nav-scroll--left'
+          aria-label='Scroll navigation left'
+          disabled={{not this.canScrollLeft}}
+          {{on 'click' (fn this.scrollTo 'left')}}
+        >
+          <ChevronCompactLeft />
+        </button>
+      {{/if}}
+      <div class={{cn 'nav-container' has-overflow=this.hasOverflow}}>
+        <ul class='nav-grid' {{this.trackOverflow}}>
           {{#each @sections as |section|}}
-            <a
-              href='#{{section.id}}'
-              class='nav-item'
-              {{on 'click' (fn scrollToSection section.id)}}
-            >{{section.navTitle}}</a>
+            <li>
+              <Button
+                @as='anchor'
+                @href='#{{section.id}}'
+                @kind='link-muted'
+                class='nav-item'
+                {{on 'click' (fn scrollToSection section.id)}}
+              >{{section.navTitle}}</Button>
+            </li>
           {{/each}}
-        </div>
+        </ul>
       </div>
-      <button
-        type='button'
-        class='nav-scroll nav-scroll--right'
-        aria-label='Scroll navigation right'
-        {{on 'click' (fn this.scrollTo 'right')}}
-      >
-        <ChevronCompactRight />
-      </button>
+      {{#if this.hasOverflow}}
+        <button
+          type='button'
+          class='nav-scroll nav-scroll--right'
+          aria-label='Scroll navigation right'
+          disabled={{not this.canScrollRight}}
+          {{on 'click' (fn this.scrollTo 'right')}}
+        >
+          <ChevronCompactRight />
+        </button>
+      {{/if}}
     </nav>
     <style scoped>
       /* Navigation */
@@ -830,14 +826,17 @@ export class NavBar extends GlimmerComponent<{
         top: 0;
         border-bottom: 1px solid var(--border);
         z-index: 10;
+        background: color-mix(in oklch, var(--background) 80%, transparent);
         backdrop-filter: blur(8px);
         display: flex;
         align-items: stretch;
-        padding-inline: var(--boxel-sp);
       }
       .nav-grid {
+        list-style: none;
+        margin: 0;
+        padding: 0;
         display: flex;
-        gap: calc(var(--boxel-sp) * 0.5);
+        gap: var(--boxel-sp-xs);
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
@@ -851,16 +850,8 @@ export class NavBar extends GlimmerComponent<{
       .nav-item {
         font-size: var(--boxel-font-size-sm);
         font-weight: 500;
-        color: var(--foreground);
-        text-decoration: none;
         white-space: nowrap;
-        padding: calc(var(--boxel-sp) * 0.5) calc(var(--boxel-sp) * 0.75);
-        border: none;
-        border-radius: calc(var(--boxel-border-radius) * 0.5);
-      }
-      .nav-item:hover {
-        background-color: var(--accent);
-        color: var(--accent-foreground);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
       }
       .nav-scroll {
         flex-shrink: 0;
@@ -868,7 +859,6 @@ export class NavBar extends GlimmerComponent<{
         background: none;
         color: var(--muted-foreground);
         width: 2.25rem;
-        height: 5rem;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -880,11 +870,17 @@ export class NavBar extends GlimmerComponent<{
         opacity: 0.5;
         padding: 0;
       }
-      .nav-scroll:hover,
+      .nav-scroll:hover:not(:disabled),
       .nav-scroll:focus-visible {
         color: var(--foreground);
-        outline: none;
-        background: color-mix(in lab, var(--foreground) 10%, transparent);
+        background: color-mix(in oklch, var(--foreground) 10%, transparent);
+      }
+      .nav-scroll:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+      }
+      .nav-scroll:disabled {
+        opacity: 0.2;
+        cursor: default;
       }
       .nav-scroll--left {
         order: -1;
@@ -898,8 +894,8 @@ export class NavBar extends GlimmerComponent<{
         display: flex;
         overflow: hidden;
       }
-      .nav-container::before,
-      .nav-container::after {
+      .nav-container.has-overflow::before,
+      .nav-container.has-overflow::after {
         content: '';
         position: absolute;
         top: 0;
@@ -908,7 +904,7 @@ export class NavBar extends GlimmerComponent<{
         pointer-events: none;
         z-index: 1;
       }
-      .nav-container::before {
+      .nav-container.has-overflow::before {
         left: 0;
         background: linear-gradient(
           to right,
@@ -916,14 +912,14 @@ export class NavBar extends GlimmerComponent<{
           transparent
         );
       }
-      .nav-container::after {
+      .nav-container.has-overflow::after {
         right: 0;
         background: linear-gradient(to left, var(--background) 5%, transparent);
       }
 
-      @media (max-width: 768px) {
+      @container (width <= 768px) {
         .dsr-nav {
-          padding: var(--boxel-sp);
+          padding-block: var(--boxel-sp);
         }
         .nav-grid {
           gap: var(--boxel-sp);
@@ -941,17 +937,15 @@ export class NavBar extends GlimmerComponent<{
 
   private scrollTo = (direction: 'left' | 'right', event: Event) => {
     event.preventDefault();
-    let navContainer = (event.currentTarget as HTMLElement)
-      ?.closest('.dsr-nav')
-      ?.querySelector('.nav-grid') as HTMLElement | null;
-    if (!navContainer) {
+    let navGrid = this.navGrid;
+    if (!navGrid) {
       return;
     }
     let offset =
       direction === 'left'
-        ? -navContainer.clientWidth * 0.8
-        : navContainer.clientWidth * 0.8;
-    navContainer.scrollBy({ left: offset, behavior: 'smooth' });
+        ? -navGrid.clientWidth * 0.8
+        : navGrid.clientWidth * 0.8;
+    navGrid.scrollBy({ left: offset, behavior: 'smooth' });
   };
 }
 
@@ -1429,6 +1423,7 @@ export class ThemeDashboard extends GlimmerComponent<{
       <article
         id='top'
         class='detailed-style-reference'
+        data-theme-dashboard
         data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
         ...attributes
       >
@@ -1479,6 +1474,9 @@ export class ThemeDashboard extends GlimmerComponent<{
           background-color: var(--background);
           color: var(--foreground);
           overflow-y: auto;
+          /* containment context for the NavBar's container queries, so
+             responsive rules key off the card's width, not the viewport */
+          container-type: inline-size;
         }
 
         .dsr-header :deep(h1) {

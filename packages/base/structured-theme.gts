@@ -40,7 +40,6 @@ import {
   ThemeImporter,
   CardContainerCss,
   ResetButton,
-  SimpleNavBar,
   type SectionSignature,
 } from './default-templates/theme-dashboard';
 
@@ -187,6 +186,7 @@ class Isolated extends Component<typeof StructuredTheme> {
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
+      @sections={{this.visibleSections}}
     >
       <:header>
         <ThemeDashboardHeader
@@ -199,11 +199,6 @@ class Isolated extends Component<typeof StructuredTheme> {
           @metaLabel='Theme Guide'
         />
       </:header>
-      <:navBar>
-        {{#if this.visibleSections.length}}
-          <SimpleNavBar @items={{this.visibleSections}} />
-        {{/if}}
-      </:navBar>
       <:default>
         {{#if this.showEmptyState}}
           <ThemeDashboardEmptyState />

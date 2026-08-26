@@ -18,7 +18,6 @@ import {
   ThemeImporter,
   CardContainerCss,
   ResetButton,
-  SimpleNavBar,
 } from './default-templates/theme-dashboard';
 
 import {
@@ -92,6 +91,7 @@ class Isolated extends Component<typeof StyleReference> {
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
+      @sections={{this.visibleSections}}
     >
       <:header>
         {{#if this.editMode}}
@@ -112,11 +112,6 @@ class Isolated extends Component<typeof StyleReference> {
           </header>
         {{/if}}
       </:header>
-      <:navBar>
-        {{#if this.visibleSections.length}}
-          <SimpleNavBar @items={{this.visibleSections}} />
-        {{/if}}
-      </:navBar>
       <:default>
         {{#if this.showEmptyState}}
           <ThemeDashboardEmptyState />
