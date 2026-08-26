@@ -869,6 +869,12 @@ export class Loader {
       | 'registered-completing-deps'
       | 'registered-with-deps'
       | 'evaluated',
+    // The modules whose own advance to each state is in flight further up this
+    // recursion, so a dep that lands back on one of them is a cycle edge rather
+    // than work to do. Held as cache keys, the same form `getModule` looks a
+    // module up under, so an ancestor reached by a different spelling of itself
+    // — extensionless against `.js`, an alias against the real URL — is still
+    // recognized as the ancestor it is.
     stack: {
       'registered-completing-deps': string[];
       'registered-with-deps': string[];
@@ -899,14 +905,32 @@ export class Loader {
             }
             let depModule = this.getModule(entry.moduleURL.href);
             if (!isEvaluatable(depModule)) {
-              // we always only await the first dep that actually needs work and
-              // then break back to the top-level state machine, so that we'll
-              // be working from the latest state.
+              // A dep short of evaluatable is either a cycle edge back into a
+              // walk already in flight, or work to do. Being on the stack is
+              // not enough to make it the former: an ancestor is only safe to
+              // record and leave to its own walk once it has registered, because
+              // registering is what gives it a dependency list of its own. An
+              // ancestor with no entry — or one still fetching, its caches
+              // discarded by a realm-mapping change while this walk was
+              // suspended — has named nothing yet, so it is work like any other
+              // dep, and re-entering the state machine is what re-establishes
+              // it. Recursing on it terminates for the same reason the first
+              // walk did: the fetch registers it, and the walk it starts finds
+              // this module on the stack and registered.
               if (
-                !stack['registered-completing-deps'].includes(
-                  entry.moduleURL.href,
+                isRegistered(depModule) &&
+                stack['registered-completing-deps'].includes(
+                  this.moduleCacheKey(entry.moduleURL.href),
                 )
               ) {
+                maybeReadyDeps.push({
+                  type: 'completing-dep',
+                  moduleURL: entry.moduleURL,
+                });
+              } else {
+                // we always only await the first dep that actually needs work and
+                // then break back to the top-level state machine, so that we'll
+                // be working from the latest state.
                 await this.advanceToState(
                   entry.moduleURL,
                   'registered-completing-deps',
@@ -915,17 +939,12 @@ export class Loader {
                     ...{
                       'registered-completing-deps': [
                         ...stack['registered-completing-deps'],
-                        resolvedURL.href,
+                        this.moduleCacheKey(resolvedURL.href),
                       ],
                     },
                   },
                 );
                 break outer_switch;
-              } else if (isRegistered(depModule)) {
-                maybeReadyDeps.push({
-                  type: 'completing-dep',
-                  moduleURL: entry.moduleURL,
-                });
               }
             } else if (depModule.state === 'registered-completing-deps') {
               maybeReadyDeps.push({
@@ -939,6 +958,11 @@ export class Loader {
               });
             }
           }
+          this.assertEveryDepRecorded(
+            resolvedURL.href,
+            maybeReadyDeps,
+            module.dependencyList,
+          );
           this.setModule(resolvedURL.href, {
             state: 'registered-completing-deps',
             implementation: module.implementation,
@@ -987,7 +1011,7 @@ export class Loader {
                     ...{
                       'registered-completing-deps': [
                         ...stack['registered-completing-deps'],
-                        resolvedURL.href,
+                        this.moduleCacheKey(resolvedURL.href),
                       ],
                     },
                   },
@@ -996,7 +1020,9 @@ export class Loader {
               }
               case 'registered-completing-deps': {
                 if (
-                  !stack['registered-with-deps'].includes(entry.moduleURL.href)
+                  !stack['registered-with-deps'].includes(
+                    this.moduleCacheKey(entry.moduleURL.href),
+                  )
                 ) {
                   await this.advanceToState(
                     entry.moduleURL,
@@ -1006,7 +1032,7 @@ export class Loader {
                       ...{
                         'registered-with-deps': [
                           ...stack['registered-with-deps'],
-                          resolvedURL.href,
+                          this.moduleCacheKey(resolvedURL.href),
                         ],
                       },
                     },
@@ -1030,6 +1056,11 @@ export class Loader {
                 });
             }
           }
+          this.assertEveryDepRecorded(
+            resolvedURL.href,
+            readyDeps,
+            module.dependencies,
+          );
           this.setModule(resolvedURL.href, {
             state: 'registered-with-deps',
             implementation: module.implementation,
@@ -1052,6 +1083,28 @@ export class Loader {
         default:
           throw assertNever(module);
       }
+    }
+  }
+
+  // `evaluate` binds a module's factory arguments positionally from the
+  // dependency list the registered-state transitions build, so a list that
+  // comes out shorter than the one the module declared does not fail where the
+  // entry was lost: the arguments after the gap shift down, and the factory is
+  // handed either the wrong module or nothing at all. Both transitions rebuild
+  // the list entry by entry and reach the commit only by running the loop to
+  // completion — every path that has work to do leaves through
+  // `break outer_switch` with nothing committed — so a length mismatch is a
+  // dropped edge and can be nothing else. Raising here names the module that
+  // dropped it instead of leaving a mis-bound factory to fail somewhere else.
+  private assertEveryDepRecorded(
+    moduleIdentifier: string,
+    recorded: EvaluatableDep[],
+    declared: (UnregisteredDep | EvaluatableDep)[],
+  ) {
+    if (recorded.length !== declared.length) {
+      throw new Error(
+        `bug: dependency list for ${moduleIdentifier} recorded ${recorded.length} of the ${declared.length} dependencies it declares`,
+      );
     }
   }
 
