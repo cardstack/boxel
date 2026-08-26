@@ -204,13 +204,23 @@ class Isolated extends Component<typeof StructuredTheme> {
     return [];
   }
 
+  // the visualizer renders ahead of the numbered sections; the nav lists
+  // it as Preview when the card has a theme (a theme-less edit view leads
+  // with the import section instead)
+  private get navSections() {
+    if (!this.hasThemeCss) {
+      return this.visibleSections;
+    }
+    return [{ id: 'preview', navTitle: 'Preview' }, ...this.visibleSections];
+  }
+
   <template>
     <ThemeDashboard
       class='structured-theme-card'
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
-      @sections={{this.visibleSections}}
+      @sections={{this.navSections}}
     >
       <:header>
         <ThemeDashboardHeader
@@ -230,6 +240,7 @@ class Isolated extends Component<typeof StructuredTheme> {
           <GridContainer class='structured-theme-grid'>
             {{#if this.showVisualizer}}
               <ThemeVisualizer
+                id='preview'
                 @toggleDarkMode={{this.toggleDarkMode}}
                 @isDarkMode={{this.isDarkMode}}
                 @fontStack={{@model.fontStacksFor this.isDarkMode}}

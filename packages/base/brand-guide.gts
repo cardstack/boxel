@@ -596,8 +596,8 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .brand-guide-mode-toggle {
         position: absolute;
-        top: var(--boxel-sp);
-        right: var(--boxel-sp);
+        top: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
       }
       .brand-guide-grid {
         gap: var(--boxel-sp-2xl);

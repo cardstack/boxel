@@ -89,13 +89,23 @@ class Isolated extends Component<typeof StyleReference> {
     ];
   }
 
+  // the visualizer renders ahead of the numbered sections; the nav lists
+  // it as Preview when the card has a theme (a theme-less edit view leads
+  // with the import section instead)
+  private get navSections() {
+    if (!this.hasThemeCss) {
+      return this.visibleSections;
+    }
+    return [{ id: 'preview', navTitle: 'Preview' }, ...this.visibleSections];
+  }
+
   <template>
     <ThemeDashboard
       class='style-reference'
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
-      @sections={{this.visibleSections}}
+      @sections={{this.navSections}}
     >
       <:header>
         {{#if this.editMode}}
@@ -121,6 +131,7 @@ class Isolated extends Component<typeof StyleReference> {
           <ThemeDashboardEmptyState />
         {{else}}
           <ThemeVisualizer
+            id='preview'
             class='style-ref-section'
             @toggleDarkMode={{this.toggleDarkMode}}
             @isDarkMode={{this.isDarkMode}}
