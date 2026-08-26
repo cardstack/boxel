@@ -54,12 +54,12 @@ const strayOf = (card: { width: number; x: number }, homeX: number) =>
  * edge, this delta closes to ZERO on its own as the card lands: the
  * follower's window can end whenever it likes and nothing jumps.
  *
- * Which is exactly why it drives x and not y. The badge deliberately sits
- * ABOVE the card's top line, so `card.y - rest.y` is a constant ten
- * pixels — it would ride ten pixels low for the whole flight and snap
- * back up the moment the window closed. A derived value is only seamless
- * where it agrees with the rest it will return to; nothing needs to move
- * vertically here, so nothing does.
+ * Which is exactly why it drives x and not y. The badge straddles the
+ * card's top edge, so `card.y - rest.y` is a constant half a badge — it
+ * would ride that much low for the whole flight and snap back up the
+ * moment the window closed. A derived value is only seamless where it
+ * agrees with the rest it will return to; nothing needs to move vertically
+ * here, so nothing does.
  */
 const pin = ({ rest, sources }: DeriveContext) => {
   const card = sources[0]!.now;
@@ -89,7 +89,9 @@ const cast = ({ rest, sources }: DeriveContext) => {
 
 const PIN_REST = { x: 0 };
 /** must match the stylesheet's resting values exactly, or the window
- *  closing would be a visible step rather than a handover */
+ *  closing would be a visible step rather than a handover. Nothing in
+ *  either file makes that true, so the acceptance suite compares this
+ *  against what the page paints before any flight. */
 const CAST_REST = {
   filter: 'blur(5px)',
   opacity: 0.72,
@@ -127,20 +129,37 @@ class Carry extends StepComponent<StepArgs & { spring?: SpringSpec }> {
 
 /* ── the demo ────────────────────────────────────────────────────────── */
 
+/**
+ * A depot floor, not three labelled boxes. Each bay is a place with a code
+ * painted on it and a count of what is standing in it; the parcel is a
+ * waybill with a number, a destination and a weight; the badge is how many
+ * items are inside it. None of that changes a frame of the motion — but a
+ * demo is a claim about a real interface, and a claim is easier to believe
+ * when the thing being carried is something a person would carry.
+ */
 const BAYS = [
-  { id: 'bay-0', label: 'Hold' },
-  { id: 'bay-1', label: 'Sorting' },
-  { id: 'bay-2', label: 'Dispatch' },
+  { code: 'B1', id: 'bay-0', label: 'Hold', queue: 4 },
+  { code: 'B2', id: 'bay-1', label: 'Sorting', queue: 1 },
+  { code: 'B3', id: 'bay-2', label: 'Dispatch', queue: 2 },
 ] as const;
+
+/** what is riding in the parcel — the number the badge is counting */
+const ITEMS = 3;
 
 export class Escort extends Component {
   @tracked bay = 0;
+
+  items = ITEMS;
 
   send = (index: number) => {
     this.bay = index;
   };
 
   isHere = (index: number) => index === this.bay;
+
+  /** two digits, because a depot counts in two digits */
+  tally = (index: number) =>
+    String(BAYS[index]!.queue + (index === this.bay ? 1 : 0)).padStart(2, '0');
 
   get here() {
     return BAYS[this.bay]!.label;
@@ -162,7 +181,12 @@ export class Escort extends Component {
               data-test-bay={{index}}
               {{on "click" (fn this.send index)}}
             >
-              <span class="esc-bay-name">{{bay.label}}</span>
+              <span class="esc-bay-code">{{bay.code}}</span>
+              <span class="esc-bay-floor"></span>
+              <span class="esc-bay-foot">
+                <span class="esc-bay-name">{{bay.label}}</span>
+                <span class="esc-bay-tally">{{this.tally index}}</span>
+              </span>
             </button>
           {{/each}}
 
@@ -184,15 +208,19 @@ export class Escort extends Component {
               data-test-escort-card
               {{motion id="card" role="card"}}
             >
-              <span class="esc-card-no">04</span>
-              <span class="esc-card-line"></span>
-              <span class="esc-card-line is-short"></span>
+              <span class="esc-card-head">
+                <span class="esc-card-no">CG-4417</span>
+                <span class="esc-card-mass">2.4kg</span>
+              </span>
+              <span class="esc-card-to">Portland OR</span>
+              <span class="esc-card-code"></span>
             </span>
             <span
               class="esc-badge"
               data-test-escort-badge
+              title="items in this parcel"
               {{motion id="badge"}}
-            >2</span>
+            >{{this.items}}</span>
           </span>
         </div>
 
@@ -224,10 +252,15 @@ export class Escort extends Component {
         </c.Parallel>
       </Choreo>
 
+      {{! the house note: one mono line, not a paragraph explaining itself }}
       <p class="esc-note">
+        <span class="esc-note-key">CG-4417</span>
         <b>{{this.here}}</b>
-        — the badge and the shadow are computed from the card, not animated
-        alongside it. Click another bay mid-flight.
+        <span class="esc-note-dot">·</span>
+        {{this.items}}
+        items
+        <span class="esc-note-dot">·</span>
+        send it again mid-flight
       </p>
     </div>
   </template>
