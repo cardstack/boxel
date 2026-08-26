@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
+import config from '@cardstack/host/config/environment';
 import {
   BoxelModuleClassifier,
   MODULE_CLASSIFICATION_REASON_KINDS,
@@ -127,12 +128,88 @@ module('Unit | rendering protocol | module classification', function () {
       }
     });
 
-    test('RP-6.6: being importable as a Host stand-in is not trusted provenance', function (assert) {
+    test('RP-6.6: a realm alias under the Cardstack scope is not a Host package', function (assert) {
+      // `addRealmMapping` registers `@cardstack/<realm>/` for every realm the
+      // Host maps, so the scope is a namespace authored content also lives in.
+      // A realm's two spellings have to agree, or one module gets two tiers
+      // depending on which string the caller happens to be holding.
       for (let identifier of [
-        '@glimmer/component',
-        '@ember/modifier',
-        'https://cardstack.com/catalog/blog-post',
+        '@cardstack/catalog/commands/listing-create',
+        '@cardstack/skills/some-skill',
+        '@cardstack/openrouter/some-model',
+        '@cardstack/experiments-realm/person',
+        '@cardstack/not-a-real-package/thing',
       ]) {
+        assert.false(isTrustedModule(identifier), `authored: ${identifier}`);
+        assert.false(isTrustedImport(identifier), `not pruned: ${identifier}`);
+      }
+      // The Base realm is trusted on its own account, so its alias agrees with
+      // its URL rather than contradicting it.
+      assert.true(isTrustedModule('@cardstack/base/card-api'), 'base alias');
+      assert.true(
+        isTrustedModule('https://cardstack.com/base/card-api'),
+        'base URL',
+      );
+    });
+
+    test('RP-6.6: the realm URLs this deployment resolves are classified from config', function (assert) {
+      // The hardcoded literals are only half the boundary; these are the
+      // inputs that vary per deployment and can be degenerate.
+      assert.true(
+        isTrustedModule(`${config.resolvedBaseRealmURL}card-api`),
+        'the resolved Base realm is trusted',
+      );
+      assert.false(
+        isTrustedModule(
+          new URL('../experiments/person', config.resolvedBaseRealmURL).href,
+        ),
+        'a sibling realm on the same origin is not',
+      );
+      assert.true(
+        isTrustedImport(`${config.iconsURL}/@cardstack/boxel-icons/v1/x.js`),
+        'the icons host is Host-provided',
+      );
+      assert.false(
+        isTrustedModule(`${config.iconsURL}/@cardstack/boxel-icons/v1/x.js`),
+        'which is not a grant of Direct execution',
+      );
+    });
+
+    test('RP-6.6: an origin-wide boundary is opted into, never inherited', function (assert) {
+      // The icons host legitimately has no path of its own.
+      assert.true(
+        isTrustedImport(`${config.iconsURL}/anything/at/all`),
+        'the icons host covers its origin',
+      );
+      let iconsOrigin = new URL(config.iconsURL).origin;
+      assert.false(
+        isTrustedModule(`${iconsOrigin}/anything/at/all`),
+        'which is not a rule realm boundaries share',
+      );
+
+      // A realm boundary is read from deployment config, and pointing one at
+      // an origin root is the one misconfiguration here that would fail OPEN —
+      // every realm on that host trusted, silently. Driven directly, because
+      // no boundary this environment configures has a root path.
+      let configured = config.resolvedBaseRealmURL;
+      try {
+        config.resolvedBaseRealmURL = `${iconsOrigin}/`;
+        assert.false(
+          isTrustedModule(`${iconsOrigin}/someone-elses-realm/card`),
+          'a realm boundary at an origin root is refused, not honoured',
+        );
+      } finally {
+        config.resolvedBaseRealmURL = configured;
+      }
+      assert.strictEqual(
+        config.resolvedBaseRealmURL,
+        configured,
+        'the environment is left as it was found',
+      );
+    });
+
+    test('RP-6.6: being importable as a Host stand-in is not trusted provenance', function (assert) {
+      for (let identifier of ['@glimmer/component', '@ember/modifier']) {
         assert.true(
           isTrustedImport(identifier),
           `Host-provided: ${identifier}`,
@@ -331,13 +408,13 @@ module('Unit | rendering protocol | module classification', function () {
         b: `import C from './c';\nexport class B {}\n`,
         c: `export class C {}\n`,
       });
-      let met = await classifierFor(realm, { maxModules: 3 }).classifyModule(
+      let met = await classifierFor(realm, { maxModules: 4 }).classifyModule(
         realm.url('a'),
       );
       assert.strictEqual(
         met.reason,
         `module-load:${realm.url('absent')}`,
-        'three modules fit, so the unreadable one is the news',
+        'all four reads fit, so the unreadable one is the news',
       );
 
       let exceeded = await classifierFor(realm, {
@@ -349,6 +426,65 @@ module('Unit | rendering protocol | module classification', function () {
         'a walk that stopped early reports that, not what it happened to reach first',
       );
       assert.false(exceeded.moduleGraphComplete);
+    });
+
+    test('RP-6.7: the bound counts reads, so unreadable imports cannot outrun it', async function (assert) {
+      let imports = Array.from(
+        { length: 40 },
+        (_, index) => `import M${index} from './missing-${index}';`,
+      ).join('\n');
+      let realm = new TestRealm({ person: `${imports}\nexport class P {}\n` });
+      let result = await classifierFor(realm, { maxModules: 5 }).classifyModule(
+        realm.url('person'),
+      );
+
+      assert.strictEqual(result.reason, 'module-graph-limit');
+      assert.false(result.moduleGraphComplete);
+      // A module that fails to load yields no analysis, so a bound counted
+      // over successful analyses would never advance and every one of the 40
+      // would be fetched.
+      assert.strictEqual(realm.loads.length, 5, 'reads stopped at the bound');
+    });
+
+    test('RP-6.7: one failing dependency is read once however many importers reach it', async function (assert) {
+      let realm = new TestRealm({
+        person: `import A from './a';\nimport B from './b';\nexport class P {}\n`,
+        a: `import Gone from './gone';\nexport class A {}\n`,
+        b: `import Gone from './gone';\nexport class B {}\n`,
+      });
+      let result = await classifierFor(realm).classifyModule(
+        realm.url('person'),
+      );
+
+      assert.strictEqual(result.reason, `module-load:${realm.url('gone')}`);
+      // A failed analysis self-evicts from the shared memo, so without a
+      // per-walk record of what was attempted the second importer re-reads it.
+      assert.strictEqual(realm.loadCount('gone'), 1, 'read once');
+    });
+
+    test('RP-6.7: a resolver that answers with something other than an identifier fails closed', async function (assert) {
+      let realm = new TestRealm({
+        person: `import A from './a';\nexport class P {}\n`,
+      });
+      let result = await classifierFor(realm, {
+        resolveImport: () => undefined as unknown as string,
+      }).classifyModule(realm.url('person'));
+
+      assert.strictEqual(result.reason, 'module-resolve:./a');
+      assert.false(result.moduleGraphComplete, 'rather than escaping');
+    });
+
+    test('RP-6.7: the reported graph cannot be mutated by one of its holders', async function (assert) {
+      let realm = new TestRealm({ person: `export class P {}\n` });
+      let classifier = classifierFor(realm);
+      let result = await classifier.classifyModule(realm.url('person'));
+
+      assert.throws(
+        () => (result.moduleGraph as string[]).push('http://evil/'),
+        'a memoized authorization list is shared, so it is frozen',
+      );
+      let again = await classifier.classifyModule(realm.url('person'));
+      assert.deepEqual(again.moduleGraph, [realm.url('person')]);
     });
 
     test('RP-6.7: a literal dynamic import is an edge and a computed one is absent', async function (assert) {
@@ -563,14 +699,18 @@ module('Unit | rendering protocol | module classification', function () {
       let classifier = classifierFor(realm);
       let draft = `import Address from './address';\nexport class Person {}\n`;
 
-      await classifier.classifyModule(realm.url('person'), draft);
+      let first = await classifier.classifyModule(realm.url('person'), draft);
       let loadsAfterFirst = realm.loads.length;
-      await classifier.classifyModule(realm.url('person'), draft);
+      let second = await classifier.classifyModule(realm.url('person'), draft);
       assert.strictEqual(
         realm.loads.length,
         loadsAfterFirst,
-        'the same draft re-walked nothing',
+        'the same draft re-read nothing',
       );
+      // Identity, not read counts: the draft's own source is supplied either
+      // way and its dependency is in the shared memo, so a read count alone
+      // holds even with no entry memo at all.
+      assert.strictEqual(second, first, 'answered from the entry memo');
 
       let changed = await classifier.classifyModule(
         realm.url('person'),
@@ -605,6 +745,20 @@ module('Unit | rendering protocol | module classification', function () {
           `import Editor from '@glimmer/component';\nexport class Person {\n  static edit = Editor;\n}\n`,
         ),
         'an imported editor is authored code on the edit surface too',
+      );
+      assert.true(
+        await editTemplateFor(
+          [
+            `import { Component, type BaseDefComponent } from '${cardApi}';`,
+            `class Edit extends Component<any> {`,
+            `  static template = <template><input /></template>;`,
+            `}`,
+            `export class Person {`,
+            `  static edit: BaseDefComponent = Edit;`,
+            `}`,
+          ].join('\n'),
+        ),
+        'the annotated form the Base realm itself writes',
       );
       assert.true(
         await editTemplateFor(

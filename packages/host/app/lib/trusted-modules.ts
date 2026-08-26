@@ -27,10 +27,18 @@ import config from '@cardstack/host/config/environment';
  * the importing module, so classification asks `isTrustedModule` for the
  * Direct decision and `isTrustedImport` for the walk; nothing here answers
  * both.
+ *
+ * What it widens by is deliberately narrow: the framework stand-ins and the
+ * icons host, both of which bottom out in modules the Host provides. Pruning
+ * is only sound where trust begins — a pruned module's own closure becomes
+ * the Host's problem to resolve. Published realm content does not qualify
+ * however Host-owned the realm is: it is authored source with its own import
+ * graph, and pruning at it would report a complete graph while dropping
+ * everything behind it.
  */
 export function isTrustedModule(moduleIdentifier: string): boolean {
   return (
-    isSafeCardstackPackageSpecifier(moduleIdentifier) ||
+    isHostPackageSpecifier(moduleIdentifier) ||
     isURLWithin(moduleIdentifier, `${PACKAGES_FAKE_ORIGIN}@cardstack/`) ||
     isURLWithin(moduleIdentifier, 'https://cardstack.com/base/') ||
     isURLWithin(moduleIdentifier, config.resolvedBaseRealmURL)
@@ -40,13 +48,42 @@ export function isTrustedModule(moduleIdentifier: string): boolean {
 export function isTrustedImport(moduleIdentifier: string): boolean {
   return (
     isTrustedModule(moduleIdentifier) ||
-    isURLWithin(moduleIdentifier, 'https://cardstack.com/catalog/') ||
-    (config.resolvedCatalogRealmURL !== undefined &&
-      isURLWithin(moduleIdentifier, config.resolvedCatalogRealmURL)) ||
-    isURLWithin(moduleIdentifier, config.iconsURL) ||
+    isURLWithin(moduleIdentifier, config.iconsURL, { allowOriginWide: true }) ||
     hostProvidedFrameworkModules.has(moduleIdentifier)
   );
 }
+
+/**
+ * The Host packages whose modules the Host itself provides — from its own
+ * bundle, from a shim, or from the Base realm. The first path segment after
+ * the scope is matched against this list rather than the scope being admitted
+ * wholesale, because `@cardstack/<name>/` is NOT only an npm scope in this
+ * codebase: it is also the realm-alias namespace. `addRealmMapping` registers
+ * one such prefix per realm — `network.ts` for the catalog, skills and
+ * OpenRouter realms, and `main.ts`/`worker.ts` generically for every
+ * `https://cardstack.com/<name>/` mapping, so the namespace acquires new
+ * members without this file being touched. Admitting the scope would hand
+ * Direct execution to authored realm content under its alias spelling while
+ * the same module's URL spelling classified as authored.
+ *
+ * `base` is on the list because the Base realm is trusted on its own account,
+ * so its alias and its URL agree.
+ *
+ * A Host package missing from this list fails closed: its modules classify as
+ * authored, which cages them and makes the walk try to read them. That is the
+ * right direction for a stale list — visible, and never an escalation — and
+ * it does not break the graph walk, which prunes on the runtime's own shim
+ * registry rather than on this list.
+ */
+const hostPackages = new Set([
+  'base',
+  'boxel-host',
+  'boxel-icons',
+  'boxel-ui',
+  'bxl',
+  'runtime-common',
+  'view-transitions',
+]);
 
 // Framework and Host-runtime modules a cage receives as a stand-in rather than
 // as authored source. Exact identifiers only: these are bare specifiers with
@@ -88,7 +125,7 @@ const hostProvidedFrameworkModules = new Set([
  * decodes to `%2e%2e`, which still carries a `%` and is refused, so there is
  * no need to decode to a fixed point.
  */
-function isSafeCardstackPackageSpecifier(identifier: string): boolean {
+function isHostPackageSpecifier(identifier: string): boolean {
   if (!identifier.startsWith('@cardstack/')) {
     return false;
   }
@@ -110,7 +147,7 @@ function isSafeCardstackPackageSpecifier(identifier: string): boolean {
   return (
     segments.length >= 2 &&
     segments[0] === '@cardstack' &&
-    segments[1] !== '' &&
+    hostPackages.has(segments[1]!) &&
     segments.every((segment) => segment !== '.' && segment !== '..')
   );
 }
@@ -126,7 +163,11 @@ function isSafeCardstackPackageSpecifier(identifier: string): boolean {
  * resolves the dot segments and percent-escapes of the identifiers that do
  * parse, which is why the comparison here can be a plain prefix test.
  */
-function isURLWithin(identifier: string, root: string): boolean {
+function isURLWithin(
+  identifier: string,
+  root: string,
+  { allowOriginWide = false }: { allowOriginWide?: boolean } = {},
+): boolean {
   try {
     let candidate = new URL(identifier);
     let boundary = new URL(root);
@@ -136,6 +177,14 @@ function isURLWithin(identifier: string, root: string): boolean {
     let boundaryPath = boundary.pathname.endsWith('/')
       ? boundary.pathname
       : `${boundary.pathname}/`;
+    // A boundary with no path of its own covers its whole origin. That is what
+    // the icons host is — one origin serving nothing else — and it is the one
+    // degenerate input here that fails OPEN, so it is opted into rather than
+    // inherited. A realm boundary misconfigured to an origin root would
+    // otherwise make every realm on that host trusted, silently.
+    if (boundaryPath === '/' && !allowOriginWide) {
+      return false;
+    }
     return (
       candidate.pathname === boundaryPath.slice(0, -1) ||
       candidate.pathname.startsWith(boundaryPath)

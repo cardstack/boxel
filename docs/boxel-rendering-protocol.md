@@ -307,8 +307,13 @@ unambiguously a path inside an `@cardstack` package — decodable, free of
 `\`, `%`, `?` and `#`, and free of `.`/`..` segments — and is rejected
 rather than normalized otherwise. Nothing derived from a module's SOURCE
 participates in this decision, so no cache, hash, or graph result can reach
-it. A wider set of import origins is Host-provided — the Catalog realm, the
-icons host, the framework stand-ins, and whatever else a runtime shims —
+it. The scope `@cardstack/<name>/` is NOT by itself the predicate: it is also
+the realm-alias namespace (`addRealmMapping` registers one such prefix per
+mapped realm, generically), so provenance within the scope is decided by an
+allowlist of Host package names. A realm's alias spelling and its URL spelling
+must always agree about that realm; the Base realm is on the list because it
+is trusted on its own account. A wider set of import origins is Host-provided
+— the icons host, the framework stand-ins, and whatever else a runtime shims —
 which is the graph walk's pruning test (RP-6.7) and NOT a grant of Direct
 execution: what a module may import says nothing about who wrote it
 (`trusted-modules.ts`).
@@ -317,7 +322,11 @@ execution: what a module may import says nothing about who wrote it
 set reachable from the entry over static import edges and literal-specifier
 dynamic imports, collected in full before anything is read off it, with
 Host-provided modules (RP-6.6) recorded as edges but never fetched or
-followed, and bounded at 256 authored modules. The graph is the exact read
+followed, and bounded at 256 module reads — attempted reads, not successful
+ones, so unreadable imports cannot outrun the bound. Pruning is sound only
+where trust begins: a pruned module's closure is the Host's to resolve, so
+published realm content is walked like any other authored source however
+Host-owned its realm. The graph is the exact read
 authority a stronger runtime is given — a Sandbox authorizes a module fetch
 against it before any authenticated request fires — so it is reported with
 an availability flag, and it is an authorization list only when that flag
@@ -327,7 +336,15 @@ graph unavailable and name the failure; a render over an unavailable graph
 fails closed with that diagnostic rather than authorizing a wider set, and
 an unavailable result is not memoized. Computed dynamic specifiers cannot
 be statically authorized, are absent from the graph, and are refused at
-runtime. The result is a property of the graph, not of traversal: a diamond
+runtime. The graph is over the specifiers the author wrote; a module the
+compiler synthesizes from one of them is not an authored edge and is not in it.
+The scoped-CSS sibling of a module carries its own content in its URL and is
+resolved by the loader without a realm read, so it is not part of the read
+authority — a gate that is asked for one admits it exactly when the module it
+was derived from is in the graph, and never on its own. Graph entries are not
+in one canonical spelling: a gate must fold the same identifier family the
+Loader does rather than compare strings exactly. The result is a property of
+the graph, not of traversal: a diamond
 reached from either side and a cycle entered from either end yield the same
 graph and the same reported failure. A caller-supplied draft revision is
 classified for that caller alone and never enters the memo other entries
@@ -335,11 +352,16 @@ read, so an unsaved buffer cannot decide the read authority of a card it is
 not the source of.
 
 **RP-6.8** Classification reports whether a module's own source declares any
-`static edit = …` template — on the card class or on any FieldDef the module
-defines. This is the fact RP-6.3's exception reads, and it is a property of
-the module's declaration rather than of its graph: a module that declares
-none contributes no authored code to the edit surface. It is established for
+`static edit = …` template — on any class the module defines, whether that is
+the card class or a FieldDef, and whether or not the declaration carries a type
+annotation. This is the fact RP-6.3's exception reads, and it is a property of
+the module's declaration rather than of its graph: a module that declares none
+contributes no authored code to the edit surface. It is established for
 authored modules only, since a trusted module renders every format Direct.
+The two errors are not symmetric and the detection errs deliberately: reporting
+a declaration that is not there keeps the surface in the stronger context,
+which R5 always permits, while missing one hands a surface containing authored
+code to trusted Base chrome, which R5 forbids.
 
 ## RP-7 Relationships and lazy loading
 

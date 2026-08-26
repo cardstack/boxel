@@ -53,8 +53,16 @@ export interface BoxelModuleClassification {
    * module fetch against it before any authenticated request fires.
    *
    * An authorization list only when `moduleGraphComplete` says so.
+   *
+   * Spellings are mixed by construction: an authored dependency appears as
+   * `resolveImport` returned it, while a module the Host provides appears as
+   * the specifier the author wrote, because resolving one can evaluate it. A
+   * gate comparing a requested URL against this list must therefore fold the
+   * same identity family the Loader does (`moduleCacheKey`,
+   * `trimExecutableExtension`) rather than compare strings exactly, or it will
+   * refuse a fetch for a module that is in the list under a sibling spelling.
    */
-  moduleGraph: string[];
+  moduleGraph: readonly string[];
 
   /**
    * Whether the walk read every module it reached. When false, `moduleGraph`
@@ -117,6 +125,11 @@ export interface BoxelModuleClassifierOptions {
    * import (`date-fns`, `lodash`, `ember-concurrency`). Such a module is
    * recorded as a graph edge and not walked — there is no authored source
    * behind it, and a walk that went looking would fail the whole graph closed.
+   *
+   * Asked about BOTH spellings: the specifier as authored, before anything is
+   * resolved, and the resolved identifier of a dependency. A predicate that
+   * answers only one of the two half-works — it prunes some edges and sends
+   * the walk after others.
    */
   isHostProvidedModule?(moduleIdentifier: string): boolean;
 
@@ -135,20 +148,48 @@ const defaultMaxModules = 256;
 const preprocessorFilename = 'boxel-source.gts';
 
 // Preprocessing a `<template>` block rewrites it into a call, and content-tag
-// adds this import to supply the callee. It is an artifact of the compile
-// step, not an edge the author wrote, so it is dropped rather than admitted to
-// every templated card's graph. A card that imports the module itself loses
-// only the recorded edge: the Host provides it, so the walk would prune there
-// anyway.
+// adds this import to supply the callee. It is an artifact of reading the
+// source, not an edge the author wrote and not one the realm serves — the
+// realm's own pipeline runs Babel after this step, which rewrites the call and
+// removes the import again — so it is dropped rather than admitted to every
+// templated card's graph. A card importing the module itself loses the
+// recorded edge with it; no runtime serves that specifier, so the edge would
+// have failed the graph closed rather than authorizing anything.
 const templateCompilerModule = '@ember/template-compiler';
 
 // `static edit = …` in a class body declares an authored in-place editor
 // (RP-6.8). Matched against the preprocessed JavaScript, where a template
 // block has become a call rather than markup, so the class-body assignment is
 // what this reads.
-const authoredEditTemplatePattern = /\bstatic\s+edit\s*=/;
+//
+// The annotated form matters as much as the bare one: content-tag does not
+// strip TypeScript (the realm's Babel pass does, later), and
+// `static edit: BaseDefComponent = Editor` is what the Base realm's own cards
+// write, so an author following that example must not read as declaring
+// nothing.
+//
+// The two ways this can be wrong are not symmetric. A false POSITIVE — the
+// text appearing in a comment, a string, or a template body — keeps the edit
+// surface in the stronger cage, which is always allowed. A false NEGATIVE
+// hands a surface that does contain authored code to the trusted Base editor,
+// which is a containment failure, so the pattern is written to err toward
+// matching.
+const authoredEditTemplatePattern = /\bstatic\s+edit\s*[:=]/;
 
 const preprocessor = new ContentTag.Preprocessor();
+
+/**
+ * A memoized result is handed to every caller that asks for the same module,
+ * so one consumer sorting the graph in place or pushing to it would corrupt
+ * the read authority every other holder is checking against. Both the list and
+ * the record around it are frozen before anyone sees them.
+ */
+function sealed(
+  classification: BoxelModuleClassification,
+): BoxelModuleClassification {
+  Object.freeze(classification.moduleGraph);
+  return Object.freeze(classification);
+}
 
 /** What one module's source says about itself. */
 interface SourceAnalysis {
@@ -331,13 +372,15 @@ export class BoxelModuleClassifier {
     source?: string,
   ): Promise<BoxelModuleClassification> {
     if (isTrustedModule(moduleIdentifier)) {
-      return Promise.resolve({
-        trusted: true,
-        moduleGraph: [moduleIdentifier],
-        moduleGraphComplete: true,
-        authoredEditTemplate: false,
-        reason: 'trusted-module',
-      });
+      return Promise.resolve(
+        sealed({
+          trusted: true,
+          moduleGraph: [moduleIdentifier],
+          moduleGraphComplete: true,
+          authoredEditTemplate: false,
+          reason: 'trusted-module',
+        }),
+      );
     }
     let sourceHash = source === undefined ? undefined : md5(source);
     let existing = this.entries.get(moduleIdentifier);
@@ -405,6 +448,15 @@ export class BoxelModuleClassifier {
     // end produce the same graph and the same reported failure: traversal
     // order cannot reach the result.
     let analyzed = new Map<string, ModuleAnalysis>();
+    // Every identifier the walk has taken a turn on, whether or not it yielded
+    // an analysis. The bound counts these rather than the successful analyses:
+    // a module that fails to load or resolve contributes nothing to
+    // `analyzed`, so counting successes would let one module declaring
+    // thousands of unreadable imports issue thousands of authenticated loads
+    // inside a walk that reports itself bounded. It is also what dedupes a
+    // failure within one walk — a failed module self-evicts from the shared
+    // memo, so a second importer reaching it would otherwise read it again.
+    let attempted = new Set<string>();
     let failures: string[] = [];
     let exceededLimit = false;
     let queue: { identifier: string; suppliedSource?: string }[] = [
@@ -413,14 +465,15 @@ export class BoxelModuleClassifier {
 
     while (queue.length > 0) {
       let { identifier, suppliedSource } = queue.shift()!;
-      if (analyzed.has(identifier)) {
+      if (attempted.has(identifier)) {
         continue;
       }
-      if (analyzed.size >= maxModules) {
+      if (attempted.size >= maxModules) {
         exceededLimit = true;
         walk.incomplete = true;
         break;
       }
+      attempted.add(identifier);
       let analysis: ModuleAnalysis;
       try {
         analysis = await this.analyzeModule(identifier, suppliedSource);
@@ -462,13 +515,13 @@ export class BoxelModuleClassifier {
         .sort(),
     ];
     let root = analyzed.get(moduleIdentifier);
-    return {
+    return sealed({
       trusted: false,
       moduleGraph,
       moduleGraphComplete: !walk.incomplete,
       authoredEditTemplate: root?.source?.authoredEditTemplate ?? false,
       reason: reasonFor({ exceededLimit, failures }),
-    };
+    });
   }
 
   /**
@@ -558,9 +611,13 @@ export class BoxelModuleClassifier {
         continue;
       }
       try {
-        dependencies.add(
-          this.options.resolveImport(specifier, moduleIdentifier),
-        );
+        let resolved = this.options.resolveImport(specifier, moduleIdentifier);
+        if (typeof resolved !== 'string') {
+          throw new TypeError(
+            `resolveImport did not answer with an identifier`,
+          );
+        }
+        dependencies.add(resolved);
       } catch {
         // Collected rather than thrown, so a module with several unresolvable
         // imports reports all of them and the walk's chosen diagnostic does
