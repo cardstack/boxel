@@ -552,8 +552,11 @@ function resolveStep(
   cs: ChangesetLike,
   exclude?: ReadonlySet<Sprite>,
 ): Resolved {
+  // a step with no `of` (a wait, a tether) still needs A sprite to hang its
+  // cue on — the run keys its bookkeeping by sprite — so it takes the
+  // first the changeset offers and produces exactly one cue
   const sprites = cs
-    .sprites(step.of)
+    .sprites(step.of ?? {})
     .filter((s) => !exclude || !exclude.has(s));
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
@@ -573,8 +576,14 @@ function resolveStep(
   let open = false;
   for (const [index, sprite] of sprites.entries()) {
     // a camera or tether is a statement about the scene, not a sprite:
-    // one cue regardless of what `of` matched
-    if ((step.kind === 'camera' || step.kind === 'tether') && index > 0) {
+    // one cue regardless of what `of` matched — as is any step that named
+    // no subject at all
+    if (
+      (step.kind === 'camera' ||
+        step.kind === 'tether' ||
+        step.of === undefined) &&
+      index > 0
+    ) {
       break;
     }
     // each sprite starts one rung later than the one before it — in the

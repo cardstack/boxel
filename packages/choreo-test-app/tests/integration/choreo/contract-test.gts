@@ -436,6 +436,68 @@ module('Integration | choreo | contract', function (hooks) {
   });
 
   /* ------------------------------------------------------------------ *
+   * Subjects — the steps that have none
+   * ------------------------------------------------------------------ */
+
+  module('subjects', function () {
+    /**
+     * A wait has no subject and a tether reads only its two ends, so neither
+     * should have to name one. `@of` was required on both anyway, which left
+     * every author writing `@of={{c.all}}` — a query run on every pass to
+     * answer a question nothing asks, and a lie about what the step reads.
+     */
+    test('a wait needs no @of, and still occupies its sequence', async function (assert) {
+      class App extends Component {
+        @tracked show = false;
+        constructor(o: unknown, a: object) {
+          super(o as never, a);
+          waited = this;
+        }
+        <template>
+          <Choreo class="stage" style="width:200px;height:60px" as |c|>
+            {{grabCtx c}}
+            {{#if this.show}}
+              <div
+                id="w"
+                style="width:10px;height:10px"
+                {{motion id="w"}}
+              ></div>
+            {{/if}}
+            <c.Sequence>
+              <c.Tween
+                @of={{c.id "w"}}
+                @opacity={{array 0 1}}
+                @duration={{0.2}}
+              />
+              <c.Wait @duration={{0.3}} />
+              <c.Tween
+                @of={{c.id "w"}}
+                @opacity={{array 1 0.4}}
+                @duration={{0.2}}
+              />
+            </c.Sequence>
+          </Choreo>
+        </template>
+      }
+      let waited: App | undefined;
+      await render(<template><App /></template>);
+      waited!.show = true;
+      await settled();
+
+      assert.deepEqual(
+        ctx.run!.cues.map((cue) => [cue.kind, Math.round(cue.start)]),
+        [
+          ['tween', 0],
+          ['wait', 200],
+          ['tween', 500],
+        ],
+        'the subjectless wait holds its 300ms of the sequence open'
+      );
+      await animationsSettled();
+    });
+  });
+
+  /* ------------------------------------------------------------------ *
    * c.Follow — a value derived from the scene, every frame
    * ------------------------------------------------------------------ */
 

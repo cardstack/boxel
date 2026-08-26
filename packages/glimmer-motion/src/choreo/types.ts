@@ -271,7 +271,19 @@ export interface HoldStep extends StepBase {
   ms?: number;
   props: Record<string, PropSource>;
 }
-export interface WaitStep extends StepBase {
+/**
+ * The steps that have no subject. A wait is a hole in a sequence and a
+ * tether reads only its two ends — neither has anything to say about the
+ * sprite `of` would name, and requiring one meant every author wrote
+ * `@of={{c.all}}`: a query run on every pass to answer a question nothing
+ * asks, and a lie about what the step reads. Absent, the step produces one
+ * cue rather than one per sprite.
+ */
+interface SubjectlessBase extends Omit<StepBase, 'of'> {
+  of?: Query | Query[];
+}
+
+export interface WaitStep extends SubjectlessBase {
   kind: 'wait';
   ms: number;
 }
@@ -333,7 +345,7 @@ export interface CameraStep extends StepBase {
  * (and every scrubbed still), `@path` receives both endpoints' boxes,
  * region-relative, and returns the path data the tether draws.
  */
-export interface TetherStep extends StepBase {
+export interface TetherStep extends SubjectlessBase {
   from: Query;
   kind: 'tether';
   /** the window; without it, the enclosing block's span */

@@ -330,7 +330,13 @@ export class Hold extends StepComponent<
   }
 }
 
-export class Wait extends StepComponent<StepArgs & { duration: number }> {
+/**
+ * `<c.Wait />` — a hole in a sequence. It has no subject: `@of` is accepted
+ * (a wait can be laddered across sprites with `@stagger`) but never needed.
+ */
+export class Wait extends StepComponent<
+  StepArgsBase & { duration: number; of?: Query | Query[] }
+> {
   node(): TimelineNode {
     const { of, duration, delay, stagger } = this.args;
     return {
@@ -461,7 +467,7 @@ export class Tether extends StepComponent<
       kind: 'tether',
       ms: msOf(duration),
       name: this.args.name,
-      of: this.args.of ?? {},
+      of: this.args.of,
       path,
       to,
     };
