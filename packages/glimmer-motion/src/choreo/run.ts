@@ -38,6 +38,19 @@ import type {
   Sprite,
 } from './types.ts';
 
+/** the properties whose mid-flight drive means a sprite is IN SPACE — a
+ *  replacement pass must carry these on, never snap them (§3.1) */
+const MIDFLIGHT_KEYS = [
+  'height',
+  'rotate',
+  'scale',
+  'scaleX',
+  'scaleY',
+  'width',
+  'x',
+  'y',
+];
+
 /** how fast each value was moving, in units per second, keyed by element then property */
 export type Velocities = Map<HTMLElement, Map<string, number>>;
 
@@ -52,6 +65,14 @@ export interface Run {
   finished: Promise<void>;
   /** nothing left to play: the run completed or was cancelled */
   isDone(): boolean;
+  /**
+   * The sprites this run is DRIVING through space right now — an
+   * unfinished move/spring/tween writing geometry — with each cue's
+   * transition. A replacement pass reads this to complete its score: a
+   * flying sprite the new score does not name gets a continuation move
+   * instead of a one-frame release to rest (§3.1).
+   */
+  midflight(): Map<ChoreoNode, Record<string, unknown> | undefined>;
   /** standing at a gate, waiting for advance() — a still, and settled */
   readonly parked: boolean;
   pause(): void;
@@ -424,6 +445,27 @@ export class ChoreoRun implements Run {
 
   isDone(): boolean {
     return this.ended || this.cancelled;
+  }
+
+  midflight(): Map<ChoreoNode, Record<string, unknown> | undefined> {
+    const out = new Map<ChoreoNode, Record<string, unknown> | undefined>();
+    if (this.isDone()) {
+      return out;
+    }
+    for (const t of this.tracks) {
+      const { cue } = t;
+      if (!t.started || t.passed) {
+        continue;
+      }
+      const geometry =
+        cue.flight !== undefined ||
+        (cue.target !== undefined &&
+          MIDFLIGHT_KEYS.some((key) => key in cue.target!));
+      if (geometry) {
+        out.set(cue.sprite.node, cue.transition);
+      }
+    }
+    return out;
   }
 
   /* ---- transport ---- */
