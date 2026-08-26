@@ -101,6 +101,10 @@ export default class RenderRoute extends Route<Model> {
   private currentTransition: Transition | undefined;
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
+  // The card id of the most recent transition into this route, recorded at
+  // beforeModel entry — the error-path fallback of last resort for deps
+  // derivation (see beforeModel).
+  #lastAttemptedCardId: string | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
@@ -180,6 +184,7 @@ export default class RenderRoute extends Route<Model> {
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
+    this.#lastAttemptedCardId = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.#modelStates.clear();
@@ -195,6 +200,16 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async beforeModel(transition: Transition) {
+    // Stash the card id this transition is trying to render before anything
+    // can throw. A pre-model failure has no model state and may surface
+    // through the window unhandledrejection listener with no transition at
+    // all; on a page whose URL is not a render path (a standby page mid
+    // in-app transition) this stash is then the only surviving record of
+    // which card the error doc's deps must name.
+    let attemptedCardId = this.#transitionCardId(transition);
+    if (attemptedCardId) {
+      this.#lastAttemptedCardId = attemptedCardId;
+    }
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
     if (!isTesting()) {
@@ -1030,9 +1045,16 @@ export default class RenderRoute extends Route<Model> {
     context?: { cardId?: string; nonce?: string },
   ): string {
     let transitionId = this.#transitionCardId(transition);
+    // `renderBaseParams` and the beforeModel stash cover the error paths that
+    // arrive with no transition (window unhandledrejection) and no model
+    // state (pre-model failures) — without them a pre-model error on a page
+    // whose URL is not a render path serializes with empty deps, and
+    // downstream invalidation never reaches the card's index rows.
     let fallbackDeps = this.#fallbackDepsFromIds([
       context?.cardId,
       transitionId,
+      this.renderBaseParams?.[0],
+      this.#lastAttemptedCardId,
     ]);
     let normalizationContext = {
       cardId: context?.cardId,
@@ -1388,7 +1410,16 @@ export default class RenderRoute extends Route<Model> {
     let { container, errorElement } = this.#ensurePrerenderElements();
     let reason = this.renderErrorState.reason ?? '';
     let parsedReason: any;
-    let fallbackDeps = this.#fallbackDepsFromTransitionParams(params);
+    // The transition's own params here are the leaf RouteInfo's, which never
+    // carry `id` (that lives on this route's RouteInfo) — walk the parent
+    // chain, and fall back to the id beforeModel stashed, before letting
+    // `#fallbackDepsFromTransitionParams` try the page URL.
+    let fallbackDeps = this.#fallbackDepsFromTransitionParams({
+      id:
+        params?.id ??
+        this.#transitionCardId(transition) ??
+        this.#lastAttemptedCardId,
+    });
     try {
       parsedReason = JSON.parse(reason);
     } catch {
