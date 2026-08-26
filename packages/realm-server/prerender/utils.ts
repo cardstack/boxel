@@ -6,6 +6,7 @@ import {
   type PrerenderMeta,
   type ScreenshotCaptureEntry,
   type ScreenshotCaptureResult,
+  type ScreenshotRegion,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
@@ -42,7 +43,7 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
 
-import type { CDPSession, Page } from 'puppeteer';
+import type { CDPSession, ElementHandle, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
@@ -1205,7 +1206,16 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // Present only when the request set `discover: true`: the settled render's
+  // `[data-card-field]` inventory. Rides alongside the captures rather than in
+  // them — it is one pass over the shared render, not per-image.
+  regions?: ScreenshotRegion[];
 }
+
+// A discover inventory returns at most this many regions. A render with more
+// `[data-card-field]` elements than this is past any real card's field count
+// and mostly a way to force a huge payload; the overflow is dropped (logged).
+const SCREENSHOT_MAX_DISCOVER_REGIONS = 200;
 
 // Block in the browser context until images, CSS background-image URLs, and
 // fonts have finished loading, then yield one animation frame so the browser
@@ -1318,8 +1328,11 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip } = captureSpec ?? {};
-  return [{ name: 'default', viewport, deviceScaleFactor, fullPage, clip }];
+  let { viewport, deviceScaleFactor, fullPage, clip, target } =
+    captureSpec ?? {};
+  return [
+    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, target },
+  ];
 }
 
 // Whether an entry asks for a viewport different from the page default.
@@ -1365,6 +1378,51 @@ async function captureOneEntry(
   entry: ScreenshotCaptureEntry,
   deviceScaleFactor: number,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A `target` is an element-handle screenshot, a capture call distinct from
+  // the page-level one below: it crops to the first match's box and honors no
+  // clip/fullPage (rejected above). A selector that matches nothing, or is not
+  // a valid CSS selector, is a capture error naming the selector rather than an
+  // uncaught throw. The parse bounds length and forbids `//` before we get
+  // here; catching a `page.$` throw covers a caller that bypassed the parse.
+  if (entry.target) {
+    let handle: ElementHandle<Element> | null;
+    try {
+      handle = await page.$(entry.target);
+    } catch (err) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target selector is invalid: ${entry.target}`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (!handle) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target matched no element: ${entry.target}`,
+        { title: 'Screenshot target not found' },
+      );
+    }
+    try {
+      let base64 = (await handle.screenshot({
+        encoding: 'base64',
+        type: 'png',
+      })) as string;
+      // The element screenshot's extent is Chromium's, not ours to predict, so
+      // the reported CSS dims come from the PNG's IHDR (physical px at bytes
+      // 16..23) divided back by the scale in effect — report and bytes cannot
+      // disagree.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      return {
+        name: entry.name,
+        base64,
+        width: Math.round(header.readUInt32BE(16) / deviceScaleFactor),
+        height: Math.round(header.readUInt32BE(20) / deviceScaleFactor),
+        deviceScaleFactor,
+      };
+    } finally {
+      await handle.dispose();
+    }
+  }
   // Reported CSS dimensions of the capture. `fullPage` reports the captured
   // document (derived from the PNG itself below, so report and bytes cannot
   // disagree); `clip` reports its own region; otherwise the viewport. Device
@@ -1424,6 +1482,80 @@ async function captureOneEntry(
   };
 }
 
+// Inventory every `[data-card-field]` element in the settled render: its field
+// name, a selector that re-addresses it, and its CSS-pixel box in the document
+// frame (the frame `clip` and a discovered box share). Bounded at
+// SCREENSHOT_MAX_DISCOVER_REGIONS; the overflow is dropped and logged rather
+// than returned, so a caller never mistakes a truncated inventory for the whole
+// render. Boxes are rounded to integers so a region reads back as a valid
+// `clip`.
+async function discoverFieldRegions(page: Page): Promise<ScreenshotRegion[]> {
+  let { regions, total } = await page.evaluate((cap: number) => {
+    // A selector that re-addresses one element: the `[data-card-field]`
+    // attribute selector when the field name is unique in the render (the
+    // common, readable case), else a structural nth-of-type path that is
+    // unique by construction. Both are CSS — never an XPath — so either is a
+    // valid `target` on a follow-up capture.
+    let escapeAttr = (value: string) =>
+      typeof CSS !== 'undefined' && CSS.escape
+        ? CSS.escape(value)
+        : value.replace(/["\\]/g, '\\$&');
+    let structuralPath = (element: Element): string => {
+      let parts: string[] = [];
+      let node: Element | null = element;
+      while (node && node !== document.documentElement) {
+        let tag = node.nodeName.toLowerCase();
+        let parent: Element | null = node.parentElement;
+        if (parent) {
+          let sameTag = Array.from(parent.children).filter(
+            (child) => child.nodeName === node!.nodeName,
+          );
+          if (sameTag.length > 1) {
+            tag += `:nth-of-type(${sameTag.indexOf(node) + 1})`;
+          }
+        }
+        parts.unshift(tag);
+        node = parent;
+      }
+      return parts.join(' > ');
+    };
+
+    let elements = Array.from(
+      document.querySelectorAll('[data-card-field]'),
+    ) as HTMLElement[];
+    let nameCounts = new Map<string, number>();
+    for (let element of elements) {
+      let name = element.getAttribute('data-card-field') ?? '';
+      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+    }
+    let regions = elements.slice(0, cap).map((element) => {
+      let cardField = element.getAttribute('data-card-field') ?? '';
+      let rect = element.getBoundingClientRect();
+      let selector =
+        nameCounts.get(cardField) === 1
+          ? `[data-card-field="${escapeAttr(cardField)}"]`
+          : structuralPath(element);
+      return {
+        cardField,
+        selector,
+        boundingBox: {
+          x: Math.round(rect.left + window.scrollX),
+          y: Math.round(rect.top + window.scrollY),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        },
+      };
+    });
+    return { regions, total: elements.length };
+  }, SCREENSHOT_MAX_DISCOVER_REGIONS);
+  if (total > regions.length) {
+    log.debug(
+      `discoverFieldRegions capped: ${total} [data-card-field] elements, returned ${regions.length}`,
+    );
+  }
+  return regions;
+}
+
 export async function captureScreenshot(
   page: Page,
   format: 'isolated' | 'embedded',
@@ -1438,15 +1570,30 @@ export async function captureScreenshot(
     }`,
   );
 
-  // Defensive: `fullPage` and `clip` are mutually exclusive (Puppeteer ignores
-  // clip under fullPage). The shared capture-spec parse already 400s this on
-  // both request surfaces, but a direct prerender-server caller could still
-  // send it — fail cleanly rather than return a silently-wrong screenshot.
+  // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
+  // fullPage capture ignores a clip, and an element (`target`) screenshot
+  // honors neither. The shared capture-spec parse already 400s these on both
+  // request surfaces, but a direct prerender-server caller could still send one
+  // — fail cleanly rather than return a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
         page,
         `capture "${entry.name}" cannot set both fullPage and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.clip) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.fullPage) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and fullPage`,
         { title: 'Invalid screenshot capture spec' },
       );
     }
@@ -1529,6 +1676,15 @@ export async function captureScreenshot(
     // for the whole batch — every entry captures the same settled render.
     await waitForImagePaint(page);
 
+    // Field-region inventory (RP capture DSL `discover`). One pass over the
+    // settled render at the first entry's viewport, independent of the
+    // captures — a follow-up caller uses a region's box as a `clip` or its
+    // selector as a `target`. Runs before the capture loop so viewport
+    // switches within a batch don't move the boxes out from under it.
+    let regions = captureSpec?.discover
+      ? await discoverFieldRegions(page)
+      : undefined;
+
     let captures: ScreenshotCaptureItem[] = [];
     for (let entry of entries) {
       if (anyViewportOverride) {
@@ -1561,9 +1717,9 @@ export async function captureScreenshot(
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
         .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
-        .join(',')}`,
+        .join(',')}${regions ? ` regions=${regions.length}` : ''}`,
     );
-    return { captures };
+    return regions ? { captures, regions } : { captures };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing

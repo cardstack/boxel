@@ -72,6 +72,11 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 // of discard.
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
+// A `target` is a CSS selector, not an arbitrary program: bound its length so a
+// pathological selector can't be smuggled through, and (checked separately) it
+// may not contain `//` so it can never be an XPath.
+export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
+
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
 // overrides (default-valued fields are elided), so `null` exactly means
@@ -88,7 +93,9 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
   'captures',
+  'discover',
 ]);
 const CAPTURE_ENTRY_FIELDS = new Set([
   'name',
@@ -96,6 +103,7 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
 ]);
 const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
 const CAPTURE_SPEC_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
@@ -237,6 +245,28 @@ function parseOverrideFields(
     }
   }
 
+  if (raw.target !== undefined) {
+    let target = raw.target;
+    // `target: null` is an explicit unset, mirroring `clip: null` — the only
+    // way a batch entry drops a batch-wide target default. It elides after the
+    // merge, so a normalized spec never carries null.
+    if (target === null) {
+      overrides.target = null;
+    } else if (typeof target !== 'string' || target.trim().length === 0) {
+      return { error: `${path}.target must be a non-empty string` };
+    } else if (target.length > SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH) {
+      return {
+        error: `${path}.target must be at most ${SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH} characters`,
+      };
+    } else if (target.includes('//')) {
+      // `//` is the XPath descendant axis; refuse it so `target` can only ever
+      // be the CSS selector the capture path passes to `page.$`.
+      return { error: `${path}.target must be a CSS selector, not an XPath` };
+    } else {
+      overrides.target = target;
+    }
+  }
+
   return { overrides };
 }
 
@@ -247,6 +277,16 @@ function checkMergedOverrides(
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
+  }
+
+  // A `target` is an element-handle screenshot: it crops to one element and
+  // honors neither a region clip nor a full-page capture, so combining them is
+  // a contradiction rather than a composition.
+  if (spec.target && spec.clip) {
+    return `${path} cannot set both target and clip`;
+  }
+  if (spec.target && spec.fullPage) {
+    return `${path} cannot set both target and fullPage`;
   }
 
   // Tighter containment when a viewport was declared: the layout was
@@ -311,6 +351,9 @@ function elideDefaults(
   if (spec.clip) {
     out.clip = spec.clip;
   }
+  if (spec.target) {
+    out.target = spec.target;
+  }
   return out;
 }
 
@@ -338,6 +381,11 @@ function mergeOverrides(
   let clip = entry.clip !== undefined ? entry.clip : base.clip;
   if (clip) {
     merged.clip = clip;
+  }
+  // Same "explicit-wins, null-unsets" rule as clip.
+  let target = entry.target !== undefined ? entry.target : base.target;
+  if (target) {
+    merged.target = target;
   }
   return merged;
 }
@@ -367,15 +415,28 @@ export function parseScreenshotCaptureSpec(
     return { error: singular.error };
   }
 
+  // `discover` is spec-level, not a per-capture override: the field-region
+  // inventory is one pass over the shared settled render, so it applies to a
+  // singular and a batch spec alike and never appears on an entry. Elided when
+  // false so it does not make an otherwise-canonical spec look non-canonical.
+  if (raw.discover !== undefined && typeof raw.discover !== 'boolean') {
+    return { error: 'captureSpec.discover must be a boolean' };
+  }
+  let discover = raw.discover === true;
+
   if (raw.captures === undefined) {
     let crossError = checkMergedOverrides(singular.overrides, 'captureSpec');
     if (crossError !== undefined) {
       return { error: crossError };
     }
-    let spec = elideDefaults(singular.overrides);
+    let spec: ScreenshotCaptureSpec = elideDefaults(singular.overrides);
+    if (discover) {
+      spec.discover = true;
+    }
     // A spec whose every field matched an engine default normalizes to null:
     // it means the canonical capture, and null is what consumers key that
-    // classification on.
+    // classification on. `discover` is an override for this purpose — a
+    // discover render is not the canonical persisted capture.
     return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
   }
 
@@ -433,7 +494,11 @@ export function parseScreenshotCaptureSpec(
     entries.push({ name, ...elideDefaults(merged) });
   }
 
-  return { captureSpec: { captures: entries } };
+  return {
+    captureSpec: discover
+      ? { captures: entries, discover: true }
+      : { captures: entries },
+  };
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are

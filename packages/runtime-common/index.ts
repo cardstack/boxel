@@ -936,6 +936,14 @@ export type ScreenshotCaptureOverrides = {
   // only "back to no clip" spelling an object-valued field has); it elides
   // away after the merge, so a normalized spec never carries null.
   clip?: { x: number; y: number; width: number; height: number } | null;
+  // CSS selector for a single element to capture — an element-handle
+  // screenshot of the first match, tightly cropped to its box. Mutually
+  // exclusive with `clip` and `fullPage` (an element screenshot honors
+  // neither). The selector is bounded in length and may not contain `//`, so
+  // it is a CSS selector and never an XPath. A batch entry may set
+  // `target: null` to drop a batch-wide target default, the same "back to no
+  // target" spelling `clip` has; it elides away after the merge.
+  target?: string | null;
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -959,6 +967,12 @@ export type ScreenshotCaptureEntry = ScreenshotCaptureOverrides & {
 // is absent the singular fields describe a single capture.
 export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
   captures?: ScreenshotCaptureEntry[];
+  // Inventory the settled render's field regions alongside the capture(s):
+  // every `[data-card-field]` element's field name, a stable selector, and its
+  // CSS-pixel bounding box. A spec-level flag, not a per-capture override — the
+  // inventory is one pass over the shared settled render, independent of how
+  // many captures are taken. The result rides on the response's `regions`.
+  discover?: boolean;
 };
 
 export type ScreenshotPrerenderArgs = {
@@ -984,6 +998,16 @@ export type ScreenshotCaptureResult = {
   deviceScaleFactor: number;
 };
 
+// One discovered field region from a `discover` inventory. `boundingBox` is in
+// CSS pixels relative to the top-left of the rendered document (the same frame
+// `clip` uses), so a follow-up `clip` or `target` capture addresses it
+// directly.
+export type ScreenshotRegion = {
+  cardField: string;
+  selector: string;
+  boundingBox: { x: number; y: number; width: number; height: number };
+};
+
 export type ScreenshotPrerenderResponse = {
   status: 'ready' | 'error' | 'unusable';
   // Present on every ready response (a single entry named "default" when the
@@ -992,6 +1016,10 @@ export type ScreenshotPrerenderResponse = {
   // back-compat with the shipped host tool and the staging capture command,
   // which read the singular fields.
   captures?: ScreenshotCaptureResult[];
+  // Field-region inventory of the settled render, present only when the request
+  // set `discover: true` on a ready response. Independent of the captures — it
+  // is one pass over the same settled render, not per-image.
+  regions?: ScreenshotRegion[];
   base64?: string;
   width?: number;
   height?: number;
