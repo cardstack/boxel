@@ -52,6 +52,17 @@ module('Unit | loader mapping change during traversal', function () {
   // namespace and reads an uninitialized binding off it — `undefined`, the
   // value a cycle owes it. With the edge dropped, `b`'s factory is handed one
   // argument fewer and reads that binding off nothing at all.
+  //
+  // Every axis of the interleaving below is load-bearing: the two-node cycle,
+  // the parked fetch of `/b` (so the walk is suspended with `/a` registered and
+  // on the stack), and the mapping change landing inside that suspension. The
+  // drop it reproduces also only commits because `/a` is the last dep `/b`
+  // declares — a dep after it that still needs work would leave through
+  // `break outer_switch` and discard the truncated list. Anyone restructuring
+  // this module must re-verify it fails with the branch in `advanceToState`'s
+  // `registered` case narrowed back to recording a completing-dep only
+  // `else if (isRegistered(depModule))`, which should reject both tests with
+  // `Cannot read properties of undefined (reading 'a')`.
   let cycleSources: Record<string, string> = {
     '/a': `import { b } from './b'; export const a = 'a' + b;`,
     '/b': `import { a } from './a'; export const b = 'b' + String(a);`,
