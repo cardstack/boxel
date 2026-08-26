@@ -264,7 +264,7 @@ module.exports = {
         tsconfigRootDir: __dirname,
       },
       rules: {
-        '@cardstack/boxel/no-url-from-realm-identifier': 'warn',
+        '@cardstack/boxel/no-url-from-realm-identifier': 'error',
       },
     },
   ],

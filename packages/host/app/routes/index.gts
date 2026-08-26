@@ -294,6 +294,12 @@ export default class Card extends Route {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
       let realmUrl = this.realmServer.availableRealmIdentifiers.find(
         (realmUrl) => {
+          // `availableRealmIdentifiers` is seeded from `baseRealm.url` and from
+          // realm-server responses, so entries are URL-form and this does not
+          // throw. If prefix forms reach here, this needs to compare namespaces
+          // rather than pathnames — there is no path to take apart in
+          // `@scope/name/`.
+          // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
           let realmPathParts = new URL(realmUrl).pathname
             .split('/')
             .filter((part) => part !== '');

@@ -47,11 +47,18 @@ function directoryNameFromModule(
   let segment: string | undefined;
   try {
     segment = lastMeaningfulSegment(
+      // A prefix form throws here and is handled by the catch below, which
+      // resolves it against the realm and takes the same final segment.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       new URL(trimExecutableExtension(rri(moduleIdentifier))).pathname,
     );
   } catch {
     try {
       segment = lastMeaningfulSegment(
+        // The prefix-form path. Resolving `@scope/name/rest` against the realm
+        // gives a URL whose last meaningful segment is still `rest`, which is
+        // all this function reads.
+        // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
         new URL(trimExecutableExtension(rri(moduleIdentifier)), paths.url)
           .pathname,
       );

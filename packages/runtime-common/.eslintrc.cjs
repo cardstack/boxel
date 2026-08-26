@@ -8,10 +8,9 @@
 // inert. Building that program makes this package's lint slower, which is why
 // it is turned on here rather than repo-wide.
 //
-// Reporting as a warning to start: the existing sites need triage into "really
-// is the network boundary" and "should never have parsed this", and a warning
-// surfaces them without blocking anyone mid-triage. It becomes an error once
-// that list is empty.
+// An error, with no standing violations. Every site that parses an identifier
+// either resolves it through the VirtualNetwork or carries an inline disable
+// saying which guard makes the parse safe there.
 module.exports = {
   overrides: [
     {
@@ -23,15 +22,6 @@ module.exports = {
         tsconfigRootDir: __dirname,
       },
       plugins: ['@cardstack/boxel'],
-      rules: {
-        '@cardstack/boxel/no-url-from-realm-identifier': 'warn',
-      },
-    },
-    // TEMPORARY, paired with lint-rule-demo.ts: raises the rule to an error for
-    // that one file so a CI lint job fails on it and nothing else. Revert the
-    // commit that added both.
-    {
-      files: ['lint-rule-demo.ts'],
       rules: {
         '@cardstack/boxel/no-url-from-realm-identifier': 'error',
       },
