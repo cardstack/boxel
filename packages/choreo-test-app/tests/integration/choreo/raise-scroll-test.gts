@@ -84,6 +84,83 @@ module('Integration | choreo | raise and scroll', function (hooks) {
     assert.strictEqual(home.style.filter, '', 'the costume comes off');
   });
 
+  /**
+   * A promotion is a move between two parents, and every number it writes is
+   * a LOCAL pixel — but the boxes it reads are client rects, which carry
+   * every transform above them. Where the region is being scaled by
+   * something outside it (a page crossing carrying the whole demo; a camera
+   * zoom, which is the same transform one element higher), a difference of
+   * two client rects written back as a local offset is the scale applied
+   * twice, and the sprite jumps the moment it is lifted. The eye reads that
+   * as the raise itself being wrong.
+   */
+  test('a raise inside a scaled ancestor does not move the sprite', async function (assert) {
+    class App extends Component {
+      @tracked step = 0;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        {{! the crossing, reduced to the one wrapper that matters }}
+        <div style="transform:scale(0.5);transform-origin:0 0">
+          <Choreo
+            class="stage"
+            style="position:relative;width:400px;height:300px"
+            as |c|
+          >
+            <div
+              id="clip2"
+              style="overflow:hidden;margin:60px 0 0 120px;width:80px;height:40px"
+            >
+              <div
+                id="lift2"
+                data-s={{this.step}}
+                style="width:60px;height:30px;background:#fa0"
+                {{motion id="lift2" role="card"}}
+              ></div>
+            </div>
+            <c.Parallel>
+              <c.Raise @of={{c.role "card"}} />
+              <c.Tween
+                @of={{c.role "card"}}
+                @opacity={{0.9}}
+                @duration={{0.6}}
+              />
+            </c.Parallel>
+          </Choreo>
+        </div>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await animationsSettled();
+    const el = find('#lift2') as HTMLElement;
+    const before = el.getBoundingClientRect();
+
+    app!.step = 1;
+    await settled();
+    await nextFrame();
+    assert.ok(el.closest('[data-choreo-raised]'), 'promoted');
+
+    const after = el.getBoundingClientRect();
+    for (const key of ['left', 'top', 'width', 'height'] as const) {
+      assert.true(
+        Math.abs(after[key] - before[key]) < 1,
+        `${key} unchanged by the lift (${before[key]} → ${after[key]})`
+      );
+    }
+
+    const seat = document.querySelector('#clip2 [aria-hidden]') as HTMLElement;
+    const seatBox = seat.getBoundingClientRect();
+    assert.true(
+      Math.abs(seatBox.width - before.width) < 1 &&
+        Math.abs(seatBox.height - before.height) < 1,
+      'and the placeholder holds a seat the same size as the sprite'
+    );
+    await animationsSettled();
+  });
+
   test('a scroll step lands the sprite at @align and occupies the sequence', async function (assert) {
     class App extends Component {
       @tracked cited = 0;

@@ -1371,29 +1371,6 @@ export class ChoreoRun implements Run {
     ve.render();
   }
 
-  /**
-   * A sprite's box in the region's own space — the same mapping the
-   * tether draws in, so a follower and a wire agree at any camera zoom.
-   */
-  private regionRect(sprite: Sprite): Rect | null {
-    const el = sprite.element;
-    if (!el?.isConnected) {
-      return null;
-    }
-    const r = el.getBoundingClientRect();
-    const frame = this.options.cameraFrame?.getBoundingClientRect();
-    const zoom = this.camera.zoom || 1;
-    if (!frame) {
-      return { height: r.height, width: r.width, x: r.x, y: r.y };
-    }
-    return {
-      height: r.height / zoom,
-      width: r.width / zoom,
-      x: (r.x - frame.x) / zoom,
-      y: (r.y - frame.y) / zoom,
-    };
-  }
-
   private drawTether(t: Track) {
     const layer = this.options.tetherLayer;
     const tether = t.cue.tether;
@@ -1436,6 +1413,25 @@ export class ChoreoRun implements Run {
 
   /* ---- c.Raise: the elevated layer (§6.3) ---- */
 
+  /**
+   * The scale between the layer's own pixels and the screen's, per axis.
+   *
+   * A promotion reads client rects and writes LOCAL pixels, and every
+   * transform above the region — a camera zoom, a page crossing carrying the
+   * whole scene, any ancestor with a scale on it — sits between the two. Read
+   * off the layer itself: its rect is what the screen shows, its offset size
+   * is what its own coordinate system calls that. Dividing by the camera zoom
+   * alone would catch the region's own transform and miss everything outside
+   * it, which is the double-scale the tether draw already dodges by mapping
+   * through the screen CTM.
+   */
+  private static layerScale(el: HTMLElement, box: DOMRect) {
+    return {
+      x: el.offsetWidth ? box.width / el.offsetWidth : 1,
+      y: el.offsetHeight ? box.height / el.offsetHeight : 1,
+    };
+  }
+
   private promote(t: Track) {
     const layer = this.options.raisedLayer;
     const el = t.cue.sprite.element;
@@ -1444,18 +1440,21 @@ export class ChoreoRun implements Run {
     }
     const box = el.getBoundingClientRect();
     const layerBox = layer.getBoundingClientRect();
+    const s = ChoreoRun.layerScale(layer, layerBox);
+    const width = box.width / s.x;
+    const height = box.height / s.y;
     // the slot holds: siblings must not reflow under a lifted sprite
     const placeholder = document.createElement(el.tagName);
     placeholder.setAttribute('aria-hidden', 'true');
-    placeholder.style.cssText = `visibility:hidden;width:${box.width}px;height:${box.height}px;margin:0;flex:none`;
+    placeholder.style.cssText = `visibility:hidden;width:${width}px;height:${height}px;margin:0;flex:none`;
     const prior = el.style.cssText;
     el.parentNode?.insertBefore(placeholder, el);
     layer.appendChild(el);
     el.style.position = 'absolute';
-    el.style.left = `${box.left - layerBox.left}px`;
-    el.style.top = `${box.top - layerBox.top}px`;
-    el.style.width = `${box.width}px`;
-    el.style.height = `${box.height}px`;
+    el.style.left = `${(box.left - layerBox.left) / s.x}px`;
+    el.style.top = `${(box.top - layerBox.top) / s.y}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
     el.style.margin = '0';
     if (t.cue.raise?.shadow) {
       el.style.filter = 'drop-shadow(0 18px 24px rgba(0,0,0,0.35))';
