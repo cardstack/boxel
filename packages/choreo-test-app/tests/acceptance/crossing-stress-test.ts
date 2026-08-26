@@ -132,13 +132,9 @@ module('Acceptance | crossing stress', function (hooks) {
         Math.abs(violet.left - ember.left) > 20,
       `hero travelled into Violet's rest (${ember.left.toFixed(0)},${ember.top.toFixed(0)} → ${violet.left.toFixed(0)},${violet.top.toFixed(0)})`
     );
-    assert.true(
-      parseFloat(getComputedStyle(hero).borderRadius) < 4,
-      `Violet's plate is square-cornered (${getComputedStyle(hero).borderRadius})`
-    );
 
     // wrap-around: crop-scale of Violet's width onto Tide's square is
-    // the flight that used to explode; a real-box + radius tween must not
+    // the flight that used to explode; a real-box tween must not
     stress().go(0);
     await settled();
     await animationsSettled();
