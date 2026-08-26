@@ -1,270 +1,74 @@
+<div align="center">
+
 # Choreo
 
-**Motion, Choreo-graphed.** Choreography for Ember. `<Choreo>` watches a whole render pass and
-hands you its **changeset** — what was inserted, removed and kept, and where each of them stood
-before and after — then plays a timeline you declare over it. A scene that is sequenced, rather
-than a set of elements each animating on its own.
+**Motion, Choreo-graphed.**
+The [Motion](https://motion.dev) engine for Ember — and a timeline for the scene. `<Choreo>` watches a render pass, measures its **changeset** — what was inserted, removed, kept, and where everything stood before and after — and plays a score you declare over it. Magic-Move crossings, gates you click through, wires drawn every frame, values derived from other elements' measurements — all interruptible mid-flight, by design.
+
+**Live gallery:** [**cardstack.github.io/choreo**](https://cardstack.github.io/choreo/) &nbsp; · &nbsp; 32 stages, every one a test fixture
+
+</div>
 
 ```gts
-import { Choreo, motion } from 'glimmer-motion';
+<Choreo as |c|>
+  {{#each this.cards key='id' as |card|}}
+    <div {{motion id=card.id role='card'}}>{{card.title}}</div>
+  {{/each}}
 
-<template>
-  <Choreo as |c|>
-    {{#each this.cards key='id' as |card|}}
-      <div {{motion id=card.id role='card'}}>{{card.title}}</div>
-    {{/each}}
-
-    <c.Sequence>
-      <c.Tween @of={{c.removed 'card'}} @opacity={{0}} @ms={{220}} />
-      <c.Move @of={{c.moved 'card'}} @spring={{this.soft}} />
-      <c.Tween @of={{c.inserted 'card'}} @opacity={{1}} @ms={{260}} />
-    </c.Sequence>
-  </Choreo>
-</template>
+  <c.Sequence>
+    <c.Tween @of={{c.removed 'card'}} @opacity={{0}} @duration={{0.22}} />
+    <c.Move @of={{c.moved 'card'}} @spring={{this.soft}} />
+    <c.Tween @of={{c.inserted 'card'}} @opacity={{1}} @duration={{0.26}} />
+  </c.Sequence>
+</Choreo>
 ```
 
-Underneath it, **`glimmer-motion`** binds the [Motion](https://motion.dev) engine to Glimmer:
-`motion-dom`, untouched, as a modifier and a handful of components — layout, shared-element
-transitions, presence, variants, drag, reorder. That binding is a complete, usable port in its own
-right, and it is what Choreo stands on. Both ship in the one package.
+<div align="center">
 
-```gts
-import { motion, Presence, LayoutGroup, to, spring } from 'glimmer-motion';
+**Declared like a template** &nbsp; · &nbsp; measured like layout &nbsp; · &nbsp; sequenced like a score &nbsp; · &nbsp; scrubbed like a video
 
-<template>
-  <LayoutGroup>
-    <Presence
-      @items={{this.cards}}
-      @key={{this.keyOf}}
-      @mode='popLayout'
-      as |card h|
-    >
-      <div
-        {{motion
-          presence=h
-          layoutId=card.id
-          initial=(to opacity=0 y=20)
-          animate=(to opacity=1 y=0)
-          exit=(to opacity=0 scale=0.9)
-          transition=(spring stiffness=300 damping=30)
-          drag='x'
-          dragSnapToOrigin=true
-        }}
-      >{{card.title}}</div>
-    </Presence>
-  </LayoutGroup>
-</template>
-```
+**Interrupted like Keynote** &nbsp; · &nbsp; click again mid-flight and everything re-aims from where it is painted
+
+</div>
 
 <p align="center">
-  <a href="https://cardstack.github.io/choreo/"><strong>See the gallery →</strong></a>
+  <img src="docs/gallery.png" alt="The Choreo gallery in light mode: the Motion, Choreographed hero above a grid of live demos — Playhead, Lightbox, and more" width="900">
 </p>
 
-<p align="center">
-  <img src="docs/gallery.png" alt="The Choreo gallery: the Motion, Choreographed hero above a grid of live demos — Playhead, Lightbox, Beacons and Sequence" width="900">
-</p>
+---
 
-> Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still
-> published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`.
+## What is Choreo?
 
-**New here?** [docs/guide.md](docs/guide.md) teaches this from a Glimmer card rather than from a React
-translation table. The rest of this document is the reference: what Choreo adds, what the binding
-covers, and where each piece of Motion went.
+Choreo is two layers in one repo, published as two packages.
 
-- [Features](#features)
-- [Why the engine is untouched](#why-the-engine-is-untouched)
-- [How it was made](#how-it-was-made)
-- [Fidelity](#fidelity)
-- [Install](#install) · [API](#api) · [React → Glimmer](#react--glimmer)
-- [Three rules React does not need](#three-rules-react-does-not-need) · [Testing](#testing)
-- [Architecture](#architecture)
-- [Not ported](#not-ported-yet)
-- [Development](#development) · [Roadmap](#roadmap) · [Credits](#credits)
+**The choreography layer** is the reason the repo exists: a region-scoped model that Motion's per-element API has no equivalent for. A `<Choreo>` region treats each render pass as one event. It snapshots its participants before the DOM changes, measures them after, and hands the difference — the **changeset** — to a timeline declared right in the template. One score describes the whole scene: what leaves, what flies, what arrives, in what order, on which clock.
 
-## Features
+**The binding underneath** is **`glimmer-motion`**: `motion-dom` — Motion's framework-free engine, untouched — bound to Glimmer as a modifier and a handful of components. Layout animation, shared-element transitions, presence, variants, drag, reorder, scroll. It is a complete, usable port in its own right (held to Motion's own test suites, pixel for pixel), and it is what the choreography stands on. Both ship in the one `glimmer-motion` package.
 
-**Choreography** — Choreo's own, and the reason this repo exists: a region-scoped model Motion's
-per-element API has no equivalent for ([docs/choreography.md](docs/choreography.md);
-[nested regions and beacons](docs/nested-choreo.md))
+A third piece, **`choreo-player`**, is a dependency-free headless transport for clocking Choreo runs from outside — a video renderer, a capture worker, a scrub UI ([packages/choreo-player](packages/choreo-player)).
 
-- `<Choreo>` watches its render passes and hands each one's **changeset** — inserted / removed / kept
-  participants with their bounds before and after — to a timeline declared inside it
-- `c.Sequence` / `c.Parallel` blocks of `c.Tween` / `c.Spring` / `c.Move` (FLIP) / `c.Hold` / `c.Wait`
-  steps; a sequence can follow a spring (its length is computed with the engine's generator)
-- **z-index as a window**: `c.Hold` sets a value for the span of its block and releases it
-- removed participants stay on screen, locked where they were, for as long as the timeline names them —
-  no `<Presence>` needed; an inserted id that replaces a removed one carries it as a `counterpart`
-- any property may be a function of the sprite and the changeset: one element's motion from another's
-  measurement
+> Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`. The repo is **Choreo**; the published package is still **`glimmer-motion`** — one npm name, unchanged, and every import in these docs is the real one.
 
-Everything below this point is the `glimmer-motion` binding: Motion's own implementation, driven
-through Glimmer, and covered by a port of the upstream test that pins it.
+**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. The choreography design docs: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [demo-recording.md](docs/demo-recording.md) (external clocks), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
 
-**Animation**
+- [Why choreography?](#why-choreography)
+- [Install](#install)
+- [At a glance: the design decisions](#at-a-glance-the-design-decisions)
+- [A tour of the vocabulary](#a-tour-of-the-vocabulary)
+- [Where it earns its keep](#where-it-earns-its-keep)
+- [Interruption, tested](#interruption-tested)
+- [External clocks: choreo-player](#external-clocks-choreo-player)
+- [The binding underneath](#the-binding-underneath) · [Why the engine is untouched](#why-the-engine-is-untouched) · [How it was made](#how-it-was-made) · [Fidelity](#fidelity)
+- [API](#api) · [React → Glimmer](#react--glimmer) · [Three rules React does not need](#three-rules-react-does-not-need)
+- [Testing](#testing) · [Architecture](#architecture) · [Development](#development) · [Roadmap](#roadmap) · [Credits](#credits)
 
-- `initial` / `animate` / `exit` targets, keyframes arrays, per-value `transition`s, `transitionEnd`
-- springs, tweens, inertia, `delay`, `repeat`, easing names and cubic-beziers — the engine's full transition surface
-- **variants** with labels, variant functions with `custom`, propagation down the element tree,
-  `staggerChildren` / `delayChildren` / `staggerDirection` / `when: "beforeChildren" | "afterChildren"`
-- motion values: `motionValue`, `transformValue`, `animateMotionValue`, springs — bound through `style`
-- `style` with static values and `MotionValue`s side by side; CSS variables; transform shorthands (`x`, `rotate`, `scale`…)
-- SVG elements (`<circle>`, `<rect>`, `<path>` …): attribute animation, `pathLength`, CSS transforms
-- `onAnimationStart` / `onAnimationComplete` / `onUpdate`, `AnimationControls` via `animate`
-- unmount cleanup of animations and motion values
+## Why choreography?
 
-**Layout**
+Element-level animation answers "how does this element move?" — and for one element it is the right question. But most of what a product ships is _scenes_: a card opens into a page, a row grows into a detail panel, a slide builds in steps, a dropped card springs into its slot while its neighbours make room. In a scene, elements don't have independent motion — they have **relationships**: this one leaves _before_ that one flies; this badge rides _that_ card; this panel grows out of _that_ row; everything freezes _while_ the hero crosses.
 
-- `layout` (`true` / `"position"` / `"size"`) — FLIP layout animation with the projection tree's scale correction
-  (border radius, box shadow, children don't distort)
-- `layoutId` shared-element transitions between elements, crossfade, lead/follow promotion, the lightbox pattern
-- `<LayoutGroup>` with `@id` namespacing and `@inherit`
-- `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutAnchor`, `layoutCrossfade`, `onLayoutMeasure`
-- nested and relative projection targets (a child following an animating parent)
-- portals (`data-framer-portal-id`), `instantLayoutTransition()`, `layoutChange()` / `snapshotAll()` / `requestSettle()`
+Per-element APIs make you reconstruct those relationships by hand: measure rects imperatively, spawn clone overlays, chain `setTimeout`s, hide the real element while a copy flies, and hope nobody clicks mid-flight. Every one of those hand-built mechanisms was found, catalogued, and replaced during the port of a real product workspace onto this library — the clones, the `afterRender` measurement hooks, the hand-matched timer pairs, all of it collapsed into declared timelines ([christse/bento-boxel#1](https://github.com/christse/bento-boxel/pull/1) is the receipts).
 
-**Presence**
-
-- `<Presence>` = AnimatePresence: `sync` / `wait` / `popLayout` modes, `@initial={{false}}`, `@custom`,
-  `@onExitComplete`, nested presence with `@propagate`
-- `h.isPresent` (tracked), exit-then-enter of the same key, a leaving item keeps its last props
-- interaction with `layout` and `layoutId` (exiting lead hands over to the entering follower)
-
-**Drag** (Motion's pan/drag session, vendored verbatim)
-
-- `drag` on `true` / `"x"` / `"y"`, `dragDirectionLock`, `dragPropagation`, `dragListener`
-- `dragConstraints` as an object, an element or a `{current}` ref; `dragElastic`, `dragMomentum`,
-  `dragTransition`, `dragSnapToOrigin`, `onMeasureDragConstraints`; constraints re-measured on resize
-- `createDragControls()` with `snapToCursor`; `whileDrag`; `onDragStart` / `onDrag` / `onDragEnd` / `onDirectionLock`
-- pan handlers (`onPanStart` / `onPan` / `onPanEnd` / `onPanSessionStart`)
-- drag inside `layout` / `layoutId` elements, nested draggables, drag while the page or a container scrolls,
-  interactive children (inputs, selects, contenteditable) don't start a drag
-- `transformPagePoint` with `correctParentTransform()` (rotated / scaled parents) and
-  `transformViewBoxPoint()` (`<svg viewBox>`)
-
-**Gestures** (Motion's hover / press / focus / viewport features)
-
-- `whileHover`, `whileTap`, `whileFocus`, `whileInView` with their handlers (`onHoverStart`/`End`,
-  `onTapStart`/`onTap`/`onTapCancel`, `onViewportEnter`/`Leave`), keyboard activation of tap, `globalTapTarget`,
-  `propagate={{hash tap=false}}`, `viewport` options (`root`, `margin`, `amount`, `once`), gesture priority
-  over `animate` and each other
-- `<MotionConfig @transition @reducedMotion @transformPagePoint @skipAnimations @nonce>` — defaults for
-  the tree, `inherit: true` transitions, nested configs. `@reducedMotion` defaults to **`"user"`** here,
-  not React's `"never"`: `prefers-reduced-motion` is a platform setting, and honouring it is not a feature
-- `scrollProgress()` (scroll position/progress motion values; container, target, offsets) and `InView`
-  (tracked `isInView`) over Motion's `scroll()` / `inView()`, which are exported too.
-  `useScroll` / `useInView` remain as deprecated aliases
-
-**Reorder** (Motion's Reorder.Group / Reorder.Item)
-
-- `<ReorderGroup>` / `<ReorderItem>` on `ul` / `li` with `...attributes`
-- axis `"x"` / `"y"` / `"xy"` (wrapped lists), detected from the layout when not given
-- auto-scroll of a scrollable ancestor near its edges; works inside `<Presence>` (the tabs demo)
-
-**Glimmer**
-
-- `.gts`, Glint signatures for every component and the modifier; named exports, no `Component` suffix
-- plain-function template helpers — `to`, `spring`, `tween`, `inertia`, `stagger`, `ease` — so a template
-  is not written in `(hash)`
-- a v2 addon: Embroider and Vite apps consume it directly; ESM, tree-shakeable per module
-- **`glimmer-motion/test-support`**: `animationsSettled()`, `bounds()`, `shape()`, `setupMotion(hooks)` —
-  a suite that waits for motion instead of sleeping through it
-- host hooks isolated in ~40 lines (`{{motion}}` shell + a `postRender` scheduler) so the engine glue can be re-hosted
-
-## Why the engine is untouched
-
-Motion's React library is two things. An animation engine — `motion-dom`: motion values, springs and
-keyframes, the _projection tree_ that does layout animation and scale correction, the pan/drag session —
-and a thin layer of React that feeds that engine props at the right moments. The engine is framework-free
-and published on its own. Only the glue is React.
-
-So this package does not re-implement animation, and it does not fork Motion. It binds the engine to
-Glimmer's rendering lifecycle and reproduces, exactly, the _ordering_ React's glue gives the engine:
-
-- visual elements are constructed **parents-first during render** and mounted **children-first in effects**;
-- every element that re-renders **snapshots its layout before the DOM changes**, the root **measures after**;
-- presence is announced **after the commit**, and a leaving element is rendered **from its last element** — its props frozen;
-- the engine's own update runs in a microtask **after all of that**, never between a render and its mounts.
-
-Getting those right is the whole job. When they are right, the engine's behaviour matches Motion to the
-pixel — which is not an aspiration but the thing we measure.
-
-## How it was made
-
-Choreo started as the motion layer of a port: a React app built on Motion (the "bentobox"
-reference, frozen as ground truth) moving to a modern Vite/Embroider Ember app. The first question was how
-much work Motion needed to run under Glimmer. The answer turned out to be "none, if you don't touch it."
-
-**Strategy.** Cardstack had done this once before with [boxel-motion](https://github.com/cardstack/boxel), a
-Glimmer animation library with its own engine. Comparing the two made the call obvious: Motion's value is
-in the engine (the projection tree especially), and that engine is already framework-free. The binding
-would use `motion-dom` as-is and replicate only the React glue — and it would be held to the standard of
-Motion's own tests rather than our eyes.
-
-**Method: port the test suite, in order, and let it drive the binding.** Each step ported one of Motion's
-Jest suites or Cypress fixture specs line by line — the fixture components rebuilt as Glimmer components,
-the literal expected pixel values kept — and whatever failed was a place where the binding's ordering
-differed from React's. In sequence: the animate prop, variants, AnimatePresence, LayoutGroup, keyframes
-and delay, the style prop and unmount, then the eighteen `layout-*` Cypress specs, then the nineteen
-`drag-*` specs, then Reorder. Nothing was declared done on a behaviour until the upstream test for it was
-green in a real Chrome.
-
-**What that surfaced.** Almost everything a port like this gets wrong is a timing rule, and the tests found
-each one:
-
-- Glimmer installs modifiers children-first, so a child can't find its parent's visual element when its
-  modifier first runs. First runs queue; the queue constructs in document order and mounts post-order after
-  the pass — and sibling order matters, because the engine's stagger index is built from it.
-- There is no `getSnapshotBeforeUpdate`. boxel-motion's render detector — a getter consuming
-  `@glimmer/validator`'s `VOLATILE_TAG` re-evaluates on every render pass — lets `<LayoutGroup>` snapshot
-  every projection node before the DOM changes, the way React re-rendering each motion component would.
-- The engine's update microtask must not run between Glimmer's render and the mounts, or it clears
-  snapshots and layout animations become identity transitions. One settle per pass, after the mounts.
-- An element created already-absent must still mount _present_ and then leave, or its exit is swallowed.
-- AnimatePresence renders a leaving child from its last present element; a live Glimmer block doesn't. When
-  a removed tab was also the selected one, its `animate` changed in the same pass as its exit and a stale
-  flag from a blocked initial mount let that change restart opacity over the exit. The modifier now freezes
-  an exiting element's props — React's behaviour, arrived at from a failing Cypress fixture.
-- `initial` values must be in the DOM before the projection first measures (percentage transforms resolve
-  against that box); React has them in the style attribute synchronously, so the binding renders them
-  synchronously at mount.
-- A Cypress page is fresh per test; a test runner isn't. The document projection node caches scroll per
-  `animationId` and leaked a stale offset across tests until the harness reset it the way a page visit does.
-
-**Packaging.** With the suite green the binding was split along the line the imports already drew:
-`MotionNode` (one element's lifecycle, no host framework), the layout pipeline, the features and a
-`postRender` scheduler on one side; the `ember-modifier` shell, the scheduler's runloop adapter and the four
-Glimmer components on the other. That second side is about forty lines plus the components — the surface
-another Glimmer host (a SES-sandboxed renderer, say) re-implements to reuse everything else. Then it was
-lifted out of the app into this repo as a v2 addon with the suite as its test-app.
-
-## Fidelity
-
-The suite has two halves, and they answer different questions.
-
-**Is it Motion?** `test-app` carries the upstream ports: the Jest suites (animate prop, variants,
-AnimatePresence, LayoutGroup, keyframes/delay, style prop, unmount) and the Cypress fixtures (all
-`layout-*`, all `drag-*`, `drag-to-reorder`, `drag-tabs`) — the fixture components rebuilt as Glimmer
-components with the literal expected pixel values kept. Where a literal was changed the reason is inline;
-each is a Cypress-runner artefact (an implicit `scrollIntoView`, `50vw` measured against the runner window,
-a "this should actually be 400" comment upstream left in). Environment deltas are documented the same way:
-DOM-read start values need a second frame in a real browser where jsdom collapsed the frameloop, and an
-Ember `render()` settles on a timer where RTL's is synchronous.
-
-**Does the choreography model hold?** `<Choreo>` is not Motion's, so it has no upstream test to inherit.
-It has a contract suite that states its rules on small fixtures, and a soak that hammers the real gallery
-(see [Testing](#testing)).
-
-**465 cases, 463 pass, 2 are upstream's own `it.skip`.**
-
-```
-pnpm install && pnpm test     # builds the addon, runs the suite (a development-mode build, as boxel does) in Chrome
-```
-
-## The name
-
-The repo is **Choreo** (`cardstack/choreo`). The published package is still
-`glimmer-motion` — one npm name, unchanged, and every import in these docs is the
-real one.
+The changeset is what makes the declarative form possible. Because the region measures **everything, both sides of every pass**, the timeline never needs a hand-measured rect: a step names _which sprites_ (by id, role, or what happened to them — `inserted`, `removed`, `moved`, `claimed`) and _what to do_, and the geometry is already there. And because every value is a function of the run's clock over measured endpoints, a second click mid-flight simply re-measures and re-aims — interruption is not an edge case to be defended against, it is the normal case the whole model is built around.
 
 ## Install
 
@@ -272,9 +76,300 @@ real one.
 pnpm add glimmer-motion motion-dom motion-utils
 ```
 
-Peer dependencies: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glimmer/component`,
-`@glimmer/tracking`, `ember-source >= 5.4`. It's a v2 addon: Embroider and Vite apps consume it directly,
-with TypeScript types and Glint signatures.
+Peer dependencies: `motion-dom` / `motion-utils` (pinned together), `ember-modifier`, `@glimmer/component`, `@glimmer/tracking`, `ember-source >= 5.4`. It's a v2 addon: Embroider and Vite apps consume it directly, with TypeScript types and Glint signatures. The headless transport is separate: `pnpm add choreo-player`.
+
+## At a glance: the design decisions
+
+Twelve decisions that make Choreo feel the way it does. Each one is enforced by tests, and most were paid for the hard way.
+
+- **The scene is the unit.** A region owns a subtree; participants opt in with `{{motion id= role=}}`; each render pass is one changeset, one timeline, one run. Two regions are two scenes with separate clocks — and nesting is legal, because an inner region measures its own pass correctly even while an outer one is flying the box it lives in.
+- **Leavers belong to the timeline.** A removed participant stays on screen, locked where it stood, exactly as long as the score names it — the region parks it in an orphan layer and releases it when its row ends. No `<Presence>` inside a scene, no clones, no "keep this in state a bit longer" flags.
+- **Identity pairs across renders.** An inserted id that replaces a removed one _claims_ it: one flight, two skins, crossfaded over the moving box. The same bare id in two different regions pairs across them — **far matching** — and the arrival flies from the departure's box as one continuous move. Pairing is also what makes "back" trail-correct for free: a closing page flies to wherever its identity truly renders next.
+- **z-index is a window; elevation is a layer.** `c.Hold` sets any property for the span of its block and hands it back — the whole "timed z-index flag" genre, retired. `c.Raise` is for what z-index cannot say: promotion to a real layer above every stacking context and overflow clip in the region, for the window, with the slot held by a placeholder.
+- **A gate is a pause; back is a hold.** `c.Gate` parks the run until `advance()` (Keynote's click), `@delay` opens it by itself, and `advance()` mid-segment is the click-through: complete instantly, park at the gate. `run.retreat()` is the Keynote back rule as a verb: land parked at the previous gate, everything ahead re-closed, and **hold** — nothing plays, no `@delay` gate self-opens, until the user advances and the build replays forward.
+- **Interruption is the doctrine.** A sprite mid-flight reads as _moved_ on every re-pass — its `initial` is the painted box, by design — so a replacement run starts from what is on screen, with velocities handed over. And a replacement pass may not drop a flight: anything the prior run was driving that the new score doesn't name gets a synthesized continuation to its rest. (Without that rule, any unrelated re-render could snap a flying element home in one frame; the test that caught it watches every frame.)
+- **Unnamed means no animation.** A reflow the score doesn't name lands instantly — apps rely on it. The continuity rule above is scoped to what was _flying_; layout stays layout.
+- **A beacon is a place, not an identity.** `{{beacon 'trash'}}` publishes a box; `@from`/`@to` borrow it as one end of a flight. The bin never joins a changeset, never deforms, and the pass measures it fresh each time — including _after_ the layout it sits in has re-solved, which kills the "predict where the slot will be" computation entirely.
+- **Derived values never read the page.** `c.Follow` computes one sprite's properties from another's _measurements_: each source arrives as `{ from, to, now }` — resting boxes from the pass, plus a current position composed from the values the run is already driving — and the follower's own box arrives as `rest`, which cannot contain what the follower writes. Pure by construction, so a follower cannot feed its own output back or force a style recalculation mid-move. The API looks this way because the obvious API (live boxes) shipped first and failed five ways; [the post-mortem](docs/postmortem-follow.md) is part of the documentation.
+- **Some ink stands.** An open-ended `c.Tether` draws its wire every frame and every still, indefinitely — a standing run that reports settled while it ticks. Tether, raise, and scroll cues compare by identity across re-renders, so a busy page cannot tear a standing wire down and refade it sixty times a second.
+- **The vocabulary is open.** Blocks answer to the anchor system (`@name` a block, `@at={{at 'carry'}}` a step against it), and a composite step is a published seam: subclass `StepComponent`, return a node tree, and your app speaks its own words — `<Carry>`, `<HotLine>`, `<CitePulse>` — with `generic: true` children that yield to anything more specific in the same score.
+- **Time is a value.** `run.time` is settable in both directions; setting it across a gate parks there; a still is a computed frame, not a paused accumulation. That is what makes the Playhead demo scrubbable, the presentation reversible, and the whole thing renderable from an external clock.
+
+## A tour of the vocabulary
+
+One scene, ten statements. The fixture is the same shape throughout: participants declared with `{{motion id= role=}}`, a timeline beside them.
+
+**1 · The changeset, sequenced.** Steps select what _happened_ — `c.inserted` / `c.removed` / `c.kept` / `c.moved` / `c.still` (optionally by role), `c.role`, `c.id`, `c.claimed` / `c.received` for the two halves of a pair, and `c.onstage(query)` to touch only what a viewport can see.
+
+```gts
+<c.Sequence>
+  <c.Tween @of={{c.removed 'row'}} @opacity={{0}} @duration={{0.16}} />
+  <c.Move @of={{c.moved 'row'}} @spring={{spring stiffness=300 damping=24}} />
+  <c.Tween @of={{c.inserted 'row'}} @opacity={{1}} @duration={{0.2}} />
+</c.Sequence>
+```
+
+A sequence can follow a spring — its length is computed with the engine's own generator, not guessed.
+
+**2 · z-index as a window.**
+
+```gts
+<c.Parallel>
+  <c.Hold @of={{c.moved 'card'}} @zIndex={{3}} />
+  <c.Move @of={{c.moved 'card'}} @spring={{carry}} />
+</c.Parallel>
+```
+
+The hold spans the block and releases; `@fill={{true}}` keeps it; `@duration` gives it its own window. Any property, not just z.
+
+**3 · The crossing — Keynote's Magic Move as one step.** For a view or route swap where the same identities exist on both sides:
+
+```gts
+<Choreo @route={{true}} @quiet={{true}} @scroll={{scrollIntent}} as |c|>
+  {{#if (crossingActive)}}
+    <c.Crossing @duration={{0.9}} @ease={{EASE}} @leave={{0.42}} @arrive={{0.55}} @overlap={{0.18}} />
+  {{/if}}
+  {{outlet}}
+</Choreo>
+```
+
+Leaves dissolve as the paired elements lift off; arrivals land near the settle; only what a viewport can see animates; the crossfade **carries color** (alpha is turned into an actual solid mid-flight so the ground never leaks through the flying box, and handed back to the stylesheet on landing). Shape matching follows the **matching-snapshot rule**: mark the real subject with `data-choreo-substance`, and the entering subject is scaled uniformly _by width_ to fill the exiting subject's width, tops pinned, any vertical overflow cropped at the bottom by a clip window that travels with the box — nothing ever stretches. A sibling step naming a role the crossing would have touched takes that sprite away from it (the yield rule) — a canned move with per-element overrides, no exclusion syntax.
+
+**4 · Gates, forward and back.** A presentation is gates all the way down:
+
+```gts
+<c.Sequence>
+  <c.Tween @of={{c.id 'kicker'}} @opacity={{array 0 1}} @duration={{0.4}} />
+  <c.Gate @delay={{0.7}} />   {{! opens itself — a preamble beat }}
+  <c.Tween @of={{c.id 'point-1'}} @y={{array 12 0}} @opacity={{array 0 1}} @duration={{0.3}} />
+  <c.Gate />                  {{! waits for the click }}
+</c.Sequence>
+```
+
+`ctx.run.advance()` opens the gate (or completes the segment and parks — the click-through). `ctx.run.retreat()` steps one build back and _holds_: gates ahead re-close, `@delay` gates do not self-open, and the next advance replays the build. Text can be delivered by word or character (`@by`, `@order`, stagger) as part of any tween.
+
+**5 · A value derived, not tweened.** The badge rides the card; the shadow spreads by how far the card is from home:
+
+```ts
+const pin = ({ rest, sources }: DeriveContext) => {
+  const card = sources[0]!.now;
+  return { x: card.x + card.width - (rest.x + rest.width) };
+};
+```
+
+```gts
+<c.Follow @of={{c.id 'badge'}} @to={{c.id 'card'}} @read={{pin}} @rest={{PIN_REST}} @duration={{1.6}} />
+```
+
+`@read` runs every frame and every scrubbed still, sees only the pass's measurements, and is right on frames nobody planned — including the frame after a mid-flight retarget. It may write transform, opacity, and filter; never layout.
+
+**6 · Wires.** Geometry drawn continuously between two sprites:
+
+```gts
+<c.Tether @name='gauge' @from={{c.id 'mark'}} @to={{c.id 'note'}} @path={{CURVE}} />
+```
+
+`@path` receives both boxes in region space each frame and returns SVG path data; the region hosts the layer. No `@duration` means a standing wire — drawn for as long as the score stands, redrawn through anything that moves either end (the Wires demo drags its notes through three drafts of copy).
+
+**7 · A place, not an identity.**
+
+```gts
+<span class='trash' {{beacon 'trash'}}>…</span>
+<c.Move @of={{c.removed 'row'}} @to={{c.beacon 'trash'}} @spring={{toss}} />
+```
+
+`@from` works the same way (out of the compose button; from where a drag let go — `c.gesture` borrows the live pointer). The bin never morphs; the pass measures it after layout has settled, so a destination that a re-solve just moved is simply _read_.
+
+**8 · Elevation and scroll as steps.**
+
+```gts
+<c.Parallel>
+  <c.Scroll @of={{c.id 'row-8'}} @align='center' @duration={{0.42}} />
+  <c.Hold @of={{c.id 'row-8'}} @backgroundColor={{FLASH}} @duration={{0.9}} />
+</c.Parallel>
+```
+
+The scroll animates the sprite's own scroll container and yields to the user's wheel; the flash's _timing_ lives in the timeline while its _fade_ stays in the stylesheet's transition. `c.Raise` promotes a sprite to the region's elevated layer for its window — above every stacking context and clip — and `c.Camera` drives the region's own frame (zoom to a sprite, hold others steady) on the same clock as everything else.
+
+**9 · Anchors and composite steps.** Name a block, aim at it, and say your app's own words once:
+
+```gts
+class Carry extends StepComponent<StepArgs & { spring?: SpringSpec }> {
+  node(): TimelineNode {
+    const { of, name, spring = carry } = this.args;
+    return {
+      at: this.args.at,
+      children: [
+        { generic: true, kind: 'move', of, spring },
+        { generic: true, kind: 'hold', of, props: { zIndex: 3 } },
+      ],
+      kind: 'parallel',
+      name,
+    };
+  }
+}
+```
+
+```gts
+<c.Parallel>
+  <Carry @name='carry' @of={{c.moved 'card'}} />
+  <c.Follow @at={{at 'carry'}} @of={{c.id 'badge'}} @to={{c.id 'card'}} … />
+</c.Parallel>
+```
+
+`at('carry')` / `after('carry')` place steps against the named block; the composite's `generic` children yield their sprites to anything more specific. `c.Crossing` itself is written against this same public seam — the canned step is not privileged.
+
+**10 · Regions and far matching.** Two `<Choreo>`s are two scenes; give an element the same bare id in both and a pass that removes it from one while inserting it in the other pairs them at a render barrier — measure, match, run, with no frame painted between — and the receiver flies from the sender's box in page space. Scoping the id is precisely how you turn it off. ([docs/nested-choreo.md](docs/nested-choreo.md))
+
+Arming — _when_ a timeline should exist — is a first-class helper, because the same ids exist on ordinary passes too:
+
+```ts
+import { createArming } from 'glimmer-motion';
+const crossing = createArming();
+crossing.begin(region); // watches the run, survives mid-flight replacement, stands down on settle
+crossing.active(); // tracked — render the timeline only while true
+```
+
+## Where it earns its keep
+
+These are not hypotheticals — each row is a shipped pattern, from the gallery or from the product-workspace port that drove the vocabulary:
+
+| The scene                                                | The score                                                                                                         |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Card ⇄ page navigation (gallery ⇄ demo, tile ⇄ document) | `<Choreo @route>` + `c.Crossing` — real elements, no snapshots, live content never freezes                        |
+| Master–detail: a row grows into a panel                  | `c.Move @from={{c.beacon row}}` `@size='scale'` — the real panel flies, the solver's re-layout is simply measured |
+| Drag-to-shelve: release point → slot                     | counterpart pairing — the painted box at release _is_ the start                                                   |
+| A card transmutes into its schema node                   | beacon flight out of a closing sheet, still measurable mid-exit                                                   |
+| Slide decks with builds                                  | `c.Gate` / `@delay` / `advance()` / `retreat()` — the Keynote rules                                               |
+| Annotations wired to their anchors                       | standing `c.Tether`s, redrawn through every reflow and every flight                                               |
+| "Jump to it and flash it"                                | `c.Scroll` + `c.Hold` — one clock instead of a scroll racing a classList write racing a timer                     |
+| A badge riding a flying card; a shadow reading lift      | `c.Follow` — right on the frames a tween would have had to predict                                                |
+| Timed highlight/z states (`justDropped`, pulse flags)    | `c.Hold` windows — the timer-and-flag genre, retired                                                              |
+| Scrubbing, replays, video export                         | `run.time` + gates + `choreo-player`                                                                              |
+
+## Interruption, tested
+
+The doctrine is that a second click mid-flight is _normal input_. The mechanics that make it true: `initial` is the painted box on every re-pass; velocities hand over to the replacement run; orphans aloft keep their run through unrelated re-renders; unnamed flying sprites get continuations; a fast keep declines pure-noise passes outright (fingerprinting the _composed_ offset chain, so a moved wrapper that is itself no participant still reads as the reflow it is).
+
+The test method matches: watch the primary element **per frame, in absolute coordinates**, normalize steps by the sample gap (a starved rAF observer merges engine frames; a real teleport pays inside one), and bound against measured travel — because a co-moving pin can stay perfect through a jump a person cannot miss. The suite's interruption soak hammers the real gallery components with clicks at 0 / 60 / 220 ms.
+
+```ts
+import {
+  setupMotion,
+  animationsSettled,
+  bounds,
+  shape,
+  orphanCount,
+  strandedTransforms,
+  live,
+  liveAll,
+  advanceGate,
+  seekTo,
+  velocityOf,
+} from 'glimmer-motion/test-support';
+```
+
+| export                            | what it is for                                                                                                                          |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `setupMotion(hooks)`              | resets what outlives an owner: beacon registry, far-match barrier, motion speed                                                         |
+| `animationsSettled(opts?)`        | resolves when every motion element, layout animation and `<Choreo>` run has stopped — and names what was still moving when it times out |
+| `bounds(el)` / `shape(el)`        | rects relative to the test root; the cumulative 2×2 transform                                                                           |
+| `orphanCount()`                   | leavers currently parked in an orphan layer                                                                                             |
+| `strandedTransforms()`            | elements wearing a transform nobody is animating                                                                                        |
+| `live(sel)` / `liveAll(sel)`      | querySelector that declines mid-flight ghosts in the orphan layer — a person never clicks one, a selector must not either               |
+| `advanceGate()` / `seekTo(s)`     | drive a parked run; scrub to a second                                                                                                   |
+| `velocityOf(el, prop)`            | how fast a value is moving right now                                                                                                    |
+| `isMotionIdle()` / `whatIsBusy()` | the probe underneath, for a custom wait                                                                                                 |
+
+`animationsSettled()` is explicit rather than a blocking test-waiter on purpose: the interruption suite's whole method is to click again while something is still in flight, and a waiter would silently turn every one of those into a wait-for-completion.
+
+## External clocks: choreo-player
+
+`choreo-player` is a dependency-free, headless transport for clocking public Choreo runs from outside — a frame-by-frame video renderer, parallel capture workers, a custom scrub surface. It owns runs you hand it (never before an external clock has actually arrived — [docs/demo-recording.md](docs/demo-recording.md) is the field guide for keeping a demo correct both interactively and under capture), and its run contract is structural and five members small:
+
+```ts
+import { createChoreoPlayer } from 'choreo-player';
+
+const player = createChoreoPlayer({
+  duration: 12,
+  prepare: () => mountScore(), // the first external clock arms the demo
+  runs: () => (scoreRun ? [scoreRun] : []), // read per operation, never leaked early
+});
+
+await player.renderAt(4.25); // pause, set speed and absolute time, settle — frame t is a function of t
+await player.play();
+```
+
+Because a Choreo still is a computed frame, `renderAt(t)` is deterministic across workers on separate pages — no wall clock, no accumulation, no frame counting.
+
+---
+
+## The binding underneath
+
+Everything below this line is **`glimmer-motion`** proper: Motion's own implementation driven through Glimmer, covered by ports of the upstream tests that pin it.
+
+**Animation** — `initial` / `animate` / `exit` targets, keyframes, per-value transitions, `transitionEnd`; springs, tweens, inertia, `delay`, `repeat`, easings — the engine's full transition surface; **variants** with labels, functions, `custom`, propagation, `staggerChildren` / `delayChildren` / `when`; motion values (`motionValue`, `transformValue`, `animateMotionValue`) bound through `style`; static values and `MotionValue`s side by side, CSS variables, transform shorthands; SVG attribute animation and `pathLength`; `onAnimationStart` / `Complete` / `onUpdate`; unmount cleanup.
+
+**Layout** — `layout` (`true` / `"position"` / `"size"`): FLIP with the projection tree's scale correction (border radius, box shadow, children don't distort); `layoutId` shared-element transitions, crossfade, lead/follow promotion, the lightbox pattern; `<LayoutGroup>` with `@id` and `@inherit`; `layoutDependency`, `layoutScroll`, `layoutRoot`, `layoutAnchor`, `layoutCrossfade`, `onLayoutMeasure`; nested and relative projection targets; portals, `instantLayoutTransition()`, `layoutChange()` / `snapshotAll()` / `requestSettle()`.
+
+**Presence** — `<Presence>` = AnimatePresence: `sync` / `wait` / `popLayout`, `@initial={{false}}`, `@custom`, `@onExitComplete`, nested presence with `@propagate`; `h.isPresent` (tracked); exit-then-enter of the same key; a leaving item keeps its last props; interaction with `layout` / `layoutId`.
+
+**Drag** (Motion's pan/drag session, vendored verbatim) — `drag` / axis locks / `dragPropagation` / `dragListener`; constraints as object, element or ref, `dragElastic`, `dragMomentum`, `dragTransition`, `dragSnapToOrigin`, re-measure on resize; `createDragControls()` with `snapToCursor`; `whileDrag` and the full handler set; pan handlers; drag inside `layout` / `layoutId`, nested draggables, drag under scroll; `transformPagePoint` with `correctParentTransform()` and `transformViewBoxPoint()`.
+
+**Gestures** — `whileHover` / `whileTap` / `whileFocus` / `whileInView` with their handlers, keyboard tap activation, `globalTapTarget`, viewport options, gesture priority; `<MotionConfig @transition @reducedMotion @transformPagePoint @skipAnimations @nonce>` — and `@reducedMotion` defaults to **`"user"`** here, not React's `"never"`: honouring a platform setting is not a feature. `scrollProgress()` and `InView` over Motion's `scroll()` / `inView()`.
+
+**Reorder** — `<ReorderGroup>` / `<ReorderItem>` on real `ul` / `li`; axis detection; auto-scroll near edges; works inside `<Presence>`.
+
+**Glimmer** — `.gts` with Glint signatures throughout; plain-function template helpers (`to`, `spring`, `tween`, `inertia`, `stagger`, `ease`) so a template is not written in `(hash)`; a v2 addon, ESM, tree-shakeable; host hooks isolated in ~40 lines so the engine glue can be re-hosted.
+
+## Why the engine is untouched
+
+Motion's React library is two things. An animation engine — `motion-dom`: motion values, springs and keyframes, the _projection tree_ that does layout animation and scale correction, the pan/drag session — and a thin layer of React that feeds that engine props at the right moments. The engine is framework-free and published on its own. Only the glue is React.
+
+So this package does not re-implement animation, and it does not fork Motion. It binds the engine to Glimmer's rendering lifecycle and reproduces, exactly, the _ordering_ React's glue gives the engine:
+
+- visual elements are constructed **parents-first during render** and mounted **children-first in effects**;
+- every element that re-renders **snapshots its layout before the DOM changes**, the root **measures after**;
+- presence is announced **after the commit**, and a leaving element is rendered **from its last element** — its props frozen;
+- the engine's own update runs in a microtask **after all of that**, never between a render and its mounts.
+
+Getting those right is the whole job. When they are right, the engine's behaviour matches Motion to the pixel — which is not an aspiration but the thing we measure.
+
+## How it was made
+
+Choreo started as the motion layer of a port: a React app built on Motion (the "bentobox" reference, frozen as ground truth) moving to a modern Vite/Embroider Ember app. The first question was how much work Motion needed to run under Glimmer. The answer turned out to be "none, if you don't touch it."
+
+**Strategy.** Cardstack had done this once before with [boxel-motion](https://github.com/cardstack/boxel), a Glimmer animation library with its own engine. Comparing the two made the call obvious: Motion's value is in the engine (the projection tree especially), and that engine is already framework-free. The binding would use `motion-dom` as-is and replicate only the React glue — and it would be held to the standard of Motion's own tests rather than our eyes.
+
+**Method: port the test suite, in order, and let it drive the binding.** Each step ported one of Motion's Jest suites or Cypress fixture specs line by line — the fixture components rebuilt as Glimmer components, the literal expected pixel values kept — and whatever failed was a place where the binding's ordering differed from React's. In sequence: the animate prop, variants, AnimatePresence, LayoutGroup, keyframes and delay, the style prop and unmount, then the eighteen `layout-*` Cypress specs, then the nineteen `drag-*` specs, then Reorder. Nothing was declared done on a behaviour until the upstream test for it was green in a real Chrome.
+
+**What that surfaced.** Almost everything a port like this gets wrong is a timing rule, and the tests found each one:
+
+- Glimmer installs modifiers children-first, so a child can't find its parent's visual element when its modifier first runs. First runs queue; the queue constructs in document order and mounts post-order after the pass — and sibling order matters, because the engine's stagger index is built from it.
+- There is no `getSnapshotBeforeUpdate`. boxel-motion's render detector — a getter consuming `@glimmer/validator`'s `VOLATILE_TAG` re-evaluates on every render pass — lets `<LayoutGroup>` snapshot every projection node before the DOM changes, the way React re-rendering each motion component would.
+- The engine's update microtask must not run between Glimmer's render and the mounts, or it clears snapshots and layout animations become identity transitions. One settle per pass, after the mounts.
+- An element created already-absent must still mount _present_ and then leave, or its exit is swallowed.
+- AnimatePresence renders a leaving child from its last present element; a live Glimmer block doesn't. The modifier freezes an exiting element's props — React's behaviour, arrived at from a failing Cypress fixture.
+- `initial` values must be in the DOM before the projection first measures; React has them in the style attribute synchronously, so the binding renders them synchronously at mount.
+- A Cypress page is fresh per test; a test runner isn't. The document projection node caches scroll per `animationId` and leaked a stale offset across tests until the harness reset it the way a page visit does.
+
+**And then the choreography earned its own list.** The same discipline — ship nothing a test didn't force — produced the region model's rules: the fast keep that declines noise passes without touching the world; page-space deltas so a region can move in the pass that moves its children; the release-measure-reassert cycle that makes every measurement a _resting_ measurement; screen-CTM mapping for every place a client rect becomes local pixels (orphan locks, raises, scroll targets, tether ink — each was found double-scaling under an external transform, each is now pinned by a fixture inside a scaled wrapper); and the derived-value API redesign that [postmortem-follow.md](docs/postmortem-follow.md) documents in full.
+
+**Packaging.** With the suite green the binding was split along the line the imports already drew: `MotionNode` (one element's lifecycle, no host framework), the layout pipeline, the features and a `postRender` scheduler on one side; the `ember-modifier` shell, the scheduler's runloop adapter and the Glimmer components on the other. That second side is about forty lines plus the components — the surface another Glimmer host (a SES-sandboxed renderer, say) re-implements to reuse everything else.
+
+## Fidelity
+
+The suite has two halves, and they answer different questions.
+
+**Is it Motion?** `test-app` carries the upstream ports: the Jest suites (animate prop, variants, AnimatePresence, LayoutGroup, keyframes/delay, style prop, unmount) and the Cypress fixtures (all `layout-*`, all `drag-*`, `drag-to-reorder`, `drag-tabs`) — the fixture components rebuilt as Glimmer components with the literal expected pixel values kept. Where a literal was changed the reason is inline; each is a Cypress-runner artefact. Environment deltas are documented the same way.
+
+**Does the choreography model hold?** `<Choreo>` is not Motion's, so it has no upstream test to inherit. It has a contract suite that states its rules on small fixtures — nesting, beacon lifetime, undo, far matching, orphan ownership, anchors, composite steps, derived-value purity (a test literally vandalises the page mid-window and asserts the frame at _t_ does not change), gate retreat, continuity from both sides, and the external-scale rules — plus per-frame interruption tests and a soak that hammers the real gallery.
+
+**589 cases — 587 pass, 2 are upstream's own `it.skip`.**
+
+```
+pnpm install && pnpm test     # builds the addon, runs the suite (a development-mode build, as boxel does) in Chrome
+```
 
 ## API
 
@@ -282,8 +377,7 @@ Named exports from `glimmer-motion`; deep imports (`glimmer-motion/presence`, �
 
 ### `{{motion}}` — `motion.div`, `motion.circle`, … as a modifier
 
-Any element. Named arguments are Motion's props — same names, same types (`MotionNodeOptions` from
-`motion-dom`):
+Any element. Named arguments are Motion's props — same names, same types (`MotionNodeOptions` from `motion-dom`):
 
 | group            | props                                                                                                                                                                                                                                                     |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -292,121 +386,26 @@ Any element. Named arguments are Motion's props — same names, same types (`Mot
 | drag             | `drag` `dragConstraints` `dragElastic` `dragMomentum` `dragSnapToOrigin` `dragDirectionLock` `dragPropagation` `dragTransition` `dragControls` `dragListener` `onDragStart` `onDrag` `onDragEnd` `onDirectionLock` `onMeasureDragConstraints` `whileDrag` |
 | pan              | `onPanStart` `onPan` `onPanEnd` `onPanSessionStart`                                                                                                                                                                                                       |
 | style            | `style` — static values land on the element as React's style attribute would; `MotionValue`s are bound                                                                                                                                                    |
+| choreo           | `id` `role` — participation in the nearest `<Choreo>` region                                                                                                                                                                                              |
 | glimmer-specific | `presence` — the handle a `<Presence>` block yields; `transformPagePoint` — per element, or inherited from `<MotionConfig>`                                                                                                                               |
 
-```gts
-<div {{motion animate=(to x=this.x) style=(styles y=this.yValue) layout=true}} />
-<circle cx="50" cy="50" r="20" {{motion drag=true dragConstraints=this.container}} />
-```
+### `<Choreo>` — the region
 
-### `<Presence>` — AnimatePresence
+`@id` (nesting and far matching), `@route` (a route swap inside is one pass), `@scroll` (`'top'` or a thunk — applied inside the pass, before final bounds), `@quiet` (pause the rest of the page for the run's span), `@debug` (outlines + `console.table` per run). Yields the context: the step components (`Sequence` `Parallel` `Gate` `Tween` `Spring` `Move` `Hold` `Wait` `Raise` `Scroll` `Camera` `Tether` `Follow` `Crossing`), the queries, `c.beacon` / `c.gesture`, and `c.run` — `advance()` `retreat()` `time` `speed` `parked` `standing` `segment` `finished`.
 
-```gts
-<Presence @items={{this.items}} @key={{this.keyOf}} @mode="sync" @initial={{false}} @custom={{this.dir}} @onExitComplete={{this.done}} as |item h|>
-  <div {{motion presence=h initial=… animate=… exit=…}}>{{item.label}}</div>
-</Presence>
-```
+Timing: `@duration` / `@delay` in seconds, `@spring` for spring specs, `@stagger` across a query's sprites; `@name` / `@at={{at 'name'}}` / `after('name')` on steps _and blocks_. Any property may be a function `(sprite, changeset) => value`; sprites carry `initial` / `final` bounds in `context`, `parent` and `page` space, a `delta`, and their `counterpart`. Open vocabulary: `StepComponent` + `toMs` + node literals ([docs/step-vocabulary.md](docs/step-vocabulary.md)).
 
-Keeps leaving items rendered until their `exit` finishes. `@mode` is `"sync"` | `"wait"` | `"popLayout"`
-(`@anchorX` / `@anchorY` for the latter). `h.isPresent` is tracked (`useIsPresent`). Nested presence under
-a leaving parent: `@propagate={{true}} @parent={{outerHandle}}`.
+### `<Presence>` / `<LayoutGroup>` / `<ReorderGroup>` + `<ReorderItem>` / `<MotionConfig>`
 
-### `<LayoutGroup>`
-
-```gts
-<LayoutGroup @id="tabs" @inherit={{true}}>…</LayoutGroup>
-```
-
-Namespaces `layoutId`s and hosts the render detector: any render pass inside it snapshots every projection
-node before the DOM changes. Outside one, wrap the state change: `layoutChange(() => { this.items = next })`.
-`instantLayoutTransition(fn)` is `useInstantLayoutTransition`.
-
-### `<ReorderGroup>` / `<ReorderItem>`
-
-```gts
-<ReorderGroup @values={{this.items}} @onReorder={{this.setItems}} @axis="y" as |group|>
-  {{#each this.items as |item|}}<ReorderItem @group={{group}} @value={{item}}>{{item}}</ReorderItem>{{/each}}
-</ReorderGroup>
-```
-
-`ReorderItem` forwards `@style @initial @animate @exit @whileDrag @transition @dragTransition @dragListener
-@dragControls @presence @onDrag @onDragEnd @layout`.
-
-### `<Choreo>` — choreography
-
-```gts
-<Choreo as |c|>
-  <div {{motion id=card.id role="card"}}>…</div>
-
-  <c.Sequence>
-    <c.Parallel>
-      <c.Hold  @of={{c.role "card"}} @zIndex={{1}} />
-      <c.Tween @of={{c.removed "card-content"}} @opacity={{0}} @ms={{220}} />
-    </c.Parallel>
-    <c.Parallel>
-      <c.Move  @of={{c.moved "card"}} @spring={{soft}} />
-      <c.Hold  @of={{c.still "card"}} @zIndex={{0}} />
-    </c.Parallel>
-    <c.Tween @of={{c.inserted "card-content"}} @opacity={{1}} @from={{hash opacity=0}} @ms={{260}} />
-  </c.Sequence>
-</Choreo>
-```
-
-A motion element with `id` or `role` is a participant of the nearest `<Choreo>`. Each render pass the
-region measures its participants before and after the DOM changes and, when something was inserted,
-removed, or moved, plays the timeline declared inside it. Queries: `c.all` `c.kept` `c.inserted`
-`c.removed` `c.still` `c.moved` (optionally by role), `c.role` `c.id`. Steps: `Tween` (`@ms @ease`),
-`Spring` (`@spring`), `Move` (FLIP from initial to final bounds), `Hold` (set for the block's span, or
-`@ms`; `@fill` keeps), `Wait`; all take `@of`, `@delay`, and properties as flat args; `@from` as a hash.
-A property may be a function `(sprite, changeset) => value`; sprites carry `initial` / `final` bounds in
-`context`, `parent` and `page` space and a `delta`. `@debug` outlines and `console.table`s each run.
-The design and the legacy it keeps: [docs/choreography.md](docs/choreography.md).
-Nested regions and beacons: [docs/nested-choreo.md](docs/nested-choreo.md).
+As in Motion — see [React → Glimmer](#react--glimmer). `<Presence>` keeps leaving items rendered until their exit finishes (`@mode`, `@initial`, `@custom`, `@onExitComplete`, `@propagate`); `<LayoutGroup>` namespaces `layoutId`s and hosts the render detector; outside one, wrap the state change in `layoutChange(() => …)`.
 
 ### Template helpers
 
-Plain functions, used as helpers with no registration. Glimmer hands a plain function its positional
-arguments and its named arguments as one trailing object — which is the shape `spring({ stiffness: 300 })`
-already wanted.
+Plain functions, no registration: `(to opacity=0 y=20)`, `(spring stiffness=300 damping=30)`, `(tween …)`, `(inertia …)`, `(stagger 0.05)`, `(ease 0.4 0 0.1 1)`. Typed, which is the difference: `(hash opacty=1)` is a perfectly good hash, and `(to opacty=1)` is a Glint error. `(hash …)` remains valid everywhere.
 
-```gts
-import { motion, to, spring } from 'glimmer-motion';
+### Drag helpers and motion values
 
-<div
-  {{motion
-    initial=(to opacity=0 y=20)
-    animate=(to opacity=1 y=0)
-    exit=(to opacity=0 scale=0.9)
-    transition=(spring stiffness=300 damping=30)
-  }}
-></div>
-```
-
-| helper               | returns                                                          |
-| -------------------- | ---------------------------------------------------------------- |
-| `(to …)`             | a target — the values to animate to                              |
-| `(spring …)`         | `{ type: 'spring', … }`; also fits a `<Choreo>` step's `@spring` |
-| `(tween …)`          | `{ type: 'tween', … }` — `duration` in seconds                   |
-| `(inertia …)`        | `{ type: 'inertia', … }` — the throw after a drag                |
-| `(stagger 0.05)`     | motion-dom's own `stagger`, for `delayChildren`                  |
-| `(ease 0.4 0 0.1 1)` | a cubic bezier. Named easings are plain strings                  |
-
-`(hash …)` remains valid everywhere. The helpers are typed, which is the difference: `(hash opacty=1)` is a
-perfectly good hash, and `(to opacty=1)` is a Glint error.
-
-`to` rather than `animate`, because it reads correctly in all four slots — `initial=(to …)`, `exit=(to …)`,
-`whileHover=(to …)` — where `animate=(animate …)` does not, and it leaves the name free for Motion's
-imperative function.
-
-### Drag helpers
-
-`createDragControls()` (`useDragControls`: `controls.start(event, { snapToCursor: true })`),
-`correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`.
-
-### Motion values
-
-Use `motion-dom` directly — `motionValue()`, `transformValue()`, `animateMotionValue()` — and hand values
-in through `style`; that's what `useMotionValue` / `useTransform` do in React.
+`createDragControls()`, `correctParentTransform(elOrRef)`, `transformViewBoxPoint(svgOrRef)`. For motion values use `motion-dom` directly — `motionValue()`, `transformValue()`, `animateMotionValue()` — and hand them in through `style`.
 
 ## React → Glimmer
 
@@ -427,15 +426,9 @@ in through `style`; that's what `useMotionValue` / `useTransform` do in React.
 
 ## Three rules React does not need
 
-React's model hides three things that Glimmer's does not, and each surfaced while porting a real app
-(the [bentobox](https://github.com/christse/bento-boxel) workspace) onto this binding. They are the
-only places where the port is not a mechanical translation.
+React's model hides three things that Glimmer's does not, and each surfaced while porting a real app onto this binding. They are the only places where the port is not a mechanical translation.
 
-**1. Motion owns a motion element's inline style — pass CSS through the modifier, not a `style`
-attribute.** In React the `style` prop belongs to Motion: it merges what you write with the
-transforms it renders. In Glimmer a bound `style="…"` attribute is yours, and Glimmer rewrites the
-whole declaration whenever the bound value changes — wiping out the transform Motion just wrote. The
-symptom is brutal and quiet: a card that stays put while the drag logic runs perfectly around it.
+**1. Motion owns a motion element's inline style — pass CSS through the modifier, not a `style` attribute.** In React the `style` prop belongs to Motion: it merges what you write with the transforms it renders. In Glimmer a bound `style="…"` attribute is yours, and Glimmer rewrites the whole declaration whenever the bound value changes — wiping out the transform Motion just wrote. The symptom is brutal and quiet: a card that stays put while the drag logic runs perfectly around it.
 
 ```gts
 {{! ✗ the next re-render erases the drag transform }}
@@ -445,23 +438,9 @@ symptom is brutal and quiet: a card that stays put while the drag logic runs per
 <div class="card" {{motion style=this.accentStyle drag=true}}>
 ```
 
-**2. A leaving child stays live — read exiting content from the yielded item.** React keeps the
-_element tree_ it captured before the diff, so a leaving child cannot re-render and nothing can
-mount inside it. A Glimmer block re-runs from live tracked state for as long as the leaver is on
-screen. So anything the exit needs — the symbol the panel was showing, the rect the modal flew from
-— has to ride on the item `<Presence>` yields, not be read back out of the state that has already
-moved on.
+**2. A leaving child stays live — read exiting content from the yielded item.** React keeps the _element tree_ it captured before the diff, so a leaving child cannot re-render. A Glimmer block re-runs from live tracked state for as long as the leaver is on screen. So anything the exit needs — the symbol the panel was showing, the rect the modal flew from — has to ride on the item `<Presence>` yields, not be read back out of state that has already moved on.
 
-The engine side of that second rule is handled here: a motion element that mounts inside a leaving
-subtree can never block its exit, and a presence flip reaches every motion descendant (React
-re-renders them all; Glimmer only re-runs the modifiers whose own args changed). Both are covered by
-tests — without them a leaver can hang on screen forever.
-
-**3. Declare what you want tweened — a value in the stylesheet is invisible to the engine.** A layout
-animation moves and resizes by transform, so everything inside a growing element is scaled with it. The
-engine corrects for that, on `borderRadius` and `boxShadow` — but it can only correct a value it holds. A
-radius that lives in CSS is not one, and a square tile growing into a wide hero comes out with oval
-corners. Hand the value to Motion and every frame is corrected against the scale in force.
+**3. Declare what you want tweened — a value in the stylesheet is invisible to the engine.** A layout animation moves and resizes by transform, and the engine corrects `borderRadius` and `boxShadow` against the scale in force — but only values it holds. A radius that lives in CSS is not one, and a square tile growing into a wide hero comes out with oval corners. Hand the value to Motion and every frame is corrected.
 
 ```gts
 {{! ✗ the engine cannot correct what it does not know about }}
@@ -471,43 +450,9 @@ corners. Hand the value to Motion and every frame is corrected against the scale
 <article class='card' {{motion layout=true style=(styles borderRadius='14px')}}></article>
 ```
 
-This is the same instinct as rule 1 from the other side: rule 1 says Motion owns the inline style, and
-rule 3 says use that ownership. Anything you want animated, corrected or measured goes through the
-modifier. `test-app/app/components/examples/sequence.gts` is the worked example.
-
 ## Testing
 
-```ts
-import {
-  setupMotion,
-  animationsSettled,
-  bounds,
-  shape,
-  orphanCount,
-  strandedTransforms,
-} from 'glimmer-motion/test-support';
-```
-
-| export                            | what it is for                                                                           |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| `setupMotion(hooks)`              | resets what outlives an owner: beacon registry, far-match barrier, motion speed          |
-| `animationsSettled(opts?)`        | resolves when every motion element, layout animation and `<Choreo>` timeline has stopped |
-| `bounds(el)`                      | `getBoundingClientRect()` relative to `#ember-testing`, not the viewport                 |
-| `shape(el)`                       | the cumulative 2×2 transform — did a parent's scale stretch this?                        |
-| `orphanCount()`                   | leavers currently parked in a `<Choreo>` orphan layer                                    |
-| `strandedTransforms()`            | elements wearing a transform nobody is animating                                         |
-| `isMotionIdle()` / `whatIsBusy()` | the probe underneath, for a custom wait                                                  |
-
-`animationsSettled()` is explicit rather than an `@ember/test-waiters` waiter hooked into `settled()`.
-A blocking waiter is the tidier-looking option and the wrong one here: the interruption suite's whole
-method is to click again while something is still in flight, and a waiter would silently turn every one of
-those into a wait-for-completion. When it times out it names what was still moving, which is usually the
-bug.
-
-The suite this backs is in two halves. `tests/integration/choreo/contract-test.gts` states the rules —
-nesting, beacon lifetime, undo, far matching, orphan ownership, measuring inside a transformed parent — on
-fixtures small enough that a failure names the defect. `interruption-test.gts` is the soak: it hammers the
-real gallery components with ten clicks at 0 / 60 / 220 ms and asserts the two invariants above.
+See [Interruption, tested](#interruption-tested) for the test-support surface. The suite is in halves: `tests/integration/choreo/contract-test.gts` states the choreography rules on fixtures small enough that a failure names the defect; sibling suites cover the crossing, gates and retreat, continuity, wires, raise/scroll, far matching, and derived values; `interruption-test.gts` is the soak. The binding's half is the upstream ports ([Fidelity](#fidelity)).
 
 ## Architecture
 
@@ -523,31 +468,25 @@ activity.ts    who is still moving, and why — what animationsSettled() waits o
 helpers.ts     to / styles / from / spring / tween / inertia / perValue / stagger / ease
 gestures/      Motion's pan + drag session, vendored verbatim (VENDORED.md)
 reorder/       Reorder's checkReorder / detectAxis / auto-scroll, vendored verbatim
-choreo/        the choreography layer: changeset, compile, run, beacons, far-match barrier, measure
-test-support/  animationsSettled, bounds, shape, setupMotion — a published entrypoint
+choreo/        the choreography layer: changeset, compile, run, anchors, beacons, arming,
+               far-match barrier, measure — the region model in ~a dozen modules
+test-support/  animationsSettled, bounds, live, orphanCount, … — a published entrypoint
    ▲  Ember host adapter
 motion.ts      {{motion}} — the ember-modifier shell; installs the runloop as postRender
 presence.gts, layout-group.gts, motion-config.gts, choreo.gts, reorder/{group,item}.gts
 ```
 
-Only the last two lines know about Ember. Re-hosting means re-doing the modifier shell, the `postRender`
-adapter and the components; everything above the adapter line is untouched.
+Only the last two lines know about Ember. Re-hosting means re-doing the modifier shell, the `postRender` adapter and the components; everything above the adapter line is untouched. `choreo-player` sits beside all of it, dependency-free, speaking only the run contract.
 
 ## Not ported (yet)
 
-`m` / `LazyMotion` (a React bundle-splitting device; the addon is tree-shaken per module already),
-Reorder's `as` prop (the group is a `ul`, items are `li`), server rendering.
+`m` / `LazyMotion` (a React bundle-splitting device; the addon is tree-shaken per module already), Reorder's `as` prop (the group is a `ul`, items are `li`), server rendering.
 
 ## Examples
 
-`test-app` serves a gallery of 22 stages at `/` — filter by **Animate**, **Layout**, **Drag**,
-**Scroll** or **Choreo**, and open any one for its annotated source. Most stages carry a speed control
-(**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the
-divisor scales the transition on its way to the engine rather than slowing a running animation, so what
-you watch at ÷10 is the same motion, born slower.
+`test-app` serves a gallery of **32 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
 
-Every demo in the gallery is also a test fixture: the interruption soak hammers them, which is why they
-are the first place a regression shows up.
+Every demo is also a test fixture: the interruption soak hammers them, which is why they are the first place a regression shows up.
 
 ```
 pnpm --filter test-app start
@@ -563,25 +502,15 @@ pnpm lint:types                # glint, both packages
 pnpm --filter test-app start   # examples at / ; tests at /tests
 ```
 
-`packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit
-(`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in
-`test-app/tests/helpers/layout-fixture.ts`: a 1000×660 fixture viewport, `should()` retries, `trigger()`
-pointer events with Cypress' element-relative coordinates, `cyClick()`, and per-test reset of the document
-projection node.
+`packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit (`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in `test-app/tests/helpers/layout-fixture.ts`.
 
 ## Roadmap
 
-- **`0.1.0` on npm.** Consumers today use `workspace:*` against a checkout. A version number is what
-  turns "copy this style" into a dependency, and it is the gate for everything below.
+- **`0.1.0` on npm.** Consumers today use `workspace:*` against a checkout. A version number is what turns "copy this style" into a dependency, and it is the gate for everything below.
 - **`ember-try` against LTS** (5.12 / 6.4 / release). The peer range already says `>= 5.4`; nothing proves it.
-- **`ember-a11y-testing` over the gallery.** `reducedMotion` already defaults to `"user"`, which was the
-  substantive half; a smoke pass is the other half.
-- **boxel-motion** — a re-host inside [cardstack/boxel](https://github.com/cardstack/boxel) for its
-  constraints (SES-sandboxed card code, cross-realm orchestration, the `surface-*` height service, fitted vs
-  embedded intrinsic sizing). It replaces the modifier shell, the scheduler adapter and the components and
-  keeps everything above the adapter line. Three host transitions are the proving ground: a stack
-  open/close (far match), a panel that is its own scene over a moving shell (nested `<Choreo>`), and
-  compose/trash (`{{beacon}}`, not `layoutId`).
+- **`ember-a11y-testing` over the gallery.** `reducedMotion` already defaults to `"user"`, which was the substantive half; a smoke pass is the other half.
+- **Docs for the newest constructs** — standing steps and `createArming` landed test-first; their prose is owed.
+- **boxel-motion** — a re-host inside [cardstack/boxel](https://github.com/cardstack/boxel) for its constraints (SES-sandboxed card code, cross-realm orchestration, fitted vs embedded intrinsic sizing). It replaces the modifier shell, the scheduler adapter and the components and keeps everything above the adapter line. Three host transitions are the proving ground: a stack open/close (far match), a panel that is its own scene over a moving shell (nested `<Choreo>`), and compose/trash (`{{beacon}}`, not `layoutId`).
 
 ## License
 
@@ -589,6 +518,4 @@ MIT. © 2026 Cardstack Foundation. See [LICENSE](LICENSE).
 
 ## Credits
 
-The engine, the algorithms and the test suites are [Motion](https://motion.dev)
-([motiondivision/motion](https://github.com/motiondivision/motion), MIT). The render-detector idea is from
-[boxel-motion](https://github.com/cardstack/boxel). This package is the Glimmer binding, by Cardstack.
+The engine, the algorithms and the test suites are [Motion](https://motion.dev) ([motiondivision/motion](https://github.com/motiondivision/motion), MIT). The render-detector idea and the choreography model's ambitions are from [boxel-motion](https://github.com/cardstack/boxel). This package is the Glimmer binding and the choreography layer, by Cardstack.
