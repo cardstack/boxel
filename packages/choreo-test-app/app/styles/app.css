@@ -3411,19 +3411,28 @@ html[data-gm-dragging] * {
 .xstress-spark,
 .xstress-hero,
 .xstress-title,
-.xstress-chip {
+.xstress-kicker,
+.xstress-chip,
+.xstress-rule {
   position: absolute;
 }
 
 /* Frozen for the flight: loops would write transform on the same node
    Crossing is flying. Restarts from 0 when data-phase returns to looping.
-   Scoped to the stage so an orphan lifted into the layer is still stilled. */
+   Scoped to the stage so an orphan lifted into the layer is still stilled.
+   Innards of the plate are not participants — freeze them too. */
 .xstress-stage[data-phase='crossing'] .xstress-wash,
 .xstress-stage[data-phase='crossing'] .xstress-orb,
 .xstress-stage[data-phase='crossing'] .xstress-spark,
 .xstress-stage[data-phase='crossing'] .xstress-hero,
 .xstress-stage[data-phase='crossing'] .xstress-title,
-.xstress-stage[data-phase='crossing'] .xstress-chip {
+.xstress-stage[data-phase='crossing'] .xstress-kicker,
+.xstress-stage[data-phase='crossing'] .xstress-chip,
+.xstress-stage[data-phase='crossing'] .xstress-rule,
+.xstress-stage[data-phase='crossing'] .xstress-hero-mark,
+.xstress-stage[data-phase='crossing'] .xstress-hero-meter,
+.xstress-stage[data-phase='crossing'] .xstress-hero-ticks i,
+.xstress-stage[data-phase='crossing'] .xstress-inset {
   animation: none !important;
 }
 
@@ -3527,15 +3536,14 @@ html[data-gm-dragging] * {
 }
 
 .xstress-hero {
-  /* never a 0×0 empty span — crop-scale of that is invisible */
+  /* never a 0×0 empty span — crop-scale of that is invisible.
+     overflow stays visible: the drop-shadow lives on THIS node
+     (via the modifier) and clip would eat it. Innards clip on .face. */
   top: 28%;
   left: calc(50% - 11vmin);
   width: 22vmin;
   height: 22vmin;
-  overflow: clip;
-  border-radius: 28px;
-  /* solid paint so a crossing skin has an rgb() to tween; the gradient
-     re-renders at every real-box size instead of being stretched */
+  /* solid paint so a size tween re-renders the gradient at every box */
   background-color: #e8d9c4;
   background-image: linear-gradient(
     160deg,
@@ -3543,8 +3551,99 @@ html[data-gm-dragging] * {
     #e8d9c4 52%,
     #d4b48a 100%
   );
-  box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
   z-index: 2;
+}
+
+.xstress-hero-face {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  border-radius: inherit;
+}
+
+.xstress-hero-shot {
+  position: absolute;
+  background:
+    linear-gradient(180deg, rgb(11 46 52 / 18%), rgb(11 46 52 / 42%)),
+    repeating-linear-gradient(
+      -18deg,
+      rgb(44 20 14 / 0%) 0 8px,
+      rgb(44 20 14 / 10%) 8px 9px
+    );
+}
+
+.xstress-hero-mark {
+  position: absolute;
+  border: 2px solid rgb(44 20 14 / 45%);
+  border-top-color: rgb(11 46 52 / 80%);
+  border-radius: 50%;
+  animation: xstress-hero-spin 2.4s linear infinite;
+}
+
+.xstress-hero-meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 9%;
+  transform-origin: 0 50%;
+  background: rgb(11 46 52 / 28%);
+  animation: xstress-hero-meter 1.7s ease-in-out infinite alternate;
+}
+
+.xstress-hero-ticks {
+  position: absolute;
+  display: flex;
+  gap: 5px;
+}
+
+.xstress-hero-ticks i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(11 46 52 / 55%);
+  animation: xstress-hero-tick 1.1s ease-in-out infinite alternate;
+}
+
+.xstress-hero-ticks i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.xstress-hero-ticks i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.xstress-inset {
+  position: absolute;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(10px, 1.2vw, 15px);
+  font-style: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #2c140e;
+  z-index: 1;
+}
+
+.xstress-kicker {
+  width: max-content;
+  z-index: 3;
+  margin: 0;
+  color: #c8c0b6;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, 1.05vw, 16px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+.xstress-rule {
+  height: 2px;
+  background: #f3ece3;
+  opacity: 0.55;
+  z-index: 3;
+  animation: xstress-rule-breathe 2.6s ease-in-out infinite alternate;
 }
 
 .xstress-title,
@@ -3604,7 +3703,48 @@ html[data-gm-dragging] * {
   left: 12%;
   color: #0b2e34;
   background: #8fd0c4;
+  box-shadow: 0 10px 24px rgb(143 208 196 / 45%);
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.tide {
+  top: 74%;
+  left: 0;
+  right: 0;
+  width: max-content;
+  margin-inline: auto;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-shot {
+  top: 12%;
+  left: 12%;
+  width: 52%;
+  height: 44%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-mark {
+  top: 14%;
+  right: 12%;
+  width: 18%;
+  height: 18%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-ticks {
+  left: 12%;
+  bottom: 16%;
+}
+
+.xstress-inset.tide {
+  right: 12%;
+  bottom: 16%;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-rule {
+  top: 58%;
+  left: 22%;
+  width: 56%;
 }
 
 /* 02 Ember — tall tile on the right, not a wall */
@@ -3634,7 +3774,47 @@ html[data-gm-dragging] * {
   top: auto;
   color: #2c140e;
   background: #ffb089;
+  box-shadow: 0 18px 40px rgb(255 138 74 / 40%);
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.ember {
+  top: 38%;
+  left: 8%;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-shot {
+  top: 8%;
+  left: 10%;
+  right: 10%;
+  height: 38%;
+  width: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-mark {
+  top: auto;
+  right: 12%;
+  bottom: 22%;
+  width: 22%;
+  height: 14%;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-ticks {
+  left: 12%;
+  bottom: 22%;
+}
+
+.xstress-inset.ember {
+  left: 12%;
+  bottom: 10%;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-rule {
+  top: 34%;
+  left: 8%;
+  width: 22%;
 }
 
 /* 03 Violet — wide slab up top */
@@ -3666,7 +3846,50 @@ html[data-gm-dragging] * {
   top: auto;
   color: #16102c;
   background: #c4b0ff;
+  box-shadow: 0 8px 22px rgb(196 176 255 / 40%);
   animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.violet {
+  right: 8%;
+  bottom: 32%;
+  left: auto;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-shot {
+  top: 14%;
+  left: 6%;
+  width: 28%;
+  bottom: 14%;
+  height: auto;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-mark {
+  top: 16%;
+  right: 8%;
+  width: 10%;
+  height: 22%;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-ticks {
+  right: 8%;
+  bottom: 18%;
+  left: auto;
+}
+
+.xstress-inset.violet {
+  left: 38%;
+  top: 18%;
+  bottom: auto;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-rule {
+  left: 8%;
+  bottom: 18%;
+  top: auto;
+  width: 28%;
 }
 
 @keyframes xstress-hero-tide {
@@ -3711,6 +3934,52 @@ html[data-gm-dragging] * {
   }
   to {
     transform: translate(16px, 12px);
+  }
+}
+
+@keyframes xstress-hero-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes xstress-hero-meter {
+  from {
+    transform: scaleX(0.35);
+  }
+  to {
+    transform: scaleX(0.92);
+  }
+}
+
+@keyframes xstress-hero-tick {
+  from {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes xstress-inset-bob {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(6px, -4px);
+  }
+}
+
+@keyframes xstress-rule-breathe {
+  from {
+    opacity: 0.28;
+    transform: scaleX(0.86);
+  }
+  to {
+    opacity: 0.7;
+    transform: scaleX(1);
   }
 }
 
@@ -3801,7 +4070,13 @@ html[data-gm-dragging] * {
   .xstress-spark,
   .xstress-hero,
   .xstress-title,
-  .xstress-chip {
+  .xstress-kicker,
+  .xstress-chip,
+  .xstress-rule,
+  .xstress-hero-mark,
+  .xstress-hero-meter,
+  .xstress-hero-ticks i,
+  .xstress-inset {
     animation: none !important;
   }
 }

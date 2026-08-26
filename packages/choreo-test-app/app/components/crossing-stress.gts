@@ -36,16 +36,26 @@ function t() {
   };
 }
 
-/** the corner radius, on its own short curve — Kiln's rule, not a skin swap */
-const radiusTween = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
+/** radius + shadow, on their own short curve — Kiln's rule, not a skin swap */
+const plateTween = { duration: 0.42, ease: [0.22, 1, 0.36, 1] } as const;
 
 function radiusFor(slide: Slide) {
   return ['28px', '36px', '0px'][slide]!;
 }
 
+function shadowFor(slide: Slide) {
+  return [
+    '0 18px 42px rgb(6 38 42 / 58%)',
+    '0 52px 110px rgb(72 16 4 / 78%)',
+    '0 6px 18px rgb(0 0 0 / 42%)',
+  ][slide]!;
+}
+
 const deck = [
   {
     chip: 'drift',
+    inset: 'flood',
+    kicker: 'flood line',
     n: 0 as Slide,
     orb: 'xstress-orb-0',
     spark: 'xstress-spark-0',
@@ -55,6 +65,8 @@ const deck = [
   },
   {
     chip: 'heat',
+    inset: '1280°',
+    kicker: 'night kiln',
     n: 1 as Slide,
     orb: 'xstress-orb-1',
     spark: 'xstress-spark-1',
@@ -64,6 +76,8 @@ const deck = [
   },
   {
     chip: 'arc',
+    inset: 'pass',
+    kicker: 'no horizon',
     n: 2 as Slide,
     orb: 'xstress-orb-2',
     spark: 'xstress-spark-2',
@@ -81,14 +95,13 @@ const STRESS = 0.72;
  * `/crossing-reel`.
  *
  * Three full-viewport slides. The beige plate is ONE element: `c.Move`
- * tweens its real box (left/top/width/height) and `animate` tweens its
- * radius — crop-scale of a wide slab onto a square is how Violet→Tide
- * blew up. Titles and chips are different strings, so they pair as
- * counterparts and `<c.Crossing>` crossfades the skins (homepage grammar).
- * Type is `pack="content"`: Crossing crop matches the shrink-wrap (the
- * ink), not a stretched layout box — a full-bleed title still flies as a
- * word. Unique washes fade. Title CSS is also max-content, so the rest
- * pose is the word too.
+ * tweens its real box; `animate` tweens radius and drop-shadow (those
+ * have to live on the modifier, or a size tween smears them). Live
+ * innards — a shot, a spinning mark, a meter, ticking dots — are NOT
+ * participants: they reflow with the box. An inset caption inside the
+ * plate IS a counterpart, so a skin crosses while its parent flies.
+ * Titles, kickers, and chips pair as counterparts (`pack="content"` on
+ * type). A kept hairline `c.Move`s with the plate. Unique washes fade.
  *
  * A cut can land at any phase of the intra-slide loops, and mid-flight.
  * Loops are CSS transforms on the motion nodes themselves, so the pass
@@ -309,14 +322,9 @@ export class CrossingStress extends Component {
                 @arrive={{tt.arrive}}
                 @overlap={{0.18}}
               />
-              {{! The plate is the same beige rect on every slide. Real box
-                  + radius tween, never crop-cover (Violet's width would
-                  scale Tide into a 48×48 square). }}
-              <c.Move
-                @of={{c.moved "hero"}}
-                @duration={{tt.move}}
-                @ease={{EASE}}
-              />
+              {{! Kept identities (plate, hairline): real-box tween, never
+                  crop-cover (Violet's width would scale Tide into a square). }}
+              <c.Move @of={{c.moved}} @duration={{tt.move}} @ease={{EASE}} />
             </c.Parallel>
           {{/let}}
         {{/if}}
@@ -327,10 +335,43 @@ export class CrossingStress extends Component {
           {{motion
             id="xstress-hero"
             role="hero"
-            animate=(to borderRadius=(radiusFor this.slide))
-            transition=radiusTween
+            style=(styles
+              borderRadius=(radiusFor this.slide)
+              boxShadow=(shadowFor this.slide)
+            )
+            animate=(to
+              borderRadius=(radiusFor this.slide)
+              boxShadow=(shadowFor this.slide)
+            )
+            transition=plateTween
           }}
-        ></div>
+        >
+          <div class="xstress-hero-face">
+            <div class="xstress-hero-shot" data-test-shot></div>
+            <span class="xstress-hero-mark" data-test-mark></span>
+            <span class="xstress-hero-meter" data-test-meter></span>
+            <span class="xstress-hero-ticks" aria-hidden="true">
+              <i></i>
+              <i></i>
+              <i></i>
+            </span>
+            {{#each deck as |s|}}
+              {{#if (this.on s.n)}}
+                <em
+                  class="xstress-inset {{s.tone}}"
+                  data-test-inset
+                  {{motion id="xstress-inset" role="inset" pack="content"}}
+                >{{s.inset}}</em>
+              {{/if}}
+            {{/each}}
+          </div>
+        </div>
+
+        <span
+          class="xstress-rule"
+          data-test-rule
+          {{motion id="xstress-rule" role="rule"}}
+        ></span>
 
         {{#each deck as |s|}}
           {{#if (this.on s.n)}}
@@ -353,6 +394,11 @@ export class CrossingStress extends Component {
                 data-test-title
                 {{motion id="xstress-title" role="type" pack="content"}}
               >{{s.title}}</b>
+              <small
+                class="xstress-kicker {{s.tone}}"
+                data-test-kicker
+                {{motion id="xstress-kicker" role="type" pack="content"}}
+              >{{s.kicker}}</small>
               <small
                 class="xstress-chip {{s.tone}}"
                 data-test-chip

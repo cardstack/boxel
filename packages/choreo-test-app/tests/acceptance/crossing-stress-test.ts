@@ -46,6 +46,16 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.strictEqual(root.dataset.phase, 'looping', 'idle loops run');
     assert.dom('[data-test-title]').hasText('Tide');
     assert.dom('[data-test-chip]').hasText('drift');
+    assert.dom('[data-test-kicker]').hasText('flood line');
+    assert.dom('[data-test-inset]').hasText('flood');
+    assert.ok(find('[data-test-shot]'), 'the plate holds a live shot');
+    assert.ok(find('[data-test-mark]'), 'the plate holds a spinning mark');
+    assert.ok(find('[data-test-rule]'), 'a kept hairline sits on the stage');
+    assert.true(
+      getComputedStyle(find('[data-test-hero]') as HTMLElement).boxShadow !==
+        'none',
+      'the plate drop-shadow is on the modifier, not eaten by overflow'
+    );
     assert.true(
       titleBox().width < window.innerWidth * 0.55,
       `Tide's title is the word, not a stage-wide strip (${titleBox().width.toFixed(0)} in ${window.innerWidth})`
@@ -93,11 +103,33 @@ module('Acceptance | crossing stress', function (hooks) {
       document.querySelector('[data-choreo-orphans] [data-test-chip]'),
       'the leaving chip rides the flight as a skin'
     );
+    assert.ok(
+      document.querySelector('[data-choreo-orphans] [data-test-kicker]'),
+      'the leaving kicker rides the flight as a skin'
+    );
+    assert.ok(
+      document.querySelector('[data-choreo-orphans] [data-test-inset]'),
+      'the inset caption is a counterpart inside the plate — it orphans, the plate does not'
+    );
     assert.strictEqual(
       document.querySelectorAll('[data-choreo-orphans] [data-test-hero]')
         .length,
       0,
       'the beige plate is the same node — it moves, it is not a counterpart skin'
+    );
+    assert.strictEqual(
+      document.querySelectorAll('[data-choreo-orphans] [data-test-rule]')
+        .length,
+      0,
+      'the hairline is kept — it Moves, it is not a skin'
+    );
+    assert.ok(
+      find('[data-test-hero] [data-test-shot]'),
+      'the shot stays inside the flying plate (not a participant)'
+    );
+    assert.ok(
+      find('[data-test-hero] [data-test-mark]'),
+      'the spinning mark stays inside the flying plate'
     );
 
     await animationsSettled();
@@ -108,6 +140,8 @@ module('Acceptance | crossing stress', function (hooks) {
     );
     assert.dom('[data-test-title]').hasText('Ember');
     assert.dom('[data-test-chip]').hasText('heat');
+    assert.dom('[data-test-kicker]').hasText('night kiln');
+    assert.dom('[data-test-inset]').hasText('1280°');
     const ember = heroBox();
     assert.true(
       Math.abs(ember.left - atRest.left) > 30 ||
@@ -126,6 +160,8 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.strictEqual(root.dataset.slide, '2', 'Violet');
     assert.dom('[data-test-title]').hasText('Violet');
     assert.dom('[data-test-chip]').hasText('arc');
+    assert.dom('[data-test-kicker]').hasText('no horizon');
+    assert.dom('[data-test-inset]').hasText('pass');
     const violet = heroBox();
     assert.true(
       Math.abs(violet.top - ember.top) > 20 ||
@@ -140,6 +176,7 @@ module('Acceptance | crossing stress', function (hooks) {
     await animationsSettled();
     assert.strictEqual(root.dataset.slide, '0', 'back to Tide');
     assert.dom('[data-test-title]').hasText('Tide');
+    assert.dom('[data-test-inset]').hasText('flood');
     assert.true(
       titleBox().width < window.innerWidth * 0.55,
       `Violet→Tide title is still the word (${titleBox().width.toFixed(0)} in ${window.innerWidth})`
