@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Acme activity stream"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../activity-feed-demo",
+        "name": "ActivityFeedDemo"
+      }
+    },
+    "relationships": {
+      "records.0": {
+        "links": {
+          "self": "../Activity/acme-renewal-call"
+        }
+      },
+      "records.1": {
+        "links": {
+          "self": "../Activity/acme-stage-change"
+        }
+      },
+      "records.2": {
+        "links": {
+          "self": "../Activity/inv-033-reminder-email"
+        }
+      }
+    }
+  }
+}

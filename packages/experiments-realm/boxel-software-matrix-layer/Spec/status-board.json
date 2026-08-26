@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Status Board component",
+      "specType": "component",
+      "ref": {
+        "module": "../components/status-board",
+        "name": "StatusBoard"
+      },
+      "readMe": "# Status Board\n\n## Summary\nA board whose columns are a lifecycle. The layer-03 `Board` owns the kanban mechanics (drag, columns, selection) and the layer-03 `statusField` owns the option set, colours and transition graph; this record-layer block is the join. Columns derive from `statusOptions` in declared order — a consumer never re-declares its lifecycle as column config — and each column header takes the option's hue through `stateColor`, so board and pills stay one colour system.\n\n## The rule it enforces\nA drag the transition graph forbids is refused inside the block (`canTransition`), before `@onMove` ever fires — no consumer forgets the check, and `@onRejected` lets one explain the refusal instead of silently snapping back.\n\n## Usage\n```gts\n<StatusBoard\n  @items={{this.tasks}}\n  @statusField={{TaskStatusField}}\n  @statusOf={{this.statusOf}}\n  @onMove={{this.transitionTask}}\n/>\n```\n`@statusOf` reads the record's current value; `@onMove` is the consumer's single status writer (a command). Cards render fitted by default, or supply the `card` block. The linked example is a usage page laying out the real stage-1 Task cards by the Task lifecycle.\n\n## Non-goals\nFree-form columns (a pipeline of stages, a swimlane of owners) belong to Board directly — this block exists only where the columns ARE a statusField. It writes nothing itself: the move lands in `@onMove`, and whether the write is allowed to skip states was already the graph's decision.",
+      "cardInfo": {
+        "name": "Status Board",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../StatusBoardDemo/task-board"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

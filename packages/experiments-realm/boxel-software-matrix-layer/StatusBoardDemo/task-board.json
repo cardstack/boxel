@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Stage 1 task board"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../status-board-demo",
+        "name": "StatusBoardDemo"
+      }
+    },
+    "relationships": {
+      "records.0": {
+        "links": {
+          "self": "../Task/ship-stage-1b-card-blocks"
+        }
+      },
+      "records.1": {
+        "links": {
+          "self": "../Task/promote-task-card-block"
+        }
+      },
+      "records.2": {
+        "links": {
+          "self": "../Task/build-note-card-block"
+        }
+      }
+    }
+  }
+}

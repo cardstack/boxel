@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "lucas",
       "workState": "In Progress",
-      "notes": "App 2: Talent & Resource Tracker",
+      "notes": "App 2: Talent & Resource Tracker | 2026-08-26: needed by Quest Log (nested-task view) — lucas owns, not parallel-building. Quest Log stage 2 consumes it when it lands or falls back to in-app recursion as a recorded gap.",
       "sharedSpec": null,
       "specTarget": null,
       "consumers": null,

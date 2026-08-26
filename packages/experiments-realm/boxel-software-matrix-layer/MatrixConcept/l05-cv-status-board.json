@@ -15,11 +15,11 @@
       "catalogMatch": null,
       "provenance": null,
       "domainKit": null,
-      "owner": null,
-      "workState": null,
-      "notes": null,
-      "sharedSpec": null,
-      "specTarget": null,
+      "owner": "richard",
+      "workState": "Done",
+      "notes": "Quest Log stage 1c: built 2026-08-26 as the Board × statusField join — columns derive from statusOptions, illegal drags refused via canTransition. Usage page: StatusBoardDemo/task-board (real Task cards). First app consumer: Quest Log stage 2 (quest board).",
+      "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/status-board",
+      "specTarget": "shared block",
       "consumers": null,
       "consumerExamples": null,
       "catalogDisposition": null,
@@ -34,7 +34,12 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/StatusBoardDemo/task-board",
+      "verifiedAt": "2026-08-26T08:04:07.000Z",
+      "specKind": "component",
+      "specExampleCount": 1,
+      "specReadmeChars": 1464,
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/StatusBoardDemo/task-board\"]"
     },
     "meta": {
       "adoptsFrom": {

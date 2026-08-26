@@ -10,14 +10,14 @@
       "implemented": false,
       "evidenceTier": "POC realm",
       "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/feed.gts (Feed component \u2014 public / internal / system entries)",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/feed.gts (Feed component — public / internal / system entries)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Feed",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing \u2014 pre-existing App 3 component; stamped with Spec, consumed by ticket-workspace",
+      "notes": "App 4: Club Membership & Ticketing — pre-existing App 3 component; stamped with Spec, consumed by ticket-workspace",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/feed",
       "specTarget": "shared block",
       "consumers": "ticket-workspace, ticket, ticket-message-field",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "verifiedAt": "2026-08-26T08:04:07.000Z"
     },
     "meta": {
       "adoptsFrom": {

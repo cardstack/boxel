@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Activity Feed component",
+      "specType": "component",
+      "ref": {
+        "module": "../components/activity-feed",
+        "name": "ActivityFeed"
+      },
+      "readMe": "# Activity Feed\n\n## Summary\nActivity cards rendered as a stream. A thin, deliberate composition: `Activity` (what happened — layer 05 card) maps onto the layer-03 `Feed` component's entries, so no consumer writes that mapping again. Authors become actors with initials, `occurredAt` orders the stream (newest first by default — a stream is not a thread), a `status change` renders as a system rule instead of a bubble, and link holes (unloaded or broken Activity links) are skipped rather than crashed on.\n\n## Usage\n```gts\n<ActivityFeed @activities={{this.accountActivities}} @emptyMessage='No activity on this account yet.' />\n```\nPass the Activity cards however the consumer gathers them — a `linksToMany`, or a live query's instances. The linked example is a usage page streaming the shared realm's real Acme activities. revenue-os currently hand-rolls this exact pane (`accountActivities` + bespoke markup) and is the named retrofit consumer; Quest Log's quest stream is the second.\n\n## Non-goals\nIt does not fetch: gathering the right activities for a record (the fan-out over invoices and opportunities revenue-os does) is app knowledge. It does not write activities — commands do. Conversation threads with visibility rules stay with Feed consumers like the ticket workspace; this block is specifically the Activity-card rendering of a record's history.",
+      "cardInfo": {
+        "name": "Activity Feed",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../ActivityFeedDemo/acme-stream"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
