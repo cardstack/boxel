@@ -1,0 +1,46 @@
+{
+  "name": "choreo-player",
+  "version": "1.0.0",
+  "description": "A headless, externally clocked player for Choreo runs.",
+  "keywords": [
+    "animation",
+    "choreo",
+    "glimmer",
+    "hyperframes",
+    "motion",
+    "player"
+  ],
+  "repository": "https://github.com/cardstack/choreo",
+  "license": "MIT",
+  "author": "Cardstack",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./hyperframes": {
+      "types": "./dist/hyperframes.d.ts",
+      "default": "./dist/hyperframes.js"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint:types": "tsc --project tsconfig.json --noEmit",
+    "prepack": "pnpm run test",
+    "test": "pnpm run build && pnpm run test:unit",
+    "test:unit": "node --test test/*.test.mjs"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}
