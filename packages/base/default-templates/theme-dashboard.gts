@@ -1147,6 +1147,43 @@ export class ThemeDashboardEmptyState extends GlimmerComponent<{
   </template>
 }
 
+// Pill samples for the semantic color roles (default, primary, secondary,
+// accent, muted, destructive) rendered with the ambient theme tokens. Shared
+// by the theme visualizer and the brand guide's UI component samples.
+export class PreviewPills extends GlimmerComponent<{
+  Element: HTMLElement;
+}> {
+  <template>
+    <div class='preview-pills' ...attributes>
+      <Pill data-test-pill-preview='default'>Default</Pill>
+      <Pill @variant='primary' data-test-pill-preview='primary'>
+        Primary
+      </Pill>
+      <Pill @variant='secondary' data-test-pill-preview='secondary'>
+        Secondary
+      </Pill>
+      <Pill @variant='accent' data-test-pill-preview='accent'>
+        Accent
+      </Pill>
+      <Pill @variant='muted' data-test-pill-preview='muted'>
+        Muted
+      </Pill>
+      <Pill @variant='destructive' data-test-pill-preview='destructive'>
+        Destructive
+      </Pill>
+    </div>
+    <style scoped>
+      @layer baseComponent {
+        .preview-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
 export class ThemeVisualizer extends GlimmerComponent<{
   Args: {
     toggleDarkMode?: () => void;
@@ -1181,24 +1218,7 @@ export class ThemeVisualizer extends GlimmerComponent<{
         {{#if (has-block 'colorPalette')}}
           <div>
             <h3 class='structured-theme-visualizer-subtitle'>Color System</h3>
-            <div class='preview-pills'>
-              <Pill data-test-pill-preview='default'>Default</Pill>
-              <Pill @variant='primary' data-test-pill-preview='primary'>
-                Primary
-              </Pill>
-              <Pill @variant='secondary' data-test-pill-preview='secondary'>
-                Secondary
-              </Pill>
-              <Pill @variant='accent' data-test-pill-preview='accent'>
-                Accent
-              </Pill>
-              <Pill @variant='muted' data-test-pill-preview='muted'>
-                Muted
-              </Pill>
-              <Pill @variant='destructive' data-test-pill-preview='destructive'>
-                Destructive
-              </Pill>
-            </div>
+            <PreviewPills class='visualizer-preview-pills' />
             {{yield to='colorPalette'}}
           </div>
         {{/if}}
@@ -1333,10 +1353,7 @@ export class ThemeVisualizer extends GlimmerComponent<{
           gap: var(--boxel-sp);
           align-items: flex-start;
         }
-        .preview-pills {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xs);
+        .visualizer-preview-pills {
           margin-bottom: var(--boxel-sp);
         }
       }

@@ -48,6 +48,7 @@ import {
   ThemeDashboardHeader,
   NavSection,
   ModeToggle,
+  PreviewPills,
   CardContainerCss,
   ThemeImporter,
   ResetButton,
@@ -148,6 +149,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
                     <@fields.functionalPalette class='functional-palette' />
                     <h3 class='color-system-title'>Color System</h3>
                     <div class='color-system-container'>
+                      <PreviewPills />
                       {{#if this.isDarkMode}}
                         <@fields.darkModeVariables />
                       {{else}}
