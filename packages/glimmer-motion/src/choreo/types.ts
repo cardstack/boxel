@@ -271,7 +271,19 @@ export interface HoldStep extends StepBase {
   ms?: number;
   props: Record<string, PropSource>;
 }
-export interface WaitStep extends StepBase {
+/**
+ * The steps that have no subject. A wait is a hole in a sequence and a
+ * tether reads only its two ends — neither has anything to say about the
+ * sprite `of` would name, and requiring one meant every author wrote
+ * `@of={{c.all}}`: a query run on every pass to answer a question nothing
+ * asks, and a lie about what the step reads. Absent, the step produces one
+ * cue rather than one per sprite.
+ */
+interface SubjectlessBase extends Omit<StepBase, 'of'> {
+  of?: Query | Query[];
+}
+
+export interface WaitStep extends SubjectlessBase {
   kind: 'wait';
   ms: number;
 }
@@ -333,7 +345,7 @@ export interface CameraStep extends StepBase {
  * (and every scrubbed still), `@path` receives both endpoints' boxes,
  * region-relative, and returns the path data the tether draws.
  */
-export interface TetherStep extends StepBase {
+export interface TetherStep extends SubjectlessBase {
   from: Query;
   kind: 'tether';
   /** the window; without it, the enclosing block's span */
@@ -461,6 +473,13 @@ export interface GateMark {
 export interface Compiled {
   cues: Cue[];
   gates: GateMark[];
+  /**
+   * The score has no length of its own: every cue in it is an OPEN step
+   * (a tether, hold, raise or follow without `@duration`) and there is no
+   * enclosing span for them to borrow. Such a score is an annotation that
+   * is simply on, and its run stands rather than ending — see Cue.standing.
+   */
+  open?: boolean;
 }
 
 /** where the region's frame stands — yielded, tracked, updated at step boundaries */
@@ -521,6 +540,13 @@ export interface Cue {
   /** scroll: animate the sprite's scroll container to this alignment */
   scroll?: { align: 'center' | 'end' | 'start' };
   sprite: Sprite;
+  /**
+   * An open step in a score with no span to borrow: it holds from its start
+   * until the run is cancelled or replaced, and its (infinite) duration is
+   * excluded from the run's length. The standing wire, the standing raise —
+   * an annotation whose lifetime is the scene's, not a step's.
+   */
+  standing?: boolean;
   start: number;
   /** tween / spring / move: the engine target… */
   target?: Record<string, unknown>;

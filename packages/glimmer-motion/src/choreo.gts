@@ -318,7 +318,16 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       if (this.passPending) {
         return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> pass pending`;
       }
-      if (this.run && !this.run.isDone() && !this.run.parked) {
+      // parked is a still and STANDING is an annotation that is simply on
+      // (a score of nothing but open steps never ends): both are settled,
+      // and a probe that called either one "in flight" would turn every
+      // wire the page leaves up into a suite-wide timeout
+      if (
+        this.run &&
+        !this.run.isDone() &&
+        !this.run.parked &&
+        !this.run.standing
+      ) {
         return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> run in flight`;
       }
       return false;

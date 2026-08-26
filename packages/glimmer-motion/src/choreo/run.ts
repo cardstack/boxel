@@ -94,6 +94,13 @@ export interface Run {
   readonly segment: number;
   /** playback rate: 1 is normal, 0.5 half, as Motion's controls */
   speed: number;
+  /**
+   * This run has no end of its own: its score is nothing but OPEN steps, so
+   * it holds them — drawing its wires, keeping its holds — until it is
+   * cancelled or replaced. A standing run is SETTLED, not in flight: there
+   * is nothing to wait for, and `finished` will not resolve until a cancel.
+   */
+  readonly standing: boolean;
   /** the clock, in seconds at 1× — settable; setting it across a gate parks there */
   time: number;
   /** what every driven value was doing at the moment of interruption */
@@ -295,6 +302,7 @@ export class ChoreoRun implements Run {
   private rate = 1;
 
   private readonly scale = motionSpeed();
+  readonly standing: boolean;
   private readonly total: number;
   private readonly gates: (GateMark & { opened: boolean })[];
   private tracks: Track[] = [];
@@ -351,6 +359,7 @@ export class ChoreoRun implements Run {
       auto: g.auto === undefined ? undefined : g.auto * s,
       opened: false,
     }));
+    this.standing = compiled.open ?? false;
     let total = 0;
     for (const cue of this.cues) {
       const start = cue.start * s;
@@ -362,12 +371,18 @@ export class ChoreoRun implements Run {
         start,
         started: false,
       });
-      if (!cue.loop) {
+      // an ambient loop plays past the run's end and a STANDING cue has no
+      // end at all: neither may lend the run a length
+      if (!cue.loop && !cue.standing) {
         total = Math.max(total, start + duration);
       }
+      // …and neither may hold a leaver's row open forever
       this.rowEnd.set(
         cue.sprite,
-        Math.max(this.rowEnd.get(cue.sprite) ?? 0, start + duration),
+        Math.max(
+          this.rowEnd.get(cue.sprite) ?? 0,
+          cue.standing ? start : start + duration,
+        ),
       );
     }
     for (const g of this.gates) {
@@ -510,7 +525,7 @@ export class ChoreoRun implements Run {
     // Keynote's click-through. Past the last gate, complete the run.
     const next = this.gates.find((g) => !g.opened && g.at >= this.master);
     this.seekTo(next ? next.at : this.total);
-    if (!next && this.master >= this.total) {
+    if (!next && this.master >= this.total && !this.standing) {
       this.finish();
     }
   }
@@ -599,7 +614,10 @@ export class ChoreoRun implements Run {
         }
       }
     }
-    if (this.master >= this.total) {
+    // A standing run has played everything it has and still is not over:
+    // its open cues are the picture, and they hold until something replaces
+    // them. It keeps ticking so the wires it draws keep following.
+    if (this.master >= this.total && !this.standing) {
       this.finish();
     }
   };
@@ -1353,29 +1371,6 @@ export class ChoreoRun implements Run {
     ve.render();
   }
 
-  /**
-   * A sprite's box in the region's own space — the same mapping the
-   * tether draws in, so a follower and a wire agree at any camera zoom.
-   */
-  private regionRect(sprite: Sprite): Rect | null {
-    const el = sprite.element;
-    if (!el?.isConnected) {
-      return null;
-    }
-    const r = el.getBoundingClientRect();
-    const frame = this.options.cameraFrame?.getBoundingClientRect();
-    const zoom = this.camera.zoom || 1;
-    if (!frame) {
-      return { height: r.height, width: r.width, x: r.x, y: r.y };
-    }
-    return {
-      height: r.height / zoom,
-      width: r.width / zoom,
-      x: (r.x - frame.x) / zoom,
-      y: (r.y - frame.y) / zoom,
-    };
-  }
-
   private drawTether(t: Track) {
     const layer = this.options.tetherLayer;
     const tether = t.cue.tether;
@@ -1418,6 +1413,25 @@ export class ChoreoRun implements Run {
 
   /* ---- c.Raise: the elevated layer (§6.3) ---- */
 
+  /**
+   * The scale between the layer's own pixels and the screen's, per axis.
+   *
+   * A promotion reads client rects and writes LOCAL pixels, and every
+   * transform above the region — a camera zoom, a page crossing carrying the
+   * whole scene, any ancestor with a scale on it — sits between the two. Read
+   * off the layer itself: its rect is what the screen shows, its offset size
+   * is what its own coordinate system calls that. Dividing by the camera zoom
+   * alone would catch the region's own transform and miss everything outside
+   * it, which is the double-scale the tether draw already dodges by mapping
+   * through the screen CTM.
+   */
+  private static layerScale(el: HTMLElement, box: DOMRect) {
+    return {
+      x: el.offsetWidth ? box.width / el.offsetWidth : 1,
+      y: el.offsetHeight ? box.height / el.offsetHeight : 1,
+    };
+  }
+
   private promote(t: Track) {
     const layer = this.options.raisedLayer;
     const el = t.cue.sprite.element;
@@ -1426,18 +1440,21 @@ export class ChoreoRun implements Run {
     }
     const box = el.getBoundingClientRect();
     const layerBox = layer.getBoundingClientRect();
+    const s = ChoreoRun.layerScale(layer, layerBox);
+    const width = box.width / s.x;
+    const height = box.height / s.y;
     // the slot holds: siblings must not reflow under a lifted sprite
     const placeholder = document.createElement(el.tagName);
     placeholder.setAttribute('aria-hidden', 'true');
-    placeholder.style.cssText = `visibility:hidden;width:${box.width}px;height:${box.height}px;margin:0;flex:none`;
+    placeholder.style.cssText = `visibility:hidden;width:${width}px;height:${height}px;margin:0;flex:none`;
     const prior = el.style.cssText;
     el.parentNode?.insertBefore(placeholder, el);
     layer.appendChild(el);
     el.style.position = 'absolute';
-    el.style.left = `${box.left - layerBox.left}px`;
-    el.style.top = `${box.top - layerBox.top}px`;
-    el.style.width = `${box.width}px`;
-    el.style.height = `${box.height}px`;
+    el.style.left = `${(box.left - layerBox.left) / s.x}px`;
+    el.style.top = `${(box.top - layerBox.top) / s.y}px`;
+    el.style.width = `${width}px`;
+    el.style.height = `${height}px`;
     el.style.margin = '0';
     if (t.cue.raise?.shadow) {
       el.style.filter = 'drop-shadow(0 18px 24px rgba(0,0,0,0.35))';

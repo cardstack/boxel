@@ -552,8 +552,11 @@ function resolveStep(
   cs: ChangesetLike,
   exclude?: ReadonlySet<Sprite>,
 ): Resolved {
+  // a step with no `of` (a wait, a tether) still needs A sprite to hang its
+  // cue on — the run keys its bookkeeping by sprite — so it takes the
+  // first the changeset offers and produces exactly one cue
   const sprites = cs
-    .sprites(step.of)
+    .sprites(step.of ?? {})
     .filter((s) => !exclude || !exclude.has(s));
   const delay = step.delay ?? 0;
   const cues: Unplaced[] = [];
@@ -573,8 +576,14 @@ function resolveStep(
   let open = false;
   for (const [index, sprite] of sprites.entries()) {
     // a camera or tether is a statement about the scene, not a sprite:
-    // one cue regardless of what `of` matched
-    if ((step.kind === 'camera' || step.kind === 'tether') && index > 0) {
+    // one cue regardless of what `of` matched — as is any step that named
+    // no subject at all
+    if (
+      (step.kind === 'camera' ||
+        step.kind === 'tether' ||
+        step.of === undefined) &&
+      index > 0
+    ) {
       break;
     }
     // each sprite starts one rung later than the one before it — in the
@@ -1140,6 +1149,23 @@ export default function compile(
       node.children.forEach(forbidGates);
     }
   };
+  /**
+   * The whole score's span — computed BEFORE anything is placed, because an
+   * open step's window depends on it.
+   *
+   * A score of nothing but open steps measures zero, and an open step's
+   * window is "the enclosing block's span" — so the annotation the author
+   * asked to be simply ON compiled to a zero-length run that ended on the
+   * frame it was born. That is not a short wire, it is no wire; the app
+   * that hit it wrote `ms: 3_600_000` to get an hour of clock out of a
+   * step whose real lifetime is the scene's. So a score with no length of
+   * its own does not borrow zero: its open cues STAND (§4.6), and the run
+   * holds them until it is cancelled or replaced.
+   */
+  const root = measure({ children: tree, kind: 'parallel' });
+  const standingScore = root === 0;
+  /** did any cue actually take the standing window? */
+  let stood = false;
   /** span: the time a hold without @duration is allowed to last from `start` */
   const place = (node: TimelineNode, start: number, span: number) => {
     if (isGate(node)) {
@@ -1180,15 +1206,26 @@ export default function compile(
       }
       for (const cue of r.cues) {
         const { offset, ...rest } = cue;
+        // `follow` belongs in this list for the same reason the other three
+        // do — FollowStep.ms is documented as "the window; without it, the
+        // enclosing block's span" — and was simply missed.
+        const borrows =
+          r.open &&
+          (cue.kind === 'hold' ||
+            cue.kind === 'raise' ||
+            cue.kind === 'tether' ||
+            cue.kind === 'follow');
+        if (borrows && standingScore) {
+          stood = true;
+        }
         out.push({
           ...rest,
-          duration:
-            r.open &&
-            (cue.kind === 'hold' ||
-              cue.kind === 'raise' ||
-              cue.kind === 'tether')
-              ? Math.max(0, span - delay - offset)
-              : cue.duration,
+          duration: borrows
+            ? standingScore
+              ? Infinity
+              : Math.max(0, span - delay - offset)
+            : cue.duration,
+          standing: borrows && standingScore ? true : undefined,
           start: base + delay + offset,
         });
       }
@@ -1219,7 +1256,6 @@ export default function compile(
       place(child, from, total);
     }
   };
-  const root = measure({ children: tree, kind: 'parallel' });
   if (tree.length > 1) {
     tree.forEach(forbidGates);
   }
@@ -1229,7 +1265,7 @@ export default function compile(
   gates.sort((a, b) => a.at - b.at);
   const derived = out.filter((cue) => cue.derive);
   if (!derived.length) {
-    return { cues: out, gates };
+    return { cues: out, gates, open: stood };
   }
   // A follower's `now` is composed from whatever is driving its source
   // THIS frame, so it has to be evaluated after that driver has written
@@ -1258,6 +1294,7 @@ export default function compile(
   return {
     cues: [...out.filter((cue) => !cue.derive), ...derived],
     gates,
+    open: stood,
   };
 }
 
@@ -1309,12 +1346,22 @@ export function continuation(
  * re-passes on every app render; a neighbouring demo writing tracked state
  * per frame must not restart this region's clock).
  *
- * The comparison is deliberately conservative. Journeys and live geometry
- * — flights, tethers, raises, scrolls — are measured off the page and are
- * not comparable by value: any such cue makes the scores different, and
- * the pass replays exactly as it always did. Values that ARE comparable
- * (targets, transitions, delivery plans, holds, camera aims) compare
- * structurally, so an edit that retimes or re-aims anything replays too.
+ * The comparison is deliberately conservative. A FLIGHT is measured off the
+ * page and is not comparable by value: any cue carrying one makes the scores
+ * different, and the pass replays exactly as it always did. Values that ARE
+ * comparable (targets, transitions, delivery plans, holds, camera aims)
+ * compare structurally, so an edit that retimes or re-aims anything replays.
+ *
+ * Tethers, raises and scrolls used to be lumped in with flights, and that was
+ * wrong in a way that only showed up on standing annotations: a wire that is
+ * simply ON was recompiled to the identical statement on every pass and, being
+ * declared different every time, had its run torn down and rebuilt — the path
+ * element removed from the layer and a new one appended, sixty times a second
+ * on a busy page. None of the three carries measured geometry in its cue: a
+ * tether is two sprites and a function, a raise is a sprite and a flag, a
+ * scroll is a sprite and an alignment. They compare by IDENTITY, which is
+ * exactly what "the same statement" means for them — and it matters most for
+ * the scroll, where replacing the cue is a visible restart of the scroll.
  */
 export function sameScore(a: Cue[], b: Cue[]): boolean {
   return a.length === b.length && a.every((cue, i) => sameCue(cue, b[i]!));
@@ -1330,17 +1377,31 @@ function sameCue(a: Cue, b: Cue): boolean {
   ) {
     return false;
   }
-  if (
-    a.flight ||
-    b.flight ||
-    a.tether ||
-    b.tether ||
-    a.raise ||
-    b.raise ||
-    a.scroll ||
-    b.scroll
-  ) {
+  if (a.flight || b.flight) {
     return false;
+  }
+  if (a.tether || b.tether) {
+    // the same two ends, drawn by the same function, under the same name
+    if (
+      !a.tether ||
+      !b.tether ||
+      a.tether.from?.node !== b.tether.from?.node ||
+      a.tether.to?.node !== b.tether.to?.node ||
+      a.tether.path !== b.tether.path ||
+      a.tether.name !== b.tether.name
+    ) {
+      return false;
+    }
+  }
+  if (a.raise || b.raise) {
+    if (!a.raise || !b.raise || a.raise.shadow !== b.raise.shadow) {
+      return false;
+    }
+  }
+  if (a.scroll || b.scroll) {
+    if (!a.scroll || !b.scroll || a.scroll.align !== b.scroll.align) {
+      return false;
+    }
   }
   const plain = (v: unknown) => JSON.stringify(v ?? null);
   // steady rides Sprite objects (cyclic); its cast size stands in for it
