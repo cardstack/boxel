@@ -157,6 +157,9 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
 
   async describeBoxel(boxel: BoxelTypeHandle): Promise<BoxelDescription> {
     let api = await this.getCardAPI();
+    if (!this.types.has(boxel)) {
+      throw new Error(`Unknown or released Boxel type handle '${boxel}'`);
+    }
     return buildBoxelDescription(captureBoxelType(this.types.get(boxel), api));
   }
 

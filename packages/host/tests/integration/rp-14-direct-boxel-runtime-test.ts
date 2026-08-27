@@ -25,7 +25,11 @@ import {
   setupLocalIndexing,
   setupIntegrationTestRealm,
 } from '../helpers';
-import { setupBaseRealm } from '../helpers/base-realm';
+import {
+  setupBaseRealm,
+  createFromSerialized,
+  getRelationshipMembershipState,
+} from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -39,6 +43,7 @@ const openingNight = rri(`${testRealmURL}Show/opening-night`);
 const matinee = rri(`${testRealmURL}Show/matinee`);
 const themedShow = rri(`${testRealmURL}Show/themed`);
 const houseTheme = rri(`${testRealmURL}Theme/house`);
+const importJob = rri(`${testRealmURL}Job/import`);
 
 // Served as source rather than as pre-built classes, so the module reaches the
 // adapter the way a realm's own module does: fetched, run through
@@ -57,12 +62,17 @@ const showSource = `
   } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
   import CurrencyField from 'https://cardstack.com/base/currency';
+  import { ProcessCard } from 'https://cardstack.com/base/process-card';
 
   export class VenueField extends FieldDef {
     static displayName = 'Venue';
     static configuration = { layout: { rows: 1, wrap: true } };
     @field name = contains(StringField);
     @field city = contains(StringField);
+  }
+
+  export class Job extends ProcessCard {
+    static displayName = 'Job';
   }
 
   export class Show extends CardDef {
@@ -123,7 +133,7 @@ function showDocument(
   };
 }
 
-const THEME_CSS = ':root { --boxel-brand: rebeccapurple; }';
+const THEME_CSS = ':root { --boxel-brand: seagreen; }';
 
 function themeDocument() {
   return {
@@ -176,6 +186,14 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
         ),
         'Show/matinee.json': showDocument(matinee, 'Matinee'),
         'Theme/house.json': themeDocument(),
+        'Job/import.json': {
+          data: {
+            type: 'card',
+            id: importJob,
+            attributes: { progressDone: 3, progressTotal: 12 },
+            meta: { adoptsFrom: { module: showModule, name: 'Job' } },
+          },
+        },
         'Show/themed.json': showDocument(
           themedShow,
           'Themed',
@@ -504,6 +522,30 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
     );
   });
 
+  test('RP-4.4, RP-5.4: an authored card inherits the trusted getters its Base templates read', async function (assert) {
+    let runtime = newRuntime();
+    let store = getService('store') as StoreService;
+    let job = (await store.get(importJob)) as CardDef;
+    let { model } = await runtime.projectInstance(runtime.retainInstance(job));
+
+    // Job is authored and ProcessCard is trusted, so the walk has to step over
+    // the authored class to reach these — and they are root-level members, not
+    // members of a nested composite.
+    assert.deepEqual(
+      {
+        percentComplete: model.percentComplete,
+        progressLabel: model.progressLabel,
+        statusLabel: model.statusLabel,
+      },
+      {
+        percentComplete: 25,
+        progressLabel: '3 of 12 items',
+        statusLabel: 'running',
+      },
+      'the getters Base’s own template reads as @model.x, none of which getFields can see',
+    );
+  });
+
   test('RP-9.1, RP-7.6: a query-backed relationship reports as query-backed and is not computed', async function (assert) {
     let runtime = newRuntime();
     let fields = await runtime.getFields(await retainedShow(runtime));
@@ -520,39 +562,45 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
     );
   });
 
-  test('RP-7.1, RP-7.2: a projection reports link state and triggers no load of its own', async function (assert) {
+  test('RP-7.1, RP-7.2: a projection reports a not-loaded link without starting its load', async function (assert) {
     let runtime = newRuntime();
-    let store = getService('store') as StoreService;
-    let instance = (await store.get(openingNight)) as CardDef;
+    // Materialized from a document that names the link but carries no
+    // `included` entry for it, so `partner` starts not-loaded — the state a
+    // projection must be able to report without changing it.
+    let resource = {
+      type: 'card',
+      id: `${testRealmURL}Show/lonely`,
+      attributes: { headline: 'Lonely' },
+      relationships: { partner: { links: { self: matinee } } },
+      meta: { adoptsFrom: { module: showModule, name: 'Show' } },
+    };
+    let instance = (await createFromSerialized(
+      resource as never,
+      { data: resource } as never,
+      undefined,
+    )) as CardDef;
 
-    // Every card carries cardInfo.cardThumbnail, a link no format template
-    // here reads. A projection that used the field getter as its trigger would
-    // fetch it — and a terminal failure would plant a sentinel on the canonical
-    // instance that nothing was rendering (RP-7.2).
-    let requested: string[] = [];
-    let realFetch = globalThis.fetch;
-    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-      requested.push(typeof input === 'string' ? input : String(input));
-      return realFetch(input as RequestInfo, init);
-    }) as typeof fetch;
-    try {
-      await runtime.projectInstance(runtime.retainInstance(instance));
-    } finally {
-      globalThis.fetch = realFetch;
-    }
-
+    let before = getRelationshipMembershipState(instance, 'partner');
     assert.deepEqual(
-      requested.filter((url) => url.includes('_search')),
-      [],
-      'no search was issued for the query-backed field',
+      { kind: before.membership?.[0]?.kind, isLoading: before.isLoading },
+      { kind: 'not-loaded', isLoading: false },
+      'the link starts not-loaded and nothing is in flight',
+    );
+
+    let projection = await runtime.projectInstance(
+      runtime.retainInstance(instance),
+    );
+
+    let after = getRelationshipMembershipState(instance, 'partner');
+    assert.deepEqual(
+      { kind: after.membership?.[0]?.kind, isLoading: after.isLoading },
+      { kind: 'not-loaded', isLoading: false },
+      'and the projection left it there — a fetch it started would show as in flight here, and a failed one would plant a terminal sentinel on a link no render asked for',
     );
     assert.strictEqual(
-      (await runtime.projectInstance(runtime.retainInstance(instance))).model
-        .revivals instanceof Array
-        ? 'array'
-        : 'not-array',
-      'array',
-      'and an unstarted query projects as an empty membership rather than failing',
+      projection.model.partner,
+      null,
+      'a non-present slot projects as absent, which is what the ordinary getter answers for it',
     );
   });
 

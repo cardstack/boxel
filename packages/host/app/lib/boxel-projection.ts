@@ -194,8 +194,9 @@ export function captureBoxelFields(
     api.getFields(instance, { includeComputeds: true }),
   ).map(([fieldName, field]) => ({
     ...describeField(fieldName, field, boxelType),
-    resolvedConfiguration:
-      dataValue(resolveFieldConfiguration(api, field, instance)) ?? null,
+    resolvedConfiguration: configurationData(
+      resolveFieldConfiguration(api, field, instance),
+    ),
   }));
 }
 
@@ -445,11 +446,11 @@ function captureFieldValue(
 /**
  * One link field's slots, in document order, as identity references.
  *
- * Membership is read and nothing is triggered. The field getter is the
- * lazy-load trigger (RP-7.2) and the renderer is what pulls it, for the fields
- * its template actually reads; a projection reads *every* field of the
- * instance and of every composite inside it, so triggering here fetches links
- * no render asked for. Three things make that worse than wasteful:
+ * Membership is read rather than pulled. The field getter is the lazy-load
+ * trigger (RP-7.2) and the renderer is what pulls it, for the fields its
+ * template actually reads; a projection reads *every* field of the instance
+ * and of every composite inside it, so triggering here fetches links no render
+ * asked for. Three things make that worse than wasteful:
  *
  * - a failed fetch is terminal — a `link-error` / `link-not-found` sentinel is
  *   planted and never retried (RP-7.2) — so one projection can permanently
@@ -461,9 +462,18 @@ function captureFieldValue(
  * - a query-backed field's getter creates its search resource, so every
  *   projection would issue a search per query field.
  *
- * `getRelationshipMembershipState` is a pure read, so what this reports is the
- * state the instance is in — which is what a projection is for. A link that
- * loads later reaches a consumer through the next projection.
+ * `getRelationshipMembershipState` is a pure read for a declared link, so what
+ * this reports is the state the instance is in — which is what a projection is
+ * for. A link that loads later reaches a consumer through the next projection.
+ *
+ * One case is not pure, and it is not one this can avoid: for a *computed*
+ * link the membership read has to run the compute to have a value to report,
+ * and an authored compute is free to read other links. `CardDef.cardTheme` is
+ * the built-in example — its compute reads `cardInfo.theme`, which is a
+ * trigger. Main reads `cardTheme` on every card render, so that particular
+ * fan-out is main's own; a compute that reaches further is the author's, and
+ * there is no way to report a computed link's membership without running it.
+ * What this rules out is the fan-out that was purely the projection's.
  *
  * Only a `present` slot yields a reference. The other four states (RP-7.1)
  * have a reference string but no loaded value, and therefore no *actual*
@@ -512,7 +522,8 @@ function captureValue(
   seen: WeakSet<object>,
 ): JsonValue {
   if (!isBaseDefInstance(value)) {
-    return dataValue(value) ?? null;
+    let projected = dataValue(value);
+    return projected === notData ? null : (projected ?? null);
   }
   if (seen.has(value)) {
     // A value reachable from itself would walk forever. Degrading the second
@@ -605,7 +616,7 @@ function captureTrustedGetters(
       }
       try {
         let projected = dataValue(getter.call(value));
-        if (projected !== undefined) {
+        if (projected !== notData) {
           defineMember(expanded, name, projected);
         }
       } catch {
@@ -676,13 +687,13 @@ function captureTheme(
   // authored fonts-first — imports set, variables still empty — renders its
   // `@import` on main, so dropping them with the theme would lose a stylesheet
   // main shows.
-  let cssImports = cssImportsOf(instance, api);
+  let ownImports = cssImportsOf(instance, api);
   let unthemed = {
     isThemed: false,
     theme: null,
     themeScope: null,
     themeCss: null,
-    cssImports,
+    cssImports: ownImports ?? null,
   };
   let source: BaseDef;
   let themeId: string | null;
@@ -714,7 +725,14 @@ function captureTheme(
     source = linked;
     themeId = instanceId(linked);
     themeCss = readString(linked, 'cssVariables', api);
-    theme = boxelReference(linked);
+    // Same fallback a link's membership reference supplies: an unsaved Theme
+    // has no id, and `{id: null}` is a reference no consumer can resolve.
+    theme = boxelReference(
+      linked,
+      (linked as unknown as Record<symbol, unknown>)[api.localId] as
+        | string
+        | undefined,
+    );
   }
   return {
     isThemed: true,
@@ -728,7 +746,10 @@ function captureTheme(
     // main does with the null.
     themeScope: themeScope(themeId, themeCss) ?? null,
     themeCss,
-    cssImports: cssImports ?? cssImportsOf(source, api),
+    cssImports:
+      ownImports === undefined
+        ? (cssImportsOf(source, api) ?? null)
+        : ownImports,
   };
 }
 
@@ -740,9 +761,16 @@ function captureTheme(
  * `CssImportField` carries its own fonts whatever it links. The caller applies
  * the fallback, so this answers only the first half.
  */
-function cssImportsOf(source: BaseDef, api: CardAPIModule): string[] | null {
+function cssImportsOf(
+  source: BaseDef,
+  api: CardAPIModule,
+): string[] | null | undefined {
+  // `undefined` distinguishes "this card declares no such field" — the only
+  // case where main consults the linked Theme — from "it declares one and has
+  // nothing in it", where main uses the card's own empty answer and does not
+  // fall back.
   if (!fieldTypedAs(source, 'cssImports', 'CssImportField', api)) {
-    return null;
+    return undefined;
   }
   let imports = (source as unknown as Record<string, unknown>).cssImports;
   if (!Array.isArray(imports)) {
@@ -863,20 +891,44 @@ function resolveFieldConfiguration(
 let warnedAboutConfigurationSupport = false;
 
 /**
- * One value as data, or `undefined` when it is not data at all.
+ * The answer for a value that is not data at all.
  *
- * `undefined` is the answer for a function, a symbol, a class instance, an
+ * A sentinel rather than `undefined`, because `undefined` IS data here: the
+ * boundary carries an undefined-valued member (`normalizeJsonData` says so in
+ * as many words, and `Cloneable` admits one), and an unset primitive field's
+ * empty value is `undefined` — so a trusted getter that maps over its own
+ * fields produces one for every field the author left blank. Conflating the
+ * two makes one blank field delete the whole list it appeared in.
+ */
+const notData = Symbol('not-data');
+
+/**
+ * A field's resolved configuration as the record carries it.
+ *
+ * `null` covers all three ways a field can have none: it configures nothing,
+ * the Base realm cannot resolve configuration at all, or what came back could
+ * not cross. The record's type admits no `undefined` here, and a consumer's
+ * question is only ever "is there configuration to apply".
+ */
+function configurationData(value: unknown): JsonValue | null {
+  let projected = dataValue(value);
+  return projected === notData || projected === undefined ? null : projected;
+}
+
+/**
+ * One value as data, or `notData`.
+ *
+ * `notData` is the answer for a function, a symbol, a class instance, an
  * accessor, and anything else the boundary would refuse, so a caller can tell
- * "this member is absent" from "this member is null" — which is what lets the
- * trusted-getter walk omit a member rather than record a null the live
- * instance never held.
+ * "this could not cross" from "this is absent" and from "this is null".
  *
  * A container is data only if everything in it is. An array holding one
  * component class is not "an array with a null in it": returning one would
  * hand a consumer a configuration that looks complete and is not, at the one
  * position it most needs to know about. So a non-data element or member
  * refuses the whole container, and the caller sees the member vanish rather
- * than change meaning.
+ * than change meaning. An *absent* element or member is not that case — it
+ * crosses as the absence it is.
  *
  * Members are read through descriptors rather than `Object.entries`, which
  * invokes an accessor. Invoking one here would materialize its result as data
@@ -889,13 +941,14 @@ let warnedAboutConfigurationSupport = false;
 function dataValue(
   value: unknown,
   seen = new WeakSet<object>(),
-): JsonValue | undefined {
+): JsonValue | typeof notData {
   if (
     value === null ||
+    value === undefined ||
     typeof value === 'string' ||
     typeof value === 'boolean'
   ) {
-    return value;
+    return value as JsonValue;
   }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -907,10 +960,10 @@ function dataValue(
     return value.toISOString();
   }
   if (typeof value !== 'object') {
-    return undefined;
+    return notData;
   }
   if (seen.has(value)) {
-    return undefined;
+    return notData;
   }
   seen.add(value);
   try {
@@ -918,8 +971,8 @@ function dataValue(
       let entries: JsonValue[] = [];
       for (let entry of value) {
         let projected = dataValue(entry, seen);
-        if (projected === undefined) {
-          return undefined;
+        if (projected === notData) {
+          return notData;
         }
         entries.push(projected);
       }
@@ -927,20 +980,20 @@ function dataValue(
     }
     let prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
-      return undefined;
+      return notData;
     }
     if (Object.getOwnPropertySymbols(value).length > 0) {
-      return undefined;
+      return notData;
     }
     let plain: Record<string, JsonValue> = {};
     for (let key of Object.getOwnPropertyNames(value)) {
       let descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (!descriptor || !('value' in descriptor)) {
-        return undefined;
+        return notData;
       }
       let projected = dataValue(descriptor.value, seen);
-      if (projected === undefined) {
-        return undefined;
+      if (projected === notData) {
+        return notData;
       }
       defineMember(plain, key, projected);
     }
