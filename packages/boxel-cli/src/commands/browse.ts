@@ -111,16 +111,17 @@ export async function browse(
 
   let { id: profileId, profile } = resolveProfile(pm, options.profile);
 
-  // Fast path: a card in a *published* realm is served on its own origin, which
-  // the host renders with no sign-in. When browsing such a card, open that
-  // public URL directly and skip minting a token entirely. Only attempted with
-  // a card path (bare `browse` has no card to resolve) and without `--host-url`
+  // Fast path: a *published* realm is served on its own origin, which the host
+  // renders with no sign-in. When the given card path is such a URL, open it
+  // as-is and skip minting a token entirely. A source-realm path always takes
+  // the token flow — the live card and its published snapshot are different
+  // URLs, so the path states which one the user wants. Only attempted with a
+  // card path (bare `browse` has no card to resolve) and without `--host-url`
   // (which explicitly targets the operator app for the token flow).
   if (cardPath && !options.hostUrl) {
     let anonymousUrl = await resolveAnonymousBrowseUrl(
       profile.realmServerUrl,
       cardPath,
-      { authedRealmFetch: (input, init) => pm.authedRealmFetch(input, init) },
     );
     if (anonymousUrl) {
       // No credential in this URL — it's a plain public link.
@@ -190,11 +191,12 @@ export function registerBrowseCommand(program: Command): void {
     .command('browse')
     .description(
       'Open the Boxel app in your browser, already signed in as your active ' +
-        'profile (a card in a published realm opens directly, no sign-in needed)',
+        'profile (a published-realm card URL opens directly, no sign-in needed)',
     )
     .argument(
       '[card-path]',
-      'Card path to deep-link to after signing in (e.g. a realm-relative path)',
+      'Card to open: a realm-relative path (opens signed in) or a ' +
+        'published-realm URL (opens directly, no sign-in)',
     )
     .option('--profile <id>', 'Profile to use (default: the active profile)')
     .option(

@@ -220,9 +220,6 @@ describe('browse', () => {
         deviceId: 'DEVICE',
         matrixUrl: 'http://localhost:8008',
       }),
-      // Default: the card isn't reachable, so the anonymous (published-realm)
-      // pre-flight yields nothing and browse falls back to the token flow.
-      authedRealmFetch: async () => fakeResponse(404, 'not found'),
       ...overrides,
     } as unknown as ProfileManager;
   }
@@ -412,14 +409,14 @@ describe('browse', () => {
     );
   });
 
-  it('opens the published URL with no token when the card is in a published realm', async () => {
+  it('opens a published-realm URL as-is, with no token', async () => {
     let openBrowserFn = vi.fn().mockResolvedValue(true);
     let requestLoginTokenFn = vi.fn();
     let resolveAnonymousBrowseUrl = vi
       .fn()
       .mockResolvedValue('https://alice.boxel.space/Post/1');
 
-    await browse('alice/blog/Post/1', {
+    await browse('https://alice.boxel.space/Post/1', {
       profileManager: fakeProfileManager(),
       requestLoginToken: requestLoginTokenFn,
       resolveAnonymousBrowseUrl,
@@ -429,8 +426,7 @@ describe('browse', () => {
 
     expect(resolveAnonymousBrowseUrl).toHaveBeenCalledWith(
       'https://localhost:4201/',
-      'alice/blog/Post/1',
-      expect.anything(),
+      'https://alice.boxel.space/Post/1',
     );
     // No token minted, and the opened URL carries no loginToken.
     expect(requestLoginTokenFn).not.toHaveBeenCalled();
@@ -446,7 +442,7 @@ describe('browse', () => {
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
 
-    await browse('alice/blog/Post/1', {
+    await browse('https://alice.boxel.space/Post/1', {
       printUrl: true,
       profileManager: fakeProfileManager(),
       requestLoginToken: requestLoginTokenFn,
@@ -463,7 +459,7 @@ describe('browse', () => {
     stdout.mockRestore();
   });
 
-  it('falls back to the login-token flow when the card is not a published realm', async () => {
+  it('falls back to the login-token flow when the card path is not a published-realm URL', async () => {
     let openBrowserFn = vi.fn().mockResolvedValue(true);
     let requestLoginTokenFn = vi
       .fn()
