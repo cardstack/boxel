@@ -45,7 +45,7 @@ export default class Login extends Component<Signature> {
   <template>
     {{#if this.exchangingSsoToken}}
       <div class='centered-loading' data-test-sso-exchanging>
-        <span class='loading-title'>Signing you in with Google</span>
+        <span class='loading-title'>Signing you in…</span>
         <LoadingIndicator class='loading-spinner' />
         {{#if this.error}}
           <div class='error' data-test-login-error>{{this.error}}</div>
@@ -344,9 +344,9 @@ export default class Login extends Component<Signature> {
       });
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error = `Google sign-in failed. ${extractMatrixErrorMessage(e)}`;
+        this.error = `Sign-in failed. ${extractMatrixErrorMessage(e)}`;
       } else {
-        this.error = `Google sign-in failed: ${e.message}`;
+        this.error = `Sign-in failed: ${e.message}`;
       }
       // Fall back to the password form so the user can recover.
       this.exchangingSsoToken = false;

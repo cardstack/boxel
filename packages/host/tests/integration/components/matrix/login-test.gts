@@ -176,7 +176,7 @@ module('Integration | Component | matrix/login', function (hooks) {
     assert
       .dom('[data-test-login-form]')
       .exists('Password form is restored after the failed SSO exchange');
-    assert.dom('[data-test-login-error]').includesText('Google sign-in failed');
+    assert.dom('[data-test-login-error]').includesText('Sign-in failed');
   });
 
   test('?loginToken= falls back to the password form when start() fails after a successful token exchange', async function (assert) {
@@ -209,7 +209,7 @@ module('Integration | Component | matrix/login', function (hooks) {
         .exists('Password form is restored after the failed start()');
       assert
         .dom('[data-test-login-error]')
-        .includesText('Google sign-in failed');
+        .includesText('Sign-in failed');
     } finally {
       matrixService.start = originalStart;
     }
