@@ -717,10 +717,6 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('rejects a non-boolean discover', async function (assert) {
-      await expectCaptureSpecRejected(assert, { discover: 'yes' }, 'discover');
-    });
-
     test('rejects an unknown nested captureSpec field by name', async function (assert) {
       await expectCaptureSpecRejected(
         assert,

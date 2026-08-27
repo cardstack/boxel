@@ -6,7 +6,6 @@ import {
   type PrerenderMeta,
   type ScreenshotCaptureEntry,
   type ScreenshotCaptureResult,
-  type ScreenshotRegion,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
@@ -1206,16 +1205,7 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
-  // Present only when the request set `discover: true`: the settled render's
-  // `[data-card-field]` inventory. Rides alongside the captures rather than in
-  // them — it is one pass over the shared render, not per-image.
-  regions?: ScreenshotRegion[];
 }
-
-// A discover inventory returns at most this many regions. A render with more
-// `[data-card-field]` elements than this is past any real card's field count
-// and mostly a way to force a huge payload; the overflow is dropped (logged).
-const SCREENSHOT_MAX_DISCOVER_REGIONS = 200;
 
 // Block in the browser context until images, CSS background-image URLs, and
 // fonts have finished loading, then yield one animation frame so the browser
@@ -1483,80 +1473,6 @@ async function captureOneEntry(
   };
 }
 
-// Inventory every `[data-card-field]` element in the settled render: its field
-// name, a selector that re-addresses it, and its CSS-pixel box in the document
-// frame (the frame `clip` and a discovered box share). Bounded at
-// SCREENSHOT_MAX_DISCOVER_REGIONS; the overflow is dropped and logged rather
-// than returned, so a caller never mistakes a truncated inventory for the whole
-// render. Boxes are rounded to integers so a region reads back as a valid
-// `clip`.
-async function discoverFieldRegions(page: Page): Promise<ScreenshotRegion[]> {
-  let { regions, total } = await page.evaluate((cap: number) => {
-    // A selector that re-addresses one element: the `[data-card-field]`
-    // attribute selector when the field name is unique in the render (the
-    // common, readable case), else a structural nth-of-type path that is
-    // unique by construction. Both are CSS — never an XPath — so either is a
-    // valid `target` on a follow-up capture.
-    let escapeAttr = (value: string) =>
-      typeof CSS !== 'undefined' && CSS.escape
-        ? CSS.escape(value)
-        : value.replace(/["\\]/g, '\\$&');
-    let structuralPath = (element: Element): string => {
-      let parts: string[] = [];
-      let node: Element | null = element;
-      while (node && node !== document.documentElement) {
-        let tag = node.nodeName.toLowerCase();
-        let parent: Element | null = node.parentElement;
-        if (parent) {
-          let sameTag = Array.from(parent.children).filter(
-            (child) => child.nodeName === node!.nodeName,
-          );
-          if (sameTag.length > 1) {
-            tag += `:nth-of-type(${sameTag.indexOf(node) + 1})`;
-          }
-        }
-        parts.unshift(tag);
-        node = parent;
-      }
-      return parts.join(' > ');
-    };
-
-    let elements = Array.from(
-      document.querySelectorAll('[data-card-field]'),
-    ) as HTMLElement[];
-    let nameCounts = new Map<string, number>();
-    for (let element of elements) {
-      let name = element.getAttribute('data-card-field') ?? '';
-      nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
-    }
-    let regions = elements.slice(0, cap).map((element) => {
-      let cardField = element.getAttribute('data-card-field') ?? '';
-      let rect = element.getBoundingClientRect();
-      let selector =
-        nameCounts.get(cardField) === 1
-          ? `[data-card-field="${escapeAttr(cardField)}"]`
-          : structuralPath(element);
-      return {
-        cardField,
-        selector,
-        boundingBox: {
-          x: Math.round(rect.left + window.scrollX),
-          y: Math.round(rect.top + window.scrollY),
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        },
-      };
-    });
-    return { regions, total: elements.length };
-  }, SCREENSHOT_MAX_DISCOVER_REGIONS);
-  if (total > regions.length) {
-    log.debug(
-      `discoverFieldRegions capped: ${total} [data-card-field] elements, returned ${regions.length}`,
-    );
-  }
-  return regions;
-}
-
 export async function captureScreenshot(
   page: Page,
   format: 'isolated' | 'embedded',
@@ -1677,15 +1593,6 @@ export async function captureScreenshot(
     // for the whole batch — every entry captures the same settled render.
     await waitForImagePaint(page);
 
-    // Field-region inventory (RP capture DSL `discover`). One pass over the
-    // settled render at the first entry's viewport, independent of the
-    // captures — a follow-up caller uses a region's box as a `clip` or its
-    // selector as a `target`. Runs before the capture loop so viewport
-    // switches within a batch don't move the boxes out from under it.
-    let regions = captureSpec?.discover
-      ? await discoverFieldRegions(page)
-      : undefined;
-
     let captures: ScreenshotCaptureItem[] = [];
     for (let entry of entries) {
       if (anyViewportOverride) {
@@ -1718,9 +1625,9 @@ export async function captureScreenshot(
     log.debug(
       `captureScreenshot success format=${format} ancestorLevel=${ancestorLevel} captures=${captures.length} dims=${captures
         .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
-        .join(',')}${regions ? ` regions=${regions.length}` : ''}`,
+        .join(',')}`,
     );
-    return regions ? { captures, regions } : { captures };
+    return { captures };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing

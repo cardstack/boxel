@@ -96,7 +96,6 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'clip',
   'target',
   'captures',
-  'discover',
 ]);
 const CAPTURE_ENTRY_FIELDS = new Set([
   'name',
@@ -417,28 +416,15 @@ export function parseScreenshotCaptureSpec(
     return { error: singular.error };
   }
 
-  // `discover` is spec-level, not a per-capture override: the field-region
-  // inventory is one pass over the shared settled render, so it applies to a
-  // singular and a batch spec alike and never appears on an entry. Elided when
-  // false so it does not make an otherwise-canonical spec look non-canonical.
-  if (raw.discover !== undefined && typeof raw.discover !== 'boolean') {
-    return { error: 'captureSpec.discover must be a boolean' };
-  }
-  let discover = raw.discover === true;
-
   if (raw.captures === undefined) {
     let crossError = checkMergedOverrides(singular.overrides, 'captureSpec');
     if (crossError !== undefined) {
       return { error: crossError };
     }
     let spec: ScreenshotCaptureSpec = elideDefaults(singular.overrides);
-    if (discover) {
-      spec.discover = true;
-    }
     // A spec whose every field matched an engine default normalizes to null:
     // it means the canonical capture, and null is what consumers key that
-    // classification on. `discover` is an override for this purpose — a
-    // discover render is not the canonical persisted capture.
+    // classification on.
     return { captureSpec: Object.keys(spec).length > 0 ? spec : null };
   }
 
@@ -496,11 +482,7 @@ export function parseScreenshotCaptureSpec(
     entries.push({ name, ...elideDefaults(merged) });
   }
 
-  return {
-    captureSpec: discover
-      ? { captures: entries, discover: true }
-      : { captures: entries },
-  };
+  return { captureSpec: { captures: entries } };
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are

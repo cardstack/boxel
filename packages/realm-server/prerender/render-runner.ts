@@ -635,7 +635,6 @@ export class RenderRunner {
         response = {
           status: 'ready',
           captures: shot.captures,
-          ...(shot.regions ? { regions: shot.regions } : {}),
           base64: first.base64,
           width: first.width,
           height: first.height,

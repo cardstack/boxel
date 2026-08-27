@@ -756,13 +756,11 @@ module(basename(import.meta.filename), function () {
                 }
               }
             `,
-            // Two field boundaries with hand-authored data-card-field markers,
-            // fixed-size so a discovered region's box is layout-independent.
-            // `title` is unique (so its selector is the attribute form);
-            // `tag` repeats (so its regions get structural selectors). Authored
-            // data-* survives into the rendered HTML, so this exercises the
-            // discover inventory without depending on the base realm's own
-            // field-boundary stamping.
+            // A card with hand-authored data-card-field markers at fixed sizes,
+            // so a `target` capture's crop dimensions are layout-independent and
+            // predictable. Authored data-* survives into the rendered HTML, so a
+            // target selector addresses a known element without depending on the
+            // base realm's own field-boundary stamping.
             'disco.gts': `
               import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
               export class Disco extends CardDef {
@@ -1081,81 +1079,29 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('discover inventories the render field regions with correct boxes', async function (assert) {
-      let { response } = await screenshot(`${realmURL}disco-card`, {
-        discover: true,
-      });
-      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
-      assert.ok(response.regions, 'a discover request carries regions');
-      let regions = response.regions!;
-
-      let title = regions.find((r) => r.cardField === 'title');
-      assert.ok(title, 'the unique title field is inventoried');
-      // The box is the element's own fixed size, independent of shell layout.
-      assert.strictEqual(title!.boundingBox.width, 200, 'title box width');
-      assert.strictEqual(title!.boundingBox.height, 50, 'title box height');
-      assert.true(title!.boundingBox.x >= 0, 'title box x is in-document');
-      assert.true(title!.boundingBox.y >= 0, 'title box y is in-document');
-      // A unique field name gets the readable attribute selector.
-      assert.strictEqual(
-        title!.selector,
-        '[data-card-field="title"]',
-        'a unique field uses its attribute selector',
-      );
-
-      // The repeated `tag` field yields one region per element, each with a
-      // structural selector unique enough to re-address it (the attribute
-      // selector would be ambiguous).
-      let tags = regions.filter((r) => r.cardField === 'tag');
-      assert.strictEqual(tags.length, 2, 'both tag elements are inventoried');
-      assert.notStrictEqual(
-        tags[0].selector,
-        tags[1].selector,
-        'duplicate-name regions get distinct selectors',
-      );
-      for (let tag of tags) {
-        assert.notStrictEqual(
-          tag.selector,
-          '[data-card-field="tag"]',
-          'a duplicated field falls back to a structural selector',
-        );
-      }
-    });
-
-    test('a target capture matches the region a discover reported', async function (assert) {
-      // discover → target is the round trip the two features exist for: the
-      // element screenshot's dimensions are the discovered box's dimensions.
+    test('a target capture crops to the addressed element', async function (assert) {
+      // A `target` selector crops the shot to that element's box. The fixture's
+      // `title` field is a fixed 200×50, so the crop dimensions are predictable.
       // Pixel-exact crop equivalence is the acceptance sweep's job; this pins
-      // the dimensional contract between the two.
-      let discovered = await screenshot(`${realmURL}disco-card`, {
-        discover: true,
-      });
-      let title = discovered.response.regions!.find(
-        (r) => r.cardField === 'title',
-      )!;
-
+      // the dimensional contract.
       let { response } = await screenshot(`${realmURL}disco-card`, {
-        target: title.selector,
+        target: '[data-card-field="title"]',
       });
       assert.strictEqual(response.status, 'ready', 'target capture succeeded');
       let png = decodePng(response.base64!);
       assert.true(png.isPng, 'target capture is a PNG');
       assert.strictEqual(
         png.width,
-        title.boundingBox.width,
-        'target PNG width equals the discovered box width',
+        200,
+        'target PNG width equals the element box width',
       );
       assert.strictEqual(
         png.height,
-        title.boundingBox.height,
-        'target PNG height equals the discovered box height',
+        50,
+        'target PNG height equals the element box height',
       );
-      assert.strictEqual(
-        response.width,
-        title.boundingBox.width,
-        'reports the element CSS width',
-      );
-      assert.strictEqual(response.height, title.boundingBox.height);
+      assert.strictEqual(response.width, 200, 'reports the element CSS width');
+      assert.strictEqual(response.height, 50, 'reports the element CSS height');
     });
 
     test('a target matching no element is a named capture error', async function (assert) {
