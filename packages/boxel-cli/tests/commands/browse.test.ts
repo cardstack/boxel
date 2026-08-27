@@ -220,6 +220,9 @@ describe('browse', () => {
         deviceId: 'DEVICE',
         matrixUrl: 'http://localhost:8008',
       }),
+      // Default: the card isn't reachable, so the anonymous (published-realm)
+      // pre-flight yields nothing and browse falls back to the token flow.
+      authedRealmFetch: async () => fakeResponse(404, 'not found'),
       ...overrides,
     } as unknown as ProfileManager;
   }
@@ -407,6 +410,110 @@ describe('browse', () => {
     expect(openBrowserFn).toHaveBeenCalledWith(
       'https://cs-123.localhost:4200/?loginToken=lt_abc',
     );
+  });
+
+  it('opens the published URL with no token when the card is in a published realm', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let requestLoginTokenFn = vi.fn();
+    let resolveAnonymousBrowseUrl = vi
+      .fn()
+      .mockResolvedValue('https://alice.boxel.space/Post/1');
+
+    await browse('alice/blog/Post/1', {
+      profileManager: fakeProfileManager(),
+      requestLoginToken: requestLoginTokenFn,
+      resolveAnonymousBrowseUrl,
+      openBrowserFn,
+      log: () => {},
+    });
+
+    expect(resolveAnonymousBrowseUrl).toHaveBeenCalledWith(
+      'https://localhost:4201/',
+      'alice/blog/Post/1',
+      expect.anything(),
+    );
+    // No token minted, and the opened URL carries no loginToken.
+    expect(requestLoginTokenFn).not.toHaveBeenCalled();
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://alice.boxel.space/Post/1',
+    );
+  });
+
+  it('prints the published URL under --print-url without minting a token', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let requestLoginTokenFn = vi.fn();
+    let stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    await browse('alice/blog/Post/1', {
+      printUrl: true,
+      profileManager: fakeProfileManager(),
+      requestLoginToken: requestLoginTokenFn,
+      resolveAnonymousBrowseUrl: vi
+        .fn()
+        .mockResolvedValue('https://alice.boxel.space/Post/1'),
+      openBrowserFn,
+      log: () => {},
+    });
+
+    expect(openBrowserFn).not.toHaveBeenCalled();
+    expect(requestLoginTokenFn).not.toHaveBeenCalled();
+    expect(stdout).toHaveBeenCalledWith('https://alice.boxel.space/Post/1\n');
+    stdout.mockRestore();
+  });
+
+  it('falls back to the login-token flow when the card is not a published realm', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let requestLoginTokenFn = vi
+      .fn()
+      .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 });
+
+    await browse('alice/blog/Post/1', {
+      profileManager: fakeProfileManager(),
+      requestLoginToken: requestLoginTokenFn,
+      resolveAnonymousBrowseUrl: vi.fn().mockResolvedValue(undefined),
+      openBrowserFn,
+      log: () => {},
+    });
+
+    expect(requestLoginTokenFn).toHaveBeenCalledTimes(1);
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://localhost:4200/?loginToken=lt_abc&cardPath=alice%2Fblog%2FPost%2F1',
+    );
+  });
+
+  it('does not attempt the anonymous path for bare browse (no card path)', async () => {
+    let resolveAnonymousBrowseUrl = vi.fn();
+
+    await browse(undefined, {
+      profileManager: fakeProfileManager(),
+      requestLoginToken: vi
+        .fn()
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+      resolveAnonymousBrowseUrl,
+      openBrowserFn: vi.fn().mockResolvedValue(true),
+      log: () => {},
+    });
+
+    expect(resolveAnonymousBrowseUrl).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt the anonymous path when --host-url is given', async () => {
+    let resolveAnonymousBrowseUrl = vi.fn();
+
+    await browse('alice/blog/Post/1', {
+      hostUrl: 'https://cs-123.localhost:4200',
+      profileManager: fakeProfileManager(),
+      requestLoginToken: vi
+        .fn()
+        .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+      resolveAnonymousBrowseUrl,
+      openBrowserFn: vi.fn().mockResolvedValue(true),
+      log: () => {},
+    });
+
+    expect(resolveAnonymousBrowseUrl).not.toHaveBeenCalled();
   });
 
   it('warns with the URL when the browser cannot be opened', async () => {

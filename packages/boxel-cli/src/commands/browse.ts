@@ -11,6 +11,7 @@ import {
   requestLoginToken as defaultRequestLoginToken,
   MatrixAuthError,
 } from '../lib/auth.ts';
+import { resolveAnonymousBrowseUrl as defaultResolveAnonymousBrowseUrl } from '../lib/published-realm.ts';
 import { openBrowser } from '../lib/open-browser.ts';
 import { FG_RED, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
@@ -71,6 +72,7 @@ export interface BrowseOptions {
   // Injectable seams for testing.
   profileManager?: ProfileManager;
   requestLoginToken?: typeof defaultRequestLoginToken;
+  resolveAnonymousBrowseUrl?: typeof defaultResolveAnonymousBrowseUrl;
   openBrowserFn?: (url: string) => Promise<boolean>;
   log?: (message: string) => void;
 }
@@ -102,10 +104,40 @@ export async function browse(
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
   let requestLoginToken = options.requestLoginToken ?? defaultRequestLoginToken;
+  let resolveAnonymousBrowseUrl =
+    options.resolveAnonymousBrowseUrl ?? defaultResolveAnonymousBrowseUrl;
   let openBrowserFn = options.openBrowserFn ?? openBrowser;
   let log = options.log ?? ((message: string) => console.log(message));
 
   let { id: profileId, profile } = resolveProfile(pm, options.profile);
+
+  // Fast path: a card in a *published* realm is served on its own origin, which
+  // the host renders with no sign-in. When browsing such a card, open that
+  // public URL directly and skip minting a token entirely. Only attempted with
+  // a card path (bare `browse` has no card to resolve) and without `--host-url`
+  // (which explicitly targets the operator app for the token flow).
+  if (cardPath && !options.hostUrl) {
+    let anonymousUrl = await resolveAnonymousBrowseUrl(
+      profile.realmServerUrl,
+      cardPath,
+      { authedRealmFetch: (input, init) => pm.authedRealmFetch(input, init) },
+    );
+    if (anonymousUrl) {
+      // No credential in this URL — it's a plain public link.
+      if (options.printUrl) {
+        cliLog.output(anonymousUrl);
+        return;
+      }
+      log(`Opening ${anonymousUrl} (published realm — no sign-in needed)`);
+      let opened = await openBrowserFn(anonymousUrl);
+      if (!opened) {
+        cliLog.warn(
+          `Couldn't open a browser automatically. Open this URL:\n  ${anonymousUrl}`,
+        );
+      }
+      return;
+    }
+  }
 
   // Mint the login token, recovering once from a rejected access token via the
   // profile manager's interactive re-auth (same pattern as the other commands).
@@ -157,7 +189,8 @@ export function registerBrowseCommand(program: Command): void {
   program
     .command('browse')
     .description(
-      'Open the Boxel app in your browser, already signed in as your active profile',
+      'Open the Boxel app in your browser, already signed in as your active ' +
+        'profile (a card in a published realm opens directly, no sign-in needed)',
     )
     .argument(
       '[card-path]',
