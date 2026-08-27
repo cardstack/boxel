@@ -79,9 +79,15 @@ export interface BuildBoxelRenderRecordInput {
 /**
  * Assembles every record one instance answers with.
  *
- * The single entry point the pipeline is meant to be used through: a caller
- * that builds a description here and a projection somewhere else has two
- * builders again, which is the shape this file exists to make unnecessary.
+ * The entry point for a caller that wants all three at once. Nothing on a
+ * render path does yet — each operation asks for the one record it answers
+ * with, which is why `describeBoxel`, `getFields` and `projectInstance` each
+ * call the builder for theirs — so today this composes them for the suite that
+ * holds the three to one input.
+ *
+ * It is one builder per record either way: a caller assembling a description
+ * here and a projection somewhere else would have two, which is the shape this
+ * file exists to make unnecessary.
  */
 export function buildBoxelRenderRecord(
   input: BuildBoxelRenderRecordInput,

@@ -273,7 +273,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
         `Boxel instance handle '${instance}' names a ${card.constructor.name}, which is not a card and has no document form`,
       );
     }
-    return api.serializeCard(card as never, {
+    return api.serializeCard(card, {
       includeComputeds: true,
       includeUnrenderedFields: true,
       useAbsoluteURL: true,

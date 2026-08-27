@@ -84,6 +84,7 @@ const showSource = `
     @field venue = contains(VenueField, {
       configuration: { layout: { rows: 3 } },
     });
+    @field subtitle = contains(StringField);
     @field tags = containsMany(StringField);
     @field partner = linksTo(() => Show);
     @field price = contains(CurrencyField);
@@ -543,6 +544,43 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
         statusLabel: 'running',
       },
       'the getters Base’s own template reads as @model.x, none of which getFields can see',
+    );
+  });
+
+  test('RP-3.3: a field the instance never carried is present holding undefined, not null', async function (assert) {
+    let runtime = newRuntime();
+    // Materialized from a document carrying only `headline`, so `subtitle` was
+    // never in the data bucket and reads as the field's declared empty value.
+    // A realm-loaded card is the other case — its document serializes an
+    // unauthored primitive as `null` — which is why this builds its own.
+    let resource = {
+      type: 'card',
+      id: `${testRealmURL}Show/sparse`,
+      attributes: { headline: 'Sparse' },
+      meta: { adoptsFrom: { module: showModule, name: 'Show' } },
+    };
+    let instance = (await createFromSerialized(
+      resource as never,
+      { data: resource } as never,
+      undefined,
+    )) as CardDef;
+    let { model } = await runtime.projectInstance(
+      runtime.retainInstance(instance),
+    );
+
+    assert.strictEqual(
+      (instance as unknown as Record<string, unknown>).subtitle,
+      undefined,
+      'the live instance reads the declared empty value, which is undefined for every primitive but Boolean',
+    );
+    assert.true(
+      'subtitle' in model,
+      'the member is present, so nothing routes it through the missing-path diagnostic',
+    );
+    assert.strictEqual(
+      model.subtitle,
+      undefined,
+      'and it holds what the instance holds — which leaves null meaning a value the field actually has',
     );
   });
 

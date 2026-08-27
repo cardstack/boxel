@@ -117,13 +117,6 @@ export type CapturedBoxelInstance = Omit<
   'protocolVersion' | 'requiredFeatures' | 'revision'
 >;
 
-/** One instance read once: its type, its projection, and its fields. */
-export interface CapturedBoxelSemantics {
-  type: CapturedBoxelType;
-  instance: CapturedBoxelInstance;
-  fields: ResolvedField[];
-}
-
 /**
  * Reads a Boxel type into the values a `BoxelDescription` is built from.
  *
@@ -158,35 +151,16 @@ export function captureBoxelType(
 }
 
 /**
- * Reads a live instance into the values an `InstanceProjection` and its
- * `ResolvedField`s are built from.
- *
- * The three are produced together because they are three views of one read:
- * the field list says what the instance declares and the model says what those
- * declarations currently hold, and a card whose fields and model were read at
- * different moments describes a state the instance was never in.
- */
-export function captureBoxelInstance(
-  instance: BaseDef,
-  api: CardAPIModule,
-): CapturedBoxelSemantics {
-  return {
-    type: captureBoxelType(instance.constructor as BaseDefConstructor, api),
-    instance: captureInstanceProjection(instance, api),
-    fields: captureBoxelFields(instance, api),
-  };
-}
-
-/**
  * Reads a live instance into the values an `InstanceProjection` is built from,
  * and nothing else.
  *
- * Separate from `captureBoxelInstance` because `projectInstance` wants only
- * this: building the type description and the resolved field list to return
- * one of the three would walk the ancestry, resolve every format slot, and
- * evaluate every field's configuration function for records the caller cannot
- * reach — the same waste, in the other direction, that keeping `getFields` out
- * of the render record removed.
+ * Narrow on purpose. `projectInstance` wants only this, and capturing the type
+ * description and the resolved field list to return one of the three would
+ * walk the ancestry, resolve every format slot, and evaluate every field's
+ * configuration function for records the caller cannot reach — the same waste,
+ * in the other direction, that keeping `getFields` out of the render record
+ * removed. A caller wanting all three composes this with `captureBoxelType`
+ * and `captureBoxelFields`.
  */
 export function captureInstanceProjection(
   instance: BaseDef,
@@ -420,12 +394,26 @@ function instanceId(instance: BaseDef): RealmResourceIdentifier | null {
  * projection answer where main refuses, and every tier reading the projection
  * would render a card main cannot.
  *
- * A field whose value cannot cross at all is **absent** from the model rather
- * than present holding `null`. `ResponseField` is the case: its value is a
- * `Response`, which no boundary carries. The absence is what makes it
- * findable — a member reading `undefined` routes through the missing-path
- * diagnostic, where a `null` is indistinguishable from a field that really is
- * null and nothing anywhere says otherwise.
+ * The model tells three states apart, and the difference matters to a consumer
+ * deciding whether to render anything:
+ *
+ * - **absent** — the value could not cross. `ResponseField` is the case: its
+ *   value is a `Response`, which no boundary carries. Absence is what makes it
+ *   findable, because a member reading `undefined` routes through the
+ *   missing-path diagnostic, where a `null` is indistinguishable from a field
+ *   that really is null and nothing anywhere says otherwise.
+ * - **present and `undefined`** — the instance's data never carried the field,
+ *   so reading it yields the field class's `[emptyValue]`, which `BaseDef`
+ *   only declares and never assigns: `undefined` for every primitive but
+ *   Boolean. That is not a choice made here — it is what `@model.x` reads on
+ *   main for the same field — and the boundary carries an undefined-valued
+ *   member deliberately (`normalizeJsonData` says so), so it survives into the
+ *   record. Note this is narrower than "blank": a card served by a realm
+ *   carries its unauthored primitives as `null`, and those project as `null`.
+ * - **present with a value** — the ordinary case.
+ *
+ * `null` is therefore a value a field holds, never this pipeline's spelling
+ * for empty.
  */
 function captureModel(
   instance: BaseDef,
@@ -747,11 +735,18 @@ function captureTheme(
   // `themeCss` reads `cardTheme` — CardDef's computed `linksTo` mirror of
   // `cardInfo.theme` — which is the read main performs on every card render.
   let css = api.themeCss(card) ?? null;
+  // Two normalizations, and only one of them is this record's business.
+  // Mapping "none" to `null` is the record's shape — `getCssImports` answers
+  // `undefined` and the record has no such member. Dropping a non-string is
+  // what keeps the member the `string[]` it is declared to be: the field is a
+  // `containsMany`, so an unauthored entry reads as the empty value rather
+  // than as a URL. Filtering before the emptiness test, so a list of nothing
+  // but unauthored entries and a list of none answer the same.
   let imports = api.getCssImports(card);
-  let cssImports =
-    Array.isArray(imports) && imports.length > 0
-      ? imports.filter((entry): entry is string => typeof entry === 'string')
-      : null;
+  let strings = Array.isArray(imports)
+    ? imports.filter((entry): entry is string => typeof entry === 'string')
+    : [];
+  let cssImports = strings.length > 0 ? strings : null;
   if (!api.hasTheme(card)) {
     return {
       isThemed: false,
@@ -936,6 +931,11 @@ function dataValue(
     typeof value === 'string' ||
     typeof value === 'boolean'
   ) {
+    // The cast is where two definitions of "data" meet: the boundary admits an
+    // undefined-valued member and `Cloneable` declares one legal, while the
+    // model's own type is JSON-valued and has no spelling for it. Carrying it
+    // is the faithful answer — an unset field reads `undefined` on main — so
+    // the narrower of the two types is the one that gives.
     return value as JsonValue;
   }
   if (typeof value === 'number') {

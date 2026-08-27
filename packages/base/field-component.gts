@@ -308,7 +308,6 @@ export function getBoxComponent(
     };
   }
 
-
   let component = class FieldComponent extends Component<BoxComponentSignature> {
     // Scopes this card's theme stylesheet. Derived from the theme card's id
     // plus a hash of its CSS (see themeScope) so every card sharing a theme
