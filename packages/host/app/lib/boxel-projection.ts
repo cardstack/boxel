@@ -828,6 +828,11 @@ function boxelReference(
  * realm predating the operation has none. A card whose Base cannot resolve
  * configuration configures nothing, which is what it did before the operation
  * existed.
+ *
+ * That degradation is announced once rather than taken silently. Its symptom
+ * is every field on every card reporting no configuration at all, which reads
+ * as "these cards configure nothing" and sends a reader looking at the cards
+ * instead of at which Base realm they were served from.
  */
 function resolveFieldConfiguration(
   api: CardAPIModule,
@@ -842,8 +847,20 @@ function resolveFieldConfiguration(
       ) => unknown;
     }
   ).resolveFieldConfiguration;
-  return resolve ? resolve(field, instance) : undefined;
+  if (!resolve) {
+    if (!warnedAboutConfigurationSupport) {
+      warnedAboutConfigurationSupport = true;
+      console.warn(
+        'This Base realm exports no resolveFieldConfiguration, so every ' +
+          'projected field reports no configuration (RP-5.2).',
+      );
+    }
+    return undefined;
+  }
+  return resolve(field, instance);
 }
+
+let warnedAboutConfigurationSupport = false;
 
 /**
  * One value as data, or `undefined` when it is not data at all.
