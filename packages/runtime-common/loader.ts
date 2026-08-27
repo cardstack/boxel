@@ -8,7 +8,6 @@ import {
   iconNotFoundMessage,
   stringifyErrorForLog,
 } from './error.ts';
-import { flatMap } from 'lodash-es';
 import {
   shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,
@@ -45,19 +44,6 @@ type RegisteredWithDepsModule = {
   implementation: Function;
 };
 
-// Import edges that were still completing when a module's dependency list was
-// frozen — recorded apart from `consumedModules`, which holds only the edges
-// that had resolved by then.
-//
-// The two readers want different halves, deliberately. Eviction reads both,
-// through `directModuleDependencies`: an edge that was still completing is an
-// import, and a module holding another's exports goes stale with it.
-// Dependency tracking — `getConsumedModules` and
-// `collectKnownModuleDependencies` — reads only `consumedModules`, because
-// that set is what the index records module dependencies from, and widening
-// it widens invalidation fan-out across indexing.
-type CompletingDependencies = { completingDependencies: string[] };
-
 type PreparingModule = {
   // this state represents the *synchronous* window of time where this
   // module's dependencies are moving from registered to preparing to
@@ -68,19 +54,19 @@ type PreparingModule = {
   implementation: Function;
   moduleInstance: object;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type BrokenModule = {
   state: 'broken';
   exception: any;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type Module =
   | FetchingModule
@@ -432,7 +418,6 @@ export class Loader {
       state: 'evaluated',
       moduleInstance: module,
       consumedModules: new Set(),
-      completingDependencies: [],
     });
   }
 
@@ -539,15 +524,13 @@ export class Loader {
 
   // The modules a cached module imports, in whatever state it is in. The
   // registered states carry their dependency list; the states past them carry
-  // it split in two, because `consumedModules` — the set the dependency
-  // tracker reads — holds only the edges that had resolved when the list was
-  // frozen. A module still fetching has named nothing yet.
+  // it as `consumedModules`. A module still fetching has named nothing yet.
   private directModuleDependencies(module: Module): string[] {
     switch (module.state) {
       case 'evaluated':
       case 'preparing':
       case 'broken':
-        return [...module.consumedModules, ...module.completingDependencies];
+        return [...module.consumedModules];
       case 'registered':
         return module.dependencyList.flatMap((entry) =>
           entry.type === 'dep' ? [entry.moduleURL.href] : [],
@@ -1326,7 +1309,6 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: loaded.module,
         consumedModules: new Set(),
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       return;
@@ -1341,7 +1323,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
@@ -1397,7 +1378,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
@@ -1424,18 +1404,23 @@ export class Loader {
 
     let privateModuleInstance = Object.create(null);
     let moduleProxy = this.readOnlyProxy(privateModuleInstance);
+    // Both edge types are imports. A `completing-dep` only records that the
+    // dep had not finished completing when this module's dependency list was
+    // frozen — a module reached while a concurrent import root is suspended
+    // can hold its whole import list that way, cycle edges and ordinary ones
+    // alike. This is the last place those edges are written down, because the
+    // distinction is dropped as the module leaves the registered states, and
+    // both readers of `consumedModules` need every import: eviction so a
+    // module does not outlive something whose exports it holds, and the index
+    // so an edit to an imported module invalidates what imported it. This set
+    // is also what indexing invalidation fans out over, which is the cost of
+    // anything added to it: it holds imports, and nothing that is not one.
     let consumedModules = new Set(
-      flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep' ? [dep.moduleURL.href] : [],
+      module.dependencies.flatMap((dep) =>
+        dep.type === 'dep' || dep.type === 'completing-dep'
+          ? [dep.moduleURL.href]
+          : [],
       ),
-    );
-    // A dependency that was still completing when this module's list was
-    // frozen is an import all the same, and this is the last place it is
-    // written down: the entry is dropped as the module leaves the registered
-    // states. Invalidation reads it, so a module does not survive the
-    // eviction of something whose exports it holds.
-    let completingDependencies = flatMap(module.dependencies, (dep) =>
-      dep.type === 'completing-dep' ? [dep.moduleURL.href] : [],
     );
 
     this.setModule(moduleIdentifier, {
@@ -1443,7 +1428,6 @@ export class Loader {
       implementation: module.implementation,
       moduleInstance: moduleProxy,
       consumedModules,
-      completingDependencies,
     });
 
     try {
@@ -1508,7 +1492,6 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: moduleProxy,
         consumedModules,
-        completingDependencies,
       });
       return moduleProxy;
     } catch (exception) {
@@ -1516,7 +1499,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules,
-        completingDependencies,
       });
       throw exception;
     }
