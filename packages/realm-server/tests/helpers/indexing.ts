@@ -221,6 +221,26 @@ export async function maxPrerenderHtmlJobId(
   return rows[0]?.max_id ?? 0;
 }
 
+// Ids of a realm's prerender-html jobs that rejected.
+//
+// A rejection never reaches the batch swap, so no row lands in
+// `prerendered_html` and the published-HTML readiness predicate stays false
+// for good. Anything polling that readiness would otherwise spend its entire
+// budget on a render that has already failed, and report a stage name rather
+// than the job that failed. Checking this alongside such a poll turns that
+// into an immediate, named failure.
+export async function rejectedPrerenderHtmlJobIds(
+  dbAdapter: DBAdapter,
+  realmURL: string | URL,
+): Promise<number[]> {
+  let concurrencyGroup = `prerender-html:${typeof realmURL === 'string' ? realmURL : realmURL.href}`;
+  let rows = (await query(dbAdapter, [
+    `SELECT j.id FROM jobs j WHERE j.status = 'rejected' AND`,
+    ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
+  ] as Expression)) as { id: number }[];
+  return rows.map((row) => row.id);
+}
+
 // HTML lands on its own channel: the index pass fires a `prerender_html`
 // job (fire-and-forget) and completes without waiting for it, so a test
 // that writes and then asserts prerendered HTML must settle that channel
@@ -243,16 +263,36 @@ export async function settlePrerenderHtmlJobs(
   let lastState = '';
   await waitUntil(
     async () => {
+      // id/status/active_reservations drive the wait; the two ages are what
+      // the timeout message needs to be actionable, and both are readable in
+      // a test process. `job_progress` is not: it is populated by the
+      // standalone worker-manager's event sink, and tests construct their
+      // Worker without a `reportProgress`, so per-file render progress simply
+      // does not exist here. Neither does an expired lease — a from-scratch
+      // render's reservation is held for FROM_SCRATCH_JOB_TIMEOUT_SEC, orders
+      // of magnitude beyond any settle budget — so lease expiry can't
+      // discriminate anything either.
+      //
+      // What the ages do separate: reservation_age_sec near the wait's own
+      // budget is a worker that claimed the job and is still inside the
+      // render. A row with no reservation whose job_age_sec keeps climbing is
+      // a job queued behind another holder of the channel, never claimed.
       let rows = (await query(dbAdapter, [
         `SELECT j.id, j.status,
+           EXTRACT(EPOCH FROM (NOW() - j.created_at))::int AS job_age_sec,
            (SELECT COUNT(*)::int FROM job_reservations r
-             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations
+             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS active_reservations,
+           (SELECT MAX(EXTRACT(EPOCH FROM (NOW() - r.created_at)))::int
+              FROM job_reservations r
+             WHERE r.job_id = j.id AND r.completed_at IS NULL) AS reservation_age_sec
          FROM jobs j WHERE`,
         ...every([['j.concurrency_group =', param(concurrencyGroup)]]),
       ] as Expression)) as {
         id: number;
         status: string;
+        job_age_sec: number;
         active_reservations: number;
+        reservation_age_sec: number | null;
       }[];
       let rejected = rows.filter((row) => row.status === 'rejected');
       if (rejected.length > 0) {
@@ -276,7 +316,10 @@ export async function settlePrerenderHtmlJobs(
       timeout: opts?.timeout ?? 30000,
       interval: 50,
       timeoutMessage: () =>
-        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; last state: ${lastState}`,
+        `waiting for prerender_html jobs to settle for ${concurrencyGroup}; ` +
+        `last state (a reservation_age_sec near this wait's budget is a worker still inside the render; ` +
+        `a null reservation_age_sec with a climbing job_age_sec is a job that was never claimed): ` +
+        lastState,
     },
   );
 }
