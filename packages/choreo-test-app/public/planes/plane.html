@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>plane</title>
+<style>
+  /* bento-boxel design language: dark ground, panel gradients, cyan accent */
+  :root {
+    --bg: #0b0d12;
+    --panel: #12151d;
+    --panel-2: #171b26;
+    --line: #232936;
+    --text: #e7eaf2;
+    --muted: #8b93a7;
+    --cyan: #22d3ee;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    color: var(--text);
+    font-family: 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ---------- plane 1: the app UI, fairly inert ---------- */
+  body[data-role='app'] {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #1b2233 0%, transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, #191527 0%, transparent 55%),
+      var(--bg);
+  }
+  .topbar {
+    padding: 16px 22px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .topbar h1 {
+    font-size: 17px;
+    letter-spacing: 0.02em;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo { color: var(--cyan); font-size: 24px; }
+  .topbar p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .count {
+    margin-left: auto;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--cyan);
+    margin-right: 6px;
+    animation: pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  .app-hint {
+    position: absolute;
+    inset: auto 0 18px 0;
+    text-align: center;
+    color: #5a6478;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  /* ---------- planes 2/3: a bento panel of bays ---------- */
+  body[data-role='panel'] { background: transparent; }
+  .panel {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  /* a foreign card is in the air anywhere on the page: the panel perks up */
+  .panel.invite {
+    border-color: color-mix(in srgb, var(--cyan) 55%, var(--line));
+    box-shadow: 0 0 36px rgba(34, 211, 238, 0.08);
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 4px;
+  }
+  .panel-tag {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--cyan);
+    background: rgba(34, 211, 238, 0.1);
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    border-radius: 999px;
+    padding: 3px 12px;
+  }
+  .panel-label { color: var(--muted); font-size: 12.5px; }
+  .bays { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .bay {
+    flex: 1;
+    border: 1.5px dashed var(--line);
+    border-radius: 14px;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .bay.hot {
+    border-color: var(--cyan);
+    background: rgba(34, 211, 238, 0.06);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  }
+  .bay.filled { border-style: solid; border-color: transparent; }
+
+  /* ---------- the card (shared by panel + overlay) ---------- */
+  .card {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--line);
+    border-top: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+    border-radius: 14px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    transition: box-shadow 0.2s, border-color 0.2s, opacity 0.2s;
+  }
+  /* hover feedback lives in glow only — never size or position, so the
+     overlay's carried copy lands on a perfect seam */
+  .card:hover {
+    border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.45),
+      0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent),
+      0 0 22px color-mix(in srgb, var(--accent) 18%, transparent);
+  }
+  .card:active { cursor: grabbing; }
+  .card-head { display: flex; align-items: center; gap: 8px; min-height: 16px; }
+  .card-grip { display: grid; grid-template-columns: repeat(2, 3px); gap: 2.5px; opacity: 0.55; }
+  .card-grip i { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); }
+  .card-kind {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .card-note { color: var(--muted); font-size: 12.5px; line-height: 1.45; margin: 0; }
+  /* the original while its copy rides the overlay: a ghost holding the bay.
+     NO pointer-events:none here — this element still holds the drag's
+     pointer capture, and some engines drop captured events on a
+     non-hit-testable target */
+  .card.ghost {
+    opacity: 0.22;
+    border-style: dashed;
+    box-shadow: none;
+  }
+
+  /* ---------- plane 4: the carry overlay ---------- */
+  body[data-role='overlay'] { background: transparent; }
+  body[data-role='overlay'] .card {
+    inset: auto;
+    left: 0;
+    top: 0;
+    cursor: grabbing;
+    box-shadow:
+      0 24px 60px rgba(0, 0, 0, 0.6),
+      0 0 0 1.5px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+</style>
+</head>
+<body>
+<script type="module">
+  /* One child document, four minds: ?role=app|panel|overlay decides which.
+   *
+   * The protocol edge below is the whole point of the prototype, shaped on
+   * the boxel sandbox surface API: a bootstrap announce over
+   * window.postMessage, then every capability on a transferred MessagePort;
+   * every message wears an envelope (kind + protocolVersion) and is
+   * type-guarded before dispatch; and THE WIRE SPEAKS PAGE SPACE — each
+   * plane converts at its own edge with toPage/toLocal using the one rect
+   * the host assigns it. Nothing in here may read its own placement from
+   * ambient DOM; the host's geometry message is the only truth.
+   */
+  const PROTOCOL = 1;
+  const params = new URLSearchParams(location.search);
+  const role = params.get('role') ?? 'app';
+  document.body.dataset.role = role;
+
+  let port = null;
+  let frameRect = { height: 0, width: 0, x: 0, y: 0 };
+
+  const toPage = (x, y) => ({ x: x + frameRect.x, y: y + frameRect.y });
+  const toLocal = (x, y) => ({ x: x - frameRect.x, y: y - frameRect.y });
+  const pageRect = (el) => {
+    const b = el.getBoundingClientRect();
+    const p = toPage(b.x, b.y);
+    return { height: b.height, width: b.width, x: p.x, y: p.y };
+  };
+  const contains = (r, p) =>
+    p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
+
+  const valid = (m) =>
+    typeof m === 'object' && m !== null &&
+    typeof m.kind === 'string' && m.protocolVersion === PROTOCOL;
+  const send = (msg) => port?.postMessage({ protocolVersion: PROTOCOL, ...msg });
+  const ack = (requestId, extra = {}) =>
+    send({ kind: 'plane-ack', ok: true, requestId, ...extra });
+
+  const handlers = {};
+
+  window.addEventListener('message', (event) => {
+    const m = event.data;
+    if (port !== null || !valid(m) || m.kind !== 'plane-connect') return;
+    port = event.ports[0];
+    port.addEventListener('message', (e) => {
+      const msg = e.data;
+      if (!valid(msg)) return;
+      if (msg.kind === 'plane-geometry') { frameRect = msg.rect; return; }
+      handlers[msg.kind]?.(msg);
+    });
+    port.start();
+    send({ kind: 'plane-ready', role });
+  });
+  window.parent.postMessage({ kind: 'plane-listening', protocolVersion: PROTOCOL, role }, '*');
+
+  const cardElement = (card, ghost = false) => {
+    const el = document.createElement('div');
+    el.className = ghost ? 'card ghost' : 'card';
+    el.dataset.card = card.id;
+    el.style.setProperty('--accent', card.accent);
+    el.innerHTML = `
+      <div class="card-head">
+        <span class="card-grip"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+        <span class="card-kind"></span>
+      </div>
+      <p class="card-note"></p>`;
+    el.querySelector('.card-kind').textContent = card.title;
+    el.querySelector('.card-note').textContent = card.note;
+    return el;
+  };
+
+  /* ---------- plane 1: inert app chrome with its own live clock ---------- */
+  if (role === 'app') {
+    document.body.innerHTML = `
+      <header class="topbar">
+        <h1><span class="logo">◍</span> Plane Compositor</h1>
+        <p>four documents, one choreography</p>
+        <span class="count"><span class="live-dot"></span><span id="clock">—</span></span>
+      </header>
+      <div class="app-hint">drag a card between Panel A and Panel B — it crosses three documents on the way</div>`;
+    const clock = document.getElementById('clock');
+    const tick = () => {
+      clock.textContent = (performance.now() / 1000).toFixed(1) + 's';
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- planes 2/3: a panel of bays; cards drag OUT, adopt IN ---------- */
+  if (role === 'panel') {
+    let bays = [];
+    let dragging = null;
+
+    const wireDrag = (el, card) => {
+      el.addEventListener('pointerdown', (e) => {
+        if (dragging !== null || el.classList.contains('ghost')) return;
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        dragging = { card, el, pointerId: e.pointerId };
+        send({
+          bounds: pageRect(el),
+          card,
+          grab: toPage(e.clientX, e.clientY),
+          kind: 'drag-start',
+        });
+      });
+      // pointer capture keeps these coming even outside the iframe's bounds;
+      // clientX/Y just runs negative/past the edge, and toPage still holds
+      el.addEventListener('pointermove', (e) => {
+        if (dragging?.el !== el) return;
+        send({ kind: 'drag-move', point: toPage(e.clientX, e.clientY) });
+      });
+      const finish = (e) => {
+        if (dragging?.el !== el) return;
+        send({ kind: 'drag-end', point: toPage(e.clientX, e.clientY) });
+        dragging = null;
+      };
+      el.addEventListener('pointerup', finish);
+      el.addEventListener('pointercancel', finish);
+    };
+
+    handlers['panel-init'] = ({ cards, label, tag }) => {
+      document.body.innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-tag"></span>
+            <span class="panel-label"></span>
+          </div>
+          <div class="bays"></div>
+        </div>`;
+      document.querySelector('.panel-tag').textContent = tag;
+      document.querySelector('.panel-label').textContent = label;
+      const baysEl = document.querySelector('.bays');
+      bays = [0, 1, 2].map((i) => {
+        const bay = document.createElement('div');
+        bay.className = 'bay';
+        bay.dataset.bay = String(i);
+        baysEl.append(bay);
+        return bay;
+      });
+      cards.forEach((card, i) => {
+        const el = cardElement(card);
+        bays[i].append(el);
+        bays[i].classList.add('filled');
+        wireDrag(el, card);
+      });
+    };
+
+    const setHot = (bay) => {
+      for (const b of bays) b.classList.toggle('hot', b === bay);
+    };
+
+    // the host says a card (from ANY panel) is airborne
+    handlers['carry-confirmed'] = ({ cardId }) => {
+      document.querySelector(`.card[data-card='${cardId}']`)?.classList.add('ghost');
+    };
+    handlers['invite'] = ({ on }) => {
+      document.querySelector('.panel')?.classList.toggle('invite', on);
+      if (!on) setHot(null);
+    };
+    handlers['drag-leave'] = () => setHot(null);
+    handlers['drag-over'] = ({ point }) => {
+      const bay = bays.find(
+        (b) => !b.querySelector('.card') && contains(pageRect(b), point),
+      );
+      setHot(bay ?? null);
+      send({
+        bounds: bay ? pageRect(bay) : null,
+        bay: bay ? Number(bay.dataset.bay) : null,
+        kind: 'drop-target',
+      });
+    };
+    handlers['adopt'] = ({ bay, card, requestId }) => {
+      const target = bays[bay];
+      const el = cardElement(card);
+      el.style.opacity = '0';
+      target.append(el);
+      target.classList.add('filled');
+      setHot(null);
+      wireDrag(el, card);
+      ack(requestId, { bounds: pageRect(el) });
+    };
+    // a same-panel drop means the ghosted original and the adopted copy
+    // coexist here briefly — :not(.ghost) / .ghost keeps them apart
+    handlers['reveal'] = ({ cardId }) => {
+      const el = document.querySelector(`.card[data-card='${cardId}']:not(.ghost)`);
+      el?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 160,
+        fill: 'forwards',
+      });
+      if (el) el.style.opacity = '';
+    };
+    handlers['release'] = ({ cardId }) => {
+      const el = document.querySelector(`.card.ghost[data-card='${cardId}']`);
+      const bay = el?.parentElement;
+      el?.remove();
+      bay?.classList.remove('filled');
+    };
+    handlers['restore'] = ({ cardId }) => {
+      document.querySelector(`.card.ghost[data-card='${cardId}']`)?.classList.remove('ghost');
+    };
+  }
+
+  /* ---------- plane 4: the carried card, and nothing else ---------- */
+  if (role === 'overlay') {
+    let carry = null;
+
+    const follow = () => {
+      if (carry === null) return;
+      // a light lerp gives the carry a hint of mass without a real spring
+      carry.x += (carry.tx - carry.x) * 0.38;
+      carry.y += (carry.ty - carry.y) * 0.38;
+      const l = toLocal(carry.x, carry.y);
+      carry.el.style.transform = `translate(${l.x}px, ${l.y}px)`;
+      requestAnimationFrame(follow);
+    };
+
+    handlers['carry-start'] = ({ bounds, card, grab, requestId }) => {
+      const el = cardElement(card);
+      el.style.width = bounds.width + 'px';
+      el.style.height = bounds.height + 'px';
+      document.body.append(el);
+      carry = {
+        el,
+        offset: { x: grab.x - bounds.x, y: grab.y - bounds.y },
+        tx: bounds.x,
+        ty: bounds.y,
+        x: bounds.x,
+        y: bounds.y,
+      };
+      const l = toLocal(bounds.x, bounds.y);
+      el.style.transform = `translate(${l.x}px, ${l.y}px)`;
+      el.animate(
+        [{ scale: '1' }, { scale: '1.04' }],
+        { duration: 140, easing: 'ease-out', fill: 'forwards' },
+      );
+      requestAnimationFrame(follow);
+      ack(requestId);
+    };
+    handlers['carry-move'] = ({ point }) => {
+      if (carry === null) return;
+      carry.tx = point.x - carry.offset.x;
+      carry.ty = point.y - carry.offset.y;
+    };
+    const flyTo = (bounds, requestId) => {
+      if (carry === null) return;
+      const { el } = carry;
+      const from = { x: carry.x, y: carry.y };
+      carry = null; // stops the follow loop
+      const to = toLocal(bounds.x, bounds.y);
+      const fromLocal = toLocal(from.x, from.y);
+      const fly = el.animate(
+        [
+          { scale: '1.04', transform: `translate(${fromLocal.x}px, ${fromLocal.y}px)` },
+          { scale: '1', transform: `translate(${to.x}px, ${to.y}px)` },
+        ],
+        { duration: 240, easing: 'cubic-bezier(0.2, 0, 0, 1)', fill: 'forwards' },
+      );
+      fly.finished.then(() => {
+        // ack first so the receiver reveals UNDER this fade — the crossfade
+        // is what hides the teleport's redraw
+        ack(requestId);
+        const fade = el.animate([{ opacity: 1 }, { opacity: 0 }], {
+          duration: 160,
+          fill: 'forwards',
+        });
+        fade.finished.then(() => el.remove());
+      });
+    };
+    handlers['land'] = ({ bounds, requestId }) => flyTo(bounds, requestId);
+    handlers['carry-cancel'] = ({ bounds, requestId }) => flyTo(bounds, requestId);
+  }
+</script>
+</body>
+</html>

@@ -9163,3 +9163,90 @@ html[data-gm-dragging] * {
     sans-serif;
   letter-spacing: -0.02em;
 }
+
+/* ============================================================
+   /_planes — planes-as-iframes prototype (plane-host.gts)
+   The stage is the compositor: four same-origin documents stacked
+   by z-index; the host owns every plane's placement.
+   ============================================================ */
+
+.plane-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #0b0d12;
+}
+
+.plane {
+  position: absolute;
+  border: 0;
+  background: transparent;
+}
+
+/* iframes are replaced elements: inset alone never stretches them,
+   so every plane gets explicit width/height */
+.plane-app {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+.plane-panel {
+  top: 12%;
+  width: 34%;
+  height: 79%;
+  z-index: 2;
+}
+
+.plane-panel-a {
+  left: 9%;
+}
+
+.plane-panel-b {
+  right: 9%;
+}
+
+/* the carry overlay is a visual, never an input surface */
+.plane-overlay {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.plane-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 3.2%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgb(18 21 29 / 88%);
+  border: 1px solid #232936;
+  border-radius: 999px;
+  padding: 6px 16px;
+  color: #8b93a7;
+  font: 600 12px/1.2 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  pointer-events: none;
+}
+
+.plane-hud-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8b93a7;
+}
+
+.plane-hud[data-phase='carrying'] .plane-hud-dot {
+  background: #22d3ee;
+}
+
+.plane-hud[data-phase='landing'] .plane-hud-dot {
+  background: #fbbf24;
+}

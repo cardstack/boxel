@@ -31,3 +31,11 @@ carrying everything — see the two-clocks bug the loop protocol caught).
 API, then write the smallest cross-DOM experiment: one world frame + one
 overlay frame, a shared clock seam, and a single far-match teleport with
 the crossfade hiding the redraw.
+
+**Picked up 2026-08-27.** The experiment exists and passes its probe:
+four planes, drag-and-drop across documents, teleports hidden by
+crossfades — see [plane-frames-prototype.md](plane-frames-prototype.md)
+(`/_planes`). The desktop follow-on (Electrobun, cross-window drags,
+tear-off to a new window) is specced as an agent handoff in
+[electrobun-planes-handoff.md](electrobun-planes-handoff.md). The shared
+clock seam remains the untested piece.
