@@ -105,9 +105,10 @@ echo "Waiting for realm readiness..."
 # ~1500 files. That total sits close enough to the ceiling that a slightly
 # slow runner pushes past it, so the ceiling is reported alongside the time
 # actually taken (below): "the job timed out" is not actionable, "readiness
-# took 28m against a 40m budget" is. Keep this under the enclosing step's
-# `timeout-minutes` in .github/workflows/ci.yaml, which has to be the outer
-# bound or the timeout arrives with no log line explaining it.
+# took 28m against a 40m budget" is. This budget and the test-realm one below
+# have to sum to less than the enclosing step's `timeout-minutes` in
+# .github/workflows/ci.yaml, which spells the arithmetic out: both can expire
+# in one run, and a step killed by GitHub first reports neither number.
 READINESS_TIMEOUT_MS="${READINESS_TIMEOUT_MS:-2400000}"
 READINESS_START=$(date +%s)
 
@@ -137,7 +138,7 @@ READINESS_ELAPSED=$(( $(date +%s) - READINESS_START ))
 READINESS_TOOK="$((READINESS_ELAPSED / 60))m$((READINESS_ELAPSED % 60))s (budget $((READINESS_TIMEOUT_MS / 60000))m, workers=${WORKER_ALL_PRIORITY_COUNT:-1})"
 
 if [ "$READINESS_STATUS" -ne 0 ]; then
-  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the all-priority workers; raise READINESS_TIMEOUT_MS or WORKER_ALL_PRIORITY_COUNT."
+  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the all-priority workers; raise READINESS_TIMEOUT_MS or CACHE_INDEX_WORKER_COUNT. Not WORKER_ALL_PRIORITY_COUNT — this task overwrites it."
   exit "$READINESS_STATUS"
 fi
 
@@ -181,8 +182,17 @@ for realm in test node-test; do
 done
 
 echo "Waiting for test realm readiness..."
+# Two realms of a few dozen files each, indexing against a base realm that is
+# already served by the time this runs — it settles in about a minute. The
+# budget is deliberately far tighter than the one above, because it and that
+# one have to *sum* to less than the enclosing step's `timeout-minutes`: a
+# step killed by GitHub reports neither which wait was outstanding nor for how
+# long, which is the diagnosis this task exists to provide. See the arithmetic
+# in .github/workflows/ci.yaml.
+TEST_READINESS_TIMEOUT_MS="${TEST_READINESS_TIMEOUT_MS:-600000}"
+
 NODE_TLS_REJECT_UNAUTHORIZED=0 \
-  wait-on -t 1800000 $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
+  wait-on -t "$TEST_READINESS_TIMEOUT_MS" $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
 TEST_WAIT_ON_PID=$!
 
 while kill -0 "$TEST_WAIT_ON_PID" 2>/dev/null; do

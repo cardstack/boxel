@@ -1098,7 +1098,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Must exceed the ceiling on the index step below.
-    timeout-minutes: 70
+    timeout-minutes: 75
     concurrency:
       group: cache-index-${{ github.run_id }}
       cancel-in-progress: false
@@ -1121,12 +1121,19 @@ jobs:
         run: |
           set -o pipefail
           mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
-        # Outer bound on the task's own readiness budget (READINESS_TIMEOUT_MS,
-        # 40m) plus the test-realm wait and the dump that follow it. It has to
-        # stay the looser of the two: when the task's budget expires first it
-        # says how long it waited and against what, and a step timeout that
-        # fired first would replace that with nothing.
-        timeout-minutes: 55
+        # Must exceed every wait the task can sit through, summed — a step
+        # killed here reports neither which wait was outstanding nor for how
+        # long, and that diagnosis is the point of the task's own budgets.
+        # Both waits can expire in the same run, so the bound is their sum
+        # plus the work around them:
+        #   READINESS_TIMEOUT_MS       40m  (realm readiness)
+        # + TEST_READINESS_TIMEOUT_MS  10m  (test-realm readiness)
+        # + service startup             2m
+        # + dump, verify, gzip          4m
+        # = 56m, so 60 leaves a small margin. Raising either budget in
+        # mise-tasks/ci/cache-index means raising this and the job's ceiling
+        # with it.
+        timeout-minutes: 60
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
