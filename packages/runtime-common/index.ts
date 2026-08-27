@@ -367,8 +367,10 @@ export interface RenderTimeoutDiagnostics {
   // Screenshot-capture renders only: the components of `renderElapsedMs`,
   // measured inside `captureScreenshot`. Navigation (route transition +
   // path settle), the prerender settle wait, the image/font paint wait, and
-  // the CDP screenshot call. Their sum is slightly under `renderElapsedMs`;
-  // the residual is the terminal-error probe and dimension reads.
+  // the capture loop — the lone `page.screenshot` for a singular capture, or
+  // each entry's viewport switch + screenshot for a batch. Their sum is
+  // slightly under `renderElapsedMs`; the residual is the terminal-error
+  // probe and dimension reads.
   screenshotNavMs?: number;
   screenshotSettleMs?: number;
   screenshotImagePaintMs?: number;

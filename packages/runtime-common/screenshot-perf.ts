@@ -17,9 +17,9 @@
 //
 //   - `capture` — emitted by the worker's `screenshot-card` task when a job
 //     finishes: queue wait, the prerender stage breakdown, and the persist
-//     leg. The same record (minus the envelope fields) is persisted onto the
-//     capture's `media_cache_ledger.diagnostics` row, so a completed
-//     capture's breakdown is readable by SQL as well as by Loki.
+//     leg. The same record is persisted onto the capture's
+//     `media_cache_ledger.diagnostics` row, so a completed capture's
+//     breakdown is readable by SQL as well as by Loki.
 //
 // Correlation: the two event types join on `jobId`/`reservationId`;
 // `correlationId` (the surface request's `x-boxel-logging-correlation-id`)
@@ -76,8 +76,11 @@ interface ScreenshotPerfBase {
   jobId: number | null;
   reservationId: number | null;
   // Wall-clock of the whole event: request receipt → response for `request`
-  // events, job claim → job return for `capture` events. Stage fields sum to
-  // at most this; the remainder is unattributed overhead.
+  // events, job claim → job return for `capture` events. The stage fields
+  // measured inside that window sum to at most this, with the remainder
+  // unattributed overhead. A `capture` event's `queueWaitMs` is the one
+  // exception: it clocks enqueue → claim, which is before the job-claim start
+  // of `totalMs`, so it sits outside this sum rather than within it.
   totalMs: number;
 }
 
