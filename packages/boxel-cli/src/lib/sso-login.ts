@@ -11,6 +11,11 @@ import {
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 
 import type { MatrixAuth } from './auth.ts';
+import { openBrowser } from './open-browser.ts';
+
+// Re-exported so this module's long-standing public surface is unchanged now
+// that the browser opener lives in its own module (shared with `browse`).
+export { openBrowser };
 
 // The authorization page states this same window to the person waiting in it, so
 // the two read it from one place.
@@ -372,33 +377,6 @@ export async function redeemLoginToken(
     userId: json.user_id,
     matrixUrl,
   };
-}
-
-// Best-effort: a detached launch whose failure is reported to the caller so it
-// can fall back to printing the URL. Never rejects.
-export function openBrowser(url: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const [command, args] =
-      process.platform === 'darwin'
-        ? ['open', [url]]
-        : process.platform === 'win32'
-          ? ['cmd', ['/c', 'start', '', url]]
-          : ['xdg-open', [url]];
-
-    try {
-      const child = spawn(command as string, args as string[], {
-        stdio: 'ignore',
-        detached: true,
-      });
-      child.once('error', () => resolve(false));
-      child.once('spawn', () => {
-        child.unref();
-        resolve(true);
-      });
-    } catch {
-      resolve(false);
-    }
-  });
 }
 
 // Copies text through the platform's clipboard tool. Best-effort in the same
