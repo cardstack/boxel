@@ -658,9 +658,10 @@ isolated render) plus its scoped-CSS URLs.
 `packages/runtime-common/boxel-execution-protocol.ts`: cloneable, versioned,
 no Ember imports. Records: `CodeRef`; `BoxelDescription` (ref, kind,
 ancestors, fields, formats, presentation statics); `FieldDescription`
-(`fieldName`, `type` code ref, `kind`, `isComputed`) — configuration is
-**not** on the type description, because resolution takes the owning root
-instance as `this` and memoizes per `(instance, fieldName)` (RP-5.1–5.2);
+(`fieldName`, `type` code ref, `kind`, `isComputed`, `isQueryBacked`) —
+configuration is **not** on the type description, because resolution takes
+the owning root instance as `this` and memoizes per `(instance, fieldName)`
+(RP-5.1–5.2);
 `ResolvedField` (a field's declaration plus the configuration resolved
 against one instance), which is what `getFields`/`getField` answer with and
 which carries no value, since the value lives in the projection's model;
@@ -689,6 +690,14 @@ wrapper); `MaterializationPurpose`; the protocol-version/feature record.
 linking a Theme and another for a Theme card previewing its own CSS, and
 the second links no Theme at all — so neither the theme reference nor
 `themeCss` implies it.
+
+`isComputed` and `isQueryBacked` are carried separately rather than reduced
+to a single writability flag, because render-time writability is
+`(not computeVia) ∧ (not queryDefinition) ∧ permissions.canWrite` (RP-9.1)
+and the permissions term is context the Host pushes per mounted surface, not
+a fact about the field — a record answering "writable" would have to guess
+it. A record carrying only `isComputed` cannot state the rule at all: a
+query-backed relationship is never editable (RP-7.6) and is not computed.
 
 `trusted-export` is a single portal token — module plus export name — and
 not a per-category split. Whether that export is admissible as a component,

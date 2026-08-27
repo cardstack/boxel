@@ -46,12 +46,14 @@ function description(
         type: stringRef,
         kind: 'contains',
         isComputed: false,
+        isQueryBacked: false,
       },
       {
         fieldName: 'vendor',
         type: personRef,
         kind: 'linksTo',
         isComputed: false,
+        isQueryBacked: false,
       },
     ],
     formats: [

@@ -75,9 +75,10 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const scanRoot = join(repoRoot, 'packages');
 
 // Every file implementing a tier runtime, and the mode each one implements.
-// Empty because the interface is declared and nothing implements it. Each entry
-// should be a mode `checkRecordParity` is given as registered.
-const registered = new Map<string, string>([]);
+// Each entry should be a mode `checkRecordParity` is given as registered.
+const registered = new Map<string, string>([
+  ['packages/host/app/lib/direct-boxel-runtime.ts', 'direct'],
+]);
 
 // Directories with no source of ours in them, a copy of it that is not the one
 // that ships, or — for `tests` — implementations that stand in for a tier

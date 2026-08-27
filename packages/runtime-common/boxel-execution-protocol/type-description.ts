@@ -37,12 +37,22 @@ export type FieldKind = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
  * (RP-5.1–5.2), so a description of a *type* has nothing to resolve against.
  * The resolved data belongs to `ResolvedField`, which an instance-aware
  * operation produces.
+ *
+ * `isComputed` and `isQueryBacked` are carried separately rather than reduced
+ * to one writability flag, because render-time writability is
+ * `(not computeVia) ∧ (not queryDefinition) ∧ permissions.canWrite` (RP-9.1)
+ * and the third term is context the Host pushes per surface, not a fact about
+ * the field. A record answering "writable" would have to guess the
+ * permissions, and a record carrying only `isComputed` cannot state the rule
+ * at all — a query-backed relationship is never editable (RP-7.6) and is not
+ * computed.
  */
 export type FieldDescription = Cloneable<{
   fieldName: string;
   type: CodeRef;
   kind: FieldKind;
   isComputed: boolean;
+  isQueryBacked: boolean;
 }>;
 
 /**
@@ -62,6 +72,7 @@ export type ResolvedField = Cloneable<{
   type: CodeRef;
   kind: FieldKind;
   isComputed: boolean;
+  isQueryBacked: boolean;
   resolvedConfiguration: JSONTypes.Value | null;
 }>;
 

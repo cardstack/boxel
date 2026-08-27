@@ -69,6 +69,7 @@ function description(
         type: { module: rri('@cardstack/base/string'), name: 'default' },
         kind: 'contains',
         isComputed: false,
+        isQueryBacked: false,
       },
     ],
     formats: [
@@ -90,6 +91,7 @@ function resolvedField(): ResolvedField {
     type: { module: rri('@cardstack/base/string'), name: 'default' },
     kind: 'contains',
     isComputed: false,
+    isQueryBacked: false,
     resolvedConfiguration: { placeholder: 'Name' },
   };
 }
