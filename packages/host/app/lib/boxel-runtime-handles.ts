@@ -25,15 +25,28 @@ import type {
  * share one handle, and then the first `dispose` would revoke the second
  * holder's name for an object it is still using. Two names for one class cost
  * a map entry; a revoked name costs a render.
+ *
+ * Ids come from a counter shared by every registry in the process rather than
+ * a per-registry one. Two runtimes of the same tier would otherwise both mint
+ * `direct-instance:1`, and a handle from one resolving in the other is a wrong
+ * answer that looks like a right one: `projectInstance` describes a different
+ * card and `dispose` releases it. A shared counter makes a handle name at most
+ * one object, whichever registry a caller hands it to.
+ *
+ * References are strong and released only by `release`. A registry outlives
+ * the objects it names only if its owner never disposes them, which is the
+ * owner's contract to keep: a mounted surface releases what it retained when
+ * it unmounts.
  */
+let nextHandleId = 0;
+
 export class RuntimeHandleRegistry<T extends object> {
-  private nextId = 0;
   private values = new Map<RuntimeHandle, T>();
 
   constructor(private readonly prefix: string) {}
 
   add(value: T): RuntimeHandle {
-    let handle = `${this.prefix}:${++this.nextId}` as RuntimeHandle;
+    let handle = `${this.prefix}:${++nextHandleId}` as RuntimeHandle;
     this.values.set(handle, value);
     return handle;
   }

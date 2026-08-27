@@ -56,7 +56,8 @@ export interface MissingProjectionPathContext {
  *
  * What comes back is a read-only observer view of the record, not the record.
  * Hand the original to anything that stores, clones, or sends it; this one is
- * for reading through.
+ * for reading through. A view does not survive `structuredClone` — a Proxy
+ * never does — which is the same rule stated from the other side.
  */
 export function observeMissingProjectionPaths<T>(
   record: T,
@@ -69,23 +70,43 @@ export function observeMissingProjectionPaths<T>(
   return watch(record, context.root ?? 'model', context, report);
 }
 
+/**
+ * String keys that are a probe of the value rather than a path through the
+ * card.
+ *
+ * `then` is how anything awaited is tested for thenability. `toJSON` is what
+ * `JSON.stringify` reaches for on every object it walks — and unlike
+ * `toString` or `valueOf` it is not on `Object.prototype`, so a presence test
+ * reports it missing. Serializing a watched projection while debugging is the
+ * likeliest thing anyone does with one, and left unhandled it emits a bogus
+ * report per object in the graph, burying the real gaps.
+ */
+const VALUE_PROBES = new Set(['then', 'toJSON']);
+
 function watch<T>(
   value: T,
   path: string,
   context: MissingProjectionPathContext,
   report: MissingProjectionPathReporter,
+  // One wrapper per underlying object, so two reads of a member answer with
+  // the same view. A fresh Proxy per read makes `a.b !== a.b`, which re-keys
+  // an `{{#each}}` on every re-render and makes an identity comparison of one
+  // member against itself false — in a value whose intended consumer is a
+  // template.
+  wrappers = new WeakMap<object, unknown>(),
 ): T {
   if (typeof value !== 'object' || value === null) {
     return value;
   }
-  return new Proxy(value as object, {
+  let existing = wrappers.get(value as object);
+  if (existing !== undefined) {
+    return existing as T;
+  }
+  let watched = new Proxy(value as object, {
     get(target, key, receiver) {
       // Symbols are the language's own protocol — iteration, primitive
-      // coercion, `instanceof` — and never a projected path. `then` is how a
-      // value gets probed for thenability when it is awaited or resolved
-      // through a promise, which is a question about the wrapper rather than
-      // about the card.
-      if (typeof key !== 'string' || key === 'then') {
+      // coercion, `instanceof` — and never a projected path.
+      if (typeof key !== 'string' || VALUE_PROBES.has(key)) {
         return Reflect.get(target, key, receiver);
       }
       let reached = `${path}.${key}`;
@@ -108,9 +129,11 @@ function watch<T>(
       if (own && !own.configurable && !own.writable) {
         return value;
       }
-      return watch(value, reached, context, report);
+      return watch(value, reached, context, report, wrappers);
     },
-  }) as T;
+  });
+  wrappers.set(value as object, watched);
+  return watched as T;
 }
 
 /**

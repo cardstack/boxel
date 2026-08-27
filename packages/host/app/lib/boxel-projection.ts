@@ -6,8 +6,17 @@
  * happens here, and `boxel-render-record.ts` assembles the protocol's records
  * out of what this produced without reading anything live. The split is what
  * makes the second half provably pure, and one capture is what keeps
- * `describeBoxel`, `getFields` and `projectInstance` from being able to
- * disagree — three answers built from one read of one instance.
+ * `getFields` and `projectInstance` from being able to disagree about one
+ * instance — both are built from a single read of it.
+ *
+ * A `BoxelDescription` is not part of that agreement, and the difference is
+ * real rather than a rounding error: it describes a *type*, read from the
+ * class, while an instance's fields and model are read from the instance and
+ * therefore honor the per-instance polymorphic override channel (RP-3.5). A
+ * card holding a `Dog` in a `contains(Pet)` field reports `Pet` in the
+ * description of its type and `Dog` in its own resolved fields. Both are
+ * correct answers to different questions, and a consumer wanting the
+ * rendering class reads the instance's, never the type's.
  *
  * There is exactly one of these. A second one is the failure this design
  * exists to prevent: competing builders each agree with themselves, so nothing
@@ -393,21 +402,23 @@ function captureModel(
   api: CardAPIModule,
 ): Record<string, JsonValue> {
   let model: Record<string, JsonValue> = {};
+  let seen = new WeakSet<object>();
+  seen.add(instance);
   for (let [fieldName, field] of Object.entries(
     api.getFields(instance, { includeComputeds: true }),
   )) {
     defineMember(
       model,
       fieldName,
-      captureFieldValue(
-        instance,
-        fieldName,
-        field.fieldType,
-        api,
-        new WeakSet(),
-      ),
+      captureFieldValue(instance, fieldName, field.fieldType, api, seen),
     );
   }
+  // The root is a value like any nested one, so its own trusted getters belong
+  // in the model for the same reason theirs do (RP-4.4/RP-5.4): a trusted Base
+  // card's `percentComplete` is reachable as `@model.percentComplete` and
+  // invisible to `getFields`, so a model built from fields alone renders a
+  // different card than main.
+  captureTrustedGetters(instance, model);
   return model;
 }
 
@@ -434,11 +445,25 @@ function captureFieldValue(
 /**
  * One link field's slots, in document order, as identity references.
  *
- * Reading the field's own getter first is what starts resolution at all: the
- * field getter is the lazy-load trigger (RP-7.2), and for a query-backed field
- * it is what creates the search resource whose membership is read below. This
- * is the read a live template performs on every render, over the same
- * canonical instance, so it is main's behavior rather than new authority.
+ * Membership is read and nothing is triggered. The field getter is the
+ * lazy-load trigger (RP-7.2) and the renderer is what pulls it, for the fields
+ * its template actually reads; a projection reads *every* field of the
+ * instance and of every composite inside it, so triggering here fetches links
+ * no render asked for. Three things make that worse than wasteful:
+ *
+ * - a failed fetch is terminal — a `link-error` / `link-not-found` sentinel is
+ *   planted and never retried (RP-7.2) — so one projection can permanently
+ *   break a link on the canonical instance that nothing was rendering;
+ * - a nested composite is not registered in any store (only
+ *   `createFromSerialized` / `updateFromSerialized` register one), so its load
+ *   runs against a throwaway fallback store and is invisible to the canonical
+ *   store's settle tracking;
+ * - a query-backed field's getter creates its search resource, so every
+ *   projection would issue a search per query field.
+ *
+ * `getRelationshipMembershipState` is a pure read, so what this reports is the
+ * state the instance is in — which is what a projection is for. A link that
+ * loads later reaches a consumer through the next projection.
  *
  * Only a `present` slot yields a reference. The other four states (RP-7.1)
  * have a reference string but no loaded value, and therefore no *actual*
@@ -460,13 +485,20 @@ function linkSlots(
   fieldName: string,
   api: CardAPIModule,
 ): (BoxelValueReference | null)[] {
-  void (instance as unknown as Record<string, unknown>)[fieldName];
   let { membership } = api.getRelationshipMembershipState(
     instance as CardDef,
     fieldName,
   );
   return (membership ?? []).map((slot) =>
-    slot.kind === 'present' ? boxelReference(slot.value) : null,
+    slot.kind === 'present'
+      ? // `slot.reference` is the linked card's id once saved and its local id
+        // before then, and both resolve through the Store's identity map
+        // (RP-8.2). Falling back to it is what keeps a link to an unsaved card
+        // resolvable: the instance's own `id` is absent until it saves, so a
+        // reference built from that alone would be `{id: null}` — which no
+        // consumer can resolve, and which makes two unsaved slots identical.
+        boxelReference(slot.value, slot.reference)
+      : null,
   );
 }
 
@@ -483,9 +515,9 @@ function captureValue(
     return dataValue(value) ?? null;
   }
   if (seen.has(value)) {
-    // The identity map makes one instance reachable twice inside a single
-    // composite tree (RP-8.2). Degrading the second reach to identity keeps
-    // the walk finite without deciding which path was the real one.
+    // A value reachable from itself would walk forever. Degrading the second
+    // reach to identity keeps the walk finite without deciding which path was
+    // the real one.
     return boxelReference(value);
   }
   seen.add(value);
@@ -520,13 +552,21 @@ function captureValue(
  * Only trusted Base classes are read. An authored getter runs in the tier that
  * owns the authored code (RP-5.4), so evaluating one here would both execute
  * authored code where it does not belong and produce a value the authored tier
- * computes again anyway. The chain is walked while the owning class stays
- * trusted and stops at the first class that is not, so a trusted Base value an
- * author subclassed contributes its Base getters and none of the author's.
+ * computes again anyway.
  *
- * A field of the same name wins: the field is the serialized, indexed,
- * `<@fields.x/>`-reachable one, and a getter shadowing it here would make the
- * model disagree with the field list built from the same read.
+ * An untrusted class in the chain is stepped over rather than stopping the
+ * walk, because a subclass is the ordinary way an author reaches Base
+ * behavior: a card extending a trusted Base card inherits the getters its own
+ * trusted templates read, and stopping at the authored class would drop every
+ * one of them. What the authored class *defines* is still skipped — and skipped
+ * for the ancestors too, so a Base getter an author overrode is not quietly
+ * replaced by the Base value underneath it. The result is the author's own
+ * members absent and the trusted members they did not touch present.
+ *
+ * A field of the same name wins for the same reason: the field is the
+ * serialized, indexed, `<@fields.x/>`-reachable one, and a getter shadowing it
+ * here would make the model disagree with the field list built from the same
+ * read.
  *
  * A getter that throws, or that answers with something other than data, is
  * omitted rather than propagated. This walk reads every getter a class exposes
@@ -538,22 +578,29 @@ function captureTrustedGetters(
   value: BaseDef,
   expanded: Record<string, JsonValue>,
 ): void {
+  // Names an untrusted class in the chain defines. They are the author's, so
+  // neither this walk's evaluation nor a trusted ancestor's definition of the
+  // same name may supply them.
+  let authored = new Set<string>();
   let prototype = Object.getPrototypeOf(value) as object | null;
   while (prototype && prototype !== Object.prototype) {
     let owner = (prototype as { constructor?: BaseDefConstructor }).constructor;
     let ref = owner ? identifyCard(owner) : undefined;
-    if (!ref || !isTrustedModule(moduleFrom(ref))) {
-      return;
-    }
+    let trusted = Boolean(ref && isTrustedModule(moduleFrom(ref)));
     for (let name of Object.getOwnPropertyNames(prototype)) {
       if (
         name === 'constructor' ||
+        authored.has(name) ||
         Object.prototype.hasOwnProperty.call(expanded, name)
       ) {
         continue;
       }
       let getter = Object.getOwnPropertyDescriptor(prototype, name)?.get;
       if (!getter) {
+        continue;
+      }
+      if (!trusted) {
+        authored.add(name);
         continue;
       }
       try {
@@ -623,12 +670,19 @@ function captureTheme(
   InstancePresentation,
   'isThemed' | 'theme' | 'themeScope' | 'themeCss' | 'cssImports'
 > {
-  const unthemed = {
+  // Read before any early return, and independent of the themed decision,
+  // because main passes `@cssImports` to `CardContainer` outside its
+  // `@isThemed` guard and the container renders them ungated. A Theme card
+  // authored fonts-first — imports set, variables still empty — renders its
+  // `@import` on main, so dropping them with the theme would lose a stylesheet
+  // main shows.
+  let cssImports = cssImportsOf(instance, api);
+  let unthemed = {
     isThemed: false,
     theme: null,
     themeScope: null,
     themeCss: null,
-    cssImports: null,
+    cssImports,
   };
   let source: BaseDef;
   let themeId: string | null;
@@ -674,16 +728,17 @@ function captureTheme(
     // main does with the null.
     themeScope: themeScope(themeId, themeCss) ?? null,
     themeCss,
-    cssImports: cssImportsOf(source, api),
+    cssImports: cssImports ?? cssImportsOf(source, api),
   };
 }
 
 /**
- * The stylesheet imports a theme depends on, typically font faces.
+ * The stylesheet imports a card supplies itself, typically font faces.
  *
- * Read off the theme source the same way main's `getCssImports` does — the
- * card's own `cssImports` when it declares one through a `CssImportField`,
- * which is what makes a Theme card previewing itself carry its own fonts.
+ * Main's `getCssImports` asks this of *every* card before falling back to its
+ * linked Theme's, not only of Theme cards — a card declaring its own
+ * `CssImportField` carries its own fonts whatever it links. The caller applies
+ * the fallback, so this answers only the first half.
  */
 function cssImportsOf(source: BaseDef, api: CardAPIModule): string[] | null {
   if (!fieldTypedAs(source, 'cssImports', 'CssImportField', api)) {
@@ -742,14 +797,27 @@ function readString(
   return typeof value === 'string' ? value : null;
 }
 
-function boxelReference(value: BaseDef): BoxelValueReference {
+/**
+ * One instance as identity.
+ *
+ * `fallbackId` is for a caller holding a resolvable identity the instance
+ * itself does not expose — a link's membership reference, which is the target's
+ * local id until it saves. Without it a reference to an unsaved card is
+ * `{id: null}`: unresolvable, and identical for every unsaved sibling in a
+ * plural field.
+ */
+function boxelReference(
+  value: BaseDef,
+  fallbackId?: string,
+): BoxelValueReference {
   let ref = identifyCard(value.constructor as BaseDefConstructor);
   if (!ref) {
     throw new Error(
       `Cannot reference a '${value.constructor.name}' instance whose type has no code reference`,
     );
   }
-  return { $boxel: { id: instanceId(value), type: ref } };
+  let id = instanceId(value) ?? (fallbackId as RealmResourceIdentifier | null);
+  return { $boxel: { id: id ?? null, type: ref } };
 }
 
 /**
@@ -780,10 +848,23 @@ function resolveFieldConfiguration(
 /**
  * One value as data, or `undefined` when it is not data at all.
  *
- * `undefined` is the answer for a function, a symbol, a class instance, and
- * anything else the boundary would refuse, so a caller can tell "this member
- * is absent" from "this member is null" — which is what lets the trusted-getter
- * walk omit a member rather than record a null the live instance never held.
+ * `undefined` is the answer for a function, a symbol, a class instance, an
+ * accessor, and anything else the boundary would refuse, so a caller can tell
+ * "this member is absent" from "this member is null" — which is what lets the
+ * trusted-getter walk omit a member rather than record a null the live
+ * instance never held.
+ *
+ * A container is data only if everything in it is. An array holding one
+ * component class is not "an array with a null in it": returning one would
+ * hand a consumer a configuration that looks complete and is not, at the one
+ * position it most needs to know about. So a non-data element or member
+ * refuses the whole container, and the caller sees the member vanish rather
+ * than change meaning.
+ *
+ * Members are read through descriptors rather than `Object.entries`, which
+ * invokes an accessor. Invoking one here would materialize its result as data
+ * and hide from `normalizeJsonData` exactly the thing that gate exists to
+ * refuse — an accessor a consumer would re-run and get a different answer from.
  *
  * A `URL` becomes its href and a `Date` its ISO string, the spellings every
  * other view of the same value already uses.
@@ -817,18 +898,34 @@ function dataValue(
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((entry) => dataValue(entry, seen) ?? null);
+      let entries: JsonValue[] = [];
+      for (let entry of value) {
+        let projected = dataValue(entry, seen);
+        if (projected === undefined) {
+          return undefined;
+        }
+        entries.push(projected);
+      }
+      return entries;
     }
     let prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
       return undefined;
     }
+    if (Object.getOwnPropertySymbols(value).length > 0) {
+      return undefined;
+    }
     let plain: Record<string, JsonValue> = {};
-    for (let [key, entry] of Object.entries(value)) {
-      let projected = dataValue(entry, seen);
-      if (projected !== undefined) {
-        defineMember(plain, key, projected);
+    for (let key of Object.getOwnPropertyNames(value)) {
+      let descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !('value' in descriptor)) {
+        return undefined;
       }
+      let projected = dataValue(descriptor.value, seen);
+      if (projected === undefined) {
+        return undefined;
+      }
+      defineMember(plain, key, projected);
     }
     return plain;
   } finally {

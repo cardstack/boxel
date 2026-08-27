@@ -1,5 +1,9 @@
+import { settled } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
+
+import { themeScope } from '@cardstack/boxel-ui/helpers';
 
 import {
   checkRecordParity,
@@ -33,6 +37,8 @@ const showModule = rri(`${testRealmURL}show`);
 const showRef: CodeRef = { module: showModule, name: 'Show' };
 const openingNight = rri(`${testRealmURL}Show/opening-night`);
 const matinee = rri(`${testRealmURL}Show/matinee`);
+const themedShow = rri(`${testRealmURL}Show/themed`);
+const houseTheme = rri(`${testRealmURL}Theme/house`);
 
 // Served as source rather than as pre-built classes, so the module reaches the
 // adapter the way a realm's own module does: fetched, run through
@@ -47,8 +53,10 @@ const showSource = `
     containsMany,
     field,
     linksTo,
+    linksToMany,
   } from 'https://cardstack.com/base/card-api';
   import StringField from 'https://cardstack.com/base/string';
+  import CurrencyField from 'https://cardstack.com/base/currency';
 
   export class VenueField extends FieldDef {
     static displayName = 'Venue';
@@ -68,6 +76,10 @@ const showSource = `
     });
     @field tags = containsMany(StringField);
     @field partner = linksTo(() => Show);
+    @field price = contains(CurrencyField);
+    @field revivals = linksToMany(() => Show, {
+      query: { filter: { eq: { headline: 'Revival' } } },
+    });
     @field billing = contains(StringField, {
       computeVia: function () {
         return this.headline + ' at the Majestic';
@@ -84,7 +96,12 @@ const showSource = `
   }
 `;
 
-function showDocument(id: string, headline: string, partner?: string) {
+function showDocument(
+  id: string,
+  headline: string,
+  partner?: string,
+  theme?: string,
+) {
   return {
     data: {
       type: 'card',
@@ -93,13 +110,36 @@ function showDocument(id: string, headline: string, partner?: string) {
         headline,
         venue: { name: 'Majestic', city: 'Cairo' },
         tags: ['gala', 'premiere'],
+        price: { code: 'EUR' },
       },
       relationships: {
         partner: partner
           ? { links: { self: partner }, data: { type: 'card', id: partner } }
           : { links: { self: null } },
+        ...(theme ? { 'cardInfo.theme': { links: { self: theme } } } : {}),
       },
       meta: { adoptsFrom: { module: showModule, name: 'Show' } },
+    },
+  };
+}
+
+const THEME_CSS = ':root { --boxel-brand: rebeccapurple; }';
+
+function themeDocument() {
+  return {
+    data: {
+      type: 'card',
+      id: houseTheme,
+      attributes: {
+        cssVariables: THEME_CSS,
+        cssImports: ['https://fonts.example/inter.css'],
+      },
+      meta: {
+        adoptsFrom: {
+          module: 'https://cardstack.com/base/card-api',
+          name: 'Theme',
+        },
+      },
     },
   };
 }
@@ -135,6 +175,13 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
           matinee,
         ),
         'Show/matinee.json': showDocument(matinee, 'Matinee'),
+        'Theme/house.json': themeDocument(),
+        'Show/themed.json': showDocument(
+          themedShow,
+          'Themed',
+          undefined,
+          houseTheme,
+        ),
       },
     });
   });
@@ -150,6 +197,21 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
   async function retainedShow(runtime: DirectBoxelRuntime, id = openingNight) {
     let store = getService('store') as StoreService;
     let instance = (await store.get(id)) as CardDef;
+    return runtime.retainInstance(instance);
+  }
+
+  // The projection reports the state an instance is in; the renderer is what
+  // pulls a link into it (RP-7.2). So a test about what a themed card projects
+  // arranges the link first, through the ordinary setter main's own editors
+  // use, rather than depending on a fetch to land mid-test.
+  async function retainedWithTheme(runtime: DirectBoxelRuntime) {
+    let store = getService('store') as StoreService;
+    let theme = await store.get(houseTheme);
+    let instance = (await store.get(themedShow)) as CardDef;
+    (
+      instance as unknown as { cardInfo: Record<string, unknown> }
+    ).cardInfo.theme = theme;
+    await settled();
     return runtime.retainInstance(instance);
   }
 
@@ -285,7 +347,7 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
     );
   });
 
-  test('RP-9.1, RP-4.4: a field reports computed and query-backed separately, and neither is the value', async function (assert) {
+  test('RP-9.1: a field reports computed and query-backed separately, and neither is the value', async function (assert) {
     let runtime = newRuntime();
     let fields = await runtime.getFields(await retainedShow(runtime));
     let byName = new Map(fields.map((field) => [field.fieldName, field]));
@@ -336,6 +398,52 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
     assert.strictEqual(projection.presentation.themeScope, null);
   });
 
+  test('RP-11.3: a card linking a Theme carries the scope token, the CSS, and the imports its container needs', async function (assert) {
+    let runtime = newRuntime();
+    let projection = await runtime.projectInstance(
+      await retainedWithTheme(runtime),
+    );
+    let { presentation } = projection;
+
+    assert.true(presentation.isThemed);
+    assert.deepEqual(
+      readBoxelValueReference(presentation.theme),
+      {
+        $boxel: {
+          id: houseTheme,
+          type: { module: rri('@cardstack/base/card-api'), name: 'Theme' },
+        },
+      },
+      'the Theme crosses as a reference — resolving it is the graph walk a projection forbids',
+    );
+    assert.strictEqual(presentation.themeCss, THEME_CSS);
+    assert.deepEqual(presentation.cssImports, [
+      'https://fonts.example/inter.css',
+    ]);
+    assert.strictEqual(
+      presentation.themeScope,
+      themeScope(houseTheme, THEME_CSS),
+      'and the scope is the content hash Base derives, so a tier’s stamped attribute matches the selector the stylesheet compiled against',
+    );
+  });
+
+  test('RP-11.3: a card linking no Theme is unthemed, and carries no scope to stamp', async function (assert) {
+    let runtime = newRuntime();
+    let { presentation } = await runtime.projectInstance(
+      await retainedShow(runtime),
+    );
+
+    assert.deepEqual(
+      {
+        isThemed: presentation.isThemed,
+        theme: presentation.theme,
+        themeScope: presentation.themeScope,
+        themeCss: presentation.themeCss,
+      },
+      { isThemed: false, theme: null, themeScope: null, themeCss: null },
+    );
+  });
+
   test('RP-1.1: the adapter’s render entry is main’s memoized component, not a second one built beside it', async function (assert) {
     let runtime = newRuntime();
     let instance = await retainedShow(runtime);
@@ -375,6 +483,77 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
         `the report names ${named}: ${warned[0]}`,
       );
     }
+  });
+
+  test('RP-4.4, RP-5.4: a trusted Base value’s plain getter is carried, because getFields cannot see it', async function (assert) {
+    let runtime = newRuntime();
+    let projection = await runtime.projectInstance(await retainedShow(runtime));
+    let price = projection.model.price as Record<string, unknown>;
+
+    assert.strictEqual(price.code, 'EUR', 'the declared field');
+    assert.strictEqual(
+      price.symbol,
+      '€',
+      'and the plain getter Base’s own atom template reads as @model.symbol — invisible to getFields, so a model built from fields alone would render a different card',
+    );
+
+    let fields = await runtime.getFields(await retainedShow(runtime));
+    assert.notOk(
+      fields.some((field) => field.fieldName === 'symbol'),
+      'and it is not a field, so it appears only in the model',
+    );
+  });
+
+  test('RP-9.1, RP-7.6: a query-backed relationship reports as query-backed and is not computed', async function (assert) {
+    let runtime = newRuntime();
+    let fields = await runtime.getFields(await retainedShow(runtime));
+    let revivals = fields.find((field) => field.fieldName === 'revivals');
+
+    assert.deepEqual(
+      {
+        isComputed: revivals?.isComputed,
+        isQueryBacked: revivals?.isQueryBacked,
+        kind: revivals?.kind,
+      },
+      { isComputed: false, isQueryBacked: true, kind: 'linksToMany' },
+      'a query-backed link is never editable and is not computed, so isComputed alone could not state RP-9.1’s rule',
+    );
+  });
+
+  test('RP-7.1, RP-7.2: a projection reports link state and triggers no load of its own', async function (assert) {
+    let runtime = newRuntime();
+    let store = getService('store') as StoreService;
+    let instance = (await store.get(openingNight)) as CardDef;
+
+    // Every card carries cardInfo.cardThumbnail, a link no format template
+    // here reads. A projection that used the field getter as its trigger would
+    // fetch it — and a terminal failure would plant a sentinel on the canonical
+    // instance that nothing was rendering (RP-7.2).
+    let requested: string[] = [];
+    let realFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      requested.push(typeof input === 'string' ? input : String(input));
+      return realFetch(input as RequestInfo, init);
+    }) as typeof fetch;
+    try {
+      await runtime.projectInstance(runtime.retainInstance(instance));
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    assert.deepEqual(
+      requested.filter((url) => url.includes('_search')),
+      [],
+      'no search was issued for the query-backed field',
+    );
+    assert.strictEqual(
+      (await runtime.projectInstance(runtime.retainInstance(instance))).model
+        .revivals instanceof Array
+        ? 'array'
+        : 'not-array',
+      'array',
+      'and an unstarted query projects as an empty membership rather than failing',
+    );
   });
 
   test('RP-14.4: Direct’s records for a real card are read as data by the parity harness with direct registered', async function (assert) {

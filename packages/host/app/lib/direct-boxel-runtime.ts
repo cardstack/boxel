@@ -16,6 +16,7 @@ import type { RealmResourceIdentifier } from '@cardstack/runtime-common/realm-id
 import type { LooseCardResource } from '@cardstack/runtime-common/resource-types';
 
 import {
+  captureBoxelFields,
   captureBoxelInstance,
   captureBoxelType,
   captureUnresolvedFields,
@@ -90,16 +91,21 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
   private types = new RuntimeHandleRegistry<BaseDefConstructor>('direct-type');
   private instances = new RuntimeHandleRegistry<BaseDef>('direct-instance');
   /**
-   * How many projections this runtime has issued for each instance.
+   * How many `projectInstance` calls this runtime has answered for each
+   * instance.
    *
    * Keyed by instance rather than by handle so two handles naming one instance
    * order against each other, which is what a recipient holding a projection
    * from one surface and a newer one from another needs.
    *
    * Counting projections rather than reading a clock is what keeps record
-   * parity reachable (RP-14.4): a clock makes every tier's record differ on a
-   * member no tier controls, where a count makes the same request sequence
-   * produce the same numbers in every tier.
+   * parity reachable (RP-14.4): `revision` is a compared member — no path is
+   * declared tier-specific — so a clock would make every tier's record differ
+   * on something no tier controls. A count agrees across tiers only while they
+   * all count the same event, which is why nothing but `projectInstance`
+   * increments this: an operation that answers about declarations is not a
+   * projection, and a tier whose `getField` quietly counted as one would
+   * diverge from a tier whose did not.
    */
   private revisions = new WeakMap<BaseDef, number>();
 
@@ -172,7 +178,21 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
         captureUnresolvedFields(this.types.get(boxel), api),
       );
     }
-    return (await this.renderRecordFor(this.instances.get(boxel))).fields;
+    if (!this.instances.has(boxel)) {
+      // Named here rather than left to a registry, which would report whichever
+      // one happened to be asked last — a `direct-type:` handle diagnosed as an
+      // unknown instance sends its reader looking in the wrong place.
+      throw new Error(`Unknown or released Boxel handle '${boxel}'`);
+    }
+    // Captured on its own rather than pulled out of a render record. A field
+    // list is a question about declarations, and building the whole record to
+    // answer it would evaluate every computed field and derive presentation
+    // for values the caller never asked for — so one field's configuration
+    // could not be read at all when an unrelated `computeVia` throws. It would
+    // also count as a projection, and `revision` orders projections.
+    return buildResolvedFields(
+      captureBoxelFields(this.instances.get(boxel), api),
+    );
   }
 
   async getField(
@@ -226,6 +246,13 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
    * (RP-8.4). Computeds and unrendered fields are both included: this states
    * everything the instance currently holds, for a consumer that will
    * materialize it, rather than the save-shaped subset a write sends (RP-9.6).
+   *
+   * Query-backed fields are omitted, as they are on every other path that
+   * serializes a card. Their membership is a live search result, not state the
+   * instance holds — serializing it would freeze a snapshot into
+   * `relationships`, and a consumer materializing that document would get a
+   * declared link where main has a query: editable where RP-7.6 says never,
+   * and stale the moment the search moves.
    */
   async serializeCard(
     instance: BoxelInstanceHandle,
@@ -235,6 +262,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
       includeComputeds: true,
       includeUnrenderedFields: true,
       useAbsoluteURL: true,
+      omitQueryFields: true,
     });
   }
 
