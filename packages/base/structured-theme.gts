@@ -328,7 +328,7 @@ class Edit extends Isolated {
 }
 
 export default class StructuredTheme extends Theme {
-  static displayName = 'Structured Theme';
+  static displayName = 'Theme';
 
   @field typography = contains(ThemeTypographyField, {
     description:
