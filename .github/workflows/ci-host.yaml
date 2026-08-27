@@ -852,7 +852,17 @@ jobs:
           # prints nothing at all if the log is missing — default both so the
           # comparison below can't be handed an empty string.
           attempted=$(grep -c '\[percy-snapshot\] attempted ' /tmp/test-output.log || true)
-          taken=$(grep -c '\[percy:core\] Snapshot taken: ' /tmp/test-output.log || true)
+          # Match the label-independent part of the CLI's line. @percy/logger
+          # builds the label as 'percy' and appends ':<scope>' only while its
+          # level is 'debug' (format() in its logger.js), so this same event
+          # prints '[percy:core] Snapshot taken:' under PERCY_LOGLEVEL=debug
+          # and '[percy] Snapshot taken:' at every other level. Matching the
+          # scoped form would tie this count to a log level set in the test
+          # step's env for unrelated reasons — drop that line and every shard
+          # reports taken=0, which on main reads as a total loss and rejects a
+          # healthy build irreversibly. The finalize job also refuses to treat
+          # a build-wide zero as a real loss, for the same reason.
+          taken=$(grep -c '] Snapshot taken: ' /tmp/test-output.log || true)
           attempted=${attempted:-0}
           taken=${taken:-0}
           printf 'shard=%s\nattempted=%s\ntaken=%s\n' \
@@ -1045,10 +1055,26 @@ jobs:
           # The CLI can report more than the suite attempted only if the
           # markers ever drift; clamp so a miscount can't read as negative.
           if [ "$lost" -lt 0 ]; then lost=0; fi
-          echo "shards=$shards attempted=$attempted taken=$taken lost=$lost"
+
+          # A build that attempted snapshots and had NONE reach the CLI is far
+          # more likely a broken marker than a real total loss — a genuine loss
+          # of every snapshot would have to mean the CLI never ran, which
+          # `percy build:finalize` below would not survive either. Since the
+          # reject this feeds cannot be undone, refuse to act on that reading:
+          # report zero lost, and fail the job afterwards so a broken gate is
+          # loud rather than quietly permissive. Failing here instead would
+          # skip finalize and strand the Percy build unfinalised.
+          marker_broken=false
+          if [ "$attempted" -gt 0 ] && [ "$taken" -eq 0 ]; then
+            marker_broken=true
+            lost=0
+          fi
+
+          echo "shards=$shards attempted=$attempted taken=$taken lost=$lost marker_broken=$marker_broken"
           echo "lost=$lost" >> "$GITHUB_OUTPUT"
           echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
           echo "taken=$taken" >> "$GITHUB_OUTPUT"
+          echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
           # No tallies at all means the shards never got far enough to write
           # them; that is the host-test failure the reject step already
           # covers, so say so rather than reading it as a clean run.
@@ -1142,6 +1168,16 @@ jobs:
           )
         run: |
           echo "::warning::host-test finished as '${{ needs.host-test.result }}' and the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}, so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
+
+      # Runs after finalize so the Percy build is sealed either way. The tally
+      # already declined to reject on this reading, so all that is left is to
+      # make sure a gate that has stopped measuring anything cannot pass for a
+      # working one.
+      - name: Fail when the Percy snapshot markers stopped matching
+        if: ${{ steps.tally.outputs.marker_broken == 'true' }}
+        run: |
+          echo "::error::The shards attempted ${{ steps.tally.outputs.attempted }} Percy snapshot(s) and the CLI was recorded as receiving none, which is a broken tally rather than a real loss — no build reaching finalize loses every snapshot. Snapshot loss went unchecked for this build. Look first at the markers the tally counts: '[percy-snapshot] attempted ' in packages/host/tests/helpers/percy-snapshot.ts, and '] Snapshot taken: ' from the Percy CLI."
+          exit 1
 
   host-merge-reports-and-publish:
     name: Merge Host reports and publish
