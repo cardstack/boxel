@@ -160,7 +160,7 @@ module('Integration | FileDef format templates', function (hooks) {
     // is rendering it, so it can draw differently per format.
     class ReportPreview extends GlimmerComponent<FilePreviewSignature> {
       get summary() {
-        return `Report preview for ${this.args.model.name} in ${this.args.mode}`;
+        return `Report preview for ${this.args.model.name} in ${this.args.format}`;
       }
 
       <template>

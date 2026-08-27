@@ -144,7 +144,7 @@ export class FileEmbeddedShell extends GlimmerComponent<FileEmbeddedShellSignatu
       >
         <FilePreviewStage
           @model={{@model}}
-          @mode='embedded'
+          @format='embedded'
           @fields={{@fields}}
           @preview={{@preview}}
         />

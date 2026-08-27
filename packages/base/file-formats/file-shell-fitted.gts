@@ -142,7 +142,7 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
       <div class='fit-stage'>
         <FilePreviewStage
           @model={{this.previewModel}}
-          @mode='fitted'
+          @format='fitted'
           @fields={{@fields}}
           @preview={{@preview}}
         />
@@ -155,7 +155,7 @@ export class FileFittedShell extends GlimmerComponent<FileFittedShellSignature> 
         {{#if this.isWaveform}}
           <FilePreviewStage
             @model={{this.waveformModel}}
-            @mode='fitted'
+            @format='fitted'
             @fields={{@fields}}
             @preview={{@preview}}
           />

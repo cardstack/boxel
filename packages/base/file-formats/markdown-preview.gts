@@ -23,8 +23,8 @@ import {
 } from './file-view-model';
 
 export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
-  get mode(): FileFormat {
-    return this.args.mode ?? 'embedded';
+  get format(): FileFormat {
+    return this.args.format ?? 'embedded';
   }
 
   // `@model` is the FileDef instance in the content-only case and a prebuilt
@@ -32,7 +32,7 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
   // shared projection.
   @cached
   get model(): FileViewModel {
-    return ensureFileViewModel(this.args.model, this.mode);
+    return ensureFileViewModel(this.args.model, this.format);
   }
 
   // The FileDef instance behind the shared projection, reached for the fields
@@ -57,7 +57,7 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
   }
 
   get isFitted(): boolean {
-    return this.mode === 'fitted';
+    return this.format === 'fitted';
   }
 
   // `contentPreview` is truncated to the fitted character/line budget in
@@ -78,7 +78,7 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
     {{else}}
       <div
         class='md-preview md-preview--full'
-        data-mode={{this.mode}}
+        data-mode={{this.format}}
         data-test-markdown-preview
       >
         {{#if this.hasContent}}

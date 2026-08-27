@@ -126,7 +126,7 @@ module('Integration | content-only file preview components', function (hooks) {
     let viewModel = fileViewModel(file, 'isolated', fileProfileSource(file));
     await renderComponent(
       <template>
-        <MarkdownPreview @model={{viewModel}} @mode='isolated' />
+        <MarkdownPreview @model={{viewModel}} @format='isolated' />
       </template>,
     );
     assert.dom('[data-test-markdown-preview] h1').hasText('Field Notes');
@@ -139,7 +139,7 @@ module('Integration | content-only file preview components', function (hooks) {
   test('MarkdownPreview in fitted mode renders the budgeted snippet rendition', async function (assert) {
     let { MarkdownPreview, FITTED_TEXT_LINE_BUDGET } = fileFormats;
     // A fixture longer than the fitted line budget, so this test pins that
-    // `@mode` flows through `ensureFileViewModel` into the projection-time
+    // `@format` flows through `ensureFileViewModel` into the projection-time
     // budget — not just the branch selection the class name reflects. The
     // heading occupies line one, so items 1..(budget - 1) survive the cut.
     let content = [
@@ -159,7 +159,7 @@ module('Integration | content-only file preview components', function (hooks) {
       content,
     });
     await renderComponent(
-      <template><MarkdownPreview @model={{file}} @mode='fitted' /></template>,
+      <template><MarkdownPreview @model={{file}} @format='fitted' /></template>,
     );
     assert
       .dom('[data-test-markdown-preview]')
