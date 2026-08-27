@@ -84,21 +84,48 @@ pnpm --dir=../matrix register-realm-users
 ensure_services_running
 
 echo "Waiting for realm readiness..."
+# The budget is the whole boot index of every realm this job serves, and one
+# all-priority worker walks them serially — the experiments realm alone is
+# ~1500 files. That total sits close enough to the ceiling that a slightly
+# slow runner pushes past it, so the ceiling is reported alongside the time
+# actually taken (below): "the job timed out" is not actionable, "readiness
+# took 28m against a 40m budget" is. Keep this under the enclosing step's
+# `timeout-minutes` in .github/workflows/ci.yaml, which has to be the outer
+# bound or the timeout arrives with no log line explaining it.
+READINESS_TIMEOUT_MS="${READINESS_TIMEOUT_MS:-2400000}"
+READINESS_START=$(date +%s)
+
 # Probe-only TLS relaxation: the realm-server / host now serve the
 # self-signed mkcert leaf on https://localhost:42XX and wait-on's
 # in-process axios doesn't pick up NODE_EXTRA_CA_CERTS reliably on CI
 # runners. The actual services under test still validate normally.
 NODE_TLS_REJECT_UNAUTHORIZED=0 \
-  wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ') &
+  wait-on -t "$READINESS_TIMEOUT_MS" $(echo "$READINESS_URLS" | tr '|' ' ') &
 WAIT_ON_PID=$!
 
 while kill -0 "$WAIT_ON_PID" 2>/dev/null; do
   ensure_services_running
   sleep 1
 done
-wait "$WAIT_ON_PID"
 
-echo "All realms ready."
+# The status is captured rather than left to `set -e` so the duration below
+# gets printed on a timeout too — "gave up after 40m" next to the budget is
+# what says whether the budget is wrong or the indexing is, and exiting here
+# would take the one number worth having with it.
+if wait "$WAIT_ON_PID"; then
+  READINESS_STATUS=0
+else
+  READINESS_STATUS=$?
+fi
+READINESS_ELAPSED=$(( $(date +%s) - READINESS_START ))
+READINESS_TOOK="$((READINESS_ELAPSED / 60))m$((READINESS_ELAPSED % 60))s (budget $((READINESS_TIMEOUT_MS / 60000))m, workers=${WORKER_ALL_PRIORITY_COUNT:-1})"
+
+if [ "$READINESS_STATUS" -ne 0 ]; then
+  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the all-priority workers; raise READINESS_TIMEOUT_MS or WORKER_ALL_PRIORITY_COUNT."
+  exit "$READINESS_STATUS"
+fi
+
+echo "All realms ready in ${READINESS_TOOK}."
 
 # Bring up the live test realms (`/test/`, `/node-test/`) once the dev stack is
 # serving. They run in their own realm-server process against their own

@@ -1097,8 +1097,8 @@ jobs:
     needs: [change-check, test-web-assets]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # Must exceed the 45-minute ceiling on the index step below.
-    timeout-minutes: 60
+    # Must exceed the ceiling on the index step below.
+    timeout-minutes: 70
     concurrency:
       group: cache-index-${{ github.run_id }}
       cancel-in-progress: false
@@ -1121,7 +1121,12 @@ jobs:
         run: |
           set -o pipefail
           mise run ci:cache-index 2>&1 | tee /tmp/cache-index.log
-        timeout-minutes: 45
+        # Outer bound on the task's own readiness budget (READINESS_TIMEOUT_MS,
+        # 40m) plus the test-realm wait and the dump that follow it. It has to
+        # stay the looser of the two: when the task's budget expires first it
+        # says how long it waited and against what, and a step timeout that
+        # fired first would replace that with nothing.
+        timeout-minutes: 55
       - name: Upload service logs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
