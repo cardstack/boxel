@@ -2288,9 +2288,15 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     snapshotFirstName: string,
     cardId = `${testRealmURL}Person/fadhlan`,
   ) {
+    let snapshotUrl = 'mxc://mock-server/fadhlan-snapshot';
     let matrixService = getService('matrix-service');
-    matrixService.downloadCardFileDef = async () =>
-      ({
+    let originalDownload =
+      matrixService.downloadCardFileDef.bind(matrixService);
+    matrixService.downloadCardFileDef = async (serializedFile) => {
+      if (serializedFile.url !== snapshotUrl) {
+        return originalDownload(serializedFile);
+      }
+      return {
         data: {
           id: cardId,
           type: 'card',
@@ -2299,7 +2305,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
             adoptsFrom: { module: `${testRealmURL}person`, name: 'Person' },
           },
         },
-      }) as unknown as LooseSingleCardDocument;
+      } as unknown as LooseSingleCardDocument;
+    };
     let commandRequestId = 'show-card-request-id';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2329,7 +2336,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         },
         data: {
           card: {
-            url: 'mxc://mock-server/fadhlan-snapshot',
+            url: snapshotUrl,
             sourceUrl: cardId,
             name: 'Fadhlan',
             contentType: 'application/vnd.card+json',
@@ -2343,8 +2350,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
   test<TestContextWithSave>('rendering a tool result that snapshots a card already in the store leaves the live instance untouched', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
     await waitFor('[data-test-person="Fadhlan"]');
-    this.onSave(() => {
-      assert.ok(false, 'rendering a tool result must not trigger a save');
+    let savedFirstNames: string[] = [];
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedFirstNames.push(json.data.attributes?.firstName);
     });
 
     simulateShowCardResult(roomId, 'Stale');
@@ -2367,6 +2378,29 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert
       .dom('[data-test-boxel-tool-call-result]')
       .containsText('Fadhlan', 'the tool result renders the live card');
+    assert.deepEqual(
+      savedFirstNames,
+      [],
+      'rendering the tool result does not save anything',
+    );
+
+    // Mutating the resident instance must show up in the tool result, which
+    // pins that the result renders the store's instance and not a copy, and
+    // the autosave that follows must carry the live value, not the snapshot.
+    live!.firstName = 'Fadhlan Updated';
+    await settled();
+
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText(
+        'Fadhlan Updated',
+        'the tool result follows the resident instance',
+      );
+    assert.deepEqual(
+      savedFirstNames,
+      ['Fadhlan Updated'],
+      'the autosave writes the live value',
+    );
   });
 
   test<TestContextWithSave>('rendering a tool result that snapshots a card not yet in the store loads the live card instead of the snapshot', async function (assert) {
