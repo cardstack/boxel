@@ -318,6 +318,9 @@ export default class Card extends Route {
           return isMatch;
         },
       );
+      // The base is a realm identifier from the same list read above. No form
+      // guard, and reachability by a prefix form is unverified.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       cardUrl = new URL(
         `/${cardPath}`,
         realmUrl ?? this.realm.defaultReadableRealm.path,

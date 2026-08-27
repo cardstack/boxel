@@ -61,6 +61,16 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
       code: `${IMPORT}let id = rri('@cardstack/base/card-api');\nlet u = new URL('https://example.test/lookup/' + id);`,
       filename,
     },
+    // A probe on a plain string is the ordinary use.
+    {
+      code: `let ok = URL.canParse('https://example.com/');`,
+      filename,
+    },
+    // A URL base is fine — only a branded base is not.
+    {
+      code: `${IMPORT}let u = new URL(rri('x') === rri('y') ? 'a' : 'b', 'https://example.com/');`,
+      filename,
+    },
   ],
 
   invalid: [
@@ -118,6 +128,31 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
       code: `${IMPORT}declare const maybe: ReturnType<typeof rri> | undefined;\nlet u = new URL(maybe ?? 'https://example.com/');`,
       filename,
       errors: [{ messageId: 'urlFromIdentifier' }],
+    },
+    // A branded *base* throws too: a prefix is not a valid base URL, so
+    // `new URL('x', '@scope/name/')` fails the same way.
+    {
+      code: `${IMPORT}let base = ri('@cardstack/base/');\nlet u = new URL('card-api', base);`,
+      filename,
+      errors: [{ messageId: 'urlBaseFromIdentifier' }],
+    },
+    // `URL.canParse` answers `false` for a prefix form rather than throwing.
+    {
+      code: `${IMPORT}let id = rri('@cardstack/base/card-api');\nlet relative = !URL.canParse(id);`,
+      filename,
+      errors: [{ messageId: 'urlProbeOnIdentifier' }],
+    },
+    // `URL.parse` answers `null` for the same input.
+    {
+      code: `${IMPORT}let id = rri('@cardstack/base/card-api');\nlet parsed = URL.parse(id);`,
+      filename,
+      errors: [{ messageId: 'urlProbeOnIdentifier' }],
+    },
+    // A branded base on the probe form is reported as well.
+    {
+      code: `${IMPORT}let base = ri('@cardstack/base/');\nlet ok = URL.canParse('card-api', base);`,
+      filename,
+      errors: [{ messageId: 'urlProbeOnIdentifier' }],
     },
     // Computing the value into a `const` first is the shape this appears in:
     // the local's own type is `string`, and the identifier is only visible in

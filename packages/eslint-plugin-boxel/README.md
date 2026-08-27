@@ -44,7 +44,7 @@ Then configure the rules you want to use under the rules section:
 | [no-raf-for-state](docs/rules/no-raf-for-state.md)                         | disallow `requestAnimationFrame` in Ember component files — use `scheduleOnce("afterRender", ...)` from `@ember/runloop` instead so that `settled()` in tests can track the work |     |     |
 | [no-unused-imports](docs/rules/no-unused-imports.md)                       | Remove unused import bindings while preserving module evaluation                                                                                                                 |     | 🔧  |
 | [no-url-form-base-imports](docs/rules/no-url-form-base-imports.md)         | disallow URL-form base-module import specifiers; use @cardstack/base/ with auto-fix                                                                                              | ✅  | 🔧  |
-| [no-url-from-realm-identifier](docs/rules/no-url-from-realm-identifier.md) | Disallow constructing a URL from a realm identifier, which throws for the canonical prefix form                                                                                  |     |     |
+| [no-url-from-realm-identifier](docs/rules/no-url-from-realm-identifier.md) | Disallow passing a realm identifier to a URL constructor or parse probe, which mishandles the canonical prefix form                                                              |     |     |
 | [template-missing-invokable](docs/rules/template-missing-invokable.md)     | disallow missing helpers, modifiers, or components in \<template\> with auto-fix to import them                                                                                  | ✅  | 🔧  |
 
 <!-- end auto-generated rules list -->

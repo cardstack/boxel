@@ -53,7 +53,7 @@ module.exports = {
     type: 'problem',
     docs: {
       description:
-        'Disallow constructing a URL from a realm identifier, which throws for the canonical prefix form',
+        'Disallow passing a realm identifier to a URL constructor or parse probe, which mishandles the canonical prefix form',
       category: 'Possible Errors',
       recommended: false,
     },
@@ -61,6 +61,10 @@ module.exports = {
     messages: {
       urlFromIdentifier:
         '`new URL()` on a {{brand}} does not survive a prefix-form identifier: it throws with no base, and with one it resolves the prefix as a relative path into a URL that points nowhere. Use `new RealmPaths(ri(x))` for path work, `virtualNetwork.toURL(x)` at a genuine network boundary, or ask the realm server which realm a URL belongs to. If this really is the boundary, disable this rule on the line with a reason.',
+      urlBaseFromIdentifier:
+        '`new URL()` with a {{brand}} as its base throws for a prefix-form identifier — a prefix is not a valid base URL. Resolve the base through `virtualNetwork.toURL(x)`, or use `new RealmPaths(ri(x))` and join the path in identifier space. If this really is the boundary, disable this rule on the line with a reason.',
+      urlProbeOnIdentifier:
+        '`URL.{{method}}()` on a {{brand}} answers as though a prefix-form identifier were not a URL — {{method}} returns {{falsy}} rather than throwing, so the misclassification propagates silently. Ask whether the value is a registered prefix (`virtualNetwork.isRegisteredPrefix(x)`) before asking whether it parses. If this really is the boundary, disable this rule on the line with a reason.',
     },
   },
 
@@ -171,21 +175,73 @@ module.exports = {
       }
     }
 
+    // An argument's brand, or undefined when it is absent or a spread (whose
+    // contents this rule cannot see).
+    function argBrand(arg) {
+      if (!arg || arg.type === 'SpreadElement') {
+        return undefined;
+      }
+      return brandInExpression(arg);
+    }
+
     return {
       NewExpression(node) {
         if (node.callee.type !== 'Identifier' || node.callee.name !== 'URL') {
           return;
         }
-        const arg = node.arguments[0];
-        if (!arg || arg.type === 'SpreadElement') {
-          return;
-        }
-        const brand = brandInExpression(arg);
+        // Both arguments are unsafe, for different reasons: a branded first
+        // argument throws with no base and mis-resolves with one, while a
+        // branded *base* throws outright, since a prefix is not a valid base
+        // URL. Report the first argument in preference — it is the value the
+        // author is usually reasoning about.
+        const brand = argBrand(node.arguments[0]);
         if (brand) {
           context.report({
             node,
             messageId: 'urlFromIdentifier',
             data: { brand: BRANDS[brand] },
+          });
+          return;
+        }
+        const baseBrand = argBrand(node.arguments[1]);
+        if (baseBrand) {
+          context.report({
+            node,
+            messageId: 'urlBaseFromIdentifier',
+            data: { brand: BRANDS[baseBrand] },
+          });
+        }
+      },
+
+      // `URL.canParse` and `URL.parse` share the blindness and fail more
+      // quietly than the constructor: they answer `false` / `null` for a
+      // prefix-form identifier, so a caller reads "not a URL" and carries on.
+      // A throw at least surfaces itself.
+      CallExpression(node) {
+        const callee = node.callee;
+        if (
+          callee.type !== 'MemberExpression' ||
+          callee.computed ||
+          callee.object.type !== 'Identifier' ||
+          callee.object.name !== 'URL' ||
+          callee.property.type !== 'Identifier'
+        ) {
+          return;
+        }
+        const method = callee.property.name;
+        if (method !== 'canParse' && method !== 'parse') {
+          return;
+        }
+        const brand = argBrand(node.arguments[0]) || argBrand(node.arguments[1]);
+        if (brand) {
+          context.report({
+            node,
+            messageId: 'urlProbeOnIdentifier',
+            data: {
+              brand: BRANDS[brand],
+              method,
+              falsy: method === 'canParse' ? '`false`' : '`null`',
+            },
           });
         }
       },

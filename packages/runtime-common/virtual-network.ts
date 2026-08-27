@@ -375,6 +375,9 @@ export class VirtualNetwork {
       typeof base === 'string'
     ) {
       if (base.startsWith('http://') || base.startsWith('https://')) {
+        // The enclosing branch has established that `base` is http(s), so it is
+        // a URL string rather than a prefix that would fail as a base.
+        // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
         return new URL(reference, base);
       }
       let mapped = this.resolveRRIToURL(base);
@@ -502,6 +505,9 @@ export class VirtualNetwork {
 
     // relativeTo is a URL — standard URL resolution
     if (isUrlRelativeTo) {
+      // `isUrlRelativeTo` is the branch where `relativeTo` is a URL; the
+      // prefix-form case resolves in prefix space below.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       return new URL(reference, relativeTo).href as RealmResourceIdentifier;
     }
 
