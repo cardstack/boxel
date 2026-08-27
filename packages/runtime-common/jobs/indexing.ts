@@ -40,17 +40,25 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // At the user-initiated tier the high-priority pool can serve base while the
 // sweep occupies the all-priority pool.
 //
-// Base is the only realm elevated this way. The high-priority pool is a rescue
-// lane for latency-sensitive user work, so handing it a large system index
-// would defeat the lane exactly when the backlog is worst; base is small
-// (definitions, few instances) and can't hold it for long. The other bootstrap
-// realms (catalog, skills, ...) stay at the system tier and get FIFO position
-// instead — the sweep enqueues them first (see `getFullReindexRealmUrls`).
+// Base is the only realm elevated this way, and the concurrency group bounds
+// what that costs: every job that writes a realm's index shares
+// `indexingConcurrencyGroup(realmURL)`, and the claim query skips any group
+// that already holds a live reservation, so base occupies at most one worker
+// at a time whatever pool serves it. Each further realm elevated would add
+// another group, and so another worker held off user-initiated work. The other
+// bootstrap realms (catalog, skills, ...) stay at the system tier and get FIFO
+// position instead — the sweep enqueues them first (see
+// `getFullReindexRealmUrls`).
 //
-// The elevation is only as good as the high-priority pool's existence: a
-// deployment running `--highPriorityCount=0` has no pool that floors above the
-// system tier, so base's job still waits its turn in the all-priority pool's
-// FIFO. The sweep ordering is what covers that case.
+// Two pool shapes float above the system tier and can serve this: the
+// high-priority pool (`--highPriorityCount`), flooring one tier below
+// indexing, and the dedicated index lane (`--userIndexCount` +
+// `--indexJobsOnly`), which floors at exactly this tier and registers only
+// indexing job types. The lane is the better home of the two — a
+// prerender-html sweep can neither hold it nor be held by it. A deployment
+// that runs neither has no pool above the lowest floor, so base's job waits
+// its turn in the all-priority pool's FIFO like anything else, and the sweep
+// ordering is what covers that case.
 export function systemInitiatedIndexPriority(realmURL: string): number {
   return isBaseRealm(realmURL)
     ? userInitiatedPriority
