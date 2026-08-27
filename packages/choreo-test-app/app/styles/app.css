@@ -9126,14 +9126,14 @@ html[data-gm-dragging] * {
    margin, NOT transform: the mark is a flight target, and a stylesheet
    transform on a participant is clobbered by the flight — rest measured
    WITH it, flown WITHOUT it, landing beside itself. */
-.reel-clock .reel-dock-mark {
+.reel-world .reel-dock-mark {
   position: absolute;
-  bottom: 8.6%;
-  left: 50%;
-  margin-left: -52px;
-  color: rgba(243, 236, 227, 0.85);
+  top: 63.9%;
+  left: 36.9%;
+  z-index: 4;
+  color: rgb(243 236 227 / 85%);
   font:
-    800 30px/1 'Syne',
+    800 17px/1 'Syne',
     sans-serif;
   letter-spacing: -0.02em;
 }

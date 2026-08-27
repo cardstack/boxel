@@ -300,8 +300,8 @@ module('Acceptance | feature reel transport', function (hooks) {
     // the barrier pairs chip and mark across regions, and the Move is
     // sampled mid-journey — into a world zoomed by the lockup framing
     await reel().renderAt(13.1);
-    const mark = find('.reel-dock-mark') as HTMLElement;
-    assert.ok(mark, '13.1s: the mark is received in the world');
+    const mark = find('.reel-world .reel-dock-mark') as HTMLElement;
+    assert.ok(mark, '13.1s: the mark is received in the WORLD region itself');
     assert.true(
       mark.style.transform !== '' && mark.style.transform !== 'none',
       `13.1s: the cross-plane flight is mid-journey (${mark.style.transform})`
@@ -313,7 +313,10 @@ module('Acceptance | feature reel transport', function (hooks) {
 
     // landed: the mark rests in the world, under the world's camera
     await reel().renderAt(14.5);
-    assert.ok(find('.reel-dock-mark'), '14.5s: the mark rests in the scene');
+    assert.ok(
+      find('.reel-world .reel-dock-mark'),
+      '14.5s: the mark rests in the scene, riding the push-in'
+    );
 
     // and the backward fold sends it home
     await reel().renderAt(12.0);

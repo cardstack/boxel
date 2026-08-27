@@ -62,6 +62,10 @@ export class FeatureReel extends Component {
   /** the preview's own clock: clamped per-frame deltas, so a hidden tab
    * (where rAF stalls but wall time marches) pauses instead of skipping */
   private previewClock = 0;
+  /** wall seconds spent holding the lockup after the score ends */
+  private holdClock = 0;
+  /** runs a loop wrap let go of — never re-adopted at the seam */
+  private retired = new WeakSet<ChoreoRun>();
   private lastTick = 0;
   private resolveReady!: () => void;
   private ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
@@ -337,23 +341,73 @@ export class FeatureReel extends Component {
       ? Math.min((nowMs - this.lastTick) / 1000, 0.1)
       : 0;
     this.lastTick = nowMs;
-    this.previewClock += dt;
-    if (this.previewClock >= DURATION + 1.2) {
+    // adopt replacement runs against the clock in force, THEN read the clock
+    const adoptTime = Math.min(DURATION, this.previewClock);
+    this.adoptForPreview(this.c?.run ?? null, 'score', adoptTime);
+    this.adoptForPreview(this.t?.run ?? null, 'titleScore', adoptTime);
+    this.adoptForPreview(this.b?.run ?? null, 'brandScore', adoptTime);
+    this.adoptForPreview(this.k?.run ?? null, 'clockScore', adoptTime);
+    // ONE clock: the world run's own transport IS the preview clock. The
+    // picture plays on WAAPI wall time; a separately accumulated rAF sum
+    // drifts from it under load, and then every cue, title and SMPTE
+    // frame folds against a world that is somewhere else — the 4-loop
+    // recording measured hundreds of ms of divergence. Reading the run
+    // keeps clock and picture one thing; only the closing hold (nothing
+    // is animating) and the pre-score boot accumulate deltas.
+    if (this.score) {
+      const t = this.score.time;
+      // …and the closing hold is a PAUSE, never a finished run: a run
+      // that finishes hands its values back (the pose snaps) and §3.1
+      // replays it from zero on the very next render — the film
+      // restarting mid-hold, without the fold home. Park every plane a
+      // hair before the end; the wrap's take bump compiles fresh runs.
+      if (this.holdClock === 0 && t >= DURATION - 0.06) {
+        for (const run of [
+          this.score,
+          this.titleScore,
+          this.brandScore,
+          this.clockScore,
+        ]) {
+          run?.pause();
+        }
+      }
+      this.previewClock = Math.min(t, DURATION);
+      this.holdClock = t >= DURATION - 0.06 ? this.holdClock + dt : 0;
+    } else {
+      this.previewClock += dt;
+    }
+    if (this.holdClock >= 1.2) {
       // the film loops: hold the lockup a beat, fold the commands home
       // (the lightbox closes, the composed row goes back out through the
       // demo's own delete), and a take bump compiles every plane a fresh
-      // score — the same first-render-plays-nothing rule as a new visit
+      // score — the same first-render-plays-nothing rule as a new visit.
+      // The outgoing runs are RETIRED, not merely replaced: until the
+      // fresh runs compile, a clock read from the parked old score would
+      // hand adoption the film's END as the seam's time, retiming every
+      // new plane to 14.9s — where it finishes at once and replays
+      // offset (the 4-loop protocol caught exactly this).
+      for (const run of [
+        this.score,
+        this.titleScore,
+        this.brandScore,
+        this.clockScore,
+      ]) {
+        if (run) {
+          this.retired.add(run);
+        }
+      }
+      this.score = null;
+      this.titleScore = null;
+      this.brandScore = null;
+      this.clockScore = null;
       this.previewClock = 0;
+      this.holdClock = 0;
       void this.compositor.foldTo(0, { parameters: false });
       this.take++;
       this.raf = requestAnimationFrame(this.tick);
       return;
     }
     const previewTime = Math.min(DURATION, this.previewClock);
-    this.adoptForPreview(this.c?.run ?? null, 'score', previewTime);
-    this.adoptForPreview(this.t?.run ?? null, 'titleScore', previewTime);
-    this.adoptForPreview(this.b?.run ?? null, 'brandScore', previewTime);
-    this.adoptForPreview(this.k?.run ?? null, 'clockScore', previewTime);
     this.paintClock(previewTime);
     void this.compositor.foldTo(previewTime, { parameters: false });
     if (this.root) {
@@ -376,7 +430,7 @@ export class FeatureReel extends Component {
     key: 'brandScore' | 'clockScore' | 'score' | 'titleScore',
     previewTime: number
   ) {
-    if (!run || run === this[key]) {
+    if (!run || run === this[key] || this.retired.has(run)) {
       return;
     }
     this[key] = run;
@@ -467,6 +521,17 @@ export class FeatureReel extends Component {
             class="reel-camera-target build-panel-aim"
             {{motion id="reel-build-panel-aim"}}
           ></div>
+          {{#if this.docked}}
+            {{! the mark's homecoming: a cross-plane arrival — the same
+                identity as the corner chip, received into the WORLD
+                itself. It lands under the lockup and rides the world's
+                camera through the closing push-in: an in-world flight
+                into a camera'd, mid-score region — the world-dock case }}
+            <span
+              class="reel-dock-mark"
+              {{motion id="brand" role="brand"}}
+            >Choreo</span>
+          {{/if}}
         </section>
 
         {{! the natural authoring contract: a move, then a wait. Every
@@ -474,67 +539,83 @@ export class FeatureReel extends Component {
             random-access seek would land on the pose — the workaround
             docs/external-clock-camera-seek-handoff.md records. The score
             staying Wait-based IS the proof the transport reconstructs. }}
-        <c.Sequence>
-          <c.Frame
-            @of={{c.id "reel-lightbox-scene"}}
-            @padding={{1}}
-            @duration={{0.01}}
-          />
-          <c.Wait @duration={{0.44}} />
-          <c.Frame
-            @of={{c.id "reel-lightbox-aim"}}
-            @padding={{0.82}}
-            @duration={{1}}
-            @ease={{GLIDE}}
-          />
-          {{! holds breathe: a recorded frame that is fully frozen reads as
+        <c.Parallel>
+          <c.Sequence>
+            <c.Frame
+              @of={{c.id "reel-lightbox-scene"}}
+              @padding={{1}}
+              @duration={{0.01}}
+            />
+            <c.Wait @duration={{0.44}} />
+            <c.Frame
+              @of={{c.id "reel-lightbox-aim"}}
+              @padding={{0.82}}
+              @duration={{1}}
+              @ease={{GLIDE}}
+            />
+            {{! holds breathe: a recorded frame that is fully frozen reads as
               a hang, so every hold pushes gently toward its aim in force }}
-          <c.SlowZoom @by={{1.03}} @duration={{1.2}} @ease={{GLIDE}} />
-          <c.Frame
-            @of={{c.id "reel-beacons-scene"}}
-            @padding={{1}}
-            @duration={{1.15}}
-            @ease={{GLIDE}}
-          />
-          <c.SlowZoom @by={{1.02}} @duration={{0.55}} @ease={{GLIDE}} />
-          <c.Frame
-            @of={{c.id "reel-beacon-aim"}}
-            @padding={{0.84}}
-            @duration={{1}}
-            @ease={{GLIDE}}
-          />
-          <c.SlowZoom @by={{1.03}} @duration={{1.1}} @ease={{GLIDE}} />
-          <c.Frame
-            @of={{c.id "reel-build-scene"}}
-            @padding={{1}}
-            @duration={{1.2}}
-            @ease={{GLIDE}}
-          />
-          <c.Wait @duration={{0.1}} />
-          <c.Frame
-            @of={{c.id "reel-build-logo-aim"}}
-            @padding={{0.82}}
-            @duration={{1}}
-            @ease={{GLIDE}}
-          />
-          <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
-          <c.Frame
-            @of={{c.id "reel-build-panel-aim"}}
-            @padding={{0.8}}
-            @duration={{1.05}}
-            @ease={{GLIDE}}
-          />
-          <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
-          <c.Frame
-            @of={{c.id "reel-build-logo-aim"}}
-            @padding={{0.82}}
-            @duration={{1.1}}
-            @ease={{GLIDE}}
-          />
-          {{! the hold gets its life from a push-in: 5% over the whole
+            <c.SlowZoom @by={{1.03}} @duration={{1.2}} @ease={{GLIDE}} />
+            <c.Frame
+              @of={{c.id "reel-beacons-scene"}}
+              @padding={{1}}
+              @duration={{1.15}}
+              @ease={{GLIDE}}
+            />
+            <c.SlowZoom @by={{1.02}} @duration={{0.55}} @ease={{GLIDE}} />
+            <c.Frame
+              @of={{c.id "reel-beacon-aim"}}
+              @padding={{0.84}}
+              @duration={{1}}
+              @ease={{GLIDE}}
+            />
+            <c.SlowZoom @by={{1.03}} @duration={{1.1}} @ease={{GLIDE}} />
+            <c.Frame
+              @of={{c.id "reel-build-scene"}}
+              @padding={{1}}
+              @duration={{1.2}}
+              @ease={{GLIDE}}
+            />
+            <c.Wait @duration={{0.1}} />
+            <c.Frame
+              @of={{c.id "reel-build-logo-aim"}}
+              @padding={{0.82}}
+              @duration={{1}}
+              @ease={{GLIDE}}
+            />
+            <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
+            <c.Frame
+              @of={{c.id "reel-build-panel-aim"}}
+              @padding={{0.8}}
+              @duration={{1.05}}
+              @ease={{GLIDE}}
+            />
+            <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
+            <c.Frame
+              @of={{c.id "reel-build-logo-aim"}}
+              @padding={{0.82}}
+              @duration={{1.1}}
+              @ease={{GLIDE}}
+            />
+            {{! the hold gets its life from a push-in: 5% over the whole
               lockup, toward the aim in force — the logo }}
-          <c.SlowZoom @by={{1.05}} @duration={{2.1}} @ease={{GLIDE}} />
-        </c.Sequence>
+            <c.SlowZoom @by={{1.05}} @duration={{2.1}} @ease={{GLIDE}} />
+          </c.Sequence>
+          <c.Sequence>
+            <c.Wait @duration={{12.9}} />
+            {{! the homecoming flight: the receiver pins page-true where
+                the corner chip stood (page space is the pact between
+                planes) and lands in ITS world — under the camera, inside
+                the push-in. Move-only and quick, the brand crossing's
+                lessons applied across a zoom disagreement }}
+            <c.Move
+              @of={{c.received "brand"}}
+              @size={{false}}
+              @duration={{0.45}}
+              @ease={{GLIDE}}
+            />
+          </c.Sequence>
+        </c.Parallel>
       </Choreo>
 
       {{! The brand plane: poster → corner chip is a CROSSING, not a cut.
@@ -724,43 +805,23 @@ export class FeatureReel extends Component {
             <span class="reel-clock-label">SMPTE 60</span>
             <span class="reel-clock-tc">00:00:00:00</span>
           </div>
-          {{#if this.docked}}
-            {{! the mark's homecoming: a cross-plane arrival — the same
-                identity as the corner chip, received into the clock plane
-                and perched above the timecode for the lockup }}
-            <span
-              class="reel-dock-mark"
-              {{motion id="brand" role="brand"}}
-            >Choreo</span>
-          {{/if}}
         </div>
-        <k.Parallel>
-          <k.Sequence>
-            <k.Camera @origin={{k.id "clock-face"}} @duration={{0.01}} />
-            <k.Wait @duration={{2.64}} />
-            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{0.45}} />
-            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{2.65}} />
-            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{0.5}} />
-            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{4.15}} />
-            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{0.4}} />
-            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-            <k.Wait @duration={{2.1}} />
-          </k.Sequence>
-          <k.Sequence>
-            <k.Wait @duration={{12.9}} />
-            <k.Move
-              @of={{k.received "brand"}}
-              @size={{false}}
-              @duration={{0.45}}
-              @ease={{GLIDE}}
-            />
-          </k.Sequence>
-        </k.Parallel>
+        <k.Sequence>
+          <k.Camera @origin={{k.id "clock-face"}} @duration={{0.01}} />
+          <k.Wait @duration={{2.64}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.45}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{2.65}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.5}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{4.15}} />
+          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{0.4}} />
+          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+          <k.Wait @duration={{2.1}} />
+        </k.Sequence>
       </Choreo>
     </div>
   </template>
