@@ -1,4 +1,5 @@
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
@@ -86,6 +87,24 @@ class RenderHtmlTemplate extends Component<Signature> {
     };
   }
 
+  // Inline sizing for the envelope box. The dimensions are per-capture data
+  // (they change between batch entries), so they can't live in scoped CSS.
+  // `position: fixed; top/left: 0` pins the box to the viewport origin so the
+  // screenshot path can size the viewport to the envelope and capture it whole,
+  // independent of any body margin. `overflow: hidden` clips the fitted card to
+  // the box the same way the host's fitted-card container does.
+  private get envelopeStyle() {
+    let envelope = this.args.model?.envelope;
+    if (!envelope) {
+      return undefined;
+    }
+    return htmlSafe(
+      `position: fixed; top: 0; left: 0; box-sizing: border-box; ` +
+        `width: ${envelope.width}px; height: ${envelope.height}px; ` +
+        `overflow: hidden;`,
+    );
+  }
+
   <template>
     {{! Whitespace-preserving container for markdown-format renders (CS-10781).
         `white-space: pre` keeps newlines and indentation authored in the
@@ -93,7 +112,20 @@ class RenderHtmlTemplate extends Component<Signature> {
         attribute gives the prerender extraction a tight target so surrounding
         route-template whitespace does not leak into the captured markdown.
         Only applies when format === 'markdown'; other formats are unaffected. }}
-    {{#if (eq @model.format 'markdown')}}
+    {{#if this.envelopeStyle}}
+      {{! Screenshot capture of the fitted format: render the card into a
+          fixed-size, non-scrolling box so its `@container fitted-card` queries
+          fire against the envelope rather than the viewport. The base
+          field-component wrapper (fitted-format: width/height 100%,
+          container-name: fitted-card, container-type: size) fills this box
+          and establishes the container, so we only supply the sized parent.
+          Fitted is the only format whose wrapper does this — any future
+          envelope format (e.g. atom) needs its own verified wrapper contract
+          before it can join. }}
+      <div data-render-envelope style={{this.envelopeStyle}}>
+        <@model.Component @format={{@model.format}} />
+      </div>
+    {{else if (eq @model.format 'markdown')}}
       <div data-markdown-render-container class='markdown-render-container'>
         <@model.Component @format={{@model.format}} />
       </div>

@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { profileCommand } from './commands/profile.ts';
+import { registerBrowseCommand } from './commands/browse.ts';
 import { registerConsolidateWorkspacesCommand } from './commands/consolidate-workspaces.ts';
 import { registerLintCommand } from './commands/lint.ts';
 import { registerParseCommand } from './commands/parse.ts';
@@ -127,6 +128,7 @@ Environment variables (for 'add'):
       },
     );
 
+  registerBrowseCommand(program);
   registerFileCommand(program);
   registerLintCommand(program);
   registerParseCommand(program);

@@ -422,11 +422,8 @@ module('Integration | field configuration', function (hooks) {
       .hasText('yes', 'configuration reflects initial theme value');
 
     // Change the consumed field in the linked Theme card
-    let mod = await loader.import(`${testRealmURL}reactive`);
-    let _ThemeCard = (mod as any).ThemeCard;
-    let loadedTheme = customStore.getCard(themeRef) as InstanceType<
-      typeof _ThemeCard
-    >;
+    await loader.import(`${testRealmURL}reactive`);
+    let loadedTheme = customStore.getCard(themeRef) as any;
     loadedTheme.palette = 'orange';
     (parent as any).theme = loadedTheme;
     // Trigger parent recompute and re-render

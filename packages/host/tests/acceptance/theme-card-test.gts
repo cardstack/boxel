@@ -575,6 +575,32 @@ module('Acceptance | theme-card-test', function (hooks) {
         `computed font-family includes themed value`,
       );
 
+      assert
+        .dom(`${cardSelector} [data-test-pill-preview]`)
+        .exists({ count: 6 }, 'the color system previews all pill variants');
+      assert.strictEqual(
+        computedProperty(
+          `${cardSelector} [data-test-pill-preview="primary"]`,
+          'background-color',
+        ),
+        hexToRgb(ROOT_CSS_VARS.primary),
+        'the primary pill previews the theme primary color',
+      );
+      assert.strictEqual(
+        computedProperty(
+          `${cardSelector} [data-test-pill-preview="destructive"]`,
+          'background-color',
+        ),
+        hexToRgb(ROOT_CSS_VARS.destructive),
+        'the destructive pill previews the theme destructive color',
+      );
+      assert
+        .dom(`${cardSelector} [data-test-action-sample]`)
+        .exists(
+          { count: 3 },
+          'default, primary, and secondary action samples render',
+        );
+
       await visitOperatorMode({
         stacks: [],
         codePath: themeCardId,
@@ -657,7 +683,7 @@ module('Acceptance | theme-card-test', function (hooks) {
     });
 
     test<TestContextWithSave>('applies pasted custom CSS variables', async function (assert) {
-      assert.expect(12);
+      assert.expect(11);
 
       await visitOperatorMode({
         stacks: [[{ id: softPopCardId, format: 'isolated' }]],
@@ -687,39 +713,40 @@ module('Acceptance | theme-card-test', function (hooks) {
         deferred.fulfill();
       });
 
-      assert.dom('[data-test-css-field]').containsText('No CSS defined');
-
-      await fillIn('[data-test-custom-css-variables]', SOFT_POP_VARS);
       assert
-        .dom('[data-test-root-vars] [data-test-var-value="secondary"]')
-        .containsText('oklch(0.7038 0.1230 182.5025)');
+        .dom('[data-test-dashboard-empty-state]')
+        .exists('a theme-less isolated view shows the empty state');
+
+      await click('[data-test-edit-button]');
+      await fillIn('[data-test-custom-css-variables]', SOFT_POP_VARS);
+      await click('[data-test-import-theme]');
+
+      assert
+        .dom(
+          '[data-test-root-vars] [data-test-field="secondary"] [data-test-color-text-input]',
+        )
+        .hasValue('oklch(0.7038 0.1230 182.5025)');
       assert
         .dom('[data-test-css-field]')
         .containsText('--background: oklch(0.9789 0.0082 121.6272);');
       assert
         .dom('[data-test-css-field]')
         .containsText('--background: oklch(0 0 0);');
+      assert
+        .dom(
+          '[data-test-root-vars] [data-test-field="accent"] [data-test-color-text-input]',
+        )
+        .hasValue('oklch(0.7686 0.1647 70.0804)');
 
       await click('[data-test-mode="toggle-dark"]');
       assert
-        .dom('[data-test-dark-vars] [data-test-var-value="muted"]')
-        .containsText('oklch(0.3211 0 0)');
-
-      await click('[data-test-edit-button]');
-
-      assert
         .dom(
-          '[data-test-field="rootVariables"] [data-test-field="accent"] [data-test-swatch="oklch(0.7686 0.1647 70.0804)"]',
+          '[data-test-dark-vars] [data-test-field="muted"] [data-test-color-text-input]',
         )
-        .exists();
+        .hasValue('oklch(0.3211 0 0)');
       assert
         .dom(
-          '[data-test-field="rootVariables"] [data-test-field="accent"] [data-test-color-text-input]',
-        )
-        .hasValue('oklch(0.7686 0.1647 70.0804)');
-      assert
-        .dom(
-          '[data-test-field="darkModeVariables"] [data-test-field="accent"] [data-test-color-text-input]',
+          '[data-test-dark-vars] [data-test-field="accent"] [data-test-color-text-input]',
         )
         .hasValue('oklch(0.8790 0.1534 91.6054)');
     });
@@ -768,48 +795,54 @@ module('Acceptance | theme-card-test', function (hooks) {
       });
 
       assert
-        .dom('[data-test-root-vars] [data-test-var-value="background"]')
+        .dom('[data-test-root-vars] [data-test-var-value="--background"]')
         .containsText('#0a0f23');
       assert
-        .dom('[data-test-root-vars] [data-test-var-value="card"]')
+        .dom('[data-test-root-vars] [data-test-var-value="--card"]')
         .containsText('#1a1f3a');
       await click('[data-test-mode="toggle-dark"]');
       assert
-        .dom('[data-test-dark-vars] [data-test-var-value="background"]')
+        .dom('[data-test-dark-vars] [data-test-var-value="--background"]')
         .containsText('#050813');
       await click('[data-test-mode="toggle-light"]');
 
+      await click('[data-test-edit-button]');
       await fillIn(
         '[data-test-custom-css-variables]',
         ':root { --background: #455A68; --foreground: #FCD2A7; } .dark { --card: black; }',
       );
+      await click('[data-test-import-theme]');
 
       assert
-        .dom('[data-test-root-vars] [data-test-var-value="background"]')
-        .containsText('#455A68', 'value is updated');
+        .dom(
+          '[data-test-root-vars] [data-test-field="background"] [data-test-color-text-input]',
+        )
+        .hasValue('#455A68', 'value is updated');
       assert
-        .dom('[data-test-root-vars] [data-test-var-value="card"]')
-        .containsText('#1a1f3a', 'existing value remains');
+        .dom(
+          '[data-test-root-vars] [data-test-field="card"] [data-test-color-text-input]',
+        )
+        .hasValue('#1a1f3a', 'existing value remains');
       assert
         .dom('[data-test-css-field]')
         .containsText('--background: #455A68;');
       assert.dom('[data-test-css-field]').containsText('--card: #1a1f3a;');
 
-      await click('[data-test-edit-button]');
-
       assert
         .dom(
-          '[data-test-field="rootVariables"] [data-test-field="foreground"] [data-test-color-text-input]',
+          '[data-test-root-vars] [data-test-field="foreground"] [data-test-color-text-input]',
         )
         .hasValue('#FCD2A7', 'foreground is updated in edit mode');
+
+      await click('[data-test-mode="toggle-dark"]');
       assert
         .dom(
-          '[data-test-field="darkModeVariables"] [data-test-field="card"] [data-test-color-text-input]',
+          '[data-test-dark-vars] [data-test-field="card"] [data-test-color-text-input]',
         )
         .hasValue('black', 'dark card background is updated in edit mode');
       assert
         .dom(
-          '[data-test-field="darkModeVariables"] [data-test-field="background"] [data-test-color-text-input]',
+          '[data-test-dark-vars] [data-test-field="background"] [data-test-color-text-input]',
         )
         .hasValue('#050813', 'existing value remains in edit mode');
     });
@@ -845,7 +878,7 @@ module('Acceptance | theme-card-test', function (hooks) {
       });
 
       await fillIn(
-        '[data-test-field="rootVariables"] [data-test-field="foreground"] [data-test-boxel-input]',
+        '[data-test-root-vars] [data-test-field="foreground"] [data-test-boxel-input]',
         NEW_FOREGROUND,
       );
 
@@ -863,20 +896,31 @@ module('Acceptance | theme-card-test', function (hooks) {
         stacks: [[{ id: themeCardId, format: 'isolated' }]],
       });
       assert
-        .dom('[data-test-var-value="accent"] [data-test-swatch="#ffb347"]')
+        .dom('[data-test-var-value="--accent"] [data-test-swatch="#ffb347"]')
         .exists();
+      assert
+        .dom('[data-test-reset]')
+        .doesNotExist('the reset button is an edit mode tool');
 
+      await click('[data-test-edit-button]');
       await click('[data-test-reset]');
-      assert
-        .dom('[data-test-var-value="accent"]')
-        .containsText('/* not set */');
       assert.dom('[data-test-css-field]').containsText('/* No CSS defined */');
+      assert
+        .dom('[data-test-custom-css-variables]')
+        .exists('the import editor remains available in edit mode');
 
-      await click('[data-test-mode="toggle-dark"]');
+      await visitOperatorMode({
+        stacks: [[{ id: themeCardId, format: 'isolated' }]],
+      });
       assert
-        .dom('[data-test-var-value="accent"]')
-        .containsText('/* not set */');
-      assert.dom('[data-test-css-field]').containsText('/* No CSS defined */');
+        .dom('[data-test-dashboard-empty-state]')
+        .exists('a reset theme shows the isolated empty state');
+      assert
+        .dom('[data-test-root-vars]')
+        .doesNotExist('the visualizer is hidden once the theme is reset');
+      assert
+        .dom('[data-test-custom-css-variables]')
+        .doesNotExist('the importer is an edit mode tool');
     });
   });
 

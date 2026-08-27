@@ -7,10 +7,16 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  isScreenshotFormat,
+  parseScreenshotCaptureSpec,
+  SCREENSHOT_FORMATS,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
+  type ScreenshotCaptureSpecParse,
+  type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -302,7 +308,11 @@ export function buildPrerenderApp(options: {
     affinityValue: string;
     realm: string;
     url: string;
-    format: 'isolated' | 'embedded';
+    format: ScreenshotFormat;
+    // Pass-through of the caller's per-capture overrides. Already validated by
+    // the realm-server handler; the capture path guards the one hard invariant
+    // (fullPage + clip) defensively.
+    captureSpec?: ScreenshotCaptureSpec;
   };
 
   type RouteParseResult<A extends RouteBaseArgs> = {
@@ -453,7 +463,17 @@ export function buildPrerenderApp(options: {
     let rawFormat = attrs.format;
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
-    let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    let formatIsValid = isScreenshotFormat(rawFormat);
+    // Same strict parse + bounds as the realm-server's POST /_screenshot-card
+    // body: this route is its own HTTP surface, and an unvalidated spec here
+    // would reach `page.setViewport` on a pooled page with none of the cost
+    // caps applied. The parse also normalizes (defaults elided, empty spec
+    // -> null), so the capture path sees one canonical shape from every
+    // caller. It is format-aware (fitted requires an envelope), so it
+    // runs only once the format itself is valid.
+    let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
+      ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
+      : { captureSpec: null };
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },
@@ -468,6 +488,9 @@ export function buildPrerenderApp(options: {
         name: 'format',
       },
     ]);
+    if (captureSpecParse.error !== undefined) {
+      missing = [...missing, 'captureSpec'];
+    }
     return {
       args:
         missing.length > 0
@@ -478,13 +501,18 @@ export function buildPrerenderApp(options: {
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
-              format: rawFormat as 'isolated' | 'embedded',
+              format: rawFormat as ScreenshotFormat,
               renderOptions,
+              ...(captureSpecParse.captureSpec
+                ? { captureSpec: captureSpecParse.captureSpec }
+                : {}),
               ...(priority !== undefined ? { priority } : {}),
             },
       missing,
       missingMessage:
-        'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+        captureSpecParse.error !== undefined
+          ? captureSpecParse.error
+          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${SCREENSHOT_FORMATS.join('|')})`,
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${
@@ -772,6 +800,7 @@ export function buildPrerenderApp(options: {
           url: args.url,
           auth: args.auth,
           format: args.format,
+          ...(args.captureSpec ? { captureSpec: args.captureSpec } : {}),
           priority: args.priority,
           signal,
         }),
