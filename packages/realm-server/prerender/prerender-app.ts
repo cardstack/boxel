@@ -1327,6 +1327,13 @@ export function createPrerenderHttpServer(options?: {
   // Compare the manager's current host-shell token against the one we warmed
   // against. A change means the host was redeployed, so recycle the browser
   // (fire-and-forget; the heartbeat itself must not block on the restart).
+  //
+  // This can fire on the very first heartbeat, while the pool's initial
+  // standby warm is still running: the heartbeat loop starts as soon as the
+  // server is listening, and that warm is deliberately not awaited. The
+  // restart serializes behind the warm rather than racing it — `closeAll`
+  // awaits any in-flight standby refill before closing — so pages the warm is
+  // mid-way through creating can't outlive the browser the restart replaces.
   function reconcileHostShell(hash: string | null) {
     if (draining || recyclingForHostChange) {
       return;
