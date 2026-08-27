@@ -2,23 +2,7 @@
 
 Release history for `@cardstack/boxel-cli` (npm) and the `boxel-cli` Claude Code plugin. **Stable cuts only** — per-merge unstable releases are documented on the GitHub Releases page (`boxel-cli-v*-unstable.*` tags) and on npm under the `unstable` dist-tag.
 
-Release entries below the insertion marker are written by CI on each stable
-promotion — most recent first.
-
-## Behavior notes
-
-<!-- Kept ABOVE the insertion marker below, so a stable cut's generated entry
-     never lands in the middle of it. -->
-
-CLI-visible behavior whose implementation lives outside `packages/boxel-cli`,
-where a release bullet naming the change would not say what it means for the
-CLI.
-
-- `boxel test` compiles card source with the realm's own pipeline, and that
-  pipeline reads no Babel configuration file. A `babel.config.*` or `.babelrc`
-  in the project the CLI runs against is not merged into the compile. Which
-  syntax compiles is a property of the realm's declared plugin list, so card
-  source compiles identically under the CLI and under a realm-server.
+Entries below are written by CI on each stable promotion — most recent first.
 
 <!-- New entries are inserted directly below this line by the stable job in .github/workflows/boxel-cli-publish.yml. -->
 

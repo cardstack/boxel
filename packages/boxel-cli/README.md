@@ -78,6 +78,12 @@ The copies are generated output, rewritten on every run: edit a skill in the rea
 
 Set `BOXEL_DISABLE_CLAUDE_SKILLS_SYNC=1`, or pass `--no-claude-skills`, to skip it.
 
+### How `boxel test` compiles card source
+
+`boxel test` compiles the `.gts` and `.ts` under a mounted realm with the realm's own pipeline, so a card compiles the same way here as it does when a realm server serves it.
+
+That pipeline reads no Babel configuration file. A `babel.config.*` or `.babelrc` in the project you run `boxel` against is not merged into the compile, and adding one cannot change which syntax compiles. Which syntax a realm accepts is a property of the pipeline's own plugin list — a card that compiled only under a project-local Babel configuration would fail as soon as anything else served it.
+
 ## Development
 
 ### Building

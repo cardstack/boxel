@@ -1205,25 +1205,45 @@ module('Unit | rendering protocol | module classification', function () {
       // marks the graph unavailable — which fails closed, on a module the realm
       // transpiles without complaint because TypeScript erased the import.
       //
-      // What keeps this narrow is that the specifiers a card can name are the
-      // ones its authoring environment resolves: a realm module, a trusted
-      // package, or a library the runtime shims — and the last two are graph
-      // leaves that are never resolved at all.
+      // This is not a hypothetical shape. A card can name a bare specifier that
+      // exists only as types in its author's tooling: a types-only package, a
+      // library whose runtime value the card imports from a CDN URL a line
+      // away, or a submodule of a package the runtime shims — a shim registry
+      // matches whole identifiers, so shimming `ember-animated` does not make
+      // `ember-animated/-private/transition-context` a leaf. None of those
+      // resolves, and each fails the graph of an otherwise working card.
+      //
+      // The fixture is the CDN shape, which is the one that looks most like
+      // working code: the value is imported from a URL the runtime serves, and
+      // only the type comes from the bare name.
+      //
+      // What it costs is more than the availability flag. A module reporting an
+      // unresolvable specifier contributes NO edges at all, so the runtime
+      // import beside the type-only one is discarded with it — the graph a card
+      // like this yields names nothing it actually loads.
       let realm = new TestRealm({});
       let entry = realm.url(entryPath);
       let result = await classifierFor(realm).classifyModule(
         entry,
-        `import type { Scene } from 'three';\nexport class C { s?: Scene; }`,
+        [
+          `import { Chess } from 'https://cdn.example/chess.js/+esm';`,
+          `import type { Chess as ChessType } from 'chess.js';`,
+          `export const game: ChessType = new Chess();`,
+        ].join('\n'),
       );
 
-      assert.deepEqual([...result.moduleGraph], [entry], 'nothing was reached');
+      assert.deepEqual(
+        [...result.moduleGraph],
+        [entry],
+        'the resolvable runtime edge beside it is discarded too',
+      );
       assert.false(result.moduleGraphComplete, 'so the graph is unavailable');
       // Which of the two failure spellings appears is the resolver's: one
       // that refuses a bare specifier outright reports `module-resolve:`, and
       // one that answers with a URL nothing serves reports `module-load:`.
       assert.strictEqual(
         result.reason,
-        'module-resolve:three',
+        'module-resolve:chess.js',
         'and names the specifier it could not place',
       );
     });

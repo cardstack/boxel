@@ -32,28 +32,21 @@
 // directory name instead, so two packages can report the same version while one
 // of them is running different code.
 
-import { readFileSync, readdirSync, realpathSync } from 'node:fs';
-import type { Dirent } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dependency = 'content-tag';
 
-// Deep enough for every workspace glob this repo declares — `packages/*`,
-// `packages/boxel-ui/docs-app`, `vendor/*` — with room for one more level, so a
-// glob added to `pnpm-workspace.yaml` does not silently fall outside the scan.
-const maxDepth = 4;
-const skipDirectories = new Set(['node_modules', 'dist', 'declarations']);
-
 function readJSON(path: string): Record<string, any> {
   return JSON.parse(readFileSync(path, 'utf8'));
 }
 
-// Every field a package can declare a dependency under. A declaration this
-// missed would drop the package out of the comparison entirely, which is the
-// silent pass this check exists to prevent — so the set is the whole of them
-// rather than the two a workspace package usually uses.
+// Every field a package can declare a dependency under, and every declaration
+// is compared rather than the first one found: a package naming content-tag
+// under two fields has two ranges, and comparing one of them would leave the
+// other free to say anything.
 const dependencyFields = [
   'dependencies',
   'devDependencies',
@@ -61,54 +54,154 @@ const dependencyFields = [
   'optionalDependencies',
 ] as const;
 
-function declaredRange(manifest: Record<string, any>): string | undefined {
+function declaredRanges(
+  manifest: Record<string, any>,
+): { field: string; range: string }[] {
+  let declarations: { field: string; range: string }[] = [];
   for (let field of dependencyFields) {
     let range = manifest[field]?.[dependency];
     if (range !== undefined) {
-      return range;
+      declarations.push({ field, range });
     }
   }
-  return undefined;
+  return declarations;
 }
 
 /**
- * Every package that declares it, discovered by walking the tree rather than
- * from a list: a new declarer joining is the case this check exists for, and
- * both a hand-maintained list and a scan of one directory level would omit it.
+ * The workspace's own package globs, read from `pnpm-workspace.yaml` rather
+ * than restated here: a glob added there has to bring its packages into this
+ * comparison, and a hand-maintained list would not.
+ *
+ * Parsed by hand because these scripts run under node's type stripping with no
+ * dependencies. The block is a flat YAML sequence of scalars, which is the only
+ * shape pnpm accepts for it.
  */
-function declaringPackages(directory: string, depth = 0): string[] {
-  let found: string[] = [];
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(directory, { withFileTypes: true });
-  } catch {
-    return found;
+function workspaceGlobs(): string[] {
+  let lines = readFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'utf8').split(
+    '\n',
+  );
+  let start = lines.findIndex((line) => /^packages:\s*$/.test(line));
+  if (start === -1) {
+    throw new Error(
+      'pnpm-workspace.yaml declares no `packages:` block; this check cannot discover what to compare',
+    );
   }
-  for (let entry of entries) {
-    if (entry.name === 'package.json' && entry.isFile() && depth > 0) {
-      try {
-        if (
-          declaredRange(readJSON(join(directory, entry.name))) !== undefined
-        ) {
-          found.push(relative(repoRoot, directory).split(sep).join('/'));
-        }
-      } catch {
-        // A manifest that does not parse is not this check's to report.
+  let globs: string[] = [];
+  for (let line of lines.slice(start + 1)) {
+    let entry = line.match(/^\s+-\s+(.+?)\s*$/);
+    if (!entry) {
+      // The first line that is not a sequence item ends the block. A blank line
+      // inside it would end it early, which YAML does not allow here anyway.
+      if (line.trim() === '' || /^\s/.test(line)) {
+        continue;
       }
+      break;
     }
-    if (
-      entry.isDirectory() &&
-      !entry.name.startsWith('.') &&
-      !skipDirectories.has(entry.name) &&
-      depth < maxDepth
-    ) {
-      found.push(...declaringPackages(join(directory, entry.name), depth + 1));
-    }
+    globs.push(entry[1]!.replace(/^["']|["']$/g, ''));
   }
-  return found;
+  return globs;
 }
 
-const packages = declaringPackages(repoRoot).sort();
+/**
+ * Directories a glob names, relative to the repo root. Supports the segment
+ * wildcards pnpm's workspace globs use — `*` within one path segment and `**`
+ * across any number of them — and throws on anything else rather than quietly
+ * matching nothing, because a glob this failed to expand would drop its
+ * packages out of the comparison silently.
+ */
+function expandGlob(glob: string): string[] {
+  let segments = glob.split('/').filter((segment) => segment.length > 0);
+  let matches = [''];
+  for (let [index, segment] of segments.entries()) {
+    let next: string[] = [];
+    if (segment === '**') {
+      let descend = (dir: string) => {
+        next.push(dir);
+        for (let entry of childDirectories(dir)) {
+          descend(join(dir, entry));
+        }
+      };
+      matches.forEach(descend);
+    } else if (segment.includes('*')) {
+      let pattern = new RegExp(
+        `^${segment.split('*').map(escapeRegExp).join('[^/]*')}$`,
+      );
+      for (let dir of matches) {
+        for (let entry of childDirectories(dir)) {
+          if (pattern.test(entry)) {
+            next.push(join(dir, entry));
+          }
+        }
+      }
+    } else {
+      if (/[?[\]{}!+@()]/.test(segment)) {
+        throw new Error(
+          `pnpm-workspace.yaml declares \`${glob}\`, whose \`${segment}\` is a pattern this check cannot expand — teach it that syntax rather than leaving those packages uncompared`,
+        );
+      }
+      for (let dir of matches) {
+        if (existsSync(join(repoRoot, dir, segment))) {
+          next.push(join(dir, segment));
+        }
+      }
+    }
+    matches = next;
+    if (matches.length === 0) {
+      break;
+    }
+    void index;
+  }
+  return matches.filter((dir) => dir.length > 0);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function childDirectories(dir: string): string[] {
+  try {
+    return readdirSync(join(repoRoot, dir), { withFileTypes: true })
+      .filter(
+        (entry) =>
+          entry.isDirectory() &&
+          entry.name !== 'node_modules' &&
+          !entry.name.startsWith('.'),
+      )
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+// Every workspace package that declares it, discovered from the globs rather
+// than listed: a new declarer joining one of them is the case this check exists
+// for, and a hand-maintained list would omit it. Bounding discovery to the
+// globs is what keeps the set equal to the packages that can HAVE an installed
+// copy — a manifest outside the workspace (a generated bundle, a config
+// directory carrying its own package.json) never gets a `node_modules` beside
+// it, so comparing one could only ever report a missing install.
+const included = new Set<string>();
+const excluded = new Set<string>();
+for (let glob of workspaceGlobs()) {
+  let negated = glob.startsWith('!');
+  let target = negated ? excluded : included;
+  for (let dir of expandGlob(negated ? glob.slice(1) : glob)) {
+    target.add(dir.split(sep).join('/'));
+  }
+}
+
+const packages = [...included]
+  .filter((pkg) => !excluded.has(pkg))
+  .filter((pkg) => {
+    try {
+      return (
+        declaredRanges(readJSON(join(repoRoot, pkg, 'package.json'))).length > 0
+      );
+    } catch {
+      return false;
+    }
+  })
+  .sort();
 
 if (packages.length < 2) {
   console.error(
@@ -123,10 +216,11 @@ const installedPath = new Map<string, string>();
 const offenders: string[] = [];
 
 for (let pkg of packages) {
-  declared.set(
-    pkg,
-    declaredRange(readJSON(join(repoRoot, pkg, 'package.json')))!,
-  );
+  for (let { field, range } of declaredRanges(
+    readJSON(join(repoRoot, pkg, 'package.json')),
+  )) {
+    declared.set(`${pkg} (${field})`, range);
+  }
 
   // Read through the package's own node_modules rather than resolving from
   // here: under pnpm's isolated layout that directory IS what the package's
@@ -148,27 +242,33 @@ for (let pkg of packages) {
   }
 }
 
-function disagreement(label: string, values: Map<string, string>): string[] {
+function disagreement(
+  label: string,
+  noun: string,
+  values: Map<string, string>,
+): string[] {
   let distinct = new Set(values.values());
   if (distinct.size <= 1) {
     return [];
   }
   return [
-    `${distinct.size} different ${label} ${dependency}s across ${values.size} packages:\n` +
-      [...values].map(([pkg, value]) => `  ${pkg}: ${value}`).join('\n'),
+    `${distinct.size} different ${label} ${dependency}s across ${values.size} ${noun}:\n` +
+      [...values].map(([key, value]) => `  ${key}: ${value}`).join('\n'),
   ];
 }
 
 offenders.push(
-  ...disagreement('declared', declared),
-  ...disagreement('installed', installedVersion),
-  ...disagreement('resolved', installedPath),
+  // The declared map is keyed by declaration rather than by package, because a
+  // package naming content-tag under two fields has two of them.
+  ...disagreement('declared', 'declarations', declared),
+  ...disagreement('installed', 'packages', installedVersion),
+  ...disagreement('resolved', 'packages', installedPath),
 );
 
 console.log(
   `${dependency} parity: ` +
     [...installedVersion]
-      .map(([pkg, version]) => `${pkg} ${version} (${declared.get(pkg)})`)
+      .map(([pkg, version]) => `${pkg} ${version}`)
       .join(', '),
 );
 
