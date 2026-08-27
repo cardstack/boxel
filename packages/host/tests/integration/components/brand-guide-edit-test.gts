@@ -1,4 +1,4 @@
-import type { RenderingTestContext } from '@ember/test-helpers';
+import { click, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -10,6 +10,7 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as BrandGuideModule from '@cardstack/base/brand-guide';
+import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
 
 module('Integration | brand-guide | edit view', function (hooks) {
   setupRenderingTest(hooks);
@@ -19,6 +20,7 @@ module('Integration | brand-guide | edit view', function (hooks) {
   let BrandGuide: typeof BrandGuideModule.default;
   let CompoundColorField: typeof BrandGuideModule.CompoundColorField;
   let CustomCssVariable: typeof BrandGuideModule.CustomCssVariable;
+  let ThemeVarField: typeof StructuredThemeVarsModule.default;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -28,7 +30,18 @@ module('Integration | brand-guide | edit view', function (hooks) {
     BrandGuide = brandGuideModule.default;
     CompoundColorField = brandGuideModule.CompoundColorField;
     CustomCssVariable = brandGuideModule.CustomCssVariable;
+    ThemeVarField = (
+      await loader.import<typeof StructuredThemeVarsModule>(
+        '@cardstack/base/structured-theme-variables',
+      )
+    ).default;
   });
+
+  function renderedSectionIds(element: Element) {
+    return [...element.querySelectorAll('[data-test-brand-guide-section]')].map(
+      (el) => el.getAttribute('data-test-brand-guide-section'),
+    );
+  }
 
   test('edit view shows every editable section with importer and reset, hiding display-only sections', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide();
@@ -82,6 +95,47 @@ module('Integration | brand-guide | edit view', function (hooks) {
     assert
       .dom('[data-test-brand-image-attachment-var]')
       .doesNotExist('read-only attachment listing is not rendered in edit');
+  });
+
+  test('theme-less edit view leads with the import and generated css sections', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide();
+    let element = await renderCard(loader, card, 'edit');
+    assert.deepEqual(
+      renderedSectionIds(element).slice(0, 2),
+      ['import-css', 'view-code'],
+      'the import workflow leads when the card has no theme',
+    );
+
+    let themedCard = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+    });
+    element = await renderCard(loader, themedCard, 'edit');
+    assert.strictEqual(
+      renderedSectionIds(element)[0],
+      'brand-palette',
+      'a themed card keeps the guide order',
+    );
+  });
+
+  test('reset clears custom css variables along with the theme variables', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+      customCssVariables: [
+        new CustomCssVariable({ name: 'spacingSm', value: '0.5rem' }),
+      ],
+    });
+    await renderCard(loader, card, 'edit');
+
+    await click('[data-test-reset]');
+    assert.strictEqual(
+      card.customCssVariables.length,
+      0,
+      'custom css variables are cleared',
+    );
+    assert.notOk(
+      card.rootVariables?.background,
+      'theme variables are cleared too',
+    );
   });
 
   test('isolated view has no importer or reset button', async function (this: RenderingTestContext, assert) {

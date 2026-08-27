@@ -763,9 +763,11 @@ export class NavBar extends GlimmerComponent<{
     this.navGrid = el;
     let update = () => this.updateScrollState(el);
     el.addEventListener('scroll', update, { passive: true });
+    // the initial measurement comes from the ResizeObserver's guaranteed
+    // async first delivery; a synchronous update here would write tracked
+    // state already consumed by this render (a backtracking re-render)
     let observer = new ResizeObserver(update);
     observer.observe(el);
-    update();
     return () => {
       el.removeEventListener('scroll', update);
       observer.disconnect();
