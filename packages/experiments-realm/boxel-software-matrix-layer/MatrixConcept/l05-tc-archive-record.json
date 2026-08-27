@@ -8,19 +8,19 @@
       "concept": "Archive Record",
       "symbol": "AR",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/archive-record.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Archive",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "Quest Log stage 1d: built 2026-08-26 — single writer for recordStatus→Archived, canTransition-gated. In-use example lands with Quest Log stage 2 (quest archiving). UI exercise deferred to stage 2.",
+      "notes": "Quest Log stage 1d: built 2026-08-26 — single writer for recordStatus→Archived, canTransition-gated. In-use example lands with Quest Log stage 2 (quest archiving). UI exercise deferred to stage 2. | Stage 2 landed 2026-08-26: wired to the quest page Archive button; example is the natural target (a completed, archivable quest).",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/archive-record",
       "specTarget": "shared block",
-      "consumers": null,
+      "consumers": "quest-log/quest",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -37,9 +37,9 @@
       "specUsageRef": null,
       "verifiedAt": "2026-08-26T08:27:39.000Z",
       "specKind": "command",
-      "specExampleCount": 0,
+      "specExampleCount": 1,
       "specReadmeChars": 1164,
-      "specExampleIds": null
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/sourdough-basics\"]"
     },
     "meta": {
       "adoptsFrom": {

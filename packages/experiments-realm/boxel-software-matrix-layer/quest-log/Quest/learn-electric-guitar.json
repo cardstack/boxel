@@ -1,0 +1,59 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Learn Electric Guitar",
+      "description": "My journey to play rock songs — chords first, then the pentatonic box, then a whole song start to finish.",
+      "category": "Music",
+      "icon": "🎸",
+      "status": "Active",
+      "recordStatus": "Active",
+      "createdAt": "2026-05-14T09:00:00.000Z",
+      "updatedAt": "2026-08-25T20:10:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest",
+        "name": "Quest"
+      }
+    },
+    "relationships": {
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/learn-basic-chords"
+        }
+      },
+      "tasks.1": {
+        "links": {
+          "self": "../QuestTask/learn-pentatonic-scale"
+        }
+      },
+      "tasks.2": {
+        "links": {
+          "self": "../QuestTask/learn-first-song"
+        }
+      },
+      "badges.0": {
+        "links": {
+          "self": "../Badge/first-chords"
+        }
+      },
+      "badges.1": {
+        "links": {
+          "self": "../Badge/scale-explorer"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

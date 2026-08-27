@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Quick warmup",
+      "startedAt": "2026-08-25T08:15:00.000Z",
+      "duration": {
+        "hours": 0,
+        "minutes": 15
+      },
+      "notes": "Fifteen minutes before work. G→C still catches on the ring finger.",
+      "achievements": "G→C transition drills",
+      "mood": "😐",
+      "energy": 3,
+      "createdAt": "2026-08-25T08:32:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/learn-electric-guitar"
+        }
+      },
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/chord-transitions"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

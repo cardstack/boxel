@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Watercolor Mornings",
+      "description": "Ten quiet minutes with a brush before work.",
+      "category": "Art",
+      "icon": "🎨",
+      "status": "Paused",
+      "recordStatus": "Archived",
+      "createdAt": "2026-04-05T10:00:00.000Z",
+      "updatedAt": "2026-06-10T07:45:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest",
+        "name": "Quest"
+      }
+    },
+    "relationships": {
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/watercolor-washes"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

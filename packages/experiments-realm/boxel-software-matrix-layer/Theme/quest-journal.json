@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Quest Journal",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      ],
+      "cssVariables": ":root {\n  --background: #f6efe1;\n  --foreground: #38301f;\n  --card: #fdf8ec;\n  --card-foreground: #38301f;\n  --popover: #fdf8ec;\n  --popover-foreground: #38301f;\n  --primary: #9a6b1f;\n  --primary-foreground: #fdf8ec;\n  --secondary: #efe5cd;\n  --secondary-foreground: #38301f;\n  --muted: #ece0c6;\n  --muted-foreground: #7d7057;\n  --accent: #e8d9b5;\n  --accent-foreground: #38301f;\n  --destructive: #a03a2e;\n  --destructive-foreground: #fdf4ee;\n  --border: #ddcfab;\n  --input: #ddcfab;\n  --ring: #9a6b1f;\n  --radius: 0.625rem;\n  --font-sans: 'Source Sans 3', system-ui, sans-serif;\n  --font-heading: 'Fraunces', Georgia, serif;\n  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;\n}",
+      "cardDescription": "Warm parchment, ink-brown type, achievement gold — the cozy adventure-journal theme for Quest Log.",
+      "cardThumbnailURL": null,
+      "cardInfo": {
+        "name": "Quest Journal",
+        "summary": "Warm parchment, ink-brown type, achievement gold — the cozy adventure-journal theme for Quest Log.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/card-api",
+        "name": "Theme"
+      }
+    }
+  }
+}

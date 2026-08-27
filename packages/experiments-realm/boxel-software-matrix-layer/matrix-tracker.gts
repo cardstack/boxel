@@ -109,7 +109,9 @@ export class MatrixTracker extends CardDef {
             return ref
               ? {
                   filter: { type: ref },
-                  sort: [{ by: 'concept', on: ref }],
+                  // cardURL tiebreaker: six concept names repeat across lanes,
+                  // and an unstable tie straddling a page boundary loses a row.
+                  sort: [{ by: 'concept', on: ref }, { by: 'cardURL' }],
                   page: { number: i, size: PAGE_SIZE },
                 }
               : undefined;
@@ -441,6 +443,10 @@ export class MatrixTracker extends CardDef {
     @action drillVerified() {
       this.drillSpecState('verified');
     }
+    @action drillAll() {
+      this.resetFilters();
+      this.activeTab = 'concepts';
+    }
     @action drillConsumed() {
       // Consumed/reused are not grid filters; the quality buckets carry
       // them — Solid and Gold both require consumption.
@@ -501,6 +507,17 @@ export class MatrixTracker extends CardDef {
 
         {{#if this.showOverview}}
         <section class='stat-band'>
+          <button
+            type='button'
+            class='stat-cell'
+            {{on 'click' this.drillAll}}
+          >
+            <Stat
+              @label='Matrix'
+              @value={{this.total}}
+              @hint='{{this.blockTotal}} blocks · {{this.outOfScopeCount}} out of scope'
+            />
+          </button>
           <button
             type='button'
             class='stat-cell'
@@ -1271,3 +1288,4 @@ function getCardOf(row: Row): CardDef {
 function isScored(score: number): boolean {
   return score >= 0;
 }
+

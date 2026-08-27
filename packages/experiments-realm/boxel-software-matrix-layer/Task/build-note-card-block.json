@@ -12,7 +12,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../task",
-        "name": "default"
+        "name": "Task"
       }
     }
   }

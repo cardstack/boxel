@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "First Chords",
+      "description": "I can play G, C and D cleanly — the campfire trinity.",
+      "icon": "🎸",
+      "claimedAt": "2026-06-02T20:00:00.000Z",
+      "isVisible": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../badge",
+        "name": "Badge"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/learn-electric-guitar"
+        }
+      },
+      "relatedTasks.0": {
+        "links": {
+          "self": "../QuestTask/g-major"
+        }
+      },
+      "relatedTasks.1": {
+        "links": {
+          "self": "../QuestTask/c-major"
+        }
+      },
+      "relatedTasks.2": {
+        "links": {
+          "self": "../QuestTask/d-major"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

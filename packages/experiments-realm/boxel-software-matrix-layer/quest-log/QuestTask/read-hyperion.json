@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Read Hyperion",
+      "status": "Not Started",
+      "createdAt": "2026-03-02T10:00:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest-task",
+        "name": "QuestTask"
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

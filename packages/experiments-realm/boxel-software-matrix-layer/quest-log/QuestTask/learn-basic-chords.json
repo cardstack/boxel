@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Learn basic chords",
+      "status": "In Progress",
+      "createdAt": "2026-05-14T09:00:00.000Z",
+      "priority": "High",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest-task",
+        "name": "QuestTask"
+      }
+    },
+    "relationships": {
+      "subtasks.0": {
+        "links": {
+          "self": "./g-major"
+        }
+      },
+      "subtasks.1": {
+        "links": {
+          "self": "./c-major"
+        }
+      },
+      "subtasks.2": {
+        "links": {
+          "self": "./d-major"
+        }
+      },
+      "subtasks.3": {
+        "links": {
+          "self": "./chord-transitions"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

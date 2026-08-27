@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Evening practice",
+      "startedAt": "2026-08-24T19:00:00.000Z",
+      "duration": {
+        "hours": 0,
+        "minutes": 45
+      },
+      "notes": "Focused on pentatonic pattern 2. Finally getting the stretches — tried 100 BPM and it's almost there.",
+      "achievements": "Pattern 2 at 100 BPM",
+      "mood": "😊",
+      "energy": 4,
+      "createdAt": "2026-08-24T19:47:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/learn-electric-guitar"
+        }
+      },
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/pattern-two"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

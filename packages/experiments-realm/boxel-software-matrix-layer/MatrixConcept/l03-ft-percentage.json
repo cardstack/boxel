@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Consumed from base \u2014 Opportunity.probability, Order.taxRate",
+      "notes": "v1 · Consumed from base — Opportunity.probability, Order.taxRate | 2026-08-26 quest-log audit finding: base PercentageField renders NOTHING for an explicit 0 (`{{#if @model}}` swallows falsy zero in isolated/atom/embedded) — wrong for progress semantics where 0% is a fact. Platform fix candidate; quest-log works around with app-side labels.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/percentage-field",
       "specTarget": "base realm",
       "consumers": "opportunity, order",

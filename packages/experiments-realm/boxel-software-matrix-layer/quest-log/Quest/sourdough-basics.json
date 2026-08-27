@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Sourdough Basics",
+      "description": "Starter, stretch-and-folds, one honest loaf.",
+      "category": "Cooking",
+      "icon": "🍞",
+      "status": "Completed",
+      "recordStatus": "Active",
+      "createdAt": "2026-06-20T08:00:00.000Z",
+      "updatedAt": "2026-07-19T17:30:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest",
+        "name": "Quest"
+      }
+    },
+    "relationships": {
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/bake-first-loaf"
+        }
+      },
+      "badges.0": {
+        "links": {
+          "self": "../Badge/crusty-crown"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

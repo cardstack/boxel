@@ -8,19 +8,19 @@
       "concept": "Restore Record",
       "symbol": "RR",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/restore-record.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Restore",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "Quest Log stage 1d: built 2026-08-26 — the way back from Archive Record. UI exercise deferred to stage 2.",
+      "notes": "Quest Log stage 1d: built 2026-08-26 — the way back from Archive Record. UI exercise deferred to stage 2. | Stage 2 landed 2026-08-26: wired to the archived-quest banner; example is a real archived quest.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/restore-record",
       "specTarget": "shared block",
-      "consumers": null,
+      "consumers": "quest-log/quest",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -37,9 +37,9 @@
       "specUsageRef": null,
       "verifiedAt": "2026-08-26T08:27:39.000Z",
       "specKind": "command",
-      "specExampleCount": 0,
+      "specExampleCount": 1,
       "specReadmeChars": 938,
-      "specExampleIds": null
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/watercolor-mornings\"]"
     },
     "meta": {
       "adoptsFrom": {

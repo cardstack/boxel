@@ -8,19 +8,19 @@
       "concept": "Updated At",
       "symbol": "UA",
       "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "evidenceTier": "POC realm",
+      "auditStatus": "POC only",
+      "whereImplemented": "experiments-realm/boxel-software-matrix-layer/updated-at-field.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Updated At | BSL",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "Quest Log stage 1a: block + Spec live 2026-08-26; in-use example + first consumer wired when Quest Log stage 2 lands (Quest.updatedAt).",
+      "notes": "Quest Log stage 1a: block + Spec live 2026-08-26; in-use example + first consumer wired when Quest Log stage 2 lands (Quest.updatedAt). | Stage 2 landed 2026-08-26: first consumer Quest.updatedAt; in-use example wired.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/updated-at-field",
       "specTarget": "shared block",
-      "consumers": null,
+      "consumers": "quest-log/quest",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {
@@ -37,9 +37,9 @@
       "specUsageRef": null,
       "verifiedAt": "2026-08-26T07:16:07.000Z",
       "specKind": "field",
-      "specExampleCount": 0,
+      "specExampleCount": 1,
       "specReadmeChars": 1165,
-      "specExampleIds": null
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/learn-electric-guitar\"]"
     },
     "meta": {
       "adoptsFrom": {

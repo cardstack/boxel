@@ -20,7 +20,7 @@
       "notes": "content-calendar built a local ContentStatusField option set (planned/in_progress/done with a next-status cycle) rather than blocking on the extraction — a recorded gap, not a silent hand-roll. Third status enum in the realm awaiting the shared block. — Extraction done: statusField factory + neutral default at status-field.gts; Spec live 2026-08-26. content-calendar ContentStatusField can now migrate to it.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/status-field",
       "specTarget": "shared block",
-      "consumers": "ticket-taxonomy, contract-status, booking, event, loyalty-account, rsvp-status-field, record-status-field",
+      "consumers": "ticket-taxonomy, contract-status, booking, event, loyalty-account, rsvp-status-field, record-status-field, quest-log/quest (QuestStatusField)",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {

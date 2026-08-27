@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Learn the pentatonic scale",
+      "status": "In Progress",
+      "createdAt": "2026-05-14T09:00:00.000Z",
+      "priority": "Normal",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest-task",
+        "name": "QuestTask"
+      }
+    },
+    "relationships": {
+      "subtasks.0": {
+        "links": {
+          "self": "./pattern-one"
+        }
+      },
+      "subtasks.1": {
+        "links": {
+          "self": "./pattern-two"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

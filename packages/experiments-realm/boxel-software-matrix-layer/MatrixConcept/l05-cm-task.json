@@ -20,7 +20,7 @@
       "notes": "Rebuilt as a shared block 2026-08-26, consuming the stage-1a field blocks (status/priority/due-date/created-at) instead of the POC’s private compounds. Subtasks per decision-B (linksToMany on parent). First app consumer: Quest Log stage 2.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/task-card",
       "specTarget": "shared block",
-      "consumers": null,
+      "consumers": "quest-log/quest-task (extends)",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {

@@ -20,7 +20,7 @@
       "notes": "App 2: Talent & Resource Tracker (v1) — Spec + default export added by richard 2026-08-26.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/score-field",
       "specTarget": "shared block",
-      "consumers": "meeting, candidate, scorecard-field",
+      "consumers": "meeting, candidate, scorecard-field, quest-log/session (energy)",
       "consumerExamples": null,
       "catalogDisposition": null,
       "cardInfo": {

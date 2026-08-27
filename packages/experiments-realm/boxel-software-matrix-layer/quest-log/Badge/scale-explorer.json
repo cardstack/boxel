@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Scale Explorer",
+      "description": "First pentatonic position, memorized and musical.",
+      "icon": "🎵",
+      "claimedAt": "2026-08-10T19:30:00.000Z",
+      "isVisible": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../badge",
+        "name": "Badge"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/learn-electric-guitar"
+        }
+      },
+      "relatedTasks.0": {
+        "links": {
+          "self": "../QuestTask/pattern-one"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

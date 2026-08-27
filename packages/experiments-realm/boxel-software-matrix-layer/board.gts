@@ -76,6 +76,7 @@ export class Board extends GlimmerComponent<BoardSignature> {
   @action handleChange(next: KanbanPlacement[]) {
     for (let placement of next) {
       let item = this.args.items[placement.index];
+      if (item)
       if (item && this.args.columnKeyFor(item) !== placement.columnId) {
         this.args.onMove?.(item, placement.columnId);
       }

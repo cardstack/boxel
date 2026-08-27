@@ -21,6 +21,13 @@
         "module": "https://cardstack.com/base/spec",
         "name": "Spec"
       }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Quest/watercolor-mornings"
+        }
+      }
     }
   }
 }

@@ -9,7 +9,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../note",
-        "name": "default"
+        "name": "Note"
       }
     },
     "relationships": {

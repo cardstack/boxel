@@ -1,0 +1,41 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Crusty Crown",
+      "description": "One honest loaf with an ear and an open crumb. I decide, and I say it counts.",
+      "icon": "🍞",
+      "claimedAt": "2026-07-19T17:30:00.000Z",
+      "isVisible": true,
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../badge",
+        "name": "Badge"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/sourdough-basics"
+        }
+      },
+      "relatedTasks.0": {
+        "links": {
+          "self": "../QuestTask/bake-first-loaf"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

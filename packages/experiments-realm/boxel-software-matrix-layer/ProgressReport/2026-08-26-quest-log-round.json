@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roundDate": "2026-08-26T14:30:00.000Z",
+      "summary": "Build round — the Quest Log round (App 5). Stage 1 filled the field, card, component and tool lanes bottom-up in one day, then stage 2 shipped the consuming app the same day: **fourteen blocks built or promoted with Specs** (Created At, Updated At, Due Date, Count, Record Status, Task, Note, Subtask-absorbed-into-Task, Status Board, Activity Feed, Tree, Generate, Summarize, Recommend, Archive/Restore Record, Sort, Filter), three already-Done blocks reused (Import, Export, Duplicate, plus Feed/Activity/Board), and **quest-log** landed as the stage-2 POC consuming 19 blocks unchanged — with the Recommend command exercised live from its UI and board drag verified persisting end-to-end.\n\nThe crawl itself got three matcher fixes (generic classes, factory-const fields, curated function modules) which recovered **nine silently-missed rows shipped by earlier apps** — the enum status fields of Apps 1/3/4 and the Order Fulfilment Board — on top of the fourteen new ones: 23 sheet rows and 20 realm rows upgraded, all upward.\n\nCoordination flags, not silent fixes: Template and Create are both marked Done by their owner with no artifact or Spec anywhere (see Note/template-row-discrepancy); Start Date and the Tree row's ownership were respected — Tree's generic block was built at Richard's direction with the owner unchanged and org-tree named as the retrofit consumer.\n\nTwo platform findings joined the blocker family's theme of the standard-vs-base gap: PercentageField renders nothing for an explicit 0 (noted on the Percentage row), and an instance authored with adoptsFrom name 'default' on a dual-export def fails every save with 'Cannot change card instance type' — silently, which is what a 'dnd does not update' bug report actually was. 28 instances re-pointed at named exports; the convention is now recorded.",
+      "metrics": "{\"concepts\": 590, \"blocks\": 567, \"outOfScope\": 23, \"verified\": 285, \"consumed\": 127, \"reused\": 93, \"gold\": 63, \"solid\": 93, \"adequate\": 94, \"thin\": 35, \"none\": 282, \"perKind\": {\"field\": 147, \"card\": 125, \"command\": 144, \"component\": 116, \"filedef\": 35}}",
+      "deltas": "{\"verified\": \"+69\", \"consumed\": \"+16\", \"reused\": \"+7\", \"gold\": \"+7\", \"solid\": \"+28\", \"adequate\": \"+34\", \"thin\": \"+0\", \"none\": \"-71\", \"note\": \"deltas vs 2026-08-24 include teammate spec-stamping pulled between rounds; buckets computed with the same per-kind rubric\"}",
+      "cardInfo": {
+        "name": "2026-08-26 Quest Log round",
+        "summary": "Stage 1a-1d blocks + the App 5 POC in one round; 23 crawl upgrades; 2 platform findings",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../progress-report",
+        "name": "ProgressReport"
+      }
+    }
+  }
+}

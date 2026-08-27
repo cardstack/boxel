@@ -1,0 +1,47 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Reading night",
+      "startedAt": "2026-07-28T21:00:00.000Z",
+      "duration": {
+        "hours": 1,
+        "minutes": 0
+      },
+      "notes": "Sixty pages of Dune. The dinner party chapter is even better the second time.",
+      "achievements": "Finished part one of Dune",
+      "mood": "😊",
+      "energy": 3,
+      "createdAt": "2026-07-28T22:05:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    },
+    "relationships": {
+      "quest": {
+        "links": {
+          "self": "../Quest/reading-challenge"
+        }
+      },
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/read-dune"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Twelve Books This Year",
+      "description": "No speed, no guilt — just twelve books I actually want to read.",
+      "category": "Reading",
+      "icon": "📚",
+      "status": "Paused",
+      "recordStatus": "Active",
+      "createdAt": "2026-03-02T10:00:00.000Z",
+      "updatedAt": "2026-08-01T21:00:00.000Z",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quest",
+        "name": "Quest"
+      }
+    },
+    "relationships": {
+      "tasks.0": {
+        "links": {
+          "self": "../QuestTask/read-dune"
+        }
+      },
+      "tasks.1": {
+        "links": {
+          "self": "../QuestTask/read-hyperion"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../../Theme/quest-journal"
+        }
+      }
+    }
+  }
+}
