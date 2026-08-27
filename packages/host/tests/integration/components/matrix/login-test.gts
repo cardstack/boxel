@@ -207,9 +207,7 @@ module('Integration | Component | matrix/login', function (hooks) {
       assert
         .dom('[data-test-login-form]')
         .exists('Password form is restored after the failed start()');
-      assert
-        .dom('[data-test-login-error]')
-        .includesText('Sign-in failed');
+      assert.dom('[data-test-login-error]').includesText('Sign-in failed');
     } finally {
       matrixService.start = originalStart;
     }
