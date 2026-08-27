@@ -1,5 +1,5 @@
 import {
-  settled,
+  click,
   waitFor,
   waitUntil,
   type RenderingTestContext,
@@ -53,9 +53,9 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     ).default;
   });
 
-  function navItemHrefs(element: Element) {
-    return [...element.querySelectorAll('.dsr-nav .nav-item')].map((el) =>
-      el.getAttribute('href'),
+  function navItemIds(element: Element) {
+    return [...element.querySelectorAll('[data-test-theme-nav-item]')].map(
+      (el) => el.getAttribute('data-test-theme-nav-item'),
     );
   }
 
@@ -66,26 +66,29 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     let element = await renderCard(loader, card, 'isolated');
 
     assert
-      .dom('.dsr-nav a[href="#preview"]')
+      .dom('[data-test-theme-nav-item="preview"]')
       .hasText('Preview', 'the nav links to the visualizer');
     assert
       .dom('#preview')
       .exists('the visualizer carries the id the nav entry targets');
     assert.strictEqual(
-      navItemHrefs(element)[0],
-      '#preview',
+      navItemIds(element)[0],
+      'preview',
       'Preview leads the nav',
     );
+    assert
+      .dom('[data-test-theme-nav] [data-test-mode]')
+      .exists('the dark-mode toggle is affixed to the nav bar');
   });
 
   test('a theme-less edit view leads the nav with Import CSS and has no Preview entry', async function (this: RenderingTestContext, assert) {
     let card = new StructuredTheme({});
     let element = await renderCard(loader, card, 'edit');
 
-    assert.dom('.dsr-nav a[href="#preview"]').doesNotExist();
+    assert.dom('[data-test-theme-nav-item="preview"]').doesNotExist();
     assert.strictEqual(
-      navItemHrefs(element)[0],
-      '#import-css',
+      navItemIds(element)[0],
+      'import-css',
       'the import workflow leads the nav',
     );
   });
@@ -95,59 +98,97 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     let element = await renderCard(loader, card, 'edit');
 
     let sectionIds = [
-      ...element.querySelectorAll('.style-ref-grid > section[id]'),
-    ].map((el) => el.id);
+      ...element.querySelectorAll('[data-test-style-ref-section]'),
+    ].map((el) => el.getAttribute('data-test-style-ref-section'));
     assert.deepEqual(
       sectionIds,
       ['import-css', 'view-code', 'visual-dna', 'inspirations', 'wallpapers'],
       'the body leads with the import workflow, matching the nav',
     );
     assert.deepEqual(
-      navItemHrefs(element).slice(0, 2),
-      ['#import-css', '#view-code'],
+      navItemIds(element).slice(0, 2),
+      ['import-css', 'view-code'],
       'the nav leads with the import workflow',
     );
   });
 
-  test('scroll chevrons track overflow and disable at the scroll ends', async function (this: RenderingTestContext, assert) {
+  test('extra nav items collapse into a dropdown menu when the bar overflows', async function (this: RenderingTestContext, assert) {
     let sections = Array.from({ length: 12 }, (_, i) => ({
       id: `section-${i}`,
       navTitle: `Section ${i}`,
     }));
+    let noop = () => {};
+    // container-type matches the dashboard root, so the nav's container-query
+    // rules apply at this width like in a real card. the width stays above the
+    // bar's compact threshold, where the strip gives way to a hamburger menu
     await renderComponent(
       <template>
-        <div class='nav-test-wrapper' style='width: 10rem'>
-          <NavBar @sections={{sections}} />
+        {{! template-lint-disable no-inline-styles }}
+        <div
+          style='width: 30rem; container-type: inline-size'
+          data-test-nav-test-wrapper
+        >
+          <NavBar @sections={{sections}} @toggleDarkMode={{noop}} />
         </div>
       </template>,
     );
 
-    await waitFor('[aria-label="Scroll navigation right"]');
+    await waitFor('[data-test-theme-nav-more]');
     assert
-      .dom('[aria-label="Scroll navigation right"]')
-      .isNotDisabled('can scroll toward the overflowing items');
-    assert
-      .dom('[aria-label="Scroll navigation left"]')
-      .isDisabled('nothing to scroll back to at rest');
-
-    let navGrid = document.querySelector('.nav-grid')!;
-    navGrid.scrollLeft = navGrid.scrollWidth;
-    navGrid.dispatchEvent(new Event('scroll'));
-    await settled();
-    assert
-      .dom('[aria-label="Scroll navigation right"]')
-      .isDisabled('right chevron disables at the end of the strip');
-    assert
-      .dom('[aria-label="Scroll navigation left"]')
-      .isNotDisabled('left chevron enables once scrolled');
-
-    let wrapper: HTMLElement = document.querySelector('.nav-test-wrapper')!;
-    wrapper.style.width = '80rem';
-    await waitUntil(
-      () => !document.querySelector('[aria-label="Scroll navigation right"]'),
+      .dom('[data-test-theme-nav-more]')
+      .isVisible('the more button appears when items overflow');
+    // overflowing items are hidden with visibility, which isVisible can't see
+    function itemVisibility(sectionId: string) {
+      let item = document.querySelector(
+        `[data-test-theme-nav-item="${sectionId}"]`,
+      )!;
+      return getComputedStyle(item).visibility;
+    }
+    assert.strictEqual(
+      itemVisibility('section-0'),
+      'visible',
+      'leading items stay in the bar',
     );
+    assert.strictEqual(
+      itemVisibility('section-11'),
+      'hidden',
+      'overflowing items are hidden from the bar',
+    );
+
+    let visibleItems = [
+      ...document.querySelectorAll('[data-test-theme-nav-item]'),
+    ].filter((el) => getComputedStyle(el).visibility === 'visible');
+    let lastVisible = visibleItems[visibleItems.length - 1]!;
+    let moreButton = document.querySelector('[data-test-theme-nav-more]')!;
+    let distance =
+      moreButton.getBoundingClientRect().left -
+      lastVisible.getBoundingClientRect().right;
+    let hugsLastItem = distance >= 0 && distance < 30;
+    assert.true(
+      hugsLastItem,
+      `the more button sits right after the last visible item (gap ${distance}px)`,
+    );
+
+    await click('[data-test-theme-nav-more]');
     assert
-      .dom('[aria-label="Scroll navigation left"]')
-      .doesNotExist('chevrons leave once the items fit');
+      .dom('[data-test-boxel-menu-item-text="Section 11"]')
+      .exists('hidden items are listed in the dropdown');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Section 0"]')
+      .doesNotExist('items already in the bar are not duplicated');
+
+    await click('[data-test-theme-nav-more]');
+    let wrapper: HTMLElement = document.querySelector(
+      '[data-test-nav-test-wrapper]',
+    )!;
+    wrapper.style.width = '160rem';
+    await waitUntil(
+      () => !document.querySelector('[data-test-theme-nav-more]'),
+    );
+    assert.strictEqual(
+      itemVisibility('section-11'),
+      'visible',
+      'every item returns to the bar once it fits',
+    );
   });
 });

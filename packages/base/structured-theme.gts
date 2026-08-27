@@ -47,7 +47,7 @@ export const GUIDE_SECTIONS = [
   {
     id: 'card-container-css',
     navTitle: 'Computed Styles',
-    title: 'Card Container Computed Styles',
+    title: 'Computed Styles',
     fieldName: null,
   },
   {
@@ -64,9 +64,8 @@ export const GUIDE_SECTIONS = [
   },
 ];
 
-// A theme-less card in edit mode leads with the import workflow; the nav and
-// the body render the same list, so the importer lands at the top of the
-// page too.
+// A theme-less card in edit mode leads with the import workflow, in both the
+// nav and the body.
 export const orderEditSections = (
   sections: SectionSignature[],
   hasThemeCss: boolean,
@@ -83,6 +82,18 @@ export const orderEditSections = (
     ).push(section);
   }
   return [...leading, ...rest];
+};
+
+// the visualizer renders ahead of the numbered sections, so the nav lists it
+// as Preview — except on a theme-less card, which leads with import instead
+export const withPreviewNavSection = (
+  sections: SectionSignature[],
+  hasThemeCss: boolean,
+): SectionSignature[] => {
+  if (!hasThemeCss) {
+    return sections;
+  }
+  return [{ id: 'preview', navTitle: 'Preview' }, ...sections];
 };
 
 // Applies parsed CSS rules back onto the card fields for editing.
@@ -204,14 +215,8 @@ class Isolated extends Component<typeof StructuredTheme> {
     return [];
   }
 
-  // the visualizer renders ahead of the numbered sections; the nav lists
-  // it as Preview when the card has a theme (a theme-less edit view leads
-  // with the import section instead)
   private get navSections() {
-    if (!this.hasThemeCss) {
-      return this.visibleSections;
-    }
-    return [{ id: 'preview', navTitle: 'Preview' }, ...this.visibleSections];
+    return withPreviewNavSection(this.visibleSections, this.hasThemeCss);
   }
 
   <template>
@@ -220,6 +225,7 @@ class Isolated extends Component<typeof StructuredTheme> {
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
+      @toggleDarkMode={{unless this.showEmptyState this.toggleDarkMode}}
       @sections={{this.navSections}}
     >
       <:header>
@@ -241,7 +247,6 @@ class Isolated extends Component<typeof StructuredTheme> {
             {{#if this.showVisualizer}}
               <ThemeVisualizer
                 id='preview'
-                @toggleDarkMode={{this.toggleDarkMode}}
                 @isDarkMode={{this.isDarkMode}}
                 @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
@@ -435,8 +440,7 @@ export default class StructuredTheme extends Theme {
     return true;
   };
 
-  // bound property so templates can pass it around; subclasses extend the
-  // reset by overriding resetCssFields
+  // bound so templates can pass it around; subclasses override resetCssFields
   resetCss = () => {
     this.resetCssFields();
   };

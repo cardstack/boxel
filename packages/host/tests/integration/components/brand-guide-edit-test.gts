@@ -117,6 +117,15 @@ module('Integration | brand-guide | edit view', function (hooks) {
     );
   });
 
+  test('dark-mode toggle is affixed in the nav bar', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+    });
+    await renderCard(loader, card, 'isolated');
+
+    assert.dom('[data-test-theme-nav] [data-test-mode]').exists();
+  });
+
   test('reset clears custom css variables along with the theme variables', async function (this: RenderingTestContext, assert) {
     let card = new BrandGuide({
       rootVariables: new ThemeVarField({ background: '#f6e6ee' }),

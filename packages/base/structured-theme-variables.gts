@@ -336,6 +336,7 @@ export class FontPreviews extends GlimmerComponent<{
       }
       .theme-var-font-preview-line {
         display: flex;
+        flex-wrap: wrap;
         align-items: baseline;
         gap: var(--boxel-sp-sm);
       }
@@ -465,7 +466,8 @@ class FieldGrid extends GlimmerComponent<{
     <style scoped>
       .field-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+        /* min() lets the column shrink instead of overflowing a narrow card */
+        grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
         gap: var(--boxel-sp-xs) var(--boxel-sp-2xs);
       }
     </style>

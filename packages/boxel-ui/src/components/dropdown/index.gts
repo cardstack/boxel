@@ -167,6 +167,13 @@ class BoxelDropdown extends Component<Signature> {
     this.args.onClose?.();
   }
 
+  // BasicDropdown's plain close() refocuses the trigger with a bare focus(),
+  // whose scroll-into-view cancels a smooth scroll a menu action just started;
+  // the focus trap already returns focus on deactivate, with preventScroll
+  @action closeSkippingFocus(dropdown: Dropdown) {
+    dropdown.actions.close(undefined, true);
+  }
+
   <template>
     {{!--
       Note:
@@ -195,6 +202,9 @@ class BoxelDropdown extends Component<Signature> {
         {{yield ddModifier to='trigger'}}
       {{/let}}
 
+      {{! preventScroll keeps the trap's focus moves (including the return
+          focus on close) from scrolling the trigger into view — that scroll
+          step cancels any smooth scroll a menu action just started }}
       <dd.Content
         @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
@@ -205,13 +215,14 @@ class BoxelDropdown extends Component<Signature> {
             initialFocus=(concat
               "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
             )
-            onDeactivate=dd.actions.close
+            onDeactivate=(fn this.closeSkippingFocus dd)
             allowOutsideClick=true
             fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
+            preventScroll=true
           )
         }}
       >
-        {{yield (hash close=dd.actions.close) to='content'}}
+        {{yield (hash close=(fn this.closeSkippingFocus dd)) to='content'}}
       </dd.Content>
     </BasicDropdown>
 

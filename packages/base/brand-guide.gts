@@ -47,7 +47,6 @@ import {
   ThemeDashboard,
   ThemeDashboardHeader,
   NavSection,
-  ModeToggle,
   PreviewPills,
   CardContainerCss,
   ThemeImporter,
@@ -98,6 +97,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       @themeId={{@model.id}}
       @sections={{this.sectionsWithContent}}
       @isDarkMode={{this.isDarkMode}}
+      @toggleDarkMode={{unless this.showEmptyState this.toggleDarkMode}}
     >
       <:header>
         <ThemeDashboardHeader
@@ -127,11 +127,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         {{#if this.showEmptyState}}
           <ThemeDashboardEmptyState />
         {{else}}
-          <ModeToggle
-            class='brand-guide-mode-toggle'
-            @toggleDarkMode={{this.toggleDarkMode}}
-            @isDarkMode={{this.isDarkMode}}
-          />
           <GridContainer class='brand-guide-grid'>
             {{#each this.sectionsWithContent as |section|}}
               <NavSection
@@ -594,13 +589,6 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         position: relative;
         text-align: center;
       }
-      .brand-guide-mode-toggle {
-        position: absolute;
-        top: var(--boxel-sp-xs);
-        right: var(--boxel-sp-xs);
-        /* paint above the sticky nav (z-index 10) while scrolling past it */
-        z-index: 11;
-      }
       .brand-guide-grid {
         gap: var(--boxel-sp-2xl);
       }
@@ -635,6 +623,13 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       .functional-palette.edit-format > :deep(*) {
         grid-template-columns: repeat(auto-fill, minmax(8.75rem, 1fr));
         gap: var(--boxel-sp-2xs);
+      }
+      /* a long nowrap swatch value (e.g. a shadow) would otherwise widen the
+         whole section past the card */
+      .brand-palette,
+      .functional-palette,
+      .color-system-container {
+        min-width: 0;
       }
       .color-system-container {
         background-color: var(--card);
@@ -682,6 +677,12 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       /* typography section */
       .typography-grid {
         grid-template-columns: 1fr 1fr;
+      }
+      @container (width <= 768px) {
+        .typography-grid,
+        .cta-grid {
+          grid-template-columns: 1fr;
+        }
       }
       .typography-block {
         display: flex;
@@ -761,7 +762,11 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       /* Image Gallery */
       .dsr-image-gallery {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+        /* min() lets the column shrink instead of overflowing a narrow card */
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(17.5rem, 100%), 1fr)
+        );
         gap: calc(var(--boxel-sp) * 1.5);
         margin-top: calc(var(--boxel-sp) * 1.5);
       }
@@ -842,11 +847,18 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
         gap: var(--boxel-sp-xs) var(--boxel-sp-lg);
         font-size: var(--boxel-font-size-sm);
       }
+      @container (width <= 400px) {
+        /* stack the name over its value so long names don't overflow */
+        .brand-guide-vars {
+          grid-template-columns: 1fr;
+        }
+      }
       .brand-guide-vars dt {
         font-weight: 600;
       }
       .brand-guide-vars dd {
         margin: 0;
+        min-width: 0;
         color: var(--muted-foreground);
       }
       .brand-guide-vars code {
@@ -868,8 +880,10 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
       }
       .var-row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xs);
+        min-width: 0;
       }
       .color-entry {
         display: flex;
@@ -1021,9 +1035,9 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   ];
 
   private get sectionsWithContent() {
-    // every field stays editable in edit mode, theme or content or not;
     // the Card Container CSS reference and the UI component samples are
-    // display-only and stay out of the editor
+    // display-only, so they stay out of the editor; every other field is
+    // editable whether or not it has content
     if (this.editMode) {
       return orderEditSections(
         this.sections.filter(
@@ -1154,8 +1168,7 @@ class BrandGuideIsolated extends Component<typeof BrandGuide> {
   }
 
   private get hasCustomVariables() {
-    // match what the custom-css section renders: unnamed palette entries
-    // emit no variables, so they must not count
+    // unnamed palette entries emit no variables, so they must not count
     return Boolean(
       this.paletteVarEntries.length ||
       this.customCssVarEntries.length ||

@@ -8,7 +8,10 @@ import {
 } from './card-api';
 import StringField from './string';
 import TextAreaField from './text-area';
-import StructuredTheme, { orderEditSections } from './structured-theme';
+import StructuredTheme, {
+  orderEditSections,
+  withPreviewNavSection,
+} from './structured-theme';
 import UrlField from './url';
 import {
   ThemeVisualizer,
@@ -89,14 +92,8 @@ class Isolated extends Component<typeof StyleReference> {
     ];
   }
 
-  // the visualizer renders ahead of the numbered sections; the nav lists
-  // it as Preview when the card has a theme (a theme-less edit view leads
-  // with the import section instead)
   private get navSections() {
-    if (!this.hasThemeCss) {
-      return this.visibleSections;
-    }
-    return [{ id: 'preview', navTitle: 'Preview' }, ...this.visibleSections];
+    return withPreviewNavSection(this.visibleSections, this.hasThemeCss);
   }
 
   <template>
@@ -105,6 +102,7 @@ class Isolated extends Component<typeof StyleReference> {
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
+      @toggleDarkMode={{unless this.showEmptyState this.toggleDarkMode}}
       @sections={{this.navSections}}
     >
       <:header>
@@ -133,7 +131,6 @@ class Isolated extends Component<typeof StyleReference> {
           <ThemeVisualizer
             id='preview'
             class='style-ref-section'
-            @toggleDarkMode={{this.toggleDarkMode}}
             @isDarkMode={{this.isDarkMode}}
             @fontStack={{@model.fontStacksFor this.isDarkMode}}
             @cssImports={{@model.cssImports}}
@@ -160,29 +157,47 @@ class Isolated extends Component<typeof StyleReference> {
             {{#if this.editMode}}
               {{#each this.visibleSections as |navSection|}}
                 {{#if (eq navSection.id 'visual-dna')}}
-                  <section id='visual-dna' class='visual-dna'>
+                  <section
+                    id='visual-dna'
+                    class='visual-dna'
+                    data-test-style-ref-section='visual-dna'
+                  >
                     <h2>{{navSection.title}}</h2>
                     <@fields.visualDNA />
                   </section>
                 {{else if (eq navSection.id 'inspirations')}}
-                  <section id='inspirations' class='inspirations'>
+                  <section
+                    id='inspirations'
+                    class='inspirations'
+                    data-test-style-ref-section='inspirations'
+                  >
                     <h2>{{navSection.title}}</h2>
                     <@fields.inspirations />
                   </section>
                 {{else if (eq navSection.id 'wallpapers')}}
-                  <section id='wallpapers' class='wallpapers'>
+                  <section
+                    id='wallpapers'
+                    class='wallpapers'
+                    data-test-style-ref-section='wallpapers'
+                  >
                     <h2>{{navSection.title}}</h2>
                     <@fields.wallpaperImages />
                   </section>
                 {{else if (eq navSection.id 'import-css')}}
-                  <section id='import-css'>
+                  <section
+                    id='import-css'
+                    data-test-style-ref-section='import-css'
+                  >
                     <h2>{{navSection.title}}</h2>
                     {{! the cardInfo editor in the header owns the name and
                       description, so the importer only handles CSS here }}
                     <ThemeImporter @setCss={{@model.setCss}} />
                   </section>
                 {{else if (eq navSection.id 'view-code')}}
-                  <section id='view-code'>
+                  <section
+                    id='view-code'
+                    data-test-style-ref-section='view-code'
+                  >
                     <h2>{{navSection.title}}</h2>
                     <@fields.cssVariables />
                   </section>
@@ -239,7 +254,7 @@ class Isolated extends Component<typeof StyleReference> {
 
               {{#if @model.cssVariables}}
                 <section id='card-container-css'>
-                  <h2>Card Container Computed Styles</h2>
+                  <h2>Computed Styles</h2>
                   <CardContainerCss @cssVariables={{@model.cssVariables}} />
                 </section>
               {{/if}}
@@ -292,6 +307,17 @@ class Isolated extends Component<typeof StyleReference> {
         padding-top: var(--boxel-sp-4xl);
         padding-inline: var(--boxel-sp-2xl);
       }
+      @container (width <= 768px) {
+        .style-ref-grid {
+          gap: var(--boxel-sp-2xl);
+          padding-top: var(--boxel-sp-2xl);
+          padding-inline: var(--boxel-sp);
+        }
+      }
+      /* let wide children scroll or wrap instead of overflowing the card */
+      .style-ref-grid > section {
+        min-width: 0;
+      }
       .inspiration-list {
         display: flex;
         flex-wrap: wrap;
@@ -308,7 +334,8 @@ class Isolated extends Component<typeof StyleReference> {
       }
       .image-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        /* min() lets the column shrink instead of overflowing a narrow card */
+        grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
         gap: var(--boxel-sp-xl);
       }
       .image-container {

@@ -10,16 +10,18 @@ import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
 import PaletteIcon from '@cardstack/boxel-icons/palette';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
-import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
-import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
+import MenuIcon from '@cardstack/boxel-icons/menu';
 import VersionIcon from '@cardstack/boxel-icons/book-text';
 
 import {
+  BoxelDropdown,
   Button,
   CardContainer,
   BoxelContainer,
+  ContextButton,
   FieldContainer,
   BoxelInput,
+  Menu as BoxelMenu,
   Pill,
   Switch,
 } from '@cardstack/boxel-ui/components';
@@ -28,7 +30,7 @@ import {
   bool,
   cn,
   eq,
-  not,
+  MenuItem,
   themeScope,
   themeScopedCss,
 } from '@cardstack/boxel-ui/helpers';
@@ -48,7 +50,10 @@ import type {
 
 function scrollToSection(sectionId: string, event: Event) {
   event.preventDefault();
-  let navEl = event.currentTarget as HTMLElement;
+  scrollToSectionFrom(event.currentTarget as HTMLElement, sectionId);
+}
+
+function scrollToSectionFrom(navEl: HTMLElement, sectionId: string) {
   let card = navEl.closest('[data-theme-dashboard]');
   let section = card?.querySelector(
     `[id="${sectionId}"]`,
@@ -408,51 +413,6 @@ export class CardContainerCss extends GlimmerComponent<{
         <code>--boxel-*</code>
         internals with Boxel defaults as fallbacks.
       </p>
-      <div class='card-container-mappings'>
-        <div class='card-container-mapping-group'>
-          <h4>Layout</h4>
-          <dl>
-            <dt><code>--background</code></dt><dd>background-color</dd>
-            <dt><code>--foreground</code></dt><dd>color</dd>
-            <dt><code>--border</code></dt><dd>border color (when boundaries
-              shown)</dd>
-            <dt><code>--radius</code></dt><dd>base border-radius (all steps,
-              base default: 0.625rem [10px])</dd>
-            <dt><code>--spacing * 4</code></dt><dd>base spacing (all steps, base
-              default: 0.25rem * 4 = 1rem [16px])</dd>
-            <dt><code>--theme-font-size</code></dt><dd>base font-size (all
-              steps, default 1rem [16px])</dd>
-            <dt><code>--theme-scale</code></dt><dd>type and spacing scale ratio
-              (default 1.333)</dd>
-            <dt><code>--font-sans</code></dt><dd>font-family (default: IBM Plex
-              Sans, sans-serif)</dd>
-          </dl>
-        </div>
-        <div class='card-container-mapping-group'>
-          <h4>Layering Pairs</h4>
-          <p class='card-container-mapping-note'>Use these pairs on nested
-            containers to differentiate visual layers without repeating colors.</p>
-          <dl>
-            <dt><code>--background</code></dt><dd><code>--foreground</code></dd>
-            <dt><code>--card</code></dt><dd><code>--card-foreground</code></dd>
-            <dt><code>--sidebar</code></dt><dd><code
-              >--sidebar-foreground</code></dd>
-            <dt><code>--popover</code></dt><dd><code
-              >--popover-foreground</code></dd>
-          </dl>
-        </div>
-        <div class='card-container-mapping-group'>
-          <h4>Typography <em>(optional overrides)</em></h4>
-          <dl>
-            <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
-            <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
-            <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
-            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
-            <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
-          </dl>
-        </div>
-      </div>
-      <h3 class='computed-vars-heading'>Computed CSS Variables</h3>
       <div class='computed-vars-section'>
         <div class='computed-vars-group'>
           <h4>Spacing</h4>
@@ -509,6 +469,16 @@ export class CardContainerCss extends GlimmerComponent<{
           {{#if this.borderRadiusVarsString}}
             <pre class='computed-vars-pre'>{{this.borderRadiusVarsString}}</pre>
           {{/if}}
+        </div>
+        <div class='card-container-mapping-group'>
+          <h4>Typography <em>(optional overrides)</em></h4>
+          <dl>
+            <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
+            <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
+            <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
+            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
+            <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
+          </dl>
         </div>
       </div>
     </div>
@@ -579,7 +549,8 @@ export class CardContainerCss extends GlimmerComponent<{
       }
       .computed-vars-section {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+        /* min() lets the column shrink instead of overflowing a narrow card */
+        grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
         gap: var(--boxel-sp-lg);
       }
       .computed-vars-group {
@@ -615,12 +586,12 @@ export class CardContainerCss extends GlimmerComponent<{
       .computed-vars-pre {
         margin: 0;
         padding: var(--boxel-sp-xs) 0 0;
+        overflow-x: auto;
         font-family: var(
           --font-mono,
           var(--boxel-monospace-font-family, monospace)
         );
         font-size: var(--boxel-font-size-xs);
-        white-space: pre-wrap;
         flex: 1;
       }
     </style>
@@ -687,7 +658,9 @@ export class NavSection extends GlimmerComponent<{
     <style scoped>
       @layer baseComponent {
         .nav-section {
-          scroll-margin-top: calc(var(--boxel-sp) * 4);
+          scroll-margin-top: var(--boxel-sp-4xl);
+          /* let wide children scroll or wrap instead of overflowing the card */
+          min-width: 0;
         }
         .nav-section:not(.nav-section--hide-counter) {
           counter-increment: section;
@@ -717,14 +690,14 @@ export class NavSection extends GlimmerComponent<{
         }
 
         .nav-section-content {
-          padding-block: calc(var(--boxel-sp) * 2);
+          padding-block: var(--boxel-sp-xl);
         }
 
         @media (max-width: 768px) {
           .nav-section-header {
             flex-direction: column;
             align-items: flex-start;
-            gap: calc(var(--boxel-sp) * 0.5);
+            gap: var(--boxel-sp-xs);
           }
           .nav-section-button {
             margin-left: initial;
@@ -747,210 +720,338 @@ export class NavSection extends GlimmerComponent<{
 export class NavBar extends GlimmerComponent<{
   Args: {
     sections?: SectionSignature[];
+    // affixes a dark-mode toggle to the right end of the bar
+    toggleDarkMode?: () => void;
+    isDarkMode?: boolean;
   };
   Element: HTMLElement;
 }> {
-  @tracked private canScrollLeft = false;
-  @tracked private canScrollRight = false;
+  // items that don't fit move into the "more" dropdown; null means all fit
+  @tracked private visibleCount: number | null = null;
 
-  private navGrid: HTMLElement | null = null;
+  // at mobile widths the item strip becomes a hamburger menu
+  @tracked private isCompact = false;
 
-  private get hasOverflow() {
-    return this.canScrollLeft || this.canScrollRight;
+  private navElement: HTMLElement | null = null;
+  private navList: HTMLElement | null = null;
+  private navToggle: HTMLElement | null = null;
+
+  // space kept free for the "more" trigger before items are dropped
+  private moreButtonReserve = 40;
+
+  private compactMaxWidth = 400;
+
+  private get hasOverflowMenu() {
+    return this.visibleCount !== null;
   }
 
-  private trackOverflow = modifier((el: HTMLElement) => {
-    this.navGrid = el;
-    let update = () => this.updateScrollState(el);
-    el.addEventListener('scroll', update, { passive: true });
-    // the initial measurement comes from the ResizeObserver's guaranteed
-    // async first delivery; a synchronous update here would write tracked
-    // state already consumed by this render (a backtracking re-render)
-    let observer = new ResizeObserver(update);
-    observer.observe(el);
+  private toMenuItem = (section: SectionSignature) =>
+    new MenuItem({
+      label: section.navTitle,
+      action: () => this.scrollFromMenu(section.id),
+    });
+
+  private get overflowMenuItems() {
+    let sections = this.args.sections ?? [];
+    if (this.visibleCount === null) {
+      return [];
+    }
+    return sections.slice(this.visibleCount).map(this.toMenuItem);
+  }
+
+  private get allMenuItems() {
+    return (this.args.sections ?? []).map(this.toMenuItem);
+  }
+
+  private isHidden = (index: number) =>
+    this.visibleCount !== null && index >= this.visibleCount;
+
+  private registerNav = modifier((el: HTMLElement) => {
+    this.navElement = el;
     return () => {
-      el.removeEventListener('scroll', update);
-      observer.disconnect();
-      this.navGrid = null;
+      this.navElement = null;
     };
   });
 
-  private updateScrollState(el: HTMLElement) {
-    let maxScrollLeft = el.scrollWidth - el.clientWidth;
-    let scrollLeft = Math.abs(el.scrollLeft);
-    this.canScrollLeft = scrollLeft > 1;
-    this.canScrollRight = scrollLeft < maxScrollLeft - 1;
+  // the dropdown content is portaled outside the card, so the menu action
+  // cannot walk up from its own element; scroll from the captured nav instead
+  private scrollFromMenu = (sectionId: string) => {
+    if (this.navElement) {
+      scrollToSectionFrom(this.navElement, sectionId);
+    }
+  };
+
+  private trackFit = modifier(
+    (el: HTMLElement, [_sections]: [SectionSignature[] | undefined]) => {
+      let update = () => this.updateVisibleCount(el);
+      // the ResizeObserver's async first delivery is the initial measurement;
+      // measuring synchronously here would cause a backtracking re-render
+      let observer = new ResizeObserver(update);
+      observer.observe(el);
+      return () => observer.disconnect();
+    },
+  );
+
+  // the container's observer has already fired by the time the strip
+  // re-renders out of compact mode; observing the list re-measures it
+  private trackListFit = modifier((el: HTMLElement) => {
+    this.navList = el;
+    let update = () => this.updateVisibleCount(el.parentElement as HTMLElement);
+    let observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      this.navList = null;
+    };
+  });
+
+  private registerToggle = modifier((el: HTMLElement) => {
+    this.navToggle = el;
+    return () => {
+      this.navToggle = null;
+    };
+  });
+
+  // measures against the container, whose width is set from outside, so the
+  // "more" button appearing cannot re-trigger the measurement. hidden items
+  // keep their layout size (visibility, not display), so widths stay readable
+  private updateVisibleCount(container: HTMLElement) {
+    this.isCompact = container.clientWidth <= this.compactMaxWidth;
+    let list = this.navList;
+    let items = list ? (Array.from(list.children) as HTMLElement[]) : [];
+    if (!list || !items.length) {
+      this.visibleCount = null;
+      return;
+    }
+    let containerStyle = getComputedStyle(container);
+    let available =
+      container.clientWidth -
+      parseFloat(containerStyle.paddingLeft) -
+      parseFloat(containerStyle.paddingRight);
+    if (this.navToggle) {
+      // the toggle is a sibling flex item, so it costs the container's gap too
+      available -=
+        this.navToggle.offsetWidth +
+        (parseFloat(containerStyle.columnGap) || 0);
+    }
+    let gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    let widths = items.map((item) => item.offsetWidth);
+    let total =
+      widths.reduce((sum, width) => sum + width, 0) + gap * (items.length - 1);
+    if (total <= available) {
+      list.style.width = '';
+      this.visibleCount = null;
+      return;
+    }
+    available -= this.moreButtonReserve;
+    let used = 0;
+    let count = 0;
+    for (let width of widths) {
+      let next = used + (count > 0 ? gap : 0) + width;
+      if (next > available) {
+        break;
+      }
+      used = next;
+      count++;
+    }
+    // pin the list width so the "more" button sits after the last visible item
+    list.style.width = `${used}px`;
+    this.visibleCount = count;
   }
 
   <template>
-    <nav class='dsr-nav' aria-label='Sections' ...attributes>
-      {{#if this.hasOverflow}}
-        <button
-          type='button'
-          class='nav-scroll nav-scroll--left'
-          aria-label='Scroll navigation left'
-          disabled={{not this.canScrollLeft}}
-          {{on 'click' (fn this.scrollTo 'left')}}
-        >
-          <ChevronCompactLeft />
-        </button>
-      {{/if}}
-      <div class={{cn 'nav-container' has-overflow=this.hasOverflow}}>
-        <ul class='nav-grid' {{this.trackOverflow}}>
-          {{#each @sections as |section|}}
-            <li>
-              <Button
-                @as='anchor'
-                @href='#{{section.id}}'
-                @kind='link-muted'
-                class='nav-item'
-                {{on 'click' (fn scrollToSection section.id)}}
-              >{{section.navTitle}}</Button>
-            </li>
-          {{/each}}
-        </ul>
+    <nav
+      class='dsr-nav'
+      aria-label='Sections'
+      {{this.registerNav}}
+      ...attributes
+      data-test-theme-nav
+    >
+      <div class='nav-container' {{this.trackFit @sections}}>
+        {{#if this.isCompact}}
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <ContextButton
+                class='nav-menu-button'
+                @variant='ghost'
+                @label='Sections menu'
+                @icon={{MenuIcon}}
+                {{bindings}}
+                data-test-theme-nav-menu
+              />
+            </:trigger>
+            <:content as |dd|>
+              <BoxelMenu
+                class='nav-dropdown-menu'
+                @closeMenu={{dd.close}}
+                @items={{this.allMenuItems}}
+              />
+            </:content>
+          </BoxelDropdown>
+        {{else}}
+          <ul
+            class={{cn 'nav-grid' nav-grid--clipped=this.hasOverflowMenu}}
+            {{this.trackListFit}}
+            data-test-theme-nav-list
+          >
+            {{#each @sections as |section index|}}
+              <li class={{if (this.isHidden index) 'nav-item-hidden'}}>
+                <Button
+                  @as='anchor'
+                  @href='#{{section.id}}'
+                  @kind='link-muted'
+                  class='nav-item'
+                  {{on 'click' (fn scrollToSection section.id)}}
+                  data-test-theme-nav-item={{section.id}}
+                >{{section.navTitle}}</Button>
+              </li>
+            {{/each}}
+          </ul>
+
+          {{#if this.hasOverflowMenu}}
+            <div class='nav-more-button-container'>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <ContextButton
+                    class='nav-more-button'
+                    @variant='ghost'
+                    @label='More sections'
+                    @icon='context-menu-vertical'
+                    {{bindings}}
+                    data-test-theme-nav-more
+                  />
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='nav-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.overflowMenuItems}}
+                  />
+                </:content>
+              </BoxelDropdown>
+            </div>
+          {{/if}}
+        {{/if}}
+
+        {{#if @toggleDarkMode}}
+          <ModeToggle
+            class='nav-mode-toggle'
+            @toggleDarkMode={{@toggleDarkMode}}
+            @isDarkMode={{bool @isDarkMode}}
+            {{this.registerToggle}}
+          />
+        {{/if}}
       </div>
-      {{#if this.hasOverflow}}
-        <button
-          type='button'
-          class='nav-scroll nav-scroll--right'
-          aria-label='Scroll navigation right'
-          disabled={{not this.canScrollRight}}
-          {{on 'click' (fn this.scrollTo 'right')}}
-        >
-          <ChevronCompactRight />
-        </button>
-      {{/if}}
     </nav>
     <style scoped>
       /* Navigation */
       .dsr-nav {
+        --dsr-nav-item-max-width: 12rem;
         position: sticky;
         top: 0;
+        /* also read by content pinned below the bar, so it stays in sync */
+        height: var(--dsr-nav-height);
+        width: 100%;
         border-bottom: 1px solid var(--border);
         z-index: 10;
         background: color-mix(in oklch, var(--background) 80%, transparent);
         backdrop-filter: blur(8px);
         display: flex;
         align-items: stretch;
+        justify-content: space-between;
       }
       .nav-grid {
         list-style: none;
         margin: 0;
         padding: 0;
-        padding-inline: var(--boxel-sp);
         display: flex;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs);
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        flex: 1;
+        min-width: 0;
+        overflow: hidden;
         position: relative;
         align-items: center;
       }
-      .nav-grid::-webkit-scrollbar {
-        display: none;
+      /* an item that doesn't fit moves into the overflow menu rather than
+         being truncated in place */
+      .nav-grid > li {
+        flex-shrink: 0;
+      }
+      /* hidden trailing items would distort space-between distribution; the
+         fit measurement sets the width instead */
+      .nav-grid--clipped {
+        justify-content: flex-start;
+        flex: none;
+      }
+      /* visibility, not display: keeps the item measurable */
+      .nav-item-hidden {
+        visibility: hidden;
       }
       .nav-item {
         font-size: var(--boxel-font-size-sm);
         font-weight: 500;
         white-space: nowrap;
         padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        /* text-overflow needs a block box; the Button is inline-flex */
+        display: block;
+        max-width: var(--dsr-nav-item-max-width);
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .nav-scroll {
+      .nav-mode-toggle {
+        align-self: center;
+        justify-content: flex-end;
+        margin-left: auto;
+      }
+      .nav-more-button-container,
+      .nav-menu-button {
+        align-self: center;
         flex-shrink: 0;
-        border: none;
-        background: none;
-        color: var(--muted-foreground);
-        width: 2.25rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition:
-          color var(--boxel-transition),
-          box-shadow var(--boxel-transition),
-          transform var(--boxel-transition);
-        opacity: 0.5;
-        padding: 0;
       }
-      .nav-scroll:hover:not(:disabled),
-      .nav-scroll:focus-visible {
+      .nav-more-button,
+      .nav-menu-button {
+        color: var(--muted-foreground);
+      }
+      .nav-more-button :deep(svg),
+      .nav-menu-button :deep(svg) {
+        stroke-width: 1px;
+      }
+      .nav-more-button:hover,
+      .nav-more-button:focus-visible,
+      .nav-menu-button:hover,
+      .nav-menu-button:focus-visible {
         color: var(--foreground);
         background: color-mix(in oklch, var(--foreground) 10%, transparent);
       }
-      .nav-scroll:focus-visible {
+      .nav-more-button:focus-visible,
+      .nav-menu-button:focus-visible {
         outline: 2px solid var(--ring, var(--boxel-highlight));
       }
-      .nav-scroll:disabled {
-        opacity: 0.2;
-        cursor: default;
-      }
-      .nav-scroll--left {
-        order: -1;
-      }
-      .nav-scroll--right {
-        order: 1;
+      /* portaled next to the app root, so it needs its own viewport cap */
+      .nav-dropdown-menu {
+        max-height: 50vh;
+        overflow-y: auto;
       }
       .nav-container {
         position: relative;
         flex-grow: 1;
         display: flex;
+        gap: var(--boxel-sp-xs);
         overflow: hidden;
-      }
-      .nav-container.has-overflow::before,
-      .nav-container.has-overflow::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 1rem;
-        pointer-events: none;
-        z-index: 1;
-      }
-      .nav-container.has-overflow::before {
-        left: 0;
-        background: linear-gradient(
-          to right,
-          var(--background) 5%,
-          transparent
-        );
-      }
-      .nav-container.has-overflow::after {
-        right: 0;
-        background: linear-gradient(to left, var(--background) 5%, transparent);
+        padding-inline: var(--boxel-sp-xl);
       }
 
       @container (width <= 768px) {
-        .dsr-nav {
-          padding-block: var(--boxel-sp);
-        }
         .nav-grid {
           gap: var(--boxel-sp);
         }
-        .nav-scroll {
-          display: none;
-        }
-        .nav-container::before,
-        .nav-container::after {
-          display: none;
+        /* matches .dsr-content's compact padding so items stay aligned */
+        .nav-container {
+          padding-inline: var(--boxel-sp);
         }
       }
     </style>
   </template>
-
-  private scrollTo = (direction: 'left' | 'right', event: Event) => {
-    event.preventDefault();
-    let navGrid = this.navGrid;
-    if (!navGrid) {
-      return;
-    }
-    let offset =
-      direction === 'left'
-        ? -navGrid.clientWidth * 0.8
-        : navGrid.clientWidth * 0.8;
-    navGrid.scrollBy({ left: offset, behavior: 'smooth' });
-  };
 }
 
 export class ModeToggle extends GlimmerComponent<{
@@ -1045,7 +1146,7 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
           text-wrap: pretty;
         }
         .isolated {
-          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
         }
         .edit {
           padding: var(--boxel-sp-xl);
@@ -1054,14 +1155,14 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: calc(var(--boxel-sp) * 1.5);
+          margin-bottom: var(--boxel-sp-lg);
           font-size: var(--boxel-caption-font-size);
           text-transform: uppercase;
           letter-spacing: var(--boxel-lsp-xxl);
           font-weight: 600;
         }
         .theme-dashboard-header-title {
-          margin-bottom: calc(var(--boxel-sp) * 0.75);
+          margin-bottom: var(--boxel-sp-sm);
           color: var(--foreground);
         }
         .theme-dashboard-header-tagline {
@@ -1113,7 +1214,7 @@ export class ThemeDashboardEmptyState extends GlimmerComponent<{
           flex-direction: column;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp-xl) calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-xl);
           text-align: center;
           text-wrap: pretty;
           color: var(--muted-foreground);
@@ -1136,9 +1237,8 @@ export class ThemeDashboardEmptyState extends GlimmerComponent<{
   </template>
 }
 
-// Pill samples for the semantic color roles (default, primary, secondary,
-// accent, muted, destructive) rendered with the ambient theme tokens. Shared
-// by the theme visualizer and the brand guide's UI component samples.
+// Pill samples for the semantic color roles, rendered with the ambient theme
+// tokens. Shared by the theme visualizer and the brand guide.
 export class PreviewPills extends GlimmerComponent<{
   Element: HTMLElement;
 }> {
@@ -1305,12 +1405,13 @@ export class ThemeVisualizer extends GlimmerComponent<{
         .dsr-theme-visualizer {
           background-color: var(--card);
           color: var(--card-foreground);
-          border-radius: var(--radius);
-          padding: calc(var(--boxel-sp) * 2);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp-xl);
+          min-width: 0;
           border: 1px solid var(--border);
         }
         .dsr-theme-visualizer + :deep(*) {
-          margin-top: calc(var(--boxel-sp) * 2);
+          margin-top: var(--boxel-sp-xl);
         }
         .dsr-theme-visualizer-header {
           display: flex;
@@ -1318,23 +1419,29 @@ export class ThemeVisualizer extends GlimmerComponent<{
           justify-content: space-between;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          margin-bottom: calc(var(--boxel-sp) * 2);
+          margin-bottom: var(--boxel-sp-xl);
           padding-bottom: var(--boxel-sp);
           border-bottom: 2px solid var(--border);
         }
         .structured-theme-visualizer {
           display: flex;
           flex-direction: column;
-          gap: calc(var(--boxel-sp) * 4);
+          gap: var(--boxel-sp-4xl);
           background-color: var(--background);
           color: var(--foreground);
           border-radius: var(--radius);
-          padding: calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-xl);
           border: 2px solid var(--border);
+        }
+        @container (width <= 768px) {
+          .dsr-theme-visualizer,
+          .structured-theme-visualizer {
+            padding-inline: var(--boxel-sp);
+          }
         }
         .structured-theme-visualizer-subtitle {
           border-bottom: var(--boxel-border);
-          margin-bottom: calc(var(--boxel-sp) * 2);
+          margin-bottom: var(--boxel-sp-xl);
         }
         .structured-theme-component-samples {
           display: flex;
@@ -1401,6 +1508,8 @@ export class ThemeDashboard extends GlimmerComponent<{
     isDarkMode?: boolean;
     themeCss?: string | null;
     themeId?: string | null;
+    // affixes a dark-mode toggle to the right end of the nav bar
+    toggleDarkMode?: () => void;
   };
   Blocks: { default: []; header: []; navBar: [] };
   Element: HTMLElement;
@@ -1450,7 +1559,11 @@ export class ThemeDashboard extends GlimmerComponent<{
         {{#if (has-block 'navBar')}}
           {{yield to='navBar'}}
         {{else if @sections.length}}
-          <NavBar @sections={{@sections}} />
+          <NavBar
+            @sections={{@sections}}
+            @toggleDarkMode={{@toggleDarkMode}}
+            @isDarkMode={{@isDarkMode}}
+          />
         {{/if}}
 
         <div class='dsr-content'>
@@ -1474,14 +1587,14 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
+          --dsr-nav-height: 3.25rem;
           display: flex;
           flex-direction: column;
           height: 100%;
           background-color: var(--background);
           color: var(--foreground);
           overflow-y: auto;
-          /* containment context for the NavBar's container queries, so
-             responsive rules key off the card's width, not the viewport */
+          /* the NavBar's container queries key off the card, not the viewport */
           container-type: inline-size;
         }
 
@@ -1502,14 +1615,14 @@ export class ThemeDashboard extends GlimmerComponent<{
           width: 100%;
           max-width: 56rem;
           margin: 0 auto;
-          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
           counter-reset: section;
         }
 
         /* Footer */
         .dsr-footer {
           border-top: 1px solid var(--border);
-          padding: calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-xl);
           background-color: var(--muted);
           color: var(--muted-foreground);
         }
@@ -1527,10 +1640,10 @@ export class ThemeDashboard extends GlimmerComponent<{
         /* Responsive */
         @media (max-width: 768px) {
           .dsr-header {
-            padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
+            padding: var(--boxel-sp-xl) var(--boxel-sp);
           }
           .dsr-content {
-            padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
+            padding: var(--boxel-sp-xl) var(--boxel-sp);
           }
         }
       }
