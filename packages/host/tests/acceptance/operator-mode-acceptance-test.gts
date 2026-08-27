@@ -840,6 +840,15 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-workspace-chooser-toggle]');
 
     assert.dom('[data-test-workspace-chooser]').exists();
+    // Wait for a workspace to actually render. Each tile renders either its
+    // own loading indicator or its content, never both, so a list that has
+    // finished loading and a list holding no tiles at all are alike in having
+    // no indicator in them — and the second is what let a Percy snapshot of an
+    // entirely empty chooser through with the test still green. Only the
+    // presence of a tile separates them.
+    await waitFor(`[data-test-workspace="Test Workspace B"]`);
+    // Still worth asserting after that wait: the wait settles one tile, this
+    // covers the rest of the list being done too.
     assert
       .dom(`[data-test-workspace-list] [data-test-workspace-loading-indicator]`)
       .doesNotExist();

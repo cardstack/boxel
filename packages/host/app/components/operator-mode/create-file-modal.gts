@@ -936,10 +936,12 @@ export default class CreateFileModal extends Component<Signature> {
     // rewritten to a realm-prefix form here.
     const canonicalModule =
       this.network.virtualNetwork.unresolveURL(absoluteModuleHref);
+    // A `canonicalModule` in prefix form takes the first arm, so the second
+    // one only ever parses an href.
     const moduleForImport: RealmResourceIdentifier | URL =
       canonicalModule.startsWith(`${baseRealmRRI}`)
         ? (canonicalModule as RealmResourceIdentifier)
-        : new URL(absoluteModuleHref);
+        : new URL(absoluteModuleHref); // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
     let moduleURL = maybeRelativeReference(
       moduleForImport,
       url,
