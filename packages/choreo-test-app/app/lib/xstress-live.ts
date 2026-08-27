@@ -2,12 +2,16 @@
  * Live innards for the stress-test plate. Not Choreo participants — they
  * ride inside the kept hero and keep running while it flies. CSS loops on
  * the hero itself freeze during a crossing (they would fight the flight
- * transform); a <video>, a WebGL field, and an overflow pane do not.
+ * transform); a <video> and an overflow pane do not. The three.js field is
+ * a slow drift over the slide ground, not in the plate — a hitch in the
+ * Magic Move would freeze it.
  */
 import { modifier } from 'ember-modifier';
 import config from 'test-app/config/environment';
 import {
+  AdditiveBlending,
   BufferGeometry,
+  CanvasTexture,
   Color,
   Float32BufferAttribute,
   PerspectiveCamera,
@@ -18,10 +22,38 @@ import {
 } from 'three';
 
 const IN_TEST = config.environment === 'test';
-const TINTS = [0x1f7c86, 0xc45a24, 0x8b6cff] as const;
+const TINTS = [0x73ffe8, 0xff7a2e, 0xc79bff] as const;
+
+/** ~16°/s on Y — slow drift; a freeze of a few frames is obvious. */
+const SPIN_Y = 0.0046;
+const SPIN_X = 0.0015;
 
 function reduced() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function discMap() {
+  const size = 64;
+  const g = document.createElement('canvas');
+  g.width = size;
+  g.height = size;
+  const ctx = g.getContext('2d')!;
+  const grad = ctx.createRadialGradient(
+    size / 2,
+    size / 2,
+    0,
+    size / 2,
+    size / 2,
+    size / 2,
+  );
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const map = new CanvasTexture(g);
+  map.needsUpdate = true;
+  return map;
 }
 
 function slideOf(el: Element) {
@@ -31,13 +63,11 @@ function slideOf(el: Element) {
 }
 
 /**
- * A small Points cloud. Keeps drawing during a crossing — that is the
- * stress (WebGL in a transforming ancestor). Reduced-motion holds still.
+ * three.js Points over the slide ground. Keeps drifting during a crossing
+ * so a discontinuity is obvious. Reduced-motion holds still. Skip the
+ * rAF/WebGL loop in test — the <canvas> still mounts.
  */
 export const particles = modifier((canvas: HTMLCanvasElement) => {
-  // The suite visits this route before integration tests. An infinite rAF
-  // plus a live WebGL context will starve later layout springs — skip both
-  // in test; the <canvas> still sits in the plate for the stress assertions.
   if (IN_TEST) {
     return;
   }
@@ -54,22 +84,26 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
   }
   renderer.setClearColor(0x000000, 0);
   const scene = new Scene();
-  const camera = new PerspectiveCamera(42, 1, 0.1, 20);
-  camera.position.z = 3.2;
-  const count = reduced() ? 28 : 96;
+  const camera = new PerspectiveCamera(42, 1, 0.1, 24);
+  camera.position.z = 4.2;
+  const count = reduced() ? 48 : 280;
   const positions = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     const o = i * 3;
-    positions[o] = (Math.random() - 0.5) * 3.2;
-    positions[o + 1] = (Math.random() - 0.5) * 3.2;
-    positions[o + 2] = (Math.random() - 0.5) * 2.4;
+    positions[o] = (Math.random() - 0.5) * 8.5;
+    positions[o + 1] = (Math.random() - 0.5) * 8.5;
+    positions[o + 2] = (Math.random() - 0.5) * 5.5;
   }
   const geo = new BufferGeometry();
   geo.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  const map = discMap();
   const mat = new PointsMaterial({
+    blending: AdditiveBlending,
     color: new Color(TINTS[0]),
-    opacity: 0.82,
-    size: 0.07,
+    depthWrite: false,
+    map,
+    opacity: 0.62,
+    size: 0.09,
     sizeAttenuation: true,
     transparent: true,
   });
@@ -78,6 +112,7 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
 
   let raf = 0;
   let alive = true;
+  const hold = reduced();
   const tick = () => {
     if (!alive) {
       return;
@@ -90,10 +125,11 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
       camera.updateProjectionMatrix();
     }
     mat.color.setHex(TINTS[slideOf(canvas)]);
-    if (!reduced()) {
-      cloud.rotation.y += 0.007;
-      cloud.rotation.x += 0.0024;
+    if (!hold) {
+      cloud.rotation.y += SPIN_Y;
+      cloud.rotation.x += SPIN_X;
     }
+    canvas.dataset.spin = String(cloud.rotation.y);
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
   };
@@ -104,6 +140,7 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
     cancelAnimationFrame(raf);
     geo.dispose();
     mat.dispose();
+    map.dispose();
     renderer.dispose();
   };
 });

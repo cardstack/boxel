@@ -58,7 +58,12 @@ module('Acceptance | crossing stress', function (hooks) {
     );
     assert.ok(
       find('[data-test-particles]'),
-      'the plate holds a three.js particle field'
+      'a three.js field drifts over the slide ground'
+    );
+    assert.strictEqual(
+      find('[data-test-hero]')?.querySelector('[data-test-particles]'),
+      null,
+      'the particle field is not in the plate'
     );
     const scroller = find('[data-test-scroll]') as HTMLElement;
     assert.ok(scroller, 'the plate holds an internal scroll pane');
@@ -155,9 +160,14 @@ module('Acceptance | crossing stress', function (hooks) {
       find('[data-test-hero] [data-test-clip]'),
       'the <video> stays inside the flying plate'
     );
+    assert.strictEqual(
+      find('[data-test-hero]')?.querySelector('[data-test-particles]'),
+      null,
+      'the three.js field stays on the ground — it is not in the flying plate'
+    );
     assert.ok(
-      find('[data-test-hero] [data-test-particles]'),
-      'the particle field stays inside the flying plate'
+      find('[data-test-particles]'),
+      'the background three.js field is still on the stage'
     );
     assert.ok(
       find('[data-test-hero] [data-test-scroll]'),

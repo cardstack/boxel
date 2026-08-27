@@ -83,7 +83,7 @@ const deck = [
 const AUTO = 1.8;
 const STRESS = 0.72;
 
-const CLIP = `${config.rootURL}xstress-clip.mp4`;
+const CLIP = `${config.rootURL}xstress-loop.mp4`;
 
 /** doubled so the overflow pane can wrap without a seam */
 const tape = [
@@ -117,12 +117,14 @@ const tape = [
  * and rebuilds every frame (Gestures forbids this) and interpolates
  * colour through mud. Each rest-state shadow is a dedicated caster
  * with a static `box-shadow`; only opacity crossfades — the same
- * grammar as Crossing skins. Live innards — a real <video>, a three.js
- * particle field, an overflow pane that auto-scrolls, a spinning mark,
- * a meter, ticking dots — are NOT participants: they reflow with the
- * box and keep running mid-flight (CSS loops on the hero itself still
- * freeze, because those fight the Move transform). An inset caption
- * inside the plate IS a counterpart, so a skin
+ * grammar as Crossing skins. Live innards — a looping <video> where
+ * the particle box was, an overflow pane that auto-scrolls, a spinning
+ * mark, a meter, ticking dots — are NOT participants: they reflow with
+ * the box and keep running mid-flight (the case a view-transition
+ * snapshot would freeze). A three.js Points cloud drifts slowly over the
+ * slide ground, not in the plate — a hitch in the flight is a freeze in
+ * the field. CSS loops on the hero itself still freeze, because those fight the Move transform. An inset caption inside the
+ * plate IS a counterpart, so a skin
  * crosses while its parent flies. Titles, kickers, and chips pair as
  * counterparts (`pack="content"` on type). A kept hairline `c.Move`s
  * with the plate. Unique washes fade.
@@ -329,6 +331,11 @@ export class CrossingStress extends Component {
         as |c|
       >
         <span hidden {{this.wire c}}></span>
+        <canvas
+          class="xstress-bg-dust"
+          data-test-particles
+          {{particles}}
+        ></canvas>
 
         {{#if this.crossing}}
           {{#let (t) as |tt|}}
@@ -378,11 +385,6 @@ export class CrossingStress extends Component {
               playsinline
               {{playClip}}
             ></video>
-            <canvas
-              class="xstress-hero-particles"
-              data-test-particles
-              {{particles}}
-            ></canvas>
             <div
               class="xstress-hero-scroll"
               data-test-scroll
