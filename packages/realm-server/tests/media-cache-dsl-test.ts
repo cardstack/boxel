@@ -127,10 +127,13 @@ module(basename(import.meta.filename), function () {
       let viaGet = parseCaptureSpecParams(
         params('viewport=1280x800&dsf=2&format=embedded'),
       );
-      let viaPost = parseScreenshotCaptureSpec({
-        viewport: { width: 1280, height: 800 },
-        deviceScaleFactor: 2,
-      });
+      let viaPost = parseScreenshotCaptureSpec(
+        {
+          viewport: { width: 1280, height: 800 },
+          deviceScaleFactor: 2,
+        },
+        'embedded',
+      );
       assert.true('spec' in viaGet, 'the GET spelling parses');
       assert.strictEqual(viaPost.error, undefined, 'the POST spelling parses');
       if ('spec' in viaGet && !viaPost.error) {
@@ -266,7 +269,7 @@ module(basename(import.meta.filename), function () {
         [
           'viewport=200x200&clip=0,0,400x300',
           'clip',
-          'captureSpec.clip exceeds captureSpec.viewport.width',
+          'captureSpec.clip exceeds the viewport width',
         ],
         [
           'viewport=100x16384&dsf=2',

@@ -18,6 +18,7 @@ import {
 import {
   chooseScreenshotCardCoalesceDecision,
   estimateScreenshotQueueWait,
+  SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
 } from '@cardstack/runtime-common/jobs/screenshot-card';
 import type {
   DBAdapter,
@@ -259,6 +260,344 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('normalizes a batch captureSpec, folding singular defaults into entries', async function (assert) {
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              captureSpec: {
+                // Singular fields act as batch-wide defaults.
+                deviceScaleFactor: 2,
+                captures: [
+                  { name: 'wide', viewport: { width: 1280, height: 800 } },
+                  {
+                    name: 'thumb',
+                    clip: { x: 0, y: 0, width: 200, height: 200 },
+                  },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      let forwarded = (published[0]?.args as Record<string, unknown>)
+        ?.captureSpec as { captures?: unknown[] };
+      assert.deepEqual(
+        forwarded,
+        {
+          captures: [
+            {
+              name: 'wide',
+              viewport: { width: 1280, height: 800 },
+              deviceScaleFactor: 2,
+            },
+            {
+              name: 'thumb',
+              deviceScaleFactor: 2,
+              clip: { x: 0, y: 0, width: 200, height: 200 },
+            },
+          ],
+        },
+        'entries fold in the singular deviceScaleFactor default and keep their own overrides',
+      );
+    });
+
+    test('an entry override back to an engine default elides after the merge', async function (assert) {
+      // `deviceScaleFactor: 1` on the entry must beat the batch-wide 2, and
+      // 1 is the engine default, so the merged entry carries no scale at all.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+      let cardId = `${realmURL}Person/fadhlan`;
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId,
+              format: 'isolated',
+              captureSpec: {
+                deviceScaleFactor: 2,
+                captures: [{ name: 'flat', deviceScaleFactor: 1 }],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.deepEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        { captures: [{ name: 'flat' }] },
+        'the explicit 1x wins over the batch default and elides',
+      );
+    });
+
+    test('an entry can unset a batch-wide clip with clip: null', async function (assert) {
+      // Object-valued fields have no scalar "back to default" spelling, so
+      // without `clip: null` a batch that declares a batch-wide clip could have
+      // no fullPage entry — the inherited clip would collide with fullPage. The
+      // unset drops the clip for that entry while the others still inherit it.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              captureSpec: {
+                clip: { x: 0, y: 0, width: 200, height: 150 },
+                captures: [
+                  { name: 'full', fullPage: true, clip: null },
+                  { name: 'thumb' },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.deepEqual(
+        (published[0]?.args as Record<string, unknown>)?.captureSpec,
+        {
+          captures: [
+            { name: 'full', fullPage: true },
+            { name: 'thumb', clip: { x: 0, y: 0, width: 200, height: 150 } },
+          ],
+        },
+        'the null entry drops the batch-wide clip; the bare entry inherits it',
+      );
+    });
+
+    test('includeBase64: false strips capture-entry bytes on the capture-only path', async function (assert) {
+      // A capture-only response's `captures` come straight from the engine
+      // with per-entry base64; the canonical path rebuilds captures[0]
+      // itself, so only this path exercises the entry-level strip.
+      let dbAdapter = makeDbAdapter();
+      let { queue } = makeQueue({
+        status: 'ready',
+        base64: 'iVBORw0KGgo=',
+        width: 1280,
+        height: 720,
+        contentType: 'image/png',
+        captures: [
+          {
+            name: 'wide',
+            base64: 'iVBORw0KGgo=',
+            width: 1280,
+            height: 720,
+            deviceScaleFactor: 1,
+          },
+          {
+            name: 'thumb',
+            base64: 'iVBORw0KGgo=',
+            width: 200,
+            height: 150,
+            deviceScaleFactor: 1,
+          },
+        ],
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+
+      let response = await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              includeBase64: false,
+              captureSpec: {
+                captures: [
+                  { name: 'wide', viewport: { width: 1280, height: 720 } },
+                  {
+                    name: 'thumb',
+                    clip: { x: 0, y: 0, width: 200, height: 150 },
+                  },
+                ],
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      let attrs = response.body.data.attributes;
+      assert.false('base64' in attrs, 'no top-level base64');
+      assert.strictEqual(attrs.captures.length, 2, 'both entries returned');
+      assert.true(
+        attrs.captures.every(
+          (capture: Record<string, unknown>) => !('base64' in capture),
+        ),
+        'no per-entry base64',
+      );
+      assert.deepEqual(
+        attrs.captures.map((capture: { name: string }) => capture.name),
+        ['wide', 'thumb'],
+        'entries keep their names and order',
+      );
+      assert.true(
+        attrs.captures.every(
+          (capture: Record<string, unknown>) => capture.url === null,
+        ),
+        'capture-only entries carry url: null (one shape with the canonical path), never an absent url',
+      );
+    });
+
+    test('rejects a batch over the capture cap', async function (assert) {
+      let captures = Array.from({ length: 13 }, (_v, i) => ({
+        name: `c${i}`,
+      }));
+      await expectCaptureSpecRejected(assert, { captures }, 'at most 12');
+    });
+
+    test('rejects an empty captures array', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [] },
+        'must not be empty',
+      );
+    });
+
+    test('rejects a capture entry without a name', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ viewport: { width: 800, height: 600 } }] },
+        'name',
+      );
+    });
+
+    test('rejects duplicate capture names', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ name: 'same' }, { name: 'same' }] },
+        'duplicated',
+      );
+    });
+
+    test('rejects an unknown capture-entry field by name', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { captures: [{ name: 'typo', fullpage: true }] },
+        'captures[0].fullpage',
+      );
+    });
+
+    test('rejects a per-entry override that violates the bounds', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          captures: [{ name: 'huge', viewport: { width: 5000, height: 600 } }],
+        },
+        'captures[0].viewport.width',
+      );
+    });
+
+    test('rejects a per-entry clip beyond the singular default viewport', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          viewport: { width: 400, height: 300 },
+          captures: [
+            { name: 'oob', clip: { x: 200, y: 0, width: 300, height: 100 } },
+          ],
+        },
+        'captures[0].clip',
+      );
+    });
+
+    test('a batch job carries the flat timeout, not one scaled by capture count', async function (assert) {
+      // The batch ceiling is sized to finish within the sync wait, so the job
+      // timeout no longer scales with entry count — a batch and a singular
+      // capture both enqueue at the flat backstop.
+      let dbAdapter = makeDbAdapter();
+      let { queue, published } = makeQueue({
+        status: 'ready',
+      } as unknown as PgPrimitive);
+      let app = buildApp(buildArgs(dbAdapter, queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let realmURL = 'http://example.test/';
+
+      await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL,
+              cardId: `${realmURL}Person/fadhlan`,
+              format: 'isolated',
+              captureSpec: {
+                captures: Array.from({ length: 12 }, (_v, i) => ({
+                  name: `c${i}`,
+                })),
+              },
+            },
+          },
+        })
+        .expect(201);
+
+      assert.strictEqual(
+        published[0]?.timeout,
+        SCREENSHOT_CARD_JOB_TIMEOUT_SEC,
+        'a full 12-entry batch enqueues at the flat 60s timeout',
+      );
+    });
+
     async function expectCaptureSpecRejected(
       assert: Assert,
       captureSpec: unknown,
@@ -473,7 +812,7 @@ module(basename(import.meta.filename), function () {
             attributes: {
               realmURL: 'http://example.test/',
               cardId: 'http://example.test/Person/fadhlan',
-              format: 'fitted',
+              format: 'nonsense',
             },
           },
         });
@@ -510,6 +849,182 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 400);
       assert.ok(response.text.includes('cardId must be within realmURL'));
       assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+    // Posts a request with the given format + captureSpec and returns the raw
+    // supertest response plus the published-job list, so envelope tests can
+    // assert on either the 201 forward or the 400 rejection.
+    async function postScreenshot(
+      format: string,
+      captureSpec: unknown,
+    ): Promise<{ response: supertest.Response; published: unknown[] }> {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let response = await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL: 'http://example.test/',
+              cardId: 'http://example.test/Person/fadhlan',
+              format,
+              ...(captureSpec === undefined ? {} : { captureSpec }),
+            },
+          },
+        });
+      return { response, published };
+    }
+
+    test('rejects fitted without an envelope', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', undefined);
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 for fitted without envelope',
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects atom as an unsupported capture format', async function (assert) {
+      // Atom's rendering through the envelope box is unspecified (its base
+      // wrapper is intrinsic-size inline-block, not a box-filling size
+      // container), so the format is refused until that capture is defined.
+      let { response, published } = await postScreenshot('atom', {
+        envelope: { width: 120, height: 40 },
+      });
+      assert.strictEqual(response.status, 400, '400 for atom format');
+      assert.ok(
+        response.text.includes('format'),
+        `names format in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('accepts fitted with an envelope and forwards it', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250, height: 275 },
+      });
+      assert.strictEqual(response.status, 201, 'fitted + envelope is accepted');
+      assert.strictEqual(published.length, 1, 'enqueues the job');
+      assert.deepEqual(
+        ((published[0] as { args?: Record<string, unknown> })?.args ?? {})
+          .captureSpec,
+        { envelope: { width: 250, height: 275 } },
+        'envelope forwarded verbatim into the job args',
+      );
+    });
+
+    test('rejects an envelope on isolated format', async function (assert) {
+      let { response, published } = await postScreenshot('isolated', {
+        envelope: { width: 250, height: 275 },
+      });
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 for envelope on a viewport-filling format',
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects a non-integer envelope dimension', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250.5, height: 275 },
+      });
+      assert.strictEqual(response.status, 400, '400 for fractional envelope');
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects an unknown envelope field by name', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250, height: 275, depth: 3 },
+      });
+      assert.strictEqual(response.status, 400, '400 for unknown envelope key');
+      assert.ok(
+        response.text.includes('envelope.depth'),
+        `names the offending field: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects an envelope past the physical-pixel cap', async function (assert) {
+      // 6000 CSS px at 3x is ~18k physical px, past the Chromium texture cap
+      // — the same composition rule the viewport and clip obey.
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 400, height: 6000 },
+        deviceScaleFactor: 3,
+      });
+      assert.strictEqual(response.status, 400, '400 for oversize envelope');
+      assert.ok(
+        response.text.includes('envelope.height × deviceScaleFactor'),
+        `names the offending field: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects a fitted batch entry missing an envelope', async function (assert) {
+      // The singular envelope acts as a batch-wide default; an entry that
+      // overrides nothing inherits it, but here neither the singular spec nor
+      // the second entry supplies one.
+      let { response, published } = await postScreenshot('fitted', {
+        captures: [
+          { name: 'ok', envelope: { width: 150, height: 170 } },
+          { name: 'missing' },
+        ],
+      });
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 when an entry has no envelope',
+      );
+      assert.ok(
+        response.text.includes('captures[1]'),
+        `names the offending entry: ${response.text}`,
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('folds a singular envelope default into fitted batch entries', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        // Singular envelope is the batch-wide default.
+        envelope: { width: 200, height: 200 },
+        captures: [
+          { name: 'inherit' },
+          { name: 'override', envelope: { width: 400, height: 300 } },
+        ],
+      });
+      assert.strictEqual(response.status, 201, 'fitted batch accepted');
+      assert.deepEqual(
+        ((published[0] as { args?: Record<string, unknown> })?.args ?? {})
+          .captureSpec,
+        {
+          captures: [
+            { name: 'inherit', envelope: { width: 200, height: 200 } },
+            { name: 'override', envelope: { width: 400, height: 300 } },
+          ],
+        },
+        'each entry carries its effective envelope',
+      );
     });
   });
 

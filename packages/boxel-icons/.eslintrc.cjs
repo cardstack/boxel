@@ -29,13 +29,17 @@ module.exports = {
     curly: 'error',
     'prefer-const': 'off',
     '@typescript-eslint/no-empty-function': 'off',
-    // Successor to `no-var-requires`: the icon build scripts require by design.
+    // The icon build scripts require by design.
     '@typescript-eslint/no-require-imports': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
     '@typescript-eslint/no-non-null-assertion': 'off',
     '@typescript-eslint/no-unused-vars': [
       'error',
-      { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrors: 'none',
+      },
     ],
   },
   overrides: [
@@ -91,7 +95,6 @@ module.exports = {
       extends: ['plugin:n/recommended'],
       rules: {
         'n/no-unpublished-require': 'off',
-        '@typescript-eslint/no-var-requires': 'off',
       },
     },
     {

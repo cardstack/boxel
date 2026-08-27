@@ -138,7 +138,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service declare private store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
-  @tracked private fileSearchResults: ReturnType<getCards> | undefined;
+  @tracked private fileSearchResults: ReturnType<getCards<FileDef>> | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private newCardNonce = 0;
 
@@ -368,7 +368,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
     // Host code-submode UI searches the store directly (uncapped); the card
     // caps live on the `@context` surfaces this component does not consume.
-    this.fileSearchResults = this.store.getSearchResource(
+    this.fileSearchResults = this.store.getSearchResource<FileDef>(
       this,
       () => this.fileMetaQuery,
       () => this.realmServer.availableRealmIdentifiers,
@@ -389,7 +389,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   static FILE_META_DROPDOWN_LIMIT = 20;
 
   private get fileMetaInstances(): FileDef[] | undefined {
-    return this.fileSearchResults?.instances as FileDef[] | undefined;
+    return this.fileSearchResults?.instances;
   }
 
   private get fileMetaDropdownOptions(): FileDef[] | undefined {

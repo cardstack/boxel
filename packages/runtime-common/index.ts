@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { ScreenshotFormat } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -925,13 +926,9 @@ export type RunCommandResponse = {
   meta?: PrerenderResponseMeta;
 };
 
-// Optional per-capture overrides for a screenshot render. All fields are
-// JSON-serializable so this rides through the worker queue on
-// `ScreenshotCardArgs`. Bounds are enforced by the realm-server handler
-// (`handle-screenshot-card.ts`) before the job is enqueued; the capture path
-// (`captureScreenshot`) treats these as already-validated but still rejects the
-// mutually-exclusive `fullPage` + `clip` combination defensively.
-export type ScreenshotCaptureSpec = {
+// The individual capture overrides shared by the singular spec and each batch
+// entry. All fields optional and JSON-serializable.
+export type ScreenshotCaptureOverrides = {
   // CSS-pixel render viewport applied via `page.setViewport` before the render
   // settles, then restored so pooled pages don't leak the size into later index
   // prerenders.
@@ -944,15 +941,53 @@ export type ScreenshotCaptureSpec = {
   fullPage?: boolean;
   // CSS-pixel region to capture, passed straight to `page.screenshot`. Its
   // extent is bounded by the same caps as the viewport (and must sit within
-  // the viewport when one is given). Mutually exclusive with `fullPage`.
-  clip?: { x: number; y: number; width: number; height: number };
+  // the viewport when one is given). Mutually exclusive with `fullPage`. A
+  // batch entry may set `clip: null` to drop a batch-wide clip default (the
+  // only "back to no clip" spelling an object-valued field has); it elides
+  // away after the merge, so a normalized spec never carries null.
+  clip?: { x: number; y: number; width: number; height: number } | null;
+  // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
+  // parent-owned box rather than the viewport, so it needs this to lay out
+  // and fire its `@container fitted-card` queries. Required for fitted
+  // captures and refused for isolated/embedded (enforced by the shared
+  // capture-spec parse on both request surfaces). The capture is sized to the
+  // envelope, so a batch of differing envelopes yields differently-sized PNGs
+  // off one render.
+  envelope?: { width: number; height: number };
 };
+
+// One entry in a batch capture: a name plus the same per-capture overrides. An
+// entry's fields override the singular spec fields, which act as batch-wide
+// defaults.
+export type ScreenshotCaptureEntry = ScreenshotCaptureOverrides & {
+  name: string;
+};
+
+// Optional per-capture overrides for a screenshot render. All fields are
+// JSON-serializable so this rides through the worker queue on
+// `ScreenshotCardArgs`. Bounds are enforced by the shared strict parse in
+// `capture-spec.ts` before the job is enqueued (both the realm-server POST
+// body and the prerender server's screenshot route run it); the capture path
+// (`captureScreenshot`) treats these as already-validated but still rejects
+// the mutually-exclusive `fullPage` + `clip` combination defensively and
+// bounds a fullPage capture's document extent, which no parse can know.
+//
+// When `captures` is present the render is captured once per entry (after a
+// single settle); each entry's overrides win over the singular fields. When it
+// is absent the singular fields describe a single capture.
+export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
+  captures?: ScreenshotCaptureEntry[];
+};
+
+// ScreenshotFormat is defined (with its runtime const + guard) in
+// `capture-spec.ts`, re-exported from this module, and imported at the top of
+// this file for the types below.
 
 export type ScreenshotPrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
-  format: 'isolated' | 'embedded';
+  format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
   // Worker-job priority threaded through from the producer side. See
@@ -965,8 +1000,25 @@ export type ScreenshotPrerenderArgs = {
   jobId?: string;
 };
 
+// One captured image in a screenshot response. `deviceScaleFactor` is the
+// effective scale used for this capture, so a consumer can reconstruct physical
+// vs CSS pixel dimensions.
+export type ScreenshotCaptureResult = {
+  name: string;
+  base64: string;
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+};
+
 export type ScreenshotPrerenderResponse = {
   status: 'ready' | 'error' | 'unusable';
+  // Present on every ready response (a single entry named "default" when the
+  // request used the singular fields); error and unusable responses carry
+  // none. The top-level `base64`/`width`/`height` mirror `captures[0]` for
+  // back-compat with the shipped host tool and the staging capture command,
+  // which read the singular fields.
+  captures?: ScreenshotCaptureResult[];
   base64?: string;
   width?: number;
   height?: number;
@@ -1405,7 +1457,12 @@ export type getCardCollection<T extends CardDef = CardDef> = (
   cardErrors: CardErrorJSONAPI[];
   isLoaded: boolean;
 };
-export type getCards<T extends CardDef = CardDef> = (
+// Generic over `CardDef | FileDef` (defaulting to `CardDef`) to match the
+// resource backing it — `StoreService.getSearchResource`, `SearchResource`, and
+// `getSearch` are all `<T extends CardDef | FileDef = CardDef>`. A file-typed
+// search (`getCards<FileDef>(...)`) is then `FileDef`-typed end to end instead
+// of a `CardDef[]` the caller has to cast.
+export type getCards<T extends CardDef | FileDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -1479,7 +1536,33 @@ export interface Store {
     patchData: PatchData,
     opts?: { doNotPersist?: boolean; clientRequestId?: string },
   ): Promise<T | CardErrorJSONAPI | undefined>;
-  search(query: Query, realmURLs?: string[]): Promise<CardDef[]>;
+  // `scope` pins which rows the search returns and drives the element type:
+  // 'files' → `FileDef[]`, 'all' → `(CardDef | FileDef)[]`, and 'cards' (or
+  // omitted) → `CardDef[]`. When omitted the scope is inferred from the filter —
+  // an untyped query defaults to 'cards'. Prefer passing it explicitly over
+  // shaping the filter to coax a scope. Note: 'all' returns a card's instance
+  // row *and* its dual-indexed `.json` file row, so an untyped `scope: 'all'`
+  // search yields each card twice unless the caller dedups
+  // (e.g. `excludeCardInstanceFileRows()`).
+  //
+  // The element type follows the runtime `scope` argument rather than a free
+  // caller-supplied type parameter, so a file-scoped search is `FileDef`-typed
+  // without a cast and a card-scoped search cannot be mis-asserted as files.
+  search(
+    query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'files' },
+  ): Promise<FileDef[]>;
+  search(
+    query: Query,
+    realmURLs: string[] | undefined,
+    opts: { scope: 'all' },
+  ): Promise<(CardDef | FileDef)[]>;
+  search<T extends CardDef = CardDef>(
+    query: Query,
+    realmURLs?: string[],
+    opts?: { scope?: 'cards' },
+  ): Promise<T[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
 

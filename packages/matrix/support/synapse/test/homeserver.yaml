@@ -84,6 +84,15 @@ suppress_key_server_warning: true
 ui_auth:
   session_timeout: "300s"
 
+login_via_existing_session:
+  enabled: true
+  require_ui_auth: false
+  token_timeout: "2m"
+  # Synapse rate-limits get_token to one request per minute per user id. That
+  # limit is hardcoded in the servlet — no rc_* setting and no admin
+  # override_ratelimit relaxes it — so anything minting more than one token
+  # per minute needs a distinct account per mint.
+
 email:
   smtp_host: "boxel-smtp"
   smtp_port: 25
