@@ -62,6 +62,18 @@ jobs:
         # set the harness knows about.
         if: ${{ !cancelled() }}
         run: pnpm run lint:tier-registry
+      - name: Check every package declaring content-tag resolves one version
+        # Several packages preprocess authored `<template>` source with their
+        # own copy — the realm with runtime-common's, the Host's module
+        # classifier with host's, the CLI with its own. Two versions read the
+        # compiled form differently, which shows up as servable modules
+        # classifying as drafts — and a draft's module graph is empty, which is
+        # the whole of a sandboxed render's fetch authority. The host suite
+        # bundles two of those copies and would catch a behavioral divergence
+        # between them incidentally; the declaration drifting, and a divergence
+        # in a package no suite bundles both sides of, are what this holds.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:content-tag-parity
       - name: Check execution-runtime evidence manifests and smoke runner
         # The wild-corpus and mirror-cohort manifests are executable, so their
         # shape (fifty unique cards, ten numbered scenarios, every evidence

@@ -937,6 +937,14 @@ async function startTestPageServer(opts: TestPageServerOptions): Promise<{
         let needsTranspile = ext === '.gts' || ext === '.ts';
 
         if (needsTranspile) {
+          // `transpileJS` is the realm's own pipeline, and it compiles the same
+          // way here as it does on a realm-server: it reads no Babel
+          // configuration file, so a `babel.config.*` or `.babelrc` in the
+          // project this server is mounted on has no effect on the card source
+          // it serves. Which syntax compiles is a property of the realm's
+          // declared plugin list, and card source that compiled only under a
+          // project-local configuration would fail the moment the same card was
+          // served by anything else.
           let cached = transpileCache.get(filePath);
           if (!cached || cached.mtimeMs !== stat.mtimeMs) {
             let source = readFileSync(filePath, 'utf8');

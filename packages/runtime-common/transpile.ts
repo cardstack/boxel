@@ -77,6 +77,33 @@ export async function transpileJS(
   const transformed = await babel.transformAsync(content, {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
+    // Which JavaScript syntax a realm serves is a property of the plugin list
+    // below and of content-tag's preprocessor, and of nothing else. Under Node,
+    // Babel otherwise merges any `babel.config.*` it finds at the working
+    // directory and any `.babelrc` above the file being compiled, so a caller
+    // transpiling inside someone else's project — `boxel test`, which serves a
+    // user's own `.gts`/`.ts` from that project's root — would inherit that
+    // project's Babel configuration and serve syntax on its say-so. An ambient
+    // `parserOpts.plugins` entry is enough to admit syntax nothing else in the
+    // system can read.
+    //
+    // That matters beyond the realm: the Host's module classifier reads served
+    // source through a front end of its own, and source it cannot read is
+    // reported as an unfinished draft — a result whose module graph is empty,
+    // which is the fetch authority a sandboxed render is given. Syntax admitted
+    // by a config file the classifier never sees therefore costs a card its
+    // modules, not merely a slower path.
+    //
+    // The trade this makes is that a CLI user's own Babel configuration does
+    // not reach card source the CLI transpiles. Card source is compiled by the
+    // realm's pipeline wherever it is served, and a project-local configuration
+    // would make it compile differently in one of those places.
+    //
+    // The browser build resolves Babel's config-file layer to a stub, so these
+    // two flags are what the browser already does, stated where every caller
+    // gets it.
+    configFile: false,
+    babelrc: false,
     plugins: [
       emberConcurrencyAsyncPlugin,
       [typescriptPlugin, { allowDeclareFields: true }],

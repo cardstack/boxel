@@ -3,11 +3,13 @@ import { init as lexerReady, parse as lexImports } from 'es-module-lexer';
 import { module, test } from 'qunit';
 
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
+import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 import config from '@cardstack/host/config/environment';
 import {
   BoxelModuleClassifier,
   MODULE_CLASSIFICATION_REASON_KINDS,
+  type BoxelModuleClassification,
   type BoxelModuleClassifierOptions,
 } from '@cardstack/host/lib/boxel-module-classifier';
 import {
@@ -845,6 +847,371 @@ module('Unit | rendering protocol | module classification', function () {
         ),
         'a longer name, and a computed key no reading of the source resolves',
       );
+    });
+  });
+
+  module("the realm's front end", function () {
+    // The realm's pipeline is content-tag's `process()` followed by Babel; the
+    // classifier's front end is content-tag's `process()` followed by
+    // `es-module-lexer`. The shared first half is what makes the second half's
+    // job tractable, and the fixtures below are what holds the two halves in
+    // agreement.
+    //
+    // The forbidden combination is one-sided: source the realm SERVES that the
+    // classifier cannot read. A render never reaches source the realm refuses,
+    // so the classifier's answer for it costs nothing; the reverse is a card
+    // whose sandbox child is handed an empty module graph — its entire fetch
+    // authority — and refuses to load the modules the render needs, on code
+    // that renders normally without classification.
+    //
+    // Fixture dependencies exist only to be reachable: what the graph assertion
+    // is about is which edges the front end extracts, not what is behind them.
+    const frontEndFixtureSources = {
+      'dep.gts': `export const tag = 'dep';\nexport class Shape {}\nexport default tag;\n`,
+      'shape.gts': `export class Shape {}\n`,
+      'd.json': `export default { name: 'd' };\n`,
+    };
+    const entryPath = 'entry.gts';
+
+    /**
+     * One shape of source, run through both halves of the realm's pipeline.
+     *
+     * `imports` is the WHOLE import list the classifier must extract, because a
+     * front end that parses the source and drops one edge fails the same way a
+     * refusal does, with a quieter symptom: the graph it reports is short by a
+     * module the render will ask for and be refused.
+     *
+     * `draft` marks a shape the front end refuses outright, which is the right
+     * answer for source that is genuinely half-written.
+     */
+    interface FrontEndFixture {
+      shape: string;
+      source: string;
+      imports: string[];
+      draft?: true;
+    }
+
+    async function classifyFixture(fixture: FrontEndFixture): Promise<{
+      result: BoxelModuleClassification;
+      expectedGraph: string[];
+    }> {
+      let realm = new TestRealm(frontEndFixtureSources);
+      let entry = realm.url(entryPath);
+      let result = await classifierFor(realm).classifyModule(
+        entry,
+        fixture.source,
+      );
+      let expectedGraph = fixture.draft
+        ? [entry]
+        : [
+            entry,
+            ...fixture.imports
+              .map((specifier) => new URL(specifier, entry).href)
+              .sort(),
+          ];
+      return { result, expectedGraph };
+    }
+
+    test('RP-6.4, RP-6.7: the realm and the classifier agree on which source is servable', async function (assert) {
+      // Each fixture goes through the realm's own `transpileJS` and through
+      // classification, and the two have to agree that servable source is
+      // readable. Asserting the AGREEMENT rather than the syntax is what keeps
+      // this honest as the pipeline moves: a shape the realm stops serving
+      // switches to the negative branch by itself, and one it starts serving
+      // becomes a demand on the classifier without anyone editing a list.
+      let served = 0;
+      let refused = 0;
+      for (let fixture of [
+        {
+          shape: 'a type-only import and an annotated field',
+          source: [
+            `import type { Shape } from './shape.gts';`,
+            `import { tag } from './dep.gts';`,
+            `export class C { s?: Shape; t = tag; }`,
+          ].join('\n'),
+          // A type-erased specifier is still a specifier the author wrote, and
+          // the front end has no TypeScript parse to tell it apart from a value
+          // import — so both edges are here. The two tests below pin that
+          // reading form by form, and name what it costs.
+          imports: ['./shape.gts', './dep.gts'],
+        },
+        {
+          shape: 'a declare field',
+          source: `import { tag } from './dep.gts';\nexport class C { declare id: string; t = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a legacy decorator on a class',
+          source: `import { tag } from './dep.gts';\nconst dec = (t: unknown) => t;\n@dec\nexport class C { t = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a legacy decorator on a field',
+          source: `import { tag } from './dep.gts';\nconst field = (..._a: unknown[]) => {};\nexport class C { @field y = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a legacy decorator on a method',
+          source: `import { tag } from './dep.gts';\nconst action = (..._a: unknown[]) => {};\nexport class C { @action run() { return tag; } }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a decorator ahead of export',
+          source: `import { tag } from './dep.gts';\nconst dec = (t: unknown) => t;\nexport @dec class A { x = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          // Statement position: content-tag rewrites the block into a call, so
+          // what the lexer reads is ordinary JavaScript.
+          shape: 'a template as a class member',
+          source: `import { tag } from './dep.gts';\nexport class C { static isolated = class { <template>hi</template> }; t = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          // Expression position, which is the case a front end that BLANKED
+          // template blocks instead of rewriting them would break: blanking
+          // leaves a hole an expression has to fill, and a finished, servable
+          // module reads as unparseable.
+          shape: 'a template in expression position',
+          source: `import { tag } from './dep.gts';\nconst Row = <template>hi</template>;\nexport const t = [Row, tag];`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a constrained type parameter',
+          source: `import { tag } from './dep.gts';\nexport function f<T extends object>(v: T): T { void [v, tag]; return v; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a parameter property',
+          source: `import { tag } from './dep.gts';\nexport class C { constructor(private x: string) { void [x, tag]; } }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'an enum',
+          source: `import { tag } from './dep.gts';\nexport enum E { A }\nexport const t = [E.A, tag];`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'an abstract member',
+          source: `import { tag } from './dep.gts';\nexport abstract class C { abstract go(): void; t = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a namespace',
+          source: `import { tag } from './dep.gts';\nexport namespace N { export const x = 1; }\nexport const t = [N.x, tag];`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a satisfies expression',
+          source: `import { tag } from './dep.gts';\nexport const t = tag satisfies string;`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'an import attribute clause',
+          source: `import d from './d.json' with { type: 'json' };\nimport { tag } from './dep.gts';\nexport const t = [d, tag];`,
+          imports: ['./d.json', './dep.gts'],
+        },
+        {
+          shape: 'a using declaration',
+          source: `import { tag } from './dep.gts';\nusing r = { [Symbol.dispose]() {} };\nexport const t = [r, tag];`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'an await using declaration',
+          source: `import { tag } from './dep.gts';\nexport async function f() { await using r = {}; return [r, tag]; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          // The realm refuses this one: `accessor` needs a decorator proposal
+          // the realm's `decorator-transforms` does not enable. The front end
+          // reads it anyway, and that asymmetry is allowed — a render never
+          // reaches source the realm will not serve, so the classifier's answer
+          // for it is moot in either direction.
+          shape: 'an accessor field',
+          source: `import { tag } from './dep.gts';\nexport class C { accessor x = tag; }`,
+          imports: ['./dep.gts'],
+        },
+        {
+          // The realm refuses this one too, and here both halves refuse it for
+          // the same reason: content-tag rejects JSX ahead of anything else, so
+          // the shared first half of the pipeline is what says no. This is the
+          // shape that keeps the draft branch exercised.
+          shape: 'a JSX element',
+          source: `import { tag } from './dep.gts';\nexport const t = <div>{tag}</div>;`,
+          imports: [],
+          draft: true,
+        },
+      ] satisfies FrontEndFixture[]) {
+        let servable = true;
+        try {
+          await transpileJS(fixture.source, `/${entryPath}`);
+        } catch {
+          servable = false;
+        }
+        if (servable) {
+          served++;
+        } else {
+          refused++;
+        }
+
+        let { result, expectedGraph } = await classifyFixture(fixture);
+        assert.deepEqual(
+          [...result.moduleGraph],
+          expectedGraph,
+          `${fixture.shape} — the complete graph, not merely a parse that succeeded`,
+        );
+        assert.strictEqual(
+          result.moduleGraphComplete,
+          !fixture.draft,
+          `${fixture.shape} — the graph is ${fixture.draft ? 'unavailable' : 'established'}`,
+        );
+        assert.strictEqual(
+          result.reason,
+          fixture.draft ? 'source-parse-pending' : 'authored-module',
+          `${fixture.shape} — the reason it reports`,
+        );
+        // The one combination the agreement forbids, computed from the realm
+        // rather than declared: source the realm hands out whose graph
+        // classification cannot establish. The other three are all fine.
+        let holeInTheMirror = servable && !result.moduleGraphComplete;
+        assert.false(
+          holeInTheMirror,
+          `${fixture.shape} — the realm ${servable ? 'transpiles' : 'refuses'} it and the classifier reports ${result.reason}`,
+        );
+      }
+      // Each row rules out one combination, and a row the realm refuses does so
+      // without demanding anything of the classifier. So the table has to keep
+      // exercising both branches: an all-refused table would pass while
+      // checking nothing, and an all-served one would drop the negative case
+      // the agreement is allowed to miss.
+      assert.true(
+        served > 0,
+        `some fixture is servable (${served} of ${served + refused})`,
+      );
+      assert.true(
+        refused > 0,
+        `some fixture is not, so the negative case is still exercised (${refused} of ${served + refused})`,
+      );
+    });
+
+    test('RP-6.7: the lexer reads each TypeScript import form one way', async function (assert) {
+      // `es-module-lexer` is deliberately tolerant — it finds import statements
+      // without parsing the language around them — and it is not a TypeScript
+      // parser. So the forms TypeScript erases are read exactly as the forms it
+      // keeps, with one exception the lexer's own grammar makes: a re-export
+      // marked `type` carries the keyword where the lexer looks for the export
+      // clause, and drops out.
+      //
+      // The asymmetry is pinned here rather than reasoned about at each call
+      // site, because the direction of an error decides what it costs. An edge
+      // the runtime never fetches only widens a read authority to a module the
+      // author's own source names — the render asks for nothing extra. A
+      // MISSING edge refuses a fetch the render makes.
+      for (let { shape, source, imports } of [
+        {
+          shape: 'a type-only named import',
+          source: `import type { Shape } from './shape.gts';\nexport const t = 1;`,
+          imports: ['./shape.gts'],
+        },
+        {
+          shape: 'a type-only default import',
+          source: `import type Shape from './shape.gts';\nexport const t = 1;`,
+          imports: ['./shape.gts'],
+        },
+        {
+          shape: 'an inline type specifier beside a value one',
+          source: `import { type Shape, tag } from './dep.gts';\nexport const t: Shape | string = tag;`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a default import beside an inline type specifier',
+          source: `import d, { type Shape } from './dep.gts';\nexport const t: Shape | string = d;`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a type-only namespace import',
+          source: `import type * as T from './shape.gts';\nexport class C { s?: T.Shape; }`,
+          imports: ['./shape.gts'],
+        },
+        {
+          // `type` is an ordinary identifier, so this is a DEFAULT BINDING
+          // named `type` and the module is a real runtime edge. It is here
+          // because it is what a front end that recognized type-only imports by
+          // matching the keyword would get wrong, in the expensive direction:
+          // dropping an edge the render will ask for.
+          shape: 'a default binding named `type`',
+          source: `import type from './dep.gts';\nexport const x = type;`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a default binding named `type` beside a named one',
+          source: `import type, { tag } from './dep.gts';\nexport const x = [type, tag];`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a re-export',
+          source: `export { tag } from './dep.gts';`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a type-only re-export',
+          source: `export type { Shape } from './shape.gts';\nexport const t = 1;`,
+          imports: [],
+        },
+        {
+          shape: 'a star re-export',
+          source: `export * from './dep.gts';`,
+          imports: ['./dep.gts'],
+        },
+        {
+          shape: 'a namespaced star re-export',
+          source: `export * as dep from './dep.gts';`,
+          imports: ['./dep.gts'],
+        },
+      ]) {
+        let realm = new TestRealm(frontEndFixtureSources);
+        let entry = realm.url(entryPath);
+        let result = await classifierFor(realm).classifyModule(entry, source);
+
+        assert.deepEqual(
+          [...result.moduleGraph],
+          [
+            entry,
+            ...imports.map((specifier) => new URL(specifier, entry).href),
+          ],
+          `${shape} — the extracted edges`,
+        );
+        assert.true(
+          result.moduleGraphComplete,
+          `${shape} — the graph is established`,
+        );
+      }
+    });
+
+    test('RP-6.7: a type-only import of a specifier nothing serves fails the graph closed', async function (assert) {
+      // What reading a type-erased import as an edge costs, stated as the
+      // failure it produces rather than left as an inference. The walk resolves
+      // the specifier like any other, and a specifier no runtime answers for
+      // marks the graph unavailable — which fails closed, on a module the realm
+      // transpiles without complaint because TypeScript erased the import.
+      //
+      // What keeps this narrow is that the specifiers a card can name are the
+      // ones its authoring environment resolves: a realm module, a trusted
+      // package, or a library the runtime shims — and the last two are graph
+      // leaves that are never resolved at all.
+      let realm = new TestRealm({});
+      let entry = realm.url(entryPath);
+      let result = await classifierFor(realm).classifyModule(
+        entry,
+        `import type { Scene } from 'three';\nexport class C { s?: Scene; }`,
+      );
+
+      assert.deepEqual([...result.moduleGraph], [entry], 'nothing was reached');
+      assert.false(result.moduleGraphComplete, 'so the graph is unavailable');
+      // Which of the two failure spellings appears is the resolver's: one
+      // that refuses a bare specifier outright reports `module-resolve:`, and
+      // one that answers with a URL nothing serves reports `module-load:`.
+      assert.strictEqual(result.reason, 'module-resolve:three');
     });
   });
 });
