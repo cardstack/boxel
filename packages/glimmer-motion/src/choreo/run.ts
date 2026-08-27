@@ -33,6 +33,7 @@ import type {
   Easing,
   FollowSource,
   GateMark,
+  PerformCommand,
   PropValue,
   Rect,
   Sprite,
@@ -117,6 +118,17 @@ interface RunOptions {
   inherit?: Velocities;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
+  /**
+   * A `c.Perform` command entered the folded set: dispatch it (§C4).
+   * Deferred past the render pass, in time order, once per fold entry.
+   */
+  onPerform?(command: PerformCommand): void;
+  /**
+   * The folded set shrank — the clock moved to before a command the host
+   * already holds. Reset commanded state; the remaining prefix is
+   * re-dispatched, in order, immediately after.
+   */
+  onPerformReset?(): void;
   onSpriteDone(sprite: Sprite): void;
   /** the region's elevated layer, where c.Raise promotes the living */
   raisedLayer?: HTMLElement;
@@ -1065,6 +1077,72 @@ export class ChoreoRun implements Run {
       }
     }
     this.rewind(rewinds, now);
+    this.foldPerforms(limit);
+  }
+
+  /** perform tracks whose commands the host currently holds (see foldPerforms) */
+  private performed = new Set<Track>();
+  /** dispatches queued for after the render pass, in fold order */
+  private pendingPerforms: (PerformCommand | 'reset')[] = [];
+  private performFlushBooked = false;
+
+  /**
+   * The command fold (§C4): the set of Perform cues at or before the
+   * clock IS the commanded state. Every evaluate — a play tick and a seek
+   * alike — re-derives the eligible set; growth dispatches the new
+   * commands in time order, and any shrink (a backward seek) resets the
+   * host first and replays the whole remaining prefix. Commands are
+   * idempotent statements of state by contract (`lamp.on`, never a
+   * toggle), which is exactly what makes the replay a re-derivation.
+   *
+   * Dispatches are DEFERRED past the render pass: the constructor's first
+   * evaluate runs while Glimmer may still be rendering, and a command
+   * exists to mutate application state. A reset collapses the queue — the
+   * dropped dispatches were never seen, and the replay that follows
+   * restates everything still standing.
+   */
+  private foldPerforms(limit: number) {
+    if (!this.options.onPerform && !this.options.onPerformReset) {
+      return;
+    }
+    const now = this.master;
+    const eligible = this.tracks
+      .filter((t) => t.cue.perform && now >= t.start && t.start < limit)
+      .sort((a, b) => a.start - b.start);
+    const held = new Set(eligible);
+    if ([...this.performed].some((t) => !held.has(t))) {
+      this.performed.clear();
+      this.pendingPerforms.length = 0;
+      this.pendingPerforms.push('reset');
+    }
+    for (const t of eligible) {
+      if (this.performed.has(t)) {
+        continue;
+      }
+      this.performed.add(t);
+      const p = t.cue.perform!;
+      this.pendingPerforms.push({
+        action: p.action,
+        payload: p.payload,
+        target: p.target,
+        time: t.start / this.scale / 1000,
+      });
+    }
+    if (this.pendingPerforms.length && !this.performFlushBooked) {
+      this.performFlushBooked = true;
+      frame.postRender(() => {
+        this.performFlushBooked = false;
+        const queue = this.pendingPerforms;
+        this.pendingPerforms = [];
+        for (const item of queue) {
+          if (item === 'reset') {
+            this.options.onPerformReset?.();
+          } else {
+            this.options.onPerform?.(item);
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -2234,6 +2312,9 @@ export class ChoreoRun implements Run {
     activeRuns.delete(this);
     this.stopTicking();
     clearTimeout(this.autoTimer);
+    // a cancelled run's queued commands die with it: the replacement run
+    // re-derives the commanded state from its own clock
+    this.pendingPerforms.length = 0;
     this.options.onCamera?.({ ...this.camera });
     // resolve everything first: a stop() issued before the async keyframe
     // resolution is dropped, and the revived animation leaves its value

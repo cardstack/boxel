@@ -28,6 +28,7 @@ export type {
   Easing,
   FollowSource,
   GateNode,
+  PerformCommand,
   PropSource,
   PropValue,
   Query,

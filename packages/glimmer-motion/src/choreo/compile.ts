@@ -1045,6 +1045,20 @@ function resolveStep(
         cues.push({ duration: step.ms, kind: 'wait', offset, sprite });
         longest = Math.max(longest, offset + step.ms);
         break;
+      case 'perform':
+        cues.push({
+          duration: 0,
+          kind: 'perform',
+          offset,
+          perform: {
+            action: step.action,
+            payload: step.payload,
+            target: step.target,
+          },
+          sprite,
+        });
+        longest = Math.max(longest, offset);
+        break;
     }
   }
   return { cues, duration: cues.length ? delay + longest : 0, open };

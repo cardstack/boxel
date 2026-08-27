@@ -287,6 +287,30 @@ export interface WaitStep extends SubjectlessBase {
   kind: 'wait';
   ms: number;
 }
+
+/**
+ * A semantic command on the timeline (§C4): dispatched once as playback
+ * crosses its time, included by a seek that lands past it, excluded — via
+ * reset-and-replay — by a seek that lands before it. A command is an
+ * idempotent statement of state (`lightbox.open`), never a time-sensitive
+ * toggle: the fold re-derives the commanded state from the clock, so a
+ * command may be dispatched again whenever the state is re-derived.
+ */
+export interface PerformStep extends SubjectlessBase {
+  action: string;
+  kind: 'perform';
+  payload?: unknown;
+  target?: string;
+}
+
+/** a `c.Perform` command as the run hands it to the host's dispatcher */
+export interface PerformCommand {
+  action: string;
+  payload?: unknown;
+  target?: string;
+  /** the command's place on the run's clock, seconds at 1× */
+  time: number;
+}
 /** scroll the sprite's container so the sprite lands at @align (§6.1) */
 export interface ScrollStep extends StepBase {
   align?: 'center' | 'end' | 'start';
@@ -429,6 +453,7 @@ export type Step =
   | FollowStep
   | HoldStep
   | MoveStep
+  | PerformStep
   | RaiseStep
   | ScrollStep
   | SpringStep
@@ -543,6 +568,8 @@ export interface Cue {
   kind: Step['kind'];
   /** an infinite-repeat tween: plays past the run's end, excluded from its length */
   loop?: boolean;
+  /** perform: the semantic command the fold dispatches at this cue's time */
+  perform?: { action: string; payload?: unknown; target?: string };
   /** raise: promote to the elevated layer for the window */
   raise?: { shadow: boolean };
   /** scroll: animate the sprite's scroll container to this alignment */

@@ -352,6 +352,33 @@ export class Wait extends StepComponent<
 }
 
 /**
+ * `<c.Perform />` — a semantic command on the timeline (§C4). It occupies
+ * an instant, positioned like any step (sequence order, `@at`, `@delay`),
+ * and carries `@action` (required), `@target` and `@payload` to the
+ * region's dispatcher (`<Choreo @onPerform>`). The fold's law: forward
+ * playback dispatches it once as the clock crosses it; a seek past it
+ * includes it; a seek before it resets the host and replays the remaining
+ * prefix. Commands are idempotent statements of state — `lightbox.open`,
+ * never `lightbox.toggle`.
+ */
+export class Perform extends StepComponent<
+  StepArgsBase & { action: string; payload?: unknown; target?: string }
+> {
+  node(): TimelineNode {
+    const { action, delay, payload, target } = this.args;
+    return {
+      action,
+      at: this.args.at,
+      delay: msOf(delay),
+      kind: 'perform',
+      name: this.args.name,
+      payload,
+      target,
+    };
+  }
+}
+
+/**
  * `<c.Scroll />` — animate the sprite's scroll container so the sprite lands
  * at `@align`; occupies the sequence like any step (§6.1).
  */

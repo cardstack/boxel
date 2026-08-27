@@ -52,6 +52,7 @@ import {
   Move,
   Pan,
   Parallel,
+  Perform,
   Raise,
   Scroll,
   Sequence,
@@ -66,6 +67,7 @@ import type {
   CameraState,
   ChoreoNode,
   Cue,
+  PerformCommand,
   Query,
   Sprite,
   SpriteType,
@@ -95,6 +97,7 @@ export interface ChoreoContext {
   Move: typeof Move;
   Pan: typeof Pan;
   Parallel: typeof Parallel;
+  Perform: typeof Perform;
   Raise: typeof Raise;
   Scroll: typeof Scroll;
   Sequence: typeof Sequence;
@@ -145,6 +148,7 @@ function contextFor(region: Choreo): ChoreoContext {
     Move,
     Pan,
     Parallel,
+    Perform,
     Raise,
     Scroll,
     Sequence,
@@ -181,6 +185,21 @@ interface Signature {
     /** outline the region and its participants; console.table each run */
     debug?: boolean;
     id?: string;
+    /**
+     * The dispatcher for `<c.Perform>` commands (§C4). Called once per
+     * command as the run's clock comes to include it — during forward
+     * playback as the clock crosses it, after a seek that lands past it,
+     * and again for the whole remaining prefix after a backward fold.
+     * Dispatches are deferred past the render pass, so a command may
+     * mutate tracked state freely.
+     */
+    onPerform?: (command: PerformCommand) => void;
+    /**
+     * The backward half of the fold: the clock moved to before a command
+     * the host already holds. Reset every commanded state here; the run
+     * re-dispatches the remaining prefix, in order, immediately after.
+     */
+    onPerformReset?: () => void;
     /**
      * Freeze the rest of the page for the span of each run (§4.7): when a
      * run starts, every animation in the document that is running AT THAT
@@ -812,6 +831,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // implicitly; a spring takes a velocity outright, so the run that is
       // being replaced hands over how fast everything was going.
       inherit: prior?.velocities,
+      onPerform: this.args.onPerform,
+      onPerformReset: this.args.onPerformReset,
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
     });

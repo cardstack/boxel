@@ -859,6 +859,16 @@ composition-side command fold proves the public semantics. Propose an
 addressable override/control channel only when ordinary component arguments,
 IDs, roles, and sidecar adapters cannot reach a demonstrated value.
 
+> **Gate satisfied (2026-08-27).** The feature reel's host fold proved the
+> semantics across five cues, clips, and capture parity, and `c.Perform`
+> shipped in core: a zero-length step carrying `@action`/`@target`/
+> `@payload`, dispatched to `<Choreo @onPerform>` with the fold's exact
+> law — the at-or-before set is re-derived on every evaluate, growth
+> dispatches in time order, a shrink calls `@onPerformReset` and replays
+> the remaining prefix, gates park commands with the clock, and
+> dispatches defer past the render pass. `perform-test.gts` is the
+> contract. The override/control channel remains unproposed on purpose.
+
 ### Phase C5 — camera direction and autoframing
 
 Keep shot direction in Choreo sequences. The compositor supplies targets,
