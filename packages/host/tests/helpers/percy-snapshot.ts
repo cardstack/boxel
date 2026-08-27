@@ -159,6 +159,19 @@ export default async function percySnapshot(
   // rejections that arrive AFTER we've already abandoned the upload, so a
   // late rejection can't surface as an unhandled rejection in a later test.
   const snapshotName = describeSnapshot(args);
+
+  // One unconditional line per snapshot the suite attempts. CI counts these
+  // per shard and compares the total against the Percy CLI's own `Snapshot
+  // taken:` lines from the same shard: a snapshot the suite attempted but the
+  // CLI never received was lost on the way — most often to the budget below —
+  // and the build finalises looking complete. On `main` that build is
+  // auto-approved into the baseline, and every snapshot it dropped resurfaces
+  // as a 100% "new snapshot" diff on later builds. The counts are the only
+  // way to tell a lost snapshot from one the CLI accepted late, so this line
+  // is load-bearing for `ci-host.yaml`'s reject gate — see the tally step
+  // there before changing its wording.
+  console.log(`[percy-snapshot] attempted ${JSON.stringify(snapshotName)}`);
+
   const percyStart = performance.now();
   let abandoned = false;
   const upload = originalPercySnapshot(...args) as Promise<void>;
