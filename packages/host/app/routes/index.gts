@@ -149,18 +149,31 @@ export default class Card extends Route {
 
     // A loginToken while already logged in means "switch accounts" (`boxel
     // browse --profile B` against a browser signed in as A). When logged out,
-    // the <Login> component consumes the token instead, so only consume it here
-    // when logged in. Strip the token from the URL first: logout() ends in a
-    // router.transitionTo that re-enters this model hook, and the already-clean
-    // URL makes that re-entry a no-op. A failure after logout leaves the user
-    // logged out on the login form — acceptable, the token is single-use.
+    // the <Login> component consumes the token instead, so only consume it
+    // here when logged in. The token is stripped from the URL up front: it is
+    // single-use, and any transition would drop the unregistered param.
+    //
+    // logout() skips its index-root transition so this transition stays
+    // alive and the URL keeps the handoff's params. On success, the
+    // refreshRoutes re-run of this hook resolves the handoff's cardPath deep
+    // link for the new session (no workspace-chooser operatorModeState has
+    // been written over it). On a failed exchange — the token is expired or
+    // already spent — the session is already torn down, so fall through to
+    // the logged-out branch below and render the login form.
     if (this.matrixService.isLoggedIn) {
       let loginToken = consumeLoginTokenFromUrl();
       if (loginToken) {
-        await this.matrixService.logout();
-        let auth = await this.matrixService.loginWithSsoToken(loginToken);
-        await this.matrixService.start({ auth, refreshRoutes: true });
-        return;
+        await this.matrixService.logout({ skipIndexTransition: true });
+        try {
+          let auth = await this.matrixService.loginWithSsoToken(loginToken);
+          await this.matrixService.start({ auth, refreshRoutes: true });
+          return;
+        } catch (e) {
+          console.error(
+            'Error switching accounts via loginToken; showing login form',
+            e,
+          );
+        }
       }
     }
 

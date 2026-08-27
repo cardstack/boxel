@@ -7,6 +7,7 @@ import {
   createSubscribedUserAndLogin,
   setupPermissions,
   assertLoggedIn,
+  assertLoggedOut,
 } from '../helpers/index.ts';
 
 // Exercises Synapse's login_via_existing_session feature (MSC3882), which the
@@ -82,16 +83,72 @@ test.describe('login_via_existing_session', () => {
     await setupPermissions(credentialsB.userId, `${appURL}/`);
     let { login_token } = await mintLoginToken(credentialsB.accessToken);
 
-    // Landing with ?loginToken while logged in as A switches to B — the login
-    // form is never shown.
+    // The switch must go straight from session A to session B: record whether
+    // the password form ever mounts during the hand-off page load.
+    await page.addInitScript(() => {
+      new MutationObserver(() => {
+        if (document.querySelector('[data-test-password-field]')) {
+          (window as { __sawPasswordForm?: boolean }).__sawPasswordForm = true;
+        }
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    });
+
+    // Landing with ?loginToken while logged in as A switches to B.
     await page.goto(`${appURL}?loginToken=${login_token}`);
 
     await assertLoggedIn(page, {
       displayName: usernameB,
       userId: credentialsB.userId,
     });
+    expect(
+      await page.evaluate(
+        () => (window as { __sawPasswordForm?: boolean }).__sawPasswordForm,
+      ),
+      'the login form never appears during the switch',
+    ).toBeFalsy();
     // The single-use token is stripped so a refresh can't re-trigger the
     // (now spent) exchange.
+    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
+  });
+
+  test('a ?loginToken with a cardPath deep-links into the card after switching accounts', async ({
+    page,
+  }) => {
+    await createSubscribedUserAndLogin(page, 'account-switch-deeplink-a');
+
+    let { username: usernameB, credentials: credentialsB } =
+      await createSubscribedUser('account-switch-deeplink-b');
+    await setupPermissions(credentialsB.userId, `${appURL}/`);
+    let { login_token } = await mintLoginToken(credentialsB.accessToken);
+
+    // The shape `boxel browse test/fadhlan --profile B` produces: a login
+    // token plus a deep link into a card.
+    await page.goto(
+      `${appURL}?loginToken=${login_token}&cardPath=test/fadhlan`,
+    );
+
+    // The deep link survives the account switch: the card opens for the new
+    // session instead of the workspace chooser.
+    await expect(
+      page.locator(`[data-test-stack-card="${appURL}/fadhlan"]`),
+    ).toHaveCount(1);
+    await assertLoggedIn(page, {
+      displayName: usernameB,
+      userId: credentialsB.userId,
+    });
+  });
+
+  test('a failed token exchange while logged in lands on the login form', async ({
+    page,
+  }) => {
+    await createSubscribedUserAndLogin(page, 'account-switch-bad-token');
+
+    // The exchange is attempted only after the current session is torn down,
+    // so when the token turns out to be dead (expired, spent, or bogus) the
+    // recovery surface is the login form — not an error screen.
+    await page.goto(`${appURL}?loginToken=not-a-real-token`);
+
+    await assertLoggedOut(page);
     expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
   });
 

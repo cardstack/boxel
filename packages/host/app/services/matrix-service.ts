@@ -703,7 +703,12 @@ export default class MatrixService extends Service {
     ]);
   }
 
-  async logout() {
+  // `skipIndexTransition` suppresses the index-root transition at the end: the
+  // account-switch flow logs out only to immediately establish a new session,
+  // so the caller owns the navigation that follows and must not have its
+  // in-flight transition aborted (nor the URL's deep-link params overwritten
+  // with the workspace-chooser state).
+  async logout(opts?: { skipIndexTransition?: true }) {
     let client = this._client;
     let didResetState = false;
     try {
@@ -736,20 +741,22 @@ export default class MatrixService extends Service {
       this.resetState();
       didResetState = true;
       await client?.logout(true);
-      // when user logs out we transition them back to an empty stack with the
-      // workspace chooser open. this way we don't inadvertently leak private
-      // card id's in the URL
-      this.router.transitionTo('index-root', {
-        queryParams: {
-          operatorModeState: stringify({
-            stacks: [],
-            submode: Submodes.Interact,
-            workspaceChooserOpened: true,
-          } as OperatorModeSerializedState),
-          sid: null,
-          clientSecret: null,
-        },
-      });
+      if (!opts?.skipIndexTransition) {
+        // when user logs out we transition them back to an empty stack with
+        // the workspace chooser open. this way we don't inadvertently leak
+        // private card id's in the URL
+        this.router.transitionTo('index-root', {
+          queryParams: {
+            operatorModeState: stringify({
+              stacks: [],
+              submode: Submodes.Interact,
+              workspaceChooserOpened: true,
+            } as OperatorModeSerializedState),
+            sid: null,
+            clientSecret: null,
+          },
+        });
+      }
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
