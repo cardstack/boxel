@@ -912,7 +912,7 @@ module('Unit | rendering protocol | module classification', function () {
       return { result, expectedGraph };
     }
 
-    test('RP-6.4, RP-6.7: the realm and the classifier agree on which source is servable', async function (assert) {
+    test('RP-6.7: the realm and the classifier agree on which source is servable', async function (assert) {
       // Each fixture goes through the realm's own `transpileJS` and through
       // classification, and the two have to agree that servable source is
       // readable. Asserting the AGREEMENT rather than the syntax is what keeps
@@ -1159,6 +1159,14 @@ module('Unit | rendering protocol | module classification', function () {
           imports: [],
         },
         {
+          // The `type` modifier INSIDE the clause reads differently from the
+          // one ahead of it: the lexer is looking for the export clause where
+          // the clause-level keyword sits, and finds it here.
+          shape: 'an inline type specifier in a re-export',
+          source: `export { type Shape } from './shape.gts';\nexport const t = 1;`,
+          imports: ['./shape.gts'],
+        },
+        {
           shape: 'a star re-export',
           source: `export * from './dep.gts';`,
           imports: ['./dep.gts'],
@@ -1177,7 +1185,9 @@ module('Unit | rendering protocol | module classification', function () {
           [...result.moduleGraph],
           [
             entry,
-            ...imports.map((specifier) => new URL(specifier, entry).href),
+            ...imports
+              .map((specifier) => new URL(specifier, entry).href)
+              .sort(),
           ],
           `${shape} — the extracted edges`,
         );
@@ -1211,7 +1221,11 @@ module('Unit | rendering protocol | module classification', function () {
       // Which of the two failure spellings appears is the resolver's: one
       // that refuses a bare specifier outright reports `module-resolve:`, and
       // one that answers with a URL nothing serves reports `module-load:`.
-      assert.strictEqual(result.reason, 'module-resolve:three');
+      assert.strictEqual(
+        result.reason,
+        'module-resolve:three',
+        'and names the specifier it could not place',
+      );
     });
   });
 });

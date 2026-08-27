@@ -10,8 +10,9 @@ promotion — most recent first.
 <!-- Kept ABOVE the insertion marker below, so a stable cut's generated entry
      never lands in the middle of it. -->
 
-Behavior worth knowing about that carries no release bullet of its own, because
-the change that produced it lives outside `packages/boxel-cli`.
+CLI-visible behavior whose implementation lives outside `packages/boxel-cli`,
+where a release bullet naming the change would not say what it means for the
+CLI.
 
 - `boxel test` compiles card source with the realm's own pipeline, and that
   pipeline reads no Babel configuration file. A `babel.config.*` or `.babelrc`

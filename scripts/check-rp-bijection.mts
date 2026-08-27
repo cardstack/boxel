@@ -48,7 +48,7 @@ const strict = process.argv.includes('--strict');
 // The count of coverable statements with no citing test. Direction 2 holds the
 // real count equal to this, so it changes only in a commit that deliberately
 // lands coverage or edits the statement inventory.
-const expectedUncovered = 103;
+const expectedUncovered = 104;
 const exemptStatements = new Set([
   'RP-0.1',
   'RP-0.2',
