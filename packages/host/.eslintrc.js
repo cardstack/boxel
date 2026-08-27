@@ -43,14 +43,11 @@ const sharedBrowserConfig = {
     ],
     'prefer-const': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
-    '@typescript-eslint/ban-types': 'off',
-    // The three rules `ban-types` was split into. Off for the same reason it is:
     // `{}` and `Function` are used deliberately here, mostly in type plumbing.
     '@typescript-eslint/no-empty-object-type': 'off',
     '@typescript-eslint/no-unsafe-function-type': 'off',
     '@typescript-eslint/no-wrapper-object-types': 'off',
-    // Successor to `no-var-requires`, which this repo also leaves off: config
-    // files and a few CJS interop points require by design.
+    // Config files and a few CJS interop points require by design.
     '@typescript-eslint/no-require-imports': 'off',
     // A bare member expression is how a getter consumes a tracked property to
     // register a reactive dependency, and `cond && doThing()` is used as a
@@ -155,7 +152,6 @@ module.exports = {
       },
       extends: ['plugin:n/recommended'],
       rules: {
-        '@typescript-eslint/no-var-requires': 'off',
         'n/no-process-exit': 'off',
         'n/hashbang': 'off',
       },

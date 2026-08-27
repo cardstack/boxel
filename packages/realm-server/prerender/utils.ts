@@ -6,6 +6,7 @@ import {
   type PrerenderMeta,
   type ScreenshotCaptureEntry,
   type ScreenshotCaptureResult,
+  type ScreenshotFormat,
   type PrerenderTypes,
   type RenderError,
   type RenderTimeoutDiagnostics,
@@ -1318,8 +1319,11 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip } = captureSpec ?? {};
-  return [{ name: 'default', viewport, deviceScaleFactor, fullPage, clip }];
+  let { viewport, deviceScaleFactor, fullPage, clip, envelope } =
+    captureSpec ?? {};
+  return [
+    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, envelope },
+  ];
 }
 
 // Whether an entry asks for a viewport different from the page default.
@@ -1345,6 +1349,106 @@ function sameViewport(a: ResolvedViewport, b: ResolvedViewport): boolean {
     a.width === b.width &&
     a.height === b.height &&
     a.deviceScaleFactor === b.deviceScaleFactor
+  );
+}
+
+// Whether an entry renders into a parent-owned envelope box (fitted) rather
+// than filling the viewport (isolated/embedded).
+function entryHasEnvelope(
+  entry: ScreenshotCaptureEntry,
+): entry is ScreenshotCaptureEntry & {
+  envelope: { width: number; height: number };
+} {
+  return entry.envelope != null;
+}
+
+function sameEnvelope(
+  a: { width: number; height: number } | undefined,
+  b: { width: number; height: number } | undefined,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return a.width === b.width && a.height === b.height;
+}
+
+// The page viewport an entry captures at. An envelope entry pins its box to
+// the viewport origin at the envelope's size, so the viewport IS the envelope
+// and the plain viewport screenshot captures the box whole. A non-envelope
+// entry uses its resolved viewport override.
+function viewportForEntry(
+  entry: ScreenshotCaptureEntry,
+  base: ResolvedViewport,
+): ResolvedViewport {
+  if (entryHasEnvelope(entry)) {
+    return {
+      width: entry.envelope.width,
+      height: entry.envelope.height,
+      deviceScaleFactor: entry.deviceScaleFactor ?? base.deviceScaleFactor,
+    };
+  }
+  return resolveViewport(entry, base);
+}
+
+// Surface a terminal prerender error (error/unusable) after a settle so we
+// return it rather than screenshotting a skeleton/error frame. Reuses the
+// same data-attribute signaling as the HTML capture path.
+async function detectTerminalPrerenderError(
+  page: Page,
+): Promise<{ status: 'error' | 'unusable'; raw: string } | null> {
+  return await page.evaluate(() => {
+    let elements = Array.from(
+      document.querySelectorAll('[data-prerender]'),
+    ) as HTMLElement[];
+    for (let element of elements) {
+      let status = element.dataset.prerenderStatus ?? '';
+      if (status === 'error' || status === 'unusable') {
+        let errorElement = element.querySelector(
+          '[data-prerender-error]',
+        ) as HTMLElement | null;
+        let raw = (
+          errorElement?.textContent ??
+          errorElement?.innerHTML ??
+          ''
+        ).trim();
+        return { status: status as 'error' | 'unusable', raw };
+      }
+    }
+    let stray = document.querySelector(
+      '[data-prerender-error]',
+    ) as HTMLElement | null;
+    if (stray) {
+      let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
+      if (raw.length > 0) {
+        return { status: 'error' as const, raw };
+      }
+    }
+    return null;
+  });
+}
+
+// Wait until the envelope box reflects the requested size — the deterministic
+// signal that a (query-param-only) re-transition's model refresh has flushed
+// to the DOM. The parent render status stays 'ready' across an envelope
+// change, so waitForPrerenderSettle alone can't distinguish the new box from
+// the old one.
+async function waitForEnvelopeBox(
+  page: Page,
+  envelope: { width: number; height: number },
+  opts?: CaptureOptions,
+): Promise<void> {
+  await page.waitForFunction(
+    (w: number, h: number) => {
+      let el = document.querySelector(
+        '[data-render-envelope]',
+      ) as HTMLElement | null;
+      if (!el) {
+        return false;
+      }
+      return el.offsetWidth === w && el.offsetHeight === h;
+    },
+    { timeout: effectiveRouteWaitTimeoutMs(opts) },
+    envelope.width,
+    envelope.height,
   );
 }
 
@@ -1426,7 +1530,7 @@ async function captureOneEntry(
 
 export async function captureScreenshot(
   page: Page,
-  format: 'isolated' | 'embedded',
+  format: ScreenshotFormat,
   ancestorLevel: number,
   opts?: CaptureOptions,
 ): Promise<ScreenshotCapture | RenderError> {
@@ -1455,9 +1559,11 @@ export async function captureScreenshot(
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
   // at a caller-specified size (or 2× scale) would silently change subsequent
   // index prerenders. Snapshot the current viewport before overriding and
-  // restore it in `finally`. Set the first entry's viewport BEFORE the render
-  // transition so the card lays out at the target size before we settle.
-  let anyViewportOverride = entries.some(entryOverridesViewport);
+  // restore it in `finally`. A viewport override is any explicit viewport /
+  // deviceScaleFactor OR an envelope (whose box is sized to the viewport).
+  let anyViewportOverride = entries.some(
+    (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
+  );
   let originalViewport = page.viewport();
   let baseViewport: ResolvedViewport = {
     width: originalViewport?.width ?? DEFAULT_SCREENSHOT_VIEWPORT.width,
@@ -1468,85 +1574,108 @@ export async function captureScreenshot(
   };
   let viewportOverridden = false;
   let currentViewport = baseViewport;
-  try {
-    if (anyViewportOverride) {
-      currentViewport = resolveViewport(entries[0], baseViewport);
-      await page.setViewport(currentViewport);
-      viewportOverridden = true;
-    }
+  let currentEnvelope: { width: number; height: number } | undefined;
 
-    await transitionTo(page, 'render.html', format, String(ancestorLevel));
+  // Transition render.html for the given envelope (undefined =
+  // viewport-filling format) and wait for the render to settle. Returns a
+  // RenderError on a terminal prerender error.
+  let renderFor = async (
+    envelope: { width: number; height: number } | undefined,
+  ): Promise<RenderError | undefined> => {
+    let htmlParams: TransitionParam[] = [format, String(ancestorLevel)];
+    if (envelope) {
+      // Envelope rides as query params on the render.html sub-route so a
+      // batch of differing envelopes re-transitions the SAME hydrated card
+      // (parent render model unchanged) into a new box — cheap vs
+      // re-hydrating.
+      htmlParams.push({
+        queryParams: {
+          envelopeWidth: String(envelope.width),
+          envelopeHeight: String(envelope.height),
+        },
+      });
+    }
+    await transitionTo(page, 'render.html', ...htmlParams);
     await waitForRoutePathSuffix(
       page,
       `/html/${format}/${ancestorLevel}`,
       opts,
     );
     await waitForPrerenderSettle(page);
-    // After settle, surface any terminal prerender error rather than
-    // screenshotting a skeleton/error frame. Reuses the same data-attribute
-    // signaling as the HTML capture path.
-    let terminal = await page.evaluate(() => {
-      let elements = Array.from(
-        document.querySelectorAll('[data-prerender]'),
-      ) as HTMLElement[];
-      for (let element of elements) {
-        let status = element.dataset.prerenderStatus ?? '';
-        if (status === 'error' || status === 'unusable') {
-          let errorElement = element.querySelector(
-            '[data-prerender-error]',
-          ) as HTMLElement | null;
-          let raw = (
-            errorElement?.textContent ??
-            errorElement?.innerHTML ??
-            ''
-          ).trim();
-          return { status: status as 'error' | 'unusable', raw };
-        }
-      }
-      let stray = document.querySelector(
-        '[data-prerender-error]',
-      ) as HTMLElement | null;
-      if (stray) {
-        let raw = (stray.textContent ?? stray.innerHTML ?? '').trim();
-        if (raw.length > 0) {
-          return { status: 'error' as const, raw };
-        }
-      }
-      return null;
-    });
+    if (envelope) {
+      // A query-param-only re-transition leaves the path (and the parent
+      // 'ready' status) unchanged, so wait on the box's applied size as the
+      // signal that the model refresh flushed the new envelope to the DOM.
+      await waitForEnvelopeBox(page, envelope, opts);
+    }
+    let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
-      let capture: RenderCapture = {
-        status: terminal.status,
-        value: terminal.raw,
-      };
-      return renderCaptureToError(page, capture, 'render.screenshot');
+      return renderCaptureToError(
+        page,
+        { status: terminal.status, value: terminal.raw },
+        'render.screenshot',
+      );
     }
     // Settle hook only tracks store/loader generation + animation frames; it
-    // does NOT wait for `<img>` element loads, CSS background-image fetches, or
-    // fonts. Without this extra wait the screenshot races those resources and
-    // produces empty avatars / missing thumbnails. Bounded by an internal
-    // timeout so a slow / 401-looping image can't hang the capture. Runs ONCE
-    // for the whole batch — every entry captures the same settled render.
+    // does NOT wait for `<img>` element loads, CSS background-image fetches,
+    // or fonts. Without this extra wait the screenshot races those resources
+    // and produces empty avatars / missing thumbnails — and a container query
+    // can reveal an image at one envelope size that a smaller one never
+    // loaded, so every re-transition waits, not just the first render.
+    // Bounded by an internal timeout so a slow / 401-looping image can't hang
+    // the capture; an image-free render pays only the fast
+    // no-pending-resources path.
     await waitForImagePaint(page);
+    return undefined;
+  };
+
+  try {
+    // Set the first entry's viewport BEFORE the render transition so the card
+    // lays out at the target size before we settle.
+    let firstViewport = viewportForEntry(entries[0], baseViewport);
+    if (anyViewportOverride) {
+      await page.setViewport(firstViewport);
+      viewportOverridden = true;
+      currentViewport = firstViewport;
+    }
+    currentEnvelope = entries[0].envelope;
+
+    let firstError = await renderFor(currentEnvelope);
+    if (firstError) {
+      return firstError;
+    }
 
     let captures: ScreenshotCaptureItem[] = [];
     for (let entry of entries) {
-      if (anyViewportOverride) {
-        let target = resolveViewport(entry, baseViewport);
-        if (!sameViewport(target, currentViewport)) {
-          await page.setViewport(target);
-          // Reflow first so the resize's srcset / media-query re-evaluation
-          // has kicked off, then wait out any image loads it started — a
-          // width or scale change can begin fetches that two animation
-          // frames alone would race, capturing half-loaded imagery. Bounded
-          // far tighter than the initial wait: this runs once per switch, so
-          // a slow/hanging image can't spend the full budget and multiply
-          // across entries. When nothing new loads, the wait costs only the
-          // DOM walk plus a frame.
-          await waitForReflow(page);
-          await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
-          currentViewport = target;
+      let entryEnvelope = entry.envelope;
+      let entryViewport = viewportForEntry(entry, baseViewport);
+      if (!sameEnvelope(entryEnvelope, currentEnvelope)) {
+        // Envelope changed: re-lay-out the same hydrated card in the new box
+        // at the matching viewport, then re-settle (which also waits out any
+        // image loads the new box triggers).
+        if (!sameViewport(entryViewport, currentViewport)) {
+          await page.setViewport(entryViewport);
+          currentViewport = entryViewport;
         }
+        let stepError = await renderFor(entryEnvelope);
+        if (stepError) {
+          return stepError;
+        }
+        currentEnvelope = entryEnvelope;
+      } else if (!sameViewport(entryViewport, currentViewport)) {
+        // Same render, different viewport (a viewport-filling batch, or a
+        // device-scale change): resize + reflow without a full re-settle.
+        // Reflow first so the resize's srcset / media-query re-evaluation has
+        // kicked off, then wait out any image loads it started — a width or
+        // scale change can begin fetches that two animation frames alone
+        // would race, capturing half-loaded imagery. Bounded far tighter than
+        // the initial wait: this runs once per switch, so a slow/hanging image
+        // can't spend the full budget and multiply across entries. When
+        // nothing new loads, the wait costs only the DOM walk plus a frame.
+        await page.setViewport(entryViewport);
+        await waitForReflow(page);
+        await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
+        currentViewport = entryViewport;
       }
       let item = await captureOneEntry(
         page,

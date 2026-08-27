@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "es2023",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    // These scripts are executed by node's own type stripping, which erases
+    // annotations without evaluating them. Anything that would need runtime
+    // emit — enum, namespace, parameter properties — must fail here rather
+    // than at the point someone runs the script.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    // Node resolves the specifier it is given, so a script importing a
+    // sibling must name the real file. Type-checking has to accept the same
+    // specifier the runtime needs.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["execution-runtime-*.mts"]
+}
