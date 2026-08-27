@@ -27,6 +27,7 @@ interface BrowserStubOptions {
   // toggle this to make standby refill arbitrarily slow.
   gate: () => Promise<void>;
   onContextCreated?: () => void;
+  onContextClosed?: () => void;
 }
 
 function makeBrowserStub(opts: BrowserStubOptions) {
@@ -53,7 +54,9 @@ function makeBrowserStub(opts: BrowserStubOptions) {
             on() {},
           };
         },
-        async close() {},
+        async close() {
+          opts.onContextClosed?.();
+        },
       };
       return context;
     },
@@ -89,6 +92,22 @@ function makeManualGate() {
       return waiters.length;
     },
   };
+}
+
+// Poll for a condition instead of sleeping a guessed interval, so a test that
+// needs the pool to reach a state waits exactly as long as that takes.
+async function waitUntil(
+  predicate: () => boolean,
+  description: string,
+  timeoutMs = 2000,
+): Promise<void> {
+  let deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error(`timed out waiting for ${description}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -192,6 +211,62 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     result.release();
+  });
+
+  // `closeAll` awaiting the in-flight refill is a contract rather than
+  // teardown hygiene, because a caller can be closing the pool in order to
+  // replace the browser under it: the prerender server's host-shell recycle
+  // does exactly that, on a boot where the initial warm is usually still
+  // running. If `closeAll` returned first, the browser would be replaced while
+  // a standby was still being created, and that standby would land in the live
+  // standby set holding a page on a browser that no longer exists — a tab a
+  // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
+  // the zero `closeAll` resets, which under-reports pool occupancy for the
+  // life of the process.
+  test('closeAll waits for an in-flight standby refill and closes what it created', async function (assert) {
+    let gate = makeManualGate();
+    let created = 0;
+    let closed = 0;
+    let browserManager = makeBrowserStub({
+      gate: gate.gate,
+      onContextCreated: () => created++,
+      onContextClosed: () => closed++,
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    // Park the refill inside `createBrowserContext`, so it is provably
+    // mid-creation — not merely scheduled — when `closeAll` runs.
+    gate.block();
+    let refill = pool.warmStandbys();
+    await waitUntil(
+      () => gate.waiterCount() > 0,
+      'the standby refill to park on the gate',
+    );
+    assert.strictEqual(created, 0, 'no context exists yet');
+
+    let closeAllSettled = false;
+    let closeAll = pool.closeAll().then(() => {
+      closeAllSettled = true;
+    });
+    // Everything else `closeAll` does resolves within a few turns of the
+    // event loop against an empty pool, so still-pending here isolates the
+    // await being asserted.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.false(
+      closeAllSettled,
+      'closeAll is still pending while a standby is mid-creation',
+    );
+
+    gate.unblockAll();
+    await closeAll;
+    await refill;
+
+    assert.true(created > 0, 'the refill created at least one context');
+    assert.strictEqual(
+      closed,
+      created,
+      'every context the refill created was closed by closeAll',
+    );
   });
 
   test('a stalled refill on affinity A does not block a concurrent reused-tab caller on affinity B', async function (assert) {
