@@ -16,11 +16,42 @@ import type RouterService from '@ember/routing/router-service';
   fusedIndexMeta: true,
 };
 
+// The card id of the most recent render transition requested through
+// `boxelTransitionTo`, recorded synchronously at request time — before Ember
+// begins the transition — so it survives every failure mode the router can
+// produce. A pre-model throw rejects the transition while its RouteInfo
+// params can still be unresolved (observed on the production build; the
+// dev/test build resolves them earlier), and the page URL is still the
+// standby page, so this stash can be the only surviving record of which card
+// an error doc's deps must name.
+export function recordAttemptedRenderCardId(
+  routeName: unknown,
+  firstParam: unknown,
+): void {
+  if (
+    typeof routeName !== 'string' ||
+    !(routeName === 'render' || routeName.startsWith('render.'))
+  ) {
+    return;
+  }
+  // Only a full render entry carries the card id in first position; sub-route
+  // transitions that reuse established base params lead with format/level.
+  if (typeof firstParam === 'string' && /^https?:\/\//.test(firstParam)) {
+    (globalThis as any).__boxelLastAttemptedRenderCardId = firstParam;
+  }
+}
+
+export function lastAttemptedRenderCardId(): string | undefined {
+  let id = (globalThis as any).__boxelLastAttemptedRenderCardId;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+}
+
 export function registerBoxelTransitionTo(
   router: RouterService,
   owner: object,
 ): void {
   let transitionFn = (...args: Parameters<RouterService['transitionTo']>) => {
+    recordAttemptedRenderCardId(args[0], args[1]);
     router.transitionTo(...args);
   };
   (globalThis as any).boxelTransitionTo = transitionFn;

@@ -10,6 +10,7 @@ import {
   putMedia,
   type MediaCacheLane,
   type ScreenshotCaptureSpec,
+  type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
   ensureFullMatrixUserId,
   ensureTrailingSlash,
@@ -30,7 +31,7 @@ export interface ScreenshotCardArgs extends JSONTypes.Object {
   realmUsername: string;
   runAs: string;
   cardId: string;
-  format: 'isolated' | 'embedded';
+  format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip). Typed as
   // `| null` rather than `?:` because `JSONTypes.Object`'s index signature
   // rejects `undefined`; the handler always sets it (to the parsed spec or

@@ -40,6 +40,10 @@ import {
   errorJsonApiToErrorEntry,
 } from '../lib/window-error-handler';
 import { createAuthErrorGuard } from '../utils/auth-error-guard';
+import {
+  lastAttemptedRenderCardId,
+  recordAttemptedRenderCardId,
+} from '../utils/register-boxel-transition';
 import { runDomDesyncCheck } from '../utils/render-desync-detector';
 import {
   RenderCardTypeTracker,
@@ -101,6 +105,10 @@ export default class RenderRoute extends Route<Model> {
   private currentTransition: Transition | undefined;
   private lastStoreResetKey: string | undefined;
   private renderBaseParams: [string, string, string] | undefined;
+  // The card id of the most recent transition into this route, recorded at
+  // beforeModel entry — the error-path fallback of last resort for deps
+  // derivation (see beforeModel).
+  #lastAttemptedCardId: string | undefined;
   private lastRenderErrorSignature: string | undefined;
   #windowListenersAttached = false;
   #cardTypeTracker = new RenderCardTypeTracker();
@@ -137,6 +145,7 @@ export default class RenderRoute extends Route<Model> {
       setError: (error) =>
         this.#writePrerenderError(elements.errorElement, error),
       currentURL: this.router.currentURL,
+      fallbackDeps: this.#windowErrorFallbackDeps(),
     });
     this.#setAllModelStatuses('unusable');
     if (isTesting()) {
@@ -180,6 +189,7 @@ export default class RenderRoute extends Route<Model> {
     this.#detachWindowErrorListeners();
     this.lastStoreResetKey = undefined;
     this.renderBaseParams = undefined;
+    this.#lastAttemptedCardId = undefined;
     this.lastRenderErrorSignature = undefined;
     this.renderErrorState.clear();
     this.#modelStates.clear();
@@ -195,6 +205,19 @@ export default class RenderRoute extends Route<Model> {
   }
 
   async beforeModel(transition: Transition) {
+    // Stash the card id this transition is trying to render before anything
+    // can throw. A pre-model failure has no model state and may surface
+    // through the window unhandledrejection listener with no transition at
+    // all; on a page whose URL is not a render path (a standby page mid
+    // in-app transition) this stash is then the only surviving record of
+    // which card the error doc's deps must name.
+    let attemptedCardId =
+      this.#transitionCardId(transition) ??
+      this.#renderParamsId() ??
+      lastAttemptedRenderCardId();
+    if (attemptedCardId) {
+      this.#lastAttemptedCardId = attemptedCardId;
+    }
     await super.beforeModel?.(transition);
     resetRenderTimerStats();
     if (!isTesting()) {
@@ -866,6 +889,7 @@ export default class RenderRoute extends Route<Model> {
       (globalThis as any).__boxelRenderCapturedDeps = undefined;
       (globalThis as any).__docsInFlight = undefined;
       (globalThis as any).__waitForRenderLoadStability = undefined;
+      (globalThis as any).__boxelLastAttemptedRenderCardId = undefined;
     });
   }
 
@@ -876,6 +900,7 @@ export default class RenderRoute extends Route<Model> {
       routeName: Parameters<RouterService['transitionTo']>[0],
       ...params: any[]
     ) => {
+      recordAttemptedRenderCardId(routeName, params[0]);
       if (routeName === 'render') {
         if (params.length >= 3) {
           baseParams = params.slice(0, 3) as [string, string, string];
@@ -891,6 +916,18 @@ export default class RenderRoute extends Route<Model> {
       }
       if (typeof routeName === 'string' && routeName.startsWith('render.')) {
         let normalized = [...params];
+        // A trailing query-params object (e.g. the fitted-screenshot
+        // envelope) is not a positional route param — peel it off before the
+        // base-param length heuristic below, then re-append it to the final
+        // transition so router.transitionTo receives it as its query-params arg.
+        let last = normalized[normalized.length - 1];
+        let queryParamsArg =
+          last &&
+          typeof last === 'object' &&
+          !Array.isArray(last) &&
+          'queryParams' in last
+            ? (normalized.pop() as { queryParams?: Record<string, string> })
+            : undefined;
         if (
           normalized.length >= 3 &&
           normalized[0] === baseParams[0] &&
@@ -905,7 +942,10 @@ export default class RenderRoute extends Route<Model> {
           this.renderBaseParams = baseParams;
           normalized = normalized.slice(3);
         }
-        join(() => this.router.transitionTo(routeName, ...normalized));
+        let finalParams = queryParamsArg
+          ? [...normalized, queryParamsArg]
+          : normalized;
+        join(() => this.router.transitionTo(routeName, ...finalParams));
         return;
       }
       join(() =>
@@ -1015,9 +1055,18 @@ export default class RenderRoute extends Route<Model> {
     context?: { cardId?: string; nonce?: string },
   ): string {
     let transitionId = this.#transitionCardId(transition);
+    // `renderBaseParams` and the beforeModel stash cover the error paths that
+    // arrive with no transition (window unhandledrejection) and no model
+    // state (pre-model failures) — without them a pre-model error on a page
+    // whose URL is not a render path serializes with empty deps, and
+    // downstream invalidation never reaches the card's index rows.
     let fallbackDeps = this.#fallbackDepsFromIds([
       context?.cardId,
       transitionId,
+      this.renderBaseParams?.[0],
+      this.#lastAttemptedCardId,
+      this.#renderParamsId(),
+      lastAttemptedRenderCardId(),
     ]);
     let normalizationContext = {
       cardId: context?.cardId,
@@ -1373,7 +1422,18 @@ export default class RenderRoute extends Route<Model> {
     let { container, errorElement } = this.#ensurePrerenderElements();
     let reason = this.renderErrorState.reason ?? '';
     let parsedReason: any;
-    let fallbackDeps = this.#fallbackDepsFromTransitionParams(params);
+    // The transition's own params here are the leaf RouteInfo's, which never
+    // carry `id` (that lives on this route's RouteInfo) — walk the parent
+    // chain, and fall back to the id beforeModel stashed, before letting
+    // `#fallbackDepsFromTransitionParams` try the page URL.
+    let fallbackDeps = this.#fallbackDepsFromTransitionParams({
+      id:
+        params?.id ??
+        this.#transitionCardId(transition) ??
+        this.#lastAttemptedCardId ??
+        this.#renderParamsId() ??
+        lastAttemptedRenderCardId(),
+    });
     try {
       parsedReason = JSON.parse(reason);
     } catch {
@@ -1450,6 +1510,35 @@ export default class RenderRoute extends Route<Model> {
     return this.#fallbackDepsFromIds([id]);
   }
 
+  // Every card-id fallback source this route holds, in shape-expanded dep
+  // form, for the error writers that run with no model state: the window
+  // error listeners (which can be the LAST writer of the prerender error
+  // element) and the pre-model early-failure path.
+  #windowErrorFallbackDeps(): string[] {
+    return this.#fallbackDepsFromIds([
+      this.renderBaseParams?.[0],
+      this.#lastAttemptedCardId,
+      this.#renderParamsId(),
+      lastAttemptedRenderCardId(),
+    ]);
+  }
+
+  // The transition's serialized state params for this route, readable even
+  // when the public RouteInfo chain has not materialized `params` yet.
+  // `paramsFor` reads the router's active transition state directly, which is
+  // populated at intent-application time for named transitions — earlier than
+  // the RouteInfo params the walk in #transitionCardId depends on.
+  #renderParamsId(): string | undefined {
+    try {
+      let params = this.paramsFor('render') as { id?: string } | undefined;
+      return typeof params?.id === 'string' && params.id.length > 0
+        ? params.id
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   #transitionCardId(transition?: Transition): string | undefined {
     let current: Transition['to'] | null = transition?.to;
     let id: string | undefined;
@@ -1459,7 +1548,25 @@ export default class RenderRoute extends Route<Model> {
         current = current?.parent;
       }
     } while (current && !id);
-    return id;
+    if (id) {
+      return id;
+    }
+    // The RouteInfo params aren't always resolved when this runs — most
+    // importantly at `beforeModel` entry (where the stash is taken) and on a
+    // pre-model rejection, whose `transition.to` is the leaf RouteInfo that
+    // never carries `:id`. `window.location` is no help there either: it is
+    // still the standby page mid in-app transition. The URL the transition is
+    // *heading to* is the one reliable record — `/render/:id/:nonce/:options`
+    // — so recover the id from it directly.
+    let intentUrl = (transition as { intent?: { url?: string } } | undefined)
+      ?.intent?.url;
+    if (intentUrl) {
+      let match = /\/render\/([^/]+)\//.exec(intentUrl);
+      if (match?.[1]) {
+        return decodeURIComponent(match[1]);
+      }
+    }
+    return undefined;
   }
 
   #fallbackDepsFromIds(ids: (string | undefined)[]): string[] {
