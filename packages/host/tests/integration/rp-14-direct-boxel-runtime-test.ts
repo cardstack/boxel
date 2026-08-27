@@ -546,6 +546,17 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
     );
   });
 
+  test('RP-7.6: a query-backed field that has not run projects as an empty membership', async function (assert) {
+    let runtime = newRuntime();
+    let { model } = await runtime.projectInstance(await retainedShow(runtime));
+
+    assert.deepEqual(
+      model.revivals,
+      [],
+      'which is also what a search that ran and matched nothing projects — the record has no spelling for the difference, and a tier reading it shows "no results" for a query that has not started',
+    );
+  });
+
   test('RP-9.1, RP-7.6: a query-backed relationship reports as query-backed and is not computed', async function (assert) {
     let runtime = newRuntime();
     let fields = await runtime.getFields(await retainedShow(runtime));

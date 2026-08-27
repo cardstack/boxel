@@ -5,9 +5,14 @@
  * everything that touches the Card API, the Loader, or a live instance
  * happens here, and `boxel-render-record.ts` assembles the protocol's records
  * out of what this produced without reading anything live. The split is what
- * makes the second half provably pure, and one capture is what keeps
- * `getFields` and `projectInstance` from being able to disagree about one
- * instance — both are built from a single read of it.
+ * makes the second half provably pure.
+ *
+ * One capture is what keeps a record internally coherent: an instance's field
+ * list and its model come from a single read, so a card whose fields and
+ * values were read at different moments never describes a state the instance
+ * was never in. It is not a claim that two *operations* agree — `getFields`
+ * and `projectInstance` each read at the moment they are called, as any two
+ * reads of a live instance do.
  *
  * A `BoxelDescription` is not part of that agreement, and the difference is
  * real rather than a rounding error: it describes a *type*, read from the
@@ -165,16 +170,33 @@ export function captureBoxelInstance(
   instance: BaseDef,
   api: CardAPIModule,
 ): CapturedBoxelSemantics {
-  let boxelType = instance.constructor as BaseDefConstructor;
   return {
-    type: captureBoxelType(boxelType, api),
-    instance: {
-      id: instanceId(instance),
-      type: codeRefFor(boxelType),
-      model: captureModel(instance, api),
-      presentation: capturePresentation(instance, api),
-    },
+    type: captureBoxelType(instance.constructor as BaseDefConstructor, api),
+    instance: captureInstanceProjection(instance, api),
     fields: captureBoxelFields(instance, api),
+  };
+}
+
+/**
+ * Reads a live instance into the values an `InstanceProjection` is built from,
+ * and nothing else.
+ *
+ * Separate from `captureBoxelInstance` because `projectInstance` wants only
+ * this: building the type description and the resolved field list to return
+ * one of the three would walk the ancestry, resolve every format slot, and
+ * evaluate every field's configuration function for records the caller cannot
+ * reach — the same waste, in the other direction, that keeping `getFields` out
+ * of the render record removed.
+ */
+export function captureInstanceProjection(
+  instance: BaseDef,
+  api: CardAPIModule,
+): CapturedBoxelInstance {
+  return {
+    id: instanceId(instance),
+    type: codeRefFor(instance.constructor as BaseDefConstructor),
+    model: captureModel(instance, api),
+    presentation: capturePresentation(instance, api),
   };
 }
 
@@ -397,6 +419,13 @@ function instanceId(instance: BaseDef): RealmResourceIdentifier | null {
  * presents the error (RP-4.5) — so swallowing it here would make this
  * projection answer where main refuses, and every tier reading the projection
  * would render a card main cannot.
+ *
+ * A field whose value cannot cross at all is **absent** from the model rather
+ * than present holding `null`. `ResponseField` is the case: its value is a
+ * `Response`, which no boundary carries. The absence is what makes it
+ * findable — a member reading `undefined` routes through the missing-path
+ * diagnostic, where a `null` is indistinguishable from a field that really is
+ * null and nothing anywhere says otherwise.
  */
 function captureModel(
   instance: BaseDef,
@@ -408,11 +437,16 @@ function captureModel(
   for (let [fieldName, field] of Object.entries(
     api.getFields(instance, { includeComputeds: true }),
   )) {
-    defineMember(
-      model,
+    let projected = captureFieldValue(
+      instance,
       fieldName,
-      captureFieldValue(instance, fieldName, field.fieldType, api, seen),
+      field.fieldType,
+      api,
+      seen,
     );
+    if (projected !== notData) {
+      defineMember(model, fieldName, projected);
+    }
   }
   // The root is a value like any nested one, so its own trusted getters belong
   // in the model for the same reason theirs do (RP-4.4/RP-5.4): a trusted Base
@@ -429,16 +463,23 @@ function captureFieldValue(
   kind: Field<BaseDefConstructor>['fieldType'],
   api: CardAPIModule,
   seen: WeakSet<object>,
-): JsonValue {
+): JsonValue | typeof notData {
   if (kind === 'linksTo' || kind === 'linksToMany') {
     let slots = linkSlots(instance, fieldName, api);
     return kind === 'linksToMany' ? slots : (slots[0] ?? null);
   }
   let value = api.peekAtField(instance, fieldName);
   if (kind === 'containsMany') {
-    return Array.isArray(value)
-      ? value.map((entry) => captureValue(entry, api, seen))
-      : [];
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    // An element cannot be omitted the way a member can — the position is the
+    // element's identity to anything iterating it — so a value that cannot
+    // cross becomes `null` here and the array keeps its length.
+    return value.map((entry) => {
+      let projected = captureValue(entry, api, seen);
+      return projected === notData ? null : projected;
+    });
   }
   return captureValue(value, api, seen);
 }
@@ -489,6 +530,22 @@ function captureFieldValue(
  * the only sanctioned structured observation (RP-7.1) — and the broken-link
  * presentation that consumes it (RP-7.4) is chrome the Host renders, not model
  * data a card reads.
+ *
+ * Two whole-field states the record has no spelling for, both query-backed
+ * (RP-7.6), both currently projecting as something they are not:
+ *
+ * - a search that has not started or is still in flight answers `membership:
+ *   undefined`, which projects as `[]` — the same as a search that ran and
+ *   matched nothing;
+ * - a search that failed as a unit answers one whole-field sentinel, which
+ *   projects as `[null]` — one absent slot rather than a failed field.
+ *
+ * RP-7.1's union describes *slots*, so neither has a place in it, and
+ * `isLoading` — read off this same call — has nowhere in the record to go. A
+ * tier rendering from the record therefore shows "no results" for a query that
+ * has not run. Carrying whole-field state is a protocol change and belongs
+ * with the relationship-state work; what is here is the slot view, stated
+ * exactly.
  */
 function linkSlots(
   instance: BaseDef,
@@ -520,10 +577,9 @@ function captureValue(
   value: unknown,
   api: CardAPIModule,
   seen: WeakSet<object>,
-): JsonValue {
+): JsonValue | typeof notData {
   if (!isBaseDefInstance(value)) {
-    let projected = dataValue(value);
-    return projected === notData ? null : (projected ?? null);
+    return dataValue(value);
   }
   if (seen.has(value)) {
     // A value reachable from itself would walk forever. Degrading the second
@@ -537,11 +593,16 @@ function captureValue(
     for (let [fieldName, field] of Object.entries(
       api.getFields(value, { includeComputeds: true }),
     )) {
-      defineMember(
-        expanded,
+      let projected = captureFieldValue(
+        value,
         fieldName,
-        captureFieldValue(value, fieldName, field.fieldType, api, seen),
+        field.fieldType,
+        api,
+        seen,
       );
+      if (projected !== notData) {
+        defineMember(expanded, fieldName, projected);
+      }
     }
     captureTrustedGetters(value, expanded);
     return expanded;
@@ -660,11 +721,12 @@ function capturePresentation(
  * derived strings cross as data. Without them a themed card renders unthemed,
  * which is not a degraded theme but a different design.
  *
- * The branch reproduces `field-component.gts`'s own `isThemeCard` / `themeCss`
- * / `hasTheme` / `themeId` / `getCssImports`, which are module-private there. A
- * card declaring its own `cssVariables` through a `CSSField` is a Theme card
- * and scopes to its own identity; every other card scopes to the Theme its
- * `cardTheme` mirror links.
+ * The derivation itself is main's, called rather than reproduced:
+ * `isThemeCard` / `themeCss` / `hasTheme` / `themeId` / `getCssImports` are
+ * the functions `field-component.gts` builds its own `CardContainer`
+ * invocation from. A second implementation here would be a second builder of
+ * the same answers — the failure this pipeline exists to avoid, one level
+ * down — and while they were copies the two had already drifted.
  *
  * `isThemed` is carried rather than derived from the other members because
  * Base answers it two ways: an ordinary card is themed when it links a Theme,
@@ -681,128 +743,54 @@ function captureTheme(
   InstancePresentation,
   'isThemed' | 'theme' | 'themeScope' | 'themeCss' | 'cssImports'
 > {
-  // Read before any early return, and independent of the themed decision,
-  // because main passes `@cssImports` to `CardContainer` outside its
-  // `@isThemed` guard and the container renders them ungated. A Theme card
-  // authored fonts-first — imports set, variables still empty — renders its
-  // `@import` on main, so dropping them with the theme would lose a stylesheet
-  // main shows.
-  let ownImports = cssImportsOf(instance, api);
-  let unthemed = {
-    isThemed: false,
-    theme: null,
-    themeScope: null,
-    themeCss: null,
-    cssImports: ownImports ?? null,
-  };
-  let source: BaseDef;
-  let themeId: string | null;
-  let themeCss: string | null;
-  let theme: BoxelValueReference | null;
-  if (fieldTypedAs(instance, 'cssVariables', 'CSSField', api)) {
-    themeCss = readString(instance, 'cssVariables', api);
-    if (!themeCss?.trim()) {
-      // A Theme card with nothing in its variables is not previewing a theme,
-      // which is exactly where Base's two answers differ: the linked branch
-      // below stays themed on empty variables and this one does not.
-      return unthemed;
-    }
-    source = instance;
-    themeId = instanceId(instance);
-    theme = null;
-  } else {
-    // `cardTheme` is CardDef's computed `linksTo` mirror of `cardInfo.theme`,
-    // and main reads it as an ordinary property read. A peek would miss it
-    // entirely: a computed relationship's value never lands in the framework
-    // bucket. The compute's own read of `cardInfo.theme` is RP-7.2's lazy-load
-    // trigger — the read main performs on every themed render.
-    let linked = hasField(instance, 'cardTheme', api)
-      ? (instance as unknown as Record<string, unknown>).cardTheme
-      : undefined;
-    if (!isBaseDefInstance(linked)) {
-      return unthemed;
-    }
-    source = linked;
-    themeId = instanceId(linked);
-    themeCss = readString(linked, 'cssVariables', api);
-    // Same fallback a link's membership reference supplies: an unsaved Theme
-    // has no id, and `{id: null}` is a reference no consumer can resolve.
-    theme = boxelReference(
-      linked,
-      (linked as unknown as Record<symbol, unknown>)[api.localId] as
-        | string
-        | undefined,
-    );
+  let card = instance as CardDef;
+  // `themeCss` reads `cardTheme` — CardDef's computed `linksTo` mirror of
+  // `cardInfo.theme` — which is the read main performs on every card render.
+  let css = api.themeCss(card) ?? null;
+  let imports = api.getCssImports(card);
+  let cssImports =
+    Array.isArray(imports) && imports.length > 0
+      ? imports.filter((entry): entry is string => typeof entry === 'string')
+      : null;
+  if (!api.hasTheme(card)) {
+    return {
+      isThemed: false,
+      theme: null,
+      themeScope: null,
+      themeCss: null,
+      // Carried even unthemed, because main passes `@cssImports` to
+      // `CardContainer` outside its `@isThemed` guard and the container
+      // renders them ungated — a Theme card authored fonts-first has imports
+      // to render and no variables yet.
+      cssImports,
+    };
   }
+  let linked = api.isThemeCard(card) ? undefined : card.cardTheme;
   return {
     isThemed: true,
-    theme,
+    theme:
+      linked && isBaseDefInstance(linked)
+        ? boxelReference(
+            linked,
+            // The same fallback a link's membership reference supplies: an
+            // unsaved Theme has no id, and `{id: null}` is a reference no
+            // consumer can resolve.
+            (linked as unknown as Record<symbol, unknown>)[api.localId] as
+              | string
+              | undefined,
+          )
+        : null,
     // Null where the content hash cannot be formed — an unsaved Theme card
     // previewing its own CSS has no id to hash. Main falls back to a
     // per-process guid there, and a guid is not a scope this record can carry:
     // the token has to be stable across processes so prerendered HTML and a
     // live render agree (RP-11.3), and a per-process one is neither derivable
-    // by a consumer nor comparable between tiers. A Host wrapper does what
-    // main does with the null.
-    themeScope: themeScope(themeId, themeCss) ?? null,
-    themeCss,
-    cssImports:
-      ownImports === undefined
-        ? (cssImportsOf(source, api) ?? null)
-        : ownImports,
+    // by a consumer nor comparable between tiers. A Host wrapper does with the
+    // null what main does with it.
+    themeScope: themeScope(api.themeId(card), css) ?? null,
+    themeCss: css,
+    cssImports,
   };
-}
-
-/**
- * The stylesheet imports a card supplies itself, typically font faces.
- *
- * Main's `getCssImports` asks this of *every* card before falling back to its
- * linked Theme's, not only of Theme cards — a card declaring its own
- * `CssImportField` carries its own fonts whatever it links. The caller applies
- * the fallback, so this answers only the first half.
- */
-function cssImportsOf(
-  source: BaseDef,
-  api: CardAPIModule,
-): string[] | null | undefined {
-  // `undefined` distinguishes "this card declares no such field" — the only
-  // case where main consults the linked Theme — from "it declares one and has
-  // nothing in it", where main uses the card's own empty answer and does not
-  // fall back.
-  if (!fieldTypedAs(source, 'cssImports', 'CssImportField', api)) {
-    return undefined;
-  }
-  let imports = (source as unknown as Record<string, unknown>).cssImports;
-  if (!Array.isArray(imports)) {
-    return null;
-  }
-  let entries = imports.filter(
-    (entry): entry is string => typeof entry === 'string',
-  );
-  return entries.length > 0 ? entries : null;
-}
-
-/**
- * Whether an instance carries a field of `fieldName` whose declared type is
- * the Base class named by `typeName`.
- *
- * The name check is main's own (`isThemeCard` / `getCssImports` in
- * `field-component.gts`): a card is a Theme because its `cssVariables` is a
- * `CSSField`, not because it happens to have a member spelled that way.
- */
-function fieldTypedAs(
-  instance: BaseDef,
-  fieldName: string,
-  typeName: string,
-  api: CardAPIModule,
-): boolean {
-  let field = (
-    api.getFields(instance, { includeComputeds: true }) as Record<
-      string,
-      Field<BaseDefConstructor> | undefined
-    >
-  )[fieldName];
-  return field?.card?.name === typeName;
 }
 
 function hasField(
@@ -952,6 +940,12 @@ function dataValue(
   }
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'bigint') {
+    // The decimal string every other view of a `BigIntegerField` already
+    // uses: it is what its serializer writes, so a projected value and a
+    // serialized one read the same.
+    return String(value);
   }
   if (value instanceof URL) {
     return value.href;

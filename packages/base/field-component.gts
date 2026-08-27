@@ -163,6 +163,55 @@ const componentCache = initSharedState(
     >(),
 );
 
+// The theme derivation a themed card's CardContainer invocation is built from.
+// Module-scope and exported rather than private to `getBoxComponent`, because
+// a card's theme has to be derivable outside a live render: an execution tier
+// that renders from projected data reads these answers as data, and a second
+// implementation of them would drift from this one with nothing to go red.
+//
+// A card is a Theme when it declares its own `cssVariables` through a
+// `CSSField`; every other card takes its theme from the `cardTheme` mirror of
+// `cardInfo.theme`.
+export function isThemeCard(cardDef?: CardDef): cardDef is Theme {
+  if (cardDef && 'cssVariables' in cardDef) {
+    let field = getField(cardDef, 'cssVariables');
+    return field?.card?.name === 'CSSField';
+  }
+  return false;
+}
+
+export function themeCss(cardDef?: CardDef) {
+  return isThemeCard(cardDef)
+    ? cardDef.cssVariables
+    : cardDef?.cardTheme?.cssVariables;
+}
+
+// Answered two ways on purpose: an ordinary card is themed when it links a
+// Theme, and a Theme card previewing its own CSS is themed when that CSS is
+// non-empty — and such a card links no Theme at all.
+export function hasTheme(cardDef?: CardDef) {
+  if (isThemeCard(cardDef)) {
+    return Boolean(cardDef?.cssVariables?.trim());
+  }
+  return cardDef?.cardTheme != null;
+}
+
+export function themeId(cardDef?: CardDef) {
+  return isThemeCard(cardDef) ? cardDef.id : cardDef?.cardTheme?.id;
+}
+
+export function getCssImports(card?: CardDef): string[] | undefined {
+  // for cards like Theme card and its descendants, directly use the `cssImports` field;
+  // for all other cards, get imports via the Theme card linked from cardInfo
+  if (card && 'cssImports' in card) {
+    let field = getField(card, 'cssImports');
+    if (field?.card?.name === 'CssImportField') {
+      return card.cssImports as string[] | undefined;
+    }
+  }
+  return card?.cardTheme?.cssImports;
+}
+
 export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
@@ -259,42 +308,6 @@ export function getBoxComponent(
     };
   }
 
-  function isThemeCard(cardDef?: CardDef): cardDef is Theme {
-    if (cardDef && 'cssVariables' in cardDef) {
-      let field = getField(cardDef, 'cssVariables');
-      return field?.card?.name === 'CSSField';
-    }
-    return false;
-  }
-
-  function themeCss(cardDef?: CardDef) {
-    return isThemeCard(cardDef)
-      ? cardDef.cssVariables
-      : cardDef?.cardTheme?.cssVariables;
-  }
-
-  function hasTheme(cardDef?: CardDef) {
-    if (isThemeCard(cardDef)) {
-      return Boolean(cardDef?.cssVariables?.trim());
-    }
-    return cardDef?.cardTheme != null;
-  }
-
-  function themeId(cardDef?: CardDef) {
-    return isThemeCard(cardDef) ? cardDef.id : cardDef?.cardTheme?.id;
-  }
-
-  function getCssImports(card?: CardDef): string[] | undefined {
-    // for cards like Theme card and its descendants, directly use the `cssImports` field;
-    // for all other cards, get imports via the Theme card linked from cardInfo
-    if (card && 'cssImports' in card) {
-      let field = getField(card, 'cssImports');
-      if (field?.card?.name === 'CssImportField') {
-        return card.cssImports as string[] | undefined;
-      }
-    }
-    return card?.cardTheme?.cssImports;
-  }
 
   let component = class FieldComponent extends Component<BoxComponentSignature> {
     // Scopes this card's theme stylesheet. Derived from the theme card's id

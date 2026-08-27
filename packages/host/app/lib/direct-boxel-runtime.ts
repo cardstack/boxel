@@ -17,14 +17,14 @@ import type { LooseCardResource } from '@cardstack/runtime-common/resource-types
 
 import {
   captureBoxelFields,
-  captureBoxelInstance,
   captureBoxelType,
+  captureInstanceProjection,
   captureUnresolvedFields,
 } from './boxel-projection';
 import { observeMissingProjectionPaths } from './boxel-projection-diagnostics';
 import {
   buildBoxelDescription,
-  buildBoxelRenderRecord,
+  buildInstanceProjection,
   buildResolvedFields,
 } from './boxel-render-record';
 import {
@@ -210,8 +210,7 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
   async projectInstance(
     instance: BoxelInstanceHandle,
   ): Promise<InstanceProjection> {
-    return (await this.renderRecordFor(this.instances.get(instance)))
-      .projection;
+    return this.projectionFor(this.instances.get(instance));
   }
 
   /**
@@ -261,7 +260,20 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     instance: BoxelInstanceHandle,
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getCardAPI();
-    return api.serializeCard(this.instances.get(instance) as never, {
+    let card = this.instances.get(instance);
+    if (!api.isCard(card)) {
+      // A document is a card's shape. A field instance has no id and no local
+      // id, so serializing one builds `{type: 'card', lid: undefined}` and
+      // dies inside the document check with a shape dump that names neither
+      // the handle nor the reason — where this names both. `retainInstance`
+      // takes any `BaseDef` and the pipeline describes field instances
+      // (`boxelKind` answers `'field'`), so a field handle reaching here is a
+      // caller mistake rather than an impossibility.
+      throw new Error(
+        `Boxel instance handle '${instance}' names a ${card.constructor.name}, which is not a card and has no document form`,
+      );
+    }
+    return api.serializeCard(card as never, {
       includeComputeds: true,
       includeUnrenderedFields: true,
       useAbsoluteURL: true,
@@ -316,13 +328,13 @@ export default class DirectBoxelRuntime implements BoxelRuntime {
     return card.constructor.getComponent(card, field, options);
   }
 
-  private async renderRecordFor(instance: BaseDef) {
+  private async projectionFor(instance: BaseDef) {
     let api = await this.getCardAPI();
     let revision = (this.revisions.get(instance) ?? 0) + 1;
     this.revisions.set(instance, revision);
-    return buildBoxelRenderRecord({
-      ...captureBoxelInstance(instance, api),
+    return buildInstanceProjection(
+      captureInstanceProjection(instance, api),
       revision,
-    });
+    );
   }
 }

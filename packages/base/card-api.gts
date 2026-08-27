@@ -18,6 +18,11 @@ import {
   type BoxComponent,
   CardCrudFunctionsConsumer,
   DefaultFormatsConsumer,
+  getCssImports,
+  hasTheme,
+  isThemeCard,
+  themeCss,
+  themeId,
 } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { LinksToEditor } from './links-to-editor';
@@ -243,6 +248,11 @@ export {
   realmURL,
   relativeTo,
   resolveFieldConfiguration,
+  isThemeCard,
+  themeCss,
+  hasTheme,
+  themeId,
+  getCssImports,
   serialize,
   serializeCard,
   serializeFileDef,
