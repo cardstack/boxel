@@ -164,10 +164,8 @@ export class CrossingStress extends Component {
   isMode = (mode: Mode) => this.mode === mode;
 
   register = modifier((el: HTMLElement) => {
-    el.closest<HTMLElement>('.app-shell')?.setAttribute(
-      'data-layout-ignore',
-      ''
-    );
+    const shell = el.closest<HTMLElement>('.app-shell');
+    shell?.setAttribute('data-layout-ignore', '');
     Object.defineProperty(el, 'choreoCrossingStress', {
       configurable: true,
       value: this,
@@ -185,9 +183,7 @@ export class CrossingStress extends Component {
       window.removeEventListener('keydown', this.onKey);
       delete (window as Window & { __choreoCrossingStress?: CrossingStress })
         .__choreoCrossingStress;
-      el.closest<HTMLElement>('.app-shell')?.removeAttribute(
-        'data-layout-ignore'
-      );
+      shell?.removeAttribute('data-layout-ignore');
     };
   });
 

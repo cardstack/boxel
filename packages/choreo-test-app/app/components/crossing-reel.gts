@@ -62,10 +62,8 @@ export class CrossingReel extends Component {
   }
 
   register = modifier((el: HTMLElement) => {
-    el.closest<HTMLElement>('.app-shell')?.setAttribute(
-      'data-layout-ignore',
-      ''
-    );
+    const shell = el.closest<HTMLElement>('.app-shell');
+    shell?.setAttribute('data-layout-ignore', '');
     Object.defineProperty(el, 'choreoCrossingReel', {
       configurable: true,
       value: this,
@@ -81,9 +79,7 @@ export class CrossingReel extends Component {
       cancelAnimationFrame(this.raf);
       delete (window as Window & { __choreoCrossingReel?: CrossingReel })
         .__choreoCrossingReel;
-      el.closest<HTMLElement>('.app-shell')?.removeAttribute(
-        'data-layout-ignore'
-      );
+      shell?.removeAttribute('data-layout-ignore');
     };
   });
 

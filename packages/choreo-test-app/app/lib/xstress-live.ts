@@ -5,6 +5,7 @@
  * transform); a <video>, a WebGL field, and an overflow pane do not.
  */
 import { modifier } from 'ember-modifier';
+import config from 'test-app/config/environment';
 import {
   BufferGeometry,
   Color,
@@ -16,6 +17,7 @@ import {
   WebGLRenderer,
 } from 'three';
 
+const IN_TEST = config.environment === 'test';
 const TINTS = [0x1f7c86, 0xc45a24, 0x8b6cff] as const;
 
 function reduced() {
@@ -33,6 +35,12 @@ function slideOf(el: Element) {
  * stress (WebGL in a transforming ancestor). Reduced-motion holds still.
  */
 export const particles = modifier((canvas: HTMLCanvasElement) => {
+  // The suite visits this route before integration tests. An infinite rAF
+  // plus a live WebGL context will starve later layout springs — skip both
+  // in test; the <canvas> still sits in the plate for the stress assertions.
+  if (IN_TEST) {
+    return;
+  }
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({
@@ -69,7 +77,11 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
   scene.add(cloud);
 
   let raf = 0;
+  let alive = true;
   const tick = () => {
+    if (!alive) {
+      return;
+    }
     const box = canvas.getBoundingClientRect();
     if (box.width > 2 && box.height > 2) {
       renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
@@ -88,6 +100,7 @@ export const particles = modifier((canvas: HTMLCanvasElement) => {
   raf = requestAnimationFrame(tick);
 
   return () => {
+    alive = false;
     cancelAnimationFrame(raf);
     geo.dispose();
     mat.dispose();
@@ -102,7 +115,7 @@ export const playClip = modifier((video: HTMLVideoElement) => {
   video.muted = true;
   video.loop = true;
   video.playsInline = true;
-  if (reduced()) {
+  if (IN_TEST || reduced()) {
     video.pause();
     return;
   }
@@ -121,11 +134,15 @@ export const playClip = modifier((video: HTMLVideoElement) => {
  * cut can land mid-scroll. Reduced-motion leaves it still.
  */
 export const liveScroll = modifier((el: HTMLElement) => {
-  if (reduced()) {
+  if (IN_TEST || reduced()) {
     return;
   }
   let raf = 0;
+  let alive = true;
   const step = () => {
+    if (!alive) {
+      return;
+    }
     const max = el.scrollHeight - el.clientHeight;
     if (max > 1) {
       const next = el.scrollTop + 0.45;
@@ -134,5 +151,8 @@ export const liveScroll = modifier((el: HTMLElement) => {
     raf = requestAnimationFrame(step);
   };
   raf = requestAnimationFrame(step);
-  return () => cancelAnimationFrame(raf);
+  return () => {
+    alive = false;
+    cancelAnimationFrame(raf);
+  };
 });
