@@ -1121,7 +1121,15 @@ export class Loader {
             await this.advanceToState(
               incompleteDependency,
               'registered-completing-deps',
-              stack,
+              {
+                ...stack,
+                ...{
+                  'registered-completing-deps': [
+                    ...stack['registered-completing-deps'],
+                    this.moduleCacheKey(resolvedURL.href),
+                  ],
+                },
+              },
             );
             break;
           }
@@ -1139,12 +1147,18 @@ export class Loader {
     }
   }
 
-  // The first module in `moduleIdentifier`'s dependency closure that `evaluate`
-  // would refuse, or undefined when the closure is ready. Mirrors the descent
-  // `evaluate` makes: it follows the same dependency entries, and stops where
-  // `evaluate` stops — a module already evaluated, preparing, or broken is
-  // answered from its own entry without its dependencies being read, so what
-  // lies beyond it cannot fail this pass either.
+  // Some module in `moduleIdentifier`'s dependency closure that `evaluate`
+  // would refuse, or undefined when the closure is ready. Which one is not
+  // defined: the traversal is depth-first over a stack, so it reaches siblings
+  // in the reverse of the order `evaluate` binds them. Nothing depends on that
+  // — the caller advances whatever comes back and re-enters, so any incomplete
+  // module in the closure is an equally good answer and the loop is what makes
+  // the search exhaustive.
+  //
+  // Where it stops is load-bearing, and matches `evaluate`: a module already
+  // evaluated, preparing, or broken is answered from its own entry without its
+  // dependencies being read, so what lies beyond one cannot fail this pass
+  // either.
   //
   // Scoped to one module's closure rather than memoized across the loader
   // because completeness is a property of an instant: a module reached through
