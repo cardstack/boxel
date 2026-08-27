@@ -18,7 +18,7 @@ interface Signature {
 }
 
 const MarkdownContentShell: TemplateOnlyComponent<Signature> = <template>
-  <div class='markdown-content' ...attributes>
+  <div class='markdown-content' ...attributes data-test-markdown-content-shell>
     {{yield}}
   </div>
   <style scoped>

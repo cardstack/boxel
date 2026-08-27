@@ -179,6 +179,59 @@ module('Integration | content-only file preview components', function (hooks) {
       );
   });
 
+  test('MarkdownPreview reflects its format as a class on the container', async function (assert) {
+    let { MarkdownPreview } = fileFormats;
+    let file = makeMarkdownFile();
+    await renderComponent(
+      <template>
+        <MarkdownPreview @model={{file}} @format='isolated' />
+      </template>,
+    );
+    assert.dom('[data-test-markdown-preview]').hasClass('md-preview');
+    assert.dom('[data-test-markdown-preview]').hasClass('md-preview--full');
+    assert
+      .dom('[data-test-markdown-preview]')
+      .hasClass('md-preview--isolated', 'the format lands as a class');
+  });
+
+  test('MarkdownPreview only reflects known formats as classes', async function (assert) {
+    let { MarkdownPreview } = fileFormats;
+    let file = makeMarkdownFile();
+    // `@format` arrives from dynamic card code, so an arbitrary string must
+    // not be interpolated into the class attribute.
+    let bogusFormat = 'bogus' as FileFormatsModule.FileFormat;
+    await renderComponent(
+      <template>
+        <MarkdownPreview @model={{file}} @format={{bogusFormat}} />
+      </template>,
+    );
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotHaveClass('md-preview--bogus', 'no class for an unknown format');
+    assert
+      .dom('[data-test-markdown-preview] h1')
+      .hasText('Field Notes', 'the content still renders');
+  });
+
+  test('MarkdownPreview can opt out of its container styles', async function (assert) {
+    let { MarkdownPreview } = fileFormats;
+    let file = makeMarkdownFile();
+    await renderComponent(
+      <template>
+        <MarkdownPreview @model={{file}} @displayContainer={{false}} />
+      </template>,
+    );
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotHaveClass('md-preview', 'no pane surface');
+    assert
+      .dom('[data-test-markdown-preview]')
+      .doesNotHaveClass('md-preview--full', 'no reading-format padding');
+    assert
+      .dom('[data-test-markdown-preview] h1')
+      .hasText('Field Notes', 'the content renders the same');
+  });
+
   test('ImagePreview renders a native <img> from a bare FileDef instance', async function (assert) {
     let { ImagePreview } = fileFormats;
     let image = new ImageDef({
