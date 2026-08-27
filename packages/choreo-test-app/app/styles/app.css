@@ -2659,6 +2659,32 @@ html[data-gm-dragging] * {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* the demos inside each scene animate continuously; containment keeps
+     their layout and paint invalidations from re-pricing the whole
+     camera'd world layer every frame (the Safari half of the live gap) */
+  contain: layout style paint;
+}
+
+/* Glass under a moving camera is repriced every frame — a
+   backdrop-filter can never be cached, and Safari re-samples and
+   re-blurs the scene behind the lightbox panels on every frame of
+   camera motion (the orphan lesson, § app.css line ~9079, applied to
+   the live world). The panels sit over their own dim wash, so a plain
+   translucent ground reads the same at speed; the interactive gallery
+   keeps its true glass. */
+.reel-world .backdrop,
+.reel-world .lightbox-body,
+.reel-world .lightbox-close,
+.reel-world .stage-arrow,
+.reel-world .replay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.reel-world .lightbox-body {
+  /* the blur carried most of the panel's legibility; without it the
+     wash is a touch deeper, same hue, photo tint still showing through */
+  background: rgba(12, 9, 8, 0.62);
 }
 
 .reel-lightbox {

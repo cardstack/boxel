@@ -67,6 +67,8 @@ export class FeatureReel extends Component {
   /** runs a loop wrap let go of — never re-adopted at the seam */
   private retired = new WeakSet<ChoreoRun>();
   private lastTick = 0;
+  /** the visitor's theme choice, restored when the route unmounts */
+  private themeBefore: string | null = null;
   private resolveReady!: () => void;
   private ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
@@ -297,6 +299,11 @@ export class FeatureReel extends Component {
     this.root = el;
     const shell = el.closest<HTMLElement>('.app-shell');
     shell?.setAttribute('data-layout-ignore', '');
+    // the film is authored against the dark palette; pin it for the
+    // route's life so a system-light Safari shows the same picture the
+    // recordings do, and hand the visitor's choice back on exit
+    this.themeBefore = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', 'dark');
     Object.defineProperty(el, 'choreoReel', {
       configurable: true,
       value: this,
@@ -410,8 +417,12 @@ export class FeatureReel extends Component {
     const previewTime = Math.min(DURATION, this.previewClock);
     this.paintClock(previewTime);
     void this.compositor.foldTo(previewTime, { parameters: false });
-    if (this.root) {
-      this.root.dataset.scoreTime = previewTime.toFixed(3);
+    // a debug handle, not a display: an attribute write invalidates style
+    // on the whole viewport subtree, so in preview it updates at 4Hz —
+    // the capture path writes it per still through renderAt instead
+    const coarse = (Math.floor(previewTime * 4) / 4).toFixed(2);
+    if (this.root && this.root.dataset.scoreTime !== coarse) {
+      this.root.dataset.scoreTime = coarse;
     }
     this.raf = requestAnimationFrame(this.tick);
   };
@@ -465,6 +476,11 @@ export class FeatureReel extends Component {
 
   willDestroy() {
     super.willDestroy();
+    if (this.themeBefore === null) {
+      document.documentElement.removeAttribute('data-theme');
+    } else {
+      document.documentElement.setAttribute('data-theme', this.themeBefore);
+    }
     if (this.root) {
       this.root.dataset.featureReelDestroyed = 'yes';
     }
