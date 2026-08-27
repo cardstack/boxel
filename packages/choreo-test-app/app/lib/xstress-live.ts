@@ -44,7 +44,7 @@ function discMap() {
     0,
     size / 2,
     size / 2,
-    size / 2,
+    size / 2
   );
   grad.addColorStop(0, 'rgba(255,255,255,1)');
   grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');

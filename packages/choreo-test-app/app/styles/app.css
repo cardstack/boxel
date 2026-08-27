@@ -4195,6 +4195,8 @@ html[data-gm-dragging] * {
   .xstress-inset {
     animation: none !important;
   }
+}
+
 /* ── The title plane ─────────────────────────────────────────────────────
    Its own Choreo region, a sibling of the camera'd world: viewport-
    anchored on purpose, so the demo camera can dive without dragging the
