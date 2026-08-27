@@ -595,10 +595,28 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     const after = root.getBoundingClientRect();
-    // the zoom every box below was measured under (§6.3): the prior run's
-    // live camera if a run was in flight, the resting state otherwise —
-    // geometry that becomes inline pixels divides back by it
-    const measureZoom = this.run?.camera.zoom ?? this.restingCamera.zoom;
+    // The zoom every box below was measured under (§6.3) — read from the
+    // PAINTED frame, never from the run's bookkeeping. While a camera cue
+    // flies on WAAPI the shadow value is one rAF behind the compositor,
+    // and inside a fast cue that one frame is the whole flight: fitted
+    // zooms cancel the mismatch, but translate targets keep it forever,
+    // and a chain of replacement passes compounds it (the reel's loop
+    // seams landed every shot hundreds of pixels off, differently per
+    // loop). getComputedStyle samples the same frozen timeline the rects
+    // above were measured under, so zoom and boxes are one measurement.
+    const paintedTf = getComputedStyle(root).transform;
+    const painted =
+      paintedTf === 'none' || paintedTf === ''
+        ? 1
+        : parseFloat(/^matrix\(([-\d.eE+]+),/.exec(paintedTf)?.[1] ?? '');
+    const shadow = this.run?.camera.zoom ?? this.restingCamera.zoom;
+    // …snapped to the exact bookkeeping value whenever the two agree: the
+    // computed matrix is serialized to a handful of digits, and letting
+    // that quantisation into the divide gives two passes of the same
+    // still landings a thousandth of a pixel apart. The painted value
+    // only OVERRULES the shadow when they genuinely diverge.
+    const measureZoom =
+      !painted || Math.abs(painted - shadow) < 0.002 ? shadow : painted;
     const changeset = new Changeset(
       inserted.filter((s) => s.type === 'inserted'),
       removed,
