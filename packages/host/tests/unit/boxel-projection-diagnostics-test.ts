@@ -87,14 +87,14 @@ module('Unit | Boxel projection diagnostics', function () {
     assert.deepEqual(reported, []);
   });
 
-  test('one path is reported once, however many times a render reads it', function (assert) {
+  test('a row’s index does not make a gap distinct, so a long list warns once', function (assert) {
     let model = observeMissingProjectionPaths(
       { rows: [{}, {}, {}] },
       { type: personRef, format: 'isolated', mode: 'direct' },
     ) as { rows: Record<string, unknown>[] };
-    let warned: unknown[] = [];
+    let warned: string[] = [];
     let original = console.warn;
-    console.warn = (...args: unknown[]) => warned.push(args);
+    console.warn = (message: string) => warned.push(message);
     try {
       for (let row of model.rows) {
         row.total;
@@ -107,6 +107,10 @@ module('Unit | Boxel projection diagnostics', function () {
       warned.length,
       1,
       'an un-deduplicated report buries the second distinct gap under a thousand copies of the first',
+    );
+    assert.true(
+      warned[0].includes('model.rows.0.total'),
+      `and it names a concrete path rather than a pattern: ${warned[0]}`,
     );
   });
 

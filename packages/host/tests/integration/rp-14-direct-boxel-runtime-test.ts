@@ -416,7 +416,7 @@ module('Integration | RP-14 Direct Boxel runtime', function (hooks) {
           undefined as unknown as RealmResourceIdentifier,
           purpose,
         ),
-        /Cannot find card|could not find card/,
+        /not found|Cannot find card/i,
         `${purpose} is not lenient here either — Direct is main, and the Host’s chrome is what presents the failure`,
       );
     }

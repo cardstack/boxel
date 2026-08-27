@@ -1,3 +1,32 @@
+/**
+ * The one place a live Boxel type or instance is read into inert values.
+ *
+ * The projection pipeline has two halves and this file is the first:
+ * everything that touches the Card API, the Loader, or a live instance
+ * happens here, and `boxel-render-record.ts` assembles the protocol's records
+ * out of what this produced without reading anything live. The split is what
+ * makes the second half provably pure, and one capture is what keeps
+ * `describeBoxel`, `getFields` and `projectInstance` from being able to
+ * disagree — three answers built from one read of one instance.
+ *
+ * There is exactly one of these. A second one is the failure this design
+ * exists to prevent: competing builders each agree with themselves, so nothing
+ * goes red until two of them are compared, and by then every consumer has
+ * grown a preference for one of the answers.
+ *
+ * What leaves here is values, never the objects they came from — a plain graph
+ * of strings, numbers, booleans, nulls, arrays and plain objects. The
+ * assembler re-reads that graph through the protocol's own normalizer, so an
+ * accessor or a class instance that reached a captured member is refused there
+ * rather than at the far side of a boundary.
+ *
+ * Where this reads is the runtime that owns the instance. Direct owns the
+ * Host's, so an authored `computeVia` runs here exactly as it runs on every
+ * render main performs — what makes the result tier-neutral is that the record
+ * carries the value and not the code, so another tier computes the same member
+ * with its own copy of the same authored function.
+ */
+
 import { themeScope } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -48,35 +77,6 @@ type CardAPIModule = typeof CardAPI;
  * boundary actually enforces.
  */
 type JsonValue = InstanceProjection['model'][string];
-
-/**
- * The one place a live Boxel type or instance is read into inert values.
- *
- * The projection pipeline has two halves and this file is the first:
- * everything that touches the Card API, the Loader, or a live instance
- * happens here, and `boxel-render-record.ts` assembles the protocol's records
- * out of what this produced without reading anything live. The split is what
- * makes the second half provably pure, and one capture is what keeps
- * `describeBoxel`, `getFields` and `projectInstance` from being able to
- * disagree — three answers built from one read of one instance.
- *
- * There is exactly one of these. A second one is the failure this design
- * exists to prevent: competing builders each agree with themselves, so nothing
- * goes red until two of them are compared, and by then every consumer has
- * grown a preference for one of the answers.
- *
- * What leaves here is values, never the objects they came from — a plain graph
- * of strings, numbers, booleans, nulls, arrays and plain objects. The
- * assembler re-reads that graph through the protocol's own normalizer, so an
- * accessor or a class instance that reached a captured member is refused there
- * rather than at the far side of a boundary.
- *
- * Where this reads is the runtime that owns the instance. Direct owns the
- * Host's, so an authored `computeVia` runs here exactly as it runs on every
- * render main performs — what makes the result tier-neutral is that the record
- * carries the value and not the code, so another tier computes the same member
- * with its own copy of the same authored function.
- */
 
 /**
  * A type's description, minus the envelope the assembler stamps.

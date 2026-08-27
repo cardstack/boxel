@@ -123,7 +123,13 @@ function watch<T>(
 function warnOnce(): MissingProjectionPathReporter {
   let seen = new Set<string>();
   return ({ path, type, format, mode }) => {
-    let key = `${mode}/${format}/${path}`;
+    // Element positions are collapsed for the purpose of deciding what is new,
+    // because a row's index is not what makes a gap distinct: a grid of a
+    // thousand rows reads the same missing member a thousand times, at a
+    // thousand paths. The warning still names the concrete path that reached
+    // it, so the reader gets a member they can go and look at rather than a
+    // pattern they have to instantiate.
+    let key = `${mode}/${format}/${path.replace(/\.\d+(?=\.|$)/g, '.#')}`;
     if (seen.has(key)) {
       return;
     }
