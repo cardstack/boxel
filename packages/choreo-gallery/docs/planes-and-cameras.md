@@ -135,6 +135,23 @@ test first.
 — the flyer rides its plane's world. That is the correct default, named
 "in-world flight" below.)
 
+**The world-dock case (closed).** The harder variant — the receiver is
+not a held pose but a WORLD: a region mid-score whose run the boundary
+pass replaces, re-adopted by an external transport. `world-dock-test.gts`
+proves the capture posture was already sound (pose survives, pin
+page-true, landing camera'd) and caught the one real engine bug: the
+replacement run inherited the region's resting camera as its fold
+origin, so a seek's reconstruction folded the score's prefix from a pose
+that prefix had already produced — every relative cue landed twice
+(`SlowZoom @by 2` painted `scale(4)`). The law, now in `finishPass`: a
+replacement compiled from the SAME score is a re-execution of the same
+timeline and inherits the prior run's fold origin (`initialCamera`/
+`initialAim`); a NEW score starts from the pose actually in force, which
+mid-flight is the prior run's live shadow, not the last landed state.
+Absolute cues masked the bug (a `Frame` in the prefix washes the origin
+out) — which is why the reel's clock plane, relative-only but with
+round-trip pulses, docked correctly by luck.
+
 ### 3. Layering, honestly
 
 Camera transforms create stacking contexts, so a plane is a stacking

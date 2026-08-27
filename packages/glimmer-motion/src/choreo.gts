@@ -688,6 +688,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // sees only the orphan half. Counting orphans as dirt meant a
     // crossing on a busy page was cancelled into a leave-only rump by
     // its own neighbours' renders, every frame.
+    const print = treePrint(tree);
     const nothingNew =
       !inserted.length &&
       pass.removed.every((s) => this.orphans.has(s.node)) &&
@@ -699,7 +700,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // …but an EDITED timeline is never noise: a changed tree replays,
       // exactly as it would with no orphans aloft (the build-order
       // transport's delay nudge, made while a leaver is frozen mid-park)
-      treePrint(tree) === this.scorePrint;
+      print === this.scorePrint;
     if (this.run && !this.run.isDone() && nothingNew) {
       for (const node of claimed) {
         this.drop(node);
@@ -733,6 +734,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     const prior = this.run;
+    // Which camera the replacement starts from is decided by WHAT it is.
+    // The same score recompiled mid-run is a re-execution of the same
+    // timeline: it inherits the prior run's fold origin, so a seek's
+    // reconstruction folds the score's prefix once and only once —
+    // handing it the pose in force would fold every relative cue on top
+    // of the pose that cue already produced, and the world doubles
+    // (world-dock-test). A NEW score responds to the world as it stands:
+    // it starts from the pose actually applied, which mid-flight is the
+    // prior run's live shadow, not the last landed state.
+    const inherited =
+      prior !== undefined && !prior.isDone()
+        ? print === this.scorePrint
+          ? { aim: prior.initialAim, camera: prior.initialCamera }
+          : { aim: prior.cameraAim, camera: prior.camera }
+        : { aim: prior?.cameraAim ?? null, camera: this.restingCamera };
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -754,7 +770,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       this.log(changeset, cues);
     }
-    this.scorePrint = treePrint(tree);
+    this.scorePrint = print;
     // taken here, with the world released and measured: the resting layout
     // this run is about to fly away from (see fastKeep)
     this.layoutPrint = this.layoutOf();
@@ -766,11 +782,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.quiet();
     }
     this.run = execute(compiled, {
-      camera: { ...this.restingCamera },
+      camera: { ...inherited.camera },
       cameraFrame: this.element,
       // the aim point in force carries run to run, so a re-aim lerps from
-      // what is actually applied rather than assuming an unaimed frame
-      cameraAim: this.run?.cameraAim,
+      // what is actually applied rather than assuming an unaimed frame —
+      // except a same-score re-execution, which carries the fold origin
+      cameraAim: inherited.aim,
       // updated at step boundaries only — a still value app logic can
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an

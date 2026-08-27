@@ -1166,9 +1166,16 @@ export class ChoreoRun implements Run {
     )(raw);
   }
 
-  /** the camera and aim this run inherited, frozen at construction */
-  private readonly initialCamera: CameraState;
-  private readonly initialAim: { x: number; y: number } | null;
+  /**
+   * The camera and aim this run inherited, frozen at construction — the
+   * fold origin every reconstruction starts from. Public because a
+   * replacement run that re-executes the SAME score must inherit this
+   * origin, not the pose in force: the pose in force is what the score's
+   * prefix already produced, and folding the prefix from it applies every
+   * relative cue twice (the world-dock law).
+   */
+  readonly initialCamera: CameraState;
+  readonly initialAim: { x: number; y: number } | null;
 
   /**
    * Rebuild the camera fold from the score prefix before a seek's still
