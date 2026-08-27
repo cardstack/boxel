@@ -298,6 +298,66 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('run-command joins a pending twin with identical args and inserts for differing args', async function (assert) {
+      await runner.destroy();
+
+      let args = {
+        realmURL: 'http://localhost:4201/openrouter/',
+        realmUsername: 'openrouter_realm',
+        runAs: 'openrouter_realm',
+        command:
+          '@cardstack/boxel-host/commands/sync-openrouter-models/default',
+        commandInput: { realmIdentifier: 'http://localhost:4201/openrouter/' },
+      };
+      let publishRunCommand = (jobArgs: typeof args) =>
+        publisher.publish({
+          jobType: 'run-command',
+          concurrencyGroup: `command:${jobArgs.realmURL}`,
+          timeout: 300,
+          priority: 1,
+          args: jobArgs,
+        });
+
+      let first = await publishRunCommand(args);
+      // Same invocation with the same args but a different key order — the
+      // twin check is structural, not textual.
+      let twin = await publishRunCommand({
+        commandInput: { realmIdentifier: args.commandInput.realmIdentifier },
+        command: args.command,
+        runAs: args.runAs,
+        realmUsername: args.realmUsername,
+        realmURL: args.realmURL,
+      });
+      let differentInput = await publishRunCommand({
+        ...args,
+        commandInput: { realmIdentifier: 'http://localhost:4201/other/' },
+      });
+
+      assert.strictEqual(
+        twin.id,
+        first.id,
+        'an identical run-command invocation joins the pending job',
+      );
+      assert.notStrictEqual(
+        differentInput.id,
+        first.id,
+        'a run-command with different args gets its own job',
+      );
+
+      let rows = (await adapter.execute(
+        `SELECT id
+         FROM jobs
+         WHERE concurrency_group=$1
+           AND status='unfulfilled'`,
+        { bind: [`command:${args.realmURL}`] },
+      )) as { id: number }[];
+      assert.strictEqual(
+        rows.length,
+        2,
+        'two distinct invocations leave two pending rows, the twin adds none',
+      );
+    });
+
     test('incremental coalesce merges mixed operations and persists per-caller metadata', async function (assert) {
       await runner.destroy();
 

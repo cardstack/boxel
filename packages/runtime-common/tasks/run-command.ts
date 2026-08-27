@@ -10,6 +10,12 @@ import {
   ensureFullMatrixUserId,
   ensureTrailingSlash,
 } from '../index.ts';
+import { isEqual } from 'lodash-es';
+import {
+  registerQueueJobDefinition,
+  type QueueCoalesceContext,
+  type QueueCoalesceDecision,
+} from '../queue.ts';
 
 export interface RunCommandArgs extends JSONTypes.Object {
   realmURL: string;
@@ -19,10 +25,31 @@ export interface RunCommandArgs extends JSONTypes.Object {
   commandInput: JSONTypes.Object | null;
 }
 
-// No coalesce handler: each run-command enqueue is a distinct invocation
-// (different `command`/`runAs`/`commandInput`) whose result is returned to its
-// caller. Joining would route one caller's response to another. The realm
-// concurrency group already serializes per-realm execution.
+// Two run-command enqueues are the same invocation only when every argument
+// matches — same realm, same principal, same command, same input. Such twins
+// produce the same result, so a second caller can safely wait on the first
+// job instead of running the command again. This is what keeps a scheduled
+// command that is enqueued from several worker tasks at once (one cron tick
+// per task) down to a single run. Anything that differs in any argument is a
+// distinct invocation with its own result and is never joined.
+function chooseRunCommandCoalesceDecision(
+  context: QueueCoalesceContext,
+): QueueCoalesceDecision {
+  let { incoming, candidates, inFlightCandidates } = context;
+  let isTwin = (candidate: { jobType: string; args: unknown }) =>
+    candidate.jobType === incoming.jobType &&
+    isEqual(candidate.args, incoming.args);
+  let twin = candidates.find(isTwin) ?? inFlightCandidates.find(isTwin);
+  if (!twin) {
+    return { type: 'insert' };
+  }
+  return { type: 'join', jobId: twin.id };
+}
+
+registerQueueJobDefinition({
+  jobType: 'run-command',
+  coalesce: chooseRunCommandCoalesceDecision,
+});
 
 export { runCommand };
 

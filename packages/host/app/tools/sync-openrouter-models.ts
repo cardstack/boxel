@@ -125,7 +125,6 @@ function buildCardJson(model: OpenRouterApiModel) {
             }
           : null,
         deprecated: false,
-        lastSeenInApi: Math.floor(Date.now() / 1000),
         expirationDate: model.expiration_date ?? null,
         cardInfo: {
           name: null,
