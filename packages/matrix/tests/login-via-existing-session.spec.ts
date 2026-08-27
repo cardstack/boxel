@@ -4,6 +4,7 @@ import { getSynapseURL } from '../support/environment-config.ts';
 import {
   createUser,
   createSubscribedUser,
+  createSubscribedUserAndLogin,
   setupPermissions,
   assertLoggedIn,
 } from '../helpers/index.ts';
@@ -63,6 +64,35 @@ test.describe('login_via_existing_session', () => {
       displayName: username,
       userId: credentials.userId,
     });
+  });
+
+  test('a ?loginToken switches accounts when the browser is already logged in as another user', async ({
+    page,
+  }) => {
+    // User A is signed in in the browser.
+    let userA = await createSubscribedUserAndLogin(page, 'account-switch-a');
+    await assertLoggedIn(page, {
+      displayName: userA.username,
+      userId: userA.credentials.userId,
+    });
+
+    // User B hands off a session via a minted login token.
+    let { username: usernameB, credentials: credentialsB } =
+      await createSubscribedUser('account-switch-b');
+    await setupPermissions(credentialsB.userId, `${appURL}/`);
+    let { login_token } = await mintLoginToken(credentialsB.accessToken);
+
+    // Landing with ?loginToken while logged in as A switches to B — the login
+    // form is never shown.
+    await page.goto(`${appURL}?loginToken=${login_token}`);
+
+    await assertLoggedIn(page, {
+      displayName: usernameB,
+      userId: credentialsB.userId,
+    });
+    // The single-use token is stripped so a refresh can't re-trigger the
+    // (now spent) exchange.
+    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
   });
 
   test('the minted token carries the configured 2-minute lifetime and exchanges for a new session', async () => {

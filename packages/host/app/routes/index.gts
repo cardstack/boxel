@@ -30,6 +30,7 @@ import type { SerializedState as OperatorModeSerializedState } from '@cardstack/
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
+import { consumeLoginTokenFromUrl } from '@cardstack/host/utils/login-token';
 
 const { hostsOwnAssets } = ENV;
 
@@ -143,6 +144,23 @@ export default class Card extends Route {
           `[login-diag] index route post-login recovery did not restore session: ` +
             JSON.stringify(this.matrixService.loginReadinessDebug),
         );
+      }
+    }
+
+    // A loginToken while already logged in means "switch accounts" (`boxel
+    // browse --profile B` against a browser signed in as A). When logged out,
+    // the <Login> component consumes the token instead, so only consume it here
+    // when logged in. Strip the token from the URL first: logout() ends in a
+    // router.transitionTo that re-enters this model hook, and the already-clean
+    // URL makes that re-entry a no-op. A failure after logout leaves the user
+    // logged out on the login form — acceptable, the token is single-use.
+    if (this.matrixService.isLoggedIn) {
+      let loginToken = consumeLoginTokenFromUrl();
+      if (loginToken) {
+        await this.matrixService.logout();
+        let auth = await this.matrixService.loginWithSsoToken(loginToken);
+        await this.matrixService.start({ auth, refreshRoutes: true });
+        return;
       }
     }
 
