@@ -12,6 +12,7 @@ import GlimmerComponent from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
 
+import { isValidFormat } from '@cardstack/runtime-common';
 import { markdownToHtml } from '@cardstack/runtime-common/marked-sync';
 
 import MarkdownTemplate from '../default-templates/markdown';
@@ -22,9 +23,32 @@ import {
   type FileViewModel,
 } from './file-view-model';
 
-export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
+interface Signature extends ContentPreviewSignature {
+  Args: ContentPreviewSignature['Args'] & {
+    // `false` opts out of the container styles — the pane's sizing, scrolling,
+    // surface colors, and reading-format padding — for an embedder that owns
+    // its own geometry. The markdown content renders the same either way, and
+    // a fitted rendition keeps its clipped-snippet treatment.
+    displayContainer?: boolean;
+  };
+}
+
+export class MarkdownPreview extends GlimmerComponent<Signature> {
   get format(): FileFormat {
     return this.args.format ?? 'embedded';
+  }
+
+  get displayContainer(): boolean {
+    return this.args.displayContainer ?? true;
+  }
+
+  // A per-format styling hook (`md-preview--embedded`, `md-preview--isolated`,
+  // …). `@format` arrives from dynamic card code, so gate the interpolation on
+  // the known format names rather than trusting the string.
+  get formatClass(): string | undefined {
+    return isValidFormat(this.format)
+      ? `md-preview--${this.format}`
+      : undefined;
   }
 
   // `@model` is the FileDef instance in the content-only case and a prebuilt
@@ -68,7 +92,11 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
 
   <template>
     {{#if this.isFitted}}
-      <div class='md-preview md-preview--fitted' data-test-markdown-preview>
+      <div
+        class='md-preview--fitted {{if this.displayContainer "md-preview"}}'
+        data-mode={{this.format}}
+        data-test-markdown-preview
+      >
         {{#if this.hasContent}}
           <div class='md-snippet'>{{this.snippetHtml}}</div>
         {{else}}
@@ -77,7 +105,8 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
       </div>
     {{else}}
       <div
-        class='md-preview md-preview--full'
+        class='{{if this.displayContainer "md-preview md-preview--full"}}
+          {{this.formatClass}}'
         data-mode={{this.format}}
         data-test-markdown-preview
       >
@@ -94,77 +123,72 @@ export class MarkdownPreview extends GlimmerComponent<ContentPreviewSignature> {
       </div>
     {{/if}}
     <style scoped>
-      .md-preview {
-        width: 100%;
-        height: 100%;
-        min-height: 0;
-        overflow: auto;
-        background: var(--md-preview-background, var(--card));
-        color: var(--md-preview-foreground, var(--card-foreground));
-        text-align: left;
-      }
-      .md-preview--full {
-        padding: var(--boxel-sp-lg);
-      }
-      /* Inside the embedded shell's bounded body, keep the first heading from
-         pushing a gap above the render. */
-      .md-preview--full :deep(h1:first-child),
-      .md-preview--full :deep(h2:first-child),
-      .md-preview--full :deep(h3:first-child),
-      .md-preview--full :deep(h4:first-child),
-      .md-preview--full :deep(h5:first-child),
-      .md-preview--full :deep(h6:first-child) {
-        margin-top: 0;
-      }
-      .md-preview__empty {
-        margin: 0;
-        padding: var(--boxel-sp);
-        color: var(--muted-foreground);
-        font-size: var(--boxel-font-sm);
-      }
+      @layer baseComponent {
+        .md-preview {
+          width: 100%;
+          height: 100%;
+          min-height: 0;
+          overflow: auto;
+          background: var(--md-preview-background, var(--card));
+          color: var(--md-preview-foreground, var(--card-foreground));
+          text-align: left;
+        }
+        .md-preview--full {
+          padding: var(--md-preview-padding, var(--boxel-sp-lg));
+        }
+        .md-preview__empty {
+          margin: 0;
+          padding: var(--boxel-sp);
+          color: var(--muted-foreground);
+          font-size: var(--boxel-font-size-sm);
+        }
 
-      /* Fitted: a glanceable mini-page. Rendered, but with its own compact type
+        /* Fitted: a glanceable mini-page. Rendered, but with its own compact type
          scale and a fade so the clip reads as "more below". */
-      .md-preview--fitted {
-        overflow: hidden;
-        position: relative;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        -webkit-mask-image: linear-gradient(to bottom, black 74%, transparent);
-        mask-image: linear-gradient(to bottom, black 74%, transparent);
-      }
-      .md-snippet {
-        font-size: 0.6875rem;
-        line-height: 1.5;
-      }
-      .md-snippet :deep(h1),
-      .md-snippet :deep(h2),
-      .md-snippet :deep(h3),
-      .md-snippet :deep(h4) {
-        font-weight: 700;
-        font-size: 0.8125rem;
-        margin: 0 0 0.25em;
-        line-height: 1.25;
-      }
-      .md-snippet :deep(p),
-      .md-snippet :deep(ul),
-      .md-snippet :deep(ol) {
-        margin: 0 0 0.5em;
-      }
-      .md-snippet :deep(ul),
-      .md-snippet :deep(ol) {
-        padding-left: 1.2em;
-      }
-      .md-snippet :deep(pre),
-      .md-snippet :deep(code) {
-        font-family: var(--font-mono, monospace);
-        font-size: 0.625rem;
-      }
-      .md-snippet :deep(pre) {
-        white-space: pre-wrap;
-        overflow: hidden;
-      }
-      .md-snippet :deep(img) {
-        max-width: 100%;
+        .md-preview--fitted {
+          overflow: hidden;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          -webkit-mask-image: linear-gradient(
+            to bottom,
+            black 74%,
+            transparent
+          );
+          mask-image: linear-gradient(to bottom, black 74%, transparent);
+        }
+        .md-snippet {
+          font-size: 0.6875rem;
+          line-height: 1.5;
+        }
+        .md-snippet :deep(h1),
+        .md-snippet :deep(h2),
+        .md-snippet :deep(h3),
+        .md-snippet :deep(h4) {
+          font-weight: 700;
+          font-size: 0.8125rem;
+          margin: 0 0 0.25em;
+          line-height: 1.25;
+        }
+        .md-snippet :deep(p),
+        .md-snippet :deep(ul),
+        .md-snippet :deep(ol) {
+          margin: 0 0 0.5em;
+        }
+        .md-snippet :deep(ul),
+        .md-snippet :deep(ol) {
+          padding-left: 1.2em;
+        }
+        .md-snippet :deep(pre),
+        .md-snippet :deep(code) {
+          font-family: var(--font-mono, monospace);
+          font-size: 0.625rem;
+        }
+        .md-snippet :deep(pre) {
+          white-space: pre-wrap;
+          overflow: hidden;
+        }
+        .md-snippet :deep(img) {
+          max-width: 100%;
+        }
       }
     </style>
   </template>

@@ -531,9 +531,6 @@ export class DocLayout extends GlimmerComponent<{
         .doc-main :deep(.markdown-content h2) {
           padding-top: var(--sp-2); /* anchor jumps land above the heading */
         }
-        .doc-main :deep(.markdown-content h2:first-child) {
-          margin-top: 0;
-        }
         .doc-main :deep(.markdown-content h3) {
           color: var(--foreground);
         }

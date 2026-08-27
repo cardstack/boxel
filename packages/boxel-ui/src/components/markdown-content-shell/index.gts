@@ -156,6 +156,11 @@ const MarkdownContentShell: TemplateOnlyComponent<Signature> = <template>
           var(--boxel-sp-sm) var(--boxel-sp-3xs)
         );
       }
+      /* A heading that opens its container gets no top margin, so a bounded
+         surface starts at the render's first line rather than a gap. */
+      .markdown-content :deep(:is(h1, h2, h3, h4, h5, h6):first-child) {
+        margin-top: var(--markdown-first-heading-margin-top, 0);
+      }
 
       /* Paragraph */
       .markdown-content :deep(p) {
