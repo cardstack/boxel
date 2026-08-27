@@ -8,8 +8,10 @@ import {
   findLiveInstanceGeneration,
   findMediaCacheEntry,
   isCaptureFormat,
+  isScreenshotFormat,
   parseScreenshotCaptureSpec,
   sanitizeLoggingCorrelationId,
+  SCREENSHOT_FORMATS,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
   X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
@@ -121,15 +123,25 @@ interface CaptureResult {
  * return a 400 naming the offending field. The one bound no request-time
  * parse can enforce — a fullPage capture's document extent — is checked
  * against the same physical-pixel cap at capture time.
+ * `format` may be `isolated`, `embedded`, or `fitted`. The `fitted` format
+ * renders into a parent-owned box, so it requires an `envelope`
+ * (`{ width, height }` in CSS px) on the captureSpec — or on every batch
+ * entry; requesting it without one returns a 400. Conversely
+ * `isolated`/`embedded` fill the viewport and reject an envelope. An
+ * envelope-carrying spec always has overrides, so fitted captures are always
+ * capture-only.
+ *
  * A batch of captures may be requested via `captureSpec.captures`, an array
  * of named `{ name, ...overrides }` entries (bounded by
  * `SCREENSHOT_MAX_CAPTURES`). Each entry's overrides win over the singular
  * `captureSpec` fields, which act as batch-wide defaults; the shared parse
  * normalizes each entry to its fully-merged spec so the capture path iterates
- * them directly against one settled render. The response's `captures` then
- * carries one `{ name, url, width, height, deviceScaleFactor, base64? }` entry
- * per capture — the same shape the canonical path emits, with `url: null` since
- * a batch is never persisted — and the top-level `base64`/`width`/`height`
+ * them directly — viewport-filling entries against one settled render, while
+ * each distinct fitted envelope re-lays-out the same hydrated card (see
+ * `SCREENSHOT_MAX_CAPTURES` for the cost contract). The response's `captures`
+ * then carries one `{ name, url, width, height, deviceScaleFactor, base64? }`
+ * entry per capture — the same shape the canonical path emits, with `url: null`
+ * since a batch is never persisted — and the top-level `base64`/`width`/`height`
  * mirror `captures[0]` for byte-compatibility with singular-shape callers.
  *
  * A spec with overrides — a batch always is one — is capture-only: the
@@ -176,12 +188,15 @@ export default function handleScreenshotCard({
     if (!cardId || typeof cardId !== 'string') {
       return sendResponseForBadRequest(ctxt, 'cardId is required');
     }
-    // Shared with the GET `_screenshot/` DSL so both surfaces accept exactly
-    // the same capture formats.
-    if (!isCaptureFormat(format)) {
+    // Shared with the prerender server's screenshot route so both surfaces
+    // accept exactly the same capture formats. Wider than the GET
+    // `_screenshot/` DSL's formats: fitted is capture-only (it always
+    // requires an envelope, so it never touches the canonical ledger
+    // identity). The message derives from the roster so the two can't drift.
+    if (!isScreenshotFormat(format)) {
       return sendResponseForBadRequest(
         ctxt,
-        'format must be "isolated" or "embedded"',
+        `format must be one of: ${SCREENSHOT_FORMATS.map((f) => `"${f}"`).join(', ')}`,
       );
     }
     if (includeBase64 !== undefined && typeof includeBase64 !== 'boolean') {
@@ -210,11 +225,13 @@ export default function handleScreenshotCard({
     if (!normalizedCardId.startsWith(normalizedRealmURL)) {
       return sendResponseForBadRequest(ctxt, 'cardId must be within realmURL');
     }
-    let spec: CaptureSpec = { format };
     let sourceURL = normalizedCardId.replace(/\.json$/, '');
     let instanceLocalPath = sourceURL.slice(normalizedRealmURL.length);
 
-    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
+    let captureSpecParse = parseScreenshotCaptureSpec(
+      attrs.captureSpec,
+      format,
+    );
     if (captureSpecParse.error) {
       return sendResponseForBadRequest(ctxt, captureSpecParse.error);
     }
@@ -249,7 +266,13 @@ export default function handleScreenshotCard({
       let isCanonicalCapture = captureSpec === null;
       let generationLookupMs: number | undefined;
       let ledgerLookupMs: number | undefined;
-      if (mediaCacheAdapter && isCanonicalCapture) {
+      // The canonical capture identity speaks the GET DSL's formats only.
+      // fitted can never reach here (it requires an envelope, so its
+      // spec is never null), but the guard keeps that invariant executable
+      // and narrows the type.
+      let spec: CaptureSpec | undefined =
+        isCanonicalCapture && isCaptureFormat(format) ? { format } : undefined;
+      if (mediaCacheAdapter && spec) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
         // permission check never covers them — realm read is enforced here
@@ -306,7 +329,7 @@ export default function handleScreenshotCard({
           ...fields,
         });
 
-      if (entryKey) {
+      if (entryKey && spec) {
         let ledgerLookupStart = Date.now();
         let entry = await findMediaCacheEntry(dbAdapter, entryKey);
         ledgerLookupMs = Date.now() - ledgerLookupStart;
@@ -436,7 +459,7 @@ export default function handleScreenshotCard({
           ...(withBase64 && c.base64 !== undefined ? { base64: c.base64 } : {}),
         }));
       }
-      if (entryKey && result.status === 'ready') {
+      if (entryKey && spec && result.status === 'ready') {
         // A canonical capture persisted under its ledger identity: replace
         // the engine's byte-only captures[] entry with the durable served-URL
         // form, carrying through the effective scale the engine reports.

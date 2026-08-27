@@ -812,7 +812,7 @@ module(basename(import.meta.filename), function () {
             attributes: {
               realmURL: 'http://example.test/',
               cardId: 'http://example.test/Person/fadhlan',
-              format: 'fitted',
+              format: 'nonsense',
             },
           },
         });
@@ -849,6 +849,182 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 400);
       assert.ok(response.text.includes('cardId must be within realmURL'));
       assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+    // Posts a request with the given format + captureSpec and returns the raw
+    // supertest response plus the published-job list, so envelope tests can
+    // assert on either the 201 forward or the 400 rejection.
+    async function postScreenshot(
+      format: string,
+      captureSpec: unknown,
+    ): Promise<{ response: supertest.Response; published: unknown[] }> {
+      let { queue, published } = makeQueue({ status: 'ready' });
+      let app = buildApp(buildArgs(makeDbAdapter(), queue));
+      let token = createJWT(
+        { user: '@someone:localhost', sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let response = await supertest(app.callback())
+        .post('/_screenshot-card')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          data: {
+            type: 'screenshot-card',
+            attributes: {
+              realmURL: 'http://example.test/',
+              cardId: 'http://example.test/Person/fadhlan',
+              format,
+              ...(captureSpec === undefined ? {} : { captureSpec }),
+            },
+          },
+        });
+      return { response, published };
+    }
+
+    test('rejects fitted without an envelope', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', undefined);
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 for fitted without envelope',
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects atom as an unsupported capture format', async function (assert) {
+      // Atom's rendering through the envelope box is unspecified (its base
+      // wrapper is intrinsic-size inline-block, not a box-filling size
+      // container), so the format is refused until that capture is defined.
+      let { response, published } = await postScreenshot('atom', {
+        envelope: { width: 120, height: 40 },
+      });
+      assert.strictEqual(response.status, 400, '400 for atom format');
+      assert.ok(
+        response.text.includes('format'),
+        `names format in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('accepts fitted with an envelope and forwards it', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250, height: 275 },
+      });
+      assert.strictEqual(response.status, 201, 'fitted + envelope is accepted');
+      assert.strictEqual(published.length, 1, 'enqueues the job');
+      assert.deepEqual(
+        ((published[0] as { args?: Record<string, unknown> })?.args ?? {})
+          .captureSpec,
+        { envelope: { width: 250, height: 275 } },
+        'envelope forwarded verbatim into the job args',
+      );
+    });
+
+    test('rejects an envelope on isolated format', async function (assert) {
+      let { response, published } = await postScreenshot('isolated', {
+        envelope: { width: 250, height: 275 },
+      });
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 for envelope on a viewport-filling format',
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects a non-integer envelope dimension', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250.5, height: 275 },
+      });
+      assert.strictEqual(response.status, 400, '400 for fractional envelope');
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects an unknown envelope field by name', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 250, height: 275, depth: 3 },
+      });
+      assert.strictEqual(response.status, 400, '400 for unknown envelope key');
+      assert.ok(
+        response.text.includes('envelope.depth'),
+        `names the offending field: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects an envelope past the physical-pixel cap', async function (assert) {
+      // 6000 CSS px at 3x is ~18k physical px, past the Chromium texture cap
+      // — the same composition rule the viewport and clip obey.
+      let { response, published } = await postScreenshot('fitted', {
+        envelope: { width: 400, height: 6000 },
+        deviceScaleFactor: 3,
+      });
+      assert.strictEqual(response.status, 400, '400 for oversize envelope');
+      assert.ok(
+        response.text.includes('envelope.height × deviceScaleFactor'),
+        `names the offending field: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('rejects a fitted batch entry missing an envelope', async function (assert) {
+      // The singular envelope acts as a batch-wide default; an entry that
+      // overrides nothing inherits it, but here neither the singular spec nor
+      // the second entry supplies one.
+      let { response, published } = await postScreenshot('fitted', {
+        captures: [
+          { name: 'ok', envelope: { width: 150, height: 170 } },
+          { name: 'missing' },
+        ],
+      });
+      assert.strictEqual(
+        response.status,
+        400,
+        '400 when an entry has no envelope',
+      );
+      assert.ok(
+        response.text.includes('captures[1]'),
+        `names the offending entry: ${response.text}`,
+      );
+      assert.ok(
+        response.text.includes('envelope'),
+        `names envelope in the error: ${response.text}`,
+      );
+      assert.deepEqual(published, [], 'does not enqueue any job');
+    });
+
+    test('folds a singular envelope default into fitted batch entries', async function (assert) {
+      let { response, published } = await postScreenshot('fitted', {
+        // Singular envelope is the batch-wide default.
+        envelope: { width: 200, height: 200 },
+        captures: [
+          { name: 'inherit' },
+          { name: 'override', envelope: { width: 400, height: 300 } },
+        ],
+      });
+      assert.strictEqual(response.status, 201, 'fitted batch accepted');
+      assert.deepEqual(
+        ((published[0] as { args?: Record<string, unknown> })?.args ?? {})
+          .captureSpec,
+        {
+          captures: [
+            { name: 'inherit', envelope: { width: 200, height: 200 } },
+            { name: 'override', envelope: { width: 400, height: 300 } },
+          ],
+        },
+        'each entry carries its effective envelope',
+      );
     });
   });
 

@@ -11,6 +11,7 @@ import {
   type RenderRouteOptions,
   type RunCommandResponse,
   type ScreenshotCaptureSpec,
+  type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
@@ -531,7 +532,7 @@ export class RenderRunner {
     realm: string;
     url: string;
     auth: string;
-    format: 'isolated' | 'embedded';
+    format: ScreenshotFormat;
     captureSpec?: ScreenshotCaptureSpec;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
