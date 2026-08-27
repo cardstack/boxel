@@ -801,6 +801,9 @@ export default class Room extends Component<Signature> {
           let fileContent = JSON.parse(openFile.content);
           let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
           if (adoptsFrom?.module) {
+            // Joins a module path against the open file's identifier. No form guard,
+            // and whether a prefix-form file identifier reaches here is unverified.
+            // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
             let moduleURLWithExtension = new URL(
               adoptsFrom.module.endsWith('.gts')
                 ? adoptsFrom.module

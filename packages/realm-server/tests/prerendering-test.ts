@@ -8,6 +8,7 @@ import type {
   ModuleRenderResponse,
   FileExtractResponse,
   RenderRouteOptions,
+  ScreenshotCaptureSpec,
 } from '@cardstack/runtime-common';
 import type { Realm as RuntimeRealm } from '@cardstack/runtime-common';
 import type { Prerenderer } from '../prerender/index.ts';
@@ -226,6 +227,24 @@ function makeStubPagePool(opts: StubPagePoolOptions) {
       }),
   );
   return { pool, contextsCreated, contextsClosed };
+}
+
+// Decode a base64 PNG's signature + IHDR dimensions without an image library.
+// The 8-byte PNG signature is followed by the IHDR chunk, whose big-endian
+// width/height live at byte offsets 16 and 20.
+function decodePng(base64: string): {
+  isPng: boolean;
+  width: number;
+  height: number;
+} {
+  let buf = Buffer.from(base64, 'base64');
+  let signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  let isPng = buf.length >= 24 && signature.every((byte, i) => buf[i] === byte);
+  return {
+    isPng,
+    width: isPng ? buf.readUInt32BE(16) : 0,
+    height: isPng ? buf.readUInt32BE(20) : 0,
+  };
 }
 
 module(basename(import.meta.filename), function () {
@@ -636,6 +655,504 @@ module(basename(import.meta.filename), function () {
       } finally {
         await flakyPatch.restore();
       }
+    });
+  });
+
+  module('prerender - screenshot capture', function (hooks) {
+    let realmURL = 'http://127.0.0.1:4461/test/';
+    let prerenderServerURL = new URL(realmURL).origin;
+    let testUserId = '@user1:localhost';
+    let permissions: RealmPermissions = {
+      [realmURL]: ['read', 'write', 'realm-owner'],
+    };
+    let prerenderer: Prerenderer;
+    let realm: RuntimeRealm;
+    let auth = () => {
+      let sessions = JSON.parse(
+        testCreatePrerenderAuth(testUserId, permissions),
+      ) as Record<string, string>;
+      let token = sessions[realmURL];
+      if (token) {
+        sessions[new URL(realmURL).origin + '/'] = token;
+      }
+      return JSON.stringify(sessions);
+    };
+
+    let screenshot = (
+      cardURL: string,
+      captureSpec?: ScreenshotCaptureSpec,
+      format: 'isolated' | 'embedded' | 'fitted' = 'isolated',
+    ) =>
+      prerenderer.prerenderScreenshot({
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+        format,
+        ...(captureSpec ? { captureSpec } : {}),
+      });
+
+    hooks.before(async () => {
+      prerenderer = getPrerendererForTesting({
+        maxPages: 2,
+        serverURL: prerenderServerURL,
+      });
+    });
+
+    hooks.after(async () => {
+      await prerenderer.stop();
+    });
+
+    hooks.afterEach(async () => {
+      await prerenderer.disposeAffinity({
+        affinityType: 'realm',
+        affinityValue: realmURL,
+      });
+    });
+
+    setupPermissionedRealmsCached(hooks, {
+      realms: [
+        {
+          realmURL,
+          permissions: {
+            '*': ['read'],
+            [testUserId]: ['read', 'write', 'realm-owner'],
+          },
+          fileSystem: {
+            'person.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Person extends CardDef {
+                static displayName = "Person";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>{{@model.name}}</template>
+                }
+              }
+            `,
+            'long.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Long extends CardDef {
+                static displayName = "Long";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div style="height: 1500px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                  </template>
+                }
+              }
+            `,
+            '1.json': {
+              data: {
+                attributes: { name: 'Maple' },
+                meta: {
+                  adoptsFrom: { module: rri('./person'), name: 'Person' },
+                },
+              },
+            },
+            'giant.gts': `
+              import { CardDef, field, contains, StringField, Component } from '@cardstack/base/card-api';
+              export class Giant extends CardDef {
+                static displayName = "Giant";
+                @field name = contains(StringField);
+                static isolated = class extends Component<typeof this> {
+                  <template>
+                    <div style="height: 6000px; background: linear-gradient(#fff, #000);">{{@model.name}}</div>
+                  </template>
+                }
+              }
+            `,
+            // Named `tall`, not `long`: an instance sharing its extensionless
+            // alias with `long.gts` would make the render route's
+            // extensionless card id ambiguous — the module source wins the
+            // lookup and the render errors trying to parse it as JSON, even
+            // though indexing (which uses full URLs) stays clean.
+            'tall.json': {
+              data: {
+                attributes: { name: 'Tall Card' },
+                meta: {
+                  adoptsFrom: { module: rri('./long'), name: 'Long' },
+                },
+              },
+            },
+            'huge.json': {
+              data: {
+                attributes: { name: 'Huge Card' },
+                meta: {
+                  adoptsFrom: { module: rri('./giant'), name: 'Giant' },
+                },
+              },
+            },
+          },
+        },
+      ],
+      onRealmSetup({ realms: setupRealms }) {
+        ({ realm } = setupRealms[0]);
+        permissions = {
+          [realmURL]: ['read', 'write', 'realm-owner'],
+        };
+      },
+    });
+
+    test('default capture is a PNG at the 800x600 viewport', async function (assert) {
+      let { response } = await screenshot(`${realmURL}1`);
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      assert.ok(response.base64, 'returns base64 image data');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG (magic bytes)');
+      assert.strictEqual(png.width, 800, 'PNG is 800px wide');
+      assert.strictEqual(png.height, 600, 'PNG is 600px tall');
+      assert.strictEqual(response.width, 800, 'reports 800 CSS px wide');
+      assert.strictEqual(response.height, 600, 'reports 600 CSS px tall');
+    });
+
+    test('viewport override widens the capture to 1280', async function (assert) {
+      let { response } = await screenshot(`${realmURL}1`, {
+        viewport: { width: 1280, height: 720 },
+      });
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 1280, 'PNG is 1280px wide');
+      assert.strictEqual(png.height, 720, 'PNG is 720px tall');
+      assert.strictEqual(response.width, 1280, 'reports 1280 CSS px wide');
+    });
+
+    test('fullPage captures beyond the viewport height for a long card', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, {
+        fullPage: true,
+      });
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 800, 'PNG keeps the 800px viewport width');
+      assert.true(
+        png.height > 600,
+        `fullPage is taller than the 600px viewport (got ${png.height})`,
+      );
+      assert.strictEqual(
+        png.height,
+        response.height,
+        'reported height matches the captured PNG height',
+      );
+    });
+
+    test('clip captures exactly the requested region', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, {
+        clip: { x: 0, y: 0, width: 400, height: 300 },
+      });
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(png.isPng, 'payload is a PNG');
+      assert.strictEqual(png.width, 400, 'PNG matches the clip width');
+      assert.strictEqual(png.height, 300, 'PNG matches the clip height');
+      assert.strictEqual(response.width, 400, 'reports the clip width');
+      assert.strictEqual(response.height, 300, 'reports the clip height');
+    });
+
+    test('fullPage rejects a document past the physical-pixel cap', async function (assert) {
+      // The parse cannot bound a fullPage capture's extent (the document's
+      // scroll size), so the capture path enforces the physical-pixel cap:
+      // a 6000px-tall document at 3× is ~18k physical px, past the 16384
+      // Chromium texture cap.
+      let { response } = await screenshot(`${realmURL}huge`, {
+        fullPage: true,
+        deviceScaleFactor: 3,
+      });
+      assert.strictEqual(response.status, 'error', 'capture is refused');
+      assert.true(
+        (response.error ?? '').includes('physical pixels'),
+        `error names the cap: ${response.error}`,
+      );
+    });
+
+    test('fullPage within the cap still captures at scale', async function (assert) {
+      // The same document is fine at 1× (6000 < 16384) — the cap composes
+      // with the scale factor rather than banning tall documents outright.
+      let { response } = await screenshot(`${realmURL}huge`, {
+        fullPage: true,
+      });
+      assert.strictEqual(response.status, 'ready', 'screenshot succeeded');
+      let png = decodePng(response.base64!);
+      assert.true(
+        png.height > 5000,
+        `captures the full document (got ${png.height})`,
+      );
+      assert.strictEqual(
+        png.height,
+        response.height,
+        'reported height matches the captured PNG height',
+      );
+    });
+
+    test('viewport override is restored on the pooled page between captures', async function (assert) {
+      // A leaked viewport would silently resize the next capture (and any index
+      // prerender) reusing this pooled page. Custom capture in the middle, plain
+      // captures on either side must both stay at the default viewport.
+      let before = decodePng(
+        (await screenshot(`${realmURL}1`)).response.base64!,
+      );
+      assert.strictEqual(before.width, 800, 'first plain capture is 800 wide');
+
+      let custom = decodePng(
+        (
+          await screenshot(`${realmURL}1`, {
+            viewport: { width: 1280, height: 900 },
+            deviceScaleFactor: 2,
+          })
+        ).response.base64!,
+      );
+      assert.strictEqual(
+        custom.width,
+        2560,
+        'custom capture is 1280 * 2x wide',
+      );
+
+      let after = decodePng(
+        (await screenshot(`${realmURL}1`)).response.base64!,
+      );
+      assert.strictEqual(
+        after.width,
+        800,
+        'viewport restored: later plain capture is back to 800 wide',
+      );
+      assert.strictEqual(after.height, 600, 'restored height is 600');
+    });
+
+    test('a custom-viewport capture leaves indexed HTML unchanged', async function (assert) {
+      let cardURL = `${realmURL}1`;
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let baseline = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      // Capture at a large custom viewport + 2x scale on the same affinity's
+      // pooled page.
+      await screenshot(cardURL, {
+        viewport: { width: 1440, height: 2000 },
+        deviceScaleFactor: 2,
+      });
+
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let after = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.strictEqual(
+        cleanWhiteSpace(after.response.isolatedHTML ?? ''),
+        cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
+        'indexed isolated HTML is identical before and after the screenshot',
+      );
+    });
+
+    test('a batch of 3 yields 3 named captures from one settle', async function (assert) {
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'wide', viewport: { width: 1280, height: 720 } },
+          { name: 'full', fullPage: true },
+          { name: 'thumb', clip: { x: 0, y: 0, width: 200, height: 150 } },
+        ],
+      });
+      assert.strictEqual(response.status, 'ready', 'batch succeeded');
+      assert.strictEqual(response.captures?.length, 3, 'returns 3 captures');
+      assert.deepEqual(
+        response.captures?.map((c) => c.name),
+        ['wide', 'full', 'thumb'],
+        'captures are named and ordered as requested',
+      );
+
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      let wide = decodePng(byName.wide.base64);
+      assert.strictEqual(wide.width, 1280, 'wide capture is 1280 wide');
+
+      let full = decodePng(byName.full.base64);
+      assert.true(full.height > 720, 'fullPage capture exceeds the viewport');
+
+      let thumb = decodePng(byName.thumb.base64);
+      assert.strictEqual(thumb.width, 200, 'thumb clip width');
+      assert.strictEqual(thumb.height, 150, 'thumb clip height');
+
+      // Back-compat mirror: top-level fields echo captures[0].
+      assert.strictEqual(
+        response.base64,
+        byName.wide.base64,
+        'top-level base64 mirrors captures[0]',
+      );
+      assert.strictEqual(response.width, byName.wide.width);
+      assert.strictEqual(response.height, byName.wide.height);
+    });
+
+    test('a bare batch entry reverts to the base viewport, not the previous entry', async function (assert) {
+      // The most confusable part of the merge: a second entry that declares no
+      // viewport must resolve from the page's base viewport (800), not inherit
+      // the first entry's 1280. This also guards `sameViewport`'s switch-back —
+      // if it wrongly kept 1280, the bare entry would capture at 1280.
+      let { response } = await screenshot(`${realmURL}tall`, {
+        captures: [
+          { name: 'wide', viewport: { width: 1280, height: 720 } },
+          { name: 'base' },
+        ],
+      });
+      assert.strictEqual(response.status, 'ready', 'batch succeeded');
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      assert.strictEqual(
+        decodePng(byName.wide.base64).width,
+        1280,
+        'wide entry captures at its declared width',
+      );
+      assert.strictEqual(
+        decodePng(byName.base.base64).width,
+        800,
+        'bare entry reverts to the 800-wide base viewport',
+      );
+    });
+
+    test('singular-shape request stays byte-compatible under the new response', async function (assert) {
+      let singular = await screenshot(`${realmURL}1`);
+      let batchOfOne = await screenshot(`${realmURL}1`, {
+        captures: [{ name: 'default' }],
+      });
+
+      // Both shapes describe one capture at the default viewport.
+      assert.strictEqual(singular.response.captures?.length, 1);
+      assert.strictEqual(batchOfOne.response.captures?.length, 1);
+      let a = decodePng(singular.response.base64!);
+      let b = decodePng(batchOfOne.response.base64!);
+      assert.deepEqual(
+        { width: a.width, height: a.height },
+        { width: 800, height: 600 },
+        'singular request still renders at 800x600',
+      );
+      assert.deepEqual(
+        { width: b.width, height: b.height },
+        { width: a.width, height: a.height },
+        'batch-of-one matches the singular dimensions',
+      );
+      assert.strictEqual(
+        singular.response.width,
+        800,
+        'top-level width preserved for singular callers',
+      );
+      assert.strictEqual(singular.response.height, 600);
+      assert.strictEqual(
+        singular.response.contentType,
+        'image/png',
+        'contentType preserved',
+      );
+    });
+
+    test('a fitted batch of 3 envelopes yields 3 differently-sized PNGs', async function (assert) {
+      // The canonical fitted matrix renders one card at many box sizes off a
+      // single hydrate: each entry re-transitions the same card into a new
+      // envelope box and the capture is sized to that box.
+      let { response } = await screenshot(
+        `${realmURL}1`,
+        {
+          captures: [
+            { name: 'sm', envelope: { width: 150, height: 170 } },
+            { name: 'md', envelope: { width: 250, height: 275 } },
+            { name: 'lg', envelope: { width: 400, height: 300 } },
+          ],
+        },
+        'fitted',
+      );
+      assert.strictEqual(response.status, 'ready', 'fitted batch succeeded');
+      assert.strictEqual(response.captures?.length, 3, 'returns 3 captures');
+      assert.deepEqual(
+        response.captures?.map((c) => c.name),
+        ['sm', 'md', 'lg'],
+        'captures are named and ordered as requested',
+      );
+
+      let byName = Object.fromEntries(
+        (response.captures ?? []).map((c) => [c.name, c]),
+      );
+      let sm = decodePng(byName.sm.base64);
+      assert.true(sm.isPng, 'sm is a PNG');
+      assert.deepEqual(
+        { width: sm.width, height: sm.height },
+        { width: 150, height: 170 },
+        'sm PNG matches its envelope',
+      );
+      let md = decodePng(byName.md.base64);
+      assert.deepEqual(
+        { width: md.width, height: md.height },
+        { width: 250, height: 275 },
+        'md PNG matches its envelope',
+      );
+      let lg = decodePng(byName.lg.base64);
+      assert.deepEqual(
+        { width: lg.width, height: lg.height },
+        { width: 400, height: 300 },
+        'lg PNG matches its envelope',
+      );
+      assert.deepEqual(
+        response.captures?.map((c) => ({ width: c.width, height: c.height })),
+        [
+          { width: 150, height: 170 },
+          { width: 250, height: 275 },
+          { width: 400, height: 300 },
+        ],
+        'reported CSS dims match each envelope',
+      );
+    });
+
+    test('a fitted envelope capture leaves indexed HTML unchanged', async function (assert) {
+      // The envelope wrapper only exists on the screenshot render (it rides on
+      // query params). A pooled page reused by indexing must not inherit it.
+      let cardURL = `${realmURL}1`;
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let baseline = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      let { response } = await screenshot(
+        cardURL,
+        { envelope: { width: 250, height: 275 } },
+        'fitted',
+      );
+      // A singular envelope must reach the capture exactly like a batch
+      // entry's: the PNG is sized to the box, not the default viewport.
+      assert.strictEqual(response.status, 'ready', 'fitted capture succeeded');
+      let png = decodePng(response.base64!);
+      assert.deepEqual(
+        { width: png.width, height: png.height },
+        { width: 250, height: 275 },
+        'singular fitted PNG matches its envelope',
+      );
+
+      await realm.realmIndexUpdater.fullIndex();
+      realm.__testOnlyClearCaches();
+      let after = await prerenderCard(prerenderer, {
+        affinityType: 'realm',
+        affinityValue: realmURL,
+        realm: realmURL,
+        url: cardURL,
+        auth: auth(),
+      });
+
+      assert.strictEqual(
+        cleanWhiteSpace(after.response.isolatedHTML ?? ''),
+        cleanWhiteSpace(baseline.response.isolatedHTML ?? ''),
+        'indexed isolated HTML is identical before and after the fitted screenshot',
+      );
     });
   });
 

@@ -16,11 +16,19 @@ export function windowErrorHandler({
   setStatusToUnusable,
   setError,
   currentURL,
+  fallbackDeps,
 }: {
   event: Event;
   setStatusToUnusable: () => void;
   setError: (error: string) => void;
   currentURL?: string | null;
+  // Deps to stamp onto the payload when the error itself carries none. This
+  // handler can be the LAST writer of the prerender error element (it fires
+  // on unhandled rejections after the route's own error handling has written
+  // its payload), so without these the captured error doc loses the card
+  // context the route derived and downstream invalidation never reaches the
+  // card's index rows.
+  fallbackDeps?: string[];
 }) {
   let [_a, _b, encodedId] = (currentURL ?? '').split('/');
   let id = encodedId ? decodeURIComponent(encodedId) : undefined;
@@ -106,6 +114,14 @@ export function windowErrorHandler({
     errorPayload.error,
     synthesizedMessage,
   );
+
+  if (
+    fallbackDeps &&
+    fallbackDeps.length > 0 &&
+    (!errorPayload.error.deps || errorPayload.error.deps.length === 0)
+  ) {
+    errorPayload.error.deps = [...new Set(fallbackDeps)];
+  }
 
   if ('stack' in errorPayload.error) {
     let updatedStack = appendRenderTimerSummaryToStack(

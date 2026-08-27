@@ -32,8 +32,11 @@ export default async function serialize({
   definitionLookup: DefinitionLookup;
   virtualNetwork: VirtualNetwork;
 }): Promise<LooseSingleCardDocument> {
+  // `meta.realmURL` is a `RealmIdentifier`, so it may be a registered prefix
+  // rather than a URL. Resolve it through the VirtualNetwork this function is
+  // already handed, which is what turns either form into a URL.
   const realmURL = doc.data.meta?.realmURL
-    ? new URL(doc.data.meta.realmURL)
+    ? virtualNetwork.toURL(doc.data.meta.realmURL)
     : undefined;
 
   const codeRefOpts = {

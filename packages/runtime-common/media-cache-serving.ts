@@ -151,7 +151,9 @@ export const MEDIA_CACHE_TOUCH_THROTTLE_MS = 60 * 60 * 1000;
 // to one per `MEDIA_CACHE_TOUCH_THROTTLE_MS` per entry. Best-effort: a
 // failed bump must never fail a serve — the worst case is an in-use
 // on-demand capture looking idle to the GC one sweep early, and a later
-// serve re-marks it.
+// serve re-marks it. Exported (as `touchMediaCacheEntryOnHit`) so every
+// surface that answers from the ledger — this route and the POST
+// `_screenshot-card` fast path — marks use through the one guard.
 async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
   if (entry.lane !== 'on-demand') {
     return;
@@ -168,3 +170,5 @@ async function touch(dbAdapter: DBAdapter, entry: MediaCacheEntry) {
     );
   }
 }
+
+export { touch as touchMediaCacheEntryOnHit };

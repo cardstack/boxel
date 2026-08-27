@@ -4,7 +4,11 @@ import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import type { ResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  type LooseSingleCardDocument,
+  type ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import {
   AI_BOT_EXECUTOR,
   type ToolRequest,
@@ -115,12 +119,30 @@ export default class MessageTool {
     }
   }
 
+  // The result doc stored in the room is a snapshot of the card as it was when
+  // the tool ran. When that card lives in a realm (the doc carries its id), the
+  // snapshot must never be installed in the store under that id: the store
+  // holds one instance per id, so adding the snapshot would replace the live
+  // instance everywhere it is rendered, and its autosave would then write the
+  // stale state back over the newer file. Render the live instance instead,
+  // and fall back to an id-less ephemeral copy only when the live card can no
+  // longer be loaded (for example, it was deleted since).
   async getCommandResultCard(): Promise<CardDef | undefined> {
     let cardDoc = await this.commandResultCardDoc();
-    let card: CardDef | undefined;
-    if (cardDoc) {
-      card = (await this.store.add(cardDoc, { doNotPersist: true })) as CardDef;
+    if (!cardDoc) {
+      return undefined;
     }
-    return card;
+    let id = cardDoc.data.id;
+    if (id) {
+      let live = await this.store.get<CardDef>(id);
+      if (isCardInstance(live)) {
+        return live;
+      }
+    }
+    let { id: _id, ...resource } = cardDoc.data;
+    let ephemeralDoc: LooseSingleCardDocument = { ...cardDoc, data: resource };
+    return (await this.store.add(ephemeralDoc, {
+      doNotPersist: true,
+    })) as CardDef;
   }
 }

@@ -99,12 +99,27 @@ export function downloadNameFor(
   return model?.name || undefined;
 }
 
-export function shortDate(value?: Date | string | null): string {
-  if (!value) {
-    return '';
+// Coerce a timestamp to a Date. A bare number is epoch time, but the server
+// stamps a file's `lastModified` / `resourceCreatedAt` in epoch *seconds* — a
+// value `new Date` would otherwise read as milliseconds and render as 1970 —
+// so seconds are promoted to ms below the year-2001 ms floor. Mirrors
+// `workspace.gts`'s `toMs`.
+function toDate(value?: Date | string | number | null): Date | undefined {
+  if (value == null || value === '') {
+    return undefined;
   }
-  let d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return new Date(value < 1e12 ? value * 1000 : value);
+  }
+  return new Date(value);
+}
+
+export function shortDate(value?: Date | string | number | null): string {
+  let d = toDate(value);
+  if (!d || Number.isNaN(d.getTime())) {
     return '';
   }
   return d.toLocaleDateString('en-US', {
@@ -114,12 +129,9 @@ export function shortDate(value?: Date | string | null): string {
   });
 }
 
-export function relativeDate(value?: Date | string | null): string {
-  if (!value) {
-    return '';
-  }
-  let d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) {
+export function relativeDate(value?: Date | string | number | null): string {
+  let d = toDate(value);
+  if (!d || Number.isNaN(d.getTime())) {
     return '';
   }
   let days = Math.floor((Date.now() - d.getTime()) / 86400000);

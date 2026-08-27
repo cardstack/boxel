@@ -1328,6 +1328,16 @@ export class PagePool {
       clearInterval(this.#contractionInterval);
       this.#contractionInterval = undefined;
     }
+    // Awaiting an in-flight standby refill is a contract, not teardown
+    // hygiene. A caller that closes the pool in order to replace the browser
+    // under it — the host-shell recycle does this on every prerender boot,
+    // where the initial warm is often still running — closes that browser as
+    // soon as this resolves. A standby that completed afterwards would add
+    // itself to `#standbys` holding a page on the replaced browser, where a
+    // later `getPage` can commandeer it, and its `#creatingStandbys--` would
+    // land below the zero this method resets the counter to, under-reporting
+    // pool occupancy for the life of the process. Pinned by
+    // `tests/page-pool-standby-refill-test.ts`.
     let ensuring = this.#ensuringStandbys;
     this.#ensuringStandbys = null;
     if (ensuring) {

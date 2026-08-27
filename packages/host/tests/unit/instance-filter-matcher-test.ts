@@ -662,6 +662,95 @@ module('Unit | instance-filter-matcher', function (hooks) {
     );
   });
 
+  // -- file timestamps (meta parity with cards) -------------------------------
+  // A file's `lastModified` / `resourceCreatedAt` ride in the resource `meta`
+  // (stamped at serialization, mirroring a card), so `createFromSerialized`
+  // carries them onto `instance[meta]` and both the FileDef getters and the
+  // client-side comparator read them the same way they do for a card.
+
+  async function hydrateFile(
+    name: string,
+    timestamps: { lastModified: number; resourceCreatedAt: number },
+  ): Promise<FileDef> {
+    let cardApi = await loader.import<any>('@cardstack/base/card-api');
+    let url = `${testRealmURL}files/${name}`;
+    let doc = {
+      data: {
+        id: url,
+        type: 'file-meta' as const,
+        attributes: { name, url, contentType: 'text/markdown' },
+        meta: {
+          adoptsFrom: { module: `${baseRealm.url}card-api`, name: 'FileDef' },
+          lastModified: timestamps.lastModified,
+          resourceCreatedAt: timestamps.resourceCreatedAt,
+        },
+      },
+    };
+    return (await cardApi.createFromSerialized(
+      doc.data,
+      doc,
+      new URL(testRealmURL),
+    )) as FileDef;
+  }
+
+  test('a hydrated FileDef exposes its meta timestamps through the getters', async function (assert) {
+    let cardApi = await loader.import<any>('@cardstack/base/card-api');
+    let file = await hydrateFile('report.md', {
+      lastModified: 1_700_000_500,
+      resourceCreatedAt: 1_700_000_000,
+    });
+    assert.strictEqual(
+      file.lastModified,
+      1_700_000_500,
+      'lastModified getter reads off meta',
+    );
+    assert.strictEqual(
+      file.resourceCreatedAt,
+      1_700_000_000,
+      'resourceCreatedAt getter reads off meta',
+    );
+    assert.strictEqual(
+      cardApi.getCardMeta(file, 'lastModified'),
+      1_700_000_500,
+      'getCardMeta answers for a file the same way it does for a card',
+    );
+    assert.strictEqual(
+      cardApi.getCardMeta(file, 'resourceCreatedAt'),
+      1_700_000_000,
+      'getCardMeta resolves resourceCreatedAt for a file',
+    );
+  });
+
+  test('comparator orders files by their meta lastModified / createdAt', async function (assert) {
+    let older = await hydrateFile('older.md', {
+      lastModified: 100,
+      resourceCreatedAt: 10,
+    });
+    let newer = await hydrateFile('newer.md', {
+      lastModified: 200,
+      resourceCreatedAt: 20,
+    });
+    let files = [older, newer] as unknown as CardDef[];
+
+    let byModifiedDesc: Sort = [{ by: 'lastModified', direction: 'desc' }];
+    assert.deepEqual(
+      [...files]
+        .sort(makeInstanceComparator(byModifiedDesc, api))
+        .map((f) => (f as any).name),
+      ['newer.md', 'older.md'],
+      'newest lastModified first',
+    );
+
+    let byCreatedAsc: Sort = [{ by: 'createdAt', direction: 'asc' }];
+    assert.deepEqual(
+      [...files]
+        .sort(makeInstanceComparator(byCreatedAsc, api))
+        .map((f) => (f as any).name),
+      ['older.md', 'newer.md'],
+      'oldest createdAt first',
+    );
+  });
+
   // -- synthetic search-doc keys (server parity) ------------------------------
   // The engine lets filters/sorts address `_title`, `_cardType`, and
   // `_isCardInstanceFile` even though they are stamped into the search doc, not

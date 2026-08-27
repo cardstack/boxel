@@ -187,6 +187,29 @@ module('Acceptance | prerender | html', function (hooks) {
       });
     }
 
+    // A card whose fitted template carries a `@container fitted-card` query, so
+    // a test can prove the query evaluates against the envelope box's size: the
+    // probe is red only once the fitted-card container is ≥ 200px wide.
+    class Boxed extends CardDef {
+      static displayName = 'Boxed';
+      @field name = contains(StringField);
+      static fitted = class Fitted extends Component<typeof Boxed> {
+        <template>
+          <div class='probe' data-test-probe><@fields.name /></div>
+          <style scoped>
+            .probe {
+              color: rgb(1, 1, 1);
+            }
+            @container fitted-card (min-width: 200px) {
+              .probe {
+                color: rgb(255, 0, 0);
+              }
+            }
+          </style>
+        </template>
+      };
+    }
+
     await setupAcceptanceTestRealm({
       mockMatrixUtils,
       contents: {
@@ -194,6 +217,13 @@ module('Acceptance | prerender | html', function (hooks) {
         'person.gts': { Person },
         'pet.gts': { Pet },
         'cat.gts': { Cat },
+        'boxed.gts': { Boxed },
+        'Boxed/one.json': {
+          data: {
+            attributes: { name: 'Boxy' },
+            meta: { adoptsFrom: { module: '../boxed', name: 'Boxed' } },
+          },
+        },
         'broken.gts': 'export const Broken = ;',
         'broken.json': {
           data: {
@@ -596,6 +626,85 @@ module('Acceptance | prerender | html', function (hooks) {
         `[data-test-card="${testRealmURL}Cat/paper"][data-test-card-format="fitted"] [data-test-card-display-name]`,
       )
       .containsText('Cat', 'fitted format renders at default type level');
+  });
+
+  test('fitted render wraps the card in a fixed-size envelope box', async function (assert) {
+    let url = `${testRealmURL}Cat/paper.json`;
+    await visit(
+      renderPath(url, '/html/fitted/0?envelopeWidth=250&envelopeHeight=275'),
+    );
+    let box = document.querySelector(
+      '[data-render-envelope]',
+    ) as HTMLElement | null;
+    assert.ok(box, 'envelope box is rendered');
+    // The box is a 250×275 border-box.
+    assert.strictEqual(box!.offsetWidth, 250, 'box is 250px wide');
+    assert.strictEqual(box!.offsetHeight, 275, 'box is 275px tall');
+    assert.strictEqual(
+      getComputedStyle(box!).overflow,
+      'hidden',
+      'box clips the card',
+    );
+
+    // The fitted card fills the box and establishes the fitted-card container.
+    let fitted = box!.querySelector(
+      `[data-test-card-format="fitted"]`,
+    ) as HTMLElement | null;
+    assert.ok(fitted, 'fitted card renders inside the box');
+    let cs = getComputedStyle(fitted!);
+    assert.strictEqual(
+      cs.containerName,
+      'fitted-card',
+      'fitted wrapper names the fitted-card container',
+    );
+    assert.strictEqual(
+      cs.containerType,
+      'size',
+      'fitted wrapper is a size container',
+    );
+    assert.strictEqual(
+      fitted!.offsetWidth,
+      250,
+      'fitted card fills the box width',
+    );
+    assert.strictEqual(
+      fitted!.offsetHeight,
+      275,
+      'fitted card fills the box height',
+    );
+  });
+
+  test('@container fitted queries fire against the envelope size', async function (assert) {
+    let url = `${testRealmURL}Boxed/one.json`;
+    // 250px-wide envelope: the fitted-card container is ≥ 200px, so the probe's
+    // `@container (min-width: 200px)` rule wins and turns it red.
+    await visit(
+      renderPath(url, '/html/fitted/0?envelopeWidth=250&envelopeHeight=275'),
+    );
+    let wideProbe = document.querySelector(
+      '[data-test-probe]',
+    ) as HTMLElement | null;
+    assert.ok(wideProbe, 'probe renders in the wide envelope');
+    assert.strictEqual(
+      getComputedStyle(wideProbe!).color,
+      'rgb(255, 0, 0)',
+      'container query fires at 250px: probe is red',
+    );
+
+    // 150px-wide envelope on a fresh nonce: below the 200px breakpoint, so the
+    // base (non-red) rule applies — proving the query tracks the envelope size.
+    await visit(
+      renderPath(url, '/html/fitted/0?envelopeWidth=150&envelopeHeight=170', 1),
+    );
+    let narrowProbe = document.querySelector(
+      '[data-test-probe]',
+    ) as HTMLElement | null;
+    assert.ok(narrowProbe, 'probe renders in the narrow envelope');
+    assert.strictEqual(
+      getComputedStyle(narrowProbe!).color,
+      'rgb(1, 1, 1)',
+      'container query does not fire at 150px: probe is not red',
+    );
   });
 
   test('prerender icon html', async function (assert) {

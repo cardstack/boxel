@@ -6,7 +6,7 @@
 
 export interface Waiters {
   buildWaiter(label: string): {
-    beginAsync(): unknown;
+    beginAsync(token?: unknown, itemLabel?: string): unknown;
     endAsync(token: unknown): void;
   };
   waitForPromise<T>(promise: Promise<T>, label?: string): Promise<T>;
@@ -19,7 +19,12 @@ export function useTestWaiters(w: Waiters) {
 }
 
 export interface TestWaiter {
-  beginAsync(): unknown;
+  // `itemLabel` describes the individual pending operation rather than the
+  // waiter as a whole. The host's moment-of-timeout diagnostic prints it in
+  // place of a stack frame (see `describePendingWaiter` in
+  // `host/tests/helpers/setup.ts`), so a waiter whose call site serves many
+  // concurrent operations should pass whatever tells them apart.
+  beginAsync(token?: unknown, itemLabel?: string): unknown;
   endAsync(token: unknown): void;
 }
 
@@ -36,8 +41,8 @@ export function buildWaiter(label: string): TestWaiter {
     return real;
   };
   return {
-    beginAsync() {
-      return resolve()?.beginAsync();
+    beginAsync(token?: unknown, itemLabel?: string) {
+      return resolve()?.beginAsync(token, itemLabel);
     },
     endAsync(token: unknown) {
       if (token === undefined) {

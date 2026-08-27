@@ -134,6 +134,7 @@ import {
   isCardDocumentString,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
+  fileMetaTimestamps,
   type IndexedFile,
   type LooseCardResource,
   type FileMetaResource,
@@ -4187,11 +4188,17 @@ export class Realm {
       });
     }
 
+    // Render as the realm's owner — the same identity an index pass renders
+    // under. The requester already proved realm read; the capture is a
+    // realm-derived artifact, not a per-user view. Resolved ahead of the
+    // congestion pre-check because the twin probe matches on `runAs`.
+    let owner = await this.getRealmOwnerUserId();
+
     let concurrencyGroup = `screenshot:${this.url}`;
     let estimate = await estimateScreenshotQueueWait(
       this.#dbAdapter,
       concurrencyGroup,
-      entryKey,
+      { ...entryKey, runAs: owner },
     );
     // A request whose capture is already queued or rendering coalesces onto
     // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
@@ -4208,10 +4215,6 @@ export class Realm {
       );
     }
 
-    // Render as the realm's owner — the same identity an index pass renders
-    // under. The requester already proved realm read; the capture is a
-    // realm-derived artifact, not a per-user view.
-    let owner = await this.getRealmOwnerUserId();
     let job = await enqueueScreenshotCardJob(
       {
         realmURL: this.url,
@@ -4219,6 +4222,10 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
+        // The GET DSL's spec is canonical by construction (viewport / scale /
+        // clip params are reserved), so there are never capture overrides on
+        // this lane.
+        captureSpec: null,
         persist: { ...entryKey, lane: 'on-demand' },
       },
       this.#queue,
@@ -4263,6 +4270,8 @@ export class Realm {
           ...entryKey,
           bytes,
           contentType: outcome.contentType ?? 'image/png',
+          width: outcome.width ?? null,
+          height: outcome.height ?? null,
           lane: 'on-demand',
         });
         entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
@@ -5091,6 +5100,12 @@ export class Realm {
           adoptsFrom: fileDefCodeRef,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          // This un-indexed fallback must stamp the timestamps too, so a file's
+          // `meta` timestamps don't hinge on whether the row is in the index yet.
+          ...fileMetaTimestamps(
+            fileRef.lastModified,
+            createdAt ?? fileRef.lastModified,
+          ),
         },
         links: { self: fileURL },
       },
@@ -5186,6 +5201,10 @@ export class Realm {
           adoptsFrom,
           realmInfo,
           realmURL: this.url as RealmIdentifier,
+          ...fileMetaTimestamps(
+            baseAttributes.lastModified,
+            baseAttributes.createdAt,
+          ),
           // Per-field subclass overrides for nested polymorphic fields (e.g.
           // `frontmatter` → SkillFrontmatterField). Without this the field
           // rehydrates as its declared base type when the document is read.

@@ -507,8 +507,9 @@ export default class RealmServerService extends Service {
   }
 
   getRealmServersForRealms(realms: string[]) {
+    // `testRealmURL` is a URL-form literal, so it has an origin to read.
     let testRealmOrigin = isTesting()
-      ? new URL(testRealmURL).origin
+      ? new URL(testRealmURL).origin // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
       : undefined;
     let sessionTokens = this.readSessionTokens();
 
@@ -555,6 +556,8 @@ export default class RealmServerService extends Service {
   private normalizeRealmServerURL(url: string): string {
     let normalizedURL = ensureTrailingSlash(url);
     if (isTesting()) {
+      // `testRealmURL` is a URL-form literal, so it has an origin to read.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       let testRealmOrigin = new URL(testRealmURL).origin;
       // In tests, realm URLs are often rooted at the test realm origin but
       // are served by the base realm server; remap to the base origin so

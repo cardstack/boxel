@@ -127,6 +127,57 @@ module(basename(import.meta.filename), function () {
       await prerenderer.stop();
     });
 
+    test('screenshot route rejects an out-of-bounds captureSpec by field name', async function (assert) {
+      // This route is its own HTTP surface: without the shared bounds check
+      // an oversize viewport would reach page.setViewport on a pooled page
+      // with none of the realm-server's cost caps applied.
+      let res = await request
+        .post('/prerender-screenshot')
+        .send({
+          data: {
+            attributes: {
+              url: 'http://example.test/card',
+              realm: 'http://example.test/',
+              auth: '{}',
+              affinityType: 'realm',
+              affinityValue: 'http://example.test/',
+              format: 'isolated',
+              captureSpec: { viewport: { width: 1_000_000, height: 600 } },
+            },
+          },
+        })
+        .set('Accept', 'application/json');
+      assert.strictEqual(res.status, 400, 'rejected before any render work');
+      assert.true(
+        res.body.errors?.[0]?.message?.includes('captureSpec.viewport.width'),
+        `names the offending field: ${JSON.stringify(res.body)}`,
+      );
+    });
+
+    test('screenshot route rejects an unknown captureSpec field by name', async function (assert) {
+      let res = await request
+        .post('/prerender-screenshot')
+        .send({
+          data: {
+            attributes: {
+              url: 'http://example.test/card',
+              realm: 'http://example.test/',
+              auth: '{}',
+              affinityType: 'realm',
+              affinityValue: 'http://example.test/',
+              format: 'isolated',
+              captureSpec: { fullpage: true },
+            },
+          },
+        })
+        .set('Accept', 'application/json');
+      assert.strictEqual(res.status, 400, 'rejected before any render work');
+      assert.true(
+        res.body.errors?.[0]?.message?.includes('captureSpec.fullpage'),
+        `names the offending field: ${JSON.stringify(res.body)}`,
+      );
+    });
+
     test('liveness', async function (assert) {
       let res = await request.get('/').set('Accept', 'application/json');
       assert.strictEqual(res.status, 200, 'HTTP 200');

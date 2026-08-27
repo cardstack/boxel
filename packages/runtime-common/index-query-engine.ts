@@ -2157,8 +2157,11 @@ function prerenderedTableFromOpts(opts: WIPOptions | undefined) {
 // prerendered_html row reads those as NULL (`ph.url IS NULL`) — no rendering
 // exists yet. Being keyed on the primary key the join is 1:1, so it never
 // fans out a `GROUP BY url` grouping. `icon_html` is not joined in: the icon
-// renders in the index visit and lives on boxel_index.
-function prerenderedJoin(opts: WIPOptions | undefined) {
+// renders in the index visit and lives on boxel_index. Exported (with
+// `effectiveHasError`) so `findLiveInstanceGeneration` in media-cache.ts can
+// build its realm-scoped raw-SQL twin of `liveInstanceGeneration` from the
+// same fragments instead of re-deriving the liveness predicate.
+export function prerenderedJoin(opts?: WIPOptions) {
   return `LEFT JOIN ${prerenderedTableFromOpts(
     opts,
   )} AS ph ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type`;
@@ -2177,7 +2180,7 @@ function prerenderedJoin(opts: WIPOptions | undefined) {
 // the prerender_html event.
 const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
 
-function effectiveHasError(): string {
+export function effectiveHasError(): string {
   return `(COALESCE(i.has_error, FALSE) OR ${RENDER_ERROR_IS_CURRENT})`;
 }
 

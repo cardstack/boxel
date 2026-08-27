@@ -1354,6 +1354,79 @@ module(basename(import.meta.filename), function () {
         doc.data.attributes?.lastModified,
         'lastModified sourced from response attributes',
       );
+      // Timestamps also ride in `meta` (mirroring a card), the canonical home a
+      // hydrated FileDef reads through `getCardMeta` / its getters. They are
+      // stamped from the index columns and agree with the legacy attributes.
+      assert.strictEqual(
+        typeof doc.data.meta?.lastModified,
+        'number',
+        'file-meta GET carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof doc.data.meta?.resourceCreatedAt,
+        'number',
+        'file-meta GET carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        doc.data.meta?.lastModified,
+        doc.data.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        doc.data.meta?.resourceCreatedAt,
+        doc.data.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
+    });
+
+    test('serves FileMeta with meta timestamps from the filesystem fallback', async function (assert) {
+      // Drop the index row so getFileMeta finds no entry and falls through to
+      // the filesystem fallback (fileMetaDocument), which builds the doc from
+      // disk metadata. The timestamps must land in `meta` there too, so a
+      // hydrated FileDef reads them the same way it does for an indexed file —
+      // the value must not hinge on whether the row is in the index yet.
+      await realm.write('unindexed-note.txt', 'not yet indexed');
+      await testDbAdapter.execute(
+        `DELETE FROM boxel_index WHERE url = '${testRealm}unindexed-note.txt'`,
+      );
+      // Assert the discriminator: with no index row, getFileMeta must take the
+      // filesystem fallback. Without this the test still passes if a row exists
+      // when the fetch runs (both GET branches now stamp the same meta keys), so
+      // it would silently stop covering the fallback it names.
+      let [{ count: indexRowCount }] = (await testDbAdapter.execute(
+        `SELECT count(*)::int AS count FROM boxel_index WHERE url = '${testRealm}unindexed-note.txt'`,
+      )) as { count: number }[];
+      assert.strictEqual(
+        indexRowCount,
+        0,
+        'no index row remains, so the GET must take the filesystem fallback',
+      );
+      let response = await fetch(`${testRealm}unindexed-note.txt`, {
+        headers: { Accept: SupportedMimeType.FileMeta },
+      });
+      assert.strictEqual(response.status, 200, 'file meta response is ok');
+      let doc = (await response.json()) as LooseSingleCardDocument;
+      assert.strictEqual(doc.data.type, 'file-meta');
+      assert.strictEqual(
+        typeof doc.data.meta?.lastModified,
+        'number',
+        'fallback file-meta GET carries meta.lastModified',
+      );
+      assert.strictEqual(
+        typeof doc.data.meta?.resourceCreatedAt,
+        'number',
+        'fallback file-meta GET carries meta.resourceCreatedAt',
+      );
+      assert.strictEqual(
+        doc.data.meta?.lastModified,
+        doc.data.attributes?.lastModified,
+        'meta.lastModified agrees with the legacy attributes spelling',
+      );
+      assert.strictEqual(
+        doc.data.meta?.resourceCreatedAt,
+        doc.data.attributes?.createdAt,
+        'meta.resourceCreatedAt agrees with the legacy attributes.createdAt',
+      );
     });
 
     test('file meta adoptsFrom prefers index types', async function (assert) {
