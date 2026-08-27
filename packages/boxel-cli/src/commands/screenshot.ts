@@ -215,10 +215,29 @@ export async function screenshot(
   let serverFetch = options.serverFetch;
   if (!serverFetch) {
     if (options.realmSecretSeed) {
+      // Seed mode mints one realm-server token for the whole invocation, so
+      // every card must resolve to the same server origin and (absent an
+      // explicit --as-user) the same derived owner — otherwise later cards
+      // would be authorized as the first card's owner, and the server would
+      // quietly skip the ledger identity for them (bytes returned, nothing
+      // persisted).
       let base = realmFlag ?? jobs[0].card;
       let asUser: string;
       try {
         asUser = options.asUser ?? deriveOwnerUserId(base);
+        let baseIdentity = `${deriveRealmServerUrl(base)} ${
+          options.asUser ?? deriveOwnerUserId(base)
+        }`;
+        for (let job of jobs) {
+          let jobIdentity = `${deriveRealmServerUrl(job.card)} ${
+            options.asUser ?? deriveOwnerUserId(job.card)
+          }`;
+          if (jobIdentity !== baseIdentity) {
+            return topLevelError(
+              'Seed mode authorizes one realm owner per invocation, but the --spec cards span more than one realm server or owner. Pass --as-user for a shared identity, or split the spec by realm.',
+            );
+          }
+        }
       } catch (e) {
         return topLevelError(
           `${e instanceof Error ? e.message : String(e)} — pass --as-user`,
@@ -432,7 +451,11 @@ async function runJob(
         )}s (raise --max-wait or retry later)`,
       );
     }
-    console.log(`Server busy; retrying ${job.card} in ${retryAfterSeconds}s…`);
+    // Progress goes to stderr: stdout is the --json / --url-only contract
+    // stream, and a busy retry mid-batch must not corrupt it.
+    console.error(
+      `Server busy; retrying ${job.card} in ${retryAfterSeconds}s…`,
+    );
     await ctx.sleep(retryAfterSeconds * 1000);
   }
 
@@ -460,6 +483,11 @@ async function runJob(
     );
   }
 
+  // A ready response can omit `captures` when the render engine returned
+  // only the singular mirror fields (base64/width/height) — the endpoint's
+  // own suite exercises this stub-engine shape. Such a capture was not
+  // persisted, so it carries no served URL; synthesize the one entry from
+  // the mirror.
   let captures: ResponseCapture[] = Array.isArray(attrs.captures)
     ? (attrs.captures as ResponseCapture[])
     : attrs.base64 != null || attrs.width != null
@@ -711,7 +739,7 @@ export function registerScreenshotCommand(program: Command): void {
     )
     .option(
       '--target <selector>',
-      'Capture the element matching this CSS selector',
+      'Capture the element matching this CSS selector (requires a realm server that supports target captures; older servers reject it with a named 400)',
     )
     .option('--full-page', 'Capture the full scrollable page height')
     .option(

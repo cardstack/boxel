@@ -515,6 +515,39 @@ describe('boxel screenshot: --spec batch', () => {
     let result = await screenshot(undefined, { specPath });
     expect(result.error).toContain('"card"');
   });
+
+  it('rejects a seed-mode spec whose cards span more than one realm owner', async () => {
+    let out = tempDir();
+    let specPath = join(out, 'captures.json');
+    writeFileSync(
+      specPath,
+      JSON.stringify([
+        { card: 'http://realms.example.test/owner-a/workspace/Person/1' },
+        { card: 'http://realms.example.test/owner-b/workspace/Person/2' },
+      ]),
+    );
+    let result = await screenshot(undefined, {
+      specPath,
+      realmSecretSeed: 'test-seed',
+    });
+    expect(result.error).toContain('one realm owner per invocation');
+
+    // An explicit --as-user unifies the identity across owners on the same
+    // server, so the guard only trips across server origins then.
+    writeFileSync(
+      specPath,
+      JSON.stringify([
+        { card: 'http://realms.example.test/owner-a/workspace/Person/1' },
+        { card: 'http://elsewhere.example.test/owner-a/workspace/Person/2' },
+      ]),
+    );
+    let crossOrigin = await screenshot(undefined, {
+      specPath,
+      realmSecretSeed: 'test-seed',
+      asUser: '@owner-a:example.test',
+    });
+    expect(crossOrigin.error).toContain('one realm owner per invocation');
+  });
 });
 
 describe('boxel screenshot: CLI flag parsing', () => {
