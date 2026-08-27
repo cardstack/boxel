@@ -41,17 +41,22 @@ import {
 import { type ChoreoHost, setChoreoHost } from './choreo/registry.ts';
 import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
+  Aim,
   Camera,
   collect,
   Crossing,
   Follow,
+  Frame,
   Gate,
   Hold,
   Move,
+  Pan,
   Parallel,
+  Perform,
   Raise,
   Scroll,
   Sequence,
+  SlowZoom,
   Spring,
   Tether,
   Tween,
@@ -62,6 +67,7 @@ import type {
   CameraState,
   ChoreoNode,
   Cue,
+  PerformCommand,
   Query,
   Sprite,
   SpriteType,
@@ -81,16 +87,21 @@ const selector = (type?: Query['type']): Selector =>
 
 /** what the region yields: the step components and the sprite queries */
 export interface ChoreoContext {
+  Aim: typeof Aim;
   Camera: typeof Camera;
   Crossing: typeof Crossing;
   Follow: typeof Follow;
+  Frame: typeof Frame;
   Gate: typeof Gate;
   Hold: typeof Hold;
   Move: typeof Move;
+  Pan: typeof Pan;
   Parallel: typeof Parallel;
+  Perform: typeof Perform;
   Raise: typeof Raise;
   Scroll: typeof Scroll;
   Sequence: typeof Sequence;
+  SlowZoom: typeof SlowZoom;
   Spring: typeof Spring;
   Tether: typeof Tether;
   Tween: typeof Tween;
@@ -127,16 +138,21 @@ export interface ChoreoContext {
 
 function contextFor(region: Choreo): ChoreoContext {
   return {
+    Aim,
     Camera,
     Crossing,
     Follow,
+    Frame,
     Gate,
     Hold,
     Move,
+    Pan,
     Parallel,
+    Perform,
     Raise,
     Scroll,
     Sequence,
+    SlowZoom,
     Spring,
     Tether,
     Tween,
@@ -169,6 +185,21 @@ interface Signature {
     /** outline the region and its participants; console.table each run */
     debug?: boolean;
     id?: string;
+    /**
+     * The dispatcher for `<c.Perform>` commands (§C4). Called once per
+     * command as the run's clock comes to include it — during forward
+     * playback as the clock crosses it, after a seek that lands past it,
+     * and again for the whole remaining prefix after a backward fold.
+     * Dispatches are deferred past the render pass, so a command may
+     * mutate tracked state freely.
+     */
+    onPerform?: (command: PerformCommand) => void;
+    /**
+     * The backward half of the fold: the clock moved to before a command
+     * the host already holds. Reset every commanded state here; the run
+     * re-dispatches the remaining prefix, in order, immediately after.
+     */
+    onPerformReset?: () => void;
     /**
      * Freeze the rest of the page for the span of each run (§4.7): when a
      * run starts, every animation in the document that is running AT THAT
@@ -564,10 +595,28 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     const after = root.getBoundingClientRect();
-    // the zoom every box below was measured under (§6.3): the prior run's
-    // live camera if a run was in flight, the resting state otherwise —
-    // geometry that becomes inline pixels divides back by it
-    const measureZoom = this.run?.camera.zoom ?? this.restingCamera.zoom;
+    // The zoom every box below was measured under (§6.3) — read from the
+    // PAINTED frame, never from the run's bookkeeping. While a camera cue
+    // flies on WAAPI the shadow value is one rAF behind the compositor,
+    // and inside a fast cue that one frame is the whole flight: fitted
+    // zooms cancel the mismatch, but translate targets keep it forever,
+    // and a chain of replacement passes compounds it (the reel's loop
+    // seams landed every shot hundreds of pixels off, differently per
+    // loop). getComputedStyle samples the same frozen timeline the rects
+    // above were measured under, so zoom and boxes are one measurement.
+    const paintedTf = getComputedStyle(root).transform;
+    const painted =
+      paintedTf === 'none' || paintedTf === ''
+        ? 1
+        : parseFloat(/^matrix\(([-\d.eE+]+),/.exec(paintedTf)?.[1] ?? '');
+    const shadow = this.run?.camera.zoom ?? this.restingCamera.zoom;
+    // …snapped to the exact bookkeeping value whenever the two agree: the
+    // computed matrix is serialized to a handful of digits, and letting
+    // that quantisation into the divide gives two passes of the same
+    // still landings a thousandth of a pixel apart. The painted value
+    // only OVERRULES the shadow when they genuinely diverge.
+    const measureZoom =
+      !painted || Math.abs(painted - shadow) < 0.002 ? shadow : painted;
     const changeset = new Changeset(
       inserted.filter((s) => s.type === 'inserted'),
       removed,
@@ -676,6 +725,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // sees only the orphan half. Counting orphans as dirt meant a
     // crossing on a busy page was cancelled into a leave-only rump by
     // its own neighbours' renders, every frame.
+    const print = treePrint(tree);
     const nothingNew =
       !inserted.length &&
       pass.removed.every((s) => this.orphans.has(s.node)) &&
@@ -687,7 +737,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // …but an EDITED timeline is never noise: a changed tree replays,
       // exactly as it would with no orphans aloft (the build-order
       // transport's delay nudge, made while a leaver is frozen mid-park)
-      treePrint(tree) === this.scorePrint;
+      print === this.scorePrint;
     if (this.run && !this.run.isDone() && nothingNew) {
       for (const node of claimed) {
         this.drop(node);
@@ -721,6 +771,21 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
     }
     const prior = this.run;
+    // Which camera the replacement starts from is decided by WHAT it is.
+    // The same score recompiled mid-run is a re-execution of the same
+    // timeline: it inherits the prior run's fold origin, so a seek's
+    // reconstruction folds the score's prefix once and only once —
+    // handing it the pose in force would fold every relative cue on top
+    // of the pose that cue already produced, and the world doubles
+    // (world-dock-test). A NEW score responds to the world as it stands:
+    // it starts from the pose actually applied, which mid-flight is the
+    // prior run's live shadow, not the last landed state.
+    const inherited =
+      prior !== undefined && !prior.isDone()
+        ? print === this.scorePrint
+          ? { aim: prior.initialAim, camera: prior.initialCamera }
+          : { aim: prior.cameraAim, camera: prior.camera }
+        : { aim: prior?.cameraAim ?? null, camera: this.restingCamera };
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -742,7 +807,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       }
       this.log(changeset, cues);
     }
-    this.scorePrint = treePrint(tree);
+    this.scorePrint = print;
     // taken here, with the world released and measured: the resting layout
     // this run is about to fly away from (see fastKeep)
     this.layoutPrint = this.layoutOf();
@@ -754,11 +819,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       this.quiet();
     }
     this.run = execute(compiled, {
-      camera: { ...this.restingCamera },
+      camera: { ...inherited.camera },
       cameraFrame: this.element,
       // the aim point in force carries run to run, so a re-aim lerps from
-      // what is actually applied rather than assuming an unaimed frame
-      cameraAim: this.run?.cameraAim,
+      // what is actually applied rather than assuming an unaimed frame —
+      // except a same-score re-execution, which carries the fold origin
+      cameraAim: inherited.aim,
       // updated at step boundaries only — a still value app logic can
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an
@@ -783,6 +849,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // implicitly; a spring takes a velocity outright, so the run that is
       // being replaced hands over how fast everything was going.
       inherit: prior?.velocities,
+      onPerform: this.args.onPerform,
+      onPerformReset: this.args.onPerformReset,
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
     });

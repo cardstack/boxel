@@ -139,6 +139,25 @@ The same applies to gating on focus, on hover, on `document.hidden`, or
 on any other "is a person here?" signal. A recorder is not a person and
 answers `false` to all of them.
 
+## Workers slice at clip boundaries, or not at all
+
+A parallel render gives each worker a fresh page and a slice of frames.
+Every state a worker cannot reconstruct by folding through `t` REPLAYS
+from its cue on that worker's first frames — and a demo's own wall-clock
+springs (a lightbox opening, a beacon flight) are exactly such state:
+they live on the engine's real-time loop, not on any seekable run. The
+symptom in the encode is unmistakable: the lightbox opens again at every
+slice boundary, and the film "restarts" every N frames.
+
+The rule: **never let worker slices land inside a clip whose motion is
+wall-clock.** Until the renderer can be told to split at clip
+boundaries, render such compositions with `--workers 1` — a single page
+walking the film monotonically plays every spring exactly once, which is
+also precisely what the recorded genre wants. (Scene-change scanning
+finds the violations fast: `ffmpeg -vf "select='gt(scene,0.03)',showinfo"`
+lists every discontinuity; slice-boundary restarts appear at exact
+multiples of the slice length.)
+
 ## Checklist
 
 Before calling a demo recordable:
@@ -153,3 +172,32 @@ Before calling a demo recordable:
 6. **The interactive tests still pass.** This is the one that catches
    everything above: the recording wiring is the most common way to break
    a demo for the people who are not recording it.
+
+## The loop-consistency protocol
+
+A looping preview earns trust the way a recording does: **record it
+playing four times, then diff relative positions across the loops at
+matched composition clocks.** Anything that drifts loop-to-loop is state
+leaking through the fold home — a clock diverging from the picture, a
+seam retiming runs to the wrong time, a measure taken under the wrong
+camera. The tooling lives in `videos/choreo-sequence-reel/scripts/`:
+`record-preview-loops.mjs` (headless Chrome: a CDP screencast plus a
+per-rAF geometry probe — painted rects only, `getBoundingClientRect`,
+because inline style does not include a playing run's WAAPI values) and
+`analyze-preview-loops.mjs` (landmark rects interpolated to canonical
+clocks; the fresh-boot loop reported separately from the steady loops).
+
+One run of this protocol found three real bugs the eye reported only as
+"tiny flashes": the preview's accumulated rAF clock drifting from the
+WAAPI picture under load; the closing hold letting runs FINISH — a
+finished run hands its values back and §3.1 replays it from zero, the
+film restarting mid-hold; and the seam handing adoption the old score's
+end time, retiming every fresh plane to 14.9s. It also caught the
+mid-flight measure bug (see `mid-flight-measure-test.gts`) that shifted
+every compiled shot by a different factor per loop.
+
+Two rules fell out. **The preview clock is the world run's own
+transport** — one clock, read from the thing that paints, never a
+parallel accumulation. **The closing hold is a pause, never a finished
+run** — park every plane a hair before its end and let the wrap's take
+bump compile fresh scores.

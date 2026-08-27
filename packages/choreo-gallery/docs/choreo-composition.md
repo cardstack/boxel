@@ -578,6 +578,53 @@ A trigger graph can hide timing more easily than a track view. The system must
 explain why a clip is active, which event caused it, which plane owns it, and
 which automation or override currently controls each value.
 
+## Scope decisions (2026-08-26 review)
+
+A review of this document against the shipped C0/C1 work re-prioritized the
+workstream. The vision sections above stand as vision; the build order below
+is the plan of record, and nothing outside it starts until the 15-second
+piece is at gallery quality.
+
+**Two laws, added to the non-negotiables:**
+
+1. **`play()` is GPU; `renderAt(t)` is a still.** Live preview plays runs on
+   their own clock so the WAAPI camera path composites off-thread; the
+   still-sampling transaction exists for an armed recorder, never as the
+   default render path. A preview that pauses and assigns `run.time` every
+   frame has shipped the capture path as the demo.
+2. **Value ownership is decided, not discovered.** Plane transform and
+   opacity belong to the compositor; sprite motion belongs to the asset's
+   own choreography; an editorial override is a weighted mix whose winner at
+   weight 1 is documented where the override is declared. Last-writer-wins
+   is a bug, not a policy.
+
+**Build order** — each step ships with tests before the next begins:
+
+1. Live play stays on WAAPI; capture still-samples; a recorder arms the
+   still path by arriving (demo-recording.md's rule, applied to the host).
+2. Semantic ports on the reel's demos (`lightbox.photo.open`,
+   `inbox.compose`, Build Order `scrub`) so no path synthesizes clicks.
+   The host's cue fold is the composition-side proof the C4 `Perform`
+   gate requires — the core step waits for it.
+3. The lower-third plane as an ordinary Glimmer/Choreo region whose fade
+   is a normal tween on the plane root — which is also the experiment
+   that keeps the addressable control channel unbuilt until it fails.
+4. Clip as parent→source time mapping, proven in the reel with one hard
+   cut and one Crossing frozen at the edited samples.
+5. Camera presets (`frame`/`aim`/`pan`/`slowZoom`/`follow`) as sugar over
+   the existing seekable step — after Clip, not before.
+
+The plane-and-camera pairing has its own design:
+[planes-and-cameras.md](planes-and-cameras.md) — independent pan and zoom
+per plane (shipped in the reel's clock plane), the coordinate contract,
+and sprites moving between planes without relayout.
+
+**Deferred until the film is the quality bar:** event journals and recorded
+gameplay, the 3D/film camera expansion, Three.js planes, Blueprint/Director
+tooling, and any compositor package. The pointer plane waits for the first
+drag demo to join the reel. Parameter channels stay sampled pass-through
+ports — they must not grow curves, easing, or a fourth interpolator.
+
 ## Minimal product
 
 ### Package map
@@ -811,6 +858,16 @@ as `lightbox.toggle`.
 composition-side command fold proves the public semantics. Propose an
 addressable override/control channel only when ordinary component arguments,
 IDs, roles, and sidecar adapters cannot reach a demonstrated value.
+
+> **Gate satisfied (2026-08-27).** The feature reel's host fold proved the
+> semantics across five cues, clips, and capture parity, and `c.Perform`
+> shipped in core: a zero-length step carrying `@action`/`@target`/
+> `@payload`, dispatched to `<Choreo @onPerform>` with the fold's exact
+> law — the at-or-before set is re-derived on every evaluate, growth
+> dispatches in time order, a shrink calls `@onPerformReset` and replays
+> the remaining prefix, gates park commands with the clock, and
+> dispatches defer past the render pass. `perform-test.gts` is the
+> contract. The override/control channel remains unproposed on purpose.
 
 ### Phase C5 — camera direction and autoframing
 

@@ -33,6 +33,7 @@ import type {
   Easing,
   FollowSource,
   GateMark,
+  PerformCommand,
   PropValue,
   Rect,
   Sprite,
@@ -117,6 +118,17 @@ interface RunOptions {
   inherit?: Velocities;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
+  /**
+   * A `c.Perform` command entered the folded set: dispatch it (§C4).
+   * Deferred past the render pass, in time order, once per fold entry.
+   */
+  onPerform?(command: PerformCommand): void;
+  /**
+   * The folded set shrank — the clock moved to before a command the host
+   * already holds. Reset commanded state; the remaining prefix is
+   * re-dispatched, in order, immediately after.
+   */
+  onPerformReset?(): void;
   onSpriteDone(sprite: Sprite): void;
   /** the region's elevated layer, where c.Raise promotes the living */
   raisedLayer?: HTMLElement;
@@ -257,6 +269,9 @@ interface Track {
   cameraFrom?: CameraState;
   /** camera: eased progress of the live step, for the aim-term lerp */
   cameraP?: number;
+  /** camera: the resolved absolute target — relative cues (`by`) resolve
+   * against the pose in force at start, absolute cues fill from it */
+  cameraTo?: CameraState;
   controls?: AnimationPlaybackControls[];
   cue: Cue;
   delivery?: Delivery;
@@ -845,8 +860,10 @@ export class ChoreoRun implements Run {
           t.aimFrom = this.cameraAim ?? aimTo;
           t.aimTo = aimTo;
           this.cameraAim = aimTo;
+          t.cameraTo = ChoreoRun.resolveCameraTo(cue.camera, t.cameraFrom!);
         } else if (!inside && t.started && now < t.start) {
           t.started = false;
+          t.cameraTo = undefined;
           t.cameraAnimation?.cancel();
           t.cameraAnimation = undefined;
           if (t.cameraFrom) {
@@ -867,12 +884,12 @@ export class ChoreoRun implements Run {
           // guard downstream never sees the same state twice.
           const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
           const from = t.cameraFrom!;
-          const to = cue.camera.to;
+          const to = t.cameraTo ?? ChoreoRun.resolveCameraTo(cue.camera, from);
           t.cameraP = p;
           this.camera = {
-            x: from.x + ((to.x ?? from.x) - from.x) * p,
-            y: from.y + ((to.y ?? from.y) - from.y) * p,
-            zoom: from.zoom + ((to.zoom ?? from.zoom) - from.zoom) * p,
+            x: from.x + (to.x - from.x) * p,
+            y: from.y + (to.y - from.y) * p,
+            zoom: from.zoom + (to.zoom - from.zoom) * p,
           };
           // the platform draws the frame while playing (§6.3 on WAAPI): the
           // whole scene composites off the main thread. Stills stay inline.
@@ -1060,6 +1077,72 @@ export class ChoreoRun implements Run {
       }
     }
     this.rewind(rewinds, now);
+    this.foldPerforms(limit);
+  }
+
+  /** perform tracks whose commands the host currently holds (see foldPerforms) */
+  private performed = new Set<Track>();
+  /** dispatches queued for after the render pass, in fold order */
+  private pendingPerforms: (PerformCommand | 'reset')[] = [];
+  private performFlushBooked = false;
+
+  /**
+   * The command fold (§C4): the set of Perform cues at or before the
+   * clock IS the commanded state. Every evaluate — a play tick and a seek
+   * alike — re-derives the eligible set; growth dispatches the new
+   * commands in time order, and any shrink (a backward seek) resets the
+   * host first and replays the whole remaining prefix. Commands are
+   * idempotent statements of state by contract (`lamp.on`, never a
+   * toggle), which is exactly what makes the replay a re-derivation.
+   *
+   * Dispatches are DEFERRED past the render pass: the constructor's first
+   * evaluate runs while Glimmer may still be rendering, and a command
+   * exists to mutate application state. A reset collapses the queue — the
+   * dropped dispatches were never seen, and the replay that follows
+   * restates everything still standing.
+   */
+  private foldPerforms(limit: number) {
+    if (!this.options.onPerform && !this.options.onPerformReset) {
+      return;
+    }
+    const now = this.master;
+    const eligible = this.tracks
+      .filter((t) => t.cue.perform && now >= t.start && t.start < limit)
+      .sort((a, b) => a.start - b.start);
+    const held = new Set(eligible);
+    if ([...this.performed].some((t) => !held.has(t))) {
+      this.performed.clear();
+      this.pendingPerforms.length = 0;
+      this.pendingPerforms.push('reset');
+    }
+    for (const t of eligible) {
+      if (this.performed.has(t)) {
+        continue;
+      }
+      this.performed.add(t);
+      const p = t.cue.perform!;
+      this.pendingPerforms.push({
+        action: p.action,
+        payload: p.payload,
+        target: p.target,
+        time: t.start / this.scale / 1000,
+      });
+    }
+    if (this.pendingPerforms.length && !this.performFlushBooked) {
+      this.performFlushBooked = true;
+      frame.postRender(() => {
+        this.performFlushBooked = false;
+        const queue = this.pendingPerforms;
+        this.pendingPerforms = [];
+        for (const item of queue) {
+          if (item === 'reset') {
+            this.options.onPerformReset?.();
+          } else {
+            this.options.onPerform?.(item);
+          }
+        }
+      });
+    }
   }
 
   /**
@@ -1124,6 +1207,26 @@ export class ChoreoRun implements Run {
    */
   cameraAim: { x: number; y: number } | null = null;
 
+  /**
+   * The absolute pose a camera cue lands on, resolved against the pose it
+   * starts from. Absolute fields pass through; missing fields hold; a
+   * relative cue (Pan / SlowZoom) offsets and multiplies the pose in
+   * force — which is why resolution happens AT START (live) or during the
+   * prefix fold (reconstruction), never at compile.
+   */
+  private static resolveCameraTo(
+    cue: NonNullable<Cue['camera']>,
+    from: CameraState,
+  ): CameraState {
+    const { by, to } = cue;
+    return {
+      x: by?.x !== undefined ? from.x + by.x : (to.x ?? from.x),
+      y: by?.y !== undefined ? from.y + by.y : (to.y ?? from.y),
+      zoom:
+        by?.zoom !== undefined ? from.zoom * by.zoom : (to.zoom ?? from.zoom),
+    };
+  }
+
   private cameraProgress(t: Track, ms: number): number {
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
@@ -1141,9 +1244,16 @@ export class ChoreoRun implements Run {
     )(raw);
   }
 
-  /** the camera and aim this run inherited, frozen at construction */
-  private readonly initialCamera: CameraState;
-  private readonly initialAim: { x: number; y: number } | null;
+  /**
+   * The camera and aim this run inherited, frozen at construction — the
+   * fold origin every reconstruction starts from. Public because a
+   * replacement run that re-executes the SAME score must inherit this
+   * origin, not the pose in force: the pose in force is what the score's
+   * prefix already produced, and folding the prefix from it applies every
+   * relative cue twice (the world-dock law).
+   */
+  readonly initialCamera: CameraState;
+  readonly initialAim: { x: number; y: number } | null;
 
   /**
    * Rebuild the camera fold from the score prefix before a seek's still
@@ -1176,6 +1286,7 @@ export class ChoreoRun implements Run {
         t.started = false;
         t.passed = false;
         t.cameraP = 0;
+        t.cameraTo = undefined;
         t.aimFrom = aim ?? undefined;
         t.aimTo = aim ?? undefined;
         t.cameraAnimation?.cancel();
@@ -1191,14 +1302,14 @@ export class ChoreoRun implements Run {
       // a track that had already passed under live play paints nothing
       t.passed = false;
       t.cameraFrom = { ...state };
+      t.cameraTo = ChoreoRun.resolveCameraTo(cue, t.cameraFrom);
       t.aimFrom = aim ?? aimTo;
       t.aimTo = aimTo;
       aim = aimTo;
       if (now >= t.end) {
-        const { to } = cue;
-        state.x = to.x ?? state.x;
-        state.y = to.y ?? state.y;
-        state.zoom = to.zoom ?? state.zoom;
+        state.x = t.cameraTo.x;
+        state.y = t.cameraTo.y;
+        state.zoom = t.cameraTo.zoom;
         t.cameraP = 1;
         // its flight is over: the inline still owns the frame again
         t.cameraAnimation?.cancel();
@@ -1270,15 +1381,12 @@ export class ChoreoRun implements Run {
   private startCameraAnimation(t: Track, now: number) {
     const host = this.options.cameraFrame;
     const from = t.cameraFrom;
-    const to = t.cue.camera?.to;
-    if (!host || !from || !to) {
+    const cue = t.cue.camera;
+    if (!host || !from || !cue) {
       return;
     }
-    const final: CameraState = {
-      x: to.x ?? from.x,
-      y: to.y ?? from.y,
-      zoom: to.zoom ?? from.zoom,
-    };
+    const final: CameraState =
+      t.cameraTo ?? ChoreoRun.resolveCameraTo(cue, from);
     const span = Math.max(1, t.end - t.start);
     const anim = host.animate(
       [
@@ -2204,6 +2312,9 @@ export class ChoreoRun implements Run {
     activeRuns.delete(this);
     this.stopTicking();
     clearTimeout(this.autoTimer);
+    // a cancelled run's queued commands die with it: the replacement run
+    // re-derives the commanded state from its own clock
+    this.pendingPerforms.length = 0;
     this.options.onCamera?.({ ...this.camera });
     // resolve everything first: a stop() issued before the async keyframe
     // resolution is dropped, and the revived animation leaves its value

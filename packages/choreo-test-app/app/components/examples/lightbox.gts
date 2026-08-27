@@ -74,8 +74,6 @@ interface SeekableLightboxElement extends HTMLElement {
   seekDemo?: (time: number) => PromiseLike<void> | void;
 }
 
-const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
 type Photo = (typeof photos)[number];
 
 export class Lightbox extends Component {
@@ -110,18 +108,17 @@ export class Lightbox extends Component {
     };
   });
 
-  /** Optional capture handle; ordinary gallery interaction is unchanged. */
-  seekDemo = async (time: number) => {
-    const local = Math.max(0, time - 0.55);
-    if (time >= 0.55 && !this.open) {
-      this.choose(photos[3]!);
-      await nextFrame();
-      await nextFrame();
-    }
+  /**
+   * Optional capture handle: stand this demo's own animations at a
+   * LOCAL-time still. Nothing else — which photo is open, and when, is
+   * the composition's decision, sent through the same buttons a person
+   * clicks. Ordinary gallery interaction is unchanged.
+   */
+  seekDemo = (time: number) => {
     for (const animation of this.root?.getAnimations({ subtree: true }) ?? []) {
       animation.pause();
       const end = Number(animation.effect?.getComputedTiming().endTime ?? 0);
-      animation.currentTime = Math.min(local * 1000, end);
+      animation.currentTime = Math.min(Math.max(0, time) * 1000, end);
     }
   };
 
