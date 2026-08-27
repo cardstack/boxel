@@ -12,8 +12,8 @@ import {
   to,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
-import { liveScroll, particles, playClip } from 'test-app/lib/xstress-live';
 import { factor } from 'test-app/lib/tempo';
+import { liveScroll, particles, playClip } from 'test-app/lib/xstress-live';
 
 const slides = [0, 1, 2] as const;
 type Slide = (typeof slides)[number];
@@ -86,7 +86,7 @@ const STRESS = 0.72;
 const CLIP = `${config.rootURL}xstress-clip.mp4`;
 
 /** doubled so the overflow pane can wrap without a seam */
-const log = [
+const tape = [
   'flood line',
   'drift 04',
   'kiln floor',
@@ -394,7 +394,7 @@ export class CrossingStress extends Component {
               {{on "click" this.eat}}
               {{on "pointerdown" this.eat}}
             >
-              {{#each log as |line|}}
+              {{#each tape as |line|}}
                 <p>{{line}}</p>
               {{/each}}
             </div>
