@@ -117,12 +117,15 @@ module('Acceptance | feature reel transport', function (hooks) {
 
     // the closing shot RETURNS to the logo aim: a different time, the same
     // declared pose — reconstruction must land both on the identical pixel.
-    // 12.9s is the re-frame's landing, the instant before the push-in
+    // Both landings are compared at their exact arrival instants, before
+    // each hold's breathing push-in moves off the landed pose
+    await reel().renderAt(8.75);
+    const logoLanding = worldTransform();
     await reel().renderAt(12.9);
     assert.strictEqual(
       worldTransform(),
-      buildLogo,
-      '12.9s and 8.9s declare the same aim and paint the same frame'
+      logoLanding,
+      '8.75s and 12.9s land the same declared aim on the identical frame'
     );
 
     // the lockup's SlowZoom is RELATIVE and must fold under random access:
@@ -282,6 +285,42 @@ module('Acceptance | feature reel transport', function (hooks) {
       (find('.reel-clock-tc') as HTMLElement).textContent,
       '00:00:05:06',
       '5.1s is frame 6 of second 5'
+    );
+  });
+
+  test('the mark docks across planes: chip out of the brand plane, into the world', async function (assert) {
+    await visit('/_feature-reel');
+
+    // before the homecoming: chip in its corner, no mark in the world
+    await reel().renderAt(12.0);
+    assert.ok(find('.reel-brand-mark'), '12.0s: the chip holds the corner');
+    assert.false(Boolean(find('.reel-dock-mark')), '12.0s: nothing docked');
+
+    // direct seek INTO the flight: one fold flips both planes in one pass,
+    // the barrier pairs chip and mark across regions, and the Move is
+    // sampled mid-journey — into a world zoomed by the lockup framing
+    await reel().renderAt(13.1);
+    const mark = find('.reel-dock-mark') as HTMLElement;
+    assert.ok(mark, '13.1s: the mark is received in the world');
+    assert.true(
+      mark.style.transform !== '' && mark.style.transform !== 'none',
+      `13.1s: the cross-plane flight is mid-journey (${mark.style.transform})`
+    );
+    assert.false(
+      Boolean(find('.reel-brand-mark')),
+      '13.1s: the chip has left the brand plane'
+    );
+
+    // landed: the mark rests in the world, under the world's camera
+    await reel().renderAt(14.5);
+    assert.ok(find('.reel-dock-mark'), '14.5s: the mark rests in the scene');
+
+    // and the backward fold sends it home
+    await reel().renderAt(12.0);
+    assert.ok(find('.reel-brand-mark'), '12.0s again: the chip is back');
+    assert.false(
+      Boolean(find('.reel-dock-mark')),
+      '12.0s again: the world let it go'
     );
   });
 });

@@ -46,6 +46,8 @@ export class FeatureReel extends Component {
   @tracked take = 0;
   /** the opening plate: mounted by the poster clip's presence fold */
   @tracked poster = true;
+  /** the mark's homecoming: chip leaves the brand plane, docks in the world */
+  @tracked docked = false;
   private root?: HTMLElement;
   private c?: { run: ChoreoRun | null };
   private t?: { run: ChoreoRun | null };
@@ -104,6 +106,7 @@ export class FeatureReel extends Component {
     cues: [
       { action: 'photo.open', at: 0.55, payload: 3, target: 'lightbox' },
       { action: 'compose', at: 4.35, target: 'inbox' },
+      { action: 'dock', at: 12.9, target: 'brand' },
     ],
     duration: DURATION,
     prepare: () => this.prepareScore(),
@@ -203,6 +206,21 @@ export class FeatureReel extends Component {
           ?.querySelectorAll<HTMLElement>('.reel-beacons .mail')[3]
           ?.querySelector<HTMLButtonElement>('button')
           ?.click();
+      },
+    });
+    this.compositor.register('brand', {
+      actions: {
+        /** ensure the mark is docked in the world — a command, not a toggle */
+        dock: () => {
+          if (!this.docked) {
+            this.docked = true;
+          }
+        },
+      },
+      reset: () => {
+        if (this.docked) {
+          this.docked = false;
+        }
       },
     });
     this.compositor.register('poster', {
@@ -469,21 +487,23 @@ export class FeatureReel extends Component {
             @duration={{1}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.2}} />
+          {{! holds breathe: a recorded frame that is fully frozen reads as
+              a hang, so every hold pushes gently toward its aim in force }}
+          <c.SlowZoom @by={{1.03}} @duration={{1.2}} @ease={{GLIDE}} />
           <c.Frame
             @of={{c.id "reel-beacons-scene"}}
             @padding={{1}}
             @duration={{1.15}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{0.55}} />
+          <c.SlowZoom @by={{1.02}} @duration={{0.55}} @ease={{GLIDE}} />
           <c.Frame
             @of={{c.id "reel-beacon-aim"}}
             @padding={{0.84}}
             @duration={{1}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1.1}} />
+          <c.SlowZoom @by={{1.03}} @duration={{1.1}} @ease={{GLIDE}} />
           <c.Frame
             @of={{c.id "reel-build-scene"}}
             @padding={{1}}
@@ -497,14 +517,14 @@ export class FeatureReel extends Component {
             @duration={{1}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1}} />
+          <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
           <c.Frame
             @of={{c.id "reel-build-panel-aim"}}
             @padding={{0.8}}
             @duration={{1.05}}
             @ease={{GLIDE}}
           />
-          <c.Wait @duration={{1}} />
+          <c.SlowZoom @by={{1.025}} @duration={{1}} @ease={{GLIDE}} />
           <c.Frame
             @of={{c.id "reel-build-logo-aim"}}
             @padding={{0.82}}
@@ -543,12 +563,14 @@ export class FeatureReel extends Component {
               <p class="reel-poster-tag">Motion. Choreographed.</p>
             </div>
           {{else}}
-            <div class="reel-brand-chip">
-              <span
-                class="reel-brand-mark"
-                {{motion id="brand" role="brand"}}
-              >Choreo</span>
-            </div>
+            {{#unless this.docked}}
+              <div class="reel-brand-chip">
+                <span
+                  class="reel-brand-mark"
+                  {{motion id="brand" role="brand"}}
+                >Choreo</span>
+              </div>
+            {{/unless}}
           {{/if}}
         </div>
         <b.Sequence>
@@ -702,23 +724,43 @@ export class FeatureReel extends Component {
             <span class="reel-clock-label">SMPTE 60</span>
             <span class="reel-clock-tc">00:00:00:00</span>
           </div>
+          {{#if this.docked}}
+            {{! the mark's homecoming: a cross-plane arrival — the same
+                identity as the corner chip, received into the clock plane
+                and perched above the timecode for the lockup }}
+            <span
+              class="reel-dock-mark"
+              {{motion id="brand" role="brand"}}
+            >Choreo</span>
+          {{/if}}
         </div>
-        <k.Sequence>
-          <k.Camera @origin={{k.id "clock-face"}} @duration={{0.01}} />
-          <k.Wait @duration={{2.64}} />
-          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{0.45}} />
-          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{2.65}} />
-          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{0.5}} />
-          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{4.15}} />
-          <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{0.4}} />
-          <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
-          <k.Wait @duration={{2.1}} />
-        </k.Sequence>
+        <k.Parallel>
+          <k.Sequence>
+            <k.Camera @origin={{k.id "clock-face"}} @duration={{0.01}} />
+            <k.Wait @duration={{2.64}} />
+            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{0.45}} />
+            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{2.65}} />
+            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{0.5}} />
+            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{4.15}} />
+            <k.SlowZoom @by={{1.3}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{0.4}} />
+            <k.SlowZoom @by={{UNPULSE}} @duration={{0.35}} @ease={{GLIDE}} />
+            <k.Wait @duration={{2.1}} />
+          </k.Sequence>
+          <k.Sequence>
+            <k.Wait @duration={{12.9}} />
+            <k.Move
+              @of={{k.received "brand"}}
+              @size={{false}}
+              @duration={{0.45}}
+              @ease={{GLIDE}}
+            />
+          </k.Sequence>
+        </k.Parallel>
       </Choreo>
     </div>
   </template>

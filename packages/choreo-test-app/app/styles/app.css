@@ -9120,3 +9120,20 @@ html[data-gm-dragging] * {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
 }
+
+/* the docked mark: the chip's homecoming — a cross-plane arrival into the
+   clock plane, perched above the timecode for the lockup. Centred by
+   margin, NOT transform: the mark is a flight target, and a stylesheet
+   transform on a participant is clobbered by the flight — rest measured
+   WITH it, flown WITHOUT it, landing beside itself. */
+.reel-clock .reel-dock-mark {
+  position: absolute;
+  bottom: 8.6%;
+  left: 50%;
+  margin-left: -52px;
+  color: rgba(243, 236, 227, 0.85);
+  font:
+    800 30px/1 'Syne',
+    sans-serif;
+  letter-spacing: -0.02em;
+}

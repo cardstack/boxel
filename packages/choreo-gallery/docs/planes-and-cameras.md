@@ -118,12 +118,18 @@ in B's LOCAL space, where an ancestor scale of `zB` multiplies every
 local translate. A flight computed from raw page deltas lands wrong by
 exactly `zB` the moment a plane is zoomed.
 
-The fix is the coordinate contract applied at the match: the
-counterpart's initial box converts `page → B-local` through
-`toLocal(box, B.camera)` before the delta is frozen. Red-first test: two
-regions, the receiver's plane held at zoom 2 by its own camera, one id
-crossing — the flight must land on the rest box to the pixel, then the
-same under a direct external-clock seek into mid-flight.
+**Verdict (tested):** the flight path is ALREADY correct. Compile
+descales both endpoints' page boxes by the receiver's own `measureZoom`,
+and the camera translate cancels in the delta — so the pin is page-true
+and the landing clean under a zoomed receiver with no far.ts change.
+`plane-flight-test.gts` (two planes, receiver held at zoom 2, one id
+crossing) stands as the guard, and the reel's dock beat proves it in the
+film. The remaining watch item is narrower: `s.initial = sender.initial`
+adopts the sender-space CONTEXT box wholesale, so a context consumer on
+a received sprite (camera `@fit` of a receiver, a follower's read) would
+see sender-space numbers — that conversion (`toLocal` at the match)
+becomes evidence-backed the day such a consumer exists, with its own red
+test first.
 
 (A plane camera that MOVES mid-flight composes with the flight visually
 — the flyer rides its plane's world. That is the correct default, named
