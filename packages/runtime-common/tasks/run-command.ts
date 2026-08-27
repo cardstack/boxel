@@ -23,27 +23,47 @@ export interface RunCommandArgs extends JSONTypes.Object {
   runAs: string;
   command: string;
   commandInput: JSONTypes.Object | null;
+  // Opt-in deduplication. A publisher that knows its invocation is
+  // idempotent (a scheduled sync, a periodic sweep) sets this so a second
+  // identical enqueue joins the pending or running job instead of running
+  // the command again. Ordinary run-command jobs pass null: they execute
+  // arbitrary commands with side effects, and two identical requests can
+  // legitimately mean two executions.
+  dedupeKey: string | null;
 }
 
-// Two run-command enqueues are the same invocation only when every argument
-// matches — same realm, same principal, same command, same input. Such twins
-// produce the same result, so a second caller can safely wait on the first
-// job instead of running the command again. This is what keeps a scheduled
-// command that is enqueued from several worker tasks at once (one cron tick
-// per task) down to a single run. Anything that differs in any argument is a
-// distinct invocation with its own result and is never joined.
+// Coalescing is opt-in via `dedupeKey`. Without a key every enqueue inserts,
+// so a command that writes files, creates rooms or sends events is never
+// silently collapsed into an earlier request. With a key, a twin is a job of
+// the same type carrying the same key and identical args; it produces the
+// same result, so the second caller can wait on it. This is what keeps a
+// scheduled command that is enqueued from several worker tasks at once (one
+// cron tick per task) down to a single run.
 function chooseRunCommandCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
+  let incomingKey = dedupeKeyOf(incoming.args);
+  if (!incomingKey) {
+    return { type: 'insert' };
+  }
   let isTwin = (candidate: { jobType: string; args: unknown }) =>
     candidate.jobType === incoming.jobType &&
+    dedupeKeyOf(candidate.args) === incomingKey &&
     isEqual(candidate.args, incoming.args);
   let twin = candidates.find(isTwin) ?? inFlightCandidates.find(isTwin);
   if (!twin) {
     return { type: 'insert' };
   }
   return { type: 'join', jobId: twin.id };
+}
+
+function dedupeKeyOf(args: unknown): string | undefined {
+  if (args && typeof args === 'object' && 'dedupeKey' in args) {
+    let key = (args as { dedupeKey?: unknown }).dedupeKey;
+    return typeof key === 'string' && key.length > 0 ? key : undefined;
+  }
+  return undefined;
 }
 
 registerQueueJobDefinition({
