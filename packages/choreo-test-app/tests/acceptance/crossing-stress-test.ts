@@ -49,6 +49,21 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.dom('[data-test-kicker]').hasText('flood line');
     assert.dom('[data-test-inset]').hasText('flood');
     assert.ok(find('[data-test-shot]'), 'the plate holds a live shot');
+    assert.strictEqual(
+      (find('[data-test-clip]') as HTMLElement).tagName,
+      'VIDEO',
+      'the shot is a real <video> clip'
+    );
+    assert.ok(
+      find('[data-test-particles]'),
+      'the plate holds a three.js particle field'
+    );
+    const scroller = find('[data-test-scroll]') as HTMLElement;
+    assert.ok(scroller, 'the plate holds an internal scroll pane');
+    assert.true(
+      scroller.scrollHeight > scroller.clientHeight + 8,
+      `the scroll pane overflows (${scroller.scrollHeight} > ${scroller.clientHeight})`
+    );
     assert.ok(find('[data-test-mark]'), 'the plate holds a spinning mark');
     assert.ok(find('[data-test-rule]'), 'a kept hairline sits on the stage');
     const tideCast = find('[data-test-cast="0"]') as HTMLElement;
@@ -133,6 +148,18 @@ module('Acceptance | crossing stress', function (hooks) {
     assert.ok(
       find('[data-test-hero] [data-test-shot]'),
       'the shot stays inside the flying plate (not a participant)'
+    );
+    assert.ok(
+      find('[data-test-hero] [data-test-clip]'),
+      'the <video> stays inside the flying plate'
+    );
+    assert.ok(
+      find('[data-test-hero] [data-test-particles]'),
+      'the particle field stays inside the flying plate'
+    );
+    assert.ok(
+      find('[data-test-hero] [data-test-scroll]'),
+      'the scroll pane stays inside the flying plate'
     );
     assert.ok(
       find('[data-test-hero] [data-test-mark]'),

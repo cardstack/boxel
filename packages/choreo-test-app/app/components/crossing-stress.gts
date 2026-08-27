@@ -12,6 +12,7 @@ import {
   to,
 } from 'glimmer-motion';
 import config from 'test-app/config/environment';
+import { liveScroll, particles, playClip } from 'test-app/lib/xstress-live';
 import { factor } from 'test-app/lib/tempo';
 
 const slides = [0, 1, 2] as const;
@@ -82,6 +83,28 @@ const deck = [
 const AUTO = 1.8;
 const STRESS = 0.72;
 
+const CLIP = `${config.rootURL}xstress-clip.mp4`;
+
+/** doubled so the overflow pane can wrap without a seam */
+const log = [
+  'flood line',
+  'drift 04',
+  'kiln floor',
+  '1280°',
+  'no horizon',
+  'pass 7',
+  'heat soak',
+  'arc bay',
+  'flood line',
+  'drift 04',
+  'kiln floor',
+  '1280°',
+  'no horizon',
+  'pass 7',
+  'heat soak',
+  'arc bay',
+] as const;
+
 /**
  * Magic Move stress — `/crossing-stress`, not the Kiln film at
  * `/crossing-reel`.
@@ -94,9 +117,12 @@ const STRESS = 0.72;
  * and rebuilds every frame (Gestures forbids this) and interpolates
  * colour through mud. Each rest-state shadow is a dedicated caster
  * with a static `box-shadow`; only opacity crossfades — the same
- * grammar as Crossing skins. Live innards — a shot, a spinning mark,
+ * grammar as Crossing skins. Live innards — a real <video>, a three.js
+ * particle field, an overflow pane that auto-scrolls, a spinning mark,
  * a meter, ticking dots — are NOT participants: they reflow with the
- * box. An inset caption inside the plate IS a counterpart, so a skin
+ * box and keep running mid-flight (CSS loops on the hero itself still
+ * freeze, because those fight the Move transform). An inset caption
+ * inside the plate IS a counterpart, so a skin
  * crosses while its parent flies. Titles, kickers, and chips pair as
  * counterparts (`pack="content"` on type). A kept hairline `c.Move`s
  * with the plate. Unique washes fade.
@@ -345,7 +371,33 @@ export class CrossingStress extends Component {
             ></span>
           {{/each}}
           <div class="xstress-hero-face">
-            <div class="xstress-hero-shot" data-test-shot></div>
+            <video
+              class="xstress-hero-shot"
+              data-test-shot
+              data-test-clip
+              src={{CLIP}}
+              muted
+              loop
+              autoplay
+              playsinline
+              {{playClip}}
+            ></video>
+            <canvas
+              class="xstress-hero-particles"
+              data-test-particles
+              {{particles}}
+            ></canvas>
+            <div
+              class="xstress-hero-scroll"
+              data-test-scroll
+              {{liveScroll}}
+              {{on "click" this.eat}}
+              {{on "pointerdown" this.eat}}
+            >
+              {{#each log as |line|}}
+                <p>{{line}}</p>
+              {{/each}}
+            </div>
             <span class="xstress-hero-mark" data-test-mark></span>
             <span class="xstress-hero-meter" data-test-meter></span>
             <span class="xstress-hero-ticks" aria-hidden="true">

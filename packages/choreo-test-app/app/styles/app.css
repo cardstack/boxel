@@ -3597,13 +3597,36 @@ html[data-gm-dragging] * {
 
 .xstress-hero-shot {
   position: absolute;
-  background:
-    linear-gradient(180deg, rgb(11 46 52 / 18%), rgb(11 46 52 / 42%)),
-    repeating-linear-gradient(
-      -18deg,
-      rgb(44 20 14 / 0%) 0 8px,
-      rgb(44 20 14 / 10%) 8px 9px
-    );
+  display: block;
+  object-fit: cover;
+  background: #0b2e34;
+}
+
+.xstress-hero-particles {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.xstress-hero-scroll {
+  position: absolute;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 1;
+  padding: 0.35em 0.55em;
+  font-family: var(--font-mono);
+  font-size: clamp(8px, 1.05vw, 12px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.45;
+  color: #2c140e;
+  background: rgb(44 20 14 / 16%);
+}
+
+.xstress-hero-scroll p {
+  margin: 0;
 }
 
 .xstress-hero-mark {
@@ -3757,6 +3780,20 @@ html[data-gm-dragging] * {
   height: 44%;
 }
 
+.xstress-stage[data-slide='0'] .xstress-hero-particles {
+  top: 12%;
+  right: 12%;
+  width: 22%;
+  height: 44%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-scroll {
+  left: 12%;
+  right: 12%;
+  bottom: 14%;
+  height: 20%;
+}
+
 .xstress-stage[data-slide='0'] .xstress-hero-mark {
   top: 14%;
   right: 12%;
@@ -3766,12 +3803,14 @@ html[data-gm-dragging] * {
 
 .xstress-stage[data-slide='0'] .xstress-hero-ticks {
   left: 12%;
-  bottom: 16%;
+  bottom: 36%;
 }
 
 .xstress-inset.tide {
-  right: 12%;
-  bottom: 16%;
+  left: 14%;
+  top: 14%;
+  right: auto;
+  bottom: auto;
   animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
 }
 
@@ -3822,26 +3861,43 @@ html[data-gm-dragging] * {
   top: 8%;
   left: 10%;
   right: 10%;
-  height: 38%;
+  height: 34%;
+  width: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-particles {
+  top: 46%;
+  left: 10%;
+  right: 10%;
+  height: 16%;
+  width: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-scroll {
+  left: 10%;
+  right: 10%;
+  bottom: 10%;
+  height: 18%;
   width: auto;
 }
 
 .xstress-stage[data-slide='1'] .xstress-hero-mark {
-  top: auto;
-  right: 12%;
-  bottom: 22%;
-  width: 22%;
-  height: 14%;
+  top: 10%;
+  right: 14%;
+  bottom: auto;
+  width: 16%;
+  height: 10%;
 }
 
 .xstress-stage[data-slide='1'] .xstress-hero-ticks {
   left: 12%;
-  bottom: 22%;
+  bottom: 30%;
 }
 
 .xstress-inset.ember {
   left: 12%;
-  bottom: 10%;
+  top: 10%;
+  bottom: auto;
   animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
 }
 
@@ -3899,21 +3955,38 @@ html[data-gm-dragging] * {
   height: auto;
 }
 
+.xstress-stage[data-slide='2'] .xstress-hero-particles {
+  top: 14%;
+  left: 38%;
+  width: 22%;
+  bottom: 14%;
+  height: auto;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-scroll {
+  top: 14%;
+  right: 6%;
+  width: 26%;
+  bottom: 14%;
+  height: auto;
+}
+
 .xstress-stage[data-slide='2'] .xstress-hero-mark {
   top: 16%;
-  right: 8%;
+  left: 8%;
+  right: auto;
   width: 10%;
   height: 22%;
 }
 
 .xstress-stage[data-slide='2'] .xstress-hero-ticks {
-  right: 8%;
+  left: 38%;
+  right: auto;
   bottom: 18%;
-  left: auto;
 }
 
 .xstress-inset.violet {
-  left: 38%;
+  left: 8%;
   top: 18%;
   bottom: auto;
   animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
