@@ -112,7 +112,17 @@ function workspaceGlobs(): string[] {
 function expandGlob(glob: string): string[] {
   let segments = glob.split('/').filter((segment) => segment.length > 0);
   let matches = [''];
-  for (let [index, segment] of segments.entries()) {
+  for (let segment of segments) {
+    // Ahead of the wildcard branches rather than inside the literal one, so a
+    // segment carrying BOTH an unsupported construct and a `*` is refused
+    // rather than compiled into a pattern that matches nothing. Neither `*`
+    // nor `**` contains any of these characters, so the supported wildcards
+    // still reach their branches.
+    if (/[?[\]{}!+@()]/.test(segment)) {
+      throw new Error(
+        `pnpm-workspace.yaml declares \`${glob}\`, whose \`${segment}\` is a pattern this check cannot expand — teach it that syntax rather than leaving those packages uncompared`,
+      );
+    }
     let next: string[] = [];
     if (segment === '**') {
       let descend = (dir: string) => {
@@ -134,11 +144,6 @@ function expandGlob(glob: string): string[] {
         }
       }
     } else {
-      if (/[?[\]{}!+@()]/.test(segment)) {
-        throw new Error(
-          `pnpm-workspace.yaml declares \`${glob}\`, whose \`${segment}\` is a pattern this check cannot expand — teach it that syntax rather than leaving those packages uncompared`,
-        );
-      }
       for (let dir of matches) {
         if (existsSync(join(repoRoot, dir, segment))) {
           next.push(join(dir, segment));
@@ -149,7 +154,6 @@ function expandGlob(glob: string): string[] {
     if (matches.length === 0) {
       break;
     }
-    void index;
   }
   return matches.filter((dir) => dir.length > 0);
 }
