@@ -106,8 +106,7 @@ const tape = [
 ] as const;
 
 /**
- * Magic Move stress — `/crossing-stress`, not the Kiln film at
- * `/crossing-reel`.
+ * Magic Move stress — `/crossing-stress`.
  *
  * Three full-viewport slides. The beige plate is ONE element: `c.Move`
  * tweens its real box; `animate` tweens radius (that has to live on the
@@ -134,7 +133,25 @@ const tape = [
  * snapshots the live box. `data-phase="crossing"` stills them for the run;
  * they restart from rest on landing.
  */
-export class CrossingStress extends Component {
+export interface CrossingStressSignature {
+  Args: {
+    /**
+     * Rendered as a gallery tile rather than as the standalone page.
+     *
+     * The page is a fixed, full-viewport rig: it takes the shell out of
+     * layout, listens on `window`, and drifts a three.js field behind the
+     * slides. None of that survives being one of thirty cards — so an
+     * embedded stage stays in flow, keeps its keys local, and drops the
+     * particle field, whose perpetual rAF would run whether or not you
+     * were looking at this tile. What it keeps is the point: the live
+     * innards, a crossing that does not freeze them, and the conductor —
+     * a tile that sits still is a tile that shows nothing.
+     */
+    embedded?: boolean;
+  };
+}
+
+export class CrossingStress extends Component<CrossingStressSignature> {
   @tracked slide: Slide = 0;
   @tracked mode: Mode = config.environment === 'test' ? 'manual' : 'auto';
 
@@ -166,25 +183,31 @@ export class CrossingStress extends Component {
   isMode = (mode: Mode) => this.mode === mode;
 
   register = modifier((el: HTMLElement) => {
-    const shell = el.closest<HTMLElement>('.app-shell');
+    const embedded = this.args.embedded ?? false;
+    // The page owns the viewport; a tile is a guest in someone's grid.
+    const shell = embedded ? null : el.closest<HTMLElement>('.app-shell');
     shell?.setAttribute('data-layout-ignore', '');
     Object.defineProperty(el, 'choreoCrossingStress', {
       configurable: true,
       value: this,
     });
-    (
-      window as Window & { __choreoCrossingStress?: CrossingStress }
-    ).__choreoCrossingStress = this;
-    window.addEventListener('keydown', this.onKey);
+    if (!embedded) {
+      (
+        window as Window & { __choreoCrossingStress?: CrossingStress }
+      ).__choreoCrossingStress = this;
+      window.addEventListener('keydown', this.onKey);
+    }
     if (this.mode !== 'manual') {
       this.started = performance.now();
       this.raf = requestAnimationFrame(this.tick);
     }
     return () => {
       cancelAnimationFrame(this.raf);
-      window.removeEventListener('keydown', this.onKey);
-      delete (window as Window & { __choreoCrossingStress?: CrossingStress })
-        .__choreoCrossingStress;
+      if (!embedded) {
+        window.removeEventListener('keydown', this.onKey);
+        delete (window as Window & { __choreoCrossingStress?: CrossingStress })
+          .__choreoCrossingStress;
+      }
       shell?.removeAttribute('data-layout-ignore');
     };
   });
@@ -213,13 +236,34 @@ export class CrossingStress extends Component {
     this.raf = requestAnimationFrame(this.tick);
   };
 
+  /**
+   * `<` / `>` and the arrows step the deck; Space advances.
+   *
+   * The page binds this to `window` — it owns the screen, so it owns the
+   * keys. A TILE cannot: thirty cards each listening on `window` would all
+   * answer one keypress, and Space would scroll the gallery out from under
+   * you. So the embedded stage is focusable and hears the same handler
+   * locally, and declines Space, which belongs to the scroller.
+   */
   private onKey = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowRight' || event.key === ' ') {
+    // The page has BOTH bindings — this one on the stage, and `window` for
+    // when focus is elsewhere. The stage sits earlier in the bubble path, so
+    // when focus is inside it both would fire; the first to act marks the
+    // event and the second stands down.
+    if (event.defaultPrevented) {
+      return;
+    }
+    const embedded = this.args.embedded ?? false;
+    const key = event.key;
+    if (key === 'ArrowRight' || key === '>' || key === '.') {
       event.preventDefault();
       this.advance();
-    } else if (event.key === 'ArrowLeft') {
+    } else if (key === 'ArrowLeft' || key === '<' || key === ',') {
       event.preventDefault();
       this.back();
+    } else if (key === ' ' && !embedded) {
+      event.preventDefault();
+      this.advance();
     }
   };
 
@@ -273,10 +317,14 @@ export class CrossingStress extends Component {
 
   <template>
     <div
-      class="xstress-viewport"
+      class="xstress-viewport {{if @embedded 'is-embedded'}}"
       data-test-crossing-stress
       data-slide={{this.slide}}
       data-phase={{this.phase}}
+      tabindex={{if @embedded "0"}}
+      role={{if @embedded "group"}}
+      aria-label={{if @embedded "Crossing deck — < and > step the slides"}}
+      {{on "keydown" this.onKey}}
       {{this.register}}
     >
       <header class="xstress-hud" {{on "click" this.eat}}>
@@ -284,10 +332,12 @@ export class CrossingStress extends Component {
           <span>{{this.label}}</span>
           <span class="xstress-phase" data-test-phase>{{this.phase}}</span>
         </p>
-        <p class="xstress-lede">
-          Cut at any time — the matching tile flies from wherever it is to the
-          next slide's start.
-        </p>
+        {{#unless @embedded}}
+          <p class="xstress-lede">
+            Cut at any time — the matching tile flies from wherever it is to the
+            next slide's start.
+          </p>
+        {{/unless}}
         <div class="xstress-controls">
           <button
             type="button"
@@ -331,11 +381,16 @@ export class CrossingStress extends Component {
         as |c|
       >
         <span hidden {{this.wire c}}></span>
-        <canvas
-          class="xstress-bg-dust"
-          data-test-particles
-          {{particles}}
-        ></canvas>
+        {{! A perpetual rAF behind thirty mounted tiles is a tax on every
+            other demo, and at card size the drift does not read. The page
+            keeps it: there, a hitch in the flight IS a freeze in the field. }}
+        {{#unless @embedded}}
+          <canvas
+            class="xstress-bg-dust"
+            data-test-particles
+            {{particles}}
+          ></canvas>
+        {{/unless}}
 
         {{#if this.crossing}}
           {{#let (t) as |tt|}}

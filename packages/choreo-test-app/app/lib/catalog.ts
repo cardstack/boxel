@@ -1,5 +1,6 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
+import { Crossing } from 'test-app/components/examples/crossing';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
@@ -32,6 +33,7 @@ import { Trail } from 'test-app/components/examples/trail';
 import { Wires } from 'test-app/components/examples/wires';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
+import { CrossingNotes } from 'test-app/components/notes/crossing';
 import { FarNotes } from 'test-app/components/notes/far';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
@@ -597,6 +599,50 @@ const layer = (sprite) => (sprite.counterpart ? 6 : 1);`,
     notes: FarNotes,
     slowmo: true,
     title: 'Far match',
+  },
+  {
+    Example: Crossing,
+    apis: ['c.Crossing', 'pack', 'createArming', 'c.Move'],
+    group: 'Choreo',
+    id: 'crossing',
+    lede: 'Two skins cross inside one flying box. The video never stops.',
+    sample: `// A CROSSING is the canned scene swap: leaves fade, the paired flight
+// carries, arrivals land near the settle. It is written in nothing but
+// the public step vocabulary — no privileged access, no snapshot.
+<c.Parallel>
+  {{! counterparts: same id, different content. Two skins, one box. }}
+  <c.Crossing
+    @duration={{tt.move}} @ease={{EASE}}
+    @leave={{tt.leave}} @arrive={{tt.arrive}} @overlap={{0.18}} />
+
+  {{! kept identities (the plate, the hairline) tween their REAL box —
+      crop-cover would scale Tide's wide plate into Violet's square. }}
+  <c.Move @of={{c.moved}} @duration={{tt.move}} @ease={{EASE}} />
+</c.Parallel>
+
+// The innards are NOT participants. A <video>, an auto-scrolling pane and
+// a spinning mark reflow with the box and keep running mid-flight — the
+// exact case a View Transition snapshot freezes into a still.
+<div class='hero' {{motion id='hero' role='hero'}}>
+  <video src={{CLIP}} muted loop autoplay playsinline></video>
+  <div class='pane' {{liveScroll}}>…</div>
+  {{! an inset caption INSIDE the plate is itself a counterpart, so a skin
+      crosses while its parent is still flying }}
+  <em {{motion id='inset' role='inset' pack='content'}}>{{s.inset}}</em>
+</div>
+
+// Drop-shadows do not tween. Tide's tight teal, Ember's huge warm and
+// Violet's small black are three different LIGHTS: interpolating the
+// box-shadow string reparses every frame and drags the colour through
+// mud. Each rest shadow is its own caster; only opacity crossfades.
+<span class='cast {{s.tone}}' data-slide={{s.n}}></span>
+
+// A cut can land at any phase — including mid-flight. data-phase='crossing'
+// stills the intra-slide CSS loops for the span of the run, because those
+// are transforms on the motion nodes themselves and would fight the Move.`,
+    notes: CrossingNotes,
+    slowmo: false,
+    title: 'Crossing',
   },
   {
     Example: Subdivision,

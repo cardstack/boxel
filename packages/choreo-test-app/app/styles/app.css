@@ -3161,162 +3161,21 @@ html[data-gm-dragging] * {
   height: 58%;
 }
 
-/* ── Kiln Magic Move reel — /crossing-reel, not /_feature-reel ───────────
-   Three compositions of the same four things, full-bleed. The conductor
-   only changes data-clip; c.Move + layout projection play the trip. */
-.xreel-viewport {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  overflow: hidden;
-  background: #2a2521;
-  color: #f3ece3;
-  font-family: var(--font-sans);
-}
-
-.xreel-index {
-  position: absolute;
-  z-index: 2;
-  top: 6%;
-  right: 6%;
-  left: auto;
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: clamp(11px, 1.05vw, 18px);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #b8aea3;
-  pointer-events: none;
-}
-
-.xreel-stage {
-  position: absolute;
-  inset: 0;
-  /* not a container: this is the projection ancestor, same as .slide */
-}
-
-.xreel-plate,
-.xreel-title,
-.xreel-kicker,
-.xreel-note {
-  position: absolute;
-}
-
-.xreel-plate {
-  border-radius: 18px;
-  overflow: clip;
-  background: linear-gradient(160deg, #ff7a45 0%, #c42712 42%, #2a0c08 100%);
-  box-shadow: 0 28px 70px rgb(0 0 0 / 36%);
-}
-
-.xreel-title,
-.xreel-kicker {
-  width: fit-content;
-}
-
-.xreel-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: -0.05em;
-  line-height: 0.92;
-}
-
-.xreel-kicker {
-  color: #d2c9bf;
-  font-size: clamp(14px, 1.6vw, 28px);
-  letter-spacing: 0.04em;
-}
-
-.xreel-note {
-  font-family: var(--font-mono);
-  font-size: clamp(12px, 1.2vw, 20px);
-  font-style: normal;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #ff6a3a;
-}
-
-/* 01 — title card: a small mark, everything centred */
-.xreel-stage[data-clip='0'] .xreel-plate {
-  top: 18%;
-  left: calc(50% - 3.6vmin);
-  width: 7.2vmin;
-  height: 7.2vmin;
-}
-
-.xreel-stage[data-clip='0'] .xreel-title {
-  top: 36%;
-  left: 50%;
-  translate: -50% 0;
-  font-size: clamp(4rem, 12vw, 9.5rem);
-}
-
-.xreel-stage[data-clip='0'] .xreel-kicker {
-  top: 68%;
-  left: 50%;
-  translate: -50% 0;
-}
-
-/* 02 — the plate takes the right half, type on the left */
-.xreel-stage[data-clip='1'] .xreel-plate {
-  top: 8%;
-  right: 6%;
-  bottom: 8%;
-  left: auto;
-  width: 48%;
-}
-
-.xreel-stage[data-clip='1'] .xreel-title {
-  top: 22%;
-  left: 7%;
-  translate: none;
-  font-size: clamp(2.4rem, 6.2vw, 5.4rem);
-}
-
-.xreel-stage[data-clip='1'] .xreel-kicker {
-  top: 48%;
-  left: 7%;
-  translate: none;
-}
-
-.xreel-stage[data-clip='1'] .xreel-note {
-  left: 7%;
-  bottom: 12%;
-}
-
-/* 03 — full-bleed down the left edge, square corners */
-.xreel-stage[data-clip='2'] .xreel-plate {
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 32%;
-}
-
-.xreel-stage[data-clip='2'] .xreel-title {
-  top: 28%;
-  left: 40%;
-  translate: none;
-  font-size: clamp(2.8rem, 7vw, 6rem);
-}
-
-.xreel-stage[data-clip='2'] .xreel-kicker {
-  top: 52%;
-  left: 40%;
-  translate: none;
-}
-
-.xreel-stage[data-clip='2'] .xreel-note {
-  left: 40%;
-  bottom: 16%;
-}
-
-/* ── Magic Move stress — /crossing-stress, not /crossing-reel ──────────
+/* ── Magic Move stress — /crossing-stress ─────────────────────────────
    Three looping slides, distinct grounds, a cut at any phase. Counterpart
    trees share ids; data-slide is the rest home; data-phase stills the
    intra-slide CSS loops for the span of a crossing. Tone classes travel
    with each sprite so an orphan keeps its own box. */
 .xstress-viewport {
+  /* The scene's unit basis. Every size below is a MULTIPLE of these rather
+     than a raw viewport unit, so the same arithmetic lays the slides out
+     against the window on /crossing-stress and against the card box in the
+     gallery tile — where `vmin` would still be measuring the whole browser.
+     `--xs-u` is the square unit (the old vmin), `--xs-w` the horizontal one.
+     1rem ≈ 1.78 of a 900px-tall viewport's vmin; the display clamps below
+     carry that conversion so their floors and ceilings scale too. */
+  --xs-u: 1vmin;
+  --xs-w: 1vw;
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -3325,6 +3184,100 @@ html[data-gm-dragging] * {
   color: #f3ece3;
   font-family: var(--font-sans);
   user-select: none;
+}
+
+/* The tile variant: the same scene, in flow. The page is `fixed; inset:0;
+   z-index:10000` because it owns the screen; inside a 400px card that would
+   cover the gallery. Everything below is containment only — no colour, no
+   timing, no geometry of the slides themselves, so the tile and the page
+   cannot drift apart the way /crossing-reel drifted from `slides`. */
+.xstress-viewport.is-embedded {
+  /* `.ex` is `container-type: size`, so cq units resolve against the card.
+     The 0.78 is deliberate slack: at a straight 1:1 the plate fills the card
+     and the slide's own type has nowhere to go. Shrinking the OBJECTS while
+     the layout percentages stay put is what buys the title, kicker and chip
+     room to be read at card size. Three tiers follow, all keyed to the
+     ELEMENT's box rather than the window's: a narrow single-column card, the
+     two-up card above, and the demo page's much larger stage. */
+  --xs-u: 1.15cqmin;
+  --xs-w: 1.15cqw;
+
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* A single-column card is barely wider than the plate wants to be, and the
+   slide's own type has nowhere to go. Give the objects back some room. */
+@container (max-width: 460px) {
+  .xstress-viewport.is-embedded {
+    --xs-u: 0.9cqmin;
+    --xs-w: 0.9cqw;
+  }
+}
+
+/* The roomy tier.
+   A gallery card sits at the base scale above. The demo page hands the same component a stage several
+   times that size, and there the slack reads as a small scene marooned in a
+   large frame — so past a card's width the scene scales UP instead, and the
+   captions, whose px ceilings were chosen for a card, get ceilings to match.
+   This is the one thing a media query could not do: the switch is the
+   ELEMENT's box, not the window's. */
+@container (min-width: 900px) {
+  .xstress-viewport.is-embedded {
+    --xs-u: 1.24cqmin;
+    --xs-w: 1.24cqw;
+  }
+
+  .xstress-viewport.is-embedded .xstress-kicker,
+  .xstress-viewport.is-embedded .xstress-chip {
+    font-size: clamp(14px, calc(1.05 * var(--xs-w)), 24px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-inset {
+    font-size: clamp(12px, calc(1.2 * var(--xs-w)), 20px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-hero-scroll {
+    font-size: clamp(8px, calc(0.72 * var(--xs-w)), 12px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-index {
+    font-size: clamp(12px, calc(1.05 * var(--xs-w)), 20px);
+  }
+}
+
+/* The card's own chin carries title and lede, so the tile's HUD is controls
+   only — pulled in tight, and sized down to a card's scale. */
+.xstress-viewport.is-embedded .xstress-hero-scroll {
+  font-size: clamp(6px, calc(0.72 * var(--xs-w)), 10px);
+}
+
+.xstress-viewport.is-embedded .xstress-kicker,
+.xstress-viewport.is-embedded .xstress-chip {
+  font-size: clamp(12px, calc(1.05 * var(--xs-w)), 17px);
+}
+
+.xstress-viewport.is-embedded .xstress-hud {
+  top: 10px;
+  right: 12px;
+  max-width: none;
+  gap: 0.4em 0.55em;
+  font-size: 11px;
+}
+
+@container (min-width: 900px) {
+  .xstress-viewport.is-embedded .xstress-hud {
+    top: 18px;
+    right: 22px;
+    gap: 0.55em 0.8em;
+    font-size: 13px;
+  }
+}
+
+.xstress-viewport.is-embedded .xstress-index {
+  font-size: 10px;
 }
 
 .xstress-hud {
@@ -3338,7 +3291,7 @@ html[data-gm-dragging] * {
   gap: 0.65em 1em;
   align-items: center;
   justify-content: flex-end;
-  max-width: min(72ch, 70vw);
+  max-width: min(72ch, calc(70 * var(--xs-w)));
   text-align: right;
   pointer-events: auto;
 }
@@ -3350,7 +3303,7 @@ html[data-gm-dragging] * {
   align-items: baseline;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: clamp(11px, 1.05vw, 18px);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 18px);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #c8c0b6;
@@ -3497,8 +3450,8 @@ html[data-gm-dragging] * {
 }
 
 .xstress-orb {
-  width: 18vmin;
-  height: 18vmin;
+  width: calc(18 * var(--xs-u));
+  height: calc(18 * var(--xs-u));
   border-radius: 50%;
   pointer-events: none;
   filter: blur(1px);
@@ -3529,8 +3482,8 @@ html[data-gm-dragging] * {
 }
 
 .xstress-spark {
-  width: 2.4vmin;
-  height: 2.4vmin;
+  width: calc(2.4 * var(--xs-u));
+  height: calc(2.4 * var(--xs-u));
   border-radius: 50%;
   pointer-events: none;
   z-index: 4;
@@ -3566,10 +3519,10 @@ html[data-gm-dragging] * {
      overflow stays visible: the drop-shadows live on .cast children
      (static box-shadow, opacity-blended) and clip would eat them.
      Innards clip on .face. */
-  top: 28%;
-  left: calc(50% - 11vmin);
-  width: 22vmin;
-  height: 22vmin;
+  top: 26%;
+  left: calc(50% - calc(14 * var(--xs-u)));
+  width: calc(28 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
   /* solid paint so a size tween re-renders the gradient at every box */
   background-color: #e8d9c4;
   background-image: linear-gradient(
@@ -3648,10 +3601,10 @@ html[data-gm-dragging] * {
   z-index: 1;
   padding: 0.35em 0.55em;
   font-family: var(--font-mono);
-  font-size: clamp(8px, 1.05vw, 12px);
-  letter-spacing: 0.14em;
+  font-size: clamp(6px, calc(0.72 * var(--xs-w)), 10px);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  line-height: 1.45;
+  line-height: 1.32;
   color: #2c140e;
   background: rgb(44 20 14 / 16%);
 }
@@ -3706,7 +3659,7 @@ html[data-gm-dragging] * {
   position: absolute;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: clamp(10px, 1.2vw, 15px);
+  font-size: clamp(10px, calc(1.2 * var(--xs-w)), 15px);
   font-style: normal;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -3720,7 +3673,7 @@ html[data-gm-dragging] * {
   margin: 0;
   color: #c8c0b6;
   font-family: var(--font-mono);
-  font-size: clamp(11px, 1.05vw, 16px);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 16px);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-style: normal;
@@ -3753,7 +3706,7 @@ html[data-gm-dragging] * {
   padding: 0.35em 0.85em;
   border-radius: 999px;
   font-family: var(--font-mono);
-  font-size: clamp(11px, 1.05vw, 16px);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 16px);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   font-style: normal;
@@ -3765,10 +3718,10 @@ html[data-gm-dragging] * {
 
 /* 01 Tide — small hero, gentle orbit, type centred */
 .xstress-stage[data-slide='0'] .xstress-hero {
-  top: 28%;
-  left: calc(50% - 11vmin);
-  width: 22vmin;
-  height: 22vmin;
+  top: 26%;
+  left: calc(50% - calc(14 * var(--xs-u)));
+  width: calc(28 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
   animation: xstress-hero-tide 2.8s ease-in-out infinite alternate;
 }
 
@@ -3782,7 +3735,11 @@ html[data-gm-dragging] * {
   width: max-content;
   margin-inline: auto;
   text-align: center;
-  font-size: clamp(3.2rem, 9vw, 7.2rem);
+  font-size: clamp(
+    calc(5.7 * var(--xs-u)),
+    calc(9 * var(--xs-w)),
+    calc(12.82 * var(--xs-u))
+  );
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3809,14 +3766,14 @@ html[data-gm-dragging] * {
   left: 12%;
   right: 12%;
   width: auto;
-  height: 44%;
+  height: 38%;
 }
 
 .xstress-stage[data-slide='0'] .xstress-hero-scroll {
   left: 12%;
   right: 12%;
-  bottom: 14%;
-  height: 20%;
+  bottom: 12%;
+  height: 28%;
 }
 
 .xstress-stage[data-slide='0'] .xstress-hero-mark {
@@ -3828,7 +3785,7 @@ html[data-gm-dragging] * {
 
 .xstress-stage[data-slide='0'] .xstress-hero-ticks {
   left: 12%;
-  bottom: 36%;
+  bottom: 42%;
 }
 
 .xstress-inset.tide {
@@ -3851,8 +3808,8 @@ html[data-gm-dragging] * {
   right: 10%;
   bottom: auto;
   left: auto;
-  width: 28vmin;
-  height: 44vmin;
+  width: calc(36 * var(--xs-u));
+  height: calc(56 * var(--xs-u));
   animation: xstress-hero-ember 2.2s ease-in-out infinite alternate;
 }
 
@@ -3862,7 +3819,11 @@ html[data-gm-dragging] * {
   right: auto;
   width: max-content;
   text-align: left;
-  font-size: clamp(2.4rem, 6.4vw, 5.6rem);
+  font-size: clamp(
+    calc(4.27 * var(--xs-u)),
+    calc(6.4 * var(--xs-w)),
+    calc(9.97 * var(--xs-u))
+  );
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3886,15 +3847,15 @@ html[data-gm-dragging] * {
   top: 8%;
   left: 10%;
   right: 10%;
-  height: 54%;
+  height: 46%;
   width: auto;
 }
 
 .xstress-stage[data-slide='1'] .xstress-hero-scroll {
   left: 10%;
   right: 10%;
-  bottom: 10%;
-  height: 18%;
+  bottom: 9%;
+  height: 30%;
   width: auto;
 }
 
@@ -3908,7 +3869,7 @@ html[data-gm-dragging] * {
 
 .xstress-stage[data-slide='1'] .xstress-hero-ticks {
   left: 12%;
-  bottom: 30%;
+  bottom: 40%;
 }
 
 .xstress-inset.ember {
@@ -3930,8 +3891,8 @@ html[data-gm-dragging] * {
   left: 10%;
   right: auto;
   bottom: auto;
-  width: 48vmin;
-  height: 22vmin;
+  width: calc(60 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
   animation: xstress-hero-violet 3.1s ease-in-out infinite alternate;
 }
 
@@ -3942,7 +3903,11 @@ html[data-gm-dragging] * {
   right: auto;
   width: max-content;
   text-align: left;
-  font-size: clamp(2.6rem, 6.8vw, 5.8rem);
+  font-size: clamp(
+    calc(4.63 * var(--xs-u)),
+    calc(6.8 * var(--xs-w)),
+    calc(10.32 * var(--xs-u))
+  );
   animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
 }
 
@@ -3989,9 +3954,9 @@ html[data-gm-dragging] * {
 }
 
 .xstress-stage[data-slide='2'] .xstress-hero-ticks {
-  left: auto;
-  right: 10%;
-  bottom: 18%;
+  left: 8%;
+  right: auto;
+  bottom: 8%;
 }
 
 .xstress-inset.violet {
