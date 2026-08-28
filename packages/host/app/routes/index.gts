@@ -29,6 +29,8 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
 
+import { realmIdentifierSegments } from '../lib/realm-utils';
+
 const { hostsOwnAssets } = ENV;
 
 export type ErrorModel = {
@@ -294,15 +296,9 @@ export default class Card extends Route {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
       let realmUrl = this.realmServer.availableRealmIdentifiers.find(
         (realmUrl) => {
-          // `availableRealmIdentifiers` is seeded from `baseRealm.url` and from
-          // realm-server responses, so entries are URL-form and this does not
-          // throw. If prefix forms reach here, this needs to compare namespaces
-          // rather than pathnames — there is no path to take apart in
-          // `@scope/name/`.
-          // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-          let realmPathParts = new URL(realmUrl).pathname
-            .split('/')
-            .filter((part) => part !== '');
+          // A realm identifier may be a URL or a registered prefix, and only
+          // the first has a pathname; take the segments of whichever it is.
+          let realmPathParts = realmIdentifierSegments(realmUrl);
           let cardPathParts = cardPath!
             .split('/')
             .filter((part) => part !== '');

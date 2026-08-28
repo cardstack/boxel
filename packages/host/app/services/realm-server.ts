@@ -517,11 +517,18 @@ export default class RealmServerService extends Service {
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      if (
-        testRealmOrigin &&
-        new URL(normalizedRealmURL).origin === testRealmOrigin
-      ) {
-        continue;
+      // A realm identifier may be a registered prefix, which has no origin to
+      // compare — resolve it before asking. Anything resolving to the test
+      // realm's origin is served by the test realm server and skipped.
+      if (testRealmOrigin) {
+        let resolved = this.network.virtualNetwork.isRegisteredPrefix(
+          normalizedRealmURL,
+        )
+          ? this.network.virtualNetwork.toURL(normalizedRealmURL).href
+          : normalizedRealmURL;
+        if (new URL(resolved).origin === testRealmOrigin) {
+          continue;
+        }
       }
       let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
       if (!token) {

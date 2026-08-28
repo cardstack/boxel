@@ -1,4 +1,5 @@
 import {
+  isUrlLike,
   RealmPaths,
   ri,
   rri,
@@ -51,4 +52,30 @@ export function resolveCardRealmUrl(
     }
   }
   return new RealmPaths(virtualNetwork.toURL(cardId)).url;
+}
+
+/**
+ * The meaningful segments of a realm identifier, in whichever form it is
+ * expressed.
+ *
+ * A realm identifier is either a URL (`https://host/foo/bar/`) or a registered
+ * prefix (`@scope/name/`). Only the first has a pathname to take apart, so
+ * anything deriving segments by parsing loses the prefix form — silently, if
+ * the parse sits in a `try`. Both forms name the realm by the same trailing
+ * segments, which is what callers here are after.
+ *
+ * @example
+ * realmIdentifierSegments('https://cardstack.com/base/')  // ['base']
+ * realmIdentifierSegments('@cardstack/base/')             // ['@cardstack', 'base']
+ * realmIdentifierSegments('https://example.com/')         // []
+ */
+export function realmIdentifierSegments(realmIdentifier: string): string[] {
+  if (!isUrlLike(realmIdentifier)) {
+    return realmIdentifier.split('/').filter(Boolean);
+  }
+  try {
+    return new URL(realmIdentifier).pathname.split('/').filter(Boolean);
+  } catch {
+    return [];
+  }
 }

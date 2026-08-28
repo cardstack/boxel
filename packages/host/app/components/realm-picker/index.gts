@@ -7,6 +7,7 @@ import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import { realmIdentifierSegments } from '../../lib/realm-utils';
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 export interface RealmFilter {
@@ -86,16 +87,11 @@ export default class RealmPicker extends Component<Signature> {
   };
 
   private realmDisplayNameFromURL(realmURL: string): string {
-    try {
-      const pathname = new URL(realmURL).pathname;
-      const segments = pathname.split('/').filter(Boolean);
-      if (segments.length === 0) {
-        return 'Base';
-      }
-      return segments[segments.length - 1] ?? 'Base';
-    } catch {
-      return 'Unknown Workspace';
+    const segments = realmIdentifierSegments(realmURL);
+    if (segments.length === 0) {
+      return 'Base';
     }
+    return segments[segments.length - 1] ?? 'Base';
   }
 
   <template>
