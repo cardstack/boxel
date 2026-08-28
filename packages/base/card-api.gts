@@ -373,6 +373,18 @@ export interface CardContext<T extends CardDef = CardDef> {
       };
     };
   }>;
+  // Host-owned document-first composition surface. Trusted card templates
+  // may ask the Host to render an inert card URL without causing the Store to
+  // materialize it first. The Host classifies the target module before any
+  // Loader sees it; Sandbox contexts deliberately omit this capability.
+  surfaceCardComponent?: ComponentLike<{
+    Element: HTMLElement;
+    Args: {
+      cardURL: string;
+      format?: Format;
+      hostOwnsBox?: boolean;
+    };
+  }>;
   // The search rendering surface: renders the heterogeneous `entry`
   // stream for an `entry`-rooted query — prerendered HTML inert (hydrated
   // lazily) or a live card — so a card author renders results without ever

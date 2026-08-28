@@ -47,25 +47,10 @@ export function decideBoxelExecution(
     return { mode: 'direct', reason: 'host-requested-direct' };
   }
   if (input.prefersFullSandbox) {
-    let requested = executionDecisionForFormat(
-      {
-        tier: 'sandbox',
-        reason: 'prefers-full-sandbox',
-        // An explicit full-sandbox request includes the edit surface. Compact
-        // formats are still contained by executionDecisionForFormat so a
-        // fitted gallery or Markdown pill never allocates an inline iframe.
-        authoredEditTemplate: true,
-      },
-      input.format,
-    );
-    if (requested.tier === 'sandbox') {
-      return { mode: requested.tier, reason: requested.reason };
-    }
-    // Containment must not weaken trusted code from Direct to Capsule.
-    if (input.trusted) {
-      return { mode: 'direct', reason: 'trusted-boxel-module' };
-    }
-    return { mode: requested.tier, reason: requested.reason };
+    // A document admitted through the two-model Host API must never demote
+    // to Capsule merely because it is rendered in a compact format. The
+    // explicit stronger-boundary request means Sandbox for every format.
+    return { mode: 'sandbox', reason: 'prefers-full-sandbox' };
   }
   if (input.trusted) {
     return { mode: 'direct', reason: 'trusted-boxel-module' };

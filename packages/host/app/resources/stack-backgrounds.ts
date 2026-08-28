@@ -3,12 +3,10 @@ import { tracked } from '@glimmer/tracking';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import { rri } from '@cardstack/runtime-common';
 
 import type { Stack } from '../components/operator-mode/interact-submode';
-import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
-import type StoreService from '../services/store';
 
 interface Args {
   positional: [stacks: Stack[]];
@@ -16,9 +14,7 @@ interface Args {
 
 export class StackBackgroundsResource extends Resource<Args> {
   @tracked value: (string | undefined | null)[] = [];
-  @service declare cardService: CardService;
   @service declare realm: RealmService;
-  @service declare store: StoreService;
 
   get backgroundImageURLs() {
     return this.value?.map((u) => (u ? u : undefined)) ?? [];
@@ -54,17 +50,16 @@ export class StackBackgroundsResource extends Resource<Args> {
         if (!bottomMostStackItem.id) {
           return;
         }
-        let bottomMostCard = await this.store.get(bottomMostStackItem.id);
-        if (!isCardInstance(bottomMostCard)) {
-          let realm = bottomMostCard.realm;
-          if (!realm) {
-            return undefined;
-          }
-          await this.realm.ensureRealmMeta(realm);
-          return this.realm.info(realm)?.backgroundURL;
+        // Background chrome depends only on the resource's realm, not on a
+        // live card instance. Loading the bottom card through Store here used
+        // to execute authored code in the Host before the stack's execution
+        // admission resource could route it to Sandbox.
+        let realm = this.realm.realmOf(rri(bottomMostStackItem.id));
+        if (!realm) {
+          return undefined;
         }
-        return (await this.cardService.getRealmInfo(bottomMostCard))
-          ?.backgroundURL;
+        await this.realm.ensureRealmMeta(realm);
+        return this.realm.info(realm)?.backgroundURL;
       }),
     );
     this.value = result;

@@ -93,7 +93,7 @@ module('Unit | Boxel execution graph', function () {
       'authored edit code never runs below the module classified tier',
     );
 
-    for (let format of ['isolated', 'embedded', 'edit']) {
+    for (let format of ['isolated', 'embedded', 'edit', ...compactFormats]) {
       assert.deepEqual(
         decideBoxelExecution(policy({ prefersFullSandbox: true, format })),
         { mode: 'sandbox', reason: 'prefers-full-sandbox' },
@@ -103,16 +103,11 @@ module('Unit | Boxel execution graph', function () {
 
     for (let format of compactFormats) {
       assert.deepEqual(
-        decideBoxelExecution(policy({ prefersFullSandbox: true, format })),
-        { mode: 'capsule', reason: `ses-only-format:${format}` },
-        `prefersFullSandbox cannot create a ${format} iframe`,
-      );
-      assert.deepEqual(
         decideBoxelExecution(
           policy({ trusted: true, prefersFullSandbox: true, format }),
         ),
-        { mode: 'direct', reason: 'trusted-boxel-module' },
-        `a compact trusted ${format} is not weakened from Direct to Capsule`,
+        { mode: 'sandbox', reason: 'prefers-full-sandbox' },
+        `an explicit trusted ${format} request may strengthen to Sandbox`,
       );
     }
 

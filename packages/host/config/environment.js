@@ -206,6 +206,16 @@ module.exports = function (environment) {
       ? defaults.boxelSandboxRuntimeURL
       : process.env.BOXEL_SANDBOX_RUNTIME_URL ||
         defaults.boxelSandboxRuntimeURL,
+    // Exact, Host-owned development/preview trust grants. These are module
+    // identities, never realm roots: granting one inspectable fixture does
+    // not promote neighboring authored code. Production has no grants unless
+    // its deployment explicitly supplies them.
+    boxelExecutionTrustedModules: (
+      process.env.BOXEL_EXECUTION_TRUSTED_MODULES || ''
+    )
+      .split(',')
+      .map((identifier) => identifier.trim())
+      .filter(Boolean),
     // The live test realm-server's /test/ realm — used by host tests
     // that load source modules from it via
     // `tests/helpers#testModuleRealm`. Derived from BOXEL_ENVIRONMENT via

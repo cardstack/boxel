@@ -247,7 +247,12 @@ export default class SubmodeLayout extends Component<Signature> {
     if (!stackItem) {
       return null;
     }
-    return this.store.peek(stackItem.id)?.id;
+    // A document-first Sandbox card deliberately has no canonical CardDef in
+    // the Host Store. Its stack item still carries the authoritative document
+    // id, which is all code mode needs to select the corresponding JSON file.
+    // Prefer the Store's canonicalized id when Direct has one, but do not make
+    // operator-mode navigation depend on Host materialization.
+    return this.store.peek(stackItem.id)?.id ?? stackItem.id;
   }
 
   private get isToggleWorkspaceChooserDisabled() {

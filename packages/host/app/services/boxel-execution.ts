@@ -14,6 +14,7 @@ import {
   isFileDefInstance,
   isResolvedCodeRef,
   isSingleCardDocument,
+  isSingleFileMetaDocument,
   getAncestor,
   Loader,
   localId,
@@ -22,16 +23,23 @@ import {
   realmURL as realmURLSymbol,
   relativeTo as relativeToSymbol,
   rri,
+  SupportedMimeType,
   withReauthenticationAllowed,
   type CodeRef,
   type FieldDefinition,
   type JSONValue,
+  type LinkableResource,
   type LooseCardResource,
+  type LooseLinkableResource,
   type LooseSingleCardDocument,
+  type LooseSingleFileMetaDocument,
+  type Meta,
   type PrerenderedHtmlFormat,
   type Query,
   type RealmResourceIdentifier,
+  type Relationship,
   type SurfaceHandle,
+  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import { createBoxelFieldPortal } from '@cardstack/host/components/boxel-field-portal';
@@ -85,6 +93,7 @@ import SandboxRuntimeProcess, {
 } from '@cardstack/host/lib/sandbox-runtime-process';
 import { constrainSandboxWriteDocument } from '@cardstack/host/lib/sandbox-write-transport';
 import {
+  documentExecutionModeFor,
   isImplicitSandboxModule,
   isTrustedImport,
   isTrustedModule,
@@ -106,6 +115,14 @@ import type {
   Format,
 } from '@cardstack/base/card-api';
 
+const executionCapabilityProbeModule = new URL(
+  'execution-capability-probe',
+  config.resolvedBaseRealmURL,
+).href;
+const executionCapabilityProbeRRI =
+  '@cardstack/base/execution-capability-probe';
+let executionCapabilityProbeSource: Promise<string> | undefined;
+
 interface HostBoundaryQuerySeed {
   instance: BaseDef;
   fieldName: string;
@@ -113,8 +130,8 @@ interface HostBoundaryQuerySeed {
   searchURL: string;
 }
 
-export interface PreparedSandboxDocumentExecution {
-  request: BoundaryBoxelExecutionRequest;
+export interface PreparedBoxelDocumentExecution {
+  request: BoxelExecutionRequest;
   classification: BoxelSourceClassification;
 }
 
@@ -195,9 +212,28 @@ export default class BoxelExecutionService extends Service {
    */
   private volatileTokens = new Map<string, { v: number }>();
 
+  private handleExecutionCapabilityProbeRequest = async (
+    request: Request,
+  ): Promise<Response | null> => {
+    if (request.url !== executionCapabilityProbeModule) {
+      return null;
+    }
+    return new Response(await this.sourceFor(executionCapabilityProbeModule), {
+      headers: { 'content-type': 'text/javascript' },
+    });
+  };
+
   constructor(owner: Owner) {
     super(owner);
-    registerDestructor(this, () => this.destroyEngine());
+    this.network.mount(this.handleExecutionCapabilityProbeRequest, {
+      prepend: true,
+    });
+    registerDestructor(this, () => {
+      this.network.virtualNetwork.unmount(
+        this.handleExecutionCapabilityProbeRequest,
+      );
+      this.destroyEngine();
+    });
   }
 
   createSession(): BoxelExecutionSession {
@@ -326,11 +362,16 @@ export default class BoxelExecutionService extends Service {
   classifyForExecution(
     moduleIdentifier: string,
     source: string,
+    onAuthoredModuleDiscovered?: (moduleIdentifier: string) => void,
   ): Promise<BoxelSourceClassification> {
     this.ensureExecutionEngine();
     // `classify` is the module graph API, not Ember's String extension.
     // eslint-disable-next-line ember/no-string-prototype-extensions
-    return this.classifier!.classify(moduleIdentifier, source);
+    return this.classifier!.classify(
+      moduleIdentifier,
+      source,
+      onAuthoredModuleDiscovered,
+    );
   }
 
   /**
@@ -398,39 +439,38 @@ export default class BoxelExecutionService extends Service {
   }
 
   /**
-   * Secure Sandbox admission from an inert realm document. Unlike
-   * `requestFor(BaseDef)`, this path never asks the Host Store or Card API to
-   * materialize the authored type. The module graph is classified from source
-   * bytes, denied to the Host Loader, and then handed to the child runtime as
-   * a JSON:API document.
-   *
-   * This is intentionally a Sandbox-only vertical slice. Direct admission
-   * will share the document-first prefix, but may invoke the Host Loader only
-   * after a separate trusted-provenance decision.
+   * The single Host document entry for Direct and Sandbox execution.
+   * Classification happens from inert metadata and source bytes before any
+   * authored module can reach the Host Loader. Trusted platform documents may
+   * then materialize through Direct; every authored document is denied to the
+   * Host Loader and materializes only inside the Sandbox child.
    */
-  async prepareSandboxURL(
+  async prepareDocumentURL(
     cardURL: string,
     format: Format | undefined,
     surfaceId: string,
-  ): Promise<PreparedSandboxDocumentExecution> {
+    hostRequestedMode?: 'direct' | 'sandbox',
+  ): Promise<PreparedBoxelDocumentExecution> {
     let document = await this.cardService.fetchJSON(cardURL);
     if (!isSingleCardDocument(document)) {
       throw new Error(`Unable to load a card document for ${cardURL}`);
     }
-    return this.prepareSandboxDocument(
+    return this.prepareDocument(
       document,
       format,
       surfaceId,
       rri(cardURL),
+      hostRequestedMode,
     );
   }
 
-  async prepareSandboxDocument(
+  async prepareDocument(
     inputDocument: LooseSingleCardDocument,
     format: Format | undefined,
     surfaceId: string,
     relativeTo?: RealmResourceIdentifier,
-  ): Promise<PreparedSandboxDocumentExecution> {
+    hostRequestedMode?: 'direct' | 'sandbox',
+  ): Promise<PreparedBoxelDocumentExecution> {
     if (!inputDocument.data) {
       throw new Error('Cannot execute a Boxel without a document resource');
     }
@@ -450,31 +490,151 @@ export default class BoxelExecutionService extends Service {
       this.network.virtualNetwork,
     );
     if (!isResolvedCodeRef(resolvedRef)) {
-      throw new Error('Sandbox document adoptsFrom must resolve to a module');
+      throw new Error('Boxel document adoptsFrom must resolve to a module');
     }
     let moduleIdentifier = resolvedRef.module;
-    if (isTrustedImport(moduleIdentifier)) {
+    let documentExecutionMode = documentExecutionModeFor(moduleIdentifier);
+    let trusted = documentExecutionMode === 'direct';
+    if (hostRequestedMode === 'direct' && !trusted) {
       throw new Error(
-        `Sandbox document admission expects an authored module, received trusted module ${moduleIdentifier}`,
+        `Host cannot force authored module ${moduleIdentifier} into Direct execution`,
+      );
+    }
+    let source = '';
+    let classification: BoxelSourceClassification;
+    if (trusted) {
+      classification = {
+        tier: 'capsule',
+        reason: 'trusted-boxel-module',
+        imports: [],
+        signals: [],
+        moduleGraph: [moduleIdentifier],
+        propagatesToImporters: false,
+        authoredEditTemplate: false,
+      };
+    } else {
+      // Block the entry before the first await in graph classification. This
+      // closes the window in which another Host path could import the module
+      // while its source and dependencies are being inspected.
+      this.loaderService.denyHostModuleEvaluation([moduleIdentifier]);
+      source = await this.sourceFor(moduleIdentifier);
+      let analyzedGraph = await this.classifyForExecution(
+        moduleIdentifier,
+        source,
+        (identifier) =>
+          this.loaderService.denyHostModuleEvaluation([identifier]),
+      );
+      // The document protocol has exactly two execution classes. Static
+      // analysis still enumerates the child-readable module graph and its
+      // diagnostics, but it does not choose an execution tier: any authored
+      // entry outside the trusted platform boundary runs in Sandbox.
+      classification = {
+        ...analyzedGraph,
+        tier: 'sandbox',
+        reason: 'untrusted-boxel-module',
+      };
+      this.loaderService.denyHostModuleEvaluation(
+        classification.moduleGraph.filter(
+          (identifier) => !isTrustedImport(identifier),
+        ),
       );
     }
 
-    // Block the entry before the first await in graph classification. This
-    // closes the window in which another Host path could import the module
-    // while its source and dependencies are being inspected.
-    this.loaderService.denyHostModuleEvaluation([moduleIdentifier]);
-    let source = await this.sourceFor(moduleIdentifier);
-    let classification = await this.classifyForExecution(
-      moduleIdentifier,
-      source,
+    // A raw realm document carries relationship links but ordinarily no
+    // side-loaded resources. The classic Store path filled that graph while
+    // materializing the live card. Document-first execution cannot use that
+    // path, so expand only the exact links declared by the document, with a
+    // hard graph bound, before handing the inert snapshot to its runtime.
+    let document = await hydrateBoxelDocumentGraph(
+      inputDocument,
+      documentBase,
+      async (url) => {
+        try {
+          let linked = await this.cardService.fetchJSON(url);
+          if (isSingleCardDocument(linked)) {
+            return linked;
+          }
+          if (isSingleFileMetaDocument(linked)) {
+            // A card-mime request for a binary relationship returns the
+            // minimal file-meta fallback. Ask for the explicit file-meta
+            // representation so index-derived attributes (duration,
+            // dimensions, frontmatter, and future FileDef fields) cross the
+            // document boundary too. This remains inert JSON; neither request
+            // admits the FileDef module to the Host Loader.
+            let enriched = await this.cardService.fetchJSON(url, {
+              headers: { Accept: SupportedMimeType.FileMeta },
+            });
+            return isSingleFileMetaDocument(enriched) ? enriched : linked;
+          }
+          return undefined;
+        } catch {
+          // Preserve a broken relationship as a broken relationship. One
+          // inaccessible target must not make the root document unloadable.
+          return undefined;
+        }
+      },
     );
-    this.loaderService.denyHostModuleEvaluation(
-      classification.moduleGraph.filter(
-        (identifier) => !isTrustedImport(identifier),
-      ),
+    let declaredModules = documentDeclaredModuleIdentifiers(
+      document,
+      documentBase,
+      this.network.virtualNetwork,
     );
-
-    let document = structuredClone(inputDocument);
+    let untrustedDeclaredModules = declaredModules.filter(
+      (identifier) => !isTrustedModule(identifier),
+    );
+    if (untrustedDeclaredModules.length > 0) {
+      // Trust is a property of the complete compositional document, not only
+      // its root type. A trusted Base workspace that contains an authored
+      // card must not trick Direct into materializing that linked type in the
+      // Host Store. Conservatively route the whole surface to Sandbox, while
+      // still granting only the exact declared modules to the child.
+      this.loaderService.denyHostModuleEvaluation(untrustedDeclaredModules);
+      if (hostRequestedMode === 'direct') {
+        throw new Error(
+          `Host cannot force a document containing authored modules into Direct execution`,
+        );
+      }
+      let linkedClassifications = await Promise.all(
+        untrustedDeclaredModules
+          .filter((identifier) => identifier !== moduleIdentifier)
+          .map(async (identifier) => {
+            let linkedSource = await this.sourceFor(identifier);
+            return this.classifyForExecution(
+              identifier,
+              linkedSource,
+              (discoveredIdentifier) =>
+                this.loaderService.denyHostModuleEvaluation([
+                  discoveredIdentifier,
+                ]),
+            );
+          }),
+      );
+      let classifications = [classification, ...linkedClassifications];
+      classification = {
+        tier: 'sandbox',
+        reason: 'untrusted-document-graph',
+        imports: [...new Set(classifications.flatMap((item) => item.imports))],
+        signals: [...new Set(classifications.flatMap((item) => item.signals))],
+        moduleGraph: [
+          ...new Set([
+            ...declaredModules,
+            ...classifications.flatMap((item) => item.moduleGraph),
+          ]),
+        ],
+        propagatesToImporters: classifications.some(
+          (item) => item.propagatesToImporters,
+        ),
+        authoredEditTemplate: classifications.some(
+          (item) => item.authoredEditTemplate,
+        ),
+      };
+      this.loaderService.denyHostModuleEvaluation(
+        classification.moduleGraph.filter(
+          (identifier) => !isTrustedImport(identifier),
+        ),
+      );
+      trusted = false;
+    }
     document.data.meta = {
       ...document.data.meta,
       adoptsFrom: resolvedRef,
@@ -483,26 +643,34 @@ export default class BoxelExecutionService extends Service {
       operationId: `${surfaceId}:${++this.nextPerformanceOperation}`,
       occurrenceId: surfaceId,
     };
-    return {
-      classification,
-      request: {
-        principal: this.principal,
-        surfaceId,
-        trusted: false,
-        format: format ?? 'isolated',
-        moduleIdentifier,
-        source,
-        relativeTo: documentBase,
-        purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
-        resource: document.data,
-        document,
-        // This API is an explicit stronger-boundary admission. It never
-        // falls back to Capsule even when the source itself needs no browser
-        // globals.
-        prefersFullSandbox: true,
-        performance,
-      },
+    let common = {
+      principal: this.principal,
+      surfaceId,
+      trusted,
+      format: format ?? 'isolated',
+      moduleIdentifier,
+      source,
+      relativeTo: documentBase,
+      purpose:
+        format === 'edit'
+          ? ('interactive-edit' as const)
+          : ('host-display' as const),
+      resource: document.data,
+      document,
+      performance,
     };
+    let request: BoxelExecutionRequest =
+      trusted && hostRequestedMode !== 'sandbox'
+        ? { ...common, hostRequestedMode: 'direct' }
+        : {
+            ...common,
+            hostRequestedMode: undefined,
+            // The document-first API intentionally exposes only Direct and
+            // Sandbox. Authored documents never enter the legacy Capsule tier,
+            // regardless of source classification or render format.
+            prefersFullSandbox: true,
+          };
+    return { classification, request };
   }
 
   async requestFor(
@@ -548,20 +716,31 @@ export default class BoxelExecutionService extends Service {
     let moduleIdentifier = identity.module;
     this.ensureLocalIdentity(card);
 
-    // Direct is the canonical-Store adapter of the rendering protocol. It
-    // needs the Card API for live projection, but it has no serialization or
-    // source boundary: the engine retains `canonicalCard` and the Direct
-    // runtime derives its render record from that instance. Avoid building a
-    // complete included JSON:API graph (and fetching source) only to discard
-    // both during materialization. Besides reducing allocation pressure, this
-    // makes the request payload state the actual authority being transferred.
+    // Existing callers already hold the canonical Direct instance, but the
+    // protocol still carries the same inert document payload as Sandbox. The
+    // engine may retain the canonical object as a Host-only optimization;
+    // document-first callers omit it and Direct materializes this document.
     if (hostRequestedMode === 'direct') {
-      let api = await recordExecutionPromise(
-        performance,
-        'card-api',
-        this.cardService.getAPI(),
-      );
+      let [document, api] = await Promise.all([
+        recordExecutionPromise(
+          performance,
+          'serialize',
+          this.cardService.serializeCard(card as never, {
+            withIncluded: true,
+            includeUnrenderedFields: true,
+            useAbsoluteURL: true,
+          }),
+        ),
+        recordExecutionPromise(
+          performance,
+          'card-api',
+          this.cardService.getAPI(),
+        ),
+      ]);
       this.cardAPI = api;
+      if (!document.data) {
+        throw new Error('Cannot execute a Boxel without a serialized resource');
+      }
       let request: DirectBoxelExecutionRequest = {
         principal: this.principal,
         surfaceId,
@@ -572,11 +751,16 @@ export default class BoxelExecutionService extends Service {
         source: '',
         relativeTo: relativeTo ?? executionRelativeTo(card),
         purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
+        resource: document.data,
+        document,
         canonicalCard: card,
         performance,
       };
       requestStage.finish({
-        counters: { includedResources: 0, sourceCharacters: 0 },
+        counters: {
+          includedResources: document.included?.length ?? 0,
+          sourceCharacters: 0,
+        },
       });
       return request;
     }
@@ -895,6 +1079,59 @@ export default class BoxelExecutionService extends Service {
   }
 
   /**
+   * Document-first counterpart to `connectSandboxInstanceSync`'s write leg.
+   *
+   * An authored document is deliberately never materialized in the Host, so
+   * there is no canonical CardDef to mutate or subscribe to. The child may
+   * nevertheless propose a complete replacement for the one root document it
+   * was given. The Host rechecks identity and the originally projected
+   * relationship neighborhood, then persists through the ordinary authenticated
+   * card endpoint. No Store, Loader, card instance, or credential crosses the
+   * iframe boundary.
+   */
+  connectSandboxDocumentSync(
+    initialDocument: LooseSingleCardDocument,
+    process: SandboxRuntimeProcess,
+  ): () => void {
+    let authorizedDocument = structuredClone(initialDocument);
+    return process.setChildWriteReceiver(async (incomingDocument) => {
+      let cardId = authorizedDocument.data?.id;
+      let incomingId = incomingDocument.data?.id;
+      if (typeof cardId !== 'string' || cardId.length === 0) {
+        throw new Error(
+          'Sandbox document write requires a saved root resource',
+        );
+      }
+      if (
+        typeof incomingId !== 'string' ||
+        this.network.virtualNetwork.unresolveURL(incomingId) !==
+          this.network.virtualNetwork.unresolveURL(cardId)
+      ) {
+        throw new Error(
+          `Sandbox document write for '${String(incomingId)}' does not match the card this process renders`,
+        );
+      }
+      let constrainedDocument = constrainSandboxWriteDocument(
+        incomingDocument,
+        authorizedDocument,
+        (id) => this.network.virtualNetwork.unresolveURL(id),
+      );
+      let saved = await this.cardService.fetchJSON(cardId, {
+        method: 'PATCH',
+        body: JSON.stringify(constrainedDocument, null, 2),
+        headers: { 'Content-Type': SupportedMimeType.CardJson },
+      });
+      if (!isSingleCardDocument(saved)) {
+        throw new Error(
+          `Sandbox document write for '${cardId}' did not return a card document`,
+        );
+      }
+      authorizedDocument = structuredClone(saved);
+      console.debug('[sandbox-parent] document write applied', { id: cardId });
+    });
+  }
+
+  /**
    * The projected execution document for `card`'s CURRENT state — the same
    * serialization `requestFor()` performs at materialize time, factored so
    * the RP-20.5 push delivers documents identical in shape to the one the
@@ -1127,7 +1364,8 @@ export default class BoxelExecutionService extends Service {
    *
    * This is presentation data only: it is never materialized into the Store,
    * never receives event handlers, and cannot acquire a Surface capability.
-   * The live Capsule or Sandbox rendering replaces it atomically when ready.
+   * Handoff callers may replace it atomically with a live rendering. Fitted
+   * composition retains it as the complete non-interactive rendering.
    */
   async prerenderedComponentFor(
     card: BaseDef,
@@ -1138,7 +1376,19 @@ export default class BoxelExecutionService extends Service {
     if (!cardId) {
       return undefined;
     }
+    return this.prerenderedComponentForURL(cardId, format);
+  }
 
+  /**
+   * URL-addressed form of `prerenderedComponentFor` for document-first
+   * composition. It deliberately avoids materializing a CardDef in the Host:
+   * fitted galleries can render indexed HTML without creating one Sandbox
+   * iframe per cell or admitting authored code to the Host Loader.
+   */
+  async prerenderedComponentForURL(
+    cardId: string,
+    format: Format | undefined,
+  ): Promise<HTMLComponent | undefined> {
     // An isolated surface prefers its own stored rendering, falling back to
     // embedded while an index that predates isolated storage catches up. An
     // edit surface uses embedded as its inert handoff image; the live
@@ -1557,6 +1807,24 @@ export default class BoxelExecutionService extends Service {
   }
 
   private async sourceFor(moduleIdentifier: string): Promise<string> {
+    // This is a deliberately narrow Host-owned demonstration module. It is
+    // shipped as source (rather than imported as a live class) so Direct and
+    // Sandbox both exercise the same Loader + Render Protocol path. Keeping
+    // the override on one exact package identifier prevents the demo from
+    // becoming a general mechanism for promoting authored realm modules.
+    if (
+      moduleIdentifier === executionCapabilityProbeModule ||
+      moduleIdentifier === executionCapabilityProbeRRI
+    ) {
+      executionCapabilityProbeSource ??= (async () => {
+        let [{ default: source }, { transpileJS }] = await Promise.all([
+          import('../../../base/execution-capability-probe.gts?raw'),
+          import('@cardstack/runtime-common/transpile'),
+        ]);
+        return transpileJS(source, '/execution-capability-probe.gts');
+      })();
+      return executionCapabilityProbeSource;
+    }
     // A shim's executable identity is already installed in the Host Loader.
     // It has no independent realm source to fetch (and Direct is the only
     // runtime allowed to consume it), but the RP classifier still needs a
@@ -1622,6 +1890,227 @@ export default class BoxelExecutionService extends Service {
     this.engine = undefined;
     this.classifier = undefined;
     this.router = undefined;
+  }
+}
+
+const MAX_DOCUMENT_GRAPH_RESOURCES = 256;
+const MAX_DOCUMENT_GRAPH_DEPTH = 16;
+
+interface DocumentGraphWork {
+  resource: DocumentGraphResource;
+  base: string;
+  depth: number;
+}
+
+interface DocumentGraphLink {
+  relationship: Relationship;
+  url: string;
+  depth: number;
+}
+
+type DocumentGraphResource = LooseLinkableResource<LinkableResource>;
+
+/**
+ * Expand the bounded relationship graph declared by an inert card document.
+ *
+ * This is the document-first equivalent of `serializeCard({ withIncluded:
+ * true })`, but it never constructs a CardDef and therefore never invokes the
+ * Host Loader. Only explicit relationship `self`/`related` links are fetched;
+ * query links and arbitrary attribute URLs do not become authority.
+ */
+export async function hydrateBoxelDocumentGraph(
+  input: LooseSingleCardDocument,
+  relativeTo: RealmResourceIdentifier | undefined,
+  fetchDocument: (
+    url: string,
+  ) => Promise<
+    LooseSingleCardDocument | LooseSingleFileMetaDocument | undefined
+  >,
+): Promise<LooseSingleCardDocument> {
+  let document = structuredClone(input);
+  let root = document.data;
+  let rootBase = absoluteDocumentResourceId(root, relativeTo?.toString());
+  if (!rootBase) {
+    return document;
+  }
+
+  let included = (document.included ??= []);
+  let known = new Map<string, DocumentGraphResource>();
+  let queued = new Set<string>();
+  let queue: DocumentGraphWork[] = [];
+
+  let addResource = (
+    candidate: DocumentGraphResource,
+    fallbackBase: string,
+    depth: number,
+    addToIncluded: boolean,
+  ): string | undefined => {
+    let id = absoluteDocumentResourceId(candidate, fallbackBase);
+    if (!id) {
+      return undefined;
+    }
+    candidate.id = id;
+    if (!known.has(id)) {
+      if (known.size >= MAX_DOCUMENT_GRAPH_RESOURCES) {
+        throw new Error(
+          `Boxel document relationship graph exceeds ${MAX_DOCUMENT_GRAPH_RESOURCES} resources`,
+        );
+      }
+      known.set(id, candidate);
+      if (addToIncluded) {
+        included.push(candidate as LinkableResource);
+      }
+    }
+    if (!queued.has(id) && depth <= MAX_DOCUMENT_GRAPH_DEPTH) {
+      queued.add(id);
+      queue.push({ resource: candidate, base: id, depth });
+    }
+    return id;
+  };
+
+  addResource(root, rootBase, 0, false);
+  for (let candidate of [...included]) {
+    if (candidate.type === 'card' || candidate.type === 'file-meta') {
+      addResource(candidate, rootBase, 0, false);
+    }
+  }
+
+  let fetched = new Map<
+    string,
+    Promise<LooseSingleCardDocument | LooseSingleFileMetaDocument | undefined>
+  >();
+  while (queue.length > 0) {
+    let layer = queue.splice(0);
+    let links: DocumentGraphLink[] = [];
+    for (let { resource, base, depth } of layer) {
+      if (depth >= MAX_DOCUMENT_GRAPH_DEPTH) {
+        continue;
+      }
+      for (let relationshipValue of Object.values(
+        resource.relationships ?? {},
+      )) {
+        for (let relationship of Array.isArray(relationshipValue)
+          ? relationshipValue
+          : [relationshipValue]) {
+          let link = relationship.links?.self ?? relationship.links?.related;
+          if (!link) {
+            continue;
+          }
+          let url: string;
+          try {
+            url = new URL(link, base).href;
+          } catch {
+            continue;
+          }
+          links.push({ relationship, url, depth: depth + 1 });
+          if (!known.has(url) && !fetched.has(url)) {
+            fetched.set(url, fetchDocument(url));
+          }
+        }
+      }
+    }
+
+    await Promise.all(fetched.values());
+    for (let { relationship, url, depth } of links) {
+      let target = known.get(url);
+      let linkedDocument = target ? undefined : await fetched.get(url);
+      if (linkedDocument?.data) {
+        let linkedRoot = linkedDocument.data;
+        let targetId = addResource(linkedRoot, url, depth, true);
+        if (targetId) {
+          target = known.get(targetId);
+        }
+        for (let candidate of linkedDocument.included ?? []) {
+          if (candidate.type === 'card' || candidate.type === 'file-meta') {
+            addResource(candidate, targetId ?? url, depth, true);
+          }
+        }
+      }
+      if (target?.id) {
+        relationship.data = {
+          type: target.type ?? 'card',
+          id: target.id,
+        };
+      }
+    }
+  }
+
+  if (included.length === 0) {
+    delete document.included;
+  }
+  return document;
+}
+
+function absoluteDocumentResourceId(
+  resource: DocumentGraphResource,
+  fallback: string | undefined,
+): string | undefined {
+  let id = resource.id ?? fallback;
+  if (!id) {
+    return undefined;
+  }
+  try {
+    return new URL(id, fallback).href;
+  } catch {
+    return id;
+  }
+}
+
+function documentDeclaredModuleIdentifiers(
+  document: LooseSingleCardDocument,
+  relativeTo: RealmResourceIdentifier | undefined,
+  virtualNetwork: VirtualNetwork,
+): string[] {
+  let modules = new Set<string>();
+  for (let resource of [document.data, ...(document.included ?? [])]) {
+    if (!resource.meta) {
+      continue;
+    }
+    let resourceBase = relativeTo;
+    if (typeof resource.id === 'string') {
+      try {
+        resourceBase = rri(new URL(resource.id, relativeTo?.toString()).href);
+      } catch {
+        // A local/opaque id cannot improve on the document's own base.
+      }
+    }
+    resolveDocumentMetaCodeRefs(
+      resource.meta,
+      resourceBase,
+      virtualNetwork,
+      modules,
+    );
+  }
+  return [...modules];
+}
+
+function resolveDocumentMetaCodeRefs(
+  meta: Partial<Meta>,
+  relativeTo: RealmResourceIdentifier | undefined,
+  virtualNetwork: VirtualNetwork,
+  modules: Set<string>,
+): void {
+  if (meta.adoptsFrom) {
+    let resolved = codeRefWithAbsoluteIdentifier(
+      meta.adoptsFrom,
+      relativeTo,
+      undefined,
+      virtualNetwork,
+    );
+    if (isResolvedCodeRef(resolved)) {
+      meta.adoptsFrom = resolved;
+      modules.add(resolved.module);
+    }
+  }
+  for (let fieldMeta of Object.values(meta.fields ?? {})) {
+    for (let nestedMeta of Array.isArray(fieldMeta) ? fieldMeta : [fieldMeta]) {
+      resolveDocumentMetaCodeRefs(
+        nestedMeta,
+        relativeTo,
+        virtualNetwork,
+        modules,
+      );
+    }
   }
 }
 

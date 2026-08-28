@@ -26,6 +26,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
+import BoxelDocumentRenderer from '@cardstack/host/components/boxel-document-renderer';
 import Auth from '@cardstack/host/components/matrix/auth';
 
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
@@ -56,9 +57,12 @@ const waiter = buildWaiter('operator-mode-container:saveCard-waiter');
 
 interface Signature {
   Args: {
-    onClose: () => void;
+    onClose?: () => void;
   };
   Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
@@ -141,6 +145,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       // populated alongside toolContext for content still reading the
       // pre-rename spelling
       commandContext: this.toolContext,
+      surfaceCardComponent: BoxelDocumentRenderer,
       searchResultsComponent: SearchResults,
       markdownEmbedChooser: this.markdownEmbedChooser,
       mode: 'operator',
@@ -197,7 +202,13 @@ export default class OperatorModeContainer extends Component<Signature> {
       {{else if this.isHostMode}}
         <HostSubmode />
       {{else}}
-        <InteractSubmode />
+        {{#if (has-block)}}
+          <InteractSubmode>
+            {{yield}}
+          </InteractSubmode>
+        {{else}}
+          <InteractSubmode />
+        {{/if}}
       {{/if}}
     </div>
 

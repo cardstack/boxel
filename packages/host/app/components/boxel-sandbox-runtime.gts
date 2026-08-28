@@ -9,6 +9,7 @@ import ContextProvider from 'ember-provide-consume-context/components/context-pr
 import { initSync, parse } from 'es-module-lexer';
 
 import {
+  CardCrudFunctionsContextName,
   CardContextName,
   DefaultFormatsContextName,
   Loader,
@@ -46,10 +47,12 @@ import type { BoxelSandboxRuntimeModel } from '@cardstack/host/routes/boxel-sand
 import type NetworkService from '@cardstack/host/services/network';
 
 import type {
+  CardCrudFunctions,
   CardContext,
   CardDef,
   FieldType,
   Format,
+  ViewCardFn,
 } from '@cardstack/base/card-api';
 import type { ComponentLike } from '@glint/template';
 import type Modifier from 'ember-modifier';
@@ -522,6 +525,8 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
   private writeClient?: SandboxWriteClient;
   /** Narrow user-navigation capability; never exposes the Host router. */
   private viewCardClient?: SandboxViewCardClient;
+  /** Open only for the synchronous lifetime of one genuine click/key event. */
+  private trustedUserGesture = false;
   /** The root is already open. Only nested card registrations navigate. */
   private renderedCardId?: string;
   /** Coordinator for implicit mutations and explicit SaveCardTool flushes. */
@@ -632,6 +637,73 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
     },
   );
 
+  /**
+   * Base's ordinary card templates receive navigation through
+   * CardCrudFunctionsContextName. The child gets only this one bounded
+   * capability: it sends an identifier and presentation metadata to the
+   * parent, which still owns admission, authorization, and stack mutation.
+   *
+   * The capture listener opens the capability for the current event task of
+   * one real click/key gesture. This permits the ordinary synchronous and
+   * microtask-based Glimmer action paths, while construction, render, a later
+   * timer, and synthetic events cannot make the Host navigate.
+   */
+  private observeTrustedUserGesture = modifier((element: Element) => {
+    let clearGesture: ReturnType<typeof setTimeout> | undefined;
+    let begin = (event: Event) => {
+      if (!event.isTrusted) {
+        return;
+      }
+      this.trustedUserGesture = true;
+      if (clearGesture !== undefined) {
+        clearTimeout(clearGesture);
+      }
+      clearGesture = setTimeout(() => {
+        this.trustedUserGesture = false;
+        clearGesture = undefined;
+      });
+    };
+    element.addEventListener('click', begin, true);
+    element.addEventListener('keydown', begin, true);
+    return () => {
+      if (clearGesture !== undefined) {
+        clearTimeout(clearGesture);
+      }
+      this.trustedUserGesture = false;
+      element.removeEventListener('click', begin, true);
+      element.removeEventListener('keydown', begin, true);
+    };
+  });
+
+  private viewCard: ViewCardFn = (cardOrURL, format = 'isolated', options) => {
+    if (!this.trustedUserGesture) {
+      console.warn(
+        '[sandbox-child] ignored viewCard outside a trusted user gesture',
+      );
+      return;
+    }
+    let cardId =
+      typeof cardOrURL === 'string'
+        ? cardOrURL
+        : cardOrURL instanceof URL
+          ? cardOrURL.href
+          : cardOrURL.id;
+    if (typeof cardId !== 'string' || cardId.length === 0) {
+      return;
+    }
+    void this.viewCardClient
+      ?.viewCard(cardId, format, {
+        ...(options?.fieldType ? { fieldType: options.fieldType } : {}),
+        ...(options?.fieldName ? { fieldName: options.fieldName } : {}),
+      })
+      .catch((error) => {
+        console.error('Sandbox card navigation failed', error);
+      });
+  };
+
+  private readonly cardCrudFunctions: Pick<CardCrudFunctions, 'viewCard'> =
+    Object.freeze({ viewCard: this.viewCard });
+
   @consume(CardContextName)
   declare private inheritedCardContext: CardContext | undefined;
 
@@ -643,6 +715,10 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       ...this.inheritedCardContext,
       toolContext: this.sandboxToolContext,
       commandContext: this.sandboxToolContext,
+      // Nested document admission is a Host capability, not ambient child
+      // authority. Sandbox cards navigate through the explicit view-card
+      // transport instead of recursively selecting execution themselves.
+      surfaceCardComponent: undefined,
       cardComponentModifier: this
         .cardNavigationModifier as unknown as typeof Modifier,
     } as CardContext;
@@ -679,13 +755,31 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
       // native fetch, preserving ordinary public CORS resources without
       // broadening authenticated Realm access.
       let authoredFetch: typeof globalThis.fetch = async (input, init) => {
+        let requestURL =
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.href
+              : String(input);
+        let requestMethod =
+          input instanceof Request ? input.method : (init?.method ?? 'GET');
         try {
           return await resourceFetch(input, init);
-        } catch {
-          return globalThis.fetch(input, {
-            ...init,
-            credentials: 'omit',
-          });
+        } catch (grantError) {
+          try {
+            return await globalThis.fetch(input, {
+              ...init,
+              credentials: 'omit',
+            });
+          } catch (networkError) {
+            // Deliberately omit headers and bodies: this is a boundary-lane
+            // diagnostic, not a request dump. URL + method are enough to tell
+            // a missing RP grant from an ordinary public-CORS failure.
+            console.warn(
+              `[sandbox-child] authored fetch denied and failed: ${requestMethod} ${requestURL}; grant=${String(grantError)}; network=${String(networkError)}`,
+            );
+            throw networkError;
+          }
         }
       };
       loaderFacade = new Proxy(this.loader, {
@@ -998,30 +1092,36 @@ export default class BoxelSandboxRuntime extends Component<Signature> {
 
   <template>
     <ContextProvider @key={{CardContextName}} @value={{this.cardContext}}>
-      {{#if this.error}}
-        <p class='boxel-sandbox-runtime__error' role='alert'>
-          {{this.error.message}}
-        </p>
-      {{else if this.surface}}
-        <main
-          class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}
-            boxel-sandbox-runtime--{{this.heightMode}}'
-          data-boxel-sandbox-runtime
-          {{attachSurface
-            this.surface
-            this.measureAndReportRenderDiagnostic
-            this.heightMode
-            this.mediaFetch
-          }}
-        >
-          {{#if this.renderedComponent}}
-            <this.renderedComponent
-              @format={{this.format}}
-              @context={{this.cardContext}}
-            />
-          {{/if}}
-        </main>
-      {{/if}}
+      <ContextProvider
+        @key={{CardCrudFunctionsContextName}}
+        @value={{this.cardCrudFunctions}}
+      >
+        {{#if this.error}}
+          <p class='boxel-sandbox-runtime__error' role='alert'>
+            {{this.error.message}}
+          </p>
+        {{else if this.surface}}
+          <main
+            class='boxel-sandbox-runtime boxel-sandbox-runtime--{{this.format}}
+              boxel-sandbox-runtime--{{this.heightMode}}'
+            data-boxel-sandbox-runtime
+            {{this.observeTrustedUserGesture}}
+            {{attachSurface
+              this.surface
+              this.measureAndReportRenderDiagnostic
+              this.heightMode
+              this.mediaFetch
+            }}
+          >
+            {{#if this.renderedComponent}}
+              <this.renderedComponent
+                @format={{this.format}}
+                @context={{this.cardContext}}
+              />
+            {{/if}}
+          </main>
+        {{/if}}
+      </ContextProvider>
     </ContextProvider>
     <style scoped>
       :global(html),

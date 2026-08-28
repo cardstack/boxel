@@ -226,10 +226,12 @@ export default class CodeSubmode extends Component<Signature> {
       if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
         return undefined;
       }
-      // this includes all JSON files, but the card resource is smart enough
-      // to skip JSON that are not card instances
-      let url = this.codePath.href.replace(/\.json$/, '');
-      return url;
+      // JSON files are inspected as inert documents. A card document enters
+      // the shared Direct/Sandbox document path in ModuleInspector; any other
+      // JSON remains an ordinary file. Calling getCard here would evaluate an
+      // authored definition in the Host before the execution policy can
+      // classify it.
+      return undefined;
     });
   };
 

@@ -3,6 +3,10 @@ import { test } from 'node:test';
 
 import {
   assessReferenceParity,
+  executionRuntimeBroadCorpusCases,
+  executionRuntimeExtendedCorpusCases,
+  executionRuntimeNavigationSoakCases,
+  executionRuntimeSmokeCases,
   normalizeVisibleText,
   summarizeExecutionStages,
   summarizeExecutionRuntimeSmokeRun,
@@ -19,6 +23,23 @@ import {
   executionRuntimeLiveFileCases,
   validateFileTwinCorpus,
 } from './execution-runtime-file-twin-corpus.mjs';
+
+test('the document-first smoke oracle contains only Direct and Sandbox execution', () => {
+  let cases = [
+    ...executionRuntimeSmokeCases,
+    ...executionRuntimeBroadCorpusCases,
+    ...executionRuntimeExtendedCorpusCases,
+    ...executionRuntimeNavigationSoakCases,
+  ];
+  assert.ok(
+    cases.some(({ expectedExecution }) => expectedExecution === 'direct'),
+  );
+  assert.ok(
+    cases.every(({ expectedExecution }) =>
+      ['direct', 'sandbox'].includes(expectedExecution),
+    ),
+  );
+});
 
 function page(overrides = {}) {
   return {

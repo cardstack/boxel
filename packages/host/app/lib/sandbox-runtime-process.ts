@@ -1227,12 +1227,17 @@ export default class SandboxRuntimeProcess implements BoxelRuntime {
 
 /**
  * Exact data-resource authority carried by a projected Boxel document.
- * Relationship links are the protocol's general explicit grant. The one
- * scalar exception is `resourceUrl`: FileDef adapters use that deliberately
- * named field as their wrapper-free projection of a binary resource when the
- * underlying polymorphic FileDef relationship cannot cross a boundary. No
- * other URL-looking string becomes authenticated Host fetch authority merely
- * because authored code can name it.
+ * Relationship links are the protocol's general explicit grant. Two bounded
+ * semantic projections supplement them:
+ *
+ * - `resourceUrl` is FileDef's deliberately named binary-resource grant.
+ * - `_types` is the read-only type inventory for the server-attested realm of
+ *   a projected resource. Workspace and card-browser components need this
+ *   inventory to render, but the child receives no general realm-fetch
+ *   capability.
+ *
+ * No other URL-looking string becomes authenticated Host fetch authority
+ * merely because authored code can name it.
  */
 export function projectedResourceLinks(
   resource: LooseCardResource,
@@ -1245,6 +1250,24 @@ export function projectedResourceLinks(
       candidate.id ?? (candidate === resource ? relativeTo : undefined);
     if (!base) {
       continue;
+    }
+    let realmURL = candidate.meta?.realmURL;
+    if (typeof realmURL === 'string') {
+      try {
+        let realm = new URL(realmURL);
+        let candidateURL = new URL(base);
+        let realmPath = realm.pathname.endsWith('/')
+          ? realm.pathname
+          : `${realm.pathname}/`;
+        if (
+          candidateURL.origin === realm.origin &&
+          candidateURL.pathname.startsWith(realmPath)
+        ) {
+          result.add(canonicalURL(`${realm.origin}${realmPath}_types`));
+        }
+      } catch {
+        // A malformed or mismatched realm claim grants nothing.
+      }
     }
     let resourceUrl = candidate.attributes?.resourceUrl;
     if (typeof resourceUrl === 'string') {

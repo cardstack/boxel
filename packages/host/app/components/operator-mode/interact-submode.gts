@@ -124,6 +124,12 @@ interface CardToDelete {
   title: string;
 }
 
+interface Signature {
+  Blocks: {
+    default: [];
+  };
+}
+
 function isInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   let tag = target.tagName;
@@ -132,7 +138,7 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   return false;
 }
 
-export default class InteractSubmode extends Component {
+export default class InteractSubmode extends Component<Signature> {
   @consume(GetCardContextName) declare private getCard: getCard;
   @consume(GetCardsContextName) declare private getCards: getCards;
   @consume(GetCardCollectionContextName)
@@ -886,87 +892,93 @@ export default class InteractSubmode extends Component {
            shortcut on whatever key produces 'e' on their layout. }}
         {{onKeyMod 'ctrl+e' this.handleToggleEdit}}
       >
-        {{#if this.canCreateNeighborStack}}
-          <NeighborStackTriggerButton
-            class='neighbor-stack-trigger stack-trigger-left'
-            @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
-        {{/if}}
-        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
-          {{#each this.stacks as |stack stackIndex|}}
-            {{#let
-              (get
-                this.stackBackgroundsState.differingBackgroundImageURLs
-                stackIndex
-              )
-              as |backgroundImageURLSpecificToThisStack|
-            }}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class={{cn
-                  'stack'
-                  stack-with-bg-image=backgroundImageURLSpecificToThisStack
-                }}
-                style={{if
-                  backgroundImageURLSpecificToThisStack
-                  (htmlSafe
-                    (concat
-                      'background-image: url('
-                      backgroundImageURLSpecificToThisStack
-                      ')'
+        {{#if (has-block)}}
+          <div class='trusted-interact-content'>
+            {{yield}}
+          </div>
+        {{else}}
+          {{#if this.canCreateNeighborStack}}
+            <NeighborStackTriggerButton
+              class='neighbor-stack-trigger stack-trigger-left'
+              @triggerSide={{SearchSheetTriggers.DropCardToLeftNeighborStackButton}}
+              @activeTrigger={{this.searchSheetTrigger}}
+              @onTrigger={{fn
+                this.showSearchWithTrigger
+                search.openSearchToPrompt
+              }}
+            />
+          {{/if}}
+          <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
+            {{#each this.stacks as |stack stackIndex|}}
+              {{#let
+                (get
+                  this.stackBackgroundsState.differingBackgroundImageURLs
+                  stackIndex
+                )
+                as |backgroundImageURLSpecificToThisStack|
+              }}
+                <OperatorModeStack
+                  data-test-operator-mode-stack={{stackIndex}}
+                  class={{cn
+                    'stack'
+                    stack-with-bg-image=backgroundImageURLSpecificToThisStack
+                  }}
+                  style={{if
+                    backgroundImageURLSpecificToThisStack
+                    (htmlSafe
+                      (concat
+                        'background-image: url('
+                        backgroundImageURLSpecificToThisStack
+                        ')'
+                      )
                     )
-                  )
-                }}
-                @stackItems={{stack}}
-                @stackIndex={{stackIndex}}
-                {{! @glint-expect-error: fn partial application loses async return type }}
-                @createCard={{fn this.createCard stackIndex}}
-                @viewCard={{fn this.viewCard stackIndex}}
-                @saveCard={{this.saveCard}}
-                @editCard={{fn this.editCard stackIndex}}
-                @deleteCard={{this.requestDeleteCard}}
-                @toolContext={{this.toolService.toolContext}}
-                @close={{this.close}}
-                @onSelectedCards={{this.onSelectedCards}}
-                @setupStackItem={{this.setupStackItem}}
-              />
-            {{/let}}
-          {{/each}}
+                  }}
+                  @stackItems={{stack}}
+                  @stackIndex={{stackIndex}}
+                  {{! @glint-expect-error: fn partial application loses async return type }}
+                  @createCard={{fn this.createCard stackIndex}}
+                  @viewCard={{fn this.viewCard stackIndex}}
+                  @saveCard={{this.saveCard}}
+                  @editCard={{fn this.editCard stackIndex}}
+                  @deleteCard={{this.requestDeleteCard}}
+                  @toolContext={{this.toolService.toolContext}}
+                  @close={{this.close}}
+                  @onSelectedCards={{this.onSelectedCards}}
+                  @setupStackItem={{this.setupStackItem}}
+                />
+              {{/let}}
+            {{/each}}
 
-          <CopyButton
-            @selectedCardIds={{this.selectedCardIds}}
-            @copy={{fn (perform this.copy)}}
-            @isCopying={{this.copy.isRunning}}
-          />
-        </div>
-        {{#if this.canCreateNeighborStack}}
-          <NeighborStackTriggerButton
-            class='neighbor-stack-trigger stack-trigger-right'
-            @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
-            @activeTrigger={{this.searchSheetTrigger}}
-            @onTrigger={{fn
-              this.showSearchWithTrigger
-              search.openSearchToPrompt
-            }}
-          />
-        {{/if}}
-        {{#if this.cardToDelete}}
-          <DeleteModal
-            @itemToDelete={{this.cardToDelete}}
-            @onConfirm={{perform this.delete}}
-            @onCancel={{this.onCancelDelete}}
-            @isDeleteRunning={{this.delete.isRunning}}
-          >
-            <:content>
-              Delete the card
-              <strong>{{this.cardToDelete.title}}</strong>?
-            </:content>
-          </DeleteModal>
+            <CopyButton
+              @selectedCardIds={{this.selectedCardIds}}
+              @copy={{fn (perform this.copy)}}
+              @isCopying={{this.copy.isRunning}}
+            />
+          </div>
+          {{#if this.canCreateNeighborStack}}
+            <NeighborStackTriggerButton
+              class='neighbor-stack-trigger stack-trigger-right'
+              @triggerSide={{SearchSheetTriggers.DropCardToRightNeighborStackButton}}
+              @activeTrigger={{this.searchSheetTrigger}}
+              @onTrigger={{fn
+                this.showSearchWithTrigger
+                search.openSearchToPrompt
+              }}
+            />
+          {{/if}}
+          {{#if this.cardToDelete}}
+            <DeleteModal
+              @itemToDelete={{this.cardToDelete}}
+              @onConfirm={{perform this.delete}}
+              @onCancel={{this.onCancelDelete}}
+              @isDeleteRunning={{this.delete.isRunning}}
+            >
+              <:content>
+                Delete the card
+                <strong>{{this.cardToDelete.title}}</strong>?
+              </:content>
+            </DeleteModal>
+          {{/if}}
         {{/if}}
       </div>
     </SubmodeLayout>
@@ -989,6 +1001,12 @@ export default class InteractSubmode extends Component {
         background-position: center;
         background-size: cover;
         height: 100%;
+      }
+      .trusted-interact-content {
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        overflow: auto;
       }
       .stacks {
         flex: 1;

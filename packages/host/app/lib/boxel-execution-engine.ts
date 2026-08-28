@@ -58,8 +58,9 @@ interface CommonBoxelExecutionRequest {
   relativeTo?: RealmResourceIdentifier;
   purpose: MaterializationPurpose;
   /**
-   * Host-only canonical value used exclusively by Direct. It is never passed
-   * to Capsule or Sandbox runtimes and never crosses an execution boundary.
+   * Optional Host-only optimization used exclusively by legacy Direct
+   * callers. Document-first Direct requests omit it and materialize from the
+   * same JSON:API payload as Sandbox. It is never passed across a boundary.
    */
   canonicalCard?: BaseDef;
   /**
@@ -76,18 +77,11 @@ interface CommonBoxelExecutionRequest {
   performance?: BoxelExecutionPerformanceContext;
 }
 
-/**
- * Direct and boundary runtimes share one request protocol, but not one
- * payload. Direct retains the canonical Store instance and must not pay to
- * manufacture a serialized graph that no consumer reads. Capsule and
- * Sandbox have an actual data boundary, so their automatic request carries
- * the cloneable JSON:API document required by `createFromSerialized()`.
- */
+/** Every execution request carries the same inert document payload. */
 export type DirectBoxelExecutionRequest = CommonBoxelExecutionRequest & {
   hostRequestedMode: 'direct';
-  canonicalCard: BaseDef;
-  resource?: never;
-  document?: never;
+  resource: LooseCardResource;
+  document: LooseSingleCardDocument;
 };
 
 export type BoundaryBoxelExecutionRequest = CommonBoxelExecutionRequest & {
@@ -607,6 +601,7 @@ export class BoxelExecutionSession {
       // retains its last-known-good output instead of rendering an unknown
       // record shape.
       assertBoxelExecutionProtocolVersion(renderRecord.protocolVersion);
+      assertBoxelExecutionProtocolVersion(renderRecord.boxel.protocolVersion);
       assertSupportedFeatures(
         renderRecord.boxel.requiredFeatures,
         SUPPORTED_EXECUTION_FEATURES,
@@ -723,9 +718,6 @@ function asError(error: unknown): Error {
  * document — an explicit, per-document grant, not a realm-wide one.
  */
 function documentDeclaredModules(request: BoxelExecutionRequest): string[] {
-  if (request.hostRequestedMode === 'direct') {
-    return [];
-  }
   let modules = modulesConsumedInMeta(request.resource.meta);
   for (let resource of request.document.included ?? []) {
     if (resource.meta) {
@@ -739,10 +731,5 @@ function boundaryPayload(request: BoxelExecutionRequest): {
   resource: LooseCardResource;
   document: LooseSingleCardDocument;
 } {
-  if (request.hostRequestedMode === 'direct') {
-    throw new Error(
-      'A Host-requested Direct payload cannot cross a serialized execution boundary',
-    );
-  }
   return { resource: request.resource, document: request.document };
 }

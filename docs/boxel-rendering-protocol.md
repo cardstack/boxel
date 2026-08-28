@@ -32,6 +32,16 @@ otherwise. `[DEFERRED]` and `[EXCLUDED]` are collected in RP-9.
 Direct is the reference implementation: where this spec is silent, main's
 Direct behavior is the contract.
 
+**RP-0.6** Current branch profile: the document-first Host entry deliberately
+enables only **Direct** for the trusted platform graph and **Sandbox** for any
+document graph containing authored modules. Static source analysis still
+builds the exact child-readable module graph and diagnostics, but it cannot
+select Capsule. `fitted` composition uses indexed, prerendered HTML rather
+than one iframe per tile. The Capsule clauses remain the adapter contract for
+a possible future reintroduction; they are not evidence that current authored
+documents execute there. The browser smoke oracle rejects any current case
+whose expected execution is Capsule.
+
 ---
 
 ## RP-1 Component entry
@@ -134,7 +144,10 @@ container-type: size; min-height 40px; max-height 600px; overflow hidden`;
 `embedded → container-type: inline-size`; `atom → display:contents` /
 `inline-block` by display-container (`field-component.gts:482-540`). The
 named fitted footprints are `FITTED_FORMATS` (`formats.ts:49-166`). Cards
-must not alter geometry at the card boundary.
+must not alter geometry at the card boundary. Every protocol consumer uses
+that same geometry; `BoxelDocumentRenderer` mirrors the Base wrapper contract
+for Direct, Sandbox, and prerendered output instead of inventing execution-
+tier-specific layout rules.
 
 ## RP-3 Fields, model, and component arguments
 
@@ -242,10 +255,15 @@ share its route. A nested Boxel defined in a different module routes
 independently. Authors recover Capsule for compact formats by splitting
 browser-dependent formats into separate modules.
 
-**RP-6.3** Format-level containment: compact/non-DOM formats (`fitted`,
-`atom`, `head`, `markdown`) AND the `edit` surface of a Sandbox-classified
-module render in Capsule and fail closed there — composition (especially
-fitted galleries) never creates inline iframes, and the STANDARD `edit`
+**RP-6.3** Format-level containment: `fitted` composition uses indexed,
+inert prerendered HTML selected by card URL and exact format. A fitted gallery
+never creates one live runtime or iframe per cell, and it never hydrates
+authored code merely to fill the gallery. A gesture may open the selected card
+on its own live Direct or Sandbox surface. Missing fitted prerender fails
+visibly; it does not silently fall back to Host execution. Other compact
+formats (`atom`, `head`, `markdown`) AND the `edit` surface of a Sandbox-
+classified module fail closed at their declared execution boundary. The
+STANDARD `edit`
 surface must run host-side because it is the trusted Base editor chrome
 operating directly on the canonical store — a module with no authored
 edit template contributes no authored code to that surface, so demoting
@@ -481,8 +499,15 @@ provider is absent (`DEFAULT_CARD_CONTEXT`, `field-component.gts:84-93`):
 **RP-10.3** `CardCrudFunctions` is `{createCard, viewCard, editCard,
 saveCard, deleteCard}` with no default: absent provider ⇒ all component
 args `undefined`; partial provision is legal (host mode provides `viewCard`
-only). **A card must render statically with no CRUD functions available**
-(the prerender contract).
+only). Sandbox also provides only `viewCard`: Base receives the ordinary
+`CardCrudFunctionsContextName`, while the implementation is a child→parent
+request rather than a Host closure. The capability is open only for the
+current event task of a genuine captured click or key event; render-time,
+later-timer, and synthetic-event calls are ignored. The child sends the card id,
+requested format, and optional field identity. The parent validates the URL
+scheme and invokes the same Host `viewCard` closure used by Direct rendering;
+no router, Store, or card instance crosses. **A card must render statically
+with no CRUD functions available** (the prerender contract).
 
 **RP-10.4** Permissions: `{canRead, canWrite}` live getters; sole consumer
 is the `@canEdit` predicate (RP-9.1).
@@ -594,18 +619,27 @@ values as `{$boxel:{id,type}}` **references, never expanded graphs**);
 block`; unknown kind rejects the generation); `SafeEvent` (exported,
 versioned); `ComponentUpdate` (`{generation, changed, effects}`); the
 protocol-version/feature record.
+`BoxelDescription` is also the metadata record consumed by Host-owned Code
+mode UI. Code mode receives it from the completed render generation; it never
+requires the Host to retain an executable definition.
 
 **RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
 `describeBoxel`, `createFromSerialized`, `getFields`/`getField`,
 `getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
 `dispose`. Nothing else — mutation is not an operation on this interface
 (RP-9.8: it is a Host-granted `set` capability).
+Direct returns these records locally. Sandbox produces the same records in
+the child and returns them over its private MessageChannel. Fitted gallery
+cells consume indexed HTML and do not start a runtime solely to request
+metadata.
 
 **RP-14.3** Version discipline: every record carries the protocol version;
 **consumers check it** and fail closed to last-known-good with one
 diagnostic. `requiredFeatures` is populated by producers and
 rejected-when-unknown by consumers. Semantic and transport versions are
 independent and both enforced.
+The outer render record and its nested `BoxelDescription` are checked
+independently before Host UI consumes either one.
 
 **RP-14.4** Record parity: Direct, Capsule, and Sandbox produce
 deep-equal `BoxelDescription`/`InstanceProjection` records for the same
@@ -741,9 +775,7 @@ DEFERRED (RP-9 list). Each future capability enters as its own spec section
 **RP-17.1 DEFERRED** (targeted at a future protocol version, in rough
 order): the RP-21 entitlement deliveries not yet built — declared query
 fields (RP-7.6) evaluated parent-side and delivered through the existing
-RP-20.5 push (never as a query capability in the child); mediated
-`viewCard` for the Sandbox tier (a navigation REQUEST over the private
-port, parent-validated, executed in parent-owned chrome); a
+RP-20.5 push (never as a query capability in the child); a
 gesture-scoped, parent-confirmed CRUD lane; and the visible-refusal
 chrome for an entitlement a surface cannot deliver (RP-21.3's ban on
 silent unavailability becomes enforceable only once refusal presentation
@@ -1040,7 +1072,7 @@ would diverge in _what_ (not _how_) is a spec bug. Status: ✅ built,
 | Runtime error reporting                                   | declared                       | native                      | boundary rejection → error presentation ✅                                                            | `runtime-error` control lane → same presentation ✅                                                                            | RP-15.3                   |
 | Search _display_ surface (host-rendered results)          | display-only                   | yes                         | `searchResultsComponent` projection key — query influence, no read-back (no DOM in SES), no egress ✅ | cannot cross an iframe; visible refusal 🔜                                                                                     | RP-21.2 / RP-11.5         |
 | Overlay/adorn discovery                                   | display-only                   | native tracker              | `cardComponentModifier` projection key ✅                                                             | parent-side slot registration (element never crosses) ✅                                                                       | RP-11.5                   |
-| `viewCard` navigation                                     | mediated action                | host closure                | host closure crosses as arg ✅                                                                        | navigation REQUEST over the port, parent validates + navigates 🔜                                                              | RP-21.2 / RP-17.1         |
+| `viewCard` navigation                                     | mediated action                | host closure                | host closure crosses as arg ✅                                                                        | genuine-gesture-scoped navigation request over the port; parent validates + navigates ✅                                       | RP-10.3 / RP-16.1         |
 | CRUD (create/delete/save beyond own instance)             | mediated action                | host actions                | not exposed; gesture-scoped parent-confirmed lane 🔜                                                  | same lane, same rules 🔜                                                                                                       | RP-17.1                   |
 | Ambient search → data into authored code                  | ambient                        | yes (trusted provenance)    | **never** ⛔                                                                                          | **never** ⛔                                                                                                                   | RP-21.2 / RP-17.2         |
 | Arbitrary network egress                                  | ambient                        | yes                         | none (SES scope has no fetch) ⛔                                                                      | none (every fetch dies at the gated port) ⛔                                                                                   | RP-15 / RP-17.2           |

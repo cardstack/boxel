@@ -6,8 +6,10 @@ import { task } from 'ember-concurrency';
 
 import { Resource } from 'ember-modify-based-class-resource';
 
+import { rri, trimExecutableExtension } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
+import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 import type { Ready } from '@cardstack/host/resources/file';
 import { loadModule } from '@cardstack/host/resources/import';
 
@@ -90,6 +92,40 @@ export class ModuleContentsResource
   }
 
   private load = task(async (executableFile: Ready) => {
+    let moduleSyntax: ModuleSyntax;
+    try {
+      moduleSyntax = new ModuleSyntax(
+        executableFile.content,
+        executableFile.url,
+        this.network.virtualNetwork,
+      );
+    } catch (error) {
+      await Promise.resolve();
+      this.moduleError = {
+        type: 'compile',
+        message: error instanceof Error ? error.message : String(error),
+      };
+      this.updateState({ declarations: [], url: executableFile.url });
+      return;
+    }
+
+    let moduleIdentifier = trimExecutableExtension(rri(executableFile.url));
+    if (!isTrustedModule(moduleIdentifier)) {
+      // Authored source can be inspected without evaluating it in the Host.
+      // Static declarations are enough to identify an exported card and hand
+      // its selected document to the Sandbox-side runtime.
+      // Match the existing Loader path's async update boundary. Updating the
+      // tracked resource synchronously from `modify()` would mutate it during
+      // the same render computation that first consumed it.
+      await Promise.resolve();
+      this.moduleError = undefined;
+      this.updateState({
+        declarations: moduleSyntax.declarations,
+        url: executableFile.url,
+      });
+      return;
+    }
+
     const result = await loadModule(
       executableFile.url,
       this.loaderService.loader,
@@ -103,11 +139,6 @@ export class ModuleContentsResource
       //this prevents unnecessary flickering of errors
       this.moduleError = undefined;
     }
-    let moduleSyntax = new ModuleSyntax(
-      executableFile.content,
-      executableFile.url,
-      this.network.virtualNetwork,
-    );
     let declarations =
       await this.moduleContentsService.assembleFromModuleSyntax(
         moduleSyntax,

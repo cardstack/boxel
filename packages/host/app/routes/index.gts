@@ -11,6 +11,7 @@ import stringify from 'safe-stable-stringify';
 import {
   HOST_APP_QUERY_PARAMS,
   isRedirectRoutingRule,
+  isSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { isFileDefInstance } from '@cardstack/runtime-common/code-ref';
 
@@ -320,12 +321,27 @@ export default class Card extends Route {
       cardUrl = new URL(cardPath, window.location.origin).href;
     }
 
-    // we only get an instance to understand its canonical URL so it's ok to
-    // fetch one that is detached from the store as we only care about its id.
-    // For a URL pointing at a binary file (e.g. an image), the store's card
-    // path auto-reroutes to a file-meta load and returns a FileDef — so the
-    // resulting stack item lands on FileDef isolated rendering instead of
-    // failing to hydrate the URL as a CardDef.
+    // Resolve cards from their inert JSON document. Calling Store.get() here
+    // used to execute an authored card in the Host merely to discover its
+    // canonical URL, before the Interact stack had a chance to classify it for
+    // Sandbox. Binary files have no card document, so only that content-type
+    // case falls through to the existing FileDef resolution path.
+    try {
+      let document = await this.cardService.fetchJSON(cardUrl);
+      if (isSingleCardDocument(document) && document.data?.id) {
+        return { id: document.data.id, type: 'card' };
+      }
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.startsWith('Expected a card document from ')
+      ) {
+        throw error;
+      }
+    }
+
+    // A URL pointing at a binary file (e.g. an image) needs the Store's
+    // file-meta reroute so it can become a FileDef stack item.
     let resolved = await this.store.get(cardUrl);
     let canonicalUrl = resolved?.id;
     if (!canonicalUrl) {

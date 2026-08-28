@@ -21,9 +21,10 @@ import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { restartableTask, timeout, dropTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 
 import pluralize from 'pluralize';
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import {
   CardContainer,
@@ -76,6 +77,7 @@ import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
+import BoxelDocumentRenderer from '../boxel-document-renderer';
 import CardRenderer from '../card-renderer';
 
 import ArchivedRealmState from './archived-realm-state';
@@ -84,6 +86,8 @@ import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
+import type BoxelExecutionService from '../../services/boxel-execution';
+import type { PreparedBoxelDocumentExecution } from '../../services/boxel-execution';
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -137,6 +141,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   declare private cardCrudFunctions: CardCrudFunctions;
 
   @service declare private cardService: CardService;
+  @service declare private boxelExecution: BoxelExecutionService;
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -166,10 +171,96 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
 
+  @use private documentAdmission = resource(({ on }) => {
+    let state = new TrackedObject<{
+      isLoaded: boolean;
+      prepared?: PreparedBoxelDocumentExecution;
+      error?: Error;
+    }>({ isLoaded: false });
+
+    // FileDefs continue through their existing Store path. Card documents are
+    // classified from inert JSON before StackItem is allowed to ask the Store
+    // for a canonical instance. This ordering is the security boundary: an
+    // authored card must never reach the Host Loader merely because it was
+    // opened on an Interact stack.
+    if (this.args.item.type === 'file') {
+      state.isLoaded = true;
+      return state;
+    }
+
+    let active = true;
+    void this.boxelExecution
+      .prepareDocumentURL(
+        this.args.item.id,
+        'isolated',
+        `stack-admission:${this.args.item.instanceId}`,
+      )
+      .then((prepared) => {
+        if (active) {
+          state.prepared = prepared;
+          state.isLoaded = true;
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          state.error =
+            error instanceof Error ? error : new Error(String(error));
+          state.isLoaded = true;
+        }
+      });
+    on.cleanup(() => {
+      active = false;
+    });
+    return state;
+  });
+
+  private get usesDocumentExecution(): boolean {
+    return this.documentAdmission.prepared?.request.trusted === false;
+  }
+
+  private get shouldLoadCanonicalCard(): boolean {
+    return (
+      this.documentAdmission.isLoaded &&
+      !this.documentAdmission.error &&
+      !this.usesDocumentExecution
+    );
+  }
+
+  private get canonicalCardIsLoaded(): boolean {
+    return Boolean(this.cardResource?.isLoaded);
+  }
+
+  private get admittedDocument() {
+    return this.documentAdmission.prepared?.request.document;
+  }
+
+  private get documentHeaderType(): string {
+    let id = this.admittedDocument?.data?.id ?? this.args.item.id;
+    if (id.endsWith('/index')) {
+      return 'Workspace';
+    }
+    let adoptsFrom = this.admittedDocument?.data?.meta?.adoptsFrom;
+    return adoptsFrom && 'name' in adoptsFrom ? adoptsFrom.name : 'Card';
+  }
+
+  private get documentHeaderTitle(): string {
+    let attributes = this.admittedDocument?.data?.attributes;
+    if (attributes) {
+      for (let key of ['cardTitle', 'title', 'name', 'label']) {
+        let value = attributes[key];
+        if (typeof value === 'string' && value.trim()) {
+          return value;
+        }
+      }
+    }
+    return this.documentHeaderType;
+  }
+
   @provide(PermissionsContextName)
   get permissions(): Permissions | undefined {
-    if (this.url) {
-      return this.realm.permissions(this.url);
+    let cardId = this.url ?? this.admittedDocument?.data?.id;
+    if (cardId) {
+      return this.realm.permissions(cardId);
     } else if (this.card?.[realmURL]) {
       return this.realm.permissions(this.card[realmURL]?.href);
     }
@@ -611,7 +702,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get cardIdentifier() {
-    return this.url;
+    return this.url ?? this.admittedDocument?.data?.id ?? this.args.item.id;
   }
 
   private get headerType() {
@@ -666,6 +757,31 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private get moreOptionsMenuItems() {
     if (this.isBuried) {
       return undefined;
+    }
+
+    if (this.usesDocumentExecution) {
+      let items = [
+        new MenuItem({
+          label: `Execution: ${executionModeLabel(this.executionMode)}`,
+          action: () => undefined,
+          eyebrow: true,
+        }),
+        new MenuItem({
+          label: 'Copy Card URL',
+          action: () => copyCardURLToClipboard(this.args.item.id),
+          icon: IconLink,
+        }),
+      ];
+      if (this.isTopCard) {
+        items.push(
+          new MenuItem({
+            label: this.isExpanded ? 'Restore Width' : 'Expand to Full Width',
+            icon: Maximize,
+            action: this.toggleExpanded,
+          }),
+        );
+      }
+      return items;
     }
 
     const items = toMenuItems(
@@ -769,6 +885,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let { request } = item;
     if (this.card) {
       request?.fulfill(this.card.id);
+    } else if (this.usesDocumentExecution) {
+      request?.fulfill(this.args.item.id);
     }
     // Mutate format in place — keeps the StackItem instance, so the
     // CardRenderer subtree stays mounted (no remount, no scroll loss,
@@ -899,14 +1017,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get canEdit() {
     return (
-      this.card &&
-      this.card[realmURL] &&
+      (this.usesDocumentExecution
+        ? this.realm.canWrite(this.args.item.id)
+        : Boolean(
+            this.card &&
+            this.card[realmURL] &&
+            this.realm.canWrite(this.card[realmURL].href),
+          )) &&
       !this.isBuried &&
       !this.isEditing &&
-      !this.isFileCard &&
-      this.realm.canWrite(this.card[realmURL].href)
+      !this.isFileCard
     );
   }
+
+  private editDocumentCard = () => {
+    this.operatorModeStateService.setItemFormat(this.args.item, 'edit', {
+      request: this.args.item.request,
+    });
+  };
 
   private get isEditing() {
     return (
@@ -995,7 +1123,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   <template>
-    {{consumeContext this.makeCardResource}}
+    {{#if this.shouldLoadCanonicalCard}}
+      {{consumeContext this.makeCardResource}}
+    {{/if}}
     <div
       class={{cn
         'item'
@@ -1021,7 +1151,77 @@ export default class OperatorModeStackItem extends Component<Signature> {
         }}
         {{ContentElement onSetup=this.setupContainerEl}}
       >
-        {{#if (not this.cardResource.isLoaded)}}
+        {{#if (not this.documentAdmission.isLoaded)}}
+          <div class='loading' data-test-stack-item-loading-card>
+            <LoadingIndicator @color='var(--boxel-dark)' />
+            <span class='loading__message'>Loading card...</span>
+          </div>
+        {{else if this.documentAdmission.error}}
+          <section class='stack-item-document-error' role='alert'>
+            <h3>Unable to render this card</h3>
+            <p>{{this.documentAdmission.error.message}}</p>
+          </section>
+        {{else if this.usesDocumentExecution}}
+          {{#let (this.realm.info @item.id) as |realmInfo|}}
+            {{#if this.expandedCardHeaderSlot}}
+              {{#in-element this.expandedCardHeaderSlot}}
+                <CardHeader
+                  @cardTypeDisplayName={{this.documentHeaderType}}
+                  @cardTitle={{this.documentHeaderTitle}}
+                  @isTopCard={{this.isTopCard}}
+                  @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+                  @realmInfo={{realmInfo}}
+                  @onEdit={{if this.canEdit this.editDocumentCard}}
+                  @onExpand={{if this.isExpanded this.toggleExpanded}}
+                  @isExpanded={{this.isExpanded}}
+                  @onFinishEditing={{if this.isEditing this.doneEditing}}
+                  @onClose={{unless this.isBuried this.closeItem}}
+                  class='expanded-card-header-pill'
+                  data-test-stack-card-header
+                />
+              {{/in-element}}
+            {{else}}
+              <CardHeader
+                @cardTypeDisplayName={{this.documentHeaderType}}
+                @cardTitle={{this.documentHeaderTitle}}
+                @isTopCard={{this.isTopCard}}
+                @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+                @realmInfo={{realmInfo}}
+                @onEdit={{if this.canEdit this.editDocumentCard}}
+                @onExpand={{if this.isExpanded this.toggleExpanded}}
+                @isExpanded={{this.isExpanded}}
+                @onFinishEditing={{if this.isEditing this.doneEditing}}
+                @onClose={{unless this.isBuried this.closeItem}}
+                @editShortcutHint={{this.keyboardShortcutLabels.edit}}
+                @finishEditingShortcutHint={{this.keyboardShortcutLabels.finishEditing}}
+                @closeShortcutHint={{this.keyboardShortcutLabels.close}}
+                class='stack-item-header'
+                role={{if this.isBuried 'button' 'banner'}}
+                {{on
+                  'click'
+                  (optional
+                    (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                  )
+                }}
+                data-test-stack-card-header
+              />
+            {{/if}}
+          {{/let}}
+          <div
+            class='stack-item-content'
+            {{ContentElement onSetup=this.setupContentEl}}
+            data-test-stack-item-content
+          >
+            <BoxelDocumentRenderer
+              class='stack-item-preview'
+              @document={{this.admittedDocument}}
+              @relativeTo={{@item.id}}
+              @format={{this.cardFormat}}
+              @hostOwnsBox={{true}}
+              @viewCard={{this.cardCrudFunctions.viewCard}}
+            />
+          </div>
+        {{else if (not this.canonicalCardIsLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>

@@ -45,9 +45,31 @@ class TestRuntime implements BoxelRuntime {
       requiredFeatures: [],
       ref,
       boxelKind: 'card',
-      ancestors: [],
-      fields: [],
-      formats: [],
+      ancestors: [
+        {
+          module:
+            'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+          name: 'CardDef',
+        },
+      ],
+      fields: [
+        {
+          fieldName: 'name',
+          fieldType: {
+            module:
+              'https://cardstack.com/base/string' as RealmResourceIdentifier,
+            name: 'default',
+          },
+          kind: 'contains',
+          isComputed: false,
+        },
+      ],
+      formats: [
+        {
+          format: 'isolated',
+          provider: { kind: 'authored', ref },
+        },
+      ],
       presentation: {
         displayName: 'Person',
         headerColor: null,
@@ -106,9 +128,14 @@ module('Unit | Boxel runtime transport', function () {
 
     try {
       assert.strictEqual(await client.loadBoxel(ref), typeHandle);
-      assert.strictEqual(
-        (await client.describeBoxel(typeHandle)).presentation.displayName,
-        'Person',
+      let description = await client.describeBoxel(typeHandle);
+      assert.strictEqual(description.presentation.displayName, 'Person');
+      assert.strictEqual(description.fields[0]?.fieldName, 'name');
+      assert.strictEqual(description.formats[0]?.format, 'isolated');
+      assert.deepEqual(
+        structuredClone(description),
+        description,
+        'Code-mode metadata is cloneable data returned by the runtime owner',
       );
       assert.strictEqual(
         (await client.buildRenderRecord(instanceHandle)).presentation.title,

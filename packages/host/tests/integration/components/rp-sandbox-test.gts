@@ -13,11 +13,14 @@ import {
   VirtualNetwork,
   baseCardRef,
   fetcher,
+  isResolvedCodeRef,
   type LooseCardResource,
   type LooseSingleCardDocument,
+  type BoxelDescription,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
 
+import BoxelDocumentRenderer from '@cardstack/host/components/boxel-document-renderer';
 import {
   createSandboxModuleEvaluator,
   measureRenderedOutput,
@@ -27,12 +30,12 @@ import {
   whenNonzeroSize,
 } from '@cardstack/host/components/boxel-sandbox-runtime';
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import SandboxDocumentRenderer from '@cardstack/host/components/sandbox-document-renderer';
 
 import {
   SandboxMatrixServiceStub,
   initialize as initializeSandboxMatrixServiceStub,
 } from '@cardstack/host/instance-initializers/stub-matrix-service-for-sandbox';
+import { decideBoxelExecution } from '@cardstack/host/lib/boxel-execution-policy';
 import { classifyBoxelSource } from '@cardstack/host/lib/boxel-source-classifier';
 import { htmlComponent } from '@cardstack/host/lib/html-component';
 import {
@@ -341,7 +344,7 @@ module('Integration | rp-sandbox', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <SandboxDocumentRenderer
+          <BoxelDocumentRenderer
             @document={{cardDocument}}
             @relativeTo={{cardURL}}
           />
@@ -387,10 +390,192 @@ module('Integration | rp-sandbox', function (hooks) {
     );
     await assert.rejects(
       loaderService.loader.import(moduleIdentifier),
-      /Host Loader refused Sandbox-owned module/,
+      /Host Loader refused untrusted module/,
       'a later Host path cannot accidentally evaluate the admitted module',
     );
     delete hostGlobal.__boxelSandboxHostExecutionProbe;
+  });
+
+  test('the Host Loader rejects authored realm code before fetching it', async function (assert) {
+    let loaderService = getService('loader-service');
+    loaderService.resetLoader({
+      force: true,
+      reason: 'global authored-module Host Loader proof',
+    });
+    let moduleIdentifier = 'https://untrusted.example/malicious-card';
+
+    await assert.rejects(
+      loaderService.loader.import(moduleIdentifier),
+      /Host Loader refused untrusted module/,
+      'an authored module cannot enter the Host Loader before a surface classifies it',
+    );
+    assert.false(
+      loaderService.loader.isModuleLoaded(moduleIdentifier),
+      'the refusal happens before fetch, transpilation, or AMD registration',
+    );
+  });
+
+  test('the document entry gives Direct and Sandbox the same inert JSON:API contract', async function (assert) {
+    let execution = getService('boxel-execution');
+    let loaderService = getService('loader-service');
+    let directURL = `${testRealmURL}trusted-document`;
+    let directDocument: LooseSingleCardDocument = {
+      data: {
+        id: directURL,
+        attributes: { title: 'trusted document' },
+        meta: { adoptsFrom: baseCardRef },
+      },
+    };
+
+    let direct = await execution.prepareDocument(
+      directDocument,
+      'isolated',
+      execution.surfaceId(),
+      testRRI('trusted-document'),
+    );
+
+    assert.strictEqual(direct.request.hostRequestedMode, 'direct');
+    assert.strictEqual(
+      direct.request.document.data,
+      direct.request.resource,
+      'Direct receives one document whose primary resource is the materialization input',
+    );
+    assert.notStrictEqual(
+      direct.request.document,
+      directDocument,
+      'the Host passes an inert clone rather than caller-owned mutable state',
+    );
+    assert.false(
+      'canonicalCard' in direct.request,
+      'document-first Direct does not require a pre-materialized Host CardDef',
+    );
+
+    let strengthenedTrustedDocument = await execution.prepareDocument(
+      directDocument,
+      'isolated',
+      execution.surfaceId(),
+      testRRI('trusted-document-sandbox'),
+      'sandbox',
+    );
+    assert.strictEqual(
+      strengthenedTrustedDocument.request.hostRequestedMode,
+      undefined,
+      'a Host may strengthen a trusted document without granting Direct',
+    );
+    assert.true(
+      strengthenedTrustedDocument.request.prefersFullSandbox,
+      'the strengthened twin carries the same explicit Sandbox routing input as an authored document',
+    );
+    assert.deepEqual(
+      decideBoxelExecution({
+        trusted: strengthenedTrustedDocument.request.trusted,
+        format: strengthenedTrustedDocument.request.format,
+        source: strengthenedTrustedDocument.classification,
+        prefersFullSandbox:
+          strengthenedTrustedDocument.request.prefersFullSandbox ?? false,
+        volatile: false,
+      }),
+      { mode: 'sandbox', reason: 'prefers-full-sandbox' },
+      'strengthening wins even though the exact same card module is trusted',
+    );
+
+    let moduleIdentifier = testRRI('plain-widget');
+    let sandboxURL = `${testRealmURL}PlainWidget/document-proof`;
+    let sandbox = await execution.prepareDocument(
+      {
+        data: {
+          id: sandboxURL,
+          attributes: { label: 'plain authored document' },
+          meta: {
+            adoptsFrom: { module: moduleIdentifier, name: 'PlainWidget' },
+          },
+        },
+      },
+      'isolated',
+      execution.surfaceId(),
+      testRRI('PlainWidget/document-proof'),
+    );
+
+    assert.strictEqual(
+      sandbox.classification.tier,
+      'sandbox',
+      'every authored document is classified Sandbox regardless of its source signals',
+    );
+    assert.strictEqual(
+      sandbox.classification.reason,
+      'untrusted-boxel-module',
+      'trust alone selects the document execution tier',
+    );
+    assert.deepEqual(
+      decideBoxelExecution({
+        trusted: sandbox.request.trusted,
+        format: sandbox.request.format,
+        source: sandbox.classification,
+        prefersFullSandbox: sandbox.request.prefersFullSandbox ?? false,
+        volatile: false,
+      }),
+      { mode: 'sandbox', reason: 'prefers-full-sandbox' },
+      'the two-model document entry promotes every authored document to Sandbox',
+    );
+    assert.strictEqual(
+      sandbox.request.document.data,
+      sandbox.request.resource,
+      'Sandbox receives the same document/resource contract as Direct',
+    );
+    assert.true(
+      loaderService.isHostModuleEvaluationDenied(moduleIdentifier),
+      'classification installs the Host Loader denial before child materialization',
+    );
+    assert.false(
+      loaderService.loader.isModuleLoaded(moduleIdentifier),
+      'the authored module is still absent from the Host Loader',
+    );
+  });
+
+  test('the document renderer exposes RP metadata to Host UI without exposing the executable definition', async function (assert) {
+    let description: BoxelDescription | undefined;
+    let directURL = `${testRealmURL}metadata-document`;
+    let directDocument: LooseSingleCardDocument = {
+      data: {
+        id: directURL,
+        attributes: { title: 'metadata document' },
+        meta: { adoptsFrom: baseCardRef },
+      },
+    };
+    let receiveDescription = (value: BoxelDescription) => {
+      description = value;
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <BoxelDocumentRenderer
+            @document={{directDocument}}
+            @relativeTo={{directURL}}
+            @onDescription={{receiveDescription}}
+          />
+        </template>
+      },
+    );
+
+    await waitUntil(() => description, { timeout: 20000 });
+    let ref = description?.ref;
+    assert.true(isResolvedCodeRef(ref), 'metadata carries a resolved code ref');
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('Expected a resolved code ref');
+    }
+    assert.strictEqual(ref.module, baseCardRef.module);
+    assert.strictEqual(ref.name, baseCardRef.name);
+    assert.ok(description?.formats.length, 'format metadata reaches Host UI');
+    assert.ok(
+      description?.presentation.displayName,
+      'presentation metadata reaches Host UI',
+    );
+    assert.deepEqual(
+      structuredClone(description),
+      description,
+      'the callback exposes only cloneable RP data',
+    );
   });
 
   test('RP-6.1: a quoted style attribute with interpolation classifies to the Sandbox tier', async function (assert) {

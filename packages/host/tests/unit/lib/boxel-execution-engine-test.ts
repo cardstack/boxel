@@ -415,7 +415,7 @@ module('Unit | Boxel execution engine', function () {
     }
   });
 
-  test('Host-requested Direct uses RP without classifying authored source', async function (assert) {
+  test('Host-requested Direct materializes the shared document without classifying authored source', async function (assert) {
     let direct = new TestRuntime('direct');
     let capsule = new TestRuntime('capsule');
     let sandbox = new TestRuntime('sandbox');
@@ -441,7 +441,8 @@ module('Unit | Boxel execution engine', function () {
         source: 'document.createElement("canvas")',
         purpose: 'host-display',
         hostRequestedMode: 'direct',
-        canonicalCard: {} as never,
+        resource,
+        document: cardDocument,
       });
 
       assert.strictEqual(
@@ -458,6 +459,16 @@ module('Unit | Boxel execution engine', function () {
         generation?.source.reason,
         'host-requested-direct',
         'the generation records why classification was intentionally bypassed',
+      );
+      assert.strictEqual(
+        direct.createdFromSerialized,
+        1,
+        'Direct consumes the same inert document payload as Sandbox',
+      );
+      assert.strictEqual(
+        direct.createFromSerializedCalls[0]?.document,
+        cardDocument,
+        'Direct receives the original JSON:API document',
       );
     } finally {
       await session.destroy();
@@ -875,6 +886,43 @@ module('Unit | Boxel execution engine', function () {
     );
   });
 
+  test('module graph classification announces authored dependencies before awaiting their source', async function (assert) {
+    let entry = 'https://example.test/entry.gts';
+    let left = 'https://example.test/left.gts';
+    let right = 'https://example.test/right.gts';
+    let events: string[] = [];
+    let classifier = new BoxelModuleGraphClassifier({
+      loadSource: async (identifier) => {
+        events.push(`load:${identifier}`);
+        return `export default class Dependency {}`;
+      },
+      resolveImport: (specifier, relativeTo) =>
+        new URL(specifier, relativeTo).href,
+      isTrustedModule: () => false,
+    });
+
+    // eslint-disable-next-line ember/no-string-prototype-extensions -- graph classifier API
+    await classifier.classify(
+      entry,
+      `
+        import Left from './left.gts';
+        import Right from './right.gts';
+        export default [Left, Right];
+      `,
+      (identifier) => {
+        events.push(`admit:${identifier}`);
+      },
+    );
+
+    assert.deepEqual(events, [
+      `admit:${entry}`,
+      `admit:${left}`,
+      `admit:${right}`,
+      `load:${left}`,
+      `load:${right}`,
+    ]);
+  });
+
   test('module graph classification reuses unchanged supplied source and replaces changed source', async function (assert) {
     let moduleIdentifier = 'https://example.test/entry.gts';
     let dependencyIdentifier = 'https://example.test/dependency.gts';
@@ -1167,6 +1215,21 @@ module('Unit | Boxel execution engine', function () {
     );
     assert.true(
       session.snapshot.error?.message.includes('protocol version 999'),
+    );
+
+    capsule.recordTamper = (record) => ({
+      ...record,
+      boxel: { ...record.boxel, protocolVersion: 998 },
+    });
+    let failedDescriptionVersion = await session.update(executionRequest());
+    assert.strictEqual(failedDescriptionVersion, undefined);
+    assert.strictEqual(
+      session.snapshot.current,
+      first,
+      'unknown Code-mode metadata cannot replace last-known-good',
+    );
+    assert.true(
+      session.snapshot.error?.message.includes('protocol version 998'),
     );
 
     capsule.recordTamper = (record) => ({

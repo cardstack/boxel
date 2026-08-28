@@ -13,8 +13,11 @@ import {
   isCardDef as isCardDefHelper,
   isFieldDef as isFieldDefHelper,
   getField,
+  rri,
+  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 
+import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 import { isReady } from '@cardstack/host/resources/file';
 
 import {
@@ -197,13 +200,38 @@ export default class CodeSemanticsService extends Service {
 
   get selectedCodeRef(): ResolvedCodeRef | undefined {
     let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
-    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+    if (isResolvedCodeRef(codeRef)) {
+      return codeRef;
+    }
+
+    // Sandbox-authored modules are inspected statically. Their exported name
+    // and source URL still form the resolved code reference needed to search
+    // for a document-first preview, without evaluating the module in Host.
+    let declaration = this.selectedDeclaration;
+    if (
+      declaration?.type === 'possibleCardOrField' &&
+      declaration.exportName &&
+      this.isModule
+    ) {
+      return {
+        module: trimExecutableExtension(rri(this.readyFile.url)),
+        name: declaration.exportName,
+      };
+    }
+    return undefined;
   }
 
   async getInheritanceChain(): Promise<
     { codeRef: CodeRef; fields: string[] }[] | undefined
   > {
     if (!this.selectedCodeRef) {
+      return undefined;
+    }
+    // Prototype traversal requires a live class. For authored modules that
+    // class belongs to the Sandbox loader, not the Host loader. A later
+    // protocol can project an inheritance chain as data when Code mode needs
+    // it; until then, omitting it is the safe and truthful result.
+    if (!isTrustedModule(this.selectedCodeRef.module)) {
       return undefined;
     }
     try {

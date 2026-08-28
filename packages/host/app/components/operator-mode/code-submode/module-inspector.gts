@@ -50,11 +50,12 @@ import Playground from '@cardstack/host/components/operator-mode/code-submode/pl
 import SchemaEditor from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SpecPreviewBadge from '@cardstack/host/components/operator-mode/code-submode/spec-preview-badge';
-
 import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
+import DocumentPreviewPanel from '@cardstack/host/components/operator-mode/preview-panel/document-preview-panel';
 import PreviewPanel from '@cardstack/host/components/operator-mode/preview-panel/index';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 
 import type { FileResource } from '@cardstack/host/resources/file';
 import type { Ready } from '@cardstack/host/resources/file';
@@ -145,6 +146,13 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     let state = new TrackedObject<{ value: boolean }>({ value: false });
     let codeRef = this.selectedDeclarationAsCodeRef;
     if (!codeRef.module || !codeRef.name) {
+      return state;
+    }
+    // Determining whether authored code is a Spec requires evaluating its
+    // class. That is safe for trusted modules only. Sandbox-authored modules
+    // are classified from source and materialized inside the child runtime;
+    // Code mode must not bypass that boundary merely to decorate its UI.
+    if (!isTrustedModule(codeRef.module)) {
       return state;
     }
     let loader = this.loaderService.loader;
@@ -339,6 +347,21 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
     }
     return null;
+  }
+
+  private get documentCard() {
+    if (!this.args.isCard || !isReady(this.args.currentOpenFile)) {
+      return undefined;
+    }
+    let document = JSON.parse(this.args.currentOpenFile.content);
+    return isCardErrorJSONAPI(document) ? undefined : document;
+  }
+
+  private get documentCardURL(): string | undefined {
+    if (!this.documentCard || !isReady(this.args.currentOpenFile)) {
+      return undefined;
+    }
+    return this.args.currentOpenFile.url.replace(/\.json$/, '');
   }
 
   private get activePanel(): ModuleInspectorView {
@@ -684,6 +707,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{else if @moduleAnalysis.moduleError}}
       <SyntaxErrorDisplay
         @syntaxErrors={{@moduleAnalysis.moduleError.message}}
+      />
+    {{else if this.documentCardURL}}
+      <DocumentPreviewPanel
+        @document={{this.documentCard}}
+        @cardURL={{this.documentCardURL}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+        @viewCard={{this.viewCardInCodeSubmode}}
       />
     {{else if @cardError}}
       <section class='module-inspector-content error'>

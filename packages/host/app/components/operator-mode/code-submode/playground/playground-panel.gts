@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { schedule } from '@ember/runloop';
@@ -53,13 +54,16 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type CardErrorJSONAPI,
+  type BoxelDescription,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
+import BoxelDocumentRenderer from '@cardstack/host/components/boxel-document-renderer';
 import Overlays from '@cardstack/host/components/operator-mode/overlays';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
+import { isTrustedModule } from '@cardstack/host/lib/trusted-modules';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -110,6 +114,29 @@ export type FieldOption = {
   field: FieldDef;
 };
 
+interface DocumentPreviewSignature {
+  Args: {
+    cardURL: string;
+    format: Format;
+    onDescription: (description: BoxelDescription) => void;
+  };
+}
+
+const DocumentPreview: TemplateOnlyComponent<DocumentPreviewSignature> =
+  <template>
+    <CardContainer class='full-height-preview isolated-and-edit-preview'>
+      <BoxelDocumentRenderer
+        class='preview'
+        @cardURL={{@cardURL}}
+        @format={{@format}}
+        {{! The playground scrolls around an intrinsically-sized preview; it
+            does not allocate the rendered card's own height. }}
+        @hostOwnsBox={{false}}
+        @onDescription={{@onDescription}}
+      />
+    </CardContainer>
+  </template>;
+
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -144,6 +171,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardOptions: RenderableSearchEntryLike[] = [];
   @tracked private selectedFileMetaId: string | undefined;
+  @tracked private documentDescription: BoxelDescription | undefined;
   @use private moduleChangeTracker = resource(() => {
     let moduleId = internalKeyFor(
       this.args.codeRef,
@@ -153,6 +181,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (moduleId !== this.#currentModuleId) {
       this.#currentModuleId = moduleId;
       this.#creationError = false;
+      this.documentDescription = undefined;
     }
     return moduleId;
   });
@@ -163,6 +192,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
     if (this.args.isFieldDef) {
       return fieldDefFormats;
+    }
+    if (this.usesDocumentRenderer) {
+      let formats = this.documentDescription?.formats.map(
+        ({ format }) => format as Format,
+      );
+      return formats?.length ? formats : cardDefFormats;
     }
     const ctor = this.card?.constructor as typeof CardDef | undefined;
     if (!ctor) return undefined;
@@ -296,7 +331,9 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
       return this.realm.info(fileId);
     }
-    let url = this.card ? urlForRealmLookup(this.card) : undefined;
+    let url = this.card
+      ? urlForRealmLookup(this.card)
+      : this.documentPreviewCardURL;
     if (!url) {
       return undefined;
     }
@@ -330,6 +367,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get prefersWideFormat() {
+    if (this.usesDocumentRenderer) {
+      return this.documentDescription?.presentation.prefersWideFormat ?? false;
+    }
     if (!this.card) {
       return false;
     }
@@ -431,7 +471,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   };
 
   private makeCardResource = () => {
-    if (this.args.isFileDef) {
+    if (this.args.isFileDef || this.usesDocumentRenderer) {
       return;
     }
     this.cardResource = this.getCard(
@@ -450,6 +490,24 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get selectedCardId() {
     return this.playgroundSelection?.cardId ?? this.card?.id;
+  }
+
+  private get usesDocumentRenderer() {
+    return (
+      !this.args.isFieldDef &&
+      !this.args.isFileDef &&
+      !isTrustedModule(this.args.codeRef.module)
+    );
+  }
+
+  private get documentPreviewCardURL(): string | undefined {
+    return this.usesDocumentRenderer ? this.selectedCardId : undefined;
+  }
+
+  @action private receiveDocumentDescription(
+    description: BoxelDescription,
+  ): void {
+    this.documentDescription = description;
   }
 
   private get selectedCardRealmHref(): string | undefined {
@@ -1118,7 +1176,7 @@ export default class PlaygroundPanel extends Component<Signature> {
                     </CardError>
                   </CardContainer>
                 {{/if}}
-              {{else if card}}
+              {{else if (or card this.documentPreviewCardURL)}}
                 {{afterRender this.processFileMetaResults}}
                 <div
                   class='preview-area'
@@ -1130,29 +1188,37 @@ export default class PlaygroundPanel extends Component<Signature> {
                       @viewCard={{@viewCard}}
                     />
                   {{/if}}
-                  <PlaygroundPreview
-                    @card={{card}}
-                    @format={{this.effectiveFormat}}
-                    @codeRef={{this.effectiveCodeRef}}
-                    @realmInfo={{this.realmInfo}}
-                    @contextMenuItems={{unless
-                      @isFileDef
-                      this.contextMenuItems
-                    }}
-                    @onEdit={{unless
-                      @isFileDef
-                      (if this.setEditMode (fn this.setFormat 'edit'))
-                    }}
-                    {{! Form is edit-with-base-template — treat it as
-                        editing for header (green bar + X button to
-                        return to default format). }}
-                    @onFinishEditing={{if
-                      (or (eq this.format 'edit') (eq this.format 'form'))
-                      (fn this.setFormat this.defaultFormat)
-                    }}
-                    @isFieldDef={{@isFieldDef}}
-                    @isFileDef={{@isFileDef}}
-                  />
+                  {{#if this.documentPreviewCardURL}}
+                    <DocumentPreview
+                      @cardURL={{this.documentPreviewCardURL}}
+                      @format={{this.effectiveFormat}}
+                      @onDescription={{this.receiveDocumentDescription}}
+                    />
+                  {{else if card}}
+                    <PlaygroundPreview
+                      @card={{card}}
+                      @format={{this.effectiveFormat}}
+                      @codeRef={{this.effectiveCodeRef}}
+                      @realmInfo={{this.realmInfo}}
+                      @contextMenuItems={{unless
+                        @isFileDef
+                        this.contextMenuItems
+                      }}
+                      @onEdit={{unless
+                        @isFileDef
+                        (if this.setEditMode (fn this.setFormat 'edit'))
+                      }}
+                      {{! Form is edit-with-base-template — treat it as
+                          editing for header (green bar + X button to
+                          return to default format). }}
+                      @onFinishEditing={{if
+                        (or (eq this.format 'edit') (eq this.format 'form'))
+                        (fn this.setFormat this.defaultFormat)
+                      }}
+                      @isFieldDef={{@isFieldDef}}
+                      @isFileDef={{@isFileDef}}
+                    />
+                  {{/if}}
                 </div>
                 <section class='instance-chooser-container'>
                   <InstanceChooser />

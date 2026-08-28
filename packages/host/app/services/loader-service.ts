@@ -21,6 +21,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import config from '@cardstack/host/config/environment';
 import { installBoxelLoaderCompatibilityModules } from '@cardstack/host/lib/boxel-loader-compatibility';
 import { clearKnownFileMetaUrls } from '@cardstack/host/lib/known-file-meta-urls';
+import { isTrustedImport } from '@cardstack/host/lib/trusted-modules';
 
 import { authErrorEventMiddleware } from '../utils/auth-error-guard';
 import { scheduleNativeTimeout } from '../utils/render-timer-stub';
@@ -31,6 +32,22 @@ import type RealmInfoService from './realm-info-service';
 import type SessionService from './session';
 
 const log = logger('loader-service');
+
+function isSyntheticTestRealmModule(moduleIdentifier: string): boolean {
+  if (config.environment !== 'test') {
+    return false;
+  }
+  try {
+    let moduleURL = new URL(moduleIdentifier);
+    let testRealmURL = new URL(config.resolvedTestRealmURL);
+    return (
+      moduleURL.origin === testRealmURL.origin &&
+      moduleURL.pathname.startsWith(testRealmURL.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
 
 export default class LoaderService extends Service {
   @service declare private realmInfoService: RealmInfoService;
@@ -279,9 +296,13 @@ export default class LoaderService extends Service {
         ),
       virtualNetwork: this.network.virtualNetwork,
       assertModuleEvaluationAllowed: (moduleIdentifier) => {
-        if (this.isHostModuleEvaluationDenied(moduleIdentifier)) {
+        if (
+          (!isTrustedImport(moduleIdentifier) &&
+            !isSyntheticTestRealmModule(moduleIdentifier)) ||
+          this.isHostModuleEvaluationDenied(moduleIdentifier)
+        ) {
           throw new Error(
-            `Host Loader refused Sandbox-owned module ${moduleIdentifier}`,
+            `Host Loader refused untrusted module ${moduleIdentifier}`,
           );
         }
       },

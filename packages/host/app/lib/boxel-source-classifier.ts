@@ -627,6 +627,15 @@ export interface BoxelModuleGraphClassifierOptions {
   maxModules?: number;
 }
 
+type ModuleDiscoveryObserver = (moduleIdentifier: string) => void;
+
+interface CachedModuleGraphClassification {
+  promise?: Promise<BoxelSourceClassification>;
+  entrySource?: string;
+  discovered: Set<string>;
+  observers: Set<ModuleDiscoveryObserver>;
+}
+
 /**
  * Classifies one executable authored module graph, not merely its entry file.
  *
@@ -636,8 +645,7 @@ export interface BoxelModuleGraphClassifierOptions {
  * be resolved, loaded, or when the graph exceeds its configured size.
  */
 export class BoxelModuleGraphClassifier {
-  private cache = new Map<string, Promise<BoxelSourceClassification>>();
-  private entrySources = new Map<string, string>();
+  private cache = new Map<string, CachedModuleGraphClassification>();
   private dependencies = new Map<string, Set<string>>();
 
   constructor(private readonly options: BoxelModuleGraphClassifierOptions) {}
@@ -645,37 +653,53 @@ export class BoxelModuleGraphClassifier {
   classify(
     moduleIdentifier: string,
     source?: string,
+    onAuthoredModuleDiscovered?: ModuleDiscoveryObserver,
   ): Promise<BoxelSourceClassification> {
     let existing = this.cache.get(moduleIdentifier);
-    if (
-      existing &&
-      (source === undefined ||
-        this.entrySources.get(moduleIdentifier) === source)
-    ) {
-      return existing;
+    if (existing && (source === undefined || existing.entrySource === source)) {
+      return this.observe(existing, onAuthoredModuleDiscovered);
     }
     if (existing) {
       this.invalidate(moduleIdentifier);
     }
     let observedDependencies = new Set<string>();
+    let entry: CachedModuleGraphClassification = {
+      entrySource: source,
+      discovered: new Set(),
+      observers: new Set(),
+    };
+    if (onAuthoredModuleDiscovered) {
+      entry.observers.add(onAuthoredModuleDiscovered);
+    }
+    let announce = (identifier: string) => {
+      if (entry.discovered.has(identifier)) {
+        return;
+      }
+      entry.discovered.add(identifier);
+      for (let observer of entry.observers) {
+        observer(identifier);
+      }
+    };
     let classification = this.classifyGraph(
       moduleIdentifier,
       source,
       observedDependencies,
+      announce,
     );
-    this.cache.set(moduleIdentifier, classification);
-    if (source !== undefined) {
-      this.entrySources.set(moduleIdentifier, source);
-    }
+    entry.promise = classification;
+    this.cache.set(moduleIdentifier, entry);
     this.dependencies.set(moduleIdentifier, observedDependencies);
     void classification.catch(() => {
-      if (this.cache.get(moduleIdentifier) === classification) {
+      if (this.cache.get(moduleIdentifier) === entry) {
         this.cache.delete(moduleIdentifier);
-        this.entrySources.delete(moduleIdentifier);
         this.dependencies.delete(moduleIdentifier);
       }
     });
-    return classification;
+    return onAuthoredModuleDiscovered
+      ? classification.finally(() =>
+          entry.observers.delete(onAuthoredModuleDiscovered),
+        )
+      : classification;
   }
 
   invalidate(moduleIdentifier?: string): void {
@@ -683,21 +707,42 @@ export class BoxelModuleGraphClassifier {
       for (let [entry, dependencies] of this.dependencies) {
         if (entry === moduleIdentifier || dependencies.has(moduleIdentifier)) {
           this.cache.delete(entry);
-          this.entrySources.delete(entry);
           this.dependencies.delete(entry);
         }
       }
     } else {
       this.cache.clear();
-      this.entrySources.clear();
       this.dependencies.clear();
     }
+  }
+
+  private observe(
+    entry: CachedModuleGraphClassification,
+    observer?: ModuleDiscoveryObserver,
+  ): Promise<BoxelSourceClassification> {
+    let promise = entry.promise;
+    if (!promise) {
+      throw new Error('Module graph classification was observed before start');
+    }
+    if (!observer) {
+      return promise;
+    }
+    // A document admission can join a classification that an ordinary
+    // metadata consumer already started. Replay everything discovered so far
+    // synchronously, then subscribe for later edges; this preserves the same
+    // pre-await denial ordering without duplicating the graph walk.
+    for (let identifier of entry.discovered) {
+      observer(identifier);
+    }
+    entry.observers.add(observer);
+    return promise.finally(() => entry.observers.delete(observer));
   }
 
   private async classifyGraph(
     moduleIdentifier: string,
     entrySource?: string,
     observedDependencies = new Set<string>(),
+    onAuthoredModuleDiscovered?: ModuleDiscoveryObserver,
   ): Promise<BoxelSourceClassification> {
     let maxModules = this.options.maxModules ?? 256;
     let graph = new Map<
@@ -705,7 +750,16 @@ export class BoxelModuleGraphClassifier {
       { own: BoxelSourceClassification; dependencies: string[] }
     >();
     let visiting = new Set<string>();
+    let discovered = new Set<string>();
     let graphFailure: BoxelSourceClassification | undefined;
+
+    let announce = (identifier: string) => {
+      if (discovered.has(identifier)) {
+        return;
+      }
+      discovered.add(identifier);
+      onAuthoredModuleDiscovered?.(identifier);
+    };
 
     let collect = async (identifier: string, suppliedSource?: string) => {
       if (
@@ -720,6 +774,12 @@ export class BoxelModuleGraphClassifier {
         graphFailure = unavailableClassification('module-graph-limit');
         return;
       }
+      // This callback must remain before both `visiting.add` and the first
+      // await below. Its purpose is admission ordering, not observation:
+      // once an authored edge is resolved, the Host must lose permission to
+      // evaluate it before any asynchronous source work gives another Host
+      // task a chance to import it.
+      announce(identifier);
       visiting.add(identifier);
 
       let source: string;
@@ -760,6 +820,10 @@ export class BoxelModuleGraphClassifier {
         }
         observedDependencies.add(dependency);
         dependencies.push(dependency);
+        // Announce every edge in this module together, before recursively
+        // awaiting the source of the first dependency. Otherwise a sibling
+        // later in the list remains Host-loadable during that await.
+        announce(dependency);
       }
       dependencies.sort();
       graph.set(identifier, { own, dependencies });

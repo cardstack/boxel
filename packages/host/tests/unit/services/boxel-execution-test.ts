@@ -3,7 +3,16 @@ import Service from '@ember/service';
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import type BoxelExecutionService from '@cardstack/host/services/boxel-execution';
+import {
+  rri,
+  type LooseSingleCardDocument,
+  type LooseSingleFileMetaDocument,
+} from '@cardstack/runtime-common';
+
+import {
+  hydrateBoxelDocumentGraph,
+  type default as BoxelExecutionService,
+} from '@cardstack/host/services/boxel-execution';
 
 import type { BaseDef } from '@cardstack/base/card-api';
 
@@ -98,6 +107,165 @@ module('Unit | Service | boxel-execution', function (hooks) {
       'isolated tries its own stored prerender first, falling back to embedded',
     );
     assert.deepEqual(imported, [cssHref]);
+  });
+
+  test('hydrates declared card and file-meta relationships without materializing instances', async function (assert) {
+    let rootURL = 'https://realm.example/Album/one';
+    let trackURL = 'https://realm.example/Track/one';
+    let coverURL = 'https://realm.example/assets/cover.png';
+    let documents = new Map<
+      string,
+      LooseSingleCardDocument | LooseSingleFileMetaDocument
+    >();
+    documents.set(trackURL, {
+      data: {
+        type: 'card',
+        id: trackURL,
+        attributes: { title: 'First track' },
+        relationships: {
+          cover: { links: { self: coverURL } },
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('https://realm.example/track'),
+            name: 'Track',
+          },
+        },
+      },
+    });
+    documents.set(coverURL, {
+      data: {
+        type: 'file-meta',
+        id: coverURL,
+        attributes: {
+          name: 'cover.png',
+          contentType: 'image/png',
+          width: 800,
+          height: 800,
+        },
+        meta: {
+          adoptsFrom: {
+            module: rri('https://base.example/image-file-def'),
+            name: 'ImageFileDef',
+          },
+        },
+      },
+    });
+    let fetched: string[] = [];
+
+    let hydrated = await hydrateBoxelDocumentGraph(
+      {
+        data: {
+          type: 'card',
+          id: rootURL,
+          relationships: {
+            track: { links: { self: trackURL } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('https://realm.example/album'),
+              name: 'Album',
+            },
+          },
+        },
+      },
+      rri(rootURL),
+      async (url) => {
+        fetched.push(url);
+        return documents.get(url);
+      },
+    );
+
+    assert.deepEqual(
+      fetched,
+      [trackURL, coverURL],
+      'only the exact declared relationship graph is fetched',
+    );
+    assert.deepEqual(
+      hydrated.data.relationships?.track,
+      {
+        links: { self: trackURL },
+        data: { type: 'card', id: trackURL },
+      },
+      'the root relationship is connected to its card resource',
+    );
+    assert.deepEqual(
+      hydrated.included?.map((resource) => ({
+        id: resource.id,
+        type: resource.type,
+      })),
+      [
+        { id: rri(trackURL), type: 'card' },
+        { id: rri(coverURL), type: 'file-meta' },
+      ],
+      'card and indexed file metadata cross the same inert document boundary',
+    );
+    assert.deepEqual(
+      hydrated.included?.[0]?.relationships?.cover,
+      {
+        links: { self: coverURL },
+        data: { type: 'file-meta', id: coverURL },
+      },
+      'the nested file relationship carries file-meta identity',
+    );
+  });
+
+  test('relationship graph hydration terminates cycles at the known root', async function (assert) {
+    let rootURL = 'https://realm.example/Node/root';
+    let childURL = 'https://realm.example/Node/child';
+    let fetchCount = 0;
+
+    let hydrated = await hydrateBoxelDocumentGraph(
+      {
+        data: {
+          type: 'card',
+          id: rootURL,
+          relationships: {
+            child: { links: { self: childURL } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('https://realm.example/node'),
+              name: 'Node',
+            },
+          },
+        },
+      },
+      rri(rootURL),
+      async (url) => {
+        fetchCount++;
+        return {
+          data: {
+            type: 'card',
+            id: url,
+            relationships: {
+              parent: { links: { self: rootURL } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: rri('https://realm.example/node'),
+                name: 'Node',
+              },
+            },
+          },
+        };
+      },
+    );
+
+    assert.strictEqual(fetchCount, 1, 'the known root is not fetched again');
+    assert.strictEqual(
+      hydrated.included?.length,
+      1,
+      'the cycle adds one child',
+    );
+    assert.deepEqual(
+      hydrated.included?.[0]?.relationships?.parent,
+      {
+        links: { self: rootURL },
+        data: { type: 'card', id: rootURL },
+      },
+      'the back edge points at the existing root resource',
+    );
   });
 
   test('a prerendered stylesheet that fails the Capsule CSS policy is dropped loudly, not silently', async function (assert) {

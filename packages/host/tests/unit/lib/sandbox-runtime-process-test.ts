@@ -2,6 +2,7 @@ import { module, test } from 'qunit';
 
 import {
   BOXEL_EXECUTION_TRANSPORT_VERSION,
+  ri,
   type LooseCardResource,
   type LooseSingleCardDocument,
   type RealmResourceIdentifier,
@@ -162,7 +163,7 @@ module('Unit | Sandbox runtime process', function () {
     channel.port2.close();
   });
 
-  test('projected links and scalar FileDef resource projections are exact authored resource authority', function (assert) {
+  test('projected links and bounded document semantics are exact authored resource authority', function (assert) {
     let id =
       'https://realm.example/cards/annual-report' as RealmResourceIdentifier;
     let resource = {
@@ -182,6 +183,7 @@ module('Unit | Sandbox runtime process', function () {
       },
       meta: {
         adoptsFrom: { module: '../annual-report', name: 'AnnualReport' },
+        realmURL: ri('https://realm.example/'),
       },
     } as unknown as LooseCardResource;
     let included = {
@@ -200,11 +202,20 @@ module('Unit | Sandbox runtime process', function () {
     } as unknown as LooseSingleCardDocument;
 
     assert.deepEqual(projectedResourceLinks(resource, document, id).sort(), [
+      'https://realm.example/_types',
       'https://realm.example/cards/details',
       'https://realm.example/files/annual-report.bin',
       'https://realm.example/files/annual-report.pdf',
       'https://realm.example/files/notes.txt',
     ]);
+
+    resource.meta!.realmURL = ri('https://other.example/');
+    assert.false(
+      projectedResourceLinks(resource, document, id).includes(
+        'https://other.example/_types',
+      ),
+      'a resource cannot grant another realm inventory by forging meta.realmURL',
+    );
   });
 
   test("RP-15.3: the control envelope accepts the child's post-ready 'runtime-error' report — and still rejects malformed shapes", function (assert) {

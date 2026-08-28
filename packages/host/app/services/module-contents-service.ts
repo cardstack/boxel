@@ -12,7 +12,6 @@ import {
 import {
   ModuleSyntax,
   type PossibleCardOrFieldDeclaration,
-  type FunctionDeclaration,
   type ClassDeclaration,
   type Declaration,
   type Reexport,
@@ -48,10 +47,9 @@ export type ToolDeclaration = Omit<ClassDeclaration, 'type'> & {
 };
 
 export type ModuleDeclaration =
+  | Declaration
   | CardOrFieldDeclaration
   | ToolDeclaration
-  | ClassDeclaration
-  | FunctionDeclaration
   | CardOrFieldReexport;
 
 export function isCardOrFieldDeclaration(

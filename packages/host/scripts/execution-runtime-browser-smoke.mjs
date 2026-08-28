@@ -33,9 +33,30 @@ export function normalizeVisibleText(value) {
 
 export const executionRuntimeSmokeCases = [
   {
+    id: 'trusted-base-direct',
+    path: '/base/index',
+    expectedExecution: 'direct',
+    mustContain: ['Base Workspace', 'Brand Guide', 'Open Library'],
+    purpose:
+      'The trusted Base realm proves the Direct half of the same document-first Host API without widening Direct trust to platform dependency realms.',
+  },
+  {
+    id: 'workspace-card-api-navigation',
+    path: '/ctse/assistant-realm-runner-poc/index',
+    expectedExecution: 'sandbox',
+    mustContain: ['AI Realm Runner Environment', 'Recipe Gallery', 'Browse'],
+    interaction: {
+      kind: 'open-stack',
+      buttonName: 'Open Recipe Gallery',
+      targetMustContain: ['Recipe Gallery', 'Banana Bread', 'Butter Chicken'],
+    },
+    purpose:
+      'A real Workspace card consumes Base viewCard inside the child, crosses the bounded navigation lane, and opens a second Sandbox stack card.',
+  },
+  {
     id: 'release-composition',
     path: '/ctse/execution-runtime-suite/Release/opening-night',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Opening Night',
       '18446744073709551617',
@@ -55,7 +76,7 @@ export const executionRuntimeSmokeCases = [
   {
     id: 'nested-field-default-edit',
     path: '/ctse/sandbox-compatibility-corpus-20260803/NestedFieldHost/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: ['Northlight Test Kitchen', '18 Orchard Lane', 'Hudson, NY'],
     minimumHeadings: 1,
     interaction: {
@@ -70,12 +91,12 @@ export const executionRuntimeSmokeCases = [
       textEntryValue: 'Northlight Test Kitchen',
     },
     purpose:
-      'Capsule isolated rendering followed by the trusted Direct default edit template and nested FieldDef controls.',
+      'Sandbox isolated rendering followed by the trusted Direct default edit template and nested FieldDef controls.',
   },
   {
     id: 'rich-markdown-graph',
     path: '/ctse/sandbox-compatibility-corpus-20260803/MarkdownArticle/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'The boundary should disappear',
       'Inline and block card formats',
@@ -91,7 +112,7 @@ export const executionRuntimeSmokeCases = [
   {
     id: 'computed-flight-projection',
     path: '/ctse/sandbox-compatibility-corpus-20260803/ComputedFlightPlan/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'BX4500 · ORD → LHR',
       '$21,406',
@@ -155,7 +176,7 @@ export const executionRuntimeBroadCorpusCases = [
   {
     id: 'format-preview-batch-one',
     path: '/ctse/sandbox-compatibility-corpus-20260803/FormatPreviewBatchOne/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Format gauntlet · cards 1–5',
       'Avery Rivera',
@@ -180,7 +201,7 @@ export const executionRuntimeExtendedCorpusCases = [
   {
     id: 'activity-timeline',
     path: '/ctse/sandbox-compatibility-corpus-20260803/ActivityTimeline/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Launch room activity',
       'Compatibility corpus created',
@@ -188,12 +209,12 @@ export const executionRuntimeExtendedCorpusCases = [
       'Editorial layout approved',
     ],
     purpose:
-      'containsMany projection and authored ordering across a Capsule boundary.',
+      'containsMany projection and authored ordering inside the isolated child.',
   },
   {
     id: 'linked-project',
     path: '/ctse/sandbox-compatibility-corpus-20260803/LinkedProject/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Realm boundary compatibility',
       'Mina Okafor',
@@ -202,12 +223,12 @@ export const executionRuntimeExtendedCorpusCases = [
       'Editorial design',
     ],
     purpose:
-      'linksTo and linksToMany projections whose linked values remain visually useful inside Capsule rendering.',
+      'linksTo and linksToMany projections whose linked values remain visually useful inside Sandbox rendering.',
   },
   {
     id: 'recursive-discussion',
     path: '/ctse/sandbox-compatibility-corpus-20260803/RecursiveDiscussion/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Sandbox design review',
       'Stable identity matters as much as capability confinement.',
@@ -220,7 +241,7 @@ export const executionRuntimeExtendedCorpusCases = [
   {
     id: 'card-info-recipe',
     path: '/ctse/sandbox-compatibility-corpus-20260803/CardInfoRecipe/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Golden Hour Lemon Beans',
       'Silky white beans',
@@ -242,7 +263,7 @@ export const executionRuntimeExtendedCorpusCases = [
   {
     id: 'workflow-studio',
     path: '/ctse/sandbox-compatibility-corpus-20260803/WorkflowStudio/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Night Market Publishing Run',
       'Collect',
@@ -252,12 +273,12 @@ export const executionRuntimeExtendedCorpusCases = [
       'active-index=0',
     ],
     purpose:
-      'Tracked local workflow state and multiple authored actions in one Capsule.',
+      'Tracked local workflow state and multiple authored actions in one Sandbox child.',
   },
   {
     id: 'video-dispatch',
     path: '/ctse/sandbox-compatibility-corpus-20260803/VideoDispatch/sample',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: [
       'Night market field dispatch',
       'MP4 + WebM',
@@ -321,17 +342,17 @@ export const executionRuntimeExtendedCorpusCases = [
 export const executionRuntimeNavigationSoakCases = [
   {
     buttonName: '01 Primitive Profile',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: ['Avery Rivera', 'Editorial Systems Lead'],
   },
   {
     buttonName: '02 Nested Field Host',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: ['Northlight Test Kitchen', '18 Orchard Lane'],
   },
   {
     buttonName: '04 Rich Markdown Article',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: ['The boundary should disappear', 'Harbor relay 7'],
   },
   {
@@ -341,7 +362,7 @@ export const executionRuntimeNavigationSoakCases = [
   },
   {
     buttonName: '11 Computed Flight Plan',
-    expectedExecution: 'capsule',
+    expectedExecution: 'sandbox',
     mustContain: ['BX4500 · ORD → LHR', '$119345.79999999999'],
   },
   {
@@ -565,29 +586,42 @@ async function settleSandboxFrame(
   timeoutMs,
   requiredSelectors = [],
 ) {
-  try {
-    let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
-    let text = await frame.locator('body').innerText({ timeoutMs });
-    let normalizedText = normalizeVisibleText(text);
-    let selectorsReady = (
-      await Promise.all(
-        requiredSelectors.map(async (selector) =>
-          Boolean(await frame.locator(selector).count()),
-        ),
-      )
-    ).every(Boolean);
-    return {
-      fatal: FATAL_TEXT.some((value) => text.includes(value)),
-      ready:
+  let deadline = Date.now() + timeoutMs;
+  let lastState = { fatal: false, ready: false, signIn: false };
+  while (Date.now() < deadline) {
+    try {
+      // The iframe element is mounted before the child has evaluated the card
+      // graph. Reading body.innerText once therefore observes a legitimate
+      // empty bootstrap document and manufactures a readiness failure. Rebind
+      // on every pass because a failed child may also be replaced in place.
+      let frame = tab.playwright.frameLocator('iframe.boxel-sandbox-process');
+      let text = await frame
+        .locator('body')
+        .innerText({ timeoutMs: Math.min(1_000, timeoutMs) });
+      let normalizedText = normalizeVisibleText(text);
+      let selectorsReady = (
+        await Promise.all(
+          requiredSelectors.map(async (selector) =>
+            Boolean(await frame.locator(selector).count()),
+          ),
+        )
+      ).every(Boolean);
+      let fatal = FATAL_TEXT.some((value) => text.includes(value));
+      let ready =
         selectorsReady &&
         expectedText.every((value) =>
           normalizedText.includes(normalizeVisibleText(value)),
-        ),
-      signIn: false,
-    };
-  } catch {
-    return { fatal: false, ready: false, signIn: false };
+        );
+      lastState = { fatal, ready, signIn: false };
+      if (ready || fatal) {
+        return lastState;
+      }
+    } catch {
+      // The child may still be replacing its bootstrap document.
+    }
+    await tab.playwright.waitForTimeout(100);
   }
+  return lastState;
 }
 
 async function probe(
@@ -856,6 +890,76 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
     ]);
   }
 
+  if (smokeCase.interaction.kind === 'open-stack') {
+    let iframeSelector = 'iframe.boxel-sandbox-process';
+    let iframeCountBefore = await tab.playwright
+      .locator(iframeSelector)
+      .count();
+    if (iframeCountBefore === 0) {
+      return {
+        iframeCountBefore,
+        kind: 'open-stack',
+        pass: false,
+        reason: 'source-sandbox-frame-missing',
+      };
+    }
+    let sourceFrame = await sandboxFrameAt(
+      tab,
+      iframeSelector,
+      iframeCountBefore - 1,
+    );
+    await sourceFrame
+      .getByRole('button', {
+        exact: true,
+        name: smokeCase.interaction.buttonName,
+      })
+      .click({ timeoutMs });
+
+    let targetText = '';
+    let iframeCountAfter = iframeCountBefore;
+    let deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      iframeCountAfter = await tab.playwright.locator(iframeSelector).count();
+      if (iframeCountAfter > iframeCountBefore) {
+        let targetFrame = await sandboxFrameAt(
+          tab,
+          iframeSelector,
+          iframeCountAfter - 1,
+        );
+        targetText = await targetFrame
+          .locator('body')
+          .innerText({ timeoutMs: Math.min(1000, timeoutMs) })
+          .catch(() => '');
+        let normalized = normalizeVisibleText(targetText);
+        if (
+          smokeCase.interaction.targetMustContain.every((value) =>
+            normalized.includes(normalizeVisibleText(value)),
+          )
+        ) {
+          break;
+        }
+      }
+      await tab.playwright.waitForTimeout(100);
+    }
+    let missingText = smokeCase.interaction.targetMustContain.filter(
+      (value) =>
+        !normalizeVisibleText(targetText).includes(normalizeVisibleText(value)),
+    );
+    let executions = await executionModes();
+    return {
+      executions,
+      iframeCountAfter,
+      iframeCountBefore,
+      kind: 'open-stack',
+      missingText,
+      pass:
+        iframeCountAfter === iframeCountBefore + 1 &&
+        missingText.length === 0 &&
+        (!checkExecution || executions.includes('sandbox')),
+      textSample: targetText.replace(/\s+/g, ' ').slice(0, 600),
+    };
+  }
+
   if (smokeCase.interaction.kind === 'default-edit') {
     let readyElapsedMs = await enterEdit();
     let values = await tab.playwright.evaluate(() =>
@@ -1025,6 +1129,20 @@ async function runInteraction(tab, smokeCase, timeoutMs, checkExecution) {
     };
   }
   throw new Error(`Unknown smoke interaction: ${smokeCase.interaction.kind}`);
+}
+
+async function sandboxFrameAt(tab, iframeSelector, index) {
+  let iframe = tab.playwright.locator(iframeSelector).nth(index);
+  let src = await iframe.getAttribute('src');
+  if (!src) {
+    throw new Error(`Sandbox iframe ${index} has no source URL`);
+  }
+  // Browser-client deliberately exposes frameLocator without Playwright's
+  // locator-index helpers. Every retained Sandbox process has a unique
+  // bootstrap URL, so select the frame by that stable identity instead of
+  // assuming source order inside a multi-card stack.
+  let escapedSrc = src.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return tab.playwright.frameLocator(`${iframeSelector}[src="${escapedSrc}"]`);
 }
 
 function assess(probeResult, interaction, smokeCase, checkExecution) {
@@ -1229,23 +1347,23 @@ async function auditSandboxTeardown(tab, origin, smokeCases, timeoutMs) {
   ) {
     return { failures: [], iframeCount: 0, skipped: true };
   }
-  let capsuleCase = smokeCases.find(
-    (smokeCase) => smokeCase.expectedExecution === 'capsule',
+  let directCase = smokeCases.find(
+    (smokeCase) => smokeCase.expectedExecution === 'direct',
   );
-  if (!capsuleCase) {
+  if (!directCase) {
     return {
-      failures: ['sandbox-teardown-needs-capsule-destination'],
+      failures: ['sandbox-teardown-needs-direct-destination'],
       iframeCount: null,
       skipped: false,
     };
   }
 
-  await tab.goto(urlFor(origin, capsuleCase.path));
+  await tab.goto(urlFor(origin, directCase.path));
   await tab.playwright.waitForLoadState({
     state: 'domcontentloaded',
     timeoutMs,
   });
-  let settled = await settle(tab, capsuleCase.mustContain, timeoutMs);
+  let settled = await settle(tab, directCase.mustContain, timeoutMs);
   let state = await tab.playwright.evaluate(() => ({
     iframeCount: document.querySelectorAll('iframe.boxel-sandbox-process')
       .length,
@@ -1389,19 +1507,21 @@ function summarizePerformance(run, smokeCases) {
   let casesById = new Map(
     smokeCases.map((smokeCase) => [smokeCase.id, smokeCase]),
   );
-  let capsule = [];
   let sandbox = [];
   let direct = [];
+  let directTransitions = [];
   for (let result of run.results) {
     let smokeCase = casesById.get(result.id);
     if (!smokeCase || !result.assessment.pass) continue;
-    if (smokeCase.expectedExecution === 'capsule') capsule.push(result);
     if (smokeCase.expectedExecution === 'sandbox') sandbox.push(result);
+    if (smokeCase.expectedExecution === 'direct') {
+      direct.push(result.page.elapsedMs);
+    }
     if (
       smokeCase.interaction?.expectedExecution === 'direct' &&
       typeof result.interaction.readyElapsedMs === 'number'
     ) {
-      direct.push(result.interaction.readyElapsedMs);
+      directTransitions.push(result.interaction.readyElapsedMs);
     }
   }
   let readySummary = (results) => ({
@@ -1415,13 +1535,12 @@ function summarizePerformance(run, smokeCases) {
     stages: summarizeExecutionStages(results),
   });
   return {
-    // Direct is entered through the trusted Base edit portal in these cases;
-    // this is the click-to-edit-ready transition, not a document navigation.
     direct: {
       samples: direct.length,
-      transitionReadyMedianMs: median(direct),
+      coldReadyMedianMs: median(direct),
+      transitionReadyMedianMs: median(directTransitions),
+      transitionSamples: directTransitions.length,
     },
-    capsule: readySummary(capsule),
     sandbox: {
       ...readySummary(sandbox),
       coldInteractiveHandoffMedianMs: median(

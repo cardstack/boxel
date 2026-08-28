@@ -630,6 +630,12 @@ export interface TypePresentation {
 }
 
 export interface BoxelDescription {
+  /**
+   * Runtime-owned type metadata for Host UI, including Code mode. Direct
+   * produces this in-process; Sandbox returns it as cloneable data over its
+   * private MessageChannel. A live definition, field object, or component
+   * must never be substituted for this record.
+   */
   protocolVersion: number;
   requiredFeatures: string[];
   ref: CodeRef;

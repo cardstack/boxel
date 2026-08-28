@@ -28,7 +28,12 @@ Router.map(function () {
   this.route('boxel-sandbox-runtime', {
     path: '/_boxel-sandbox-runtime',
   });
-
+  this.route('boxel-execution-preview', {
+    path: '/_boxel-execution-preview/*cardPath',
+  });
+  this.route('boxel-execution-capability-demo', {
+    path: '/_boxel-execution-capability-demo',
+  });
   this.route('index', { path: '/*path' });
   this.route('index-root', { path: '/' });
 

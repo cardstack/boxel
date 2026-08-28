@@ -41,6 +41,7 @@ export default config as {
   resolvedOpenRouterRealmURL: string | undefined;
   resolvedTestRealmURL: string;
   boxelSandboxRuntimeURL?: string;
+  boxelExecutionTrustedModules: string[];
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
