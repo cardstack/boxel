@@ -358,7 +358,7 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
   @tracked dimensions: { x: number; y: number; z: number } | null = null;
 
   get isFitted() {
-    return this.args.mode === 'fitted';
+    return this.args.format === 'fitted';
   }
   get url() {
     return String(this.args.model?.resourceUrl ?? this.args.model?.url ?? '');
@@ -408,7 +408,7 @@ export class Model3DPreview extends GlimmerComponent<FilePreviewSignature> {
     {{#if this.isFitted}}
       <ModelThumbnail @name={{this.name}} data-test-model-preview='fitted' />
     {{else}}
-      <div class='model-viewer' data-test-model-preview={{@mode}}>
+      <div class='model-viewer' data-test-model-preview={{@format}}>
         {{#if this.url}}
           <div class='model-viewer__host' {{renderModel this this.url}}></div>
         {{/if}}

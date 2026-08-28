@@ -219,7 +219,7 @@ class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get isFitted(): boolean {
-    return this.args.mode === 'fitted';
+    return this.args.format === 'fitted';
   }
 
   get parsed(): { ok: boolean; value?: JsonValue } {
@@ -242,7 +242,7 @@ class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
       return htmlSafe('');
     }
     let maxNodes =
-      this.args.mode === 'embedded' ? EMBEDDED_MAX_NODES : TREE_MAX_NODES;
+      this.args.format === 'embedded' ? EMBEDDED_MAX_NODES : TREE_MAX_NODES;
     return htmlSafe(jsonToTreeHtml(value as JsonValue, maxNodes));
   }
 
@@ -315,7 +315,7 @@ class JsonPreview extends GlimmerComponent<FilePreviewSignature> {
     {{else}}
       <div
         class='data-preview data-preview--tree'
-        data-mode={{@mode}}
+        data-mode={{@format}}
         data-test-json-preview
       >
         {{#if this.hasContent}}

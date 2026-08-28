@@ -11,6 +11,7 @@ import {
   requestLoginToken as defaultRequestLoginToken,
   MatrixAuthError,
 } from '../lib/auth.ts';
+import { resolveAnonymousBrowseUrl as defaultResolveAnonymousBrowseUrl } from '../lib/published-realm.ts';
 import { openBrowser } from '../lib/open-browser.ts';
 import { FG_RED, RESET } from '../lib/colors.ts';
 import { cliLog } from '../lib/cli-log.ts';
@@ -71,15 +72,20 @@ export interface BrowseOptions {
   // Injectable seams for testing.
   profileManager?: ProfileManager;
   requestLoginToken?: typeof defaultRequestLoginToken;
+  resolveAnonymousBrowseUrl?: typeof defaultResolveAnonymousBrowseUrl;
   openBrowserFn?: (url: string) => Promise<boolean>;
   log?: (message: string) => void;
 }
 
-// Resolve the target profile: the named one, or the active one.
+// Resolve the target profile: the named one, or the active one. A missing
+// *named* profile is always an error (the user asked for it by name), but a
+// missing active profile returns null so the caller can still try the
+// anonymous published-realm path — which needs no credentials — before
+// insisting on a profile for the token flow.
 function resolveProfile(
   pm: ProfileManager,
   profileId: string | undefined,
-): { id: string; profile: Profile } {
+): { id: string; profile: Profile } | null {
   if (profileId) {
     let profile = pm.getProfile(profileId);
     if (!profile) {
@@ -89,11 +95,7 @@ function resolveProfile(
     }
     return { id: profileId, profile };
   }
-  let active = pm.getActiveProfile();
-  if (!active) {
-    throw new Error(NO_ACTIVE_PROFILE_ERROR);
-  }
-  return active;
+  return pm.getActiveProfile();
 }
 
 export async function browse(
@@ -102,10 +104,51 @@ export async function browse(
 ): Promise<void> {
   let pm = options.profileManager ?? getProfileManager();
   let requestLoginToken = options.requestLoginToken ?? defaultRequestLoginToken;
+  let resolveAnonymousBrowseUrl =
+    options.resolveAnonymousBrowseUrl ?? defaultResolveAnonymousBrowseUrl;
   let openBrowserFn = options.openBrowserFn ?? openBrowser;
   let log = options.log ?? ((message: string) => console.log(message));
 
-  let { id: profileId, profile } = resolveProfile(pm, options.profile);
+  let resolved = resolveProfile(pm, options.profile);
+
+  // Fast path: a *published* realm is served on its own origin, which the host
+  // renders with no sign-in. When the given card path is such a URL, open it
+  // as-is and skip minting a token entirely. A source-realm path always takes
+  // the token flow — the live card and its published snapshot are different
+  // URLs, so the path states which one the user wants. Only attempted with a
+  // card path (bare `browse` has no card to resolve) and without `--host-url`
+  // (which explicitly targets the operator app for the token flow).
+  //
+  // Tried before requiring a profile so a fresh install with no profile can
+  // still open an absolute published URL, which needs no credentials.
+  if (cardPath && !options.hostUrl) {
+    let anonymousUrl = await resolveAnonymousBrowseUrl(
+      resolved?.profile.realmServerUrl,
+      cardPath,
+    );
+    if (anonymousUrl) {
+      // No credential in this URL — it's a plain public link.
+      if (options.printUrl) {
+        cliLog.output(anonymousUrl);
+        return;
+      }
+      log(`Opening ${anonymousUrl} (published realm — no sign-in needed)`);
+      let opened = await openBrowserFn(anonymousUrl);
+      if (!opened) {
+        cliLog.warn(
+          `Couldn't open a browser automatically. Open this URL:\n  ${anonymousUrl}`,
+        );
+      }
+      return;
+    }
+  }
+
+  // The token flow needs a profile; the anonymous path above didn't apply, so
+  // insist on one now.
+  if (!resolved) {
+    throw new Error(NO_ACTIVE_PROFILE_ERROR);
+  }
+  let { id: profileId, profile } = resolved;
 
   // Mint the login token, recovering once from a rejected access token via the
   // profile manager's interactive re-auth (same pattern as the other commands).
@@ -157,11 +200,13 @@ export function registerBrowseCommand(program: Command): void {
   program
     .command('browse')
     .description(
-      'Open the Boxel app in your browser, already signed in as your active profile',
+      'Open the Boxel app in your browser, already signed in as your active ' +
+        'profile (a published-realm card URL opens directly, no sign-in needed)',
     )
     .argument(
       '[card-path]',
-      'Card path to deep-link to after signing in (e.g. a realm-relative path)',
+      'Card to open: a realm-relative path (opens signed in) or a ' +
+        'published-realm URL (opens directly, no sign-in)',
     )
     .option('--profile <id>', 'Profile to use (default: the active profile)')
     .option(

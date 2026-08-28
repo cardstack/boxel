@@ -475,87 +475,69 @@ export class DocLayout extends GlimmerComponent<{
           max-width: 48rem;
         }
 
-        /* Markdown content */
-        .doc-main :deep(.markdown-content) {
-          font-size: 0.9375rem;
-          line-height: 1.7;
+        /* Markdown content, tuned through MarkdownTemplate's `--markdown-*`
+           contract; `:deep` below covers only what the contract doesn't. */
+        .doc-main {
+          --markdown-font-size: 0.9375rem;
+          --markdown-line-height: 1.7;
+          --markdown-heading-scroll-margin: 6rem; /* sticky TOC offset */
+          --markdown-h2-font-size: 1.375rem;
+          --markdown-h2-font-weight: 700;
+          --markdown-h2-line-height: 1.3;
+          --markdown-h2-margin-block: var(--sp-6) var(--sp-3);
+          --markdown-h3-font-size: 1.125rem;
+          --markdown-h3-font-weight: 500;
+          --markdown-h3-line-height: 1.4;
+          --markdown-h3-margin-block: var(--sp-6) var(--sp-2);
+          --markdown-h4-font-size: 1rem;
+          --markdown-h4-font-weight: 600;
+          --markdown-h4-line-height: 1.5;
+          --markdown-h4-margin-block: var(--sp-4) var(--sp-2);
+          --markdown-p-margin-block: var(--sp-3);
+          --markdown-list-margin-block: var(--sp-3);
+          --markdown-list-padding-left: var(--sp-6);
+          --markdown-li-margin-block: var(--sp-2);
+          --markdown-li-line-height: 1.5;
+          --markdown-code-font-size: 0.875em;
+          --markdown-code-padding: 0.125rem 0.25rem;
+          --markdown-code-border-radius: var(--boxel-border-radius-sm);
+          --markdown-pre-margin-block: var(--sp-4);
+          --markdown-pre-padding: var(--sp-3);
+          --markdown-pre-border: 1px solid var(--db-border);
+          --markdown-pre-border-left: 3px solid var(--db-primary);
+          --markdown-pre-font-size: 0.8125rem;
+          --markdown-pre-line-height: 1.5;
+          --markdown-blockquote-margin-block: var(--sp-4);
+          --markdown-blockquote-padding: var(--sp-3) var(--sp-4);
+          --markdown-blockquote-border-left: 3px solid var(--primary);
+          --markdown-blockquote-background: var(--muted);
+          --markdown-blockquote-border-radius: 0 var(--boxel-border-radius-sm)
+            var(--boxel-border-radius-sm) 0;
+          --markdown-link-color: var(--primary);
+          --markdown-link-text-decoration: none;
+        }
+        .instructions-article {
+          --markdown-code-background: color-mix(
+            in lab,
+            var(--db-primary) 8%,
+            var(--db-muted)
+          );
+          --markdown-pre-background: color-mix(
+            in lab,
+            var(--db-primary) 8%,
+            var(--db-muted)
+          );
         }
         .doc-main :deep(.markdown-content h2) {
-          font-size: 1.375rem;
-          font-weight: 700;
-          line-height: 1.3;
-          margin-top: var(--sp-6);
-          margin-bottom: var(--sp-3);
-          scroll-margin-top: 6rem; /* Increased for sticky TOC offset */
-          padding-top: var(--sp-2);
-        }
-        .doc-main :deep(.markdown-content h2:first-child) {
-          margin-top: 0;
+          padding-top: var(--sp-2); /* anchor jumps land above the heading */
         }
         .doc-main :deep(.markdown-content h3) {
-          font-size: 1.125rem;
-          font-weight: 500;
-          line-height: 1.4;
-          margin-top: var(--sp-6);
-          margin-bottom: var(--sp-2);
           color: var(--foreground);
-          scroll-margin-top: 6rem; /* Increased for sticky TOC offset */
-        }
-        .doc-main :deep(.markdown-content h4) {
-          font-size: 1rem;
-          font-weight: 600;
-          line-height: 1.5;
-          margin-top: var(--sp-4);
-          margin-bottom: var(--sp-2);
-        }
-        .doc-main :deep(.markdown-content p) {
-          margin: var(--sp-3) 0;
-          line-height: 1.6;
-        }
-        .doc-main :deep(.markdown-content ul),
-        .doc-main :deep(.markdown-content ol) {
-          margin: var(--sp-3) 0;
-          padding-left: var(--sp-6);
-        }
-        .doc-main :deep(.markdown-content li) {
-          margin: var(--sp-2) 0;
-          line-height: 1.5;
-        }
-        .instructions-article :deep(pre),
-        .instructions-article :deep(code) {
-          --code-bg: color-mix(in lab, var(--db-primary) 8%, var(--db-muted));
-          background-color: var(--code-bg, var(--db-muted));
-        }
-        .doc-main :deep(.markdown-content code) {
-          font-size: 0.875em;
-          padding: 0.125rem 0.25rem;
-          border-radius: var(--boxel-border-radius-sm);
         }
         .doc-main :deep(.markdown-content pre) {
-          margin: var(--sp-4) 0;
-          padding: var(--sp-3);
-          border: 1px solid var(--db-border);
-          border-left: 3px solid var(--db-primary);
           overflow-x: auto;
-          font-size: 0.8125rem;
-          line-height: 1.5;
-        }
-        .doc-main :deep(.markdown-content pre code) {
-          background: transparent;
-          padding: 0;
-        }
-        .doc-main :deep(.markdown-content blockquote) {
-          margin: var(--sp-4) 0;
-          padding: var(--sp-3) var(--sp-4);
-          border-left: 3px solid var(--primary);
-          background: var(--muted);
-          border-radius: 0 var(--boxel-border-radius-sm)
-            var(--boxel-border-radius-sm) 0;
-          font-style: italic;
         }
         .doc-main :deep(.markdown-content a) {
-          color: var(--primary);
-          text-decoration: none;
           transition: color 0.15s ease;
         }
         .doc-main :deep(.markdown-content a:hover) {

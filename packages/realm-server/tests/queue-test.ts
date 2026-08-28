@@ -9,6 +9,7 @@ import {
 } from '@cardstack/postgres';
 
 import type {
+  PgPrimitive,
   QueueCoalesceContext,
   QueuePublisher,
   QueueRunner,
@@ -296,6 +297,128 @@ module(basename(import.meta.filename), function () {
         1,
         'only one pending job row exists for the converged coalesce group',
       );
+    });
+
+    module('run-command coalesce', function () {
+      const realmURL = 'http://localhost:4201/openrouter/';
+      const dedupedArgs = {
+        realmURL,
+        realmUsername: 'openrouter_realm',
+        runAs: 'openrouter_realm',
+        command:
+          '@cardstack/boxel-host/commands/sync-openrouter-models/default',
+        commandInput: { realmIdentifier: realmURL },
+        dedupeKey: `sync-openrouter-models:${realmURL}`,
+      };
+      function publishRunCommand(args: PgPrimitive) {
+        return publisher.publish<{ status: string }>({
+          jobType: 'run-command',
+          concurrencyGroup: `command:${realmURL}`,
+          timeout: 300,
+          priority: 1,
+          args,
+        });
+      }
+      async function pendingRowCount() {
+        let rows = (await adapter.execute(
+          `SELECT id
+           FROM jobs
+           WHERE concurrency_group=$1
+             AND status='unfulfilled'`,
+          { bind: [`command:${realmURL}`] },
+        )) as { id: number }[];
+        return rows.length;
+      }
+
+      test('a keyed enqueue joins a pending twin with identical args', async function (assert) {
+        await runner.destroy();
+
+        let first = await publishRunCommand(dedupedArgs);
+        // Same invocation, same key, different property order — the twin
+        // check is structural, not textual.
+        let twin = await publishRunCommand({
+          dedupeKey: dedupedArgs.dedupeKey,
+          commandInput: { realmIdentifier: realmURL },
+          command: dedupedArgs.command,
+          runAs: dedupedArgs.runAs,
+          realmUsername: dedupedArgs.realmUsername,
+          realmURL,
+        });
+        let differentInput = await publishRunCommand({
+          ...dedupedArgs,
+          commandInput: { realmIdentifier: 'http://localhost:4201/other/' },
+        });
+
+        assert.strictEqual(
+          twin.id,
+          first.id,
+          'an identical keyed invocation joins the pending job',
+        );
+        assert.notStrictEqual(
+          differentInput.id,
+          first.id,
+          'a keyed invocation with different args gets its own job',
+        );
+        assert.strictEqual(
+          await pendingRowCount(),
+          2,
+          'two distinct invocations leave two pending rows, the twin adds none',
+        );
+      });
+
+      test('an enqueue without a dedupeKey never joins, even when args are identical', async function (assert) {
+        await runner.destroy();
+
+        let plainArgs = { ...dedupedArgs, dedupeKey: null };
+        let first = await publishRunCommand(plainArgs);
+        let second = await publishRunCommand({ ...plainArgs });
+
+        assert.notStrictEqual(
+          second.id,
+          first.id,
+          'identical unkeyed run-command requests are two executions',
+        );
+        assert.strictEqual(
+          await pendingRowCount(),
+          2,
+          'both unkeyed requests are pending as separate jobs',
+        );
+      });
+
+      test('a keyed enqueue joins an in-flight twin and shares its result', async function (assert) {
+        let started = new Deferred<void>();
+        let release = new Deferred<void>();
+        let executions = 0;
+        runner.register('run-command', async () => {
+          executions++;
+          started.fulfill();
+          await release.promise;
+          return { status: 'synced' };
+        });
+
+        let running = await publishRunCommand(dedupedArgs);
+        await started.promise;
+
+        let lateTwin = await publishRunCommand({ ...dedupedArgs });
+        assert.strictEqual(
+          lateTwin.id,
+          running.id,
+          'a keyed twin published after the job was claimed joins it',
+        );
+
+        release.fulfill();
+        let [runningResult, twinResult] = await Promise.all([
+          running.done,
+          lateTwin.done,
+        ]);
+        assert.deepEqual(runningResult, { status: 'synced' });
+        assert.deepEqual(
+          twinResult,
+          { status: 'synced' },
+          'the late twin receives the single execution result',
+        );
+        assert.strictEqual(executions, 1, 'the command ran exactly once');
+      });
     });
 
     test('incremental coalesce merges mixed operations and persists per-caller metadata', async function (assert) {

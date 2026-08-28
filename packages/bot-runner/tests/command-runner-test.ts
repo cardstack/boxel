@@ -131,6 +131,7 @@ module('command runner', () => {
           realmURL: 'http://localhost:4201/test/',
           realmUsername: '@alice:localhost',
           runAs: '@alice:localhost',
+          dedupeKey: null,
           command: '@cardstack/boxel-host/commands/show-card/default',
           commandInput: { cardId: 'http://localhost:4201/test/Person/1' },
         },
@@ -322,6 +323,7 @@ module('command runner', () => {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
+        dedupeKey: null,
         command: '@cardstack/boxel-host/commands/patch-card-instance/default',
         commandInput: {
           cardId: submissionCardUrl,
@@ -338,6 +340,7 @@ module('command runner', () => {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
+        dedupeKey: null,
         command: '@cardstack/boxel-host/commands/patch-card-instance/default',
         commandInput: {
           cardId: submissionCardUrl,
@@ -358,6 +361,7 @@ module('command runner', () => {
         realmURL: SUBMISSION_REALM_URL,
         realmUsername: SUBMISSION_BOT_USER_ID,
         runAs: SUBMISSION_BOT_USER_ID,
+        dedupeKey: null,
         command: '@cardstack/catalog/commands/create-pr-card/default',
         commandInput: {
           realm: SUBMISSION_REALM_URL,
@@ -381,6 +385,7 @@ module('command runner', () => {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
+        dedupeKey: null,
         command: '@cardstack/boxel-host/commands/patch-card-instance/default',
         commandInput: {
           cardId: submissionCardUrl,
@@ -403,6 +408,7 @@ module('command runner', () => {
         realmURL: 'http://localhost:4201/test/',
         realmUsername: '@alice:localhost',
         runAs: '@alice:localhost',
+        dedupeKey: null,
         command: '@cardstack/boxel-host/commands/patch-card-instance/default',
         commandInput: {
           cardId: submissionCardUrl,
