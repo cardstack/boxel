@@ -792,8 +792,8 @@ summary,
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   margin-top: -19px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -10163,4 +10163,460 @@ html[data-gm-dragging] * {
     800 17px/1 'Syne',
     sans-serif;
   letter-spacing: -0.02em;
+}
+
+/* ── Perform: the kiln firing ────────────────────────────────────────────
+   The demo container IS the scene. The stove, the schedule and the transport
+   are objects standing in one room rather than a card on a stage, so a later
+   `<c.Move>` could fly any of them without a second coordinate space.
+
+   WHY NOTHING HERE TWEENS A SHADOW
+   The heat is the one thing that changes continuously, so it is the one worth
+   being strict about. `box-shadow`, `text-shadow`, `filter: blur()` and
+   `drop-shadow()` are all re-rasterised on every frame that touches them, and
+   a shadow string is re-parsed and rebuilt besides — the trap the Crossing
+   demo documents for its three lights. The cheap pair is `opacity` and
+   `transform`, which composite without repainting.
+
+   So every glow is a STATIC gradient drawn once at full strength, and heat is
+   the opacity it is shown at. The flame does not grow by animating `height`,
+   which is layout; it is one path scaled on Y. The cone and the damper
+   rotate. That is the whole vocabulary.
+
+   The stove reads four custom properties the host writes each frame
+   (--kf-gas 0..5, --kf-damper, --kf-soak, --kf-cone). Nothing here is animated
+   BY the score: this is the app's own state, which the score only commands,
+   and no rule below knows the timeline exists. */
+.kf-stage {
+  --kf-gas: 0;
+  --kf-damper: 0;
+  --kf-soak: 0;
+  --kf-cone: 0;
+  /* The scene's whole palette, so one block below can move it into daylight.
+     The FIRE is deliberately not in here: a flame is the same colour in a dark
+     room and a bright one, and the glow reads on either ground because it is
+     opacity over a static gradient rather than a colour being mixed. */
+  --kf-ink: #ffeede;
+  --kf-dim: #a08b7d;
+  --kf-hot: #ff7a28;
+  --kf-ember: #ffb35a;
+  --kf-room-a: #1b1512;
+  --kf-room-b: #100c0a;
+  --kf-brick-a: #3a2f29;
+  --kf-brick-b: #1d1614;
+  --kf-trim: #4a3a31;
+  --kf-void: #120d0b;
+  --kf-shelf: #0d0908;
+  --kf-edge: #6d5647;
+  --kf-flap: #c49a7c;
+  --kf-clay: #f3e6cd;
+  --kf-hair: rgb(255 255 255 / 14%);
+  --kf-mark: rgb(255 255 255 / 34%);
+  /* 0 cold, 1 at full gas — every heat-driven rule reads this, so the mapping
+     lives in exactly one place */
+  --kf-heat: calc(var(--kf-gas) / 5);
+
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  justify-content: center;
+  padding: 14px 16px;
+  background:
+    radial-gradient(
+      70% 55% at 50% 86%,
+      rgb(255 122 40 / calc(var(--kf-heat) * 26%)),
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--kf-room-a) 0%, var(--kf-room-b) 100%);
+  color: var(--kf-ink);
+}
+
+/* Daylight: the same workshop with the lights on. The mouth and the shelf stay
+   dark, because the inside of a kiln is dark at noon too — the theme moves the
+   ROOM and the stove's clay, never the fire or the void it burns in. */
+:root[data-theme='light'] .kf-stage {
+  --kf-ink: #2a1f16;
+  --kf-dim: #7a6857;
+  --kf-ember: #b8430c;
+  --kf-room-a: #e7ddcd;
+  --kf-room-b: #d6c9b4;
+  --kf-brick-a: #bcab95;
+  --kf-brick-b: #97836c;
+  --kf-trim: #8a7660;
+  --kf-void: #241a14;
+  --kf-shelf: #1a120d;
+  --kf-edge: #6e5c48;
+  --kf-flap: #6b563f;
+  --kf-clay: #fdf6e8;
+  --kf-hair: rgb(42 31 22 / 20%);
+  --kf-mark: rgb(42 31 22 / 36%);
+}
+
+/* The stove and the schedule sit side by side, and fall to a stack when the
+   room cannot hold both. A flex wrap rather than a container query on purpose:
+   `.kf-stage` is the container ELEMENT, and an element never matches a query
+   against its own box — the two-column rule would simply never fire. The
+   basis widths below are the breakpoint, expressed where it can work. */
+.kf-scene {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: center;
+  /* the demo page's room is far wider than the scene wants to be; past this
+     the objects would just drift apart */
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.kf-kiln {
+  flex: 1 1 165px;
+  max-width: 230px;
+}
+
+.kf-ledger {
+  flex: 2 1 215px;
+  max-width: 330px;
+}
+
+/* the one big number — a game reads its state out loud. Colour is a paint,
+   but it steps once per command rather than tweening per frame. */
+.kf-temp {
+  font:
+    800 clamp(24px, 8cqw, 40px) / 1 'Syne',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  /* No transition on this one. `color-mix()` whose inputs are unregistered
+     custom properties does not re-resolve while a transition is holding the
+     property: the number kept the dark palette's colour after a theme swap.
+     It steps once per command anyway, so there was never much to tween. */
+  color: color-mix(
+    in oklab,
+    var(--kf-dim),
+    var(--kf-ember) calc(var(--kf-heat) * 100%)
+  );
+}
+
+/* — the stove — */
+
+.kf-kiln {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+}
+
+/* the light it throws into the room: a static bloom, faded in. This is the
+   rule that would otherwise have been an animated box-shadow. */
+.kf-kiln::after {
+  content: '';
+  position: absolute;
+  inset: -16%;
+  background: radial-gradient(
+    56% 44% at 50% 62%,
+    rgb(255 122 40 / 40%),
+    transparent 72%
+  );
+  opacity: var(--kf-heat);
+  pointer-events: none;
+  transition: opacity 420ms linear;
+}
+
+.kf-art {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+}
+
+.kf-glow {
+  opacity: var(--kf-heat);
+  transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* the flame grows by SCALE, not height: a transform, so no layout and no
+   repaint — drawn once at full size, squashed toward its base */
+.kf-flame {
+  opacity: var(--kf-heat);
+  scale: 1 calc(0.16 + var(--kf-heat) * 0.84);
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transition:
+    scale 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms linear;
+}
+
+/* upright until it drops, then bent for good. The only latching thing the
+   stove draws, and so the one a host that ignores reset leaves bent in a
+   future that has not happened yet. */
+/* Both hinges are given in VIEW-BOX units, not percentages of the shape's own
+   box. `fill-box` percentages are resolved against a bounding box the browser
+   computes for the geometry, which moves the moment the path does — and a
+   rotation whose pivot drifts is the classic reason an SVG part looks
+   detached mid-swing. These pivots are literal points in the drawing: the
+   flap's hinge pin, and the spot the cone is standing on. */
+.kf-cone {
+  rotate: calc(var(--kf-cone) * 52deg);
+  transform-box: view-box;
+  transform-origin: 112px 99px;
+  transition: rotate 560ms cubic-bezier(0.34, 1.32, 0.64, 1);
+}
+
+.kf-damper {
+  rotate: calc(var(--kf-damper) * 74deg);
+  transform-box: view-box;
+  transform-origin: 128px 12.5px;
+  transition: rotate 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* soak is the one latch with nothing of its own to bend, so it gets a word */
+.kf-soak {
+  justify-self: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--kf-void) 82%, transparent);
+  color: var(--kf-clay);
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 1.9cqw, 9px);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  /* holds its box when dark, so lighting it shifts nothing */
+  opacity: var(--kf-soak);
+  transition: opacity 260ms linear;
+}
+
+/* — the schedule — */
+
+.kf-ledger {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kf-row {
+  display: grid;
+  width: 100%;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  opacity: 0.38;
+  transition:
+    opacity 200ms linear,
+    background-color 200ms linear,
+    border-color 200ms linear;
+}
+
+/* lit when the command is at or before the clock — the law, drawn */
+.kf-row.is-on {
+  border-color: rgb(255 122 40 / 28%);
+  background: rgb(255 122 40 / 10%);
+  opacity: 1;
+}
+
+.kf-num {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--kf-hair);
+  border-radius: 50%;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.kf-row.is-on .kf-num {
+  border-color: transparent;
+  background: var(--kf-hot);
+  color: #1a0f08;
+}
+
+.kf-action {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: clamp(8.5px, 2.2cqw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kf-arg {
+  color: var(--kf-ember);
+  font-family: var(--font-mono);
+  font-size: clamp(8.5px, 2.2cqw, 11px);
+  font-weight: 700;
+}
+
+/* — the transport, in the Playhead idiom — */
+
+.kf-transport {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.kf-play {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ff9a4a, #ef5f14);
+  color: #2a1206;
+  cursor: pointer;
+}
+
+.kf-play:active {
+  translate: 0 1px;
+}
+
+.kf-icon {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
+}
+
+.kf-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 20px;
+}
+
+.kf-rail,
+.kf-fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+}
+
+.kf-rail {
+  background: var(--kf-hair);
+}
+
+/* scaleX from `paint`, so the bar redraws without a render */
+.kf-fill {
+  background: linear-gradient(90deg, #ff9a4a, var(--kf-hot));
+  transform-origin: left center;
+}
+
+/* one mark per command: the schedule, read off the same array the score is
+   built from */
+.kf-mark {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--kf-mark);
+  transform: translate(-1px, -50%);
+}
+
+.kf-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--kf-clay);
+  border: 1px solid var(--kf-hot);
+}
+
+/* the real control, invisible over the drawing. `touch-action: none` because
+   a sideways drag here can only mean the playhead — otherwise the scroller
+   takes the gesture and the timeline reads as broken. */
+.kf-range {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  opacity: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  appearance: none;
+}
+
+.kf-clock {
+  flex: none;
+  min-width: 42px;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 2.2cqw, 11px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+
+/* — the A/B, now one switch on the transport row — */
+
+.kf-host {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--kf-hair);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(7.5px, 1.9cqw, 9px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+/* the wrong state wears the warning, so a reader who never presses it still
+   knows which one is the bug */
+.kf-host.is-bad {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ff6b6b, #d33);
+  color: #2a0606;
+}
+
+.kf-host:active {
+  translate: 0 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kf-kiln::after,
+  .kf-glow,
+  .kf-flame,
+  .kf-cone,
+  .kf-damper,
+  .kf-soak,
+  .kf-row {
+    transition: none;
+  }
 }
