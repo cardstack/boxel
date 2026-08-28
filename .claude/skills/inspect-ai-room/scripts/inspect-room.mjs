@@ -1,5 +1,6 @@
-// Inspect local AI assistant rooms via the Matrix client API, logged in as
-// the aibot user (which is a member of every assistant room).
+// Inspect AI assistant rooms via the Matrix client API. Locally this logs in
+// as the aibot user (a member of every assistant room); against staging /
+// production it reuses a boxel-cli profile's Matrix token (see Auth below).
 //
 //   node inspect-room.mjs rooms [N]          list the N most recent rooms (default 10)
 //   node inspect-room.mjs timeline <roomId>  decoded event timeline (edits, tools, results)
@@ -8,14 +9,56 @@
 //   node inspect-room.mjs raw <roomId> [filter]  full event JSON, optionally
 //                                            only events whose JSON contains `filter`
 //
-// Env: MATRIX_URL (default http://localhost:8008),
-//      BOXEL_AIBOT_PASSWORD (default 'pass').
+// Auth (first match wins):
+//   --profile <id>   use a boxel-cli profile from ~/.boxel-cli/profiles.json
+//                    (its matrixUrl + matrixAccessToken); this is how staging /
+//                    production rooms are inspected — the profile's user must be
+//                    a member of the room. `--profile staging` matches any
+//                    profile whose matrixUrl contains "staging".
+//   MATRIX_TOKEN     env: raw access token, used with MATRIX_URL
+//   aibot login      env MATRIX_URL (default http://localhost:8008) +
+//                    BOXEL_AIBOT_PASSWORD (default 'pass'); local synapse only.
 
-const MATRIX_URL = process.env.MATRIX_URL || 'http://localhost:8008';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+let argv = process.argv.slice(2);
+let profileArg;
+let pi = argv.indexOf('--profile');
+if (pi !== -1) {
+  profileArg = argv[pi + 1];
+  argv.splice(pi, 2);
+}
+const [cmd, arg1, arg2] = argv;
+
+function loadProfile(idOrHint) {
+  let file = path.join(os.homedir(), '.boxel-cli', 'profiles.json');
+  let profiles = JSON.parse(fs.readFileSync(file, 'utf8')).profiles ?? {};
+  let p =
+    profiles[idOrHint] ??
+    Object.values(profiles).find((x) => x.matrixUrl?.includes(idOrHint));
+  if (!p) {
+    throw new Error(
+      `no boxel-cli profile matching "${idOrHint}"; have: ${Object.keys(profiles).join(', ')}`,
+    );
+  }
+  if (!p.matrixAccessToken) {
+    throw new Error(
+      `profile ${p.matrixUserId} has no stored Matrix token; run \`boxel profile add\``,
+    );
+  }
+  return p;
+}
+
+let profile = profileArg ? loadProfile(profileArg) : undefined;
+const MATRIX_URL =
+  profile?.matrixUrl || process.env.MATRIX_URL || 'http://localhost:8008';
 const PASSWORD = process.env.BOXEL_AIBOT_PASSWORD || 'pass';
-const [, , cmd, arg1, arg2] = process.argv;
 
 async function login() {
+  if (profile) return profile.matrixAccessToken;
+  if (process.env.MATRIX_TOKEN) return process.env.MATRIX_TOKEN;
   let res = await fetch(new URL('/_matrix/client/v3/login', MATRIX_URL), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -112,8 +155,7 @@ if (cmd === 'rooms') {
       parts.push(`fin=${c.isStreamingFinished}`);
     // Rooms from before the command→tool rename carry requests under the
     // legacy key; read both, like runtime-common's getToolRequests().
-    let tools =
-      c['app.boxel.toolRequests'] ?? c['app.boxel.commandRequests'];
+    let tools = c['app.boxel.toolRequests'] ?? c['app.boxel.commandRequests'];
     if (tools?.length)
       parts.push('tools=' + tools.map((t) => t.name).join(','));
     let agent = eventData(c)?.context?.agentId;
@@ -146,7 +188,12 @@ if (cmd === 'rooms') {
       else turns.push({ key, usage });
     }
   }
-  let sum = { promptTokens: 0, completionTokens: 0, cachedTokens: 0, costUsd: 0 };
+  let sum = {
+    promptTokens: 0,
+    completionTokens: 0,
+    cachedTokens: 0,
+    costUsd: 0,
+  };
   for (let [i, t] of turns.entries()) {
     let u = t.usage;
     console.log(
