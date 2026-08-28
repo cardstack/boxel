@@ -9,8 +9,11 @@
  * schedule is an absolute setting that re-derives correctly by accident, so a
  * test that only checked `gas` would pass against a broken host.
  */
+import { concat } from '@ember/helper';
+import { htmlSafe } from '@ember/template';
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
+import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { Fold } from 'test-app/components/examples/fold';
 
@@ -151,40 +154,59 @@ module('Integration | examples | fold', function (hooks) {
   });
 
   /**
-   * The scene has to FIT. It is stacked on a phone — the stove over its
-   * schedule — and a 400px gallery card is the tightest box it is ever given,
-   * so the narrow tier's job is to land the whole thing inside one.
+   * The scene has to FIT, in every box a card comes in.
    *
-   * `scrollHeight` / `clientHeight` in CSS pixels, not rects: QUnit scales
-   * `#ember-testing`, so every getBoundingClientRect here comes back at half
-   * size and would compare the harness rather than the layout.
+   * Two traps are baked into this test because both of them let an earlier
+   * version pass while the temperature was visibly cut off the top of the
+   * card. The stage CENTRES its column, so content that does not fit
+   * overflows at both ends and `scrollHeight` — which only reports the
+   * downward half — says everything is fine. And the layout has to be
+   * measured after it settles, not on the frame `render()` returns.
    */
-  test('the whole scene fits a phone-sized card without clipping', async function (assert) {
-    await render(
-      <template>
-        <div style="position:relative;width:360px;height:400px">
-          <Fold />
-        </div>
-      </template>
-    );
-    const stage = document.querySelector('.kf-stage') as HTMLElement;
-    assert.ok(stage, 'the stage rendered');
-    assert.true(
-      stage.scrollHeight <= stage.clientHeight + 1,
-      `nothing is clipped ${JSON.stringify({
-        content: stage.scrollHeight,
-        frame: stage.clientHeight,
-      })}`
-    );
+  const fits = (label: string, w: number, h: number) =>
+    test(`the whole scene fits ${label} without clipping`, async function (assert) {
+      await render(
+        <template>
+          <div
+            style={{htmlSafe
+              (concat "position:relative;width:" w "px;height:" h "px")
+            }}
+          >
+            <Fold />
+          </div>
+        </template>
+      );
+      await animationsSettled();
 
-    // and the scene stacked rather than trying to sit side by side
-    const kiln = document.querySelector('.kf-kiln') as HTMLElement;
-    const ledger = document.querySelector('.kf-ledger') as HTMLElement;
-    assert.true(
-      ledger.offsetTop >= kiln.offsetTop + kiln.offsetHeight - 2,
-      'the schedule is below the stove, not beside it'
-    );
-  });
+      const stage = document.querySelector('.kf-stage') as HTMLElement;
+      const kids = [...stage.children].filter(
+        (el) => (el as HTMLElement).offsetHeight > 0
+      ) as HTMLElement[];
+      // the scene's own rows, not the region's full-height internals
+      const own = kids.filter((el) => el.className.startsWith('kf-'));
+      const top = Math.min(...own.map((el) => el.offsetTop));
+      const bottom = Math.max(
+        ...own.map((el) => el.offsetTop + el.offsetHeight)
+      );
+      const report = JSON.stringify({
+        bottom,
+        frame: stage.clientHeight,
+        parts: own.map((el) => [
+          el.className.split(' ')[0],
+          el.offsetTop,
+          el.offsetHeight,
+        ]),
+        top,
+      });
+      assert.true(top >= -1, `nothing overflows the top ${report}`);
+      assert.true(
+        bottom <= stage.clientHeight + 1,
+        `nothing overflows the bottom ${report}`
+      );
+    });
+
+  fits('a phone-sized card', 359, 400);
+  fits('a desktop card', 557, 400);
 
   test('repeating the same seek changes nothing', async function (assert) {
     const app = await fired();

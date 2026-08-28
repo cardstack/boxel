@@ -10340,43 +10340,6 @@ html[data-gm-dragging] * {
   max-width: 330px;
 }
 
-/* Phone: the scene has to fit a 400px card once it is stacked.
-   Descendants only — `.kf-stage` is the container element itself, and an
-   element never matches a query against its own box, so the stage's own
-   padding is kept modest for every size instead. The budget below is the
-   stove at 128px, six rows at ~20px, and the transport: about 335px of the
-   ~352px a card gives once its padding is taken off. */
-@container (max-width: 430px) {
-  .kf-art {
-    max-width: 128px;
-  }
-
-  .kf-temp {
-    font:
-      800 clamp(20px, 7cqw, 26px) / 1 'Syne',
-      sans-serif;
-  }
-
-  .kf-ledger {
-    gap: 2px;
-  }
-
-  .kf-row {
-    gap: 6px;
-    padding: 2px 6px;
-  }
-
-  .kf-num {
-    width: 14px;
-    height: 14px;
-    font-size: 7px;
-  }
-
-  .kf-scene {
-    gap: 6px 12px;
-  }
-}
-
 /* the one big number — a game reads its state out loud. Colour is a paint,
    but it steps once per command rather than tweening per frame. */
 .kf-temp {
@@ -10702,6 +10665,45 @@ html[data-gm-dragging] * {
 
 .kf-host:active {
   translate: 0 1px;
+}
+
+/* Phone: the scene has to fit a 400px card once it is stacked.
+   Descendants only — `.kf-stage` is the container element itself, and an
+   element never matches a query against its own box, so the stage's own
+   padding is kept modest for every size instead. It also has to sit AFTER
+   the base rules it narrows: same specificity, so the later one wins, and
+   parked above them this whole block was silently overridden. The budget is
+   stove at 128px, six rows at ~20px, and the transport: about 335px of the
+   ~352px a card gives once its padding is taken off. */
+@container (max-width: 430px) {
+  .kf-art {
+    max-width: 128px;
+  }
+
+  .kf-temp {
+    font:
+      800 clamp(20px, 7cqw, 26px) / 1 'Syne',
+      sans-serif;
+  }
+
+  .kf-ledger {
+    gap: 2px;
+  }
+
+  .kf-row {
+    gap: 6px;
+    padding: 2px 6px;
+  }
+
+  .kf-num {
+    width: 14px;
+    height: 14px;
+    font-size: 7px;
+  }
+
+  .kf-scene {
+    gap: 6px 12px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
