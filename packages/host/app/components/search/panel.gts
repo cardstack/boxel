@@ -85,6 +85,8 @@ export default class SearchPanel extends Component<Signature> {
     return `realm:${realmURLs[0].href}`;
   }
 
+  // The realms searched when no realm is picked: the caller's narrowed set
+  // when it declares one, otherwise everything the user can reach.
   private get availableRealms(): string[] {
     return (
       this.args.availableRealms ?? this.realmServer.availableRealmIdentifiers
@@ -106,7 +108,7 @@ export default class SearchPanel extends Component<Signature> {
       onChange: this.onRealmChange,
       selectedURLs: this.selectedRealmURLs,
       locked: this.args.lockSelectedRealms,
-      available: this.availableRealms,
+      available: this.args.availableRealms,
     };
   }
 

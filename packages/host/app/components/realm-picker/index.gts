@@ -17,9 +17,11 @@ export interface RealmFilter {
   /** When true, the realm scope is locked and the picker UI is disabled. */
   locked?: boolean;
   /**
-   * The realms the picker offers, and what select-all resolves to. Omitted
-   * for a search over everything the user can reach; a card picker narrows it
-   * to the realms its result may come from.
+   * The bound the caller puts on which realms this search may draw from: the
+   * realms the picker offers, what select-all resolves to, and the limit a
+   * pasted card URL has to fall inside. Omitted for a search over everything
+   * the user can reach; a card picker narrows it to the realms whose cards
+   * its result may come from.
    */
   available?: string[];
 }

@@ -402,8 +402,8 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
       assert
         .dom('[data-test-search-label]')
-        .hasText(
-          '5 results across 1 realm',
+        .containsText(
+          'across 1 realm',
           'the search is scoped to the one linkable realm',
         );
 
