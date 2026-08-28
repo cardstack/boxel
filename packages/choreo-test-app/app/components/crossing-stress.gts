@@ -141,11 +141,11 @@ export interface CrossingStressSignature {
      * The page is a fixed, full-viewport rig: it takes the shell out of
      * layout, listens on `window`, and drifts a three.js field behind the
      * slides. None of that survives being one of thirty cards — so an
-     * embedded stage stays in flow, keeps its keys local, and drops the
-     * particle field, whose perpetual rAF would run whether or not you
-     * were looking at this tile. What it keeps is the point: the live
-     * innards, a crossing that does not freeze them, and the conductor —
-     * a tile that sits still is a tile that shows nothing.
+     * embedded stage stays in flow, keeps its keys local, drops the particle
+     * field, and does NOT run the conductor: thirty tiles cutting on their
+     * own clocks is a gallery that will not sit still to be read, and the
+     * crossing is a thing you ask for rather than something that happens at
+     * you. Press Next, Auto or Stress and it behaves exactly like the page.
      */
     embedded?: boolean;
   };
@@ -153,7 +153,8 @@ export interface CrossingStressSignature {
 
 export class CrossingStress extends Component<CrossingStressSignature> {
   @tracked slide: Slide = 0;
-  @tracked mode: Mode = config.environment === 'test' ? 'manual' : 'auto';
+  @tracked mode: Mode =
+    config.environment === 'test' || this.args.embedded ? 'manual' : 'auto';
 
   private arming = createArming();
   private region: ChoreoContext | null = null;

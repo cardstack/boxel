@@ -111,7 +111,7 @@ const COLD: Firing = { cone: false, damper: false, gas: 0, soak: false };
  * chamber is painted by hand in `tick` instead, from CSS custom properties —
  * the same discipline the Build Order transport uses for its clock.
  */
-export class Perform extends Component {
+export class Fold extends Component {
   /** bumped to replay the score from cold */
   @tracked take = 0;
   @tracked playing = false;
@@ -195,7 +195,7 @@ export class Perform extends Component {
 
   register = modifier((el: HTMLElement) => {
     this.stage = el;
-    (el as HTMLElement & { perform?: Perform }).perform = this;
+    (el as HTMLElement & { fold?: Fold }).fold = this;
     const seen = new IntersectionObserver(
       (entries) => {
         this.onstage = entries.some((e) => e.isIntersecting);

@@ -1,9 +1,9 @@
 import type { TOC } from '@ember/component/template-only';
 
 /**
- * Deep dive for the Commands demo.
+ * Deep dive for the Fold demo.
  */
-const PerformNotes: TOC<object> = <template>
+const FoldNotes: TOC<object> = <template>
   <section class="dive" aria-label="How it works">
     <header class="dive-head">
       <p class="dive-kicker">How it works</p>
@@ -13,9 +13,11 @@ const PerformNotes: TOC<object> = <template>
         puts commands in the score. A command is not an animation — it is a
         statement of state handed to the app, and the app is what changes. The
         law underneath it is one sentence:
-        <b>the set of commands at or before the clock is the commanded state</b>.
-        Everything on this stage exists to make that visible, because it is a
-        claim about scrubbing that a still frame cannot show.
+        <b>the set of commands at or before the clock is the commanded state</b>
+        — the library calls that summing-up the
+        <em>fold</em>, which is what this demo is named for. Everything on this
+        stage exists to make it visible, because it is a claim about scrubbing
+        that a still frame cannot show.
       </p>
     </header>
 
@@ -117,5 +119,5 @@ const PerformNotes: TOC<object> = <template>
   </section>
 </template>;
 
-export default PerformNotes;
-export { PerformNotes };
+export default FoldNotes;
+export { FoldNotes };

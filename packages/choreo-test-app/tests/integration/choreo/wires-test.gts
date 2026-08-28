@@ -33,6 +33,61 @@ module('Integration | choreo | wires', function (hooks) {
   const restingCount = (n: number) =>
     waitUntil(() => resting() === n, { timeout: 2000 });
 
+  /**
+   * The narrow layout is a different geometry, not a smaller one.
+   *
+   * Below 460px the board stops being two columns and puts the comments UNDER
+   * the note, because a 148px floor on the margin column was leaving 110px for
+   * the prose and wrapping a three-sentence note to nine lines. A tether is
+   * derived from where its two ends actually are, so the only thing that has
+   * to hold is that it still finds them — the wire runs downward instead of
+   * sideways and is otherwise the same construct.
+   */
+  test('the threads still draw when the comments stack under the note', async function (assert) {
+    await render(
+      <template>
+        <div style="position:relative;width:360px;height:620px">
+          <Wires />
+        </div>
+      </template>
+    );
+    await animationsSettled();
+    await restingCount(2);
+    assert.strictEqual(resting(), 2, 'two resting threads at phone width');
+
+    const copy = find('.wires-copy') as HTMLElement;
+    const margin = find('.wires-margin') as HTMLElement;
+    assert.true(
+      margin.offsetTop >= copy.offsetTop + copy.offsetHeight - 2,
+      'the comments are laid out below the note, not beside it'
+    );
+    const board = find('.wires-board') as HTMLElement;
+    // offsetWidth, not a rect: QUnit scales #ember-testing, so every
+    // getBoundingClientRect here comes back at half size and comparing one
+    // against a CSS-pixel threshold measures the harness, not the layout
+    assert.strictEqual(
+      getComputedStyle(board).gridTemplateColumns.split(' ').length,
+      1,
+      'the board is one column'
+    );
+    assert.true(
+      copy.offsetWidth > 200,
+      `the prose gets the full width back ${JSON.stringify({
+        board: board.offsetWidth,
+        cols: getComputedStyle(board).gridTemplateColumns,
+        copy: copy.offsetWidth,
+      })}`
+    );
+
+    const paths = [
+      ...document.querySelectorAll<SVGPathElement>('.wires-rest path'),
+    ];
+    assert.true(
+      paths.every((p) => p.getTotalLength() > 0),
+      'every thread has real length — the ends were found'
+    );
+  });
+
   test('a version pass keeps a live tether inside a moving comment', async function (assert) {
     await render(<template><Wires /></template>);
     await animationsSettled();

@@ -1,5 +1,5 @@
 /**
- * The Commands demo's argument, asserted.
+ * The Fold demo's argument, asserted.
  *
  * The tile exists to show one thing: on a backward seek, Choreo calls the
  * host's reset and then replays the remaining prefix, so a scrub is a
@@ -12,7 +12,7 @@
 import { render, settled } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
-import { Perform } from 'test-app/components/examples/perform';
+import { Fold } from 'test-app/components/examples/fold';
 
 import { setupFixtureViewport } from '../helpers/layout-fixture';
 
@@ -61,11 +61,11 @@ interface Host {
  * broken case would pass for the wrong reason.
  */
 async function fired(honours = true) {
-  await render(<template><Perform /></template>);
+  await render(<template><Fold /></template>);
   const el = document.querySelector('.kf-stage') as HTMLElement & {
-    perform?: Host;
+    fold?: Host;
   };
-  const app = el.perform!;
+  const app = el.fold!;
   if (!honours) {
     app.setFold(false);
     await settled();
@@ -76,7 +76,7 @@ async function fired(honours = true) {
   return app;
 }
 
-module('Integration | examples | perform', function (hooks) {
+module('Integration | examples | fold', function (hooks) {
   setupRenderingTest(hooks);
   setupFixtureViewport(hooks);
 
@@ -147,6 +147,42 @@ module('Integration | examples | perform', function (hooks) {
       app.state,
       { cone: false, damper: false, gas: 0, soak: false },
       'the broken host is cold again, because nothing was rewound'
+    );
+  });
+
+  /**
+   * The scene has to FIT. It is stacked on a phone — the stove over its
+   * schedule — and a 400px gallery card is the tightest box it is ever given,
+   * so the narrow tier's job is to land the whole thing inside one.
+   *
+   * `scrollHeight` / `clientHeight` in CSS pixels, not rects: QUnit scales
+   * `#ember-testing`, so every getBoundingClientRect here comes back at half
+   * size and would compare the harness rather than the layout.
+   */
+  test('the whole scene fits a phone-sized card without clipping', async function (assert) {
+    await render(
+      <template>
+        <div style="position:relative;width:360px;height:400px">
+          <Fold />
+        </div>
+      </template>
+    );
+    const stage = document.querySelector('.kf-stage') as HTMLElement;
+    assert.ok(stage, 'the stage rendered');
+    assert.true(
+      stage.scrollHeight <= stage.clientHeight + 1,
+      `nothing is clipped ${JSON.stringify({
+        content: stage.scrollHeight,
+        frame: stage.clientHeight,
+      })}`
+    );
+
+    // and the scene stacked rather than trying to sit side by side
+    const kiln = document.querySelector('.kf-kiln') as HTMLElement;
+    const ledger = document.querySelector('.kf-ledger') as HTMLElement;
+    assert.true(
+      ledger.offsetTop >= kiln.offsetTop + kiln.offsetHeight - 2,
+      'the schedule is below the stove, not beside it'
     );
   });
 

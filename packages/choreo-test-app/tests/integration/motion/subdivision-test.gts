@@ -1,4 +1,5 @@
-import { find, render, triggerEvent } from '@ember/test-helpers';
+import { find, render, triggerEvent, waitUntil } from '@ember/test-helpers';
+import { setMotionSpeed } from 'glimmer-motion';
 import {
   animationsSettled,
   bounds,
@@ -20,6 +21,24 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
  * Every query is scoped to that fixture. A document-wide `.sub-tile` is
  * how this test used to report `{ before: 48, after: 48 }` — a collapsed
  * leftover, not the grid the seam actually moved.
+ *
+ * WHY THIS FILE IS PARANOID ABOUT TIME
+ * It used to fail only in a loaded full suite and pass alone, which is the
+ * signature of a test racing the clock rather than testing behaviour. Two
+ * things caused it, and both are fixed here rather than papered over with a
+ * longer sleep:
+ *
+ *   The fixture was measured as soon as `animationsSettled()` returned, but
+ *   settled means "nothing is animating", not "the container query has
+ *   resolved and the grid has a width". On a busy machine the first
+ *   measurement could land on a collapsed grid, and a width that never
+ *   changed reads exactly like a seam that did not move.
+ *
+ *   The "springs rather than snaps" case asserted that an animation was in
+ *   flight one frame after the double-click. At 1x that is a coin toss under
+ *   load: the spring can finish inside the gap. `setMotionSpeed` stretches
+ *   the transition so being mid-flight is a fact rather than a hope — the
+ *   speed is reset for us by `setupMotion`'s beforeEach.
  */
 async function mount() {
   await render(
@@ -31,6 +50,18 @@ async function mount() {
   );
   await animationsSettled();
   const stage = find('[data-test-stage]') as HTMLElement;
+  // the grid sizes itself from container units; wait for a real box rather
+  // than measuring whatever the first frame happened to have
+  await waitUntil(
+    () => {
+      const g = stage.querySelector('[data-test-grid]') as HTMLElement | null;
+      return g ? g.getBoundingClientRect().width > 100 : false;
+    },
+    { timeout: 4000 }
+  ).catch(() => {
+    // fall through: the assertions below report the box they actually got,
+    // which is the diagnostic this test exists to give
+  });
   const root = stage.querySelector(
     '[data-test-subdivision]'
   ) as HTMLElement | null;
@@ -96,19 +127,31 @@ module('Integration | motion | subdivision', function (hooks) {
       return;
     }
 
-    await triggerEvent(seam, 'dblclick');
-    const reduced = window.matchMedia(
-      '(prefers-reduced-motion: reduce)'
-    ).matches;
-    if (!reduced) {
-      assert.false(
-        isMotionIdle(),
-        `layout animation is in flight: ${
-          whatIsBusy().join('; ') || '(nothing reported busy)'
-        }`
-      );
+    // Stretch the transition so "still moving one frame later" is a fact
+    // rather than a race with the machine's load.
+    //
+    // The speed is GLOBAL, and `setupMotion`'s beforeEach only resets it for
+    // suites that use it — so it is put back here, in a finally, rather than
+    // left for a neighbour to inherit. A test that fixes its own flake by
+    // slowing every test after it has not fixed anything.
+    setMotionSpeed(8);
+    try {
+      await triggerEvent(seam, 'dblclick');
+      const reduced = window.matchMedia(
+        '(prefers-reduced-motion: reduce)'
+      ).matches;
+      if (!reduced) {
+        assert.false(
+          isMotionIdle(),
+          `layout animation is in flight: ${
+            whatIsBusy().join('; ') || '(nothing reported busy)'
+          }`
+        );
+      }
+      await animationsSettled({ timeout: 12000 });
+      assert.true(isMotionIdle(), 'the spring finishes');
+    } finally {
+      setMotionSpeed(1);
     }
-    await animationsSettled();
-    assert.true(isMotionIdle(), 'the spring finishes');
   });
 });

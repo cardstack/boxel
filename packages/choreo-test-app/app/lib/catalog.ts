@@ -5,6 +5,7 @@ import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
 import { FarMatch } from 'test-app/components/examples/far-match';
+import { Fold } from 'test-app/components/examples/fold';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
 import { HideHeader } from 'test-app/components/examples/hide-header';
@@ -16,7 +17,6 @@ import { Lightbox } from 'test-app/components/examples/lightbox';
 import { Lists } from 'test-app/components/examples/lists';
 import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
-import { Perform } from 'test-app/components/examples/perform';
 import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { Presentation } from 'test-app/components/examples/presentation';
@@ -36,11 +36,11 @@ import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
 import { CrossingNotes } from 'test-app/components/notes/crossing';
 import { FarNotes } from 'test-app/components/notes/far';
+import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
-import { PerformNotes } from 'test-app/components/notes/perform';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
 import { PresentationNotes } from 'test-app/components/notes/presentation';
@@ -1184,10 +1184,10 @@ get header() { return { y: this.hidden ? -72 : 0 }; }
     title: 'Hide header',
   },
   {
-    Example: Perform,
+    Example: Fold,
     apis: ['c.Perform', '@onPerform', '@onPerformReset', 'run.time'],
     group: 'Timeline',
-    id: 'perform',
+    id: 'fold',
     lede: 'Scrub back through orders the timeline does not own.',
     sample: `// A COMMAND is not an animation. It is a statement of state the score
 // hands to the app, and the app is what changes. The law is one line:
@@ -1225,9 +1225,9 @@ reset = () => { this.state = { ...COLD }; };
 // cancels the run that was dispatching. The chamber is painted by hand
 // from custom properties instead — Build Order's discipline.
 el.style.setProperty('--kf-gas', String(s.gas));`,
-    notes: PerformNotes,
+    notes: FoldNotes,
     slowmo: false,
-    title: 'Commands',
+    title: 'Fold',
   },
   {
     Example: PathDraw,
