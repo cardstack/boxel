@@ -438,6 +438,44 @@ module('Unit | query', function (hooks) {
     assert.deepEqual(getIds(results), [mango.id], 'only the FancyPerson');
   });
 
+  test('a type filter spelled with the base realm alias matches a canonically-keyed row', async function (assert) {
+    // The `types` column holds one canonical key per type — `internalKeyFor`
+    // resolves any spelling to a real URL and then unresolves it to the
+    // registered prefix. So a filter naming the module by its alias URL and a
+    // filter naming it by its prefix produce the same key, and both match a
+    // row stamped in prefix form. This is what lets the type predicates
+    // compare a single key rather than enumerating equivalent spellings.
+    await setupIndex(dbAdapter, [
+      {
+        url: `${testRealmURL}vangogh.json`,
+        file_alias: `${testRealmURL}vangogh`,
+        type: 'instance',
+        generation: 1,
+        realm_url: testRealmURL,
+        deps: [],
+        types: [`${baseRealmRRI}card-api/CardDef`],
+        last_modified: '1',
+        resource_created_at: '1',
+      },
+    ]);
+
+    for (let [label, module] of [
+      ['prefix form', `${baseRealmRRI}card-api`],
+      ['alias URL form', 'https://cardstack.com/base/card-api'],
+    ] as [string, string][]) {
+      let { meta } = await indexQueryEngine.searchCards(new URL(testRealmURL), {
+        filter: {
+          type: { module, name: 'CardDef' } as ResolvedCodeRef,
+        },
+      });
+      assert.strictEqual(
+        meta.page.total,
+        1,
+        `a filter in ${label} matches the canonically-keyed row`,
+      );
+    }
+  });
+
   test('{ type: baseRef } matches every card instance (BaseDef terminates the chain)', async function (assert) {
     // getTypes now ends each chain at BaseDef, so a BaseDef-anchored filter is a
     // universe selector across kinds. Here (instance-only fixtures) it should
