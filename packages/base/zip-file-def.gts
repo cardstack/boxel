@@ -146,7 +146,7 @@ const TREE_ROW_BUDGET = 400;
 // fitted cell shows a compact count-and-size summary with a few leading names.
 class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
   get isFitted(): boolean {
-    return this.args.mode === 'fitted';
+    return this.args.format === 'fitted';
   }
 
   get entryCount(): number {
@@ -250,7 +250,7 @@ class ArchivePreview extends GlimmerComponent<FilePreviewSignature> {
         {{/if}}
       </div>
     {{else}}
-      <div class='archive-tree' data-test-archive-preview data-mode={{@mode}}>
+      <div class='archive-tree' data-test-archive-preview data-mode={{@format}}>
         {{#if this.tree.rows.length}}
           <ul class='archive-tree__list'>
             {{#each this.tree.rows as |row|}}

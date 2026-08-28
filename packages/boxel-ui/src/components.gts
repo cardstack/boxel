@@ -65,6 +65,7 @@ import {
 } from './components/kanban/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
+import MarkdownContentShell from './components/markdown-content-shell/index.gts';
 import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
@@ -176,6 +177,7 @@ export {
   KanbanPlane,
   Label,
   LoadingIndicator,
+  MarkdownContentShell,
   Menu,
   BoxelMessage as Message,
   Modal,

@@ -386,7 +386,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           <div class='iso-stage' style={{this.previewFrameStyle}}>
             <FilePreviewStage
               @model={{@model}}
-              @mode='isolated'
+              @format='isolated'
               @fields={{@fields}}
               @preview={{@preview}}
             />
