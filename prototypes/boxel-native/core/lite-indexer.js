@@ -1,3 +1,5 @@
+import { computeSearchDoc, COMPUTED_KEYS } from './computed-fields.js';
+
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS boxel_index (
   url TEXT NOT NULL,
@@ -49,13 +51,19 @@ CREATE TABLE IF NOT EXISTS sync_manifest (
 
 const REALM_URL = 'https://local.boxel/preview/';
 
-function cardTitle(attributes, fileAlias) {
-  const first = attributes.firstName || attributes.title || '';
-  const last = attributes.lastName || '';
-  const name = `${first} ${last}`.trim();
-  if (name) return name;
-  return fileAlias.replace(/\.json$/, '');
-}
+const SEARCH_DOC_PATHS = [
+  '$._title',
+  '$.fullName',
+  '$.initials',
+  '$.sortName',
+  '$.handle',
+  '$.kindLabel',
+  '$._cardType',
+  '$.firstName',
+  '$.lastName',
+  '$.title',
+  '$.body',
+];
 
 function fileAliasFromPath(relativePath) {
   return relativePath.replace(/\.json$/, '');
@@ -132,12 +140,12 @@ export class LiteIndexer {
     const adoptsFrom = resource.meta?.adoptsFrom ?? { module: '', name: '' };
     const alias = fileAliasFromPath(relativePath);
     const url = resource.id || instanceUrl(relativePath);
-    const title = cardTitle(attributes, alias);
-    const searchDoc = {
-      title,
-      _cardTitle: title,
-      ...attributes,
-    };
+    const searchDoc = computeSearchDoc({
+      attributes,
+      adoptsFrom,
+      fileAlias: alias,
+    });
+    const title = searchDoc._title;
     const types = [
       `${adoptsFrom.module ?? ''}/${adoptsFrom.name ?? 'CardDef'}`,
     ];
@@ -223,33 +231,66 @@ export class LiteIndexer {
     );
   }
 
-  search(queryText = '') {
+  searchSql(queryText = '') {
     const q = queryText.trim();
     if (!q) {
-      return this.db.all(
-        `SELECT url, file_alias, types, search_doc, pristine_doc, indexed_at
+      return {
+        sql: `SELECT url, file_alias, types, search_doc, pristine_doc, indexed_at
          FROM boxel_index
          WHERE type = 'instance' AND is_deleted = 0 AND realm_url = ?
-         ORDER BY json_extract(search_doc, '$.title') COLLATE NOCASE`,
-        [this.realmUrl],
-      );
+         ORDER BY json_extract(search_doc, '$._title') COLLATE NOCASE`,
+        bind: [this.realmUrl],
+      };
     }
-    const like = `%${q}%`;
-    return this.db.all(
-      `SELECT url, file_alias, types, search_doc, pristine_doc, indexed_at
+    const extracts = SEARCH_DOC_PATHS.map(
+      (path) => `json_extract(search_doc, '${path}') LIKE ? COLLATE NOCASE`,
+    ).join('\n           OR ');
+    return {
+      sql: `SELECT url, file_alias, types, search_doc, pristine_doc, indexed_at
        FROM boxel_index
        WHERE type = 'instance'
          AND is_deleted = 0
          AND realm_url = ?
          AND (
-           file_alias LIKE ? COLLATE NOCASE
-           OR json_extract(search_doc, '$.title') LIKE ? COLLATE NOCASE
-           OR json_extract(search_doc, '$.firstName') LIKE ? COLLATE NOCASE
-           OR json_extract(search_doc, '$.lastName') LIKE ? COLLATE NOCASE
+           ${extracts}
          )
-       ORDER BY json_extract(search_doc, '$.title') COLLATE NOCASE`,
-      [this.realmUrl, like, like, like, like],
-    );
+       ORDER BY json_extract(search_doc, '$._title') COLLATE NOCASE`,
+      bind: [this.realmUrl, ...SEARCH_DOC_PATHS.map(() => `%${q}%`)],
+    };
+  }
+
+  search(queryText = '') {
+    const { sql, bind } = this.searchSql(queryText);
+    return this.db.all(sql, bind);
+  }
+
+  /**
+   * Index query plus a filesystem scan used only as a contrast: the scan is
+   * not the search path. Computed keys live in search_doc and are absent
+   * from the JSON:API files.
+   */
+  searchIndex(queryText, fs) {
+    const q = queryText.trim();
+    const { sql, bind } = this.searchSql(q);
+    const rows = this.db.all(sql, bind);
+    const jsonSourceHits = [];
+    if (q && fs) {
+      const needle = q.toLowerCase();
+      for (const path of fs.list()) {
+        if (!path.endsWith('.json')) continue;
+        const content = fs.read(path) ?? '';
+        if (content.toLowerCase().includes(needle)) {
+          jsonSourceHits.push(path);
+        }
+      }
+    }
+    return {
+      sql: sql.replace(/\s+/g, ' ').trim(),
+      query: q,
+      computedKeys: COMPUTED_KEYS,
+      jsonSourceHits,
+      rows,
+    };
   }
 
   getByAlias(alias) {

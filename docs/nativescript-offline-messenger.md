@@ -24,7 +24,7 @@ The pieces that **do not** fit on a phone/Mac Catalyst process:
 - Card modules are Glimmer/Ember (`CardDef` in `.gts`). NativeScript UI cannot load those modules as native views without the host execution runtime.
 - `matrix-js-sdk` is the browser SDK. It is the wrong client on NativeScript (see Matrix client below).
 
-So the native app's indexer is a **lite indexer**: parse JSON:API files from the filesystem, write `pristine_doc` + a field-level `search_doc` into `boxel_index`, and skip prerender HTML. Search, open-as-JSON, attach-to-message, and sync all work. Isolated/embedded card *rendering* stays a host (or later Sandbox) concern.
+So the native app's indexer is a **lite indexer**: parse JSON:API files from the filesystem, write `pristine_doc` + a field-level `search_doc` into `boxel_index`, and skip prerender HTML. Search, open-as-JSON, attach-to-message, and sync all work. Isolated/embedded card *rendering* stays a host (or later Sandbox) concern. Search is `json_extract` on `boxel_index.search_doc` (including computed keys stamped at index time), not a scan of the JSON files.
 
 ## Recommended native architecture
 

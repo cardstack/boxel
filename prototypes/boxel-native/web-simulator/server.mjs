@@ -54,9 +54,7 @@ async function handleApi(req, res, url) {
     return json(res, 200, runtime.snapshot());
   }
   if (req.method === 'GET' && route === '/api/cards') {
-    return json(res, 200, {
-      cards: runtime.searchCards(url.searchParams.get('q') || ''),
-    });
+    return json(res, 200, runtime.searchIndex(url.searchParams.get('q') || ''));
   }
   if (req.method === 'GET' && route.startsWith('/api/cards/')) {
     const alias = decodeURIComponent(route.slice('/api/cards/'.length));

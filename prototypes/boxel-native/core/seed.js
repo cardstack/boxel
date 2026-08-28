@@ -6,6 +6,16 @@ export class Person extends CardDef {
   static displayName = 'Person';
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
+  @field fullName = contains(StringField, {
+    computeVia: function () {
+      return [this.lastName, this.firstName].filter(Boolean).join(', ');
+    },
+  });
+  @field initials = contains(StringField, {
+    computeVia: function () {
+      return \`\${this.firstName?.[0] ?? ''}\${this.lastName?.[0] ?? ''}\`.toUpperCase();
+    },
+  });
 }
 `;
 

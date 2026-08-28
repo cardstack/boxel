@@ -184,19 +184,42 @@ function aliasFromUrl(url) {
 }
 
 function renderCards() {
-  const cards = view.query
-    ? state.cards.filter((c) =>
-        `${c.title} ${c.fileAlias}`.toLowerCase().includes(view.query),
-      )
-    : state.cards;
+  fetchCards();
+}
+
+async function fetchCards() {
+  const result = await api(
+    `/api/cards?q=${encodeURIComponent(view.query || '')}`,
+  );
+  const cards = result.cards;
+  const jsonMiss =
+    result.query && result.jsonSourceHits.length === 0 && cards.length > 0;
   app.innerHTML = `
     <div class="nav-title">
       <h2>Cards</h2>
-      <p class="muted">${state.index.instances} instances in boxel_index · gen ${state.index.generation}</p>
+      <p class="muted">SQLite <code>boxel_index.search_doc</code> · gen ${state.index.generation}</p>
     </div>
     <div class="search">
-      <input id="q" placeholder="Search sqlite json_extract(search_doc)" value="${escapeHtml(view.query)}" />
+      <input id="q" placeholder="Search computed index: MG, Grove, Maple, @maple.grove" value="${escapeHtml(view.query)}" />
     </div>
+    ${
+      result.query
+        ? `<div class="proof">
+        <div class="kv"><span>Searched</span><strong>${escapeHtml(result.searched)}</strong></div>
+        <div class="kv"><span>Not searched</span><strong>${escapeHtml(result.notSearched)}</strong></div>
+        <div class="kv"><span>Index hits</span><strong class="action-push">${cards.length}</strong></div>
+        <div class="kv"><span>JSON file hits</span><strong class="${jsonMiss ? 'action-push' : ''}">${result.jsonSourceHits.length}</strong></div>
+        ${
+          jsonMiss
+            ? `<p class="muted proof-note">This query matches computed <code>search_doc</code> keys and does not appear in any realm JSON file.</p>`
+            : result.jsonSourceHits.length
+              ? `<p class="muted proof-note">JSON also contains this string in ${result.jsonSourceHits.map(escapeHtml).join(', ')} — try <code>MG</code> or <code>@maple.grove</code>.</p>`
+              : ''
+        }
+        <pre class="sql-view">${escapeHtml(result.sql)}</pre>
+      </div>`
+        : `<p class="muted" style="padding:0 0.85rem 0.7rem">Computed at index time (not stored in JSON): <code>_title</code> <code>fullName</code> <code>initials</code> <code>handle</code></p>`
+    }
     <form class="form" id="new-card">
       <input name="firstName" placeholder="First name" required />
       <input name="lastName" placeholder="Last name" />
@@ -208,17 +231,22 @@ function renderCards() {
       <button class="list-row" data-open-card="${escapeHtml(c.fileAlias)}">
         <div>
           <strong>${escapeHtml(c.title)}</strong>
-          <small>${escapeHtml(c.fileAlias)}.json · ${escapeHtml(c.types[0] || '')}</small>
+          <small>${escapeHtml(c.handle || '')} · ${escapeHtml(c.fullName || '')} · ${escapeHtml(c.initials || '')}</small>
         </div>
       </button>`,
       )
       .join('')}
   `;
-  app.querySelector('#q').addEventListener('input', (e) => {
-    view.query = e.target.value.trim().toLowerCase();
-    renderCards();
-    app.querySelector('#q').focus();
-    app.querySelector('#q').setSelectionRange(view.query.length, view.query.length);
+  const input = app.querySelector('#q');
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      view.query = input.value.trim();
+      fetchCards();
+    }
+  });
+  input.addEventListener('change', () => {
+    view.query = input.value.trim();
+    fetchCards();
   });
   app.querySelector('#new-card').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -230,7 +258,9 @@ function renderCards() {
         lastName: data.get('lastName'),
       }),
     });
-    await refresh();
+    state = await api('/api/state');
+    view.query = '';
+    fetchCards();
   });
   app.querySelectorAll('[data-open-card]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -238,6 +268,8 @@ function renderCards() {
       renderCard();
     });
   });
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
 }
 
 async function renderCard() {
@@ -246,7 +278,12 @@ async function renderCard() {
     <button class="back" data-back>‹ Cards</button>
     <div class="nav-title">
       <h2>${escapeHtml(card.title)}</h2>
-      <p class="muted">${escapeHtml(card.url)}</p>
+      <p class="muted">${escapeHtml(card.handle || '')} · computed, not in the JSON file</p>
+    </div>
+    <div class="proof" style="padding-top:0">
+      <p class="muted proof-note">search_doc computed keys (SQLite)</p>
+      <pre class="sql-view">${escapeHtml(JSON.stringify(card.computed, null, 2))}</pre>
+      <p class="muted proof-note">JSON:API source on disk</p>
     </div>
     <pre class="json-view">${escapeHtml(JSON.stringify(card.pristineDoc, null, 2))}</pre>
   `;

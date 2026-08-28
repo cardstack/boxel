@@ -32,6 +32,32 @@ test('search uses sqlite json_extract against search_doc', () => {
   assert.equal(hits[0].fileAlias, 'nimbus');
 });
 
+test('computed values are in search_doc and absent from the JSON source', () => {
+  const runtime = boot();
+  const maple = runtime.getCard('maple-grove');
+  const source = runtime.fs.read('maple-grove.json');
+  assert.equal(maple.computed.handle, '@maple.grove');
+  assert.equal(maple.computed.initials, 'MG');
+  assert.equal(maple.computed.fullName, 'Grove, Maple');
+  assert.equal(maple.computed._title, 'Maple Grove');
+  assert.equal(source.includes('@maple.grove'), false);
+  assert.equal(source.includes('"initials"'), false);
+  assert.equal(source.includes('Grove, Maple'), false);
+});
+
+test('search hits SQLite computed keys that a JSON-file scan misses', () => {
+  const runtime = boot();
+  for (const q of ['@maple.grove', 'MG', 'Grove, Maple']) {
+    const result = runtime.searchIndex(q);
+    assert.equal(result.searched, 'boxel_index.search_doc');
+    assert.equal(result.notSearched, 'realm JSON files');
+    assert.ok(result.sql.includes('json_extract(search_doc'));
+    assert.equal(result.cards.length, 1, `index should hit for ${q}`);
+    assert.equal(result.cards[0].fileAlias, 'maple-grove');
+    assert.deepEqual(result.jsonSourceHits, [], `JSON scan should miss ${q}`);
+  }
+});
+
 test('creating a card writes a JSON file then reindexes', () => {
   const runtime = boot();
   const card = runtime.createPersonCard({

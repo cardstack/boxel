@@ -1,4 +1,5 @@
 import { LiteIndexer, REALM_URL } from './lite-indexer.js';
+import { computedOnly } from './computed-fields.js';
 import { RealmFs, SimulatedRemote, md5 } from './realm-fs.js';
 import { Messenger } from './messenger.js';
 import { planSync } from './sync-logic.js';
@@ -81,7 +82,20 @@ export class BoxelNativeRuntime {
   }
 
   searchCards(q) {
-    return this.indexer.search(q).map(decorateCard);
+    return this.searchIndex(q).cards;
+  }
+
+  searchIndex(q = '') {
+    const result = this.indexer.searchIndex(q, this.fs);
+    return {
+      query: result.query,
+      sql: result.sql,
+      computedKeys: result.computedKeys,
+      jsonSourceHits: result.jsonSourceHits,
+      cards: result.rows.map(decorateCard),
+      searched: 'boxel_index.search_doc',
+      notSearched: 'realm JSON files',
+    };
   }
 
   getCard(alias) {
@@ -281,7 +295,11 @@ function decorateCard(row) {
   return {
     url: row.url,
     fileAlias: row.file_alias,
-    title: search.title || row.file_alias,
+    title: search._title || search.title || row.file_alias,
+    handle: search.handle,
+    initials: search.initials,
+    fullName: search.fullName,
+    computed: computedOnly(search),
     types: safeJson(row.types) ?? [],
     searchDoc: search,
     pristineDoc: pristine,

@@ -10,9 +10,7 @@ From this directory:
 node web-simulator/server.mjs
 ```
 
-Then open http://127.0.0.1:4173/
-
-The page is an iPhone chrome around `node:sqlite`: realm JSON files on a virtual disk, lite `boxel_index`, queued chats, then `boxel realm sync --prefer-newest` classify/push/pull against a simulated remote.
+Computed fields (`_title`, `fullName`, `initials`, `handle`) are evaluated at index time and stored on `boxel_index.search_doc`. Search is `json_extract` against that column only — the JSON files on disk are not queried. The Cards tab shows index hits vs a contrast JSON-file scan so a query like `@maple.grove` or `MG` is visibly an index hit and a source miss.
 
 ```bash
 node --test tests/core.test.js

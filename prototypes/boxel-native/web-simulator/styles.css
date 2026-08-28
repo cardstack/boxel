@@ -347,15 +347,27 @@ button.primary {
   flex: 1;
 }
 
-.json-view {
+.proof {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0 0.85rem 0.85rem;
+}
+
+.proof-note {
+  margin: 0.15rem 0 0;
+}
+
+.sql-view {
   white-space: pre-wrap;
   font-family: var(--mono);
-  font-size: 0.72rem;
-  color: #c7d0e0;
-  margin: 0 0.85rem;
+  font-size: 0.62rem;
+  color: #9ad7c2;
   background: #15161c;
-  border-radius: 1rem;
-  padding: 0.9rem;
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  margin: 0;
+  max-height: 7rem;
+  overflow: auto;
 }
 
 @media (max-width: 860px) {
