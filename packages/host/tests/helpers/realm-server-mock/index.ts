@@ -13,10 +13,17 @@ import {
   getRealmServerRoute,
   registerDefaultRoutes,
   resetCatalogRealmURL,
+  resetLinkableRealms,
   setCatalogRealmURL,
+  setLinkableRealms,
 } from './routes';
 
-export { resetCatalogRealmURL, setCatalogRealmURL };
+export {
+  resetCatalogRealmURL,
+  resetLinkableRealms,
+  setCatalogRealmURL,
+  setLinkableRealms,
+};
 
 import type { EnsureSessionRoom, RealmServerMockState } from './types';
 

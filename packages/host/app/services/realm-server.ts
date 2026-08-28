@@ -837,6 +837,56 @@ export default class RealmServerService extends Service {
     return json.data ?? [];
   }
 
+  // The realms among `realmUrls` whose cards a card stored in
+  // `consumingRealm` can link to. A realm resolves its cards' links under its
+  // own owner's identity, so a target the owner cannot read makes the linking
+  // card unfetchable regardless of who authored the link. Card pickers scope
+  // their search to this set so a chosen card still resolves once linked.
+  //
+  // `consumingRealm` rides along in the realm list, which the realm server
+  // authorizes against this user — the answer is always a subset of the
+  // realms passed in.
+  async fetchLinkableRealms(
+    consumingRealm: string,
+    realmUrls: string[],
+  ): Promise<string[]> {
+    let consuming = ensureTrailingSlash(consumingRealm);
+    let uniqueRealmUrls = Array.from(new Set([consuming, ...realmUrls]));
+    let realmServerURLs = this.getRealmServersForRealms(uniqueRealmUrls);
+    // TODO remove this assertion after multi-realm server/federated identity is supported
+    this.assertOwnRealmServer(realmServerURLs);
+    let [realmServerURL] = realmServerURLs;
+
+    await this.login();
+
+    let response = await this.authedFetch(
+      new URL('_linkable-realms', realmServerURL).href,
+      {
+        method: 'QUERY',
+        headers: {
+          Accept: SupportedMimeType.JSONAPI,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          realms: uniqueRealmUrls,
+          consumingRealm: consuming,
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      let responseText = await response.text();
+      throw new Error(
+        `Failed to fetch linkable realms for ${consuming}: ${response.status} - ${responseText}`,
+      );
+    }
+
+    let json = (await response.json()) as {
+      data?: { attributes?: { realms?: string[] } };
+    };
+    return json.data?.attributes?.realms ?? [];
+  }
+
   async fetchCardTypeSummaries(
     realmUrls: string[],
     options?: {

@@ -75,6 +75,8 @@ type State = {
   dismissModal: boolean;
   errorMessage?: string;
   baseFilter?: Filter;
+  // The realms this chooser searches, and the only ones its realm picker
+  // offers: those whose cards the consuming realm can fetch once linked.
   availableRealmUrls: string[];
   hasPreselectedCard?: boolean;
   consumingRealm?: URL;
@@ -114,6 +116,7 @@ export default class CardChooserModal extends Component<Signature> {
           <SearchPanel
             @searchKey={{state.searchKey}}
             @baseFilter={{state.baseFilter}}
+            @availableRealms={{state.availableRealmUrls}}
             @initialSelectedRealms={{this.initialSelectedRealmsForPanel}}
             @initialSelectedTypes={{this.initialSelectedTypesForPanel}}
             @lockSelectedRealms={{state.lockConsumingRealm}}
@@ -350,6 +353,9 @@ export default class CardChooserModal extends Component<Signature> {
       } = {},
     ) => {
       await this.realmServer.ready;
+      // In flight alongside the title / preselection work below, awaited only
+      // where the chooser's realm scope is finally needed.
+      let linkableRealms = this.linkableRealms(opts.consumingRealm);
       // Preload realm info without blocking the modal from opening.
       let prefetchRealmInfo = Promise.all(
         this.realmServer.availableRealmIdentifiers.map(async (realmURL) => {
@@ -409,7 +415,7 @@ export default class CardChooserModal extends Component<Signature> {
         searchKey: '',
         dismissModal: false,
         baseFilter: query.filter,
-        availableRealmUrls: this.realmServer.availableRealmIdentifiers,
+        availableRealmUrls: await linkableRealms,
         selectedCards: preselectedCardUrls,
         multiSelect: opts?.multiSelect ?? false,
         hasPreselectedCard: preselectedCardUrls.length > 0,
@@ -421,6 +427,32 @@ export default class CardChooserModal extends Component<Signature> {
       return await request.deferred.promise;
     },
   );
+
+  // The realms the chooser draws from. A card linked into `consumingRealm`
+  // is fetched by that realm under its own owner's identity, so a card in a
+  // realm that owner cannot read errors the moment the linking card is
+  // assembled — offering it hands the author a broken link. The realm server
+  // resolves the set; a failure there leaves the chooser at the user's full
+  // reach rather than an empty one, which the pick-time fetch still guards.
+  private async linkableRealms(consumingRealm?: URL): Promise<string[]> {
+    let availableRealms = this.realmServer.availableRealmIdentifiers;
+    if (!consumingRealm) {
+      return availableRealms;
+    }
+    try {
+      return await this.realmServer.fetchLinkableRealms(
+        consumingRealm.href,
+        availableRealms,
+      );
+    } catch (error) {
+      console.warn(
+        'Failed to resolve linkable realms for',
+        consumingRealm.href,
+        error,
+      );
+      return availableRealms;
+    }
+  }
 
   @action
   private setSearchKey(searchKey: string) {

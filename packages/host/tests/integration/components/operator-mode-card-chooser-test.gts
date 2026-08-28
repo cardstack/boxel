@@ -23,6 +23,8 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import {
   percySnapshot,
+  resetLinkableRealms,
+  setLinkableRealms,
   setupRealmCacheTeardown,
   testModuleRealm,
   testRealmURL,
@@ -40,6 +42,12 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     // The helper's realm-building beforeEach runs for these tests too, and caches
     // under this module's name, which the outer teardown's prefix cannot match.
     setupRealmCacheTeardown(hooks);
+
+    // The linkable-realm narrowing is module-level state in the realm-server
+    // mock, so clear it after every test whether or not that test set it.
+    hooks.afterEach(function () {
+      resetLinkableRealms();
+    });
 
     test(`displays recently accessed card`, async function (assert) {
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
@@ -370,6 +378,42 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       assert
         .dom(`[data-test-recent-card-result]`)
         .exists({ count: 2 }, 'non-Pet recent cards are filtered out');
+    });
+
+    test(`omits realms the consuming realm cannot fetch links from`, async function (assert) {
+      // A card's links are resolved by the realm that stores it, under its
+      // own owner's identity — so a card in a realm that owner cannot read
+      // breaks the moment the linking card is assembled. Here only the
+      // consuming realm is linkable, and the chooser must offer nothing else
+      // even though the user can read the other realms.
+      setLinkableRealms(testRealmURL);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}Person/hassan"]`);
+      await waitFor(`[data-test-add-new="friends"]`);
+      await click(`[data-test-add-new="friends"]`); // linksToMany add button
+      await waitFor('[data-test-card-chooser-modal]');
+      await settled();
+
+      assert
+        .dom('[data-test-search-label]')
+        .hasText(
+          '5 results across 1 realm',
+          'the search is scoped to the one linkable realm',
+        );
+
+      await click('[data-test-realm-picker] [data-test-boxel-picker-trigger]');
+      assert
+        .dom(`[data-test-boxel-picker-option-row="${testRealmURL}"]`)
+        .exists('the linkable realm is offered');
+      assert
+        .dom(`[data-test-boxel-picker-option-row="${baseRealm.url}"]`)
+        .doesNotExist('a realm the consuming realm cannot read is not offered');
     });
 
     test('type picker is hidden when baseFilter constrains type', async function (assert) {

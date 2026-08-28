@@ -47,6 +47,23 @@ export function resetCatalogRealmURL() {
   catalogRealmURLOverrides = [];
 }
 
+// Realms the mocked `/_linkable-realms` endpoint reports back, over and above
+// the consuming realm itself. Unset means every requested realm is linkable —
+// the answer for a fixture whose realms share one owner, which is what a test
+// gets unless it says otherwise. Module-level for the same reason
+// `catalogRealmURLOverrides` is: route handlers are registered once at module
+// load and shared across the run. Pair `setLinkableRealms` with
+// `resetLinkableRealms` in afterEach so the narrowing does not leak.
+let linkableRealmsOverride: string[] | undefined;
+
+export function setLinkableRealms(...urls: string[]) {
+  linkableRealmsOverride = urls.map(ensureTrailingSlash);
+}
+
+export function resetLinkableRealms() {
+  linkableRealmsOverride = undefined;
+}
+
 const realmServerRoutes = new Map<string, RealmServerMockRoute>();
 
 function normalizeRoutePath(path: string): string {
@@ -71,6 +88,7 @@ export function registerDefaultRoutes() {
   registerAuthRoutes();
   registerArchiveRoutes();
   registerPublishRoutes();
+  registerLinkableRealmsRoutes();
 }
 
 // The test environment points `ENV.realmServerURL` at the fake `http://test-realm`
@@ -247,6 +265,49 @@ function registerInfoRoutes() {
         status: 200,
         headers,
       });
+    },
+  });
+}
+
+// Which of the requested realms a card in the consuming realm can link to.
+// The realm server derives this from the consuming realm's owner's read
+// permissions; here it is whatever `setLinkableRealms` declared, with the
+// consuming realm always linkable to itself.
+function registerLinkableRealmsRoutes() {
+  registerRealmServerRoute({
+    path: '/_linkable-realms',
+    handler: async (req) => {
+      let payload: unknown;
+      let realmList: string[];
+      try {
+        payload = await parseSearchRequestPayload(req.clone());
+        realmList = parseRealmsFromPayload(payload);
+      } catch (e) {
+        if (e instanceof SearchRequestError) {
+          return buildSearchErrorResponse(e.message);
+        }
+        throw e;
+      }
+      let consumingRealm = ensureTrailingSlash(
+        String((payload as Record<string, unknown>).consumingRealm ?? ''),
+      );
+      let realms = linkableRealmsOverride
+        ? realmList.filter(
+            (realmURL) =>
+              realmURL === consumingRealm ||
+              linkableRealmsOverride!.includes(realmURL),
+          )
+        : realmList;
+      return new Response(
+        JSON.stringify({
+          data: {
+            type: 'linkable-realms',
+            id: consumingRealm,
+            attributes: { realms },
+          },
+        }),
+        { status: 200, headers: { 'content-type': SupportedMimeType.JSONAPI } },
+      );
     },
   });
 }

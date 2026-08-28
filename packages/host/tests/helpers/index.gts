@@ -91,10 +91,12 @@ export { createJWT, testRealmSecretSeed } from './test-auth';
 export {
   registerRealmAuthSessionRoomEnsurer,
   resetCatalogRealmURL,
+  resetLinkableRealms,
   setRealmArchived,
   setRealmAuthFailure,
   setupAuthEndpoints,
   setCatalogRealmURL,
+  setLinkableRealms,
 } from './realm-server-mock';
 export { setupOperatorModeStateCleanup } from './operator-mode-state';
 export * from '@cardstack/runtime-common/helpers';

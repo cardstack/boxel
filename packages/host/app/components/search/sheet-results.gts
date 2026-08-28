@@ -70,6 +70,11 @@ interface Signature {
     // locked). A pasted URL that resolves outside the scope is then
     // suppressed rather than offered.
     realmsLocked?: boolean;
+    // Every realm this search may draw from, before the realm picker narrows
+    // it. `realms` is a user-chosen slice of this; a pasted URL outside it is
+    // outside the caller's reach entirely, so it is suppressed even though
+    // the picker stays open. Omitted when the caller imposes no such bound.
+    availableRealms?: string[];
     baseFilter?: Filter;
     offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     // The recent card ids stripped of any `.json`, for most-recent-first
@@ -143,28 +148,54 @@ export default class SheetResults extends Component<Signature> {
     return buildRecentsSection([...entries]);
   }
 
-  // The URL-paste section. When the realm scope is locked (the chooser is
-  // hard-scoped to a consuming realm), a pasted URL that resolves to a card
-  // outside the scope is suppressed — otherwise the tile would be
-  // selectable and Go could return a cross-realm card. `buildUrlSection`
-  // resolves `realmUrl` against `realms` (normalizing id forms), so an
-  // in-scope card always yields one of the `realms` entries verbatim.
+  // The URL-paste section. A pasted URL that resolves to a card outside the
+  // scope its caller imposes is suppressed — otherwise the tile would be
+  // selectable and Go could return a card the caller cannot use. Two bounds
+  // do that, each checked against the realm `buildUrlSection` resolved (it
+  // matches `realms` first, normalizing id forms, and falls back to the
+  // card's own realm when none matches): a locked realm scope, which pins the
+  // paste to `realms`, and `availableRealms`, the realms the caller can draw
+  // from at all — the realm picker only ever narrows that set, so a paste
+  // outside it is out of reach however the picker is set. A caller that
+  // imposes neither accepts any URL the user can resolve.
   private get urlSection(): UrlSection | undefined {
     let section = buildUrlSection(
       this.args.resolvedCard,
       this.args.searchKeyIsURL,
-      this.args.realms,
+      this.urlSectionRealms,
       this.realm,
       (url) => this.network.virtualNetwork.unresolveURL(url),
     );
+    if (!section) {
+      return undefined;
+    }
     if (
-      section &&
       this.args.realmsLocked &&
       !this.args.realms.includes(section.realmUrl)
     ) {
       return undefined;
     }
+    if (
+      this.args.availableRealms &&
+      !this.urlSectionRealms.includes(section.realmUrl)
+    ) {
+      return undefined;
+    }
     return section;
+  }
+
+  // Realms `buildUrlSection` matches the pasted card against, picked realms
+  // first so a card in one resolves to the picked form. A card in an
+  // available-but-unpicked realm would otherwise fall to the path-derived
+  // realm, which names a sub-path rather than a realm root and so reads as
+  // out of scope; carrying every available realm resolves it verbatim
+  // instead, leaving the fallback to mean what the scope check takes it to
+  // mean — the card is in none of these realms.
+  private get urlSectionRealms(): string[] {
+    if (!this.args.availableRealms) {
+      return this.args.realms;
+    }
+    return [...new Set([...this.args.realms, ...this.args.availableRealms])];
   }
 
   private get sections(): SearchSheetSection[] {

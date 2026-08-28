@@ -398,11 +398,15 @@ export default class PanelContent extends Component<Signature> {
     return this.args.searchKey?.trim();
   }
 
+  // The realm scope the searches run against: whatever the realm filter
+  // resolved (select-all already expanded to the filter's available set), or
+  // every realm the user can reach when the filter has nothing.
   get realms() {
     const urls =
       this.args.realmFilter.selectedURLs.length > 0
         ? this.args.realmFilter.selectedURLs
-        : this.realmServer.availableRealmIdentifiers;
+        : (this.args.realmFilter.available ??
+          this.realmServer.availableRealmIdentifiers);
     return urls ?? [];
   }
 
@@ -486,6 +490,7 @@ export default class PanelContent extends Component<Signature> {
                 @isCardResourceLoaded={{this.isCardResourceLoaded}}
                 @realms={{this.realms}}
                 @realmsLocked={{@realmFilter.locked}}
+                @availableRealms={{@realmFilter.available}}
                 @baseFilter={{@baseFilter}}
                 @offerToCreate={{@offerToCreate}}
                 @recentCardBareIds={{this.recentCardBareIds}}

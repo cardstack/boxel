@@ -24,6 +24,13 @@ interface Signature {
     initialSelectedTypes?: ResolvedCodeRef[];
     initialSelectedRealms?: URL[];
     /**
+     * The realms this panel searches when no realm is picked, and the only
+     * ones its realm picker offers. Defaults to every realm the user can
+     * reach; a card picker narrows it to the realms whose cards its caller
+     * can actually use.
+     */
+    availableRealms?: string[];
+    /**
      * Hard-scope: when true, selectedRealms is fixed to initialSelectedRealms
      * and the realm picker is disabled.
      */
@@ -78,9 +85,15 @@ export default class SearchPanel extends Component<Signature> {
     return `realm:${realmURLs[0].href}`;
   }
 
+  private get availableRealms(): string[] {
+    return (
+      this.args.availableRealms ?? this.realmServer.availableRealmIdentifiers
+    );
+  }
+
   private get selectedRealmURLs(): string[] {
     if (this.selectedRealms.length === 0) {
-      return this.realmServer.availableRealmIdentifiers;
+      return this.availableRealms;
     }
     return this.selectedRealms.map((url) => url.href);
   }
@@ -93,6 +106,7 @@ export default class SearchPanel extends Component<Signature> {
       onChange: this.onRealmChange,
       selectedURLs: this.selectedRealmURLs,
       locked: this.args.lockSelectedRealms,
+      available: this.availableRealms,
     };
   }
 

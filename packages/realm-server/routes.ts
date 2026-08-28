@@ -58,6 +58,7 @@ import type { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import handleRealmIndexCounts from './handlers/handle-realm-index-counts.ts';
 import handleRealmInfo from './handlers/handle-realm-info.ts';
 import handleFederatedTypes from './handlers/handle-federated-types.ts';
+import handleLinkableRealms from './handlers/handle-linkable-realms.ts';
 import { multiRealmAuthorization } from './middleware/multi-realm-authorization.ts';
 import handleDownloadRealm from './handlers/handle-download-realm.ts';
 import {
@@ -258,6 +259,11 @@ export function createRoutes(args: CreateRoutesArgs) {
       dbAdapter: args.dbAdapter,
       reconciler: args.reconciler,
     }),
+  );
+  router.all(
+    '/_linkable-realms',
+    multiRealmAuthorization(args),
+    handleLinkableRealms({ dbAdapter: args.dbAdapter }),
   );
   router.post(
     '/_prerender-card',

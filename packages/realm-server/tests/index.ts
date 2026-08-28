@@ -340,6 +340,7 @@ const ALL_TEST_FILES: string[] = [
   './server-endpoints/download-realm-test',
   './server-endpoints/federated-types-test',
   './server-endpoints/index-responses-test',
+  './server-endpoints/linkable-realms-test',
   './server-endpoints/maintenance-endpoints-test',
   './server-endpoints/publish-progress-test',
   './server-endpoints/queue-status-test',

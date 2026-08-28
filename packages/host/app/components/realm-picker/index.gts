@@ -16,6 +16,12 @@ export interface RealmFilter {
   selectedURLs: string[];
   /** When true, the realm scope is locked and the picker UI is disabled. */
   locked?: boolean;
+  /**
+   * The realms the picker offers, and what select-all resolves to. Omitted
+   * for a search over everything the user can reach; a card picker narrows it
+   * to the realms its result may come from.
+   */
+  available?: string[];
 }
 
 interface Signature {
@@ -36,9 +42,17 @@ export default class RealmPicker extends Component<Signature> {
   // fires onChange to the parent. Without this, Picker sees an empty @selected
   // on first render and calls onChange([select-all]), which the parent
   // interprets as a user-initiated filter change (expanding the search sheet).
+  // The realm set on offer: the filter's own scope when it declares one,
+  // otherwise every realm the user can reach.
+  private get availableRealms(): readonly string[] {
+    return (
+      this.args.filter.available ?? this.realmServer.availableRealmIdentifiers
+    );
+  }
+
   @cached
   get selectAllOption(): PickerOption {
-    const urls = this.realmServer.availableRealmIdentifiers;
+    const urls = this.availableRealms;
     return {
       id: 'select-all',
       label: `Select All (${urls.length})`,
@@ -62,7 +76,7 @@ export default class RealmPicker extends Component<Signature> {
   }
 
   get realmOptions(): PickerOption[] {
-    const urls = this.realmServer.availableRealmIdentifiers;
+    const urls = this.availableRealms;
     const options: PickerOption[] = [this.selectAllOption];
     for (const realmURL of urls) {
       const info = this.realm.info(realmURL);
