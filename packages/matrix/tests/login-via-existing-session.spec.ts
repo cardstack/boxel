@@ -7,7 +7,6 @@ import {
   createSubscribedUserAndLogin,
   setupPermissions,
   assertLoggedIn,
-  assertLoggedOut,
 } from '../helpers/index.ts';
 
 // Exercises Synapse's login_via_existing_session feature (MSC3882), which the
@@ -138,18 +137,114 @@ test.describe('login_via_existing_session', () => {
     });
   });
 
-  test('a failed token exchange while logged in lands on the login form', async ({
+  test('a failed token exchange while logged in stays signed in as the current account', async ({
     page,
   }) => {
-    await createSubscribedUserAndLogin(page, 'account-switch-bad-token');
+    let userA = await createSubscribedUserAndLogin(
+      page,
+      'account-switch-bad-token',
+    );
+    await assertLoggedIn(page, {
+      displayName: userA.username,
+      userId: userA.credentials.userId,
+    });
 
-    // The exchange is attempted only after the current session is torn down,
-    // so when the token turns out to be dead (expired, spent, or bogus) the
-    // recovery surface is the login form — not an error screen.
+    // The token is validated before any teardown, so a dead token (expired,
+    // spent, or bogus) leaves the current session intact rather than logging
+    // the user out.
     await page.goto(`${appURL}?loginToken=not-a-real-token`);
 
-    await assertLoggedOut(page);
+    await assertLoggedIn(page, {
+      displayName: userA.username,
+      userId: userA.credentials.userId,
+    });
+    // The single-use token is still stripped so a refresh can't re-attempt it.
     expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
+  });
+
+  test('a ?loginToken switches accounts even when the stored session is revoked server-side', async ({
+    page,
+  }) => {
+    let userA = await createSubscribedUserAndLogin(
+      page,
+      'account-switch-stale-a',
+    );
+    await assertLoggedIn(page, {
+      displayName: userA.username,
+      userId: userA.credentials.userId,
+    });
+
+    // Revoke A's session server-side while leaving it persisted in the browser:
+    // the days-old-session shape `boxel browse` targets, where the stored auth
+    // is now dead. Booting it first would fail and drop the token, so the switch
+    // has to run ahead of the boot.
+    let accessTokenA = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('auth') ?? '{}').access_token,
+    );
+    let revoke = await fetch(`${getSynapseURL()}/_matrix/client/v3/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessTokenA}` },
+    });
+    expect(revoke.status, 'A’s stored session is revoked server-side').toBe(
+      200,
+    );
+
+    let { username: usernameB, credentials: credentialsB } =
+      await createSubscribedUser('account-switch-stale-b');
+    await setupPermissions(credentialsB.userId, `${appURL}/`);
+    let { login_token } = await mintLoginToken(credentialsB.accessToken);
+
+    await page.goto(`${appURL}?loginToken=${login_token}`);
+
+    await assertLoggedIn(page, {
+      displayName: usernameB,
+      userId: credentialsB.userId,
+    });
+    expect(new URL(page.url()).searchParams.has('loginToken')).toBe(false);
+  });
+
+  test('switching accounts revokes the previous account server-side', async ({
+    page,
+  }) => {
+    let userA = await createSubscribedUserAndLogin(
+      page,
+      'account-switch-revoke-a',
+    );
+    await assertLoggedIn(page, {
+      displayName: userA.username,
+      userId: userA.credentials.userId,
+    });
+
+    // Capture A's access token from the browser before the switch clears it.
+    let accessTokenA = await page.evaluate(
+      () => JSON.parse(localStorage.getItem('auth') ?? '{}').access_token,
+    );
+    let whoamiA = () =>
+      fetch(`${getSynapseURL()}/_matrix/client/v3/account/whoami`, {
+        headers: { Authorization: `Bearer ${accessTokenA}` },
+      });
+    expect(
+      (await whoamiA()).status,
+      'A’s token is valid before the switch',
+    ).toBe(200);
+
+    let { username: usernameB, credentials: credentialsB } =
+      await createSubscribedUser('account-switch-revoke-b');
+    await setupPermissions(credentialsB.userId, `${appURL}/`);
+    let { login_token } = await mintLoginToken(credentialsB.accessToken);
+
+    await page.goto(`${appURL}?loginToken=${login_token}`);
+    await assertLoggedIn(page, {
+      displayName: usernameB,
+      userId: credentialsB.userId,
+    });
+
+    // The switch logs A out server-side even though A was never booted in this
+    // browser session — the tear-down is handed A's captured auth.
+    expect(
+      (await whoamiA()).status,
+      'A’s token is rejected after the switch',
+    ).toBe(401);
   });
 
   test('the minted token carries the configured 2-minute lifetime and exchanges for a new session', async () => {

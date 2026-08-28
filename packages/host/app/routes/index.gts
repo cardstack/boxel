@@ -30,7 +30,10 @@ import type { SerializedState as OperatorModeSerializedState } from '@cardstack/
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
-import { consumeLoginTokenFromUrl } from '@cardstack/host/utils/login-token';
+import {
+  consumeLoginTokenFromUrl,
+  peekLoginToken,
+} from '@cardstack/host/utils/login-token';
 
 const { hostsOwnAssets } = ENV;
 
@@ -121,6 +124,37 @@ export default class Card extends Route {
 
     let { operatorModeState, cardPath } = params;
 
+    // Account switch: a loginToken next to a session stored in this browser
+    // means "switch to the token's account" (`boxel browse --profile B` against
+    // a browser signed in as A). Run this BEFORE booting the stored session — a
+    // days-old session may be revoked server-side, and booting it first would
+    // fail, drop the unregistered token in logout()'s transition, and skip the
+    // switch entirely. When there is no stored session the browser is logged
+    // out, so <Login> consumes the token instead; we don't handle that here.
+    let loginToken = peekLoginToken();
+    if (loginToken && this.matrixService.persistedUserId) {
+      consumeLoginTokenFromUrl(); // single-use: strip up front so a refresh can't retry
+      let didStart = this.didMatrixServiceStart;
+      try {
+        // switchAccount boots the new account with refreshRoutes, which
+        // re-enters this hook; set the one-shot flag first so that re-run skips
+        // the boot below (the new session is already up).
+        this.didMatrixServiceStart = true;
+        await this.matrixService.switchAccount(loginToken);
+        return;
+      } catch (e) {
+        // Redemption failed before any teardown, so the current session is
+        // untouched. Restore the flag: if the service hadn't started yet the
+        // boot below establishes the current account; if it had, skip the
+        // redundant re-boot and stay signed in as it.
+        this.didMatrixServiceStart = didStart;
+        console.error(
+          'Error switching accounts via loginToken; staying signed in',
+          e,
+        );
+      }
+    }
+
     if (!this.didMatrixServiceStart) {
       await this.matrixService.ready;
       await this.matrixService.start();
@@ -144,36 +178,6 @@ export default class Card extends Route {
           `[login-diag] index route post-login recovery did not restore session: ` +
             JSON.stringify(this.matrixService.loginReadinessDebug),
         );
-      }
-    }
-
-    // A loginToken while already logged in means "switch accounts" (`boxel
-    // browse --profile B` against a browser signed in as A). When logged out,
-    // the <Login> component consumes the token instead, so only consume it
-    // here when logged in. The token is stripped from the URL up front: it is
-    // single-use, and any transition would drop the unregistered param.
-    //
-    // logout() skips its index-root transition so this transition stays
-    // alive and the URL keeps the handoff's params. On success, the
-    // refreshRoutes re-run of this hook resolves the handoff's cardPath deep
-    // link for the new session (no workspace-chooser operatorModeState has
-    // been written over it). On a failed exchange — the token is expired or
-    // already spent — the session is already torn down, so fall through to
-    // the logged-out branch below and render the login form.
-    if (this.matrixService.isLoggedIn) {
-      let loginToken = consumeLoginTokenFromUrl();
-      if (loginToken) {
-        await this.matrixService.logout({ skipIndexTransition: true });
-        try {
-          let auth = await this.matrixService.loginWithSsoToken(loginToken);
-          await this.matrixService.start({ auth, refreshRoutes: true });
-          return;
-        } catch (e) {
-          console.error(
-            'Error switching accounts via loginToken; showing login form',
-            e,
-          );
-        }
       }
     }
 

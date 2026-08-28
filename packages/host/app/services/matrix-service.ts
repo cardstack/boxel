@@ -708,8 +708,25 @@ export default class MatrixService extends Service {
   // so the caller owns the navigation that follows and must not have its
   // in-flight transition aborted (nor the URL's deep-link params overwritten
   // with the workspace-chooser state).
-  async logout(opts?: { skipIndexTransition?: true }) {
-    let client = this._client;
+  async logout(opts?: {
+    skipIndexTransition?: true;
+    serverLogoutAuth?: LoginResponse;
+  }) {
+    // Which session to revoke server-side, decoupled from `this._client`. During
+    // an account switch the live client has already been rewritten to the
+    // incoming account's token by loginWithToken(), and the outgoing account was
+    // never booted here — so the only way to log it out server-side is a
+    // throwaway client built from its captured auth. Plain createClient has no
+    // side effects (no setClient/saveAuth) and logout(true) on a never-started
+    // client just POSTs /logout.
+    let client = opts?.serverLogoutAuth
+      ? this.matrixSDK.createClient({
+          baseUrl: matrixURL,
+          accessToken: opts.serverLogoutAuth.access_token,
+          userId: opts.serverLogoutAuth.user_id,
+          deviceId: opts.serverLogoutAuth.device_id,
+        })
+      : this._client;
     let didResetState = false;
     try {
       // Logout should synchronously move the app into a logged-out state.
@@ -766,6 +783,27 @@ export default class MatrixService extends Service {
         this.resetState();
       }
     }
+  }
+
+  // A loginToken next to a session stored in this browser means "switch to the
+  // token's account" (`boxel browse --profile B` against a browser signed in as
+  // A). Ordered so a bad/expired token is non-destructive:
+  //   snapshot A → redeem B (validates the token) → tear down A (revoking it
+  //   server-side via the snapshot) → boot B.
+  // Redemption runs first, so a dead token throws before any teardown and the
+  // caller stays signed in as A. The snapshot is taken up front because
+  // loginWithSsoToken() rewrites the live client's access token in place and
+  // logout() clears persisted auth — this is the only point A's session is
+  // recoverable for a server-side logout.
+  async switchAccount(loginToken: string): Promise<void> {
+    await this.ready;
+    let previousAuth = this.getAuth();
+    let auth = await this.loginWithSsoToken(loginToken);
+    await this.logout({
+      skipIndexTransition: true,
+      serverLogoutAuth: previousAuth,
+    });
+    await this.start({ auth, refreshRoutes: true });
   }
 
   get isInitializingNewUser() {
