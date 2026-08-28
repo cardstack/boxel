@@ -22,37 +22,41 @@ permissions:
 # train can supersede work that is cheap to redo without ever interrupting
 # work that has already started changing the environment.
 #
-# Build phase (Docker images, host bundle) — each build job holds a
-# per-service `deploy-<env>-build-<service>` group with cancel-in-progress on
-# for staging. Images are keyed by :<git-sha> and nothing outside the
-# registry has been touched yet, so a newer merge may kill a superseded
-# build at any point and lose only CPU time.
+# Build phase (this workflow) — each build job holds a per-service
+# `deploy-<env>-build-<service>` group with cancel-in-progress on for
+# staging. Images are keyed by :<git-sha> and nothing outside the registry
+# has been touched yet, so a newer merge may kill a superseded build at any
+# point and lose only CPU time.
 #
-# Release phase (ECS service flips, DB migrations, asset publishes) — each
-# job holds a per-service `deploy-<env>-release-<service>` group with
-# cancel-in-progress OFF. Once a deploy has started pointing services at new
-# images it is allowed to finish, so the environment is never left half on
-# one commit and half on another because a merge landed at minute 40.
+# Release phase (deploy-release.yml) — everything that changes the
+# environment runs inside ONE called workflow, so the single `release` job
+# below holds `deploy-<env>-release` for the entire phase. Concurrency
+# groups are held only while a job runs, which is why the phase is one job
+# and not a group shared by many: a phase spread across jobs could be
+# evicted from the queue partway through, having already flipped some
+# services. As one job it is all-or-nothing — a superseded run is dropped
+# while still pending, before it has changed anything.
 #
-# Newest-commit-wins survives the split without a workflow-level cancel:
+# Newest-commit-wins survives without a workflow-level cancel:
 #
 #   * A run still building when a newer run starts loses its builds to the
-#     build-phase cancel, and every release job downstream of a cancelled
-#     build is skipped with it — so it can never flip a service.
-#   * A run that already reached the release phase took each service's group
-#     first, so a newer run queues behind it and lands last.
+#     build-phase cancel, and the release job needs every build, so it never
+#     starts.
+#   * A run already in the release phase took the group first, so a newer
+#     run waits and lands after it.
 #   * GitHub keeps at most one pending job per group and cancels the older
-#     one, so a mid-train run that never got to flip anything drops out of
-#     the queue while the newest run stays in it.
+#     one, so a mid-train run drops out of the queue while the newest stays
+#     in it — and because it was still pending, it flipped nothing.
 #
 # Staging (auto-deployed on every merge to main) therefore takes a per-run
 # workflow-level group: runs neither cancel nor queue as a whole, and all
-# sequencing happens per service. Every other environment — production
-# (manual only), and any value we don't explicitly recognize — keeps the
-# single `deploy-<env>` group and queues whole runs, so a deliberate deploy
-# is never interleaved with another. Per-run grouping is opt-in per
-# environment (== 'staging') rather than opt-out (!= 'production') so an
-# unexpected env errs toward the more conservative behavior.
+# sequencing happens in the two phase groups. Every other environment —
+# production (manual only), and any value we don't explicitly recognize —
+# keeps the single `deploy-<env>` group and queues whole runs, so a
+# deliberate deploy is never interleaved with another. Per-run grouping is
+# opt-in per environment (== 'staging') rather than opt-out
+# (!= 'production') so an unexpected env errs toward the more conservative
+# behavior.
 #
 # The environment is read through a fallback chain — `inputs.environment`
 # for the workflow_call path (merge-to-main auto deploy), then
@@ -135,22 +139,6 @@ jobs:
       environment: ${{ inputs.environment }}
       dockerfile: "packages/ai-bot/Dockerfile"
 
-  deploy-ai-bot:
-    needs: [build-ai-bot, migrate-db]
-    name: Deploy ai-bot to AWS ECS
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-ai-bot
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-ai-bot"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-ai-bot-${{ inputs.environment }}"
-      image: ${{ needs.build-ai-bot.outputs.image }}
-      wait-for-service-stability: false
-
   build-bot-runner:
     name: Build bot-runner Docker image
     concurrency:
@@ -162,22 +150,6 @@ jobs:
       environment: ${{ inputs.environment }}
       dockerfile: "packages/bot-runner/Dockerfile"
 
-  deploy-bot-runner:
-    needs: [build-bot-runner, migrate-db]
-    name: Deploy bot-runner to AWS ECS
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-bot-runner
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-bot-runner"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-bot-runner-${{ inputs.environment }}"
-      image: ${{ needs.build-bot-runner.outputs.image }}
-      wait-for-service-stability: false
-
   build-host:
     name: Build host
     concurrency:
@@ -187,28 +159,6 @@ jobs:
     secrets: inherit
     with:
       environment: ${{ inputs.environment }}
-
-  deploy-host:
-    name: Deploy host
-    needs: [build-host]
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-host
-      cancel-in-progress: false
-    uses: ./.github/workflows/deploy-host.yml
-    secrets: inherit
-    with:
-      environment: ${{ inputs.environment }}
-
-  deploy-ui:
-    name: Deploy boxel-ui
-    if: inputs.environment == 'staging'
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-boxel-ui
-      cancel-in-progress: false
-    uses: ./.github/workflows/deploy-ui.yml
-    secrets: inherit
-    with:
-      environment: staging
 
   build-realm-server:
     name: Build realm-server Docker image
@@ -273,278 +223,37 @@ jobs:
       environment: ${{ inputs.environment }}
       dockerfile: "packages/postgres/Dockerfile"
 
-  # Run the DB migrations as a one-shot ECS task and gate the rest of the deploy
-  # on its exit code, so the app never rolls out ahead of its schema. The
-  # pg-migration image applies migrations and exits with node-pg-migrate's
-  # status (packages/postgres/scripts/run-migrations.sh); run one-shot with the
-  # service's trailing `sleep infinity` overridden away, a failing or
-  # crash-looping migration exits non-zero and fails this job — blocking every
-  # downstream deploy. deploy-host / build-realm-server are deps so migrations
-  # run at the last possible moment, minimizing how long old code sees the new
-  # schema.
-  migrate-db:
-    needs: [build-pg-migration, build-realm-server, deploy-host]
-    name: Run DB migrations
-    # Shared with migrate-db-remove: both run a one-shot task on the same
-    # pg-migration service, so no two migration tasks can overlap. They
-    # never contend within a run — the removal phase waits on
-    # deploy-realm-server, long after this job has finished.
+  # The whole environment-changing half of the deploy, held under one
+  # concurrency group for its full duration. `needs` lists every build so the
+  # phase cannot start on a partial set of images — and so a run whose build
+  # was superseded never reaches it.
+  release:
+    name: Release
+    needs:
+      [
+        build-ai-bot,
+        build-bot-runner,
+        build-host,
+        build-realm-server,
+        build-prerender-manager,
+        build-prerender,
+        build-worker,
+        build-pg-migration,
+      ]
     concurrency:
-      group: deploy-${{ inputs.environment }}-release-pg-migration
+      group: deploy-${{ inputs.environment }}-release
       cancel-in-progress: false
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      CLUSTER: ${{ inputs.environment }}
-      SERVICE: boxel-pg-migration-${{ inputs.environment }}
-      CONTAINER: boxel-pg-migration
-      IMAGE: ${{ needs.build-pg-migration.outputs.image }}
-      LOG_GROUP: ecs-boxel-pg-migration-${{ inputs.environment }}
-      # Bounds a migration that hangs (e.g. blocked on a lock); a long backfill
-      # migration must finish under it. Genuine failures exit immediately.
-      TIMEOUT_SECONDS: "1800"
-    steps:
-      - name: Check out
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up env
-        run: |
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
-          elif [ "${{ inputs.environment }}" = "staging" ]; then
-            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
-          else
-            echo "unrecognized environment: ${{ inputs.environment }}"
-            exit 1
-          fi
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Run migrations and gate on exit code
-        run: .github/scripts/run-gated-migration-task.sh ./scripts/run-migrations.sh
-
-  deploy-prerender:
-    name: Deploy prerender
-    needs: [build-prerender]
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-prerender-server
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
+    uses: ./.github/workflows/deploy-release.yml
     secrets: inherit
     with:
-      container-name: "boxel-prerender-server"
       environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-prerender-server-${{ inputs.environment }}"
-      image: ${{ needs.build-prerender.outputs.image }}
-      timeout-minutes: 10
-      wait-for-service-stability: true
-
-  deploy-prerender-manager:
-    name: Deploy prerender manager
-    needs: [build-prerender-manager, deploy-prerender]
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-prerender-manager
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-prerender-manager"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-prerender-manager-${{ inputs.environment }}"
-      image: ${{ needs.build-prerender-manager.outputs.image }}
-      timeout-minutes: 10
-      wait-for-service-stability: true
-
-  deploy-worker:
-    name: Deploy worker
-    needs: [build-worker, deploy-host, migrate-db, deploy-prerender-manager]
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-worker
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-worker"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-worker-${{ inputs.environment }}"
-      image: ${{ needs.build-worker.outputs.image }}
-      wait-for-service-stability: false
-
-  # the wait-for-service-stability flag doesn't seem to work in
-  # aws-actions/amazon-ecs-deploy-task-definition@v2. we keep getting timeouts
-  # waiting for service stability. So we are manually waiting here.
-  post-deploy-worker:
-    name: Wait for worker
-    needs: [deploy-worker]
-    runs-on: ubuntu-latest
-    steps:
-      - run: sleep 180
-
-  deploy-realm-server:
-    name: Deploy realm server
-    needs: [post-deploy-worker, build-realm-server, deploy-host, migrate-db]
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-realm-server
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-realm-server"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-realm-server-${{ inputs.environment }}"
-      image: ${{ needs.build-realm-server.outputs.image }}
-      timeout-minutes: 10
-      wait-for-service-stability: true
-
-  post-deploy-realm-server:
-    name: After realm server stable deployment
-    needs: [deploy-realm-server]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call post-deployment endpoint on realm server
-        run: |
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            URL="https://app.boxel.ai/_post-deployment"
-            SECRET="${{ secrets.PRODUCTION_REALM_SERVER_SECRET }}"
-          elif [ "${{ inputs.environment }}" = "staging" ]; then
-            URL="https://realms-staging.stack.cards/_post-deployment"
-            SECRET="${{ secrets.STAGING_REALM_SERVER_SECRET }}"
-          else
-            echo "Unknown environment: ${{ inputs.environment }}"
-            exit 1
-          fi
-
-          response=$(curl -s -w "\n%{http_code}" -X POST \
-            -H "Authorization: $SECRET" "$URL")
-          response_body=$(echo "$response" | head -n -1)
-          response_code=$(echo "$response" | tail -n 1)
-
-          echo "Response body: $response_body"
-
-          if [ "$response_code" != "200" ]; then
-            echo "Post-deployment endpoint returned $response_code, expected 200"
-            echo "Response body: $response_body"
-            exit 1
-          fi
-
-  # Destructive ("removal") migrations — column/table drops and renames, held in
-  # packages/postgres/migrations-removal/ — run HERE, after deploy-realm-server
-  # has reached stability. `wait-for-service-stability: true` on that job means
-  # the previous realm-server task set has fully drained (and, via its
-  # post-deploy-worker dependency, the previous worker task set too), so no task
-  # on the old code revision is left to query a column this phase drops. That is
-  # the whole point: running drops before the old tasks drain is what takes the
-  # published realms down (old code 500s on `column i.<x> does not exist`).
-  #
-  # A failure here is non-fatal to serving: the new code, by definition, no
-  # longer reads the removed columns, so it is already live and healthy — the
-  # drop simply hasn't happened yet and can be retried on the next deploy.
-  #
-  # Gate on deploy-realm-server, NOT post-deploy-realm-server: the latter is a
-  # separate /_post-deployment hook that can fail independently of the only real
-  # precondition here — the old tasks being gone.
-  migrate-db-remove:
-    needs: [build-pg-migration, deploy-realm-server]
-    name: Run DB removal migrations
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-pg-migration
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      CLUSTER: ${{ inputs.environment }}
-      SERVICE: boxel-pg-migration-${{ inputs.environment }}
-      CONTAINER: boxel-pg-migration
-      IMAGE: ${{ needs.build-pg-migration.outputs.image }}
-      LOG_GROUP: ecs-boxel-pg-migration-${{ inputs.environment }}
-      # Bounds a migration that hangs (e.g. blocked on a lock); a long backfill
-      # migration must finish under it. Genuine failures exit immediately.
-      TIMEOUT_SECONDS: "1800"
-    steps:
-      - name: Check out
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Set up env
-        run: |
-          if [ "${{ inputs.environment }}" = "production" ]; then
-            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github" >> "$GITHUB_ENV"
-          elif [ "${{ inputs.environment }}" = "staging" ]; then
-            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github" >> "$GITHUB_ENV"
-          else
-            echo "unrecognized environment: ${{ inputs.environment }}"
-            exit 1
-          fi
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-
-      - name: Run removal migrations and gate on exit code
-        run: .github/scripts/run-gated-migration-task.sh ./scripts/run-migrations.sh migrations-removal migrations_removal
-
-  recycle-prerender:
-    name: Recycle prerender after host is live
-    # The prerender fleet deploys before the realm server (the manager,
-    # worker, and realm server all depend on it being up for boot indexing),
-    # so its tabs warm against the OLD host shell the realm server was still
-    # serving at that point. Once the realm server is up serving the new
-    # shell, re-deploy the prerender service so its tabs re-warm against it.
-    # The reusable deploy passes force-new-deployment, so this recycles fresh
-    # tasks even though the image is unchanged.
-    #
-    # Gate on `deploy-realm-server` (wait-for-service-stability: true → the
-    # new realm server is up and serving the new shell), NOT on
-    # `post-deploy-realm-server`: that job is a separate post-deploy hook
-    # (it POSTs the realm server's `/_post-deployment` endpoint) and can fail
-    # independently of the recycle's only real precondition — the new shell
-    # being served. Coupling to it would skip this recycle on an unrelated
-    # hook failure.
-    needs: [build-prerender, deploy-realm-server]
-    # Shared with deploy-prerender: same ECS service, so a redeploy from
-    # another run can't interleave with this recycle.
-    concurrency:
-      group: deploy-${{ inputs.environment }}-release-prerender-server
-      cancel-in-progress: false
-    uses: cardstack/gh-actions/.github/workflows/ecs-deploy.yml@main
-    secrets: inherit
-    with:
-      container-name: "boxel-prerender-server"
-      environment: ${{ inputs.environment }}
-      cluster: ${{ inputs.environment }}
-      service-name: "boxel-prerender-server-${{ inputs.environment }}"
-      image: ${{ needs.build-prerender.outputs.image }}
-      timeout-minutes: 10
-      wait-for-service-stability: true
-
-  apply-observability:
-    # Push the observability/ package's dashboards/folders/data sources/alerts
-    # into the production self-host Grafana as part of the deploy. The
-    # called workflow's `environment: observability-production` gives the run
-    # a production badge and a Grafana URL link, but doesn't gate (no required
-    # reviewers — dispatching the manual deploy IS the approval).
-    #
-    # Production-only. Staging applies happen automatically on merge to main
-    # via observability-apply-staging.yml — no need to re-run during a
-    # manual staging deploy.
-    name: Apply observability to production
-    if: inputs.environment == 'production'
-    needs: [post-deploy-realm-server]
-    uses: ./.github/workflows/observability-apply-production.yml
-    secrets: inherit
+      ai-bot-image: ${{ needs.build-ai-bot.outputs.image }}
+      bot-runner-image: ${{ needs.build-bot-runner.outputs.image }}
+      pg-migration-image: ${{ needs.build-pg-migration.outputs.image }}
+      prerender-image: ${{ needs.build-prerender.outputs.image }}
+      prerender-manager-image: ${{ needs.build-prerender-manager.outputs.image }}
+      realm-server-image: ${{ needs.build-realm-server.outputs.image }}
+      worker-image: ${{ needs.build-worker.outputs.image }}
 
   finalize-deployment:
     name: Update GitHub deployment status
@@ -552,26 +261,14 @@ jobs:
       [
         create-deployment,
         build-ai-bot,
-        deploy-ai-bot,
         build-bot-runner,
-        deploy-bot-runner,
         build-host,
-        deploy-host,
         build-realm-server,
         build-prerender-manager,
         build-prerender,
         build-worker,
         build-pg-migration,
-        migrate-db,
-        deploy-prerender,
-        deploy-prerender-manager,
-        deploy-worker,
-        post-deploy-worker,
-        deploy-realm-server,
-        post-deploy-realm-server,
-        migrate-db-remove,
-        recycle-prerender,
-        apply-observability,
+        release,
       ]
     if: github.event_name == 'workflow_dispatch' && always()
     runs-on: ubuntu-latest
