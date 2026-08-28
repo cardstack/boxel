@@ -18,6 +18,13 @@ has every interface described below. It refines the boundary-record work in
 putting the fixed Boxel semantic API and the Glimmer rendering boundary into
 one layered runtime model.
 
+> **Current security architecture:** the presentation-containment topology in
+> this design document was superseded by the document-first Direct/Sandbox
+> implementation. Authored Sandbox modules no longer have a parallel canonical
+> instance evaluated by the Host Loader. See
+> [the Loader-boundary security reconciliation](boxel-execution-runtime-loader-boundary-reconciliation.md)
+> for the current boundary, evidence, residual risk, and follow-up gates.
+
 This document is intentionally self-contained for architectural review. It
 includes the authored and implicit API inventory, the complete `surface*`
 capability plane, the validation conclusions drawn from real applications, and

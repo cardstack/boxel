@@ -10,6 +10,16 @@ audits the Capsule's Glimmer wire-format bridge and shared-Host-DOM risk for
 Ember/Glimmer maintainers. Read this guide once, top to bottom, then review
 against the spec.
 
+> **Security correction:** this guide's Layer 0 and three-tier walkthrough
+> predate the document-first Direct/Sandbox redesign. They accurately describe
+> the earlier presentation-containment prototype, but not the current authored
+> code-containment claim. The current branch admits trusted platform documents
+> to Direct and every document graph containing authored modules to Sandbox;
+> the authored Loader, Card API instance, getters/computeds, Glimmer, and DOM
+> all live in the child. Capsule is not selected by this entry. Read
+> [the Loader-boundary security reconciliation](boxel-execution-runtime-loader-boundary-reconciliation.md)
+> before using the historical sections below for security review.
+
 ---
 
 ## Layer 0 — the model
