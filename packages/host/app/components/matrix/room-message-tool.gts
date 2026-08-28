@@ -152,11 +152,21 @@ export default class RoomMessageTool extends Component<Signature> {
   };
 
   private scrollBottomIntoView = modifier((element: HTMLElement) => {
+    // Consume the toggle flag so the modifier re-runs when the code area is
+    // hidden, then clear the stamped inline height so the container collapses
+    // back to its header-only size. Without this, a container that mounted
+    // while expanded keeps its stamped height after "Hide Info" removes the
+    // editor, leaving an empty gap.
+    if (!this.isDisplayingCode) {
+      element.style.height = '';
+      return;
+    }
     let editor = this.args.monacoSDK.editor
       .getEditors()
       .find((editor) => element.contains(editor.getContainerDomNode()));
     let editorHeight = editor?.getContentHeight() ?? 0;
     if (!editorHeight || editorHeight < 0) {
+      element.style.height = '';
       return;
     }
     let heightOfOtherChildren = [...element.children]

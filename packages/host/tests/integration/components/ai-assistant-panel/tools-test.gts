@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn, find } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -1239,6 +1239,77 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
     await percySnapshot(assert); // can preview code in ViewCode panel
+  });
+
+  test('"Hide Info" collapses the code area even after the message re-mounts while expanded', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'hide-info-height',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          }),
+        },
+      ],
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+
+    // Expand the code area.
+    await click('[data-test-view-code-button]');
+    await waitFor('[data-test-editor]');
+
+    // Re-mount the tool-call message while its code area is open: close and
+    // reopen the AI assistant panel. The expanded/collapsed flag lives in the
+    // room resource and survives the remount, so the code area comes back open
+    // and the height-stamping modifier installs with the editor present —
+    // reproducing the condition under which "Hide Info" used to leave an empty
+    // expanded-height block.
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-editor]');
+    await settled();
+
+    // Collapse via "Hide Info".
+    await click('[data-test-view-code-button]');
+    assert
+      .dom('[data-test-editor]')
+      .doesNotExist('code editor is removed after Hide Info');
+
+    let codeBlock = find(
+      '[data-test-tool-call-id="hide-info-height"] .tool-code-block',
+    ) as HTMLElement;
+    assert.ok(codeBlock, 'tool code block element exists');
+    assert.strictEqual(
+      codeBlock.style.height,
+      '',
+      'inline height is cleared so the block collapses to its header-only height',
+    );
   });
 
   test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {
