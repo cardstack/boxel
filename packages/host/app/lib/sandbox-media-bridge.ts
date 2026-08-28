@@ -167,6 +167,22 @@ export default class SandboxMediaBridge {
         // Leave the source removed. Restoring an arbitrary authored URL would
         // turn the child document into an ambient image-request/egress lane
         // and bypass the exact projected-resource capability above.
+        // Still reproduce the browser's ordinary failed-image contract. Base
+        // image components use this signal to replace the element with their
+        // established "Artwork unavailable" state. Dispatching the event
+        // exposes no bytes, URL authority, or ambient network capability; it
+        // only reports the failure of the bounded Host fetch the card asked
+        // for. Guard it like the success leg so a stale request cannot mutate
+        // a re-rendered image.
+        if (
+          this.generationByImage.get(image) === generation &&
+          image.isConnected
+        ) {
+          let EventConstructor = image.ownerDocument.defaultView?.Event;
+          if (EventConstructor) {
+            image.dispatchEvent(new EventConstructor('error'));
+          }
+        }
       });
     this.hydrationByImage.set(image, hydration);
     return hydration;

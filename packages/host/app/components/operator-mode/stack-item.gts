@@ -45,6 +45,7 @@ import { IconLink, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import {
   type ToolContext,
+  type BoxelDescription,
   type Permissions,
   type getCard,
   type getCards,
@@ -149,6 +150,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @tracked private selectedCards = new TrackedSet<string>();
   @tracked private executionMode: BoxelExecutionMode | undefined;
+  @tracked private documentDescription: BoxelDescription | undefined;
 
   private normalizeCardId(cardDefOrId: CardDefOrId): string {
     if (typeof cardDefOrId === 'string') {
@@ -238,6 +240,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let id = this.admittedDocument?.data?.id ?? this.args.item.id;
     if (id.endsWith('/index')) {
       return 'Workspace';
+    }
+    let displayName = this.documentDescription?.presentation.displayName;
+    if (displayName) {
+      return displayName;
     }
     let adoptsFrom = this.admittedDocument?.data?.meta?.adoptsFrom;
     return adoptsFrom && 'name' in adoptsFrom ? adoptsFrom.name : 'Card';
@@ -855,6 +861,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isWideFormat() {
+    if (this.usesDocumentExecution) {
+      return this.documentDescription?.presentation.prefersWideFormat ?? false;
+    }
     if (!this.card) {
       return false;
     }
@@ -867,6 +876,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get headerColor() {
+    if (this.usesDocumentExecution) {
+      return this.documentDescription?.presentation.headerColor ?? undefined;
+    }
     if (!this.card) {
       return undefined;
     }
@@ -1010,6 +1022,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     scheduleOnce('afterRender', this, updateExecutionMode);
     return () => observer.disconnect();
   };
+
+  @action
+  private receiveDocumentDescription(description: BoxelDescription): void {
+    // The runtime owns the executable definition. Stack chrome consumes only
+    // its cloneable RP description so Direct and Sandbox make the same layout
+    // and presentation decisions without admitting authored code to Host.
+    this.documentDescription = structuredClone(description);
+  }
 
   private setupContainerEl = (el: HTMLElement) => {
     this.containerEl = el;
@@ -1219,6 +1239,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @format={{this.cardFormat}}
               @hostOwnsBox={{true}}
               @viewCard={{this.cardCrudFunctions.viewCard}}
+              @onDescription={{this.receiveDocumentDescription}}
             />
           </div>
         {{else if (not this.canonicalCardIsLoaded)}}
