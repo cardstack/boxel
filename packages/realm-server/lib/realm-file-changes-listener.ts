@@ -13,8 +13,11 @@ const log = logger('realm-server:file-changes-listener');
 // runtime-common/realm.ts), every listener subscribed on this channel looks
 // up the URL in its lookup function. If the realm is mounted locally,
 // `realm.invalidateCache(path)` clears the matching #sourceCache /
-// #transpiledModuleCache entries. If it's not mounted, the notification is dropped —
-// this instance has no stale state to clear.
+// #transpiledModuleCache entries, and `realm.refreshDirectoryView(path)`
+// re-lists the path's parent directory so the kernel's cached view of the
+// shared filesystem (which can still say the file is absent) is refreshed
+// too. If it's not mounted, the notification is dropped — this instance has
+// no stale state to clear.
 //
 // Bulk variant: when the path is the wildcard sentinel `*` (CS-11156),
 // `realm.clearLocalSourceCaches()` drops every cached path for that realm. Emitted
@@ -102,6 +105,13 @@ export class RealmFileChangesListener {
         realm.clearLocalSourceCaches();
       } else {
         realm.invalidateCache(parsed.path);
+        // Fire-and-forget: the NOTIFY handler stays synchronous, and a failed
+        // directory listing only means the kernel cache expires on its own.
+        realm.refreshDirectoryView(parsed.path).catch((err: unknown) => {
+          log.warn(
+            `refreshDirectoryView failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
+          );
+        });
       }
     } catch (err: unknown) {
       const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';

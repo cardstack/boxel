@@ -1980,6 +1980,26 @@ export class Realm {
     }
   }
 
+  // Refresh this instance's filesystem view of the directory that holds
+  // `path`, after a peer instance wrote or deleted that path. The realm
+  // directory is a shared network filesystem (EFS/NFS) when several
+  // realm-server instances run at once, and each instance's kernel caches
+  // its own view of every directory — including "this name is not here"
+  // answers from earlier lookups. A file a peer just wrote therefore keeps
+  // reading as missing on this instance until the directory's attribute cache
+  // expires, tens of seconds later. Listing the directory makes the kernel
+  // re-read it from the server, which discards the stale negative entry so the
+  // next lookup of `path` sees the file. Draining the listing is the whole
+  // point; the entries themselves are not used. A directory that does not
+  // exist here (yet) is not an error — the adapter yields nothing for it.
+  async refreshDirectoryView(path: LocalPath): Promise<void> {
+    let separator = path.lastIndexOf('/');
+    let directory = separator === -1 ? '' : path.slice(0, separator);
+    for await (let _entry of this.#adapter.readdir(directory)) {
+      // intentionally empty
+    }
+  }
+
   // CS-11028: shared drop helper for any in-process site that invalidates a
   // single #transpiledModuleCache entry — writeMany, delete/deleteAll, the local
   // file-watcher callback, the index-updater's executable-invalidation
