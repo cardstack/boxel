@@ -33,8 +33,9 @@ node scripts/inspect-room.mjs --profile @me:stack.cards rooms 10
 ```
 
 `--profile` takes a profile id or a substring of its `matrixUrl`
-(`staging`, `boxel.ai`). Every subcommand works; `rooms` lists the profile
-user's rooms, not all rooms. Room ids on staging end in `:stack.cards`;
+(`staging`, `boxel.ai`). A substring that matches more than one profile is
+rejected; pass the exact id then. Every subcommand works; `rooms` lists the
+profile user's rooms, not all rooms. Room ids on staging end in `:stack.cards`;
 quote them in the shell because of the `!`.
 
 Limits: the profile's user must be a member of the room (the user who ran the

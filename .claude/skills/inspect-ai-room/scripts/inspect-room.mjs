@@ -35,9 +35,18 @@ const [cmd, arg1, arg2] = argv;
 function loadProfile(idOrHint) {
   let file = path.join(os.homedir(), '.boxel-cli', 'profiles.json');
   let profiles = JSON.parse(fs.readFileSync(file, 'utf8')).profiles ?? {};
-  let p =
-    profiles[idOrHint] ??
-    Object.values(profiles).find((x) => x.matrixUrl?.includes(idOrHint));
+  let p = profiles[idOrHint];
+  if (!p) {
+    let matches = Object.entries(profiles).filter(([, x]) =>
+      x.matrixUrl?.includes(idOrHint),
+    );
+    if (matches.length > 1) {
+      throw new Error(
+        `"${idOrHint}" matches several boxel-cli profiles (${matches.map(([id]) => id).join(', ')}); pass the exact profile id`,
+      );
+    }
+    p = matches[0]?.[1];
+  }
   if (!p) {
     throw new Error(
       `no boxel-cli profile matching "${idOrHint}"; have: ${Object.keys(profiles).join(', ')}`,
