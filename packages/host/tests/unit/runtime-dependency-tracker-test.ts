@@ -1,6 +1,5 @@
-import QUnit from 'qunit';
-const { module, test } = QUnit;
-import { basename } from 'path';
+import { module, test } from 'qunit';
+
 import {
   Loader,
   beginRuntimeDependencyTrackingSession,
@@ -15,7 +14,18 @@ import {
   withRuntimeDependencyTrackingContext,
 } from '@cardstack/runtime-common';
 
-module(basename(import.meta.filename), function (hooks) {
+// The runtime dependency tracker records what a card reached for while it
+// rendered, and every production caller of it runs in a browser tab: the host
+// app's render route, store, and search resources, `packages/base`'s card API
+// and serialization, and the `Loader` whose import-time module-graph walk feeds
+// it module deps. Nothing constructs a `Loader` under node, so a tracker suite
+// there would drive a runtime that ships nothing — it would stay green while
+// the browser behavior it stands in for diverged, and it would advertise the
+// loader as node-supported to anyone reading the test tree.
+module('Unit | runtime dependency tracker', function (hooks) {
+  // Sessions, contexts, and the probe dedup tables are module-global state in
+  // `runtime-common`, and the whole host suite shares one page. A test that
+  // leaves a session open is visible to every test that runs after it.
   hooks.afterEach(() => {
     endRuntimeDependencyTrackingSession();
     resetRuntimeDependencyTracker();
