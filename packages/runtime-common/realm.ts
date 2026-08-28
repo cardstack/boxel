@@ -133,6 +133,7 @@ import {
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isSingleCardDocument,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
   fileMetaTimestamps,
@@ -5072,13 +5073,31 @@ export class Realm {
     requestContext: RequestContext,
     localPath: LocalPath,
   ): Promise<Response> {
-    let source = await this.readFileAsText(`${localPath}.json`);
-    // Only a card document ever gets an index row, so a `.json` holding
-    // anything else is not waiting on indexing — it is genuinely not a card.
-    if (source && isCardDocumentString(source.content)) {
-      return notIndexedYet(request, requestContext);
+    let sourcePath = `${localPath}.json` as LocalPath;
+    if (await this.isIgnored(this.paths.fileURL(sourcePath))) {
+      // An ignored path is never visited, so no amount of waiting produces an
+      // index row for it.
+      return notFound(request, requestContext);
     }
-    return notFound(request, requestContext);
+    let source = await this.readFileAsText(sourcePath);
+    if (!source) {
+      return notFound(request, requestContext);
+    }
+    // The marker promises an index row is coming, so it has to match what the
+    // indexer will actually make one for: a `.json` whose `data` is a single
+    // card resource. A collection document (which `isCardDocumentString` also
+    // accepts) never becomes an instance row, and neither does anything else
+    // — those are genuinely not cards, not cards in waiting.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.content);
+    } catch {
+      return notFound(request, requestContext);
+    }
+    if (!isSingleCardDocument(parsed)) {
+      return notFound(request, requestContext);
+    }
+    return notIndexedYet(request, requestContext);
   }
 
   private async fileMetaDocument(

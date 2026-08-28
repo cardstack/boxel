@@ -2936,6 +2936,79 @@ module('Integration | Store', function (hooks) {
       );
   });
 
+  test('an index event that lands while the first read is in flight still resolves the placeholder', async function (assert) {
+    // On the realm's file system, never seen by the index: the read below
+    // comes back as the awaiting-index 404.
+    await testRealmAdapter.write(
+      'Person/racing.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Racing' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    // Hold that 404 open after the realm has produced it but before the store
+    // records it, so the invalidation below arrives in the gap. Without the
+    // in-flight check the store finds nothing to reload, drops the event, and
+    // then installs a placeholder that no later event ever clears.
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let reached404 = new Deferred<void>();
+    let release404 = new Deferred<void>();
+    cardService.fetchJSON = async (url: string | URL, args?: any) => {
+      if (!String(url).includes('Person/racing')) {
+        return originalFetchJSON(url, args);
+      }
+      try {
+        return await originalFetchJSON(url, args);
+      } catch (err) {
+        reached404.fulfill();
+        await release404.promise;
+        throw err;
+      }
+    };
+
+    try {
+      let reading = storeService.get(`${testRealmURL}Person/racing`);
+      await reached404.promise;
+
+      // The realm indexes the file and broadcasts the invalidation naming it,
+      // all while the read above is still parked.
+      await testRealm.write(
+        'Person/racing.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Racing Person' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      release404.fulfill();
+      await reading;
+      await settled();
+    } finally {
+      cardService.fetchJSON = originalFetchJSON;
+    }
+
+    let instance = storeService.peek(`${testRealmURL}Person/racing`);
+    assert.true(
+      isCardInstance(instance),
+      'the store holds the card rather than the stale placeholder',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Racing Person',
+      'and it is the indexed state',
+    );
+  });
+
   test('an instance can be restored after a loader reset', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(

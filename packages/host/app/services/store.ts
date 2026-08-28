@@ -2020,7 +2020,9 @@ export default class StoreService extends Service implements StoreInterface {
 
     if (event.indexType === 'full') {
       // A full reindex carries no per-file invalidation list; report it as a
-      // thin realm-event so the dashboard still sees the pass happened.
+      // thin realm-event so the dashboard still sees the pass happened. The
+      // rows it rebuilt are not lost to reloaders: the pass broadcasts the
+      // URLs it visited as an incremental event of its own before this one.
       telemetry?.recordEvent({
         event_type: 'realm-event',
         realm: event.realmURL,
@@ -2203,6 +2205,18 @@ export default class StoreService extends Service implements StoreInterface {
           this.loadInstanceTask.perform(invalidation);
           reloadsTriggered++;
         }
+      } else if (this.hasInflightCardLoad(invalidation)) {
+        // The invalidation landed while this id's first read was still in
+        // flight, so there is nothing in the store to reload yet. That read
+        // may well be the one that 404s — the index row this event announces
+        // did not exist when it was issued — and its awaiting-index
+        // placeholder would then be stale the moment it is installed, with no
+        // further event coming for it. Reload once the read settles.
+        realmEventsLogger.debug(
+          `deferring reload of ${invalidation} until its in-flight load settles`,
+        );
+        this.reloadAfterInflightLoad.perform(invalidation);
+        reloadsTriggered++;
       } else {
         realmEventsLogger.debug(
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
@@ -2255,6 +2269,29 @@ export default class StoreService extends Service implements StoreInterface {
       }
     },
   );
+
+  // Is a first read of `id` still in flight? `inflightGetCards` is keyed by the
+  // normalized URL, which is the form an invalidation carries.
+  private hasInflightCardLoad(id: string): boolean {
+    let url = asURL(id, this.network.virtualNetwork);
+    return url ? this.inflightGetCards.has(url) : false;
+  }
+
+  // Wait out the in-flight read of `id`, then reload it if what it produced was
+  // an awaiting-index placeholder. That placeholder is the store's promise that
+  // the card will appear on its own, and the event that would have kept the
+  // promise is the one already being handled — it arrived too early to find
+  // anything to reload.
+  private reloadAfterInflightLoad = task(async (id: string) => {
+    let url = asURL(id, this.network.virtualNetwork);
+    let inflight = url ? this.inflightGetCards.get(url) : undefined;
+    if (inflight) {
+      await inflight;
+    }
+    if (this.peekError(id)?.awaitingIndex) {
+      this.loadInstanceTask.perform(id);
+    }
+  });
 
   private reestablishReferences = task(async () => {
     let remoteIds = new Set<string>();

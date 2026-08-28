@@ -922,25 +922,40 @@ module(basename(import.meta.filename), function () {
         });
 
         // A write lands on the realm's file system before it is indexed, so
-        // "no index row" and "no card" are different situations. Dropping the
-        // index row while leaving `person-1.json` on disk reproduces the
-        // window a client sees between the two — the same state a replica that
-        // did not handle the write is in until the indexing pass lands.
+        // "no index row" and "no card" are different situations. Writing
+        // straight to disk (rather than through `realm.write`) leaves a file
+        // the index has never seen — the state a client reads during the
+        // window between a write and the indexing pass that follows it, and
+        // the state any replica that did not handle the write is in.
         module(
-          'index row missing for a card whose source is on disk',
+          'card source on disk that the index has never seen',
           function (hooks) {
-            hooks.beforeEach(async function () {
-              for (let table of ['boxel_index', 'boxel_index_working']) {
-                await dbAdapter.execute(
-                  `DELETE FROM ${table} WHERE url = $1 OR file_alias = $1`,
-                  { bind: [`${testRealmHref}person-1`] },
-                );
-              }
+            hooks.beforeEach(function () {
+              let realmDir = join(dir.name, 'realm_server_1', 'test');
+              writeFileSync(
+                join(realmDir, 'unindexed-card.json'),
+                JSON.stringify({
+                  data: {
+                    type: 'card',
+                    attributes: { firstName: 'Pending' },
+                    meta: {
+                      adoptsFrom: { module: './person', name: 'Person' },
+                    },
+                  },
+                }),
+              );
+              // A collection document is a card document but never gets an
+              // instance row of its own, so no amount of waiting makes it
+              // servable.
+              writeFileSync(
+                join(realmDir, 'unindexed-collection.json'),
+                JSON.stringify({ data: [] }),
+              );
             });
 
-            test('the 404 says the card is awaiting indexing rather than missing', async function (assert) {
+            test('the 404 for a single-card source says it is awaiting indexing rather than missing', async function (assert) {
               let response = await request
-                .get('/person-1')
+                .get('/unindexed-card')
                 .set('Accept', 'application/vnd.card+json');
 
               assert.strictEqual(
@@ -956,7 +971,7 @@ module(basename(import.meta.filename), function () {
 
             test('the conditional-GET path says the same thing', async function (assert) {
               let response = await request
-                .get('/person-1')
+                .get('/unindexed-card')
                 .set('Accept', 'application/vnd.card+json')
                 .set('If-None-Match', '"stale-etag"');
 
@@ -968,6 +983,23 @@ module(basename(import.meta.filename), function () {
               assert.true(
                 response.body.errors?.[0]?.awaitingIndex,
                 'the error carries the awaiting-index marker',
+              );
+            });
+
+            test('a source the indexer would never give an instance row is a plain 404', async function (assert) {
+              let response = await request
+                .get('/unindexed-collection')
+                .set('Accept', 'application/vnd.card+json');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.strictEqual(
+                response.body.errors?.[0]?.awaitingIndex,
+                undefined,
+                'nothing suggests a row is coming for it',
               );
             });
           },
