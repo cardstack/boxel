@@ -459,31 +459,28 @@ jobs:
     needs: [test-web-assets, check-percy, check-index-cache]
     strategy:
       fail-fast: false
+      # Three places carry the shard count and must move together: this list,
+      # `shardTotal` below, and `--shard-count` on the timings generator, which
+      # decides whether a rebalance is worth committing by predicting the
+      # slowest shard.
+      #
+      # Fewer, longer shards rather than more, shorter ones. Setup is ~195s per
+      # shard and largely irreducible — it is bound by the runner's cores, not
+      # by latency, so parallelising or pre-computing it moves the cost rather
+      # than removing it. Each added shard therefore buys a shrinking slice of
+      # test time for a fixed ~3 minutes of machine
+      # time and one more slot held. Measured on ~8,500s of test work: at 20
+      # shards the slowest shard took 13.1 minutes for 3.62 machine-hours, at
+      # 12 it took 18.0 for 3.08. Sixteen sits between them, keeping most of
+      # the wall clock while returning a fifth of the slots to the pool.
+      #
+      # The modelled wall-clock cost overstates the real one, because it
+      # assumes every shard starts immediately. They do not: shards have been
+      # observed queueing up to 242s waiting for a runner, and 20 concurrent
+      # jobs per host run is a large share of the pool.
       matrix:
-        shardIndex:
-          [
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-          ]
-        shardTotal: [20]
+        shardIndex: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+        shardTotal: [16]
     concurrency:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
@@ -1398,7 +1395,7 @@ jobs:
             # job loudly rather than committing a degraded weights file.
             if [ -f merged-junit-report/host.xml ]; then
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
-                --min-drift-seconds 60 --shard-count 20
+                --min-drift-seconds 60 --shard-count 16
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
