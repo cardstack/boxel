@@ -2937,6 +2937,12 @@ module('Integration | Store', function (hooks) {
   });
 
   test('an index event that lands while the first read is in flight still resolves the placeholder', async function (assert) {
+    // The store subscribes to a realm's index events when something first
+    // references a card in it, so give it the same footing the app has by the
+    // time it reads a brand-new card.
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+
     // On the realm's file system, never seen by the index: the read below
     // comes back as the awaiting-index 404.
     await testRealmAdapter.write(
@@ -2972,12 +2978,19 @@ module('Integration | Store', function (hooks) {
       }
     };
 
+    // Deliver exactly one index event, inside the window. The realm broadcasts
+    // its own when it indexes the file below, and matrix hands that over some
+    // time later — after the read has settled, where the ordinary error-reload
+    // path would pick it up and the window would never be exercised.
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+
     try {
       let reading = storeService.get(`${testRealmURL}Person/racing`);
       await reached404.promise;
 
-      // The realm indexes the file and broadcasts the invalidation naming it,
-      // all while the read above is still parked.
       await testRealm.write(
         'Person/racing.json',
         JSON.stringify({
@@ -2989,12 +3002,19 @@ module('Integration | Store', function (hooks) {
           },
         } as LooseSingleCardDocument),
       );
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}Person/racing`],
+        realmURL: testRealmURL,
+      });
 
       release404.fulfill();
       await reading;
       await settled();
     } finally {
       cardService.fetchJSON = originalFetchJSON;
+      messageService.relayRealmEvent = deliverRealmEvents;
     }
 
     let instance = storeService.peek(`${testRealmURL}Person/racing`);
