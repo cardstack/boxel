@@ -803,6 +803,15 @@ export default class MatrixService extends Service {
       skipIndexTransition: true,
       serverLogoutAuth: previousAuth,
     });
+    // The realm-server and per-realm session tokens carry the outgoing
+    // account's session-room claim, and logout()/clearLocalStorage leave them
+    // in place. Forget them so the incoming account mints its own on boot
+    // rather than reusing them and trying to join a session room it was never
+    // invited to (a 403 that fails the boot). setClient() during start()
+    // re-reads these keys, so clearing them here is enough. Mirrors
+    // forgetPersistedSession, which documents this hazard.
+    window.localStorage.removeItem(RealmServerSessionLocalStorageKey);
+    window.localStorage.removeItem(SessionLocalStorageKey);
     await this.start({ auth, refreshRoutes: true });
   }
 
