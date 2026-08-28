@@ -32,6 +32,7 @@ import {
 import { setupBaseRealm } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 const realmAURL = 'http://test-realm/testuser/workspace-a/';
 const realmBURL = 'http://test-realm/testuser/workspace-b/';
@@ -1255,6 +1256,46 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .doesNotExist('dropdown closed on mouseleave');
 
       restoreA();
+    });
+  });
+
+  // Each tile fills in its realm session and metadata from a background load
+  // started in the component constructor. Nothing awaits that load, and
+  // ember-concurrency rethrows an unconsumed task instance's error globally:
+  // an escaping rejection lands as `Global error: Uncaught TypeError: Failed
+  // to fetch` against whichever test happens to be running, which is not
+  // necessarily the one whose tile failed. `suspendGlobalErrorHook` collects
+  // what would otherwise be that global failure so it can be asserted on.
+  module('background tile loads', function (hooks) {
+    let { capturedExceptions } = suspendGlobalErrorHook(hooks);
+
+    test('a rejected realm load does not surface as a global error', async function (assert) {
+      let realmService = getService('realm') as any;
+      let originalLogin = realmService.login.bind(realmService);
+      realmService.login = async (realmURL: string) => {
+        if (realmURL === realmAURL) {
+          // What a realm-server round trip rejects with when the connection
+          // fails outright rather than answering an error status.
+          throw new TypeError('Failed to fetch');
+        }
+        return originalLogin(realmURL);
+      };
+
+      try {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+        await settled();
+      } finally {
+        realmService.login = originalLogin;
+      }
+
+      assert.deepEqual(
+        capturedExceptions.map((error) => String(error)),
+        [],
+        'the rejected load raised nothing globally',
+      );
+      assert
+        .dom('[data-test-workspace-list] [data-test-workspace]')
+        .exists('the chooser still renders its workspace tiles');
     });
   });
 });

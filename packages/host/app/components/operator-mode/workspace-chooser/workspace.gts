@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
@@ -11,7 +12,7 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { format as formatDate } from 'date-fns';
-import { dropTask, task } from 'ember-concurrency';
+import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
 
@@ -39,6 +40,7 @@ import {
 import {
   ensureTrailingSlash,
   hasExecutableExtension,
+  logger,
   RealmPaths,
   SupportedMimeType,
   type RealmIdentifier,
@@ -75,6 +77,8 @@ interface Signature {
     navIndex?: number;
   };
 }
+
+const log = logger('component:workspace-chooser/workspace');
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -1656,7 +1660,9 @@ export default class Workspace extends Component<Signature> {
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.loadRealmTask.perform();
+    this.loadRealmTask
+      .perform()
+      .catch((error: unknown) => this.reportRealmLoadFailure(error));
   }
 
   willDestroy() {
@@ -1664,10 +1670,54 @@ export default class Workspace extends Component<Signature> {
     this.clearReindexError();
   }
 
+  // Fills in the session and the realm metadata the tile renders from. The
+  // tile renders immediately off `realm.info()`, which answers synchronously
+  // with a placeholder, so this runs in the background and nothing awaits it.
+  //
+  // `loadRealmStage` records how far it got. Both steps talk to the realm
+  // server and both can fail transiently with the same `TypeError: Failed to
+  // fetch`, so the rejection alone doesn't say which one did; the stage names
+  // it in the diagnostic below.
+  private loadRealmStage: 'login' | 'realm-meta' = 'login';
+
   private loadRealmTask = task(async () => {
+    this.loadRealmStage = 'login';
     await this.realm.login(this.args.realmIdentifier);
+    this.loadRealmStage = 'realm-meta';
     await this.realm.ensureRealmMeta(this.args.realmIdentifier);
   });
+
+  // An unconsumed ember-concurrency task instance rethrows its error globally,
+  // which under a test run fails whichever test happens to be executing rather
+  // than the one that rendered this tile. The load is best-effort — the tile
+  // keeps the placeholder name and no stats, and a later render's
+  // `realm.info()` re-attempts the `_info` fetch — so a failure is recorded
+  // here instead of escaping. Cancellation is the ordinary teardown path
+  // (the chooser closes while the load is in flight) and stays silent.
+  private reportRealmLoadFailure(error: unknown) {
+    if (didCancel(error)) {
+      return;
+    }
+    log.warn(
+      `background realm load failed at ${this.loadRealmStage} for ${this.args.realmIdentifier}: ${error}`,
+    );
+    // The service logger is off by default in a test build, so the same detail
+    // goes to the console under test — this is the record a CI run leaves
+    // behind when a tile's load fails. The stack is included because the
+    // fetch's own message ("Failed to fetch") names neither the request nor
+    // the caller, and it is the only thing that distinguishes this load from
+    // any other background fetch failing the same way.
+    if (isTesting()) {
+      console.warn(
+        `[workspace-chooser] background realm load failed ${JSON.stringify({
+          realmURL: this.args.realmIdentifier,
+          stage: this.loadRealmStage,
+          error: String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        })}`,
+      );
+    }
+  }
 
   @cached
   private get realmInfo() {

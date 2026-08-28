@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Home from '@cardstack/boxel-icons/home';
 import Shapes from '@cardstack/boxel-icons/shapes';
-import { dropTask } from 'ember-concurrency';
+import { didCancel, dropTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -22,7 +22,7 @@ import {
 } from '@cardstack/boxel-ui/icons';
 import type { Icon } from '@cardstack/boxel-ui/icons';
 
-import { ri } from '@cardstack/runtime-common';
+import { logger, ri } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -46,6 +46,8 @@ interface Signature {
     topBarCenterElement: Element | null;
   };
 }
+
+const log = logger('component:workspace-chooser');
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
@@ -118,7 +120,17 @@ export default class WorkspaceChooser extends Component<Signature> {
       !this.loadArchivedRealmsTask.lastSuccessful &&
       !this.loadArchivedRealmsTask.isRunning
     ) {
-      this.loadArchivedRealmsTask.perform();
+      // Nothing awaits the perform, and an unconsumed ember-concurrency task
+      // instance rethrows its error globally — under a test run that fails
+      // whichever test is executing rather than this one. The disclosure
+      // already handles a failed load by leaving `lastSuccessful` unset so the
+      // next expand retries, so a failure is logged here rather than escaping.
+      this.loadArchivedRealmsTask.perform().catch((error: unknown) => {
+        if (didCancel(error)) {
+          return;
+        }
+        log.warn(`loading archived realms failed: ${error}`);
+      });
     }
   }
 
