@@ -10,7 +10,9 @@ From this directory:
 node web-simulator/server.mjs
 ```
 
-Computed fields (`_title`, `fullName`, `initials`, `handle`) are evaluated at index time and stored on `boxel_index.search_doc`. Search is `json_extract` against that column only — the JSON files on disk are not queried. The Cards tab shows index hits vs a contrast JSON-file scan so a query like `@maple.grove` or `MG` is visibly an index hit and a source miss.
+Then open http://127.0.0.1:4173/
+
+Computed fields (`_title`, `fullName`, `initials`, `handle`) are evaluated at index time and stored on `boxel_index.search_doc`. Search is `json_extract` against that column only — the JSON files on disk are not queried. On the Cards tab try `MG` or `@maple.grove`: index hits, JSON-file scan misses.
 
 ```bash
 node --test tests/core.test.js
