@@ -556,8 +556,20 @@ function hasRelativeModule(ref: CodeRef): boolean {
   return hasRelativeModule(ref.card);
 }
 
-function isRelativePath(moduleId: unknown): moduleId is string {
+// Exported for testing: both branches of `resolveAdoptsFrom` currently agree
+// for a prefix-form module — the relative branch passes it through unchanged —
+// so the classification has no observable behaviour of its own to assert
+// against, and a regression would be silent.
+export function isRelativePath(moduleId: unknown): moduleId is string {
   if (typeof moduleId !== 'string') {
+    return false;
+  }
+  // A prefix-form RRI (`@scope/name/…`) is absolute, but no URL parser knows
+  // that: `URL.canParse` answers false for it, which would classify the
+  // canonical spelling of a base-realm module as a relative path.
+  // `resolveRRIReference`, which receives whatever this classifies, draws the
+  // same line the same way.
+  if (moduleId.startsWith('@')) {
     return false;
   }
   if (typeof URL.canParse === 'function') {
