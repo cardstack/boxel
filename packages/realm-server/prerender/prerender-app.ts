@@ -13,6 +13,7 @@ import {
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
+  type RenderVisitResponse,
   type RunCommandResponse,
   type ScreenshotCaptureSpec,
   type ScreenshotCaptureSpecParse,
@@ -41,6 +42,7 @@ import {
   sanitizePrerenderRequestId,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
+import { isMissingExportMessage } from '@cardstack/runtime-common/package-shim-handler';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -104,6 +106,73 @@ export function decideHostShellRecycle(
     return { recycle: false, nextWarmed: reported };
   }
   return { recycle: true, nextWarmed: reported };
+}
+
+// Whether a visit's result should be re-rendered rather than believed.
+//
+// The two tokens are what this server had adopted when the render started and
+// when its response came back. A render that straddled a change between them
+// ran on a page whose bundle the realm server may already have stopped
+// serving. On its own that is unremarkable — most renders spanning a deploy
+// still produce correct output — and it matters for one class of failure:
+// `has no exported member`, which is exactly what a page resolving current
+// realm source against the previous bundle throws.
+//
+// That failure is worth one more render because of what happens to it
+// downstream. The indexer stores a failed render as the card's content, so a
+// transient bundle mismatch becomes an error document served from cache to
+// every anonymous reader until an unrelated reindex revisits the row.
+// Re-rendering on a page warmed against the current shell costs one render;
+// believing it costs an outage that lasts until something else repairs it.
+export function shouldRerenderForShellChange({
+  response,
+  shellAtStart,
+  shellAtCompletion,
+}: {
+  response: RenderVisitResponse;
+  shellAtStart: string | undefined;
+  shellAtCompletion: string | undefined;
+}): boolean {
+  // A server that has never been told a token knows nothing about which shell
+  // it is running, so an unknown on either side is left alone rather than
+  // guessed at in one direction or the other.
+  if (shellAtStart === undefined || shellAtCompletion === undefined) {
+    return false;
+  }
+  if (shellAtStart === shellAtCompletion) {
+    return false;
+  }
+  return hasMissingExportError(response);
+}
+
+function hasMissingExportError(response: RenderVisitResponse): boolean {
+  for (let candidate of [response.card?.error, response.pageUnusableError]) {
+    let message = candidate?.error?.message;
+    if (typeof message === 'string' && isMissingExportMessage(message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Record which host shell produced this response. Kept whether or not the
+// render failed: on a failure it is the evidence for how the failure should be
+// read, and on a success it is what lets an operator attribute a render to a
+// bundle without matching timestamps against deploy logs.
+export function stampHostShellTokens(
+  response: RenderVisitResponse,
+  tokens: { atStart: string | undefined; atCompletion: string | undefined },
+): void {
+  if (tokens.atStart === undefined && tokens.atCompletion === undefined) {
+    return;
+  }
+  response.meta = {
+    ...(response.meta ?? {}),
+    ...(tokens.atStart !== undefined ? { hostShellHash: tokens.atStart } : {}),
+    ...(tokens.atCompletion !== undefined
+      ? { hostShellHashAtCompletion: tokens.atCompletion }
+      : {}),
+  };
 }
 
 // A one-shot notification that shutdown has begun, which the holder releases
@@ -204,6 +273,10 @@ export function buildPrerenderApp(options: {
   maxPages?: number;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
+  // The host-shell token this server has adopted, read at render start and
+  // again at render end so a visit can tell whether the shell moved under it.
+  // Owned by the HTTP server, which learns it from the manager's heartbeat.
+  getHostShellHash?: () => string | undefined;
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -975,23 +1048,27 @@ export function buildPrerenderApp(options: {
       let jobId = sanitizePrerenderJobId(ctxt.get(PRERENDER_JOB_ID_HEADER));
 
       let start = Date.now();
+      // Hoisted so a re-render after a host-shell change replays the same
+      // visit rather than an approximation of it.
+      let visitArgs: Parameters<typeof prerenderer.prerenderVisit>[0] = {
+        affinityType,
+        affinityValue,
+        realm,
+        url,
+        auth,
+        ...(visitType ? { visitType } : {}),
+        renderOptions,
+        ...(fileData ? { fileData } : {}),
+        ...(Array.isArray(types) ? { types } : {}),
+        ...(cardTypes?.length ? { cardTypes } : {}),
+        ...(batchId ? { batchId } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(jobId ? { jobId } : {}),
+        signal: ac.signal,
+      };
+      let shellAtStart = options.getHostShellHash?.();
       let execPromise = prerenderer
-        .prerenderVisit({
-          affinityType,
-          affinityValue,
-          realm,
-          url,
-          auth,
-          ...(visitType ? { visitType } : {}),
-          renderOptions,
-          ...(fileData ? { fileData } : {}),
-          ...(Array.isArray(types) ? { types } : {}),
-          ...(cardTypes?.length ? { cardTypes } : {}),
-          ...(batchId ? { batchId } : {}),
-          ...(priority !== undefined ? { priority } : {}),
-          ...(jobId ? { jobId } : {}),
-          signal: ac.signal,
-        })
+        .prerenderVisit(visitArgs)
         .then((result) => ({ result }));
       let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
       if ('draining' in raceResult) {
@@ -1017,6 +1094,37 @@ export function buildPrerenderApp(options: {
         return;
       }
       let { response, timings, pool } = raceResult.result;
+      let shellAtCompletion = options.getHostShellHash?.();
+      if (
+        !options.isDraining?.() &&
+        shouldRerenderForShellChange({
+          response,
+          shellAtStart,
+          shellAtCompletion,
+        })
+      ) {
+        log.warn(
+          'visit of %s failed to resolve a module on host shell %s, which this server has since replaced with %s; re-rendering before returning that failure',
+          url,
+          shellAtStart,
+          shellAtCompletion,
+        );
+        // The token moved because `reconcileHostShell` saw it move, so the
+        // browser is being recycled around now and this visit lands on a page
+        // warmed against the current shell. One attempt only: if it fails
+        // again the failure is the card's, and the caller is owed an answer.
+        shellAtStart = shellAtCompletion;
+        try {
+          ({ response, timings, pool } =
+            await prerenderer.prerenderVisit(visitArgs));
+          shellAtCompletion = options.getHostShellHash?.();
+        } catch (e) {
+          log.warn(
+            `re-render of ${url} after a host-shell change threw; keeping the original result:`,
+            e,
+          );
+        }
+      }
       let totalMs = Date.now() - start;
       let poolFlags = Object.entries({
         reused: pool.reused,
@@ -1045,6 +1153,10 @@ export function buildPrerenderApp(options: {
         poolFlagSuffix,
       );
       decorateRenderErrorDiagnostics(response, requestId);
+      stampHostShellTokens(response, {
+        atStart: shellAtStart,
+        atCompletion: shellAtCompletion,
+      });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that
       // existing telemetry consumers still read.
@@ -1255,6 +1367,7 @@ export function createPrerenderHttpServer(options?: {
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
+    getHostShellHash: () => warmedHostShellHash,
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,

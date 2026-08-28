@@ -640,6 +640,15 @@ export interface PrerenderResponseMeta {
   // Lets operators join client → manager → prerender-server logs for
   // a single request. Absent for in-process (non-HTTP) callers.
   requestId?: string;
+  // Host-shell token the prerender server had adopted when this render
+  // started, and again when its response was assembled. Two different values
+  // mean the render straddled a host redeploy: the page resolved modules
+  // against a bundle the realm server may already have stopped serving. That
+  // is unremarkable for a render that succeeded, and decisive for one that
+  // failed to resolve a module — the failure then describes the environment
+  // rather than the card. Absent while the server has never been told a token.
+  hostShellHash?: string;
+  hostShellHashAtCompletion?: string;
 }
 
 // Per-visit client-side overhead the indexer spent producing a row, measured
