@@ -23,13 +23,12 @@ import type CardService from '@cardstack/host/services/card-service';
 import type HostModeService from '@cardstack/host/services/host-mode-service';
 import type HostModeStateService from '@cardstack/host/services/host-mode-state-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { SerializedState as OperatorModeSerializedState } from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type StoreService from '@cardstack/host/services/store';
-
-import { realmIdentifierSegments } from '../lib/realm-utils';
 
 const { hostsOwnAssets } = ENV;
 
@@ -61,6 +60,7 @@ export default class Card extends Route {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private router: RouterService;
   @service declare private store: StoreService;
+  @service declare private network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
@@ -294,11 +294,24 @@ export default class Card extends Route {
     let cardUrl;
     if (hostsOwnAssets) {
       // availableRealmIdentifiers is set in matrixService.start(), so we can use it here
-      let realmUrl = this.realmServer.availableRealmIdentifiers.find(
-        (realmUrl) => {
-          // A realm identifier may be a URL or a registered prefix, and only
-          // the first has a pathname; take the segments of whichever it is.
-          let realmPathParts = realmIdentifierSegments(realmUrl);
+      // The question here is which realm *serves* this card path, so the
+      // comparison is against each realm's mounted URL path. A registered
+      // prefix does not carry one: `@cardstack/base/` names two namespace
+      // segments while the realm it maps to is mounted at `/base/`, so
+      // comparing the prefix directly matches nothing. Resolve first, then
+      // match — and reuse the resolved URL as the base below, which is the
+      // only form `new URL` accepts.
+      let vn = this.network.virtualNetwork;
+      let realmUrl = this.realmServer.availableRealmIdentifiers
+        .map((identifier) =>
+          vn.isRegisteredPrefix(identifier)
+            ? vn.toURL(identifier).href
+            : identifier,
+        )
+        .find((resolvedRealmUrl) => {
+          let realmPathParts = new URL(resolvedRealmUrl).pathname
+            .split('/')
+            .filter((part) => part !== '');
           let cardPathParts = cardPath!
             .split('/')
             .filter((part) => part !== '');
@@ -312,11 +325,7 @@ export default class Card extends Route {
             }
           }
           return isMatch;
-        },
-      );
-      // The base is a realm identifier from the same list read above. No form
-      // guard, and reachability by a prefix form is unverified.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
+        });
       cardUrl = new URL(
         `/${cardPath}`,
         realmUrl ?? this.realm.defaultReadableRealm.path,

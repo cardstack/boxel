@@ -55,14 +55,19 @@ export function resolveCardRealmUrl(
 }
 
 /**
- * The meaningful segments of a realm identifier, in whichever form it is
- * expressed.
+ * The segments that *name* a realm, in whichever form its identifier is
+ * expressed. For naming a realm — a label, a heading — not for locating it.
  *
  * A realm identifier is either a URL (`https://host/foo/bar/`) or a registered
  * prefix (`@scope/name/`). Only the first has a pathname to take apart, so
- * anything deriving segments by parsing loses the prefix form — silently, if
- * the parse sits in a `try`. Both forms name the realm by the same trailing
- * segments, which is what callers here are after.
+ * deriving segments by parsing loses the prefix form — silently, if the parse
+ * sits in a `try`. Both forms end in the segment that names the realm, which
+ * is what a label is after.
+ *
+ * The two forms do NOT agree on where a realm is mounted: `@cardstack/base/`
+ * names two segments while the realm it maps to is served at `/base/`. Anything
+ * matching a request path against a realm must resolve the identifier through
+ * `virtualNetwork.toURL()` and use that pathname instead.
  *
  * @example
  * realmIdentifierSegments('https://cardstack.com/base/')  // ['base']
