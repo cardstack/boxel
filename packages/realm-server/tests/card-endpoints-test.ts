@@ -920,6 +920,75 @@ module(basename(import.meta.filename), function () {
           assert.ok(response.body.data, 'full body is returned');
           assert.ok(response.get('etag'), '200 response still carries an ETag');
         });
+
+        // A write lands on the realm's file system before it is indexed, so
+        // "no index row" and "no card" are different situations. Dropping the
+        // index row while leaving `person-1.json` on disk reproduces the
+        // window a client sees between the two — the same state a replica that
+        // did not handle the write is in until the indexing pass lands.
+        module(
+          'index row missing for a card whose source is on disk',
+          function (hooks) {
+            hooks.beforeEach(async function () {
+              for (let table of ['boxel_index', 'boxel_index_working']) {
+                await dbAdapter.execute(
+                  `DELETE FROM ${table} WHERE url = $1 OR file_alias = $1`,
+                  { bind: [`${testRealmHref}person-1`] },
+                );
+              }
+            });
+
+            test('the 404 says the card is awaiting indexing rather than missing', async function (assert) {
+              let response = await request
+                .get('/person-1')
+                .set('Accept', 'application/vnd.card+json');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.true(
+                response.body.errors?.[0]?.awaitingIndex,
+                'the error carries the awaiting-index marker',
+              );
+            });
+
+            test('the conditional-GET path says the same thing', async function (assert) {
+              let response = await request
+                .get('/person-1')
+                .set('Accept', 'application/vnd.card+json')
+                .set('If-None-Match', '"stale-etag"');
+
+              assert.strictEqual(
+                response.status,
+                404,
+                `HTTP 404 status: ${response.text}`,
+              );
+              assert.true(
+                response.body.errors?.[0]?.awaitingIndex,
+                'the error carries the awaiting-index marker',
+              );
+            });
+          },
+        );
+
+        test('a card with neither an index row nor a source file is a plain 404', async function (assert) {
+          let response = await request
+            .get('/nonexistent-card')
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            404,
+            `HTTP 404 status: ${response.text}`,
+          );
+          assert.strictEqual(
+            response.body.errors?.[0]?.awaitingIndex,
+            undefined,
+            'nothing suggests the card is on its way',
+          );
+        });
       });
 
       module('published realm', function (hooks) {

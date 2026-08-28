@@ -48,6 +48,12 @@ export interface SerializedError {
   // persistently failing visit cannot keep consuming its realm's prerender
   // affinity lane.
   consecutiveVisitFailures?: number;
+  // Set on the 404 a realm returns for an instance whose source file is on
+  // disk but which the index has no row for yet. The reference is sound and
+  // resolves once the indexing pass that the write kicked off lands, so a
+  // consumer holds a placeholder and waits for the realm's index event
+  // instead of committing to a broken reference.
+  awaitingIndex?: true;
 }
 
 // A persisted error document: the `SerializedError` plus the index metadata
@@ -334,6 +340,10 @@ export interface CardErrorJSONAPI {
   title: string;
   message: string;
   realm: string | undefined;
+  // Mirrors `SerializedError['awaitingIndex']`: the realm holds this
+  // instance's source but has not indexed it yet, so this 404 is a wait
+  // rather than an absence.
+  awaitingIndex?: true;
   meta: {
     lastKnownGoodHtml: string | null;
     cardTitle: string | null;
@@ -403,6 +413,9 @@ export function formattedError(
             status.message[cardError.status] ??
             cardError.message,
           realm: error?.responseHeaders?.get('X-Boxel-Realm-Url'),
+          ...(cardError.awaitingIndex || err.awaitingIndex
+            ? { awaitingIndex: true as const }
+            : {}),
           meta:
             meta ??
             (() => {
@@ -448,6 +461,9 @@ export function formattedError(
         title: err?.title ?? status.message[errorStatus] ?? errorMessage,
         message: errorMessage,
         realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
+        ...(err?.awaitingIndex || error?.awaitingIndex
+          ? { awaitingIndex: true as const }
+          : {}),
         meta:
           err?.meta ??
           (() => {
@@ -482,6 +498,7 @@ export class CardError extends Error implements SerializedError {
     | (CardError | SearchResultError['error'] | Error | CardErrorJSONAPI)[]
     | null = null;
   deps?: string[];
+  awaitingIndex?: true;
 
   constructor(
     message: string,
@@ -518,6 +535,9 @@ export class CardError extends Error implements SerializedError {
       id: err.id,
     });
     result.stack = err.stack;
+    if (err.awaitingIndex) {
+      result.awaitingIndex = true;
+    }
     if (err.additionalErrors) {
       result.additionalErrors = err.additionalErrors.map((inner) =>
         CardError.fromSerializableError(inner),
@@ -846,6 +866,21 @@ export function notFound(
     new CardError(message, { status: 404, id: request.url }),
     requestContext,
   );
+}
+
+// The instance's source file is on the realm but the index — which is what
+// card+json is served from — has no row for it yet. Still a 404, because there
+// is no card document to hand back; the `awaitingIndex` marker is what tells
+// the caller apart from `notFound`, so it can wait for the realm's index event
+// rather than treat the reference as broken.
+export function notIndexedYet(
+  request: Request,
+  requestContext: RequestContext,
+  message = `${request.url} has not finished indexing`,
+): Response {
+  let error = new CardError(message, { status: 404, id: request.url });
+  error.awaitingIndex = true;
+  return responseWithError(error, requestContext);
 }
 
 export function notAcceptable(

@@ -4,9 +4,13 @@ import { cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import { CardHeader } from '@cardstack/boxel-ui/components';
+import { CardHeader, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
-import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
+import {
+  FileAlert,
+  ExclamationCircle,
+  LoadingIndicator as LoadingIndicatorIcon,
+} from '@cardstack/boxel-ui/icons';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
@@ -42,9 +46,13 @@ export default class CardErrorComponent extends Component<Signature> {
   <template>
     {{#unless @hideHeader}}
       <CardHeader
-        class='error-header'
-        @cardTypeDisplayName='Card Error: {{this.errorTitle}}'
-        @cardTypeIcon={{ExclamationCircle}}
+        class={{if this.isAwaitingIndex 'pending-header' 'error-header'}}
+        @cardTypeDisplayName={{this.headerDisplayName}}
+        @cardTypeIcon={{if
+          this.isAwaitingIndex
+          LoadingIndicatorIcon
+          ExclamationCircle
+        }}
         @isTopCard={{@headerOptions.isTopCard}}
         @moreOptionsMenuItems={{@headerOptions.moreOptionsMenuItems}}
         @onClose={{@headerOptions.onClose}}
@@ -52,39 +60,86 @@ export default class CardErrorComponent extends Component<Signature> {
       />
     {{/unless}}
 
-    <div class='card-error' data-test-card-error={{this.id}}>
-      {{#if this.lastKnownGoodHtml}}
-        <this.lastKnownGoodHtml />
-      {{else}}
-        <div class='card-error-default'>
-          <FileAlert class='icon' />
-          <div class='message'>
-            {{#if @message}}
-              {{@message}}
-            {{else if @cardCreationError}}
-              Failed to create card.
-            {{else}}
-              This card contains an error.
-            {{/if}}
-          </div>
+    {{#if this.isAwaitingIndex}}
+      <div class='card-pending' data-test-card-awaiting-index={{this.id}}>
+        <LoadingIndicator class='pending-icon' />
+        <div class='pending-message'>
+          <p class='pending-headline'>Preparing this card</p>
+          <p class='pending-detail'>
+            The workspace has the file and is still getting the card ready. It
+            will appear here on its own once that finishes.
+          </p>
         </div>
-      {{/if}}
-    </div>
-    <CardErrorDetail
-      @error={{@error}}
-      @title={{this.errorTitle}}
-      @viewInCodeMode={{@viewInCodeMode}}
-      @fileToFixWithAi={{@fileToFixWithAi}}
-      class='card-error-detail'
-    >
-      <:error>
-        {{yield to='error'}}
-      </:error>
-    </CardErrorDetail>
+      </div>
+    {{else}}
+      <div class='card-error' data-test-card-error={{this.id}}>
+        {{#if this.lastKnownGoodHtml}}
+          <this.lastKnownGoodHtml />
+        {{else}}
+          <div class='card-error-default'>
+            <FileAlert class='icon' />
+            <div class='message'>
+              {{#if @message}}
+                {{@message}}
+              {{else if @cardCreationError}}
+                Failed to create card.
+              {{else}}
+                This card contains an error.
+              {{/if}}
+            </div>
+          </div>
+        {{/if}}
+      </div>
+      <CardErrorDetail
+        @error={{@error}}
+        @title={{this.errorTitle}}
+        @viewInCodeMode={{@viewInCodeMode}}
+        @fileToFixWithAi={{@fileToFixWithAi}}
+        class='card-error-detail'
+      >
+        <:error>
+          {{yield to='error'}}
+        </:error>
+      </CardErrorDetail>
+    {{/if}}
     <style scoped>
       .icon {
         height: 100px;
         width: 100px;
+      }
+      .card-pending {
+        display: flex;
+        flex: 1;
+        height: 100%;
+        align-content: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
+      }
+      .pending-icon {
+        --boxel-loading-indicator-size: 60px;
+        color: var(--boxel-400);
+      }
+      .pending-message {
+        width: 100%;
+        text-align: center;
+        text-wrap: pretty;
+      }
+      .pending-headline {
+        margin: 0;
+        font: 600 var(--boxel-font);
+      }
+      .pending-detail {
+        margin: var(--boxel-sp-xxs) auto 0;
+        max-width: 40ch;
+        color: var(--boxel-450);
+        font: var(--boxel-font-sm);
+      }
+      .pending-header {
+        min-height: var(--boxel-form-control-height);
+        background-color: var(--boxel-100);
+        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
       .card-error-default {
         display: flex;
@@ -141,6 +196,22 @@ export default class CardErrorComponent extends Component<Signature> {
 
   private get id() {
     return this.args.error.id;
+  }
+
+  // The realm answers a card+json read for an instance whose source it holds
+  // but has not indexed yet with a 404 carrying this marker. Nothing is wrong
+  // with the card — the indexing pass the write kicked off just hasn't landed —
+  // and the store reloads the instance when the realm broadcasts the index
+  // event for it, so this stands in until the real card takes over rather than
+  // reporting a card that isn't there.
+  private get isAwaitingIndex() {
+    return this.args.error.awaitingIndex === true;
+  }
+
+  private get headerDisplayName() {
+    return this.isAwaitingIndex
+      ? 'Preparing Card'
+      : `Card Error: ${this.errorTitle}`;
   }
 
   private get errorTitle() {

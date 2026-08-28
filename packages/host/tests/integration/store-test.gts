@@ -2877,6 +2877,65 @@ module('Integration | Store', function (hooks) {
       .containsText('Hassan', 'card is still rendered');
   });
 
+  test('a card the realm holds but has not indexed yet shows as being prepared, then renders once indexing lands', async function (assert) {
+    // Writing through the adapter puts the source on the realm without
+    // enqueuing an indexing pass — the state a card+json read sees between a
+    // write landing and the index catching up with it.
+    await testRealmAdapter.write(
+      'Person/pending.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Pending' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    setCardInOperatorModeState(`${testRealmURL}Person/pending`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-card-awaiting-index]');
+    assert
+      .dom('[data-test-card-awaiting-index]')
+      .containsText(
+        'Preparing this card',
+        'the card reads as on its way rather than missing',
+      );
+    assert
+      .dom('[data-test-card-error]')
+      .doesNotExist('no card error is reported');
+
+    // The realm indexes the file and broadcasts the invalidation, which is
+    // what the placeholder is waiting on.
+    await testRealm.write(
+      'Person/pending.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Pending Person' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitFor('[data-test-card-awaiting-index]', { count: 0 });
+    assert
+      .dom(
+        `[data-stack-card="${testRealmURL}Person/pending"] [data-test-field="name"]`,
+      )
+      .containsText(
+        'Pending Person',
+        'the real card takes over once it is indexed',
+      );
+  });
+
   test('an instance can be restored after a loader reset', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
