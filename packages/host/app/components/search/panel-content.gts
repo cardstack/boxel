@@ -414,6 +414,18 @@ export default class PanelContent extends Component<Signature> {
     return this.recentCardsService.recentCardIds;
   }
 
+  // The recent ids the live fallback may resolve. That fallback loads cards
+  // by id rather than through the realm-scoped search, so the realm scope has
+  // to be applied here too — otherwise a search error would resurface a
+  // recent from a realm the scope excludes, which for a card chooser is a
+  // realm whose cards its consuming realm cannot fetch. Matched by realm
+  // prefix, as `recentsSearchRealms` matches.
+  get scopedRecentCardIds(): string[] {
+    return this.recentCardIds.filter((id) =>
+      this.realms.some((realm) => id.startsWith(realm)),
+    );
+  }
+
   @action
   onChangeView(id: string) {
     if (this.args.onViewIdChange) {
@@ -471,7 +483,7 @@ export default class PanelContent extends Component<Signature> {
             as |recentsResults|
           >
             <LiveRecentsProvider
-              @cardIds={{this.recentCardIds}}
+              @cardIds={{this.scopedRecentCardIds}}
               @recentsResults={{recentsResults}}
               as |liveRecentCards|
             >
