@@ -1,6 +1,6 @@
 ---
 name: inspect-ai-room
-description: Inspect an AI assistant room's Matrix events on local, staging, or production — token usage/cost per turn, decoded timeline (edits, tool requests/results, streaming flags), room state (LLM model, mode, skills). Use when the user hands over a room id (local or staging) and wants the session analyzed, when analyzing benchmark sessions, diagnosing a stalled/stuck assistant response, or checking whether prompt caching is working.
+description: Inspect an AI assistant room's Matrix events on local, staging, or production — token usage/cost per turn, decoded timeline (edits, tool requests/results, streaming flags), room state (LLM model, mode, skills). Use when the user hands over a room id (local, staging, or production) and wants the session analyzed, when analyzing benchmark sessions, diagnosing a stalled/stuck assistant response, or checking whether prompt caching is working.
 ---
 
 # Inspect an AI assistant room

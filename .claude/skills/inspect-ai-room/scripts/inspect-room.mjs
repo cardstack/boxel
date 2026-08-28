@@ -28,6 +28,11 @@ let profileArg;
 let pi = argv.indexOf('--profile');
 if (pi !== -1) {
   profileArg = argv[pi + 1];
+  if (!profileArg || profileArg.startsWith('--')) {
+    throw new Error(
+      '--profile needs a value: a boxel-cli profile id or a matrixUrl substring',
+    );
+  }
   argv.splice(pi, 2);
 }
 const [cmd, arg1, arg2] = argv;
