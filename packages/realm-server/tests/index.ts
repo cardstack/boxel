@@ -310,6 +310,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
   './realm-file-changes-listener-test',
+  './directory-view-refresher-test',
   './realm-index-updated-listener-test',
   './jobs-finished-listener-test',
   './realm-routing-test',

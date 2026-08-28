@@ -11,7 +11,7 @@ import {
 
 // Minimal fake `Realm` — the listener calls `.url` (via lookup),
 // `.invalidateCache(path)` plus `.refreshDirectoryView(path)` for per-path
-// payloads, and `.clearLocalSourceCaches()` for wildcard payloads (CS-11156).
+// payloads, and `.clearLocalSourceCaches()` for wildcard payloads.
 // Stub all three; tests pick whichever they care about.
 function makeFakeRealm(
   url: string,
