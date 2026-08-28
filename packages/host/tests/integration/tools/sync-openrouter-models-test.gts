@@ -146,10 +146,19 @@ module('Integration | tools | sync-openrouter-models', function (hooks) {
 
     // The existing, still-listed model is discovered via search, so it is updated
     // in place rather than re-added.
+    let gpt4Op = opFor('OpenRouterModel/openai-gpt-4.json');
     assert.strictEqual(
-      opFor('OpenRouterModel/openai-gpt-4.json')?.op,
+      gpt4Op?.op,
       'update',
       'existing listed model resolves to an update',
+    );
+
+    // The generated card must not carry any per-run value. The realm skips a
+    // write whose content matches what is on disk, and one changing attribute
+    // would turn every daily sync into a rewrite of every model.
+    assert.false(
+      'lastSeenInApi' in ((gpt4Op?.data as any)?.attributes ?? {}),
+      'generated model card carries no per-run timestamp',
     );
 
     // The model not previously in the realm is added.

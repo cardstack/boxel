@@ -55,6 +55,9 @@ export async function enqueueSyncOpenRouterModels({
     runAs: REALM_USERNAME,
     command: COMMAND_SPECIFIER,
     commandInput: { realmIdentifier: realmURL },
+    // The sync is idempotent; the cron enqueues it from every worker task, so
+    // identical enqueues join one pending job instead of each running a sync.
+    dedupeKey: `sync-openrouter-models:${realmURL}`,
   };
 
   try {
