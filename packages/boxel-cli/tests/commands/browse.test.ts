@@ -435,6 +435,48 @@ describe('browse', () => {
     );
   });
 
+  it('opens an absolute published-realm URL with no active profile', async () => {
+    // A fresh install (no profile) can still open a published URL: the
+    // anonymous path runs before the token flow insists on a profile.
+    let openBrowserFn = vi.fn().mockResolvedValue(true);
+    let requestLoginTokenFn = vi.fn();
+    let resolveAnonymousBrowseUrl = vi
+      .fn()
+      .mockResolvedValue('https://alice.boxel.space/Post/1');
+
+    await browse('https://alice.boxel.space/Post/1', {
+      profileManager: fakeProfileManager({ getActiveProfile: () => null }),
+      requestLoginToken: requestLoginTokenFn,
+      resolveAnonymousBrowseUrl,
+      openBrowserFn,
+      log: () => {},
+    });
+
+    // No profile, so no realm-server URL is passed to the resolver.
+    expect(resolveAnonymousBrowseUrl).toHaveBeenCalledWith(
+      undefined,
+      'https://alice.boxel.space/Post/1',
+    );
+    expect(requestLoginTokenFn).not.toHaveBeenCalled();
+    expect(openBrowserFn).toHaveBeenCalledWith(
+      'https://alice.boxel.space/Post/1',
+    );
+  });
+
+  it('errors with no active profile when the URL is not a published realm', async () => {
+    // The anonymous path missed, so the token flow needs a profile — and
+    // there is none.
+    await expect(
+      browse('alice/blog/Post/1', {
+        profileManager: fakeProfileManager({ getActiveProfile: () => null }),
+        requestLoginToken: vi.fn(),
+        resolveAnonymousBrowseUrl: vi.fn().mockResolvedValue(undefined),
+        openBrowserFn: vi.fn(),
+        log: () => {},
+      }),
+    ).rejects.toThrow(/No active profile/);
+  });
+
   it('prints the published URL under --print-url without minting a token', async () => {
     let openBrowserFn = vi.fn().mockResolvedValue(true);
     let requestLoginTokenFn = vi.fn();
