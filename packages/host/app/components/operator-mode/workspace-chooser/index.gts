@@ -121,10 +121,10 @@ export default class WorkspaceChooser extends Component<Signature> {
       !this.loadArchivedRealmsTask.isRunning
     ) {
       // Nothing awaits the perform, and an unconsumed ember-concurrency task
-      // instance rethrows its error globally — under a test run that fails
-      // whichever test is executing rather than this one. The disclosure
-      // already handles a failed load by leaving `lastSuccessful` unset so the
-      // next expand retries, so a failure is logged here rather than escaping.
+      // instance reports its error globally — under a test run that fails
+      // whichever test is executing rather than this one. A rejection leaves
+      // `lastSuccessful` unset, so re-expanding the section retries; until
+      // then it reads the same as a section with nothing archived.
       this.loadArchivedRealmsTask.perform().catch((error: unknown) => {
         if (didCancel(error)) {
           return;

@@ -1260,20 +1260,24 @@ module('Acceptance | workspace-chooser', function (hooks) {
   });
 
   // Each tile fills in its realm session and metadata from a background load
-  // started in the component constructor. Nothing awaits that load, and
-  // ember-concurrency rethrows an unconsumed task instance's error globally:
-  // an escaping rejection lands as `Global error: Uncaught TypeError: Failed
-  // to fetch` against whichever test happens to be running, which is not
-  // necessarily the one whose tile failed. `suspendGlobalErrorHook` collects
-  // what would otherwise be that global failure so it can be asserted on.
+  // started in the component constructor. Nothing awaits that load, and an
+  // unconsumed ember-concurrency task instance reports its error through
+  // `Ember.onerror` — or throws it from a run-loop timer when nothing sets
+  // that. An escaping rejection therefore lands as `Global error: Uncaught
+  // TypeError: Failed to fetch` against whichever test happens to be running,
+  // which is not necessarily the one whose tile failed.
+  // `suspendGlobalErrorHook` collects what would otherwise be that global
+  // failure so it can be asserted on.
   module('background tile loads', function (hooks) {
     let { capturedExceptions } = suspendGlobalErrorHook(hooks);
 
     test('a rejected realm load does not surface as a global error', async function (assert) {
       let realmService = getService('realm') as any;
       let originalLogin = realmService.login.bind(realmService);
+      let rejectedLoads = 0;
       realmService.login = async (realmURL: string) => {
         if (realmURL === realmAURL) {
+          rejectedLoads++;
           // What a realm-server round trip rejects with when the connection
           // fails outright rather than answering an error status.
           throw new TypeError('Failed to fetch');
@@ -1288,6 +1292,13 @@ module('Acceptance | workspace-chooser', function (hooks) {
         realmService.login = originalLogin;
       }
 
+      // An empty capture proves nothing unless the load it stands for
+      // actually ran: were the tile to stop asking for this realm by this
+      // URL, both assertions below would still hold with nothing exercised.
+      assert.ok(
+        rejectedLoads > 0,
+        `the tile's realm load ran and rejected, ${rejectedLoads} time(s)`,
+      );
       assert.deepEqual(
         capturedExceptions.map((error) => String(error)),
         [],
