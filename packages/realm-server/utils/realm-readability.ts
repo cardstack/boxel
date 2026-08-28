@@ -95,6 +95,10 @@ export async function fetchLinkableRealms(
   realmList: string[],
 ): Promise<string[]> {
   let ownerUserId = await fetchRealmOwnerUserId(dbAdapter, consumingRealm);
+  // A realm with no `realm-owner` row has no identity to resolve links under
+  // at all: its outbound fetch fails while resolving the owner, before any
+  // request goes out, so every cross-realm link from it is unfetchable. Only
+  // its own cards are linkable.
   let readable = ownerUserId
     ? buildReadableRealms(
         await fetchUserPermissions(dbAdapter, {
@@ -103,9 +107,7 @@ export async function fetchLinkableRealms(
         }),
         await getPublishedRealmURLs(dbAdapter, realmList),
       )
-    : // An ownerless realm (no `realm-owner` permission row) resolves links
-      // under no identity beyond what the world can read.
-      await getPublicReadableRealms(dbAdapter, realmList);
+    : new Set<string>();
   readable.add(ensureTrailingSlash(consumingRealm));
   return realmList.filter((realmURL) => readable.has(realmURL));
 }

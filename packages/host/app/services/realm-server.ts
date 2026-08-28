@@ -884,7 +884,17 @@ export default class RealmServerService extends Service {
     let json = (await response.json()) as {
       data?: { attributes?: { realms?: string[] } };
     };
-    return json.data?.attributes?.realms ?? [];
+    let realms = json.data?.attributes?.realms;
+    // The consuming realm is always linkable, so a well-formed answer is never
+    // empty. Refusing an empty one keeps it from being read as a realm scope:
+    // downstream, an empty realm list means "search everything", which would
+    // widen the search while leaving the realm picker with nothing to offer.
+    if (!realms?.length) {
+      throw new Error(
+        `Linkable realms for ${consuming} came back empty; expected at least the consuming realm`,
+      );
+    }
+    return realms;
   }
 
   async fetchCardTypeSummaries(

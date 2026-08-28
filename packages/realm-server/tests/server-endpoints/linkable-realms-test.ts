@@ -40,6 +40,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let sharedRealmURL = new URL('http://127.0.0.1:4444/shared/');
     let authorOnlyRealmURL = new URL('http://127.0.0.1:4444/author-only/');
     let publicRealmURL = new URL('http://127.0.0.1:4444/public/');
+    // No `realm-owner` row, so it has no identity to resolve links under.
+    let ownerlessRealmURL = new URL('http://127.0.0.1:4444/ownerless/');
 
     async function startLinkableRealmsServer({
       dbAdapter,
@@ -93,6 +95,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
             permissions: {
               '*': ['read'],
               [authorUserId]: ['read', 'write', 'realm-owner'],
+            },
+          },
+          {
+            realmURL: ownerlessRealmURL,
+            fileSystem: {
+              'realm.json': realmConfigCardJSON({ name: 'Ownerless Realm' }),
+            },
+            permissions: {
+              [authorUserId]: ['read', 'write'],
             },
           },
         ],
@@ -160,6 +171,42 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
           sharedRealmURL.href,
         ].sort(),
         'the realm the author owns alone is dropped; the consuming, shared, and world-readable realms remain',
+      );
+    });
+
+    test('QUERY /_linkable-realms refuses a consuming realm the caller cannot write', async function (assert) {
+      // The answer describes the consuming realm owner's access. A caller who
+      // merely reads that realm would be asking about a third party, so read
+      // is not enough to ask — otherwise a world-readable realm becomes a
+      // probe for its owner's membership in any realm the caller can name.
+      let response = await makeRequest({
+        consumingRealm: sharedRealmURL.href,
+        realms: [sharedRealmURL.href, consumingRealmURL.href],
+      });
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      assert.ok(
+        response.body.errors?.[0]?.includes(sharedRealmURL.href),
+        'response names the realm the caller cannot write',
+      );
+    });
+
+    test('QUERY /_linkable-realms leaves an ownerless realm able to link only its own cards', async function (assert) {
+      let response = await makeRequest({
+        consumingRealm: ownerlessRealmURL.href,
+        realms: [
+          ownerlessRealmURL.href,
+          publicRealmURL.href,
+          sharedRealmURL.href,
+        ],
+      });
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let body = response.body as LinkableRealmsDocument;
+      assert.deepEqual(
+        body.data.attributes.realms,
+        [ownerlessRealmURL.href],
+        'a realm with no owner resolves links under no identity, so not even a world-readable realm is linkable from it',
       );
     });
 

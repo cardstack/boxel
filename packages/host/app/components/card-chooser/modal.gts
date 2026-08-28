@@ -432,8 +432,12 @@ export default class CardChooserModal extends Component<Signature> {
   // is fetched by that realm under its own owner's identity, so a card in a
   // realm that owner cannot read errors the moment the linking card is
   // assembled — offering it hands the author a broken link. The realm server
-  // resolves the set; a failure there leaves the chooser at the user's full
-  // reach rather than an empty one, which the pick-time fetch still guards.
+  // resolves the set. Nothing downstream re-checks it: what the chooser
+  // returns is linked as-is, and the store read that follows a pick runs as
+  // the user, who could always read the card. So a failure here reopens the
+  // gap for as long as it lasts — the chooser falls back to the user's full
+  // reach because a chooser that offers nothing is worse than one that offers
+  // too much, not because anything else is covering it.
   private async linkableRealms(consumingRealm?: URL): Promise<string[]> {
     let availableRealms = this.realmServer.availableRealmIdentifiers;
     if (!consumingRealm) {

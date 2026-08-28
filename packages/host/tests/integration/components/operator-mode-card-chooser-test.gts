@@ -38,16 +38,18 @@ module('Integration | operator-mode | card chooser', function (hooks) {
 
   let noop = () => {};
 
+  // The linkable-realm narrowing is module-level state in the realm-server
+  // mock, so clear it after every test in this file whether or not that test
+  // set it — a narrowing left behind would silently scope an unrelated test's
+  // chooser.
+  hooks.afterEach(function () {
+    resetLinkableRealms();
+  });
+
   module('recents section', function (hooks) {
     // The helper's realm-building beforeEach runs for these tests too, and caches
     // under this module's name, which the outer teardown's prefix cannot match.
     setupRealmCacheTeardown(hooks);
-
-    // The linkable-realm narrowing is module-level state in the realm-server
-    // mock, so clear it after every test whether or not that test set it.
-    hooks.afterEach(function () {
-      resetLinkableRealms();
-    });
 
     test(`displays recently accessed card`, async function (assert) {
       ctx.setCardInOperatorModeState(`${testRealmURL}grid`);

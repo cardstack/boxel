@@ -34,6 +34,10 @@ import {
 
 export type MultiRealmAuthorizationState = {
   realmList: string[];
+  // The authenticated caller, absent for an anonymous request (which reaches a
+  // handler only when every requested realm is world-readable). A handler that
+  // needs more than the read this middleware enforces resolves it from here.
+  userId?: string;
 };
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
@@ -117,6 +121,7 @@ export function multiRealmAuthorization({
 
     let publishedRealmURLs = await getPublishedRealmURLs(dbAdapter, realmList);
 
+    let callerUserId: string | undefined;
     let readableRealms = new Set<string>();
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
@@ -177,10 +182,12 @@ export function multiRealmAuthorization({
         );
         return;
       }
+      callerUserId = token.user;
     }
 
     (ctxt.state as Record<string, unknown>)[MULTI_REALM_AUTH_STATE] = {
       realmList,
+      ...(callerUserId !== undefined ? { userId: callerUserId } : {}),
     } satisfies MultiRealmAuthorizationState;
 
     await next();
