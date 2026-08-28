@@ -2019,17 +2019,21 @@ export default class StoreService extends Service implements StoreInterface {
     };
 
     if (event.indexType === 'full') {
-      // A full reindex carries no per-file invalidation list; report it as a
-      // thin realm-event so the dashboard still sees the pass happened. The
-      // rows it rebuilt are not lost to reloaders: the pass broadcasts the
-      // URLs it visited as an incremental event of its own before this one.
+      // A full reindex carries no per-file invalidation list, so there is
+      // nothing to reload by name. A realm that reindexes on request does
+      // broadcast the URLs it visited as an incremental event first, but one
+      // reindexing at startup announces itself with this event alone — so this
+      // can be the only word a card being held as awaiting-index ever gets
+      // that the row it is waiting for now exists.
+      let reloadsTriggered = this.reloadAwaitingIndexInstances(event.realmURL);
+      // Report the pass as a thin realm-event so the dashboard still sees it.
       telemetry?.recordEvent({
         event_type: 'realm-event',
         realm: event.realmURL,
         index_type: 'full',
         invalidations_count: 0,
         invalidated_ids: [],
-        reloads_triggered: 0,
+        reloads_triggered: reloadsTriggered,
         own_write: false,
         processing_ms: 0,
         event_args: eventArgs(),
@@ -2212,11 +2216,13 @@ export default class StoreService extends Service implements StoreInterface {
         // did not exist when it was issued — and its awaiting-index
         // placeholder would then be stale the moment it is installed, with no
         // further event coming for it. Reload once the read settles.
+        // Deliberately not counted as a reload: whether one happens depends on
+        // what the read settles into, and the counter is read synchronously
+        // here for the realm-event telemetry.
         realmEventsLogger.debug(
           `deferring reload of ${invalidation} until its in-flight load settles`,
         );
         this.reloadAfterInflightLoad.perform(invalidation);
-        reloadsTriggered++;
       } else {
         realmEventsLogger.debug(
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
@@ -2292,6 +2298,27 @@ export default class StoreService extends Service implements StoreInterface {
       this.loadInstanceTask.perform(id);
     }
   });
+
+  // Re-read every card being held as awaiting-index in `realmURL`. Their whole
+  // state is "a row for me is coming", and a from-scratch pass is one way it
+  // arrives without any event naming the card.
+  private reloadAwaitingIndexInstances(realmURL: string): number {
+    let reloaded = 0;
+    for (let [id, error] of this.store.cardErrorEntries()) {
+      if (!error.awaitingIndex) {
+        continue;
+      }
+      if (this.realm.realmOf(rri(id)) !== realmURL) {
+        continue;
+      }
+      realmEventsLogger.debug(
+        `reloading ${id} because a full index of ${realmURL} may have landed the row it is waiting for`,
+      );
+      this.loadInstanceTask.perform(id);
+      reloaded++;
+    }
+    return reloaded;
+  }
 
   private reestablishReferences = task(async () => {
     let remoteIds = new Set<string>();

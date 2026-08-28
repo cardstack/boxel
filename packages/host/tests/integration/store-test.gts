@@ -3013,7 +3013,11 @@ module('Integration | Store', function (hooks) {
       await reading;
       await settled();
     } finally {
-      cardService.fetchJSON = originalFetchJSON;
+      // Released here too: if the read never reaches the 404, or the write
+      // throws, the intercepted fetch would otherwise never return and the
+      // test would hang to the qunit timeout instead of failing with a reason.
+      release404.fulfill();
+      delete cardService.fetchJSON;
       messageService.relayRealmEvent = deliverRealmEvents;
     }
 
@@ -3025,6 +3029,71 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(
       (instance as any).name,
       'Racing Person',
+      'and it is the indexed state',
+    );
+  });
+
+  test('a full reindex resolves a placeholder even though it names no cards', async function (assert) {
+    // A realm reindexing at startup announces itself with a bare `full` event
+    // and no per-card invalidations, so this is the only word the store gets
+    // that the awaited row now exists.
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+
+    await testRealmAdapter.write(
+      'Person/swept.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Swept' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let placeholder = await storeService.get(`${testRealmURL}Person/swept`);
+    assert.true(
+      (placeholder as CardErrorJSONAPI).awaitingIndex,
+      'the read leaves an awaiting-index placeholder',
+    );
+
+    // Withhold the realm's own broadcasts so the only event the store sees is
+    // the bare full one handed over below.
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+    try {
+      await testRealm.write(
+        'Person/swept.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Swept Person' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: testRealmURL,
+      });
+      await settled();
+    } finally {
+      messageService.relayRealmEvent = deliverRealmEvents;
+    }
+
+    let instance = storeService.peek(`${testRealmURL}Person/swept`);
+    assert.true(
+      isCardInstance(instance),
+      'the sweep replaced the placeholder with the card',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Swept Person',
       'and it is the indexed state',
     );
   });

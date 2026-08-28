@@ -7,6 +7,7 @@ import {
   Deferred,
   type LooseSingleCardDocument,
   rri,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common/realm';
 
@@ -16,6 +17,7 @@ import {
   visitOperatorMode,
 } from '../../helpers';
 import { setupInteractSubmodeTests } from '../../helpers/interact-submode-setup';
+import { getTestRealmRegistry } from '../../helpers/test-realm-registry';
 
 import type {
   IncrementalIndexEventContent,
@@ -35,6 +37,72 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
     // The helper's realm-building beforeEach runs for these tests too, and
     // caches under this module's name, which the outer prefix cannot match.
     setupRealmCacheTeardown(hooks);
+
+    test('a card the realm has not indexed yet reads as being prepared, then renders itself once indexing lands', async function (assert) {
+      // Writing through the adapter puts the instance on the realm's file
+      // system with no indexing pass behind it, holding open for the length of
+      // the test the window a client normally sees only for as long as
+      // indexing takes.
+      let { adapter } = getTestRealmRegistry().get(testRealmURL)!;
+      await adapter.write(
+        'Person/late.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { firstName: 'Late' },
+            meta: {
+              adoptsFrom: { module: rri('../person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/late`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom('[data-test-card-awaiting-index]')
+        .containsText(
+          'Preparing this card',
+          'the card reads as being prepared rather than missing',
+        );
+      assert
+        .dom('[data-test-card-error]')
+        .doesNotExist('nothing is reported as an error');
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+        .doesNotExist('the card itself has nothing to render yet');
+
+      // Indexing catches up with the file that was already there — the same
+      // bytes, now with a row behind them.
+      let response = await getService('network').authedFetch(
+        `${testRealmURL}_invalidate`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: SupportedMimeType.JSONAPI,
+            'Content-Type': SupportedMimeType.JSONAPI,
+          },
+          body: JSON.stringify({
+            data: { attributes: { urls: [`${testRealmURL}Person/late.json`] } },
+          }),
+        },
+      );
+      assert.strictEqual(
+        response.status,
+        204,
+        'the realm indexed the file that was already on disk',
+      );
+      await settled();
+
+      assert
+        .dom('[data-test-card-awaiting-index]')
+        .doesNotExist('the placeholder gives way on its own');
+      assert
+        .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+        .hasText('Late', 'the card renders without a reload');
+    });
 
     test('stack item live updates when index changes', async function (assert) {
       await visitOperatorMode({

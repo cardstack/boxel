@@ -6,11 +6,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { CardHeader, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
-import {
-  FileAlert,
-  ExclamationCircle,
-  LoadingIndicator as LoadingIndicatorIcon,
-} from '@cardstack/boxel-ui/icons';
+import { FileAlert, ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { CardErrorJSONAPI } from '@cardstack/host/services/store';
@@ -46,11 +42,14 @@ export default class CardErrorComponent extends Component<Signature> {
   <template>
     {{#unless @hideHeader}}
       <CardHeader
-        class={{if this.isAwaitingIndex 'pending-header' 'error-header'}}
+        {{! `error-header` is the structural hook consumers style (e.g. the
+            module inspector stretches it to full width), so it stays on in
+            both states; `pending` only restyles it. }}
+        class='error-header {{if this.isAwaitingIndex "pending"}}'
         @cardTypeDisplayName={{this.headerDisplayName}}
         @cardTypeIcon={{if
           this.isAwaitingIndex
-          LoadingIndicatorIcon
+          LoadingIndicator
           ExclamationCircle
         }}
         @isTopCard={{@headerOptions.isTopCard}}
@@ -61,7 +60,14 @@ export default class CardErrorComponent extends Component<Signature> {
     {{/unless}}
 
     {{#if this.isAwaitingIndex}}
-      <div class='card-pending' data-test-card-awaiting-index={{this.id}}>
+      {{! A live region: the placeholder promises the card will appear on its
+          own, so its arrival has to be announced rather than only drawn. }}
+      <div
+        class='card-pending'
+        role='status'
+        aria-live='polite'
+        data-test-card-awaiting-index={{this.id}}
+      >
         <LoadingIndicator class='pending-icon' />
         <div class='pending-message'>
           <p class='pending-headline'>Preparing this card</p>
@@ -136,10 +142,18 @@ export default class CardErrorComponent extends Component<Signature> {
         color: var(--boxel-450);
         font: var(--boxel-font-sm);
       }
-      .pending-header {
+      .error-header.pending {
         min-height: var(--boxel-form-control-height);
         background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
+      }
+      /* The consumer sets --boxel-card-header-text-color from the realm's own
+         colour — white for a dark realm — which says nothing about the grey
+         painted above. Name a colour that belongs to this background, the way
+         the error state names its own. */
+      .error-header.pending :deep(.card-type-display-name),
+      .error-header.pending :deep(.boxel-loading-indicator) {
+        color: var(--boxel-dark);
       }
       .card-error-default {
         display: flex;
