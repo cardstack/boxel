@@ -298,6 +298,33 @@ the mounted format: a Capsule-classified definition with no authored `edit`
 format therefore stamps `direct`, because trusted Base owns and renders that
 format against the canonical Store instance.
 
+The containment unit is a **root render surface**, not an individual field.
+After a root custom edit template is admitted to Sandbox, its complete
+`@fields` tree executes in that same child document: trusted Base field
+components run there with less authority, authored FieldDef edit templates run
+there too, and a `containsMany` of 1 or 1,000 members creates Glimmer component
+instances but no additional iframe boundary. A field delegation must never
+attempt to mount Host Direct DOM inside the cross-origin document, and must
+never bounce through the Host router to create an iframe per member. Opening a
+linked card as a separate stack item creates a new root surface and may
+therefore create a second iframe; rendering that link inline remains inside the
+already-selected parent environment. This monotonic rule is both the security
+model (a descendant cannot regain authority its parent surrendered) and the
+resource bound (iframe count is proportional to visible root surfaces, never
+to data cardinality).
+
+The child document and its instance registry are also the lifetime unit. A
+format change, parent rerender, or replacement `SandboxRenderSlot` for the same
+root process must transfer mount ownership before releasing the predecessor;
+otherwise removing the iframe destroys child-local instance handles before
+the successor render can use them. Within that retained child, field edits
+update the materialized tree normally. The child coalesces changes into a
+complete-document proposal, the Host authorizes and applies that proposal to
+the one root resource, and the writer is not echoed back to itself (an echo
+would replace nested compound instances and needlessly remount a large
+`containsMany` tree). Other visible roots receive the canonical document over
+the ordinary instance-push lane and update in place.
+
 **RP-6.5** The standard-view base-template override (interact mode's
 "Toggle Standard View", the preview panel's synthetic `form` format — a
 `baseCardRef` passed alongside `execution='auto'`) is resolved by the

@@ -1,6 +1,8 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
-import Modifier from 'ember-modifier';
+import Modifier, { type ArgsFor } from 'ember-modifier';
 
 import type { SandboxRenderSlot } from '@cardstack/host/lib/sandbox-runtime-process';
 import type SurfaceService from '@cardstack/host/services/surface-service';
@@ -29,12 +31,52 @@ interface Signature {
 export default class BoxelSandboxSlotModifier extends Modifier<Signature> {
   @service declare private surfaceService: SurfaceService;
 
+  private current?: {
+    element: HTMLElement;
+    slot: SandboxRenderSlot;
+    detach: () => void;
+    unmount: () => void;
+  };
+
+  constructor(owner: Owner, args: ArgsFor<Signature>) {
+    super(owner, args);
+    registerDestructor(this, () => this.releaseCurrent());
+  }
+
   modify(element: HTMLElement, [slot]: [SandboxRenderSlot]) {
-    let unmount = slot.process.mount(element, slot.mountToken);
-    let detach = this.surfaceService.attach(slot.surface, element);
-    return () => {
-      detach();
-      unmount();
+    if (
+      this.current?.element === element &&
+      this.current.slot.process === slot.process &&
+      this.current.slot.mountToken === slot.mountToken &&
+      this.current.slot.surface === slot.surface
+    ) {
+      return;
+    }
+
+    // Modifier arguments are updated in place. A cleanup function returned
+    // from modify() is run BEFORE the next modify() call, which is too early
+    // for a live cross-origin iframe: unmounting destroys its child document
+    // and every child-local instance handle. Install the successor ownership
+    // first, then release the predecessor. SandboxRuntimeProcess.mount()
+    // transfers ownership on the same element, so the predecessor's tokened
+    // unmount becomes a no-op and the iframe never leaves the DOM during an
+    // isolated/edit format switch.
+    let next = {
+      element,
+      slot,
+      unmount: slot.process.mount(element, slot.mountToken),
+      detach: this.surfaceService.attach(slot.surface, element),
     };
+    let previous = this.current;
+    this.current = next;
+    previous?.detach();
+    previous?.unmount();
+  }
+
+  private releaseCurrent(): void {
+    let current = this.current;
+    this.current = undefined;
+    current?.detach();
+    current?.unmount();
   }
 }

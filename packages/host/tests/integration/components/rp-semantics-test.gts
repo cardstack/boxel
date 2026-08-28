@@ -1,7 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type { RenderingTestContext } from '@ember/test-helpers';
-import { click, render, settled } from '@ember/test-helpers';
+import { click, fillIn, render, settled } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -705,6 +705,115 @@ module('Integration | rp-semantics', function (hooks) {
     assert.false(
       cardAPI.useIndexBasedKey in CompoundSample,
       'compound fields default to value-identity keying',
+    );
+  });
+
+  test('RP-3.4, RP-6.4: a large custom containsMany editor remains one local component tree and preserves indexed writes', async function (assert) {
+    class AuthoredDetail extends FieldDef {
+      static displayName = 'AuthoredDetail';
+      @field note = contains(StringField);
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <div data-test-authored-detail-editor>
+            <@fields.note @format='edit' />
+          </div>
+        </template>
+      };
+    }
+
+    class AuthoredRow extends FieldDef {
+      static displayName = 'AuthoredRow';
+      @field label = contains(StringField);
+      @field detail = contains(AuthoredDetail);
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <fieldset data-test-authored-row-editor>
+            <@fields.label @format='edit' />
+            <@fields.detail @format='edit' />
+          </fieldset>
+        </template>
+      };
+    }
+
+    class LargeRosterEditor extends CardDef {
+      static displayName = 'LargeRosterEditor';
+      @field rows = containsMany(AuthoredRow);
+
+      static edit = class Edit extends Component<typeof this> {
+        <template>
+          <section data-test-large-roster-editor>
+            {{#each @fields.rows as |Row|}}
+              <Row @format='edit' />
+            {{/each}}
+          </section>
+        </template>
+      };
+    }
+
+    loader.shimModule(`${testRealmURL}rp34-large-editor`, {
+      AuthoredDetail,
+      AuthoredRow,
+      LargeRosterEditor,
+    });
+
+    let rowCount = 64;
+    let card = new LargeRosterEditor({
+      rows: Array.from(
+        { length: rowCount },
+        (_, index) =>
+          new AuthoredRow({
+            label: `Row ${index + 1}`,
+            detail: new AuthoredDetail({ note: `Note ${index + 1}` }),
+          }),
+      ),
+    });
+
+    await renderCard(loader, card, 'edit');
+
+    assert
+      .dom('[data-test-authored-row-editor]')
+      .exists(
+        { count: rowCount },
+        'the plural editor renders every repeated authored FieldDef in one component tree',
+      );
+    assert
+      .dom('[data-test-authored-detail-editor]')
+      .exists(
+        { count: rowCount },
+        'each row can delegate to another authored edit template without changing the field contract',
+      );
+
+    let inputs = [
+      ...document.querySelectorAll<HTMLInputElement>(
+        '[data-test-large-roster-editor] input',
+      ),
+    ];
+    assert.strictEqual(
+      inputs.length,
+      rowCount * 2,
+      'trusted Base StringField editors compose inside both authored editor levels',
+    );
+
+    await fillIn(inputs[0]!, 'First row changed');
+    await fillIn(inputs[rowCount - 1]!, 'Middle row changed');
+    await fillIn(inputs.at(-1)!, 'Last note changed');
+
+    assert.strictEqual(
+      card.rows[0]?.label,
+      'First row changed',
+      'the first indexed editor writes through to its own member',
+    );
+    assert.strictEqual(
+      card.rows[31]?.detail.note,
+      'Middle row changed',
+      'an editor in the middle of the large collection keeps the correct Box path',
+    );
+    assert.strictEqual(
+      card.rows.at(-1)?.detail.note,
+      'Last note changed',
+      'the final nested editor writes through without an index collision',
     );
   });
 

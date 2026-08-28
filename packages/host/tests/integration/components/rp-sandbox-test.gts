@@ -212,6 +212,63 @@ const inPlaceEditorSource = `
   }
 `;
 
+// Scale/ownership fixture for the edit topology that is easiest to get
+// catastrophically wrong: one authored root editor delegates a large
+// containsMany to authored row editors, and every row delegates again to an
+// authored nested editor plus trusted Base primitive editors. Once the root
+// has entered Sandbox, all of these components must stay in that ONE child
+// document. Re-routing every field would create an iframe tree proportional
+// to the data size and make ordinary forms unusable.
+const nestedManyEditorSource = `
+  import {
+    CardDef,
+    Component,
+    FieldDef,
+    contains,
+    containsMany,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  export class AuthoredDetail extends FieldDef {
+    @field note = contains(StringField);
+    static edit = class Edit extends Component<typeof AuthoredDetail> {
+      <template>
+        <div data-nested-many-detail>
+          <@fields.note @format='edit' />
+        </div>
+      </template>
+    };
+  }
+
+  export class AuthoredRow extends FieldDef {
+    @field label = contains(StringField);
+    @field detail = contains(AuthoredDetail);
+    static edit = class Edit extends Component<typeof AuthoredRow> {
+      <template>
+        <fieldset data-nested-many-row>
+          <@fields.label @format='edit' />
+          <@fields.detail @format='edit' />
+        </fieldset>
+      </template>
+    };
+  }
+
+  export class NestedManyEditor extends CardDef {
+    static displayName = 'Nested Many Editor';
+    @field rows = containsMany(AuthoredRow);
+    static edit = class Edit extends Component<typeof NestedManyEditor> {
+      <template>
+        <section data-nested-many-editor>
+          {{#each @fields.rows as |Row|}}
+            <Row @format='edit' />
+          {{/each}}
+        </section>
+      </template>
+    };
+  }
+`;
+
 // `Roster` forward-references `Classroom` through a linksTo thunk while
 // `Classroom` is declared LATER in the module — main's sanctioned pattern.
 // Evaluation must not invoke the thunk before `Classroom` initializes.
@@ -269,6 +326,7 @@ module('Integration | rp-sandbox', function (hooks) {
           'plain-widget.gts': plainWidgetSource,
           'forward-link.gts': forwardLinkSource,
           'in-place-editor.gts': inPlaceEditorSource,
+          'nested-many-editor.gts': nestedManyEditorSource,
           'SecureSandboxCard/proof.json': {
             data: {
               attributes: { label: 'document-first' },
@@ -394,6 +452,67 @@ module('Integration | rp-sandbox', function (hooks) {
       'a later Host path cannot accidentally evaluate the admitted module',
     );
     delete hostGlobal.__boxelSandboxHostExecutionProbe;
+  });
+
+  test('RP-3.4, RP-6.4: a large nested containsMany edit surface owns exactly one Sandbox iframe', async function (assert) {
+    let loaderService = getService('loader-service');
+    loaderService.resetLoader({
+      force: true,
+      reason: 'nested containsMany Sandbox ownership proof',
+    });
+    let moduleIdentifier = testRRI('nested-many-editor');
+    let cardURL = `${testRealmURL}NestedManyEditor/large`;
+    let rowCount = 64;
+    let cardDocument: LooseSingleCardDocument = {
+      data: {
+        id: cardURL,
+        attributes: {
+          rows: Array.from({ length: rowCount }, (_, index) => ({
+            label: `Row ${index + 1}`,
+            detail: { note: `Note ${index + 1}` },
+          })),
+        },
+        meta: {
+          adoptsFrom: {
+            module: moduleIdentifier,
+            name: 'NestedManyEditor',
+          },
+        },
+      },
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <BoxelDocumentRenderer
+            @document={{cardDocument}}
+            @relativeTo={{cardURL}}
+            @format='edit'
+          />
+        </template>
+      },
+    );
+
+    await waitFor('[data-boxel-execution="sandbox"]', { timeout: 20000 });
+    assert
+      .dom('[data-boxel-execution="sandbox"] iframe.boxel-sandbox-process')
+      .exists(
+        { count: 1 },
+        'one root edit surface owns one Sandbox process regardless of collection length',
+      );
+    assert
+      .dom('[data-boxel-execution="sandbox"] [data-boxel-execution]')
+      .doesNotExist(
+        'delegated fields do not re-enter the Host router and allocate nested execution surfaces',
+      );
+    assert.false(
+      loaderService.loader.isModuleLoaded(moduleIdentifier),
+      'the root, row, and nested authored edit templates all remain outside the Host Loader',
+    );
+    assert.true(
+      loaderService.isHostModuleEvaluationDenied(moduleIdentifier),
+      'the single child owns the complete authored edit graph after pre-Loader classification',
+    );
   });
 
   test('the Host Loader rejects authored realm code before fetching it', async function (assert) {
