@@ -403,7 +403,7 @@ test.describe('Login', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await expect(page.locator('[data-test-login-error]')).toContainText(
-      'Sign in failed. Please check your credentials and try again',
+      'Sign-in failed. Please check your credentials and try again',
     );
 
     await page.locator('[data-test-password-field]').fill(password);
