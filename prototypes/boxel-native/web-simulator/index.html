@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Boxel Native — iPhone Simulator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <header class="stage-copy">
+        <p class="eyebrow">NativeScript 9.1 · SQLite path</p>
+        <h1>Boxel offline messenger</h1>
+        <p>
+          iPhone chrome around the same data plane a NativeScript 9.1 iOS / Mac
+          Catalyst app would use: realm files on disk, lite indexer into
+          <code>boxel_index</code>, queued chat, then
+          <code>boxel realm sync</code>-shaped reconcile when online.
+        </p>
+        <ul class="legend">
+          <li>Chats attach indexed cards</li>
+          <li>Cards are JSON files → SQLite</li>
+          <li>Sync uses prefer-newest</li>
+        </ul>
+      </header>
+
+      <section class="phone" aria-label="iPhone simulator">
+        <div class="phone-bezel">
+          <div class="dynamic-island"></div>
+          <div class="phone-screen">
+            <div class="status-bar">
+              <span>9:41</span>
+              <span class="status-icons">5G ●●●●</span>
+            </div>
+            <div id="app" class="app"></div>
+            <nav class="tab-bar" role="tablist">
+              <button data-tab="chats" class="tab is-active">
+                <span class="tab-icon">💬</span>Chats
+              </button>
+              <button data-tab="cards" class="tab">
+                <span class="tab-icon">🗂️</span>Cards
+              </button>
+              <button data-tab="sync" class="tab">
+                <span class="tab-icon">🔄</span>Sync
+              </button>
+            </nav>
+          </div>
+          <div class="home-indicator"></div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

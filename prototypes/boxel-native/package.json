@@ -1,0 +1,9 @@
+{
+  "name": "@cardstack/boxel-native-proto",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node web-simulator/server.mjs",
+    "test": "node --test tests/core.test.js"
+  }
+}
