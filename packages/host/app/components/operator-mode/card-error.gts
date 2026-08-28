@@ -72,8 +72,7 @@ export default class CardErrorComponent extends Component<Signature> {
         <div class='pending-message'>
           <p class='pending-headline'>Preparing this card</p>
           <p class='pending-detail'>
-            The workspace has the file and is still getting the card ready. It
-            will appear here on its own once that finishes.
+            The workspace has the file and is still getting it ready.
           </p>
         </div>
       </div>

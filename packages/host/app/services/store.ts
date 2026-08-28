@@ -2445,13 +2445,19 @@ export default class StoreService extends Service implements StoreInterface {
       try {
         maybeReloadedInstance = await this.reloadInstance(instance);
       } catch (err: any) {
-        if (err.status === 404) {
+        let cardError = processCardError(instance.id, err).errors[0];
+        if (err.status === 404 && !cardError?.awaitingIndex) {
           // in this case the document was invalidated in the index because the
           // file was deleted
           isDelete = true;
         } else {
-          let errorResponse = processCardError(instance.id, err);
-          maybeReloadedInstance = errorResponse.errors[0];
+          // Every other failure — including a 404 the realm marked as awaiting
+          // indexing — leaves the card in an error state rather than deleting
+          // it. That marker means the realm still holds the source, so
+          // treating it as a deletion would evict the instance and rewrite
+          // every consumer's link to a not-found sentinel over a row that is
+          // on its way back.
+          maybeReloadedInstance = cardError;
         }
       }
       // Detach the original instance's autosave subscription when it's been

@@ -3098,6 +3098,67 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a reload that 404s while the row is being rebuilt keeps the card instead of deleting it', async function (assert) {
+    let url = `${testRealmURL}Person/rebuilt`;
+    await testRealm.write(
+      'Person/rebuilt.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Rebuilt' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+    storeService.addReference(url);
+    await storeService.flush();
+    assert.true(
+      isCardInstance(storeService.peek(url)),
+      'the card starts out loaded',
+    );
+
+    // Take the row away and put the file back, without the store hearing
+    // either step — the state a reload meets when the index no longer has a
+    // row but the realm still holds the source.
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+    try {
+      await testRealm.delete('Person/rebuilt.json');
+      await testRealmAdapter.write(
+        'Person/rebuilt.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Rebuilt' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+      await settled();
+    } finally {
+      messageService.relayRealmEvent = deliverRealmEvents;
+    }
+
+    assert.true(
+      isCardInstance(storeService.peek(url)),
+      'the card is still in the store — nothing was deleted',
+    );
+    assert.true(
+      storeService.peekError(url)?.awaitingIndex,
+      'and it is reported as awaiting its row rather than as gone',
+    );
+  });
+
   test('an instance can be restored after a loader reset', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
