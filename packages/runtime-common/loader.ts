@@ -267,6 +267,16 @@ export class Loader {
   private retrySleep: ((ms: number) => Promise<void>) | undefined;
   private moduleEvaluator: ModuleEvaluator;
   private moduleMeta: ((moduleIdentifier: string) => object) | undefined;
+  /**
+   * A runtime-owned admission check that runs before source is compiled or a
+   * registered module is evaluated. The Host uses this to make an execution
+   * classification durable: once an authored module is assigned to an
+   * isolated runtime, a later Store or rendering path cannot accidentally
+   * evaluate it through the Host Loader.
+   */
+  private assertModuleEvaluationAllowed:
+    | ((moduleIdentifier: string) => void)
+    | undefined;
 
   constructor(
     fetch: Fetch,
@@ -276,6 +286,7 @@ export class Loader {
       virtualNetwork?: VirtualNetwork;
       moduleEvaluator?: ModuleEvaluator;
       moduleMeta?: (moduleIdentifier: string) => object;
+      assertModuleEvaluationAllowed?: (moduleIdentifier: string) => void;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -286,6 +297,7 @@ export class Loader {
     this.moduleEvaluator =
       options?.moduleEvaluator ?? evaluateModuleInCurrentRealm;
     this.moduleMeta = options?.moduleMeta;
+    this.assertModuleEvaluationAllowed = options?.assertModuleEvaluationAllowed;
     // Module caches are keyed by canonical RRI form (see moduleCacheKey), whose
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
@@ -316,6 +328,7 @@ export class Loader {
       virtualNetwork: loader.virtualNetwork,
       moduleEvaluator: loader.moduleEvaluator,
       moduleMeta: loader.moduleMeta,
+      assertModuleEvaluationAllowed: loader.assertModuleEvaluationAllowed,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -1156,6 +1169,12 @@ export class Loader {
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
 
+    // This check deliberately precedes both transpilation and the AMD module
+    // evaluator. Evaluating the generated registration wrapper is already an
+    // execution of attacker-controlled source, even before its exported
+    // module body is invoked.
+    this.assertModuleEvaluationAllowed?.(moduleIdentifier);
+
     this.log.debug(
       `loader cache miss for ${moduleURL.href}, fetching this module...`,
     );
@@ -1304,6 +1323,10 @@ export class Loader {
   }
 
   private evaluate<T>(moduleIdentifier: string, module: EvaluatableModule): T {
+    // A module may have reached the registered state before a policy decision
+    // was installed. Re-check at the point its implementation would run so a
+    // late admission decision still fails closed.
+    this.assertModuleEvaluationAllowed?.(moduleIdentifier);
     if (module.state === 'broken') {
       throw module.exception;
     }

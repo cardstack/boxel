@@ -8,9 +8,12 @@ import {
   isCssResource,
   isHtmlResource,
   buildQuerySearchURL,
+  codeRefWithAbsoluteIdentifier,
   identifyCard,
   isCardInstance,
   isFileDefInstance,
+  isResolvedCodeRef,
+  isSingleCardDocument,
   getAncestor,
   Loader,
   localId,
@@ -108,6 +111,11 @@ interface HostBoundaryQuerySeed {
   fieldName: string;
   values: CardDef[];
   searchURL: string;
+}
+
+export interface PreparedSandboxDocumentExecution {
+  request: BoundaryBoxelExecutionRequest;
+  classification: BoxelSourceClassification;
 }
 
 /**
@@ -356,6 +364,7 @@ export default class BoxelExecutionService extends Service {
     format: string | undefined,
     source: BoxelSourceClassification,
     volatile = false,
+    prefersFullSandbox = false,
   ):
     | {
         process: SandboxRuntimeProcess;
@@ -374,7 +383,7 @@ export default class BoxelExecutionService extends Service {
       trusted,
       format,
       source,
-      prefersFullSandbox: false,
+      prefersFullSandbox,
       volatile,
     });
     if (lease.runtime.mode !== 'sandbox') {
@@ -385,6 +394,114 @@ export default class BoxelExecutionService extends Service {
       process: lease.runtime as SandboxRuntimeProcess,
       mountToken: (lease.runtime as SandboxRuntimeProcess).reserveMount(),
       release: lease.release,
+    };
+  }
+
+  /**
+   * Secure Sandbox admission from an inert realm document. Unlike
+   * `requestFor(BaseDef)`, this path never asks the Host Store or Card API to
+   * materialize the authored type. The module graph is classified from source
+   * bytes, denied to the Host Loader, and then handed to the child runtime as
+   * a JSON:API document.
+   *
+   * This is intentionally a Sandbox-only vertical slice. Direct admission
+   * will share the document-first prefix, but may invoke the Host Loader only
+   * after a separate trusted-provenance decision.
+   */
+  async prepareSandboxURL(
+    cardURL: string,
+    format: Format | undefined,
+    surfaceId: string,
+  ): Promise<PreparedSandboxDocumentExecution> {
+    let document = await this.cardService.fetchJSON(cardURL);
+    if (!isSingleCardDocument(document)) {
+      throw new Error(`Unable to load a card document for ${cardURL}`);
+    }
+    return this.prepareSandboxDocument(
+      document,
+      format,
+      surfaceId,
+      rri(cardURL),
+    );
+  }
+
+  async prepareSandboxDocument(
+    inputDocument: LooseSingleCardDocument,
+    format: Format | undefined,
+    surfaceId: string,
+    relativeTo?: RealmResourceIdentifier,
+  ): Promise<PreparedSandboxDocumentExecution> {
+    if (!inputDocument.data) {
+      throw new Error('Cannot execute a Boxel without a document resource');
+    }
+    let adoptsFrom = inputDocument.data.meta?.adoptsFrom;
+    if (!adoptsFrom) {
+      throw new Error('Cannot execute a Boxel document without adoptsFrom');
+    }
+    let documentBase =
+      relativeTo ??
+      (typeof inputDocument.data.id === 'string'
+        ? rri(inputDocument.data.id)
+        : undefined);
+    let resolvedRef = codeRefWithAbsoluteIdentifier(
+      adoptsFrom,
+      documentBase,
+      undefined,
+      this.network.virtualNetwork,
+    );
+    if (!isResolvedCodeRef(resolvedRef)) {
+      throw new Error('Sandbox document adoptsFrom must resolve to a module');
+    }
+    let moduleIdentifier = resolvedRef.module;
+    if (isTrustedImport(moduleIdentifier)) {
+      throw new Error(
+        `Sandbox document admission expects an authored module, received trusted module ${moduleIdentifier}`,
+      );
+    }
+
+    // Block the entry before the first await in graph classification. This
+    // closes the window in which another Host path could import the module
+    // while its source and dependencies are being inspected.
+    this.loaderService.denyHostModuleEvaluation([moduleIdentifier]);
+    let source = await this.sourceFor(moduleIdentifier);
+    let classification = await this.classifyForExecution(
+      moduleIdentifier,
+      source,
+    );
+    this.loaderService.denyHostModuleEvaluation(
+      classification.moduleGraph.filter(
+        (identifier) => !isTrustedImport(identifier),
+      ),
+    );
+
+    let document = structuredClone(inputDocument);
+    document.data.meta = {
+      ...document.data.meta,
+      adoptsFrom: resolvedRef,
+    };
+    let performance: BoxelExecutionPerformanceContext = {
+      operationId: `${surfaceId}:${++this.nextPerformanceOperation}`,
+      occurrenceId: surfaceId,
+    };
+    return {
+      classification,
+      request: {
+        principal: this.principal,
+        surfaceId,
+        trusted: false,
+        format: format ?? 'isolated',
+        moduleIdentifier,
+        source,
+        relativeTo: documentBase,
+        purpose: format === 'edit' ? 'interactive-edit' : 'host-display',
+        resource: document.data,
+        document,
+        // This API is an explicit stronger-boundary admission. It never
+        // falls back to Capsule even when the source itself needs no browser
+        // globals.
+        prefersFullSandbox: true,
+        performance,
+      },
     };
   }
 

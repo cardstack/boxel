@@ -7,6 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import type { FetcherMiddlewareHandler } from '@cardstack/runtime-common';
 import {
+  canonicalModuleKey,
   fetcher,
   maybeHandleScopedCSSRequest,
   authorizationMiddleware,
@@ -55,6 +56,7 @@ export default class LoaderService extends Service {
   // a record for the next session, which has its own idea of what it loaded.
   private flushedForCodeChange = new Set<string>();
   private executableModuleConsumers = new Map<string, number>();
+  private deniedHostModuleEvaluations = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -125,6 +127,35 @@ export default class LoaderService extends Service {
   public isExecutableModuleInUse(moduleIdentifier: string): boolean {
     let key = this.loader.moduleKey(moduleIdentifier) ?? moduleIdentifier;
     return (this.executableModuleConsumers.get(key) ?? 0) > 0;
+  }
+
+  /**
+   * Permanently deny Host evaluation of these modules for the current
+   * authenticated session. The execution admission boundary calls this
+   * before handing an authored document to an isolated runtime. Refusing a
+   * module that is already present is intentional: classification happened
+   * too late to make a code-containment claim for that document.
+   */
+  public denyHostModuleEvaluation(moduleIdentifiers: Iterable<string>): void {
+    let admitted: { identifier: string; key: string }[] = [];
+    for (let identifier of moduleIdentifiers) {
+      let key = this.moduleEvaluationKey(identifier);
+      if (this.loader.isModuleLoaded(identifier)) {
+        throw new Error(
+          `Cannot admit ${identifier} to Sandbox after the Host Loader has already loaded it`,
+        );
+      }
+      admitted.push({ identifier, key });
+    }
+    for (let { key } of admitted) {
+      this.deniedHostModuleEvaluations.add(key);
+    }
+  }
+
+  public isHostModuleEvaluationDenied(moduleIdentifier: string): boolean {
+    return this.deniedHostModuleEvaluations.has(
+      this.moduleEvaluationKey(moduleIdentifier),
+    );
   }
 
   // Called whenever the loader is actually replaced. A code-change flush makes
@@ -247,6 +278,13 @@ export default class LoaderService extends Service {
           scheduleNativeTimeout(() => resolve(), ms),
         ),
       virtualNetwork: this.network.virtualNetwork,
+      assertModuleEvaluationAllowed: (moduleIdentifier) => {
+        if (this.isHostModuleEvaluationDenied(moduleIdentifier)) {
+          throw new Error(
+            `Host Loader refused Sandbox-owned module ${moduleIdentifier}`,
+          );
+        }
+      },
     });
     installBoxelLoaderCompatibilityModules(loader);
     return loader;
@@ -256,9 +294,18 @@ export default class LoaderService extends Service {
     // This clears cached module fetches and scoped styles at session/test
     // boundaries so private realm assets do not leak across owners.
     this.flushedForCodeChange.clear();
+    this.deniedHostModuleEvaluations.clear();
     clearFetchCache();
     clearInjectedScopedCSS();
     clearKnownFileMetaUrls();
+  }
+
+  private moduleEvaluationKey(moduleIdentifier: string): string {
+    try {
+      return canonicalModuleKey(moduleIdentifier, this.network.virtualNetwork);
+    } catch {
+      return moduleIdentifier;
+    }
   }
 }
 

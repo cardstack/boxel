@@ -68,6 +68,10 @@ class TestRuntime {
   failBuild = false;
   prefersFullSandbox = false;
   createdFromSerialized = 0;
+  createFromSerializedCalls: {
+    resource: LooseCardResource;
+    document: LooseSingleCardDocument;
+  }[] = [];
   retainedCanonical?: object;
   allowedModules: readonly string[] = [];
   renderSlotCalls: { format: string; hostOwnsBox?: boolean }[] = [];
@@ -83,8 +87,12 @@ class TestRuntime {
   async loadBoxel(): Promise<never> {
     throw new Error('not used');
   }
-  async createFromSerialized(): Promise<BoxelInstanceHandle> {
+  async createFromSerialized(
+    resource: LooseCardResource,
+    document: LooseSingleCardDocument,
+  ): Promise<BoxelInstanceHandle> {
     this.createdFromSerialized++;
+    this.createFromSerializedCalls.push({ resource, document });
     return `${this.mode}-instance:${++this.nextInstance}` as BoxelInstanceHandle;
   }
   retainCanonicalInstance(instance: object): BoxelInstanceHandle {
@@ -352,6 +360,57 @@ module('Unit | Boxel execution engine', function () {
         await session.destroy();
       }
     } finally {
+      engine.destroy();
+    }
+  });
+
+  test('a document-first Sandbox request materializes the raw document only in the selected child runtime', async function (assert) {
+    let direct = new TestRuntime('direct');
+    let capsule = new TestRuntime('capsule');
+    let sandbox = new TestRuntime('sandbox');
+    let router = new BoxelRuntimeRouter(
+      direct as unknown as DirectBoxelRuntime,
+      () => capsule as unknown as CapsuleBoxelRuntime,
+      () => sandbox as unknown as SandboxRuntimeProcess,
+    );
+    let engine = new BoxelExecutionEngine(router, async () => sandboxSource);
+    let session = engine.createSession();
+
+    try {
+      let request = {
+        ...executionRequest('sandbox'),
+        prefersFullSandbox: true,
+      };
+      let generation = await session.update(request);
+
+      assert.strictEqual(generation?.lease.runtime.mode, 'sandbox');
+      assert.strictEqual(
+        direct.createdFromSerialized,
+        0,
+        'Direct never materializes the authored document',
+      );
+      assert.strictEqual(
+        capsule.createdFromSerialized,
+        0,
+        'Capsule never materializes the authored document',
+      );
+      assert.strictEqual(sandbox.createdFromSerialized, 1);
+      assert.strictEqual(
+        sandbox.createFromSerializedCalls[0]?.resource,
+        resource,
+        'the child receives the raw primary resource',
+      );
+      assert.strictEqual(
+        sandbox.createFromSerializedCalls[0]?.document,
+        cardDocument,
+        'the child receives the raw JSON:API document without a Host instance',
+      );
+      assert.notOk(
+        'canonicalCard' in request,
+        'the document-first request carries no canonical Host CardDef',
+      );
+    } finally {
+      await session.destroy();
       engine.destroy();
     }
   });

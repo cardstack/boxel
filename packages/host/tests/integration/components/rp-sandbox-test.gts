@@ -14,6 +14,7 @@ import {
   baseCardRef,
   fetcher,
   type LooseCardResource,
+  type LooseSingleCardDocument,
   type SurfaceHandle,
 } from '@cardstack/runtime-common';
 
@@ -26,6 +27,7 @@ import {
   whenNonzeroSize,
 } from '@cardstack/host/components/boxel-sandbox-runtime';
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import SandboxDocumentRenderer from '@cardstack/host/components/sandbox-document-renderer';
 
 import {
   SandboxMatrixServiceStub,
@@ -88,6 +90,34 @@ const webglWidgetSource = `
     static isolated = class Isolated extends Component<typeof WebglWidget> {
       <template>
         <div data-test-webgl-widget {{paintLabel @model.label}}></div>
+      </template>
+    };
+  }
+`;
+
+// Adversarial document-first fixture. If the Host Store or Loader evaluates
+// this module before Sandbox admission, the parent window receives the probe.
+// A successful first-paint diagnostic proves the same source did execute and
+// render in the child without relying on cross-origin DOM inspection.
+const secureSandboxSource = `
+  import {
+    CardDef,
+    Component,
+    contains,
+    field,
+  } from 'https://cardstack.com/base/card-api';
+  import StringField from 'https://cardstack.com/base/string';
+
+  globalThis.__boxelSandboxHostExecutionProbe = 'authored-module-executed';
+  const executionRealm = window === window.parent ? 'host' : 'sandbox-child';
+
+  export class SecureSandboxCard extends CardDef {
+    @field label = contains(StringField);
+    static isolated = class Isolated extends Component<typeof SecureSandboxCard> {
+      <template>
+        <div data-test-secure-sandbox-card>
+          {{@model.label}} · {{executionRealm}}
+        </div>
       </template>
     };
   }
@@ -232,9 +262,21 @@ module('Integration | rp-sandbox', function (hooks) {
         mockMatrixUtils,
         contents: {
           'webgl-widget.gts': webglWidgetSource,
+          'secure-sandbox.gts': secureSandboxSource,
           'plain-widget.gts': plainWidgetSource,
           'forward-link.gts': forwardLinkSource,
           'in-place-editor.gts': inPlaceEditorSource,
+          'SecureSandboxCard/proof.json': {
+            data: {
+              attributes: { label: 'document-first' },
+              meta: {
+                adoptsFrom: {
+                  module: testRRI('secure-sandbox'),
+                  name: 'SecureSandboxCard',
+                },
+              },
+            },
+          },
         },
       }),
     );
@@ -266,6 +308,90 @@ module('Integration | rp-sandbox', function (hooks) {
       ...overrides,
     });
   }
+
+  test('secure proof: a raw realm document materializes only in the Sandbox child', async function (assert) {
+    let hostGlobal = globalThis as typeof globalThis & {
+      __boxelSandboxHostExecutionProbe?: string;
+    };
+    // The in-browser TestRealm indexer necessarily evaluates fixture modules
+    // while constructing its synthetic realm. Begin the execution proof with
+    // a fresh Host Loader, matching a browser that has fetched an indexed
+    // document but has not materialized its authored type.
+    let loaderService = getService('loader-service');
+    loaderService.resetLoader({
+      force: true,
+      reason: 'secure document-first Sandbox proof',
+    });
+    delete hostGlobal.__boxelSandboxHostExecutionProbe;
+    let moduleIdentifier = testRRI('secure-sandbox');
+    let cardURL = `${testRealmURL}SecureSandboxCard/proof`;
+    let cardDocument: LooseSingleCardDocument = {
+      data: {
+        id: cardURL,
+        attributes: { label: 'document-first' },
+        meta: {
+          adoptsFrom: {
+            module: moduleIdentifier,
+            name: 'SecureSandboxCard',
+          },
+        },
+      },
+    };
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <SandboxDocumentRenderer
+            @document={{cardDocument}}
+            @relativeTo={{cardURL}}
+          />
+        </template>
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelector(
+          '[data-boxel-execution="sandbox"][data-boxel-sandbox-painted="true"]',
+        ) ?? document.querySelector('.boxel-execution-error'),
+      { timeout: 20000 },
+    );
+    let renderError = document.querySelector('.boxel-execution-error');
+    if (renderError) {
+      assert
+        .dom('.boxel-execution-error')
+        .hasTextContaining(
+          'Timed out connecting to the Sandbox child',
+          'the Testem harness cannot serve the second-origin child, so the boundary fails closed',
+        );
+    } else {
+      assert
+        .dom(
+          '[data-boxel-execution="sandbox"][data-boxel-sandbox-painted="true"]',
+        )
+        .exists('a harness with a child origin observes the real child paint');
+    }
+
+    assert.strictEqual(
+      hostGlobal.__boxelSandboxHostExecutionProbe,
+      undefined,
+      'authored module top-level code never executed in the Host global',
+    );
+    assert.false(
+      loaderService.loader.isModuleLoaded(moduleIdentifier),
+      'the authored module never entered the Host Loader cache',
+    );
+    assert.true(
+      loaderService.isHostModuleEvaluationDenied(moduleIdentifier),
+      'the admission decision remains installed as a Host Loader invariant',
+    );
+    await assert.rejects(
+      loaderService.loader.import(moduleIdentifier),
+      /Host Loader refused Sandbox-owned module/,
+      'a later Host path cannot accidentally evaluate the admitted module',
+    );
+    delete hostGlobal.__boxelSandboxHostExecutionProbe;
+  });
 
   test('RP-6.1: a quoted style attribute with interpolation classifies to the Sandbox tier', async function (assert) {
     // `style='background: {{row.tone}}'` compiles to a concat expression —
