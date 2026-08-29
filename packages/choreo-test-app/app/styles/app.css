@@ -10815,8 +10815,33 @@ html[data-gm-dragging] * {
   width: 100%;
 }
 
+/* Depth for the form, and the cheap kind of depth. A shadow is not a
+   composited property: every frame that changes one re-rasterises the box it
+   is drawn on. So this is not the card's shadow — it is its own layer, at a
+   FIXED size, never moved and never resized, carrying four shadows painted
+   once at full strength. Only its opacity animates, which is the one channel
+   that composites, and the card grows into it while it fades up. */
+.ie-shade {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: min(100%, 340px);
+  height: var(--ie-height-edit);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(28 22 18 / 5%),
+    0 4px 8px rgb(28 22 18 / 5%),
+    0 12px 24px rgb(28 22 18 / 6%),
+    0 28px 56px rgb(28 22 18 / 6%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
 .ie-card {
   position: relative;
+  z-index: 1;
   display: grid;
   box-sizing: border-box;
   width: min(100%, 340px);

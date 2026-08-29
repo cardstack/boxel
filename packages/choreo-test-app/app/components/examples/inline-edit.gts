@@ -246,6 +246,23 @@ const VIEW: Record<Key, TypeScale> = {
   title: scale(15, 500, -0.01),
 };
 
+/**
+ * The three ranks are three INKS as well as three sizes, and the ink is part
+ * of the journey: a contact line that is grey in the reading view and full
+ * strength in the form has to get there, or it pops at the handover like any
+ * other property that was left out.
+ *
+ * Tokens rather than literals, resolved against the live document — the
+ * gallery has a dark mode, and a hex baked in here would be the light
+ * theme's grey travelling across a dark card.
+ */
+const INK: Record<Key, { edit: string; view: string }> = {
+  dob: { edit: '--ink', view: '--ink-faint' },
+  email: { edit: '--ink', view: '--ink-faint' },
+  name: { edit: '--ink', view: '--ink' },
+  title: { edit: '--ink', view: '--ink-dim' },
+};
+
 /** writing: every field the same, because a form's values are one kind of thing */
 const EDIT: Record<Key, TypeScale> = {
   dob: scale(17, 400, -0.01),
@@ -264,6 +281,7 @@ const EDIT: Record<Key, TypeScale> = {
  * to know. One step covers every word; the plan tells each one apart.
  */
 interface Pose {
+  color: string;
   size: string;
   tracking: string;
   weight: number;
@@ -417,7 +435,13 @@ export class InlineEdit extends Component {
         key === 'dob'
           ? words.map((_, i) => this.dateX[i] ?? this.dateX[0]!)
           : layoutWords(words, EDIT[key], edit[key].x).map((b) => b.x);
-      const pose = (at: TypeScale, x: number, y: number): Pose => ({
+      const pose = (
+        at: TypeScale,
+        token: string,
+        x: number,
+        y: number
+      ): Pose => ({
+        color: this.ink.get(token) ?? 'currentColor',
         size: `${at.size}px`,
         tracking: `${at.tracking}em`,
         weight: at.weight,
@@ -427,9 +451,19 @@ export class InlineEdit extends Component {
       plan.set(
         key,
         words.map((word, index) => ({
-          edit: pose(EDIT[key], editX[index] ?? edit[key].x, edit[key].y),
+          edit: pose(
+            EDIT[key],
+            INK[key].edit,
+            editX[index] ?? edit[key].x,
+            edit[key].y
+          ),
           id: `${key}-g${this.generation}-w${index}`,
-          view: pose(VIEW[key], viewX[index] ?? view[key].x, view[key].y),
+          view: pose(
+            VIEW[key],
+            INK[key].view,
+            viewX[index] ?? view[key].x,
+            view[key].y
+          ),
           word,
         }))
       );
@@ -587,6 +621,7 @@ export class InlineEdit extends Component {
   wordSize = this.of('size');
   wordWeight = this.of('weight');
   wordTracking = this.of('tracking');
+  wordColor = this.of('color');
 
   /**
    * The word fades up ONLY when there is something to fade against.
@@ -613,6 +648,11 @@ export class InlineEdit extends Component {
     return this.tween('3px', '9px');
   }
 
+  /** the form is lifted off the page; the reading card lies flat on it */
+  get shade() {
+    return this.tween(0, 1);
+  }
+
   /* — the region, and the flag that says a pass is under way — */
 
   private arming = createArming();
@@ -626,8 +666,35 @@ export class InlineEdit extends Component {
 
   hold = modifier((el: HTMLElement) => {
     this.root = el;
-    return () => (this.root = undefined);
+    this.readInk(el);
+    // the gallery's theme switch rewrites the tokens under us, and a colour
+    // the plan resolved against the old theme is a colour that travels wrong
+    const watch = new MutationObserver(() => {
+      this.readInk(el);
+      this.generation++;
+    });
+    watch.observe(document.documentElement, {
+      attributeFilter: ['class', 'data-theme'],
+      attributes: true,
+    });
+    return () => {
+      watch.disconnect();
+      this.root = undefined;
+    };
   });
+
+  /** the resolved value of every ink token the plan needs, this theme */
+  private ink = new Map<string, string>();
+
+  private readInk(el: HTMLElement) {
+    const style = getComputedStyle(el);
+    for (const token of ['--ink', '--ink-dim', '--ink-faint']) {
+      this.ink.set(
+        token,
+        style.getPropertyValue(token).trim() || 'currentColor'
+      );
+    }
+  }
 
   /**
    * `data-flying` is written by HAND. `arming.active()` is tracked, so
@@ -662,6 +729,15 @@ export class InlineEdit extends Component {
       <Choreo class="ie-stage" as |c|>
         {{this.grab c}}
 
+        {{! DEPTH, and the cheap kind. A shadow is not a composited property
+            — every frame that changes one re-rasterises the box it is on —
+            so this is not the card's shadow. It is a layer of its own, at a
+            FIXED size and never moved, carrying a stack of four shadows
+            painted once at full strength. The only thing that animates is
+            its opacity, which is the one channel that composites, and the
+            card grows into it as it fades up. }}
+        <span class="ie-shade" {{motion id="shade" role="shade"}}></span>
+
         {{! The white card is a PARTICIPANT, not the region itself. A region
             is the frame a crossing is measured IN; it is not one of the
             things measured, so a card that WAS the region had no before and
@@ -687,7 +763,7 @@ export class InlineEdit extends Component {
               >{{this.initials}}</b>
             </span>
 
-            <span class="ie-kicker" {{motion id="kicker" role="type"}}>
+            <span class="ie-kicker" {{motion id="kicker" role="kicker"}}>
               {{if this.editing "Editing profile" "Kiln Engineering"}}
             </span>
 
@@ -806,6 +882,10 @@ export class InlineEdit extends Component {
           <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
+          {{! the eyebrow moves because the avatar beside it shrinks and the
+              lane under it gets shorter — two reasons, neither of them its
+              own, and without a Move of its own it simply jumped }}
+          <c.Move @of={{c.moved "kicker"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
 
           {{! and its corners ride alongside, because a corner carried by a
@@ -822,6 +902,12 @@ export class InlineEdit extends Component {
             @duration={{BOX}}
             @ease={{EASE}}
           />
+          <c.Tween
+            @of={{c.kept "shade"}}
+            @opacity={{this.shade}}
+            @duration={{MOVE}}
+            @ease={{EASE}}
+          />
 
           {{! The foreground moves as TYPE: every property of it at once, out
               of ONE step, because a step property may be a function of the
@@ -834,6 +920,7 @@ export class InlineEdit extends Component {
             @fontSize={{this.wordSize}}
             @fontWeight={{this.wordWeight}}
             @letterSpacing={{this.wordTracking}}
+            @color={{this.wordColor}}
             @opacity={{this.wordFade}}
             @duration={{MOVE}}
             @ease={{EASE}}
