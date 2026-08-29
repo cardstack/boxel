@@ -10933,14 +10933,17 @@ html[data-gm-dragging] * {
 
 /* the avatar is one identity in both states; only its box changes */
 .ie-avatar {
+  /* positioned by its TOP EDGE, never centred: a centred box is positioned
+     against its own size, and `c.Move` overrides that size while it plays —
+     so the avatar slid out from under its own FLIP by half the change in its
+     height and the initials jumped with it */
   position: absolute;
-  top: 50%;
+  top: var(--ie-avatar-top-view);
   left: 0;
-  translate: 0 -50%;
   display: grid;
   place-items: center;
-  width: 72px;
-  height: 72px;
+  width: var(--ie-avatar-view);
+  height: var(--ie-avatar-view);
   /* 36px, not 50%. A percentage radius is resolved against the box, so a
      circle tweening to a rounded rect would be interpolating a percentage
      into a length — the engine cannot, and the corner snaps at one end. */
@@ -10951,8 +10954,9 @@ html[data-gm-dragging] * {
 }
 
 .ie-card[data-mode='edit'] .ie-avatar {
-  width: 34px;
-  height: 34px;
+  top: var(--ie-avatar-top-edit);
+  width: var(--ie-avatar-edit);
+  height: var(--ie-avatar-edit);
   border-radius: 10px;
 }
 
@@ -10969,10 +10973,11 @@ html[data-gm-dragging] * {
 }
 
 .ie-kicker {
-  /* one avatar and one gutter in from the lane's left, per pose */
+  /* one avatar and one gutter in from the lane's left, per pose — the same
+     numbers the avatar is sized from, so the two cannot disagree */
   position: absolute;
   top: 50%;
-  left: 83px;
+  left: var(--ie-kicker-view);
   translate: 0 -50%;
   white-space: nowrap;
   color: var(--ink-faint);
@@ -10985,7 +10990,7 @@ html[data-gm-dragging] * {
 /* the form says so: the eyebrow is the one line that changes meaning between
    the poses, from a team name to a statement of what the card is doing */
 .ie-card[data-mode='edit'] .ie-kicker {
-  left: 45px;
+  left: var(--ie-kicker-edit);
   color: var(--ink-dim);
   font-weight: 700;
 }

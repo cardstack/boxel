@@ -100,6 +100,21 @@ const FADE_OUT = [1, 0];
 const PAD = 18;
 
 /**
+ * The avatar's size in each pose, and the gutter between it and the eyebrow.
+ *
+ * Here rather than in the stylesheet because the header is positioned from
+ * these numbers rather than aligned by them, and it has to be. A box that is
+ * CENTRED — by `align-self`, or by `top: 50%` with a percentage translate —
+ * is positioned against its own size, and `c.Move` overrides an element's
+ * size while it plays. So the avatar slid out from under its own FLIP by
+ * half the change in its height, taking the initials with it, and the MV
+ * jumped nineteen pixels on the first frame of every pass. Positioned by its
+ * TOP EDGE, from a number, nothing it does to its own height can move it.
+ */
+const AVATAR = { edit: 34, view: 72 } as const;
+const GUTTER = 11;
+
+/**
  * Lane heights, in order, per pose. The same five lanes in the same order in
  * both, which is what makes crossing impossible rather than merely unlikely.
  * These must agree with the row templates in the stylesheet; the two tests
@@ -526,6 +541,12 @@ export class InlineEdit extends Component {
       [
         `--ie-areas:${ORDER.map((name) => `'${name}'`).join(' ')}`,
         `--ie-line:${LINE}px`,
+        ...(['view', 'edit'] as const).flatMap((pose) => [
+          `--ie-avatar-${pose}:${AVATAR[pose]}px`,
+          // its top edge, so that its own height cannot move it
+          `--ie-avatar-top-${pose}:${(LANES[pose].head - AVATAR[pose]) / 2}px`,
+          `--ie-kicker-${pose}:${AVATAR[pose] + GUTTER}px`,
+        ]),
         ...rows('view'),
         ...rows('edit'),
         `--pt-day:${day}px`,
