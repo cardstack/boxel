@@ -124,12 +124,13 @@ export class Subdivision extends Component {
   };
 
   <template>
-    <div class="ex">
-      <div class="subdivide" style={{this.style}} {{this.bind}}>
+    <div class="ex" data-test-subdivision>
+      <div class="subdivide" data-test-grid style={{this.style}} {{this.bind}}>
         {{#each tiles as |tile|}}
           <button
             type="button"
             class={{if (this.isOn tile.id) "sub-tile is-on" "sub-tile"}}
+            data-test-tile={{tile.id}}
             {{motion layout=true transition=settle}}
             {{on "click" (fn this.select tile.id)}}
           >
@@ -145,6 +146,7 @@ export class Subdivision extends Component {
             the thing being measured. }}
         <span
           class="sub-seam is-col {{if (this.isLive 'col') 'is-live'}}"
+          data-test-seam="col"
           style={{this.colSeam}}
           {{motion
             onPanStart=(fn this.grab "col")
@@ -155,6 +157,7 @@ export class Subdivision extends Component {
         ></span>
         <span
           class="sub-seam is-row {{if (this.isLive 'row') 'is-live'}}"
+          data-test-seam="row"
           style={{this.rowSeam}}
           {{motion
             onPanStart=(fn this.grab "row")
