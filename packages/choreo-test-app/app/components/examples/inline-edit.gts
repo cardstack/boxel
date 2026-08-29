@@ -716,11 +716,28 @@ export class InlineEdit extends Component {
    * fields, out of one step. The plan already knows where each id belongs in
    * both poses, so each of these is a lookup rather than a measurement.
    */
+  /**
+   * A property whose two ends are equal is not animated — it is left out of
+   * the step entirely, so the engine never writes it and the stylesheet's
+   * rest pose governs.
+   *
+   * Three of the four fields have the same tracking in both poses, and the
+   * name has the same ink; tweening those is pure per-frame cost for a value
+   * that does not change. Eleven words times four properties is forty-four
+   * animated values a frame, and this is the cheapest possible way to cut it
+   * — by not asking for the ones nobody wanted.
+   */
   private of =
     <K extends keyof Pose>(key: K, off?: string) =>
     (sprite: Sprite) => {
       const word = this.find(sprite.id);
-      return word ? this.tween(word.view[key], word.edit[key], off)() : 0;
+      if (!word) {
+        return 0;
+      }
+      if (word.view[key] === word.edit[key]) {
+        return undefined as never;
+      }
+      return this.tween(word.view[key], word.edit[key], off)();
     };
 
   wordX = this.of('x');

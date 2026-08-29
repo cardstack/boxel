@@ -63,12 +63,68 @@ const shorthand = (t: TypeScale) =>
  * view does not, and folding that in here means the inset is tweened with
  * everything else rather than jumping at the frame the mode changes.
  */
+/**
+ * What the canvas says, over what the page actually draws.
+ *
+ * pretext measures with the canvas font shorthand, and an engine is entitled
+ * to parse that shorthand differently from the way it renders CSS. Blink
+ * honours `font-stretch` in the shorthand — measured, 311px becomes 280px
+ * for the same string — and WebKit has historically ignored it, which means
+ * the plan is computed against the WIDE cut while the screen draws the
+ * narrow one. The first word lands and every word after it drifts, which is
+ * exactly the "the spacing is off, but only in Safari" report.
+ *
+ * Rather than guess which engine honours what, the two are reconciled: one
+ * sample string measured both ways, once per face, and every width scaled by
+ * the ratio between them. On an engine where they already agree the ratio is
+ * 1 and nothing changes. Tracking is left out of the calibration on purpose
+ * — it is a per-character constant, not a property of the face, and CSS adds
+ * it after the last glyph where canvas may not.
+ */
+const SAMPLE = 'Marguerite Villanueva 1986 @kiln.studio';
+const ratios = new Map<string, number>();
+
+let probe: HTMLElement | undefined;
+
+function ratioFor(scale: TypeScale): number {
+  const key = shorthand(scale);
+  const known = ratios.get(key);
+  if (known !== undefined) {
+    return known;
+  }
+  if (typeof document === 'undefined') {
+    return 1;
+  }
+  if (!probe) {
+    probe = document.createElement('span');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.style.cssText =
+      'position:absolute;left:-9999px;top:0;white-space:pre;visibility:hidden;';
+    document.body.appendChild(probe);
+  }
+  probe.style.fontFamily = `'${scale.family}', sans-serif`;
+  probe.style.fontSize = `${scale.size}px`;
+  probe.style.fontWeight = String(scale.weight);
+  probe.style.fontStretch = scale.stretch ?? 'normal';
+  probe.style.letterSpacing = 'normal';
+  probe.textContent = SAMPLE;
+  const drawn = probe.getBoundingClientRect().width;
+  const measured = measureNaturalWidth(
+    prepareWithSegments(SAMPLE, key, { letterSpacing: 0 })
+  );
+  const ratio = drawn > 0 && measured > 0 ? drawn / measured : 1;
+  ratios.set(key, ratio);
+  return ratio;
+}
+
 /** one string's natural width at a scale — no wrapping, no DOM */
 export function measureText(text: string, scale: TypeScale): number {
-  return measureNaturalWidth(
-    prepareWithSegments(text, shorthand(scale), {
-      letterSpacing: scale.tracking * scale.size,
-    })
+  return (
+    measureNaturalWidth(
+      prepareWithSegments(text, shorthand(scale), {
+        letterSpacing: scale.tracking * scale.size,
+      })
+    ) * ratioFor(scale)
   );
 }
 
@@ -79,9 +135,12 @@ export function layoutWords(
 ): WordBox[] {
   const font = shorthand(scale);
   const letterSpacing = scale.tracking * scale.size;
+  const ratio = ratioFor(scale);
   const measure = (text: string) =>
     text
-      ? measureNaturalWidth(prepareWithSegments(text, font, { letterSpacing }))
+      ? measureNaturalWidth(
+          prepareWithSegments(text, font, { letterSpacing })
+        ) * ratio
       : 0;
 
   // Each word's left edge is the WHOLE line's width less the width of the
@@ -115,4 +174,9 @@ export async function typeReady(scales: TypeScale[]): Promise<void> {
   }
   await Promise.all(scales.map((scale) => fonts.load(shorthand(scale))));
   await fonts.ready;
+  // warm the canvas-against-page calibration while nothing is in flight: it
+  // reads the DOM once per face, and that is not a thing to do mid-pass
+  for (const scale of scales) {
+    ratioFor(scale);
+  }
 }
