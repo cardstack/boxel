@@ -1745,8 +1745,8 @@ html[data-gm-dragging] * {
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
@@ -4424,7 +4424,7 @@ html[data-gm-dragging] * {
 
 .cam-caption {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.2;
@@ -4890,7 +4890,7 @@ html[data-gm-dragging] * {
 
 .sub-tile b {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .sub-tile small {
@@ -7256,7 +7256,7 @@ html[data-gm-dragging] * {
   height: 36px;
   border-radius: 50%;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #fff;
 }
@@ -7616,8 +7616,8 @@ html[data-gm-dragging] * {
 
 .sheet.is-rows .share-mark,
 .sheet.is-app .share-mark {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 9px;
   background: var(--bg-spot);
 }
@@ -7665,7 +7665,7 @@ html[data-gm-dragging] * {
   color: var(--ink-faint);
 }
 
-/* ---- density: a slider IS a playhead --------------------------------------
+/* ---- rack: a slider IS a playhead --------------------------------------
    Twenty-eight Scrabble tiles in five arrangements, on ONE score.
 
    Nothing here is a pose class. The tiles never change shape and the DOM
@@ -7691,9 +7691,28 @@ html[data-gm-dragging] * {
  * a question about the space it was given, and that is exactly what a
  * container query answers. No observer, no imperative write, and it settles
  * in the same pass as the layout it depends on. */
-.dn-fit-box {
+.rk-fit-box {
   width: calc(340px * var(--k, 1));
-  height: calc(470px * var(--k, 1));
+  height: calc(376px * var(--k, 1));
+}
+
+/* ON ITS OWN PAGE THERE IS ROOM, SO TAKE IT.
+ *
+ * The gallery card and the demo page hand this control the same WIDTH — 522
+ * of content either way — and differ only in height: 380 in a card, 577 on
+ * the page. A width query cannot tell them apart, which is exactly why the
+ * rack was being clipped in the grid while the width said there was plenty of
+ * room. Height would need `container-type: size`, and that collapses a
+ * container whose height is content-derived.
+ *
+ * So key on the real difference: which page you are on. The demo page wraps a
+ * stage in `.stage-wrap`; a gallery card wraps it in `.card-stage`. Guarded
+ * by a min-width so a narrow phone still falls through to the shrink rules
+ * below, which are less specific and would otherwise lose. */
+@container (min-width: 430px) {
+  .stage-wrap .rk-fit-box {
+    --k: 1.5;
+  }
 }
 
 /* The gallery card is narrower than the demo page, and a phone narrower
@@ -7704,37 +7723,37 @@ html[data-gm-dragging] * {
    — and the card carries 16px of padding a side, so they sit well below the
    340 the control wants. Each step is the largest scale that still fits. */
 @container (max-width: 339px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.96;
   }
 }
 
 @container (max-width: 325px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.92;
   }
 }
 
 @container (max-width: 312px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.88;
   }
 }
 
 @container (max-width: 298px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.84;
   }
 }
 
 @container (max-width: 285px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.78;
   }
 }
 
 @container (max-width: 264px) {
-  .dn-fit-box {
+  .rk-fit-box {
     --k: 0.7;
   }
 }
@@ -7747,14 +7766,14 @@ html[data-gm-dragging] * {
  * and what got cropped was the rack: the demo lost the one thing you touch.
  * Scaling the whole thing keeps every proportion and every hit target in
  * agreement with the arithmetic. */
-.dn-fit {
+.rk-fit {
   width: 340px;
-  height: 470px;
+  height: 376px;
   transform: scale(var(--k, 1));
   transform-origin: top left;
 }
 
-.ex:has(.dn-stage) {
+.ex:has(.rk-stage) {
   container-type: inline-size;
   --tile: #f0e3c2;
   --tile-lip: rgba(122, 92, 44, 0.42);
@@ -7762,10 +7781,10 @@ html[data-gm-dragging] * {
   --tile-ink: #3a2b16;
 }
 
-.dn-stage {
+.rk-stage {
   position: relative;
   width: 340px;
-  height: 380px;
+  height: 292px;
 }
 
 /* A TILE, as an object.
@@ -7774,12 +7793,12 @@ html[data-gm-dragging] * {
  * darker one along the bottom, which is what a chamfer looks like from
  * straight on. The letter is a display face rather than the mono the rest of
  * the page uses — a Scrabble tile is printed, not typeset. */
-.dn-l {
+.rk-l {
   position: absolute;
   left: 0;
   top: 0;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7800,18 +7819,18 @@ html[data-gm-dragging] * {
     0 2px 3px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a))),
     0 -1px 2px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
 }
 
-.dn-l b {
+.rk-l b {
   font-weight: 700;
   text-transform: uppercase;
   /* optically centred: the value in the corner pulls the eye down-right */
   transform: translate(-1px, -1.5px);
 }
 
-.dn-l i {
+.rk-l i {
   position: absolute;
   right: 2px;
   bottom: 1px;
@@ -7824,40 +7843,40 @@ html[data-gm-dragging] * {
 
 /* vowels are marked in EVERY arrangement, not only the one that groups them:
    a colour that arrived on a pose change would have nothing to fade with */
-.dn-l.is-vowel {
+.rk-l.is-vowel {
   --tile: #f6d7a2;
   color: #6b3a10;
 }
 
 /* a blank has no letter and no value — it is the absence, drawn */
-.dn-l.is-blank {
+.rk-l.is-blank {
   --tile: #e7dcc4;
 }
 
 /* ---- the furniture, each piece true in one arrangement ---- */
 
-.dn-axis {
+.rk-axis {
   position: absolute;
   background: var(--line);
   opacity: 0;
 }
 
-.dn-axis.is-x {
+.rk-axis.is-x {
   left: 12px;
   right: 6px;
-  top: 328px;
+  top: 262px;
   height: 1px;
 }
 
-.dn-axis.is-y {
+.rk-axis.is-y {
   left: 12px;
-  top: 18px;
-  bottom: 46px;
+  top: 10px;
+  bottom: 36px;
   width: 1px;
 }
 
-.dn-alab,
-.dn-tick {
+.rk-alab,
+.rk-tick {
   position: absolute;
   font-family: var(--font-mono);
   font-size: 9px;
@@ -7868,23 +7887,23 @@ html[data-gm-dragging] * {
   white-space: nowrap;
 }
 
-.dn-alab.is-x {
+.rk-alab.is-x {
   right: 8px;
-  top: 350px;
+  top: 276px;
 }
 
-.dn-alab.is-yt {
+.rk-alab.is-yt {
   left: 20px;
-  top: 18px;
+  top: 10px;
 }
 
-.dn-alab.is-yb {
+.rk-alab.is-yb {
   left: 20px;
-  bottom: 52px;
+  bottom: 40px;
 }
 
-.dn-tick {
-  top: 333px;
+.rk-tick {
+  top: 266px;
   transform: translateX(-50%);
   font-size: 9px;
   color: var(--ink-dim);
@@ -7894,43 +7913,43 @@ html[data-gm-dragging] * {
    squares — enough for the longest word with room around it. Drawn with
    gradients rather than 169 elements, because it is scenery: nothing on it
    moves, and the tiles that land on it are the participants. */
-.dn-grid {
+.rk-grid {
   position: absolute;
-  left: 8px;
-  top: 20px;
-  width: 325px;
-  height: 325px;
+  left: 33px;
+  top: 8px;
+  width: 242px;
+  height: 242px;
   border-radius: 4px;
   background-color: #e6ddcd;
   background-image:
     linear-gradient(to right, rgba(120, 96, 60, 0.22) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(120, 96, 60, 0.22) 1px, transparent 1px);
-  background-size: 25px 25px;
+  background-size: 22px 22px;
   box-shadow:
     inset 0 0 0 1px rgba(120, 96, 60, 0.35),
     0 2px 8px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
   opacity: 0;
 }
 
-:root:not([data-theme='light']) .dn-grid {
+:root:not([data-theme='light']) .rk-grid {
   background-color: #3a332b;
   background-image:
     linear-gradient(to right, rgba(226, 205, 170, 0.16) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(226, 205, 170, 0.16) 1px, transparent 1px);
 }
 
-.dn-alab.is-game {
-  left: 8px;
-  top: 352px;
+.rk-alab.is-game {
+  left: 12px;
+  top: 258px;
   text-transform: none;
   letter-spacing: 0.04em;
   font-size: 9px;
   color: var(--ink-dim);
 }
 
-.dn-key {
+.rk-key {
   position: absolute;
-  top: 290px;
+  top: 232px;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -7943,7 +7962,7 @@ html[data-gm-dragging] * {
   white-space: nowrap;
 }
 
-.dn-key::before {
+.rk-key::before {
   content: '';
   width: 13px;
   height: 13px;
@@ -7952,26 +7971,26 @@ html[data-gm-dragging] * {
   box-shadow: inset 0 -2px 0 var(--tile-lip);
 }
 
-.dn-key.is-v {
+.rk-key.is-v {
   left: 40px;
 }
 
-.dn-key.is-v::before {
+.rk-key.is-v::before {
   background: #f6d7a2;
 }
 
-.dn-key.is-c {
+.rk-key.is-c {
   left: 150px;
 }
 
 /* ---- the rack: a slider dressed as the thing it is ---- */
 
-.dn-rail {
+.rk-rail {
   --pad: 15px;
   position: relative;
   width: 340px;
-  height: 30px;
-  margin-top: 14px;
+  height: 28px;
+  margin-top: 8px;
   padding: 0 var(--pad);
   border-radius: 6px 6px 9px 9px;
   background: linear-gradient(180deg, #8a6236, #6d4a26 62%, #5b3d1f);
@@ -7983,17 +8002,17 @@ html[data-gm-dragging] * {
   cursor: grab;
 }
 
-.dn-rail:active {
+.rk-rail:active {
   cursor: grabbing;
 }
 
-.dn-rail:focus-visible {
+.rk-rail:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
 
 /* the groove the marker slides in, filled up to where the playhead is */
-.dn-track {
+.rk-track {
   position: absolute;
   left: var(--pad);
   right: var(--pad);
@@ -8012,9 +8031,9 @@ html[data-gm-dragging] * {
 /* Positioned inside the TRACK's span, not the rack's.
    `--f` is a plain fraction the component writes each frame; the arithmetic
    that turns it into a place belongs here, where the padding is known. */
-.dn-thumb {
+.rk-thumb {
   position: absolute;
-  top: 4px;
+  top: 3px;
   left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
   transform: translateX(-50%);
   width: 22px;
@@ -8029,9 +8048,9 @@ html[data-gm-dragging] * {
 }
 
 /* the stops sit under the rack, and the one in force says so */
-.dn-notch {
+.rk-notch {
   position: absolute;
-  top: 38px;
+  top: 34px;
   left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
   transform: translateX(-50%);
   padding: 3px 6px;
@@ -8056,23 +8075,23 @@ html[data-gm-dragging] * {
    The first is flush with the rack's left edge and the last with its right,
    so the row of stops spans exactly what the rack spans — and neither can
    hang off a narrow card. */
-.dn-notch:first-of-type {
+.rk-notch:first-of-type {
   left: 0;
   transform: translateX(0);
 }
 
-.dn-notch:last-of-type {
+.rk-notch:last-of-type {
   left: 100%;
   transform: translateX(-100%);
 }
 
 @media (hover: hover) {
-  .dn-notch:hover {
+  .rk-notch:hover {
     color: var(--ink-dim);
   }
 }
 
-.dn-notch.is-on {
+.rk-notch.is-on {
   font-size: 11px;
   font-weight: 700;
   color: var(--tile-ink);
@@ -8080,11 +8099,11 @@ html[data-gm-dragging] * {
   box-shadow: inset 0 -2px 0 var(--tile-lip);
 }
 
-.dn-wire {
+.rk-wire {
   display: none;
 }
 
-.dn-hint {
+.rk-hint {
   margin: 34px 0 0;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -8094,12 +8113,12 @@ html[data-gm-dragging] * {
 }
 
 /* a Scrabble tile is a physical object, and the one thing it is not is dark */
-:root:not([data-theme='light']) .dn-l,
-:root:not([data-theme='light']) .dn-thumb {
+:root:not([data-theme='light']) .rk-l,
+:root:not([data-theme='light']) .rk-thumb {
   --tile-lip: rgba(92, 68, 28, 0.55);
 }
 
-:root:not([data-theme='light']) .dn-notch.is-on {
+:root:not([data-theme='light']) .rk-notch.is-on {
   color: #3a2b16;
 }
 
@@ -8334,8 +8353,8 @@ html[data-gm-dragging] * {
   display: grid;
   place-items: center;
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
@@ -8822,8 +8841,8 @@ html[data-gm-dragging] * {
 
 .ph-hand svg {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   fill: #fff;
   stroke: rgba(0, 0, 0, 0.5);
   stroke-width: 1.2;
@@ -9484,8 +9503,8 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: var(--bg-well);
@@ -9755,7 +9774,7 @@ html[data-gm-dragging] * {
 
 .dd-mode b {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -10990,8 +11009,8 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(180deg, #ff9a4a, #ef5f14);

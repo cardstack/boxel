@@ -115,10 +115,11 @@ const POINTS: Record<string, number> = {
 const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
 
 /**
- * The two blanks.
+ * The blank.
  *
- * A Scrabble set has twenty-eight tiles, not twenty-six, and the last two are
- * worth nothing and stand for anything. They belong in three of the five
+ * A set holds two, but one on the board says the same thing and a pair of
+ * identical featureless tiles reads as a mistake rather than as a fact. It is
+ * worth nothing and stands for anything. They belong in three of the five
  * arrangements and genuinely do not belong in the fourth: a blank has no
  * letter, so it has no letter frequency, and putting it anywhere on that
  * chart would be inventing a number.
@@ -127,7 +128,7 @@ const VOWELS = new Set(['a', 'e', 'i', 'o', 'u']);
  * final leg while everything else spreads — which says what the footnote
  * under a chart would have had to say, without a footnote.
  */
-const BLANKS = ['blank-1', 'blank-2'];
+const BLANKS = ['blank'];
 
 /** how many of each tile a Scrabble set contains */
 const BAG: Record<string, number> = {
@@ -179,25 +180,25 @@ const GAME: [string, number, number][] = [
   // not six centred rows. Centring them was worse than it sounds: an
   // even-length word cannot be centred on an odd grid without sitting half a
   // square off, so four of the six looked misaligned rather than placed.
-  ['CWM', 2, 1],
-  ['FJORD', 6, 3],
-  ['BANK', 1, 5],
-  ['GLYPHS', 5, 7],
-  ['VEXT', 2, 9],
-  ['QUIZ', 7, 11],
+  ['CWM', 1, 0],
+  ['FJORD', 5, 2],
+  ['BANK', 0, 4],
+  ['GLYPHS', 4, 6],
+  ['VEXT', 1, 8],
+  ['QUIZ', 6, 10],
 ];
-const GRID = 13;
+const GRID = 11;
 
 /* ── the layouts, arithmetic rather than stylesheet ─────────────────────── */
 
-const TILE = 24;
-const STEP = 30;
+const TILE = 22;
+const STEP = 27;
 const COLS = 7;
-const BOARD = { h: 380, w: 340 };
+const BOARD = { h: 292, w: 340 };
 /** the board's own pitch — one square per cell, a tile centred in each */
-const CELL = 25;
+const CELL = 22;
 const BOARD_X = Math.round((BOARD.w - GRID * CELL) / 2);
-const BOARD_Y = 20;
+const BOARD_Y = 8;
 const square = (col: number, row: number) => ({
   x: BOARD_X + col * CELL + (CELL - TILE) / 2,
   y: BOARD_Y + row * CELL + (CELL - TILE) / 2,
@@ -205,7 +206,7 @@ const square = (col: number, row: number) => ({
 const GRID_X = Math.round((BOARD.w - (COLS - 1) * STEP - TILE) / 2);
 
 const alphabet = Object.keys(FREQ);
-/** the full set: twenty-six letters and two blanks */
+/** the full set: twenty-six letters and a blank */
 const bagful = [...alphabet, ...BLANKS];
 const isBlank = (ch: string) => ch.startsWith('blank');
 const topFreq = Math.max(...Object.values(FREQ));
@@ -242,7 +243,7 @@ const cell = (n: number, x0: number, y0: number) => ({
  * the clearest way to show what the chart is actually claiming: how often a
  * letter turns up, against what it is worth.
  */
-const PLOT = { bottom: 322, left: 16, right: 332, top: 22 };
+const PLOT = { bottom: 256, left: 16, right: 332, top: 14 };
 
 /** every letter of a given value, most frequent first */
 const strip = (value: number) =>
@@ -391,16 +392,32 @@ for (const [word, col, row] of GAME) {
     played.set(ch.toLowerCase(), square(col + j, row));
   });
 }
-// the tiles nobody played, in the corner
-BLANKS.forEach((b, k) => played.set(b, square(GRID - 2 + k, GRID - 1)));
+// the tile nobody played, in the corner
+BLANKS.forEach((b, k) => played.set(b, square(GRID - 1 - k, GRID - 1)));
+
+/**
+ * The top row of the `groups` arrangement: the vowels, and then the blanks.
+ *
+ * A blank is neither a vowel nor a consonant, and giving it a line of its own
+ * under the consonant block put it where nothing else was — which read as a
+ * mistake and, worse, put the two of them on the same square. They belong at
+ * the END of the vowels: the tiles that can be any vowel you like, after the
+ * five that are.
+ */
+const TOP_ROW = [...alphabet.filter((c) => VOWELS.has(c)), ...BLANKS];
+
+/** centre a row of `n` tiles on the board */
+const row = (rank: number, n: number, y: number) => ({
+  x: Math.round((BOARD.w - (n - 1) * STEP - TILE) / 2) + rank * STEP,
+  y,
+});
 
 const letters = bagful.map((ch, i) => {
   const blank = isBlank(ch);
   const vowel = VOWELS.has(ch);
-  const peers = bagful.filter(
-    (c) => isBlank(c) === blank && VOWELS.has(c) === vowel
-  );
-  const rank = peers.indexOf(ch);
+  const top = TOP_ROW.indexOf(ch);
+  const rank =
+    top >= 0 ? top : bagful.filter((c) => TOP_ROW.indexOf(c) < 0).indexOf(ch);
   const sack = bagged.get(ch)!;
   const pile = stacked.get(ch)!;
   const spot = plotted.get(ch)!;
@@ -413,13 +430,8 @@ const letters = bagful.map((ch, i) => {
     worth: POINTS[ch]!,
     /** the tile's seat in each of the five arrangements, in order */
     seats: [
-      cell(i, GRID_X, 70),
-      vowel
-        ? {
-            x: Math.round((BOARD.w - 5 * STEP + STEP - TILE) / 2) + rank * STEP,
-            y: 48,
-          }
-        : cell(rank, GRID_X, 132),
+      cell(i, GRID_X, 40),
+      top >= 0 ? row(rank, TOP_ROW.length, 26) : cell(rank, GRID_X, 96),
       sack,
       pile,
       spot,
@@ -477,7 +489,7 @@ const quint = (t: number) =>
  * leaves the middle of the alphabet, keeps its seat when the vowels gather,
  * and ends up alone at the top of the plot, and you can watch it go.
  */
-export class Density extends Component {
+export class Rack extends Component {
   /**
    * THE PARKED OPENING.
    *
@@ -496,6 +508,8 @@ export class Density extends Component {
   private c?: { run: ChoreoRun | null };
   /** the slider, in notches */
   private p = 0;
+  /** the stop the control is heading for — what a repeated key steps from */
+  private goal = 0;
   private rail?: HTMLElement;
   private thumb?: HTMLElement;
   private dragging = false;
@@ -549,7 +563,7 @@ export class Density extends Component {
     if (near !== this.lit) {
       this.lit = near;
       this.rail
-        ?.querySelectorAll<HTMLElement>('.dn-notch')
+        ?.querySelectorAll<HTMLElement>('.rk-notch')
         .forEach((el, i) => el.classList.toggle('is-on', i === near));
     }
   }
@@ -585,7 +599,7 @@ export class Density extends Component {
    * at the last stop.
    */
   private at(clientX: number) {
-    const track = this.rail?.querySelector('.dn-track');
+    const track = this.rail?.querySelector('.rk-track');
     if (!track) {
       return this.p;
     }
@@ -595,6 +609,16 @@ export class Density extends Component {
 
   grab = (event: PointerEvent) => {
     if (event.button !== 0) {
+      return;
+    }
+    // A STOP IS NOT THE TRACK.
+    //
+    // The labels are children of the rack, so a press on one arrives here
+    // first and would seize the playhead to wherever that label sits — the
+    // ride is then over before `pick` gets to ask for it, and what you see is
+    // a jump with an ease politely appended. A press on a stop belongs to the
+    // stop; the rack only owns presses on itself.
+    if ((event.target as Element | null)?.closest('.rk-notch')) {
       return;
     }
     this.stop();
@@ -629,8 +653,29 @@ export class Density extends Component {
     }
     this.dragging = false;
     (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-    this.springTo(Math.round(clamp(this.p + this.v * 0.12, 0, LAST)));
+    const landing = Math.round(clamp(this.p + this.v * 0.12, 0, LAST));
+    this.goal = landing;
+    this.springTo(landing);
   };
+
+  /**
+   * Aim at a stop.
+   *
+   * From REST it is an eased ride: a tap or a key press has no momentum to
+   * spend, so it gets a curve instead. Mid-RIDE it hands over to the spring
+   * with whatever speed it already had — pressing an arrow twice quickly
+   * should read as one longer journey, and restarting the ease each time
+   * made it stutter, decelerating into a stop it never reached before
+   * setting off again.
+   */
+  private aim(target: number) {
+    if (this.raf) {
+      this.goal = target;
+      this.springTo(target);
+      return;
+    }
+    this.easeTo(target);
+  }
 
   /**
    * A stop, tapped: an eased ride rather than a spring.
@@ -644,6 +689,7 @@ export class Density extends Component {
    */
   private easeTo(target: number) {
     this.stop();
+    this.goal = target;
     const from = this.p;
     const span = Math.abs(target - from);
     if (span < 0.001) {
@@ -653,13 +699,21 @@ export class Density extends Component {
     // stops should not take four times as long as crossing one
     const ms = 380 + Math.sqrt(span) * 300;
     const started = performance.now();
+    let last = started;
+    let lastP = from;
     const tick = (now: number) => {
       const t = Math.min(1, (now - started) / ms);
       this.p = from + (target - from) * quint(t);
-      this.v = 0;
+      // keep a real velocity: an ease that reports zero has nothing to hand
+      // over, and a second key press mid-ride then restarts from a dead stop
+      const dt = Math.max(1, now - last) / 1000;
+      this.v = (this.p - lastP) / dt;
+      last = now;
+      lastP = this.p;
       this.draw();
       if (t >= 1) {
         this.p = target;
+        this.v = 0;
         this.draw();
         this.raf = 0;
         return;
@@ -672,6 +726,7 @@ export class Density extends Component {
   /** carry the slider to a stop on a spring, carrying the throw's momentum */
   private springTo(target: number) {
     this.stop();
+    this.goal = target;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 1 / 30);
@@ -700,12 +755,18 @@ export class Density extends Component {
    * control only half of the people who need it can use.
    */
   key = (event: KeyboardEvent) => {
-    const here = Math.round(this.p);
+    // Walk from the GOAL, not from where the playhead happens to be.
+    //
+    // Deriving the next stop from `Math.round(this.p)` looks equivalent and
+    // is not: a held key repeats while the previous ride is still in the air,
+    // the playhead is still rounding to the stop it left, and every repeat
+    // re-targets the same destination. The rack stalls one stop short and
+    // then completes when you let go, which is exactly backwards.
     const step: Record<string, number> = {
-      ArrowDown: here - 1,
-      ArrowLeft: here - 1,
-      ArrowRight: here + 1,
-      ArrowUp: here + 1,
+      ArrowDown: this.goal - 1,
+      ArrowLeft: this.goal - 1,
+      ArrowRight: this.goal + 1,
+      ArrowUp: this.goal + 1,
       End: LAST,
       Home: 0,
     };
@@ -714,7 +775,7 @@ export class Density extends Component {
       return;
     }
     event.preventDefault();
-    this.easeTo(clamp(target, 0, LAST));
+    this.aim(clamp(target, 0, LAST));
   };
 
   /** a notch, clicked: the same spring, a stated target */
@@ -722,7 +783,20 @@ export class Density extends Component {
     const notch = Number(
       (event.currentTarget as HTMLElement).dataset['notch'] ?? 0
     );
-    this.easeTo(clamp(notch, 0, LAST));
+    this.aim(clamp(notch, 0, LAST));
+  };
+
+  /**
+   * Clicking anywhere in the demo hands the keyboard to the rack.
+   *
+   * The rack is the slider and holds the focus, but nobody clicks a rack to
+   * start using arrow keys — they click the thing they are looking at, which
+   * is the tiles. Focusing on any pointerdown in the card means the arrows
+   * work the moment you have touched it at all. `preventScroll`, because
+   * focusing something should never move the page under you.
+   */
+  claim = () => {
+    this.rail?.focus({ preventScroll: true });
   };
 
   railed = modifier((el: HTMLElement) => {
@@ -746,7 +820,7 @@ export class Density extends Component {
   });
 
   mount = modifier((el: HTMLElement) => {
-    (el as HTMLElement & { density?: Density }).density = this;
+    (el as HTMLElement & { rack?: Rack }).rack = this;
     const id = requestAnimationFrame(() => {
       this.take = 1;
     });
@@ -809,6 +883,7 @@ export class Density extends Component {
   seek(p: number) {
     this.stop();
     this.p = clamp(p, 0, LAST);
+    this.goal = Math.round(this.p);
     this.draw();
   }
 
@@ -817,12 +892,17 @@ export class Density extends Component {
   counts = counts;
 
   <template>
-    <div class="ex no-select" {{on "selectstart" preventSelect}} {{this.mount}}>
-      <div class="dn-fit-box"><div class="dn-fit">
+    <div
+      class="ex no-select"
+      {{on "selectstart" preventSelect}}
+      {{on "pointerdown" this.claim}}
+      {{this.mount}}
+    >
+      <div class="rk-fit-box"><div class="rk-fit">
           {{! the region is the stage; the tiles are children ON it }}
-          <Choreo class="dn-stage" as |c|>
+          <Choreo class="rk-stage" as |c|>
             <span
-              class="dn-wire"
+              class="rk-wire"
               data-take={{this.take}}
               {{this.wire c}}
             ></span>
@@ -831,63 +911,63 @@ export class Density extends Component {
             where it becomes true — see the fade arrays above. Nothing is ever
             added or removed: a changeset that gains a participant mid-gesture
             is a different kind of pass. }}
-            <span class="dn-key is-v" {{motion id="key-v" role="vowels"}}>
+            <span class="rk-key is-v" {{motion id="key-v" role="vowels"}}>
               Vowels
             </span>
-            <span class="dn-key is-c" {{motion id="key-c" role="vowels"}}>
+            <span class="rk-key is-c" {{motion id="key-c" role="vowels"}}>
               Consonants
             </span>
 
             <span
-              class="dn-axis is-x"
+              class="rk-axis is-x"
               {{motion id="axis-bag" role="bag"}}
             ></span>
-            <span class="dn-alab is-x" {{motion id="lab-bag" role="bag"}}>
+            <span class="rk-alab is-x" {{motion id="lab-bag" role="bag"}}>
               Tiles in the bag
             </span>
             {{#each this.counts as |count|}}
               <span
-                class="dn-tick"
+                class="rk-tick"
                 style={{tickAt count this.counts}}
                 {{motion id=(tickId "bag" count) role="bag"}}
               >{{count}}</span>
             {{/each}}
 
             <span
-              class="dn-axis is-x"
+              class="rk-axis is-x"
               {{motion id="axis-x" role="points"}}
             ></span>
-            <span class="dn-alab is-x" {{motion id="lab-x" role="points"}}>
+            <span class="rk-alab is-x" {{motion id="lab-x" role="points"}}>
               Scrabble points
             </span>
             {{#each this.values as |value|}}
               <span
-                class="dn-tick"
+                class="rk-tick"
                 style={{tickAt value this.values}}
                 {{motion id=(tickId "pts" value) role="points"}}
               >{{value}}</span>
             {{/each}}
 
             {{! the board, which is only true at the last stop }}
-            <span class="dn-grid" {{motion id="grid" role="game"}}></span>
-            <span class="dn-alab is-game" {{motion id="lab-game" role="game"}}>
+            <span class="rk-grid" {{motion id="grid" role="game"}}></span>
+            <span class="rk-alab is-game" {{motion id="lab-game" role="game"}}>
               Cwm fjord bank glyphs vext quiz · 26 tiles, no letter twice
             </span>
 
             <span
-              class="dn-axis is-y"
+              class="rk-axis is-y"
               {{motion id="axis-y" role="plot"}}
             ></span>
-            <span class="dn-alab is-yt" {{motion id="lab-yt" role="plot"}}>
+            <span class="rk-alab is-yt" {{motion id="lab-yt" role="plot"}}>
               ↑ Rarer
             </span>
-            <span class="dn-alab is-yb" {{motion id="lab-yb" role="plot"}}>
+            <span class="rk-alab is-yb" {{motion id="lab-yb" role="plot"}}>
               ↓ Commoner
             </span>
 
             {{#each this.letters as |l|}}
               <span
-                class="dn-l {{if l.vowel 'is-vowel'}} {{if l.blank 'is-blank'}}"
+                class="rk-l {{if l.vowel 'is-vowel'}} {{if l.blank 'is-blank'}}"
                 {{motion id=l.key role=(if l.blank "blank" "tile")}}
               >
                 <b>{{l.ch}}</b>
@@ -955,7 +1035,7 @@ export class Density extends Component {
           </Choreo>
 
           <div
-            class="dn-rail"
+            class="rk-rail"
             role="slider"
             tabindex="0"
             aria-label="Arrangement"
@@ -968,20 +1048,19 @@ export class Density extends Component {
             {{on "pointerup" this.land}}
             {{on "pointercancel" this.land}}
           >
-            <span class="dn-track"></span>
+            <span class="rk-track"></span>
             {{#each STOPS as |stop i|}}
               <button
                 type="button"
-                class="dn-notch"
+                class="rk-notch"
                 data-notch={{i}}
                 style={{notch i}}
                 {{on "click" this.pick}}
               ><span>{{stop}}</span></button>
             {{/each}}
-            <span class="dn-thumb" {{this.thumbed}}></span>
+            <span class="rk-thumb" {{this.thumbed}}></span>
           </div>
 
-          <p class="dn-hint">Drag the knob · tap a stop · arrow keys</p>
         </div></div>
     </div>
   </template>

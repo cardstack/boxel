@@ -1,7 +1,6 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
 import { Crossing } from 'test-app/components/examples/crossing';
-import { Density } from 'test-app/components/examples/density';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
@@ -22,6 +21,7 @@ import { PathDraw } from 'test-app/components/examples/path-draw';
 import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { Presentation } from 'test-app/components/examples/presentation';
+import { Rack } from 'test-app/components/examples/rack';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
 import { Reveal } from 'test-app/components/examples/reveal';
@@ -37,7 +37,6 @@ import { Wires } from 'test-app/components/examples/wires';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
 import { CrossingNotes } from 'test-app/components/notes/crossing';
-import { DensityNotes } from 'test-app/components/notes/density';
 import { FarNotes } from 'test-app/components/notes/far';
 import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
@@ -48,6 +47,7 @@ import { LightboxNotes } from 'test-app/components/notes/lightbox';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
 import { PresentationNotes } from 'test-app/components/notes/presentation';
+import { RackNotes } from 'test-app/components/notes/rack';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
@@ -781,27 +781,27 @@ drop = () => { this.col = Math.round(this.col); };
     title: 'Drag',
   },
   {
-    Example: Density,
+    Example: Rack,
     apis: ['c.run', 'run.time', 'run.paused', 'c.Gate', 'c.Move'],
     group: 'Drag',
-    id: 'density',
-    lede: 'Tap a stop and it plays. Drag the knob and it is yours.',
+    id: 'rack',
+    lede: 'Six arrangements, one score, and a clock you can hold.',
     sample: `{{! ONE score for the whole journey, not one per leg.
 
     A changeset has two ends, so five stops looks at first like four scores
     with the host swapping between them. It is not: a keyframe array is the
     from-and-to AND ANY WAYPOINTS in one value. Six stops per property is one
     score, the DOM never changes, and the region compiles exactly once. }}
-<Choreo class='dn-stage' as |c|>
+<Choreo class='rk-stage' as |c|>
   <span data-take={{this.take}} {{this.wire c}}></span>
 
   {{! every tile states all six of its seats; nothing here re-renders }}
   {{#each this.letters as |l|}}
-    <span class='dn-l' {{motion id=l.key role='tile'}}>{{l.ch}}</span>
+    <span class='rk-l' {{motion id=l.key role='tile'}}>{{l.ch}}</span>
   {{/each}}
 
   {{! furniture appears only where it is TRUE — one number per stop }}
-  <span class='dn-grid' {{motion id='grid' role='game'}}></span>
+  <span class='rk-grid' {{motion id='grid' role='game'}}></span>
 
   <c.Sequence>
     <c.Gate />   {{! a score's way of saying "do not start yet" }}
@@ -820,19 +820,28 @@ drop = () => { this.col = Math.round(this.col); };
 xs = (sprite) => seats.get(sprite.id).map((s) => s.x);
 fadeGame = [0, 0, 0, 0, 0, 1];
 
-// The knob writes the clock. Nothing here is @tracked: a render inside a
-// region is a PASS, so tracked state in a pointermove would recompile the
-// score sixty times a second.
+// Nothing here is @tracked. A render inside a region is a PASS, so tracked
+// state written from a pointermove would recompile the score sixty times a
+// second — the run is held in a plain field and driven imperatively.
 move = (event) => {
-  this.p = detent(this.at(event.clientX));
-  this.run.pause();
+  this.p = detent(this.at(event.clientX));   // sticky near a stop, never snapped
+  this.draw();
+};
+
+// one place writes the clock, whatever moved the playhead: a drag, a spring
+// after a throw, or an eased ride from a tap or an arrow key
+private draw() {
+  const run = this.run;
+  if (!run) return;
+  if (run.parked) run.advance();             // open the head gate, once
+  run.pause();
   // parked a hair short: a run that reaches its own duration is FINISHED,
   // and a finished run replays itself on any later render
-  this.run.time = (this.p / LAST) * (this.run.duration - 0.001);
-};`,
-    notes: DensityNotes,
+  run.time = (this.p / LAST) * Math.max(0, run.duration - 0.001);
+}`,
+    notes: RackNotes,
     slowmo: false,
-    title: 'Density',
+    title: 'Rack',
   },
   {
     Example: Sheet,
