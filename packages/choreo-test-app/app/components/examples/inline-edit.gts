@@ -274,6 +274,10 @@ const STRETCH = 'semi-condensed';
  *   color     the ink tween
  *   shade     the form's shadow layer
  *   boxes     the card's and the platters' geometry moves
+ *   score     the WHOLE choreography — no crossing, no moves, no tweens.
+ *             The card still swaps poses; it just snaps. If this is still
+ *             slow then the animation is not what is slow, and the next
+ *             question is whether any other page in the gallery is fast.
  *
  * And two groups, for splitting the space quickly:
  *
@@ -757,6 +761,7 @@ export class InlineEdit extends Component {
   }
 
   boxesMove = !OFF.has('boxes');
+  scored = !OFF.has('score');
 
   /** the form is lifted off the page; the reading card lies flat on it */
   get shade() {
@@ -991,113 +996,131 @@ export class InlineEdit extends Component {
           >{{if this.editing "Done" "Edit"}}</button>
         </div>
 
-        <c.Parallel>
-          <c.Crossing
-            @duration={{MOVE}}
-            @ease={{EASE}}
-            @leave={{0.14}}
-            @arrive={{0.28}}
-            @overlap={{0.42}}
-          />
+        {{#if this.scored}}
+          <c.Parallel>
+            <c.Crossing
+              @duration={{MOVE}}
+              @ease={{EASE}}
+              @leave={{0.14}}
+              @arrive={{0.28}}
+              @overlap={{0.42}}
+            />
 
-          {{! The background moves as boxes: real geometry, along its lane. }}
-          <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
-          {{#if this.boxesMove}}
+            {{! The background moves as boxes: real geometry, along its lane. }}
             <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
-            <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
-          {{/if}}
-          {{! the eyebrow moves because the avatar beside it shrinks and the
+            {{#if this.boxesMove}}
+              <c.Move
+                @of={{c.moved "card"}}
+                @duration={{MOVE}}
+                @ease={{EASE}}
+              />
+              <c.Move
+                @of={{c.moved "plate"}}
+                @duration={{MOVE}}
+                @ease={{EASE}}
+              />
+            {{/if}}
+            {{! the eyebrow moves because the avatar beside it shrinks and the
               lane under it gets shorter — two reasons, neither of them its
               own, and without a Move of its own it simply jumped }}
-          <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
-          <c.Move @of={{c.moved "kicker"}} @duration={{MOVE}} @ease={{EASE}} />
-          <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
+            <c.Move
+              @of={{c.moved "avatar"}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Move
+              @of={{c.moved "kicker"}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
 
-          {{! and its corners ride alongside, because a corner carried by a
+            {{! and its corners ride alongside, because a corner carried by a
               crop-scale is a corner that smears }}
-          <c.Tween
-            @of={{c.kept "plate"}}
-            @borderRadius={{this.plateRadius}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.kept "avatar"}}
-            @borderRadius={{this.avatarRadius}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.kept "shade"}}
-            @opacity={{this.shade}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
+            <c.Tween
+              @of={{c.kept "plate"}}
+              @borderRadius={{this.plateRadius}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.kept "avatar"}}
+              @borderRadius={{this.avatarRadius}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.kept "shade"}}
+              @opacity={{this.shade}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
 
-          {{! The foreground moves as TYPE: every property of it at once, out
+            {{! The foreground moves as TYPE: every property of it at once, out
               of ONE step, because a step property may be a function of the
               sprite it is applied to. Three type scales across four fields,
               and the score does not have to know that. }}
-          <c.Tween
-            @of={{c.kept "value"}}
-            @x={{this.wordX}}
-            @y={{this.wordY}}
-            @fontSize={{this.wordSize}}
-            @fontWeight={{this.wordWeight}}
-            @letterSpacing={{this.wordTracking}}
-            @color={{this.wordColor}}
-            @opacity={{this.wordFade}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.kept "initials"}}
-            @fontSize={{this.initialSize}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
+            <c.Tween
+              @of={{c.kept "value"}}
+              @x={{this.wordX}}
+              @y={{this.wordY}}
+              @fontSize={{this.wordSize}}
+              @fontWeight={{this.wordWeight}}
+              @letterSpacing={{this.wordTracking}}
+              @color={{this.wordColor}}
+              @opacity={{this.wordFade}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.kept "initials"}}
+              @fontSize={{this.initialSize}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
 
-          {{! Claimed by nobody, so nothing was fading them: the reading view
+            {{! Claimed by nobody, so nothing was fading them: the reading view
               has no counterpart for a form field, which is the point. }}
-          <c.Tween
-            @of={{c.removed "control"}}
-            @opacity={{FADE_OUT}}
-            @duration={{LEAVE}}
-            @ease={{EASE}}
-          />
+            <c.Tween
+              @of={{c.removed "control"}}
+              @opacity={{FADE_OUT}}
+              @duration={{LEAVE}}
+              @ease={{EASE}}
+            />
 
-          {{! The date's three chips arrive as part of the crossing rather
+            {{! The date's three chips arrive as part of the crossing rather
               than by a rule of their own: they are inserted, so the score
               can address them, and their entrance is the same fade every
               other arrival on this card gets. Their TEXT is not what fades —
               the flight is still drawing that — only the grey they sit on. }}
-          <c.Tween
-            @of={{c.inserted "chip"}}
-            @opacity={{FADE_IN}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.removed "chip"}}
-            @opacity={{FADE_OUT}}
-            @duration={{LEAVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.inserted "label"}}
-            @opacity={{FADE_IN}}
-            @y={{LABEL_IN}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.removed "label"}}
-            @opacity={{FADE_OUT}}
-            @y={{LABEL_OUT}}
-            @duration={{LEAVE}}
-            @ease={{EASE}}
-          />
-        </c.Parallel>
+            <c.Tween
+              @of={{c.inserted "chip"}}
+              @opacity={{FADE_IN}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.removed "chip"}}
+              @opacity={{FADE_OUT}}
+              @duration={{LEAVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.inserted "label"}}
+              @opacity={{FADE_IN}}
+              @y={{LABEL_IN}}
+              @duration={{MOVE}}
+              @ease={{EASE}}
+            />
+            <c.Tween
+              @of={{c.removed "label"}}
+              @opacity={{FADE_OUT}}
+              @y={{LABEL_OUT}}
+              @duration={{LEAVE}}
+              @ease={{EASE}}
+            />
+          </c.Parallel>
+        {{/if}}
       </Choreo>
     </div>
   </template>
