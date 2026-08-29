@@ -37,6 +37,7 @@ import { Wires } from 'test-app/components/examples/wires';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
 import { CrossingNotes } from 'test-app/components/notes/crossing';
+import { DensityNotes } from 'test-app/components/notes/density';
 import { FarNotes } from 'test-app/components/notes/far';
 import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
@@ -785,36 +786,51 @@ drop = () => { this.col = Math.round(this.col); };
     group: 'Drag',
     id: 'density',
     lede: 'Tap a stop and it plays. Drag the knob and it is yours.',
-    sample: `{{! Three arrangements is TWO scores, because a changeset has exactly two
-    ends. The component keeps the right one loaded; the thumb writes the clock.
+    sample: `{{! ONE score for the whole journey, not one per leg.
 
-    Every letter carries all three of its boxes as custom properties and the
-    class picks which pair is in force — so the stylesheet owns the poses and
-    the arithmetic stays derived from the data. }}
+    A changeset has two ends, so five stops looks at first like four scores
+    with the host swapping between them. It is not: a keyframe array is the
+    from-and-to AND ANY WAYPOINTS in one value. Six stops per property is one
+    score, the DOM never changes, and the region compiles exactly once. }}
 <Choreo class='dn-stage' as |c|>
-  <span {{this.wire c this.stage}}></span>
-  <div class='dn-board is-{{this.pose}}'>
-    {{#each this.letters as |l|}}
-      <span class='dn-l' style={{box l}} {{motion id=l.ch}}>{{l.ch}}</span>
-    {{/each}}
-  </div>
+  <span data-take={{this.take}} {{this.wire c}}></span>
+
+  {{! every tile states all six of its seats; nothing here re-renders }}
+  {{#each this.letters as |l|}}
+    <span class='dn-l' {{motion id=l.key role='tile'}}>{{l.ch}}</span>
+  {{/each}}
+
+  {{! furniture appears only where it is TRUE — one number per stop }}
+  <span class='dn-grid' {{motion id='grid' role='game'}}></span>
+
   <c.Sequence>
-    <c.Gate />
-    <c.Move @of={{c.all}} @duration={{0.5}} @ease='linear' />
+    <c.Gate />   {{! a score's way of saying "do not start yet" }}
+    <c.Parallel>
+      <c.Tween @of={{array (c.role 'tile') (c.role 'blank')}}
+               @x={{this.xs}} @y={{this.ys}}
+               @duration={{SPAN}} @ease='linear' />
+      <c.Tween @of={{c.role 'game'}} @opacity={{this.fadeGame}}
+               @duration={{SPAN}} @ease='linear' />
+    </c.Parallel>
   </c.Sequence>
 </Choreo>
 
-// The thumb writes run.time. Nothing here is @tracked except the pose index:
-// a render inside a region is a PASS, so assigning tracked state from a
-// pointermove would recompile the score sixty times a second.
+// One array per property, one entry per stop. A property function is handed
+// the sprite, so each tile answers with its own journey.
+xs = (sprite) => seats.get(sprite.id).map((s) => s.x);
+fadeGame = [0, 0, 0, 0, 0, 1];
+
+// The knob writes the clock. Nothing here is @tracked: a render inside a
+// region is a PASS, so tracked state in a pointermove would recompile the
+// score sixty times a second.
 move = (event) => {
-  this.p = this.at(event.clientX);
+  this.p = detent(this.at(event.clientX));
   this.run.pause();
-  // parked a hair short: a run allowed to reach its own duration is FINISHED,
+  // parked a hair short: a run that reaches its own duration is FINISHED,
   // and a finished run replays itself on any later render
-  const local = (this.p - this.from) / (this.stage - this.from);
-  this.run.time = local * (this.run.duration - 0.001);
+  this.run.time = (this.p / LAST) * (this.run.duration - 0.001);
 };`,
+    notes: DensityNotes,
     slowmo: false,
     title: 'Density',
   },

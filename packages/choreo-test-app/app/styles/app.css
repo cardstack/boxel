@@ -7678,6 +7678,82 @@ html[data-gm-dragging] * {
    real claims about English and about Scrabble, and they are easier to
    believe from objects you recognise than from dots. */
 
+/* THE BOX THE SCALED CONTROL OCCUPIES.
+ *
+ * `transform` does not change a layout box, so a scaled control still claims
+ * its full unscaled height and paints over whatever follows — which is how
+ * the rack ended up printed across the card's own title. The wrapper carries
+ * the scaled size as real layout; the control inside it is what gets scaled.
+ *
+ * `--k` comes from container queries below rather than from a
+ * ResizeObserver. Every seat here is arithmetic in a fixed 340-wide space, so
+ * the control cannot reflow — but which of a handful of sizes it should be is
+ * a question about the space it was given, and that is exactly what a
+ * container query answers. No observer, no imperative write, and it settles
+ * in the same pass as the layout it depends on. */
+.dn-fit-box {
+  width: calc(340px * var(--k, 1));
+  height: calc(470px * var(--k, 1));
+}
+
+/* The gallery card is narrower than the demo page, and a phone narrower
+   still. Discrete steps rather than a fluid ratio, because CSS cannot divide
+   one length by another to produce the plain number `scale()` wants.
+   
+   The thresholds are the CONTENT width — what `@container` actually measures
+   — and the card carries 16px of padding a side, so they sit well below the
+   340 the control wants. Each step is the largest scale that still fits. */
+@container (max-width: 339px) {
+  .dn-fit-box {
+    --k: 0.96;
+  }
+}
+
+@container (max-width: 325px) {
+  .dn-fit-box {
+    --k: 0.92;
+  }
+}
+
+@container (max-width: 312px) {
+  .dn-fit-box {
+    --k: 0.88;
+  }
+}
+
+@container (max-width: 298px) {
+  .dn-fit-box {
+    --k: 0.84;
+  }
+}
+
+@container (max-width: 285px) {
+  .dn-fit-box {
+    --k: 0.78;
+  }
+}
+
+@container (max-width: 264px) {
+  .dn-fit-box {
+    --k: 0.7;
+  }
+}
+
+/* One control, scaled as a whole.
+ *
+ * Every seat in this demo is arithmetic in a fixed 340-wide space — which is
+ * what lets the journey be keyframes rather than measurements, and also means
+ * it cannot reflow. In the gallery grid and on a phone it was simply cropped,
+ * and what got cropped was the rack: the demo lost the one thing you touch.
+ * Scaling the whole thing keeps every proportion and every hit target in
+ * agreement with the arithmetic. */
+.dn-fit {
+  width: 340px;
+  height: 470px;
+  transform: scale(var(--k, 1));
+  transform-origin: top left;
+}
+
 .ex:has(.dn-stage) {
   container-type: inline-size;
   --tile: #f0e3c2;
@@ -7690,7 +7766,6 @@ html[data-gm-dragging] * {
   position: relative;
   width: 340px;
   height: 380px;
-  max-width: 96cqw;
 }
 
 /* A TILE, as an object.
@@ -7895,7 +7970,6 @@ html[data-gm-dragging] * {
   --pad: 15px;
   position: relative;
   width: 340px;
-  max-width: 96cqw;
   height: 30px;
   margin-top: 14px;
   padding: 0 var(--pad);
@@ -7975,6 +8049,21 @@ html[data-gm-dragging] * {
     color 0.18s ease,
     background 0.18s ease,
     font-size 0.18s ease;
+}
+
+/* The end labels are centred on the ends of the TRACK, which leaves them
+   floating a padding's width inside the rack rather than agreeing with it.
+   The first is flush with the rack's left edge and the last with its right,
+   so the row of stops spans exactly what the rack spans — and neither can
+   hang off a narrow card. */
+.dn-notch:first-of-type {
+  left: 0;
+  transform: translateX(0);
+}
+
+.dn-notch:last-of-type {
+  left: 100%;
+  transform: translateX(-100%);
 }
 
 @media (hover: hover) {

@@ -174,7 +174,18 @@ const BAG: Record<string, number> = {
  * The two blanks are not played. They sit in the corner, which is the honest
  * place for a tile nobody needed.
  */
-const GAME = ['CWM', 'FJORD', 'BANK', 'GLYPHS', 'VEXT', 'QUIZ'];
+const GAME: [string, number, number][] = [
+  // word, column, row — staggered, because a board someone has played on is
+  // not six centred rows. Centring them was worse than it sounds: an
+  // even-length word cannot be centred on an odd grid without sitting half a
+  // square off, so four of the six looked misaligned rather than placed.
+  ['CWM', 2, 1],
+  ['FJORD', 6, 3],
+  ['BANK', 1, 5],
+  ['GLYPHS', 5, 7],
+  ['VEXT', 2, 9],
+  ['QUIZ', 7, 11],
+];
 const GRID = 13;
 
 /* ── the layouts, arithmetic rather than stylesheet ─────────────────────── */
@@ -375,13 +386,11 @@ for (const value of values) {
 
 /** every letter's square, worked out from the six words */
 const played = new Map<string, { x: number; y: number }>();
-GAME.forEach((word, w) => {
-  const col = Math.floor((GRID - word.length) / 2);
-  const row = 1 + w * 2;
+for (const [word, col, row] of GAME) {
   [...word].forEach((ch, j) => {
     played.set(ch.toLowerCase(), square(col + j, row));
   });
-});
+}
 // the tiles nobody played, in the corner
 BLANKS.forEach((b, k) => played.set(b, square(GRID - 2 + k, GRID - 1)));
 
@@ -809,156 +818,171 @@ export class Density extends Component {
 
   <template>
     <div class="ex no-select" {{on "selectstart" preventSelect}} {{this.mount}}>
-      {{! the region is the stage; the tiles are children ON it }}
-      <Choreo class="dn-stage" as |c|>
-        <span class="dn-wire" data-take={{this.take}} {{this.wire c}}></span>
+      <div class="dn-fit-box"><div class="dn-fit">
+          {{! the region is the stage; the tiles are children ON it }}
+          <Choreo class="dn-stage" as |c|>
+            <span
+              class="dn-wire"
+              data-take={{this.take}}
+              {{this.wire c}}
+            ></span>
 
-        {{! Every piece of furniture belongs to ONE arrangement and fades in
+            {{! Every piece of furniture belongs to ONE arrangement and fades in
             where it becomes true — see the fade arrays above. Nothing is ever
             added or removed: a changeset that gains a participant mid-gesture
             is a different kind of pass. }}
-        <span class="dn-key is-v" {{motion id="key-v" role="vowels"}}>
-          Vowels
-        </span>
-        <span class="dn-key is-c" {{motion id="key-c" role="vowels"}}>
-          Consonants
-        </span>
+            <span class="dn-key is-v" {{motion id="key-v" role="vowels"}}>
+              Vowels
+            </span>
+            <span class="dn-key is-c" {{motion id="key-c" role="vowels"}}>
+              Consonants
+            </span>
 
-        <span class="dn-axis is-x" {{motion id="axis-bag" role="bag"}}></span>
-        <span class="dn-alab is-x" {{motion id="lab-bag" role="bag"}}>
-          Tiles in the bag
-        </span>
-        {{#each this.counts as |count|}}
-          <span
-            class="dn-tick"
-            style={{tickAt count this.counts}}
-            {{motion id=(tickId "bag" count) role="bag"}}
-          >{{count}}</span>
-        {{/each}}
+            <span
+              class="dn-axis is-x"
+              {{motion id="axis-bag" role="bag"}}
+            ></span>
+            <span class="dn-alab is-x" {{motion id="lab-bag" role="bag"}}>
+              Tiles in the bag
+            </span>
+            {{#each this.counts as |count|}}
+              <span
+                class="dn-tick"
+                style={{tickAt count this.counts}}
+                {{motion id=(tickId "bag" count) role="bag"}}
+              >{{count}}</span>
+            {{/each}}
 
-        <span class="dn-axis is-x" {{motion id="axis-x" role="points"}}></span>
-        <span class="dn-alab is-x" {{motion id="lab-x" role="points"}}>
-          Scrabble points
-        </span>
-        {{#each this.values as |value|}}
-          <span
-            class="dn-tick"
-            style={{tickAt value this.values}}
-            {{motion id=(tickId "pts" value) role="points"}}
-          >{{value}}</span>
-        {{/each}}
+            <span
+              class="dn-axis is-x"
+              {{motion id="axis-x" role="points"}}
+            ></span>
+            <span class="dn-alab is-x" {{motion id="lab-x" role="points"}}>
+              Scrabble points
+            </span>
+            {{#each this.values as |value|}}
+              <span
+                class="dn-tick"
+                style={{tickAt value this.values}}
+                {{motion id=(tickId "pts" value) role="points"}}
+              >{{value}}</span>
+            {{/each}}
 
-        {{! the board, which is only true at the last stop }}
-        <span class="dn-grid" {{motion id="grid" role="game"}}></span>
-        <span class="dn-alab is-game" {{motion id="lab-game" role="game"}}>
-          Cwm fjord bank glyphs vext quiz · 26 tiles, no letter twice
-        </span>
+            {{! the board, which is only true at the last stop }}
+            <span class="dn-grid" {{motion id="grid" role="game"}}></span>
+            <span class="dn-alab is-game" {{motion id="lab-game" role="game"}}>
+              Cwm fjord bank glyphs vext quiz · 26 tiles, no letter twice
+            </span>
 
-        <span class="dn-axis is-y" {{motion id="axis-y" role="plot"}}></span>
-        <span class="dn-alab is-yt" {{motion id="lab-yt" role="plot"}}>
-          ↑ Rarer
-        </span>
-        <span class="dn-alab is-yb" {{motion id="lab-yb" role="plot"}}>
-          ↓ Commoner
-        </span>
+            <span
+              class="dn-axis is-y"
+              {{motion id="axis-y" role="plot"}}
+            ></span>
+            <span class="dn-alab is-yt" {{motion id="lab-yt" role="plot"}}>
+              ↑ Rarer
+            </span>
+            <span class="dn-alab is-yb" {{motion id="lab-yb" role="plot"}}>
+              ↓ Commoner
+            </span>
 
-        {{#each this.letters as |l|}}
-          <span
-            class="dn-l {{if l.vowel 'is-vowel'}} {{if l.blank 'is-blank'}}"
-            {{motion id=l.key role=(if l.blank "blank" "tile")}}
-          >
-            <b>{{l.ch}}</b>
-            {{#unless l.blank}}<i>{{l.worth}}</i>{{/unless}}
-          </span>
-        {{/each}}
+            {{#each this.letters as |l|}}
+              <span
+                class="dn-l {{if l.vowel 'is-vowel'}} {{if l.blank 'is-blank'}}"
+                {{motion id=l.key role=(if l.blank "blank" "tile")}}
+              >
+                <b>{{l.ch}}</b>
+                {{#unless l.blank}}<i>{{l.worth}}</i>{{/unless}}
+              </span>
+            {{/each}}
 
-        <c.Sequence>
-          {{! the gate is what keeps the score still until the slider asks }}
-          <c.Gate />
-          <c.Parallel>
-            {{! Four stops, evenly spaced along one clock. Linear, because
+            <c.Sequence>
+              {{! the gate is what keeps the score still until the slider asks }}
+              <c.Gate />
+              <c.Parallel>
+                {{! Four stops, evenly spaced along one clock. Linear, because
                 under a finger there is no time to have an opinion about —
                 the hand is already the curve. }}
-            {{! A role is a single value, not a list, so the blanks cannot be
+                {{! A role is a single value, not a list, so the blanks cannot be
                 both "tile" and "blank". `@of` takes an ARRAY of queries, which
                 is the honest way to say "everything that moves": the letters
                 and the blanks travel together, and only the blanks also
                 fade. }}
-            <c.Tween
-              @of={{array (c.role "tile") (c.role "blank")}}
-              @x={{this.xs}}
-              @y={{this.ys}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "vowels"}}
-              @opacity={{this.fadeVowels}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "bag"}}
-              @opacity={{this.fadeBag}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "points"}}
-              @opacity={{this.fadePoints}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "plot"}}
-              @opacity={{this.fadePlot}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "blank"}}
-              @opacity={{this.fadeBlank}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "game"}}
-              @opacity={{this.fadeGame}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-          </c.Parallel>
-        </c.Sequence>
-      </Choreo>
+                <c.Tween
+                  @of={{array (c.role "tile") (c.role "blank")}}
+                  @x={{this.xs}}
+                  @y={{this.ys}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "vowels"}}
+                  @opacity={{this.fadeVowels}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "bag"}}
+                  @opacity={{this.fadeBag}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "points"}}
+                  @opacity={{this.fadePoints}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "plot"}}
+                  @opacity={{this.fadePlot}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "blank"}}
+                  @opacity={{this.fadeBlank}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+                <c.Tween
+                  @of={{c.role "game"}}
+                  @opacity={{this.fadeGame}}
+                  @duration={{SPAN}}
+                  @ease={{LINEAR}}
+                />
+              </c.Parallel>
+            </c.Sequence>
+          </Choreo>
 
-      <div
-        class="dn-rail"
-        role="slider"
-        tabindex="0"
-        aria-label="Arrangement"
-        aria-valuemin="0"
-        aria-valuemax={{LAST}}
-        {{this.railed}}
-        {{on "keydown" this.key}}
-        {{on "pointerdown" this.grab}}
-        {{on "pointermove" this.move}}
-        {{on "pointerup" this.land}}
-        {{on "pointercancel" this.land}}
-      >
-        <span class="dn-track"></span>
-        {{#each STOPS as |stop i|}}
-          <button
-            type="button"
-            class="dn-notch"
-            data-notch={{i}}
-            style={{notch i}}
-            {{on "click" this.pick}}
-          ><span>{{stop}}</span></button>
-        {{/each}}
-        <span class="dn-thumb" {{this.thumbed}}></span>
-      </div>
+          <div
+            class="dn-rail"
+            role="slider"
+            tabindex="0"
+            aria-label="Arrangement"
+            aria-valuemin="0"
+            aria-valuemax={{LAST}}
+            {{this.railed}}
+            {{on "keydown" this.key}}
+            {{on "pointerdown" this.grab}}
+            {{on "pointermove" this.move}}
+            {{on "pointerup" this.land}}
+            {{on "pointercancel" this.land}}
+          >
+            <span class="dn-track"></span>
+            {{#each STOPS as |stop i|}}
+              <button
+                type="button"
+                class="dn-notch"
+                data-notch={{i}}
+                style={{notch i}}
+                {{on "click" this.pick}}
+              ><span>{{stop}}</span></button>
+            {{/each}}
+            <span class="dn-thumb" {{this.thumbed}}></span>
+          </div>
 
-      <p class="dn-hint">Drag the knob to scrub · tap a stop to play it</p>
+          <p class="dn-hint">Drag the knob · tap a stop · arrow keys</p>
+        </div></div>
     </div>
   </template>
 }
