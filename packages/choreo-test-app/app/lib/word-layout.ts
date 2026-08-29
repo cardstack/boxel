@@ -47,9 +47,9 @@ export interface TypeScale {
 }
 
 export interface WordBox {
+  width: number;
   /** left edge, relative to the start of the line */
   x: number;
-  width: number;
 }
 
 /** the canvas `font` shorthand for a scale */

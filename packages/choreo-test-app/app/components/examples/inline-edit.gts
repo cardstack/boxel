@@ -1,9 +1,10 @@
 import { concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
+import type { Sprite } from 'glimmer-motion';
 import {
   Choreo,
   type ChoreoContext,
@@ -11,7 +12,6 @@ import {
   motion,
   styles,
 } from 'glimmer-motion';
-import type { Sprite } from 'glimmer-motion';
 import {
   DateField,
   EmailField,
@@ -21,8 +21,8 @@ import {
 import {
   layoutWords,
   measureText,
-  type TypeScale,
   typeReady,
+  type TypeScale,
 } from 'test-app/lib/word-layout';
 
 /**
@@ -523,7 +523,7 @@ export class InlineEdit extends Component {
 
   get plan(): Map<Key, Word[]> {
     // read the generation so a font arriving re-measures everything
-    this.generation;
+    void this.generation;
     const view = origins('view');
     const edit = origins('edit');
     const plan = new Map<Key, Word[]>();
@@ -581,7 +581,7 @@ export class InlineEdit extends Component {
    */
   get chips() {
     // read the generation so a font arriving re-measures everything
-    this.generation;
+    void this.generation;
     return WIDEST.map(chip);
   }
 

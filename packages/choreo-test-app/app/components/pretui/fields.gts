@@ -25,8 +25,8 @@ import { motion } from 'glimmer-motion';
 export interface FieldArgs {
   id: string;
   label: string;
-  value: string;
   onChange: (value: string) => void;
+  value: string;
 }
 
 const value = (event: Event) => (event.target as HTMLInputElement).value;

@@ -6,7 +6,7 @@
  * not laid out by the browser, so the assertions have to check the numbers
  * the demo computed rather than trusting that flow got it right.
  */
-import { click, fillIn, find, render, settled } from '@ember/test-helpers';
+import { click, fillIn, find, render } from '@ember/test-helpers';
 import { animationsSettled, setupMotion } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';
@@ -517,7 +517,6 @@ module('Integration | inline edit', function (hooks) {
     await animationsSettled();
 
     await fillIn('.ie-plate[data-field="name"] input', 'Margarethe Vela');
-    await settled();
     await toggle();
     await animationsSettled();
 
