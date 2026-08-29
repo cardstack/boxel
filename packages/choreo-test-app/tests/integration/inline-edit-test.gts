@@ -145,6 +145,52 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
+   * The redraw at the handover, which was a measurement error after all.
+   *
+   * The flight word and the real text have to be the SAME text — same size,
+   * same weight, same tracking, same line box — or the last frame of the
+   * flight and the first frame of the real thing are two different
+   * renderings of one word, and the swap reads as a redraw. Two of those
+   * were wrong: the reading view sets the name at -0.03em while `.ie-word`
+   * wore the shared -0.01em, which is the tracking pretext had NOT measured
+   * against, so every letter after the first drifted; and centring a 1.18
+   * line box is not centring a 40px one, because where a glyph sits inside a
+   * line box comes from the font's metrics, so the whole flight rode a
+   * pixel high.
+   */
+  test('the flight and the real text are the same text, to the pixel', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+    // a round trip first: the score owns size, weight and tracking, so a
+    // word has none of them until a pass has run
+    await toggle();
+    await animationsSettled();
+    await toggle();
+    await animationsSettled();
+
+    const glyphs = (el: HTMLElement) => {
+      const range = document.createRange();
+      range.setStart(el.firstChild!, 0);
+      range.setEnd(el.firstChild!, Math.min(2, el.textContent!.length));
+      return range.getBoundingClientRect();
+    };
+
+    for (const key of ['name', 'email', 'dob']) {
+      const real = glyphs(field(key).querySelector('.ie-value')!);
+      const flown = glyphs(field(key).querySelector('.ie-word')!);
+      assert.deepEqual(
+        [
+          Math.round(flown.left - real.left),
+          Math.round(flown.top - real.top),
+          Math.round(flown.width - real.width),
+        ],
+        [0, 0, 0],
+        `${key} flies as the same text it lands as`
+      );
+    }
+  });
+
+  /**
    * The bug the eye caught first: "14 March 1986" arriving as "14  March1986".
    *
    * Each word used to travel alone, so nothing was interpolating the LINE —

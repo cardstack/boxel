@@ -44,12 +44,33 @@ const FIELDS = [
 type Key = (typeof FIELDS)[number]['key'];
 
 const MOVE = 0.55;
-const EASE = [0.22, 1, 0.36, 1] as const;
+/**
+ * Soft in, soft out.
+ *
+ * The rest of the gallery leaves the line at full speed — `[0.22, 1, 0.36,
+ * 1]`, all deceleration — which suits a card being thrown across a stage.
+ * Nothing here is thrown. A record turning into a form is a considered act,
+ * and type that starts moving instantly reads as a jump cut no matter how
+ * gently it lands. This eases in as well as out.
+ */
+const EASE = [0.4, 0, 0.2, 1] as const;
 const BOX = 0.42;
 
-/** the plate arrives by expanding, and leaves by collapsing back */
+/** the form comes apart faster than it assembles */
+const LEAVE = 0.24;
+
+/**
+ * The plate arrives by expanding and leaves by collapsing.
+ *
+ * It leaves further than it arrives, and faster, because of what is inside
+ * it: the control's own text is already gone — the flight is drawing that,
+ * and two copies of one value is the one thing this demo will not do — so a
+ * plate on its way out is an empty box, and an empty box that lingers reads
+ * as debris. Collapsing it harder is how it stops looking like something
+ * left behind.
+ */
 const PLATE_IN = [0.72, 1];
-const PLATE_OUT = [1, 0.72];
+const PLATE_OUT = [1, 0.58];
 
 const FAMILY = 'Archivo';
 const WORD_GAP = 0.3;
@@ -348,6 +369,24 @@ export class InlineEdit extends Component {
     return this.tween(VIEW.name.weight, EDIT.name.weight);
   }
 
+  /**
+   * Tracking is tweened, not left to the stylesheet, and it has to be.
+   *
+   * The reading view sets the name at -0.03em and everything else at -0.01em,
+   * and pretext measured every word against exactly those numbers. While the
+   * flight word wore the stylesheet's -0.01em instead, its glyphs were laid
+   * out to a tracking the plan had not used: the first letter landed on the
+   * pixel and every letter after it drifted, so the handover to the real text
+   * was a visible redraw of the same word at a slightly different width.
+   */
+  get nameTracking() {
+    return this.tween(`${VIEW.name.tracking}em`, `${EDIT.name.tracking}em`);
+  }
+
+  get subTracking() {
+    return this.tween(`${VIEW.dob.tracking}em`, `${EDIT.dob.tracking}em`);
+  }
+
   get subSize() {
     return this.tween(`${VIEW.dob.size}px`, `${EDIT.dob.size}px`);
   }
@@ -440,6 +479,7 @@ export class InlineEdit extends Component {
                   @label={{field.label}}
                   @value={{get this.record field.key}}
                   @onChange={{fn this.update field.key}}
+                  {{motion id=(concat field.key "-control") role="control"}}
                 />
               {{else if field.email}}
                 <EmailField
@@ -447,6 +487,7 @@ export class InlineEdit extends Component {
                   @label={{field.label}}
                   @value={{get this.record field.key}}
                   @onChange={{fn this.update field.key}}
+                  {{motion id=(concat field.key "-control") role="control"}}
                 />
               {{else}}
                 <TextField
@@ -454,6 +495,7 @@ export class InlineEdit extends Component {
                   @label={{field.label}}
                   @value={{get this.record field.key}}
                   @onChange={{fn this.update field.key}}
+                  {{motion id=(concat field.key "-control") role="control"}}
                 />
               {{/if}}
             {{else}}
@@ -482,7 +524,7 @@ export class InlineEdit extends Component {
           <c.Crossing
             @duration={{MOVE}}
             @ease={{EASE}}
-            @leave={{0.2}}
+            @leave={{0.14}}
             @arrive={{0.28}}
             @overlap={{0.42}}
           />
@@ -502,6 +544,7 @@ export class InlineEdit extends Component {
             @x={{this.wordX}}
             @fontSize={{this.nameSize}}
             @fontWeight={{this.nameWeight}}
+            @letterSpacing={{this.nameTracking}}
             @duration={{MOVE}}
             @ease={{EASE}}
           />
@@ -510,6 +553,7 @@ export class InlineEdit extends Component {
             @x={{this.wordX}}
             @fontSize={{this.subSize}}
             @fontWeight={{this.subWeight}}
+            @letterSpacing={{this.subTracking}}
             @duration={{MOVE}}
             @ease={{EASE}}
           />
@@ -542,7 +586,37 @@ export class InlineEdit extends Component {
           <c.Tween
             @of={{c.removed "plate"}}
             @scaleY={{PLATE_OUT}}
-            @duration={{BOX}}
+            @duration={{LEAVE}}
+            @ease={{EASE}}
+          />
+
+          {{! The controls leave WITH the plate. On the way in they are
+              invisible until the flight lands, so there is nothing to
+              animate there; on the way out the form should come apart as one
+              thing rather than have its values blink off a frame before
+              their own chrome. A departing control is in the orphan layer by
+              then — outside the card, and so outside the rule that hides a
+              real value while the flight is drawing it — which is what lets
+              it be seen going at all. }}
+          <c.Tween
+            @of={{c.removed "control"}}
+            @scaleY={{PLATE_OUT}}
+            @duration={{LEAVE}}
+            @ease={{EASE}}
+          />
+
+          {{! The controls leave WITH the plate. On the way in they are
+              invisible until the flight lands, so there is nothing to
+              animate; on the way out the form should come apart as one
+              thing rather than have its values blink off a frame before
+              their chrome. The departing control is in the orphan layer by
+              then — outside the card, and so outside the rule that hides a
+              real value while the flight is drawing it — which is what lets
+              it be seen going. }}
+          <c.Tween
+            @of={{c.removed "control"}}
+            @scaleY={{PLATE_OUT}}
+            @duration={{LEAVE}}
             @ease={{EASE}}
           />
         </c.Parallel>

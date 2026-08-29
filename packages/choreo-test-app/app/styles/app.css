@@ -10788,6 +10788,14 @@ html[data-gm-dragging] * {
    the height difference stays a height difference. */
 .ie {
   display: grid;
+  /* An EXPLICIT column, and it is load-bearing. An auto column is sized by
+     what its items ask for, and mid-flight the card asks for more than it is
+     given — so the column grew, the centred card was centred in something
+     wider than the stage, and the whole card lurched 70px right and slid
+     back over the next 150ms. That was the yank, and it was never the type.
+     A `minmax(0, 1fr)` column is the stage's width and nobody else's
+     business, so the contents may overflow it without moving anything. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 300px auto;
   gap: 14px;
   justify-items: center;
@@ -10973,33 +10981,40 @@ html[data-gm-dragging] * {
 }
 
 /* PHASE 2 — the flight layer. A word is out of flow, never wraps, and its
-   left edge is a number the score tweens. It is invisible at rest in BOTH
-   poses: the four opacity keyframes on its step are what make it the middle
-   of the transition and nothing else.
+   left edge is a number the score tweens.
+
+   Its LINE BOX is the same 40px the real text gets, and that is a fix rather
+   than a detail. Centring a `line-height: 1.18` box inside the field is not
+   the same as centring a 40px line box: where a glyph sits inside a line box
+   comes from the font's own metrics, so the flight rode 1.2px high on the
+   name and two thirds of a pixel high on the rest, and the handover to the
+   real text was a small vertical jump. Same line box, same baseline.
 
    `font-variation-settings` is gone on purpose — a variation axis cannot be
    said in the canvas font shorthand pretext measures with, so asking for one
    here would render a face half a line narrower than the widths the layout
-   was computed from. `font-stretch` reaches the same axis and is in the
+   was computed from. `font-stretch` reaches the same axis and IS in the
    shorthand, so both ends agree. */
 .ie-word {
   position: absolute;
-  top: 50%;
+  top: 0;
   left: 0;
-  translate: 0 -50%;
+  height: 40px;
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   color: var(--ink);
+  /* the rest tracking mirrors the real text's; the score's keyframes state
+     both ends anyway, so this only has to be right before the first pass */
   letter-spacing: -0.01em;
-  line-height: 1.18;
-  /* Hidden at BOTH ends, and shown only while the region says a scene
-     change is under way. There is no fade in either direction on purpose:
-     the word is the ONLY copy of the value for the length of the flight, so
-     there is nothing to blend it with.
+  line-height: 40px;
+  /* Hidden at BOTH ends, and shown only while the region says a scene change
+     is under way. There is no fade in either direction on purpose: the word
+     is the ONLY copy of the value for the length of the flight, so there is
+     nothing to blend it with.
 
-     VISIBILITY rather than opacity, and that is not a preference. A
-     participant's opacity is the engine's — it renders one inline, so a
+     VISIBILITY rather than opacity, and again not a preference: a
+     participant's opacity is the engine's — it renders one inline — so a
      rule here is simply outvoted, and the words sat fully opaque over the
      controls with a stylesheet that clearly said otherwise. Nothing in the
      library writes `visibility`. */
@@ -11033,10 +11048,14 @@ html[data-gm-dragging] * {
   line-height: 40px;
 }
 
+.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-value,
+.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-word {
+  letter-spacing: -0.03em;
+}
+
 .ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-value {
   font-size: 30px;
   font-weight: 700;
-  letter-spacing: -0.03em;
 }
 
 .ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-value,
@@ -11062,6 +11081,8 @@ html[data-gm-dragging] * {
   font-weight: 400;
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
+  /* the same line box the flight lands from — see `.ie-word` */
+  line-height: 40px;
   appearance: none;
 }
 
