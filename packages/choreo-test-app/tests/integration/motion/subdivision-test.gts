@@ -50,12 +50,24 @@ async function mount() {
   );
   await animationsSettled();
   const stage = find('[data-test-stage]') as HTMLElement;
-  // the grid sizes itself from container units; wait for a real box rather
-  // than measuring whatever the first frame happened to have
+  // Wait for a real TILE, not a real grid.
+  //
+  // `.subdivide` is `height: min(72cqh, 300px)`, and `cqh` reads 0 until the
+  // container query has resolved — so the demo can mount at full width with
+  // no height at all. The old guard watched `[data-test-grid]`, which is
+  // full-bleed and therefore already wider than 100px while every tile inside
+  // it was 47x10; it never once caught the case it was written for. The tile
+  // is the element whose box actually comes from the container units.
   await waitUntil(
     () => {
-      const g = stage.querySelector('[data-test-grid]') as HTMLElement | null;
-      return g ? g.getBoundingClientRect().width > 100 : false;
+      const t = stage.querySelector(
+        '[data-test-tile="atlas"]'
+      ) as HTMLElement | null;
+      if (!t) {
+        return false;
+      }
+      const box = t.getBoundingClientRect();
+      return box.width > 20 && box.height > 20;
     },
     { timeout: 4000 }
   ).catch(() => {
@@ -90,12 +102,13 @@ module('Integration | motion | subdivision', function (hooks) {
       return;
     }
 
-    const gridBox = bounds(grid);
+    const tileBox = bounds(tile);
     assert.true(
-      gridBox.width > 100,
-      `the demo came up on a real stage ${report({
-        grid: gridBox,
+      tileBox.width > 20 && tileBox.height > 20,
+      `the demo came up with real tiles ${report({
+        grid: bounds(grid),
         stage: bounds(stage),
+        tile: tileBox,
       })}`
     );
     assert.true(
@@ -141,10 +154,22 @@ module('Integration | motion | subdivision', function (hooks) {
         '(prefers-reduced-motion: reduce)'
       ).matches;
       if (!reduced) {
-        assert.false(
-          isMotionIdle(),
-          `layout animation is in flight: ${
-            whatIsBusy().join('; ') || '(nothing reported busy)'
+        // A projection animation starts on the frame AFTER the layout change,
+        // and `triggerEvent` resolves on a runloop flush that can land before
+        // it. Sampling once said "nothing reported busy" for an animation that
+        // had simply not begun. Wait for it to start, then say it started.
+        let started = false;
+        await waitUntil(
+          () => {
+            started ||= !isMotionIdle();
+            return started;
+          },
+          { timeout: 2000 }
+        ).catch(() => undefined);
+        assert.true(
+          started,
+          `the seam animated rather than snapping: ${
+            whatIsBusy().join('; ') || '(nothing ever reported busy)'
           }`
         );
       }

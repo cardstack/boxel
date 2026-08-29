@@ -1242,6 +1242,14 @@ html[data-gm-dragging] * {
 }
 
 .mode-rest {
+  /* Pinned to the floor of the slot, which is a fixed height already.
+     It used to sit immediately under the notices, so `sync` — the one mode
+     that briefly holds TWO — swung it 63px down and 63px back on every
+     switch. That excursion was the mode's layout being honest, and it read
+     as the panel lurching. Reserving the space instead means the only thing
+     that moves is the notice, which is the thing the mode is about: the
+     newcomer still enters BELOW the leaver and still rises as it unmounts. */
+  margin-top: auto;
   padding: 8px 12px;
   border-radius: 12px;
   background: var(--bg-spot);
