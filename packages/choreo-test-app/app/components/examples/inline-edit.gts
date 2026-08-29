@@ -659,128 +659,137 @@ export class InlineEdit extends Component {
   <template>
     {{! `data-flying` is set on this element by hand — see `toggle`. }}
     <div class="ex ie" style={{this.metrics}} {{this.hold}}>
-      <Choreo
-        class="ie-card"
-        data-mode={{if this.editing "edit" "view"}}
-        as |c|
-      >
+      <Choreo class="ie-stage" as |c|>
         {{this.grab c}}
 
-        {{! ── BACKGROUND: boxes that nest and never cross ────────────── }}
-        <div class="ie-head">
-          <span
-            class="ie-avatar"
-            data-test-avatar
-            {{motion id="avatar" role="avatar"}}
-          >
-            <b
-              class="ie-initials"
-              {{motion id="initials" role="initials" pack="content"}}
-            >{{this.initials}}</b>
-          </span>
+        {{! The white card is a PARTICIPANT, not the region itself. A region
+            is the frame a crossing is measured IN; it is not one of the
+            things measured, so a card that WAS the region had no before and
+            after of its own and snapped between its two heights while
+            everything inside it flew. One element in, and it is FLIPped like
+            any other box on the card. }}
+        <div
+          class="ie-card"
+          data-mode={{if this.editing "edit" "view"}}
+          {{motion id="card" role="card"}}
+        >
 
-          <span class="ie-kicker" {{motion id="kicker" role="type"}}>
-            {{if this.editing "Editing profile" "Kiln Engineering"}}
-          </span>
+          {{! ── BACKGROUND: boxes that nest and never cross ────────────── }}
+          <div class="ie-head">
+            <span
+              class="ie-avatar"
+              data-test-avatar
+              {{motion id="avatar" role="avatar"}}
+            >
+              <b
+                class="ie-initials"
+                {{motion id="initials" role="initials" pack="content"}}
+              >{{this.initials}}</b>
+            </span>
 
-          {{! Top right of the card, the way a phone puts Edit and Done: the
+            <span class="ie-kicker" {{motion id="kicker" role="type"}}>
+              {{if this.editing "Editing profile" "Kiln Engineering"}}
+            </span>
+
+            {{! Top right of the card, the way a phone puts Edit and Done: the
               control that changes the mode belongs to the thing whose mode
               it changes, not to the page around it. }}
-          <button
-            type="button"
-            class="ie-toggle"
-            data-test-toggle
-            {{on "click" this.toggle}}
-          >{{if this.editing "Done" "Edit"}}</button>
-        </div>
+            <button
+              type="button"
+              class="ie-toggle"
+              data-test-toggle
+              {{on "click" this.toggle}}
+            >{{if this.editing "Done" "Edit"}}</button>
+          </div>
 
-        <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
+          <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
 
-        {{#each this.fields as |field|}}
-          {{#if this.editing}}
-            <span
-              class="ie-label"
-              data-label={{field.key}}
-              style={{this.labelArea field.key}}
-              {{motion id=(concat field.key "-label") role="label"}}
-            >{{field.label}}</span>
-          {{/if}}
+          {{#each this.fields as |field|}}
+            {{#if this.editing}}
+              <span
+                class="ie-label"
+                data-label={{field.key}}
+                style={{this.labelArea field.key}}
+                {{motion id=(concat field.key "-label") role="label"}}
+              >{{field.label}}</span>
+            {{/if}}
 
-          {{! The platter IS the field: its own lane, its own border, and
+            {{! The platter IS the field: its own lane, its own border, and
               everything the field consists of inside it. It carries no text
               of its own in the reading view, which is why it can be empty
               there without looking like an empty box — it is invisible. }}
-          <div
-            class="ie-plate"
-            data-field={{field.key}}
-            data-test-field={{field.key}}
-            style={{this.area field.key}}
-            {{motion id=(concat field.key "-plate") role="plate"}}
-          >
-            {{#if this.editing}}
-              {{#if field.date}}
-                <DateField
-                  @id={{concat "ie-" field.key}}
-                  @label={{field.label}}
-                  @value={{get this.record field.key}}
-                  @onChange={{fn this.update field.key}}
-                  {{motion id=(concat field.key "-control") role="control"}}
-                />
-              {{else if field.email}}
-                <EmailField
-                  @id={{concat "ie-" field.key}}
-                  @label={{field.label}}
-                  @value={{get this.record field.key}}
-                  @onChange={{fn this.update field.key}}
-                  {{motion id=(concat field.key "-control") role="control"}}
-                />
-              {{else}}
-                <TextField
-                  @id={{concat "ie-" field.key}}
-                  @label={{field.label}}
-                  @value={{get this.record field.key}}
-                  @onChange={{fn this.update field.key}}
-                  {{motion id=(concat field.key "-control") role="control"}}
-                />
+            <div
+              class="ie-plate"
+              data-field={{field.key}}
+              data-test-field={{field.key}}
+              style={{this.area field.key}}
+              {{motion id=(concat field.key "-plate") role="plate"}}
+            >
+              {{#if this.editing}}
+                {{#if field.date}}
+                  <DateField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                    {{motion id=(concat field.key "-control") role="control"}}
+                  />
+                {{else if field.email}}
+                  <EmailField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                    {{motion id=(concat field.key "-control") role="control"}}
+                  />
+                {{else}}
+                  <TextField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                    {{motion id=(concat field.key "-control") role="control"}}
+                  />
+                {{/if}}
               {{/if}}
-            {{/if}}
-          </div>
-        {{/each}}
+            </div>
+          {{/each}}
 
-        {{! ── FOREGROUND: type, over the card and laid out by nobody ─────
+          {{! ── FOREGROUND: type, over the card and laid out by nobody ─────
             Not inside a platter, so nothing clips it and nothing lays it
             out; free to cross, which is how the reading view puts email and
             date of birth on one line while their platters keep two separate
             lanes. Everything it needs — where, how big, how heavy, how
             tightly set — it carries itself, from pretext. }}
-        <div class="ie-type">
-          {{#unless this.editing}}
-            {{#each this.strings as |line|}}
-              <span
-                class="ie-value"
-                data-value={{line.key}}
-                style={{line.place}}
-              >{{line.value}}</span>
-            {{/each}}
-          {{/unless}}
+          <div class="ie-type">
+            {{#unless this.editing}}
+              {{#each this.strings as |line|}}
+                <span
+                  class="ie-value"
+                  data-value={{line.key}}
+                  style={{line.place}}
+                >{{line.value}}</span>
+              {{/each}}
+            {{/unless}}
 
-          {{#each this.fields as |field|}}
-            {{#each (this.words field.key) key="id" as |part|}}
-              <span
-                class="ie-word"
-                data-field={{field.key}}
-                aria-hidden="true"
-                {{motion
-                  id=part.id
-                  role="value"
-                  style=(styles
-                    x=(if this.editing part.edit.x part.view.x)
-                    y=(if this.editing part.edit.y part.view.y)
-                  )
-                }}
-              >{{part.word}}</span>
+            {{#each this.fields as |field|}}
+              {{#each (this.words field.key) key="id" as |part|}}
+                <span
+                  class="ie-word"
+                  data-field={{field.key}}
+                  aria-hidden="true"
+                  {{motion
+                    id=part.id
+                    role="value"
+                    style=(styles
+                      x=(if this.editing part.edit.x part.view.x)
+                      y=(if this.editing part.edit.y part.view.y)
+                    )
+                  }}
+                >{{part.word}}</span>
+              {{/each}}
             {{/each}}
-          {{/each}}
+          </div>
         </div>
 
         <c.Parallel>
@@ -793,6 +802,8 @@ export class InlineEdit extends Component {
           />
 
           {{! The background moves as boxes: real geometry, along its lane. }}
+          <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
+          <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />

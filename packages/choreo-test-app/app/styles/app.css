@@ -10807,10 +10807,17 @@ html[data-gm-dragging] * {
    poses are different heights on purpose, and a centred card would turn that
    into vertical drift under every flight. Its rows and its height come from
    the component — see above. */
-.ie-card {
+.ie-stage {
   position: relative;
   display: grid;
   align-self: start;
+  justify-items: center;
+  width: 100%;
+}
+
+.ie-card {
+  position: relative;
+  display: grid;
   box-sizing: border-box;
   width: min(100%, 340px);
   /* the lane order, the row heights and the card's height are the form's

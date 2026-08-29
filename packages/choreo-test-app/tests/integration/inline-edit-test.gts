@@ -271,6 +271,41 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
+   * And the white card tweens too, which took making it a participant.
+   *
+   * A region is the frame a crossing is measured IN — it is not one of the
+   * things measured, so it has no before and after of its own. The card WAS
+   * the region, so it snapped between its two heights on the first frame
+   * while everything inside it flew. One element in, and it is FLIPped like
+   * any other box.
+   */
+  test('the card tweens its height rather than snapping', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+    const start = card().offsetHeight;
+
+    await click('[data-test-toggle]');
+    let played = 0;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((go) => requestAnimationFrame(go));
+      if (/height|transform/.test(card().getAttribute('style') ?? '')) {
+        played++;
+      }
+    }
+    await animationsSettled();
+
+    assert.notEqual(
+      start,
+      card().offsetHeight,
+      'the card is a different height in the two poses'
+    );
+    assert.ok(
+      played >= 2,
+      `and its box was the move's for more than one frame (${played})`
+    );
+  });
+
+  /**
    * The platters TWEEN. They snapped once, and how they snapped is worth a
    * case of its own.
    *
