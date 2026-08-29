@@ -10853,7 +10853,7 @@ html[data-gm-dragging] * {
      started in the wrong place. */
   grid-template-areas: var(--ie-areas);
   grid-template-columns: minmax(0, 1fr);
-  padding: 18px;
+  padding: var(--ie-pad);
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--bg-elev);
@@ -10875,9 +10875,13 @@ html[data-gm-dragging] * {
 /* the mode switch belongs to the thing whose mode it changes, in the card's
    own top-right corner the way a phone puts Done */
 .ie-toggle {
+  /* against the padding, in the card's own corner, and the SAME corner in
+     both poses: EDIT and DONE are different lengths, and a pill that
+     shrink-wraps its label moves the one control that should be the fixed
+     point of the whole transition */
   position: absolute;
-  top: 13px;
-  right: 13px;
+  top: var(--ie-pad);
+  right: var(--ie-pad);
   z-index: 3;
   /* One size in both states. EDIT and DONE are different lengths, and a
      pill that shrink-wraps its label moves its own left edge when the mode
@@ -11005,6 +11009,9 @@ html[data-gm-dragging] * {
 /* the label exists only in the form: it arrives with the editor and leaves
    with it, which is what says the card changed MODE rather than reflowed */
 .ie-label {
+  /* under its own platter, which is painted over it: the label rises out
+     from behind the field it names rather than appearing above it */
+  z-index: 0;
   align-self: end;
   padding-bottom: 4px;
   color: var(--ink-faint);
@@ -11058,7 +11065,7 @@ html[data-gm-dragging] * {
    through to the real controls underneath. */
 .ie-type {
   position: absolute;
-  inset: 18px;
+  inset: var(--ie-pad);
   z-index: 2;
   pointer-events: none;
 }

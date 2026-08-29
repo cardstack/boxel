@@ -20,7 +20,9 @@ const field = (key: string) =>
   find(`.ie-plate[data-field="${key}"]`) as HTMLElement;
 
 const words = (key: string) => [
-  ...document.querySelectorAll<HTMLElement>(`.ie-word[data-field="${key}"]`),
+  ...document.querySelectorAll<HTMLElement>(
+    `.ie-word[data-field="${key}"]:not([data-ghost])`
+  ),
 ];
 
 /**
@@ -302,6 +304,31 @@ module('Integration | inline edit', function (hooks) {
     assert.ok(
       played >= 2,
       `and its box was the move's for more than one frame (${played})`
+    );
+  });
+
+  /**
+   * The keyboard reaches Done by carrying on.
+   *
+   * The mode switch is placed in the card's corner by position, so its
+   * document order is free — and it was first, which put Done between the
+   * user and the form they were about to fill in. It is last now: tab out of
+   * the year and the next stop is the button that commits.
+   */
+  test('Done is the last stop after the form', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+    await toggle();
+    await animationsSettled();
+
+    assert.deepEqual(
+      [
+        ...(find('.ie-card') as HTMLElement).querySelectorAll<HTMLElement>(
+          'input, select, button'
+        ),
+      ].map((el) => el.getAttribute('aria-label') ?? el.className),
+      ['Name', 'Job title', 'Email', 'Day', 'Month', 'Year', 'ie-toggle'],
+      'the form in order, and the commit at the end of it'
     );
   });
 
