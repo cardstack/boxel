@@ -189,6 +189,45 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
+   * The form's chrome belongs to the container, not to the text.
+   *
+   * The plate and the label used to live INSIDE the field, and the field is
+   * the one thing in a row that travels — the date flies the width of the
+   * card. So the plate stretched and slid across the card behind the words
+   * and the label came sailing in from the right, and the transition read as
+   * the layout being yanked rather than as the type moving. They are
+   * siblings sharing the field's grid area now, in no Move at all: they are
+   * at their destination on the first frame and stay there.
+   */
+  test('the plates do not travel — they are where they land, from frame one', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+
+    const plates = () =>
+      [...document.querySelectorAll<HTMLElement>('.ie-plate')].map((el) => {
+        const box = el.getBoundingClientRect();
+        return [Math.round(box.left), Math.round(box.width)].join('x');
+      });
+
+    await click('[data-test-toggle]');
+    const during: string[][] = [];
+    for (let i = 0; i < 5; i++) {
+      await new Promise((go) => requestAnimationFrame(go));
+      during.push(plates());
+    }
+    await animationsSettled();
+    const landed = plates();
+
+    for (const sample of during) {
+      assert.deepEqual(
+        sample,
+        landed,
+        'the chrome never moves while the type is in flight'
+      );
+    }
+  });
+
+  /**
    * The flight is the MIDDLE phase: never two copies of a value on screen.
    *
    * `visibility` rather than opacity is load-bearing, and the assertion is
@@ -213,8 +252,8 @@ module('Integration | inline edit', function (hooks) {
 
     assert.strictEqual(shown(), 0, 'nothing over the form controls');
     assert.notOk(
-      card().dataset['flying'],
-      'and the region is no longer armed once the pass has settled'
+      (find('.ie') as HTMLElement).dataset['flying'],
+      'and the arming has stood down once the pass has settled'
     );
   });
 

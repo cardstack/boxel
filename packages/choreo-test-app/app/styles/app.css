@@ -10907,55 +10907,45 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* A field owns no height of its own: the card's row template states it, once
-   per mode, where the difference between the two poses is legible. The box
-   sits at the BOTTOM of whatever room it is given, so the label above it
-   arrives by pushing down from the top rather than shoving the value. */
-.ie-field {
-  position: relative;
-  display: grid;
-  gap: 4px;
-  align-content: end;
-  min-width: 0;
-}
-
-/* The form's chrome, and nothing else. It is a SIBLING of the text rather
-   than its container, so it can be left out of every Move: the words fly,
-   the plate stays where the form puts it and fades up in place. Its rest
-   pose here is the FORM's — the reading view is where it is invisible,
-   which is the honest way round for a thing only the form has. */
-.ie-plate {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 40px;
-  border: 1px solid rgb(28 22 18 / 22%);
-  border-radius: 9px;
-  background: var(--bg);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.ie-card[data-mode='edit'] .ie-plate {
-  opacity: 1;
-}
-
+/* The three things a field row is made of, all sharing one grid area and
+   stacked on top of each other: the plate behind, the label above, and the
+   text itself. They are SIBLINGS rather than nested, which is what lets the
+   field travel without dragging the chrome with it — see `.ie-field`. */
+.ie-plate[data-plate='name'],
+.ie-label[data-label='name'],
 .ie-field[data-field='name'] {
   grid-area: name;
 }
 
+.ie-plate[data-plate='email'],
+.ie-label[data-label='email'],
 .ie-field[data-field='email'] {
   grid-area: email;
 }
 
+.ie-plate[data-plate='dob'],
+.ie-label[data-label='dob'],
 .ie-field[data-field='dob'] {
   grid-area: dob;
+}
+
+/* The form's chrome, and nothing else. It exists only in the form — there is
+   no invisible copy of it sitting in the reading view — so the crossing owns
+   its fade, and it is in no Move at all: it belongs to the container rather
+   than to the text, and it arrives by expanding where it lands. */
+.ie-plate {
+  align-self: end;
+  height: 40px;
+  border: 1px solid rgb(28 22 18 / 22%);
+  border-radius: 9px;
+  background: var(--bg);
+  pointer-events: none;
 }
 
 /* the label exists only in the form: it arrives with the editor and leaves
    with it, which is what says the card changed MODE rather than reflowed */
 .ie-label {
+  align-self: start;
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -10963,19 +10953,14 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* ONE box in both states, so there is nothing to align.
-   These were two rules — a value and an editor — and the words inside them
-   were counterpart pairs the crossing had to pin together. It could not,
-   because the arriving copy animated its own font-size and so moved the box
-   the pin was computed from: mid-flight the name appeared twice, large and
-   small, sliding past each other. The box now persists and only its chrome
-   changes, which is also why the height can be fixed without a fight. */
-/* The line's box. It draws nothing — the plate behind it draws every bit of
-   the form's chrome — and it holds no layout either: every word inside it is
-   out of flow, at an x pretext worked out. So the box is a coordinate frame
-   and nothing else, which is exactly what makes the type safe to resize. */
-.ie-box {
+/* The line itself, and the only thing in a row that travels. It draws
+   nothing and it holds no layout: every word inside it is out of flow at an
+   x pretext worked out, so the box is a coordinate frame and nothing else,
+   which is exactly what makes the type safe to resize. */
+.ie-field {
   position: relative;
+  z-index: 1;
+  align-self: end;
   box-sizing: border-box;
   height: 40px;
   min-width: 0;
@@ -10983,18 +10968,8 @@ html[data-gm-dragging] * {
   overflow: visible;
 }
 
-/* the chrome is the only thing the mode switches, and it is a colour change
-   on a box that never moves — cheap, and it cannot disturb the type */
-/* the form's 11px inset is folded into the measured x, not into padding:
-   a padding change is a jump on the frame the mode flips, and an inset
-   carried in the numbers is tweened along with everything else */
-.ie-card[data-mode='edit'] .ie-box {
+.ie-card[data-mode='edit'] .ie-field {
   cursor: text;
-}
-
-.ie-box:focus-visible {
-  outline: 2px solid #ff7a28;
-  outline-offset: 1px;
 }
 
 /* PHASE 2 — the flight layer. A word is out of flow, never wraps, and its
@@ -11032,15 +11007,20 @@ html[data-gm-dragging] * {
   pointer-events: none;
 }
 
-.ie-card[data-flying] .ie-word {
+.ie[data-flying] .ie-word {
   visibility: visible;
 }
 
-/* the real control keeps its box, its caret and its focus for the whole
-   flight — only its TEXT stands aside, because the flight is drawing it */
-.ie-card[data-flying] .ie-value,
-.ie-card[data-flying] .pt-input {
-  color: transparent;
+/* The real value stands aside for exactly as long as the flight is drawing
+   it. VISIBILITY again, and again not a preference: `color: transparent` was
+   outspecified by the two rules that give the reading view its type scale —
+   which are three selectors long, because they name the mode and the field —
+   so the name went quiet and email and date of birth showed through the
+   flight as a doubled, offset copy of themselves. Nothing else in this
+   stylesheet sets `visibility`, so one selector is enough. */
+.ie[data-flying] .ie-value,
+.ie[data-flying] .pt-input {
+  visibility: hidden;
 }
 
 /* PHASE 1 — the reading view's own markup: an ordinary string in ordinary

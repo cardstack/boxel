@@ -2,6 +2,7 @@ import { concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
 import {
   Choreo,
   type ChoreoContext,
@@ -45,6 +46,10 @@ type Key = (typeof FIELDS)[number]['key'];
 const MOVE = 0.55;
 const EASE = [0.22, 1, 0.36, 1] as const;
 const BOX = 0.42;
+
+/** the plate arrives by expanding, and leaves by collapsing back */
+const PLATE_IN = [0.72, 1];
+const PLATE_OUT = [1, 0.72];
 
 const FAMILY = 'Archivo';
 const WORD_GAP = 0.3;
@@ -190,10 +195,12 @@ export class InlineEdit extends Component {
   };
 
   private region?: ChoreoContext;
+  private root?: HTMLElement;
 
-  get flying() {
-    return this.arming.active();
-  }
+  hold = modifier((el: HTMLElement) => {
+    this.root = el;
+    return () => (this.root = undefined);
+  });
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args as never);
@@ -217,9 +224,29 @@ export class InlineEdit extends Component {
     this.record = { ...this.record, [key]: value };
   };
 
+  /**
+   * The flag is written by HAND, and that is the whole reason this works.
+   *
+   * `arming.active()` is tracked, so reading it in the template re-renders
+   * this component when the arming stands down — and a render inside the
+   * region is a pass, and a pass is a crossing. Standing down at the end of
+   * a flight kicked off a second one, and the whole transition played
+   * through again: measured, `x` reset from 11 to 1.9 and climbed back. Every
+   * step here is a keyframe ARRAY, which states both ends explicitly, so a
+   * replay is not a no-op — it starts over from a pose the card has left.
+   *
+   * `settled()` is the same arming, read as a promise instead of as tracked
+   * state: all four of its subtleties, none of its renders.
+   */
   toggle = () => {
+    this.moving = true;
+    this.root?.setAttribute('data-flying', 'true');
     if (this.region) {
       this.arming.begin(this.region);
+      void this.arming.settled().then(() => {
+        this.moving = false;
+        this.root?.removeAttribute('data-flying');
+      });
     }
     this.editing = !this.editing;
   };
@@ -267,56 +294,84 @@ export class InlineEdit extends Component {
   wordX = (sprite: Sprite) => {
     for (const words of this.plan.values()) {
       const found = words.find((word) => word.id === sprite.id);
-      if (found) {
-        return this.editing
-          ? [found.view, found.edit]
-          : [found.edit, found.view];
+      if (!found) {
+        continue;
       }
+      if (!this.moving) {
+        return this.editing ? found.edit : found.view;
+      }
+      return this.editing ? [found.view, found.edit] : [found.edit, found.view];
     }
     return 0;
   };
 
-  private pair = <T,>(from: T, to: T) =>
-    this.editing ? [from, to] : [to, from];
+  /**
+   * Is a mode change actually in flight? A PLAIN field, never tracked.
+   *
+   * Every step below is a keyframe ARRAY — it states both ends, because the
+   * rest poses live in CSS and a step given one target finds the element
+   * already there and animates nothing. The cost of saying both ends is that
+   * a keyframe array is not idempotent: ANY later pass replays it from a
+   * pose the card has already left. And a later pass is not hypothetical —
+   * one arrives as this run settles, and the plates and the avatar's corners
+   * were visibly animating back out of the form after the card had finished
+   * becoming a card again.
+   *
+   * So each prop is a FUNCTION rather than a value. A step property may be a
+   * function, and it is evaluated per pass — which means it can answer
+   * differently for the pass that IS the mode change and for every other
+   * pass the region will ever run. Outside the crossing it returns the one
+   * value the card is currently at, and the step is the no-op it should be.
+   */
+  private moving = false;
+
+  /**
+   * `(view, edit)` in; a per-pass answer out — both ends while crossing, the
+   * current end otherwise.
+   */
+  private tween =
+    <T,>(view: T, edit: T) =>
+    () =>
+      this.moving
+        ? this.editing
+          ? [view, edit]
+          : [edit, view]
+        : this.editing
+          ? edit
+          : view;
 
   get nameSize() {
-    return this.pair(`${VIEW.name.size}px`, `${EDIT.name.size}px`);
+    return this.tween(`${VIEW.name.size}px`, `${EDIT.name.size}px`);
   }
 
   get nameWeight() {
-    return this.pair(VIEW.name.weight, EDIT.name.weight);
+    return this.tween(VIEW.name.weight, EDIT.name.weight);
   }
 
   get subSize() {
-    return this.pair(`${VIEW.dob.size}px`, `${EDIT.dob.size}px`);
+    return this.tween(`${VIEW.dob.size}px`, `${EDIT.dob.size}px`);
   }
 
   get subWeight() {
-    return this.pair(VIEW.dob.weight, EDIT.dob.weight);
+    return this.tween(VIEW.dob.weight, EDIT.dob.weight);
   }
 
   get initialSize() {
-    return this.pair('28px', '14px');
+    return this.tween('28px', '14px');
   }
 
   get avatarRadius() {
-    return this.pair('36px', '10px');
-  }
-
-  get plateOpacity() {
-    return this.pair(0, 1);
-  }
-
-  get plateScale() {
-    return this.pair(0.72, 1);
+    return this.tween('36px', '10px');
   }
 
   <template>
-    <div class="ex ie">
+    {{! `data-flying` is set on this element by hand rather than rendered —
+        see `toggle`. Reading the arming as tracked state re-renders the
+        component, and a render inside the region is another crossing. }}
+    <div class="ex ie" {{this.hold}}>
       <Choreo
         class="ie-card"
         data-mode={{if this.editing "edit" "view"}}
-        data-flying={{if this.flying "true"}}
         as |c|
       >
         {{this.grab c}}
@@ -340,28 +395,35 @@ export class InlineEdit extends Component {
         <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
 
         {{#each this.fields as |field|}}
+          {{! The plate and the label are SIBLINGS of the field, not children
+              of it, and they share its grid area rather than living inside
+              it. Inside, they were dragged by the field's own Move: the date
+              flies the width of the card, so its plate stretched and slid
+              across the card behind the words and its label came sailing in
+              from the right. Nothing about the form's chrome is travelling —
+              it belongs to the container. Out here it simply expands and
+              fades where it lands, and the only thing the transition moves
+              is the type. }}
+          {{#if this.editing}}
+            <span
+              class="ie-plate"
+              data-plate={{field.key}}
+              {{motion id=(concat field.key "-plate") role="plate"}}
+            ></span>
+            <span
+              class="ie-label"
+              data-label={{field.key}}
+              {{motion id=(concat field.key "-label") role="label"}}
+            >{{field.label}}</span>
+          {{/if}}
+
           <div
             class="ie-field"
             data-field={{field.key}}
+            data-test-field={{field.key}}
             {{motion id=(concat field.key "-field") role="field"}}
           >
-            {{! The form's chrome is its own element, so it can be left out of
-                every Move: it belongs to the container rather than to the
-                text, and it arrives where the form puts it. }}
-            <span
-              class="ie-plate"
-              {{motion id=(concat field.key "-plate") role="plate"}}
-            ></span>
-
-            {{#if this.editing}}
-              <span
-                class="ie-label"
-                {{motion id=(concat field.key "-label") role="label"}}
-              >{{field.label}}</span>
-            {{/if}}
-
-            <div class="ie-box" data-test-field={{field.key}}>
-              {{! PHASE 1 and PHASE 3: real DOM at both ends. Neither carries
+            {{! PHASE 1 and PHASE 3: real DOM at both ends. Neither carries
                   a motion id, and that is deliberate — they are not in the
                   crossing at all. There is never a moment with two copies of
                   a value on screen: the string is gone the instant the
@@ -371,49 +433,48 @@ export class InlineEdit extends Component {
                   two identical copies blending, which reads as a ghost — and
                   a ghost is what you get when the two do not agree, so the
                   right answer is to make them agree and show one. }}
-              {{#if this.editing}}
-                {{#if field.date}}
-                  <DateField
-                    @id={{concat "ie-" field.key}}
-                    @label={{field.label}}
-                    @value={{get this.record field.key}}
-                    @onChange={{fn this.update field.key}}
-                  />
-                {{else if field.email}}
-                  <EmailField
-                    @id={{concat "ie-" field.key}}
-                    @label={{field.label}}
-                    @value={{get this.record field.key}}
-                    @onChange={{fn this.update field.key}}
-                  />
-                {{else}}
-                  <TextField
-                    @id={{concat "ie-" field.key}}
-                    @label={{field.label}}
-                    @value={{get this.record field.key}}
-                    @onChange={{fn this.update field.key}}
-                  />
-                {{/if}}
+            {{#if this.editing}}
+              {{#if field.date}}
+                <DateField
+                  @id={{concat "ie-" field.key}}
+                  @label={{field.label}}
+                  @value={{get this.record field.key}}
+                  @onChange={{fn this.update field.key}}
+                />
+              {{else if field.email}}
+                <EmailField
+                  @id={{concat "ie-" field.key}}
+                  @label={{field.label}}
+                  @value={{get this.record field.key}}
+                  @onChange={{fn this.update field.key}}
+                />
               {{else}}
-                <span class="ie-value">{{get this.record field.key}}</span>
+                <TextField
+                  @id={{concat "ie-" field.key}}
+                  @label={{field.label}}
+                  @value={{get this.record field.key}}
+                  @onChange={{fn this.update field.key}}
+                />
               {{/if}}
+            {{else}}
+              <span class="ie-value">{{get this.record field.key}}</span>
+            {{/if}}
 
-              {{! PHASE 2: the flight. These words are in the DOM in every
+            {{! PHASE 2: the flight. These words are in the DOM in every
                   phase — that is what lets the region keep their identity and
                   fly them with the field — but they are only ever VISIBLE
                   between the two real poses. }}
-              {{#each (this.words field.key) key="id" as |part|}}
-                <span
-                  class="ie-word"
-                  aria-hidden="true"
-                  {{motion
-                    id=part.id
-                    role=field.role
-                    style=(styles x=(if this.editing part.edit part.view))
-                  }}
-                >{{part.word}}</span>
-              {{/each}}
-            </div>
+            {{#each (this.words field.key) key="id" as |part|}}
+              <span
+                class="ie-word"
+                aria-hidden="true"
+                {{motion
+                  id=part.id
+                  role=field.role
+                  style=(styles x=(if this.editing part.edit part.view))
+                }}
+              >{{part.word}}</span>
+            {{/each}}
           </div>
         {{/each}}
 
@@ -465,10 +526,22 @@ export class InlineEdit extends Component {
             @duration={{BOX}}
             @ease={{EASE}}
           />
+          {{! The plate is INSERTED and REMOVED, not kept — the form's chrome
+              exists only in the form. So the crossing owns its fade, and the
+              only thing left to say is that it should arrive by expanding.
+              These two need no per-pass guard: an inserted or removed query
+              selects nothing on a pass where nothing was inserted or
+              removed, which is what makes them safe to state as constants
+              while every kept step here has to be a function. }}
           <c.Tween
-            @of={{c.kept "plate"}}
-            @opacity={{this.plateOpacity}}
-            @scaleY={{this.plateScale}}
+            @of={{c.inserted "plate"}}
+            @scaleY={{PLATE_IN}}
+            @duration={{BOX}}
+            @ease={{EASE}}
+          />
+          <c.Tween
+            @of={{c.removed "plate"}}
+            @scaleY={{PLATE_OUT}}
             @duration={{BOX}}
             @ease={{EASE}}
           />
