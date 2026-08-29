@@ -20,9 +20,7 @@ const field = (key: string) =>
   find(`.ie-plate[data-field="${key}"]`) as HTMLElement;
 
 const words = (key: string) => [
-  ...document.querySelectorAll<HTMLElement>(
-    `.ie-word[data-field="${key}"]:not([data-ghost])`
-  ),
+  ...document.querySelectorAll<HTMLElement>(`.ie-word[data-field="${key}"]`),
 ];
 
 /**

@@ -356,7 +356,7 @@ const InlineEditNotes: TOC<object> = <template>
     </section>
 
     <section class="dd">
-      <h3>Weight, and what to do when an engine will not tween it</h3>
+      <h3>A variable font, and a hypothesis that did not survive</h3>
       <div class="dd-col">
         <p>
           A variable font is what makes a weight change animatable at all: with
@@ -366,27 +366,38 @@ const InlineEditNotes: TOC<object> = <template>
           as unitless in the library is what lets it interpolate as a number.
         </p>
         <p>
-          But every distinct weight is a fresh glyph raster, and engines differ
-          enormously in how they cache that. Blink holds the variations across
-          frames; WebKit largely re-shapes and re-rasters. A dozen words each
+          It is also expensive, at least in theory. Every distinct weight is a
+          fresh glyph raster, and engines differ in how they cache that — so
+          when this demo turned out to be markedly slower in Safari than in
+          Chrome, the weight tween was the obvious suspect. A dozen words each
           interpolating weight for half a second is a dozen text runs
-          re-rendered sixty times a second, and on Safari it is the single most
-          expensive thing this demo asks for.
+          re-rendered sixty times a second.
         </p>
         <p>
-          The fix is not to drop the weight change — it is to stop INTERPOLATING
-          it. The word is drawn twice, each copy at a constant weight, and the
-          one being left dissolves into the one being arrived at. Two static
-          text runs cost less than one animated one, and a dissolve between two
-          weights of the same word in the same place reads as the weight
-          changing. Size, position, kerning and colour still travel.
+          <b>It was not the cause.</b>
+          Disabling the weight tween in Safari — snapping it, and crossfading
+          two constant-weight copies so the change still read — made no
+          measurable difference, and the branch was removed rather than kept on
+          the strength of a plausible story. It cost a user-agent sniff, a
+          doubled DOM and two extra steps, for nothing.
         </p>
         <p>
-          It is engine-sniffed, which is not a happy sentence to write. There is
-          no media query for "does this engine rasterise variations cheaply" —
-          it is a performance characteristic, not a capability, and the honest
-          alternative is measuring frame times at runtime and degrading, which
-          is a great deal of machinery for one property.
+          Which leaves the real cause unfound, and the remaining suspects worth
+          writing down for whoever looks next. A rounded
+          <code>overflow: hidden</code>
+          clip on four platters that resize every frame is a known WebKit
+          hotspot. So is repainting a rounded, filled box while its geometry
+          animates — which is what the card and every platter are doing. And the
+          weight was only one of four text properties in flight: size, tracking
+          and colour all re-shape or re-paint the run too, and
+          <code>font-size</code>
+          is the one that re-shapes every glyph.
+        </p>
+        <p>
+          The lesson is the ordinary one and it is worth stating plainly: a
+          performance hypothesis you cannot measure is a guess, and shipping a
+          guess costs complexity whether or not it was right. Bisect by
+          disabling one suspect at a time in the browser that is slow.
         </p>
       </div>
     </section>

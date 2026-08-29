@@ -256,27 +256,6 @@ const FAMILY = 'Archivo';
  */
 const STRETCH = 'semi-condensed';
 
-/**
- * WebKit does not tween a variable font's weight cheaply.
- *
- * Every distinct weight is a fresh glyph raster, and Blink caches the
- * variations across frames where WebKit largely re-shapes and re-rasters —
- * so a card with a dozen words each interpolating `font-weight` for half a
- * second is a dozen text runs re-rendered sixty times a second. It is the
- * single most expensive thing this demo asks for, and it is the one property
- * whose absence costs the least: the size, the position and the kerning all
- * still travel, and the weight arrives at the landing.
- *
- * Sniffed rather than feature-detected, which is not a happy sentence to
- * write. There is no query for "does this engine rasterise variations
- * cheaply" — it is a performance characteristic, not a capability, and the
- * only honest alternative would be to measure frame times at runtime and
- * degrade, which is a great deal of machinery for one property.
- */
-const SAFARI =
-  typeof navigator !== 'undefined' &&
-  /^((?!chrom|android|crios|fxios|edg).)*safari/i.test(navigator.userAgent);
-
 const scale = (size: number, weight: number, tracking: number): TypeScale => ({
   family: FAMILY,
   size,
@@ -646,9 +625,8 @@ export class InlineEdit extends Component {
           : view;
 
   private find(id: string | null) {
-    const key = id?.replace(/-ghost$/, '');
     for (const words of this.plan.values()) {
-      const found = words.find((word) => word.id === key);
+      const found = words.find((word) => word.id === id);
       if (found) {
         return found;
       }
@@ -681,21 +659,7 @@ export class InlineEdit extends Component {
   wordX = this.of('x');
   wordY = this.of('y');
   wordSize = this.of('size');
-  /**
-   * The one property that does not travel on WebKit — it lands instead. See
-   * `SAFARI`: it is snapped to the pose being arrived at rather than the one
-   * being left, so the text is set correctly for all but the first frame.
-   */
-  wordWeight = (sprite: Sprite) => {
-    const word = this.find(sprite.id);
-    if (!word) {
-      return 0;
-    }
-    if (SAFARI) {
-      return this.editing ? word.edit.weight : word.view.weight;
-    }
-    return this.tween(word.view.weight, word.edit.weight)();
-  };
+  wordWeight = this.of('weight');
   wordTracking = this.of('tracking');
   wordColor = this.of('color');
 
@@ -710,29 +674,7 @@ export class InlineEdit extends Component {
    * is not a participant, it simply unmounts, and a word ramping from zero
    * against nothing is the value going missing for a fifth of a second.
    */
-  wordFade = () =>
-    this.moving && (SAFARI || !this.editing) ? [0, 1, 1, 1] : 1;
-
-  /**
-   * WebKit's substitute for a weight tween: two copies and a dissolve.
-   *
-   * The weight snaps on WebKit because interpolating it is a fresh glyph
-   * raster per frame. Snapping alone is honest but abrupt — the name goes
-   * from bold to regular in one frame while everything else about it is
-   * still travelling. So the word is drawn TWICE, each copy at a constant
-   * weight, and they cross: the one being left fades out while the one being
-   * arrived at fades in. Two static text runs cost less than one animated
-   * one, and a dissolve between two weights of the same word at the same
-   * position reads as the weight changing.
-   *
-   * Only where it earns its place — every field's weight does change here,
-   * but a card whose weights matched would render one copy as before.
-   */
-  get ghosts() {
-    return SAFARI;
-  }
-
-  ghostFade = () => (this.moving ? [1, 0, 0, 0] : 0);
+  wordFade = () => (this.moving && !this.editing ? [0, 1, 1, 1] : 1);
 
   get initialSize() {
     return this.tween('28px', '14px');
@@ -1031,20 +973,6 @@ export class InlineEdit extends Component {
             @duration={{MOVE}}
             @ease={{EASE}}
           />
-          {{! the copy being left: same journey, opposite fade, and a weight
-              that never changes while it is on screen }}
-          <c.Tween
-            @of={{c.kept "value-under"}}
-            @x={{this.wordX}}
-            @y={{this.wordY}}
-            @fontSize={{this.wordSize}}
-            @letterSpacing={{this.wordTracking}}
-            @color={{this.wordColor}}
-            @opacity={{this.ghostFade}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-
           <c.Tween
             @of={{c.kept "initials"}}
             @fontSize={{this.initialSize}}
