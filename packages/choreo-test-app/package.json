@@ -11,6 +11,7 @@
     "start:test": "vite dev --open /tests/"
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
     "choreo-player": "workspace:*",
     "glimmer-motion": "workspace:*",
     "motion": "^13.1.1",

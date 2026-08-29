@@ -10894,7 +10894,7 @@ html[data-gm-dragging] * {
   font-family: 'Archivo', var(--font), sans-serif;
   font-size: 28px;
   font-weight: 700;
-  font-variation-settings: 'wdth' 88;
+  font-stretch: 87.5%;
   letter-spacing: 0.01em;
 }
 
@@ -10970,25 +10970,25 @@ html[data-gm-dragging] * {
    the pin was computed from: mid-flight the name appeared twice, large and
    small, sliding past each other. The box now persists and only its chrome
    changes, which is also why the height can be fixed without a fight. */
+/* The line's box. It draws nothing — the plate behind it draws every bit of
+   the form's chrome — and it holds no layout either: every word inside it is
+   out of flow, at an x pretext worked out. So the box is a coordinate frame
+   and nothing else, which is exactly what makes the type safe to resize. */
 .ie-box {
   position: relative;
-  display: flex;
   box-sizing: border-box;
   height: 40px;
-  align-items: center;
-  gap: 0.34em;
   min-width: 0;
-  padding: 7px 0;
-  /* no chrome at all any more — the plate behind it draws every bit of that,
-     and a box that draws nothing is a box the crossing never has to move */
   background: transparent;
   overflow: visible;
 }
 
 /* the chrome is the only thing the mode switches, and it is a colour change
    on a box that never moves — cheap, and it cannot disturb the type */
+/* the form's 11px inset is folded into the measured x, not into padding:
+   a padding change is a jump on the frame the mode flips, and an inset
+   carried in the numbers is tweened along with everything else */
 .ie-card[data-mode='edit'] .ie-box {
-  padding: 7px 11px;
   cursor: text;
 }
 
@@ -10997,18 +10997,23 @@ html[data-gm-dragging] * {
   outline-offset: 1px;
 }
 
-/* One rule for a word in either state. The SIZE and WEIGHT are deliberately
-   absent — the modifier owns them, so they can be interpolated across the
-   mode change rather than snapped by a class change. */
+/* A word is absolutely positioned and never wraps: it is one word, and its
+   left edge is a number the score tweens. `font-variation-settings` is gone
+   on purpose — a variation axis cannot be said in the canvas font shorthand
+   pretext measures with, so asking for one here would render a face half a
+   line narrower than the widths the layout was computed from. */
 .ie-word {
-  /* a word is one word: it may overflow its box for the length of a flight,
-     but it must never break in the middle of itself to fit */
+  position: absolute;
+  top: 50%;
+  left: 0;
+  translate: 0 -50%;
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
-  font-variation-settings: 'wdth' 88;
+  font-stretch: 87.5%;
   color: var(--ink);
   letter-spacing: -0.01em;
   line-height: 1.18;
+  outline: none;
 }
 
 /* THE READING POSE has variety: a large bold name over two quiet values. */
