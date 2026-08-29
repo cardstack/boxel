@@ -946,6 +946,32 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     ) {
       return false;
     }
+    // A HELD RUN CANNOT BE MEASURED AROUND.
+    //
+    // Everything below this line decides "nothing changed" by looking at the
+    // page — and while a run is holding, what the page reports is what the
+    // RUN wrote. A Move keeps inline width and height on its sprites for as
+    // long as it owns them, and `layoutOf` reads exactly those. So a run
+    // parked at the pose it compiled TO reports a layout identical to the
+    // one recorded when it compiled, and a genuine change to the resting
+    // layout arrives on a pass that declines itself: the score is never
+    // recompiled and the new pose never lands.
+    //
+    // That is not hypothetical. It is what a host scrubbing `run.time` hits
+    // every time it swaps to a neighbouring segment — the swap happens at a
+    // waypoint, and a waypoint is the pose the outgoing run is parked at by
+    // definition.
+    //
+    // Measuring the resting layout instead would mean releasing the run, and
+    // releasing is the destructive thing this path exists to avoid. So the
+    // rule is simply: the fast path is for a run flying under its own clock.
+    // A run whose clock somebody else is holding takes the full pipeline —
+    // which costs nothing in practice, because a host that owns a clock is
+    // not the busy-gallery case this path was written for. It scrubs; it
+    // does not re-render.
+    if (this.run.paused) {
+      return false;
+    }
     for (const node of this.participants) {
       const el = node.element;
       if (!el || !el.isConnected) {

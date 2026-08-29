@@ -77,6 +77,16 @@ export interface Run {
   /** standing at a gate, waiting for advance() — a still, and settled */
   readonly parked: boolean;
   pause(): void;
+  /**
+   * The run is not advancing itself: paused, parked at a gate, or otherwise
+   * held. Its clock belongs to whoever stopped it.
+   *
+   * A held run keeps writing: inline width, height and transform stay on
+   * every sprite it owns, so the geometry the page reports is the run's
+   * rather than the stylesheet's. Anything deciding whether the world has
+   * changed by measuring it has to know not to trust what it sees.
+   */
+  readonly paused: boolean;
   play(): void;
   /** a pass measured and decided to keep this run: put the picture back */
   reassert(): void;
@@ -432,6 +442,10 @@ export class ChoreoRun implements Run {
 
   get duration(): number {
     return this.total / this.scale / 1000;
+  }
+
+  get paused(): boolean {
+    return !this.playing;
   }
 
   get time(): number {

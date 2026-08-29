@@ -21,6 +21,7 @@ import { PathDraw } from 'test-app/components/examples/path-draw';
 import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { Presentation } from 'test-app/components/examples/presentation';
+import { Rack } from 'test-app/components/examples/rack';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
 import { Reveal } from 'test-app/components/examples/reveal';
@@ -46,6 +47,7 @@ import { LightboxNotes } from 'test-app/components/notes/lightbox';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
 import { PresentationNotes } from 'test-app/components/notes/presentation';
+import { RackNotes } from 'test-app/components/notes/rack';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
@@ -777,6 +779,69 @@ drop = () => { this.col = Math.round(this.col); };
 </div>`,
     slowmo: false,
     title: 'Drag',
+  },
+  {
+    Example: Rack,
+    apis: ['c.run', 'run.time', 'run.paused', 'c.Gate', 'c.Move'],
+    group: 'Drag',
+    id: 'rack',
+    lede: 'Six arrangements, one score, and a clock you can hold.',
+    sample: `{{! ONE score for the whole journey, not one per leg.
+
+    A changeset has two ends, so five stops looks at first like four scores
+    with the host swapping between them. It is not: a keyframe array is the
+    from-and-to AND ANY WAYPOINTS in one value. Six stops per property is one
+    score, the DOM never changes, and the region compiles exactly once. }}
+<Choreo class='rk-stage' as |c|>
+  <span data-take={{this.take}} {{this.wire c}}></span>
+
+  {{! every tile states all six of its seats; nothing here re-renders }}
+  {{#each this.letters as |l|}}
+    <span class='rk-l' {{motion id=l.key role='tile'}}>{{l.ch}}</span>
+  {{/each}}
+
+  {{! furniture appears only where it is TRUE — one number per stop }}
+  <span class='rk-grid' {{motion id='grid' role='game'}}></span>
+
+  <c.Sequence>
+    <c.Gate />   {{! a score's way of saying "do not start yet" }}
+    <c.Parallel>
+      <c.Tween @of={{array (c.role 'tile') (c.role 'blank')}}
+               @x={{this.xs}} @y={{this.ys}}
+               @duration={{SPAN}} @ease='linear' />
+      <c.Tween @of={{c.role 'game'}} @opacity={{this.fadeGame}}
+               @duration={{SPAN}} @ease='linear' />
+    </c.Parallel>
+  </c.Sequence>
+</Choreo>
+
+// One array per property, one entry per stop. A property function is handed
+// the sprite, so each tile answers with its own journey.
+xs = (sprite) => seats.get(sprite.id).map((s) => s.x);
+fadeGame = [0, 0, 0, 0, 0, 1];
+
+// Nothing here is @tracked. A render inside a region is a PASS, so tracked
+// state written from a pointermove would recompile the score sixty times a
+// second — the run is held in a plain field and driven imperatively.
+move = (event) => {
+  this.p = detent(this.at(event.clientX));   // sticky near a stop, never snapped
+  this.draw();
+};
+
+// one place writes the clock, whatever moved the playhead: a drag, a spring
+// after a throw, or an eased ride from a tap or an arrow key
+private draw() {
+  const run = this.run;
+  if (!run) return;
+  if (run.parked) run.advance();             // open the head gate, once
+  run.pause();
+  // parked a hair short: a run that reaches its own duration is FINISHED,
+  // and a finished run replays itself on any later render
+  run.time = (this.p / LAST) * Math.max(0, run.duration - 0.001);
+}`,
+    notes: RackNotes,
+    slowmo: false,
+    title: 'Rack',
   },
   {
     Example: Sheet,

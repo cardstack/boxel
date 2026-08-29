@@ -1371,7 +1371,7 @@ html[data-gm-dragging] * {
 
 .apps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px 12px;
   width: min(86%, 280px);
 }
@@ -1745,8 +1745,8 @@ html[data-gm-dragging] * {
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
@@ -4424,7 +4424,7 @@ html[data-gm-dragging] * {
 
 .cam-caption {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.2;
@@ -4890,7 +4890,7 @@ html[data-gm-dragging] * {
 
 .sub-tile b {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .sub-tile small {
@@ -6226,7 +6226,7 @@ html[data-gm-dragging] * {
   right: var(--pres-m);
   bottom: 7cqw;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4cqw;
   margin: 0;
   padding: 0;
@@ -6841,7 +6841,7 @@ html[data-gm-dragging] * {
   align-self: start;
   margin-top: 52px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
   gap: 8px;
   width: min(94%, 330px);
@@ -7256,7 +7256,7 @@ html[data-gm-dragging] * {
   height: 36px;
   border-radius: 50%;
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: #fff;
 }
@@ -7616,8 +7616,8 @@ html[data-gm-dragging] * {
 
 .sheet.is-rows .share-mark,
 .sheet.is-app .share-mark {
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   border-radius: 9px;
   background: var(--bg-spot);
 }
@@ -7663,6 +7663,478 @@ html[data-gm-dragging] * {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* ---- rack: a slider IS a playhead --------------------------------------
+   Twenty-eight Scrabble tiles in five arrangements, on ONE score.
+
+   Nothing here is a pose class. The tiles never change shape and the DOM
+   never changes at all: every seat is a keyframe, and the rack scrubs one
+   clock from end to end. That is why none of the geometry traps the rest of
+   this stylesheet documents can arise — there is no layout to be measured out
+   from under anything.
+
+   It is also dressed as a game rather than as a chart. The arrangements are
+   real claims about English and about Scrabble, and they are easier to
+   believe from objects you recognise than from dots. */
+
+/* THE BOX THE SCALED CONTROL OCCUPIES.
+ *
+ * `transform` does not change a layout box, so a scaled control still claims
+ * its full unscaled height and paints over whatever follows — which is how
+ * the rack ended up printed across the card's own title. The wrapper carries
+ * the scaled size as real layout; the control inside it is what gets scaled.
+ *
+ * `--k` comes from container queries below rather than from a
+ * ResizeObserver. Every seat here is arithmetic in a fixed 340-wide space, so
+ * the control cannot reflow — but which of a handful of sizes it should be is
+ * a question about the space it was given, and that is exactly what a
+ * container query answers. No observer, no imperative write, and it settles
+ * in the same pass as the layout it depends on. */
+.rk-fit-box {
+  width: calc(340px * var(--k, 1));
+  height: calc(376px * var(--k, 1));
+}
+
+/* ON ITS OWN PAGE THERE IS ROOM, SO TAKE IT.
+ *
+ * The gallery card and the demo page hand this control the same WIDTH — 522
+ * of content either way — and differ only in height: 380 in a card, 577 on
+ * the page. A width query cannot tell them apart, which is exactly why the
+ * rack was being clipped in the grid while the width said there was plenty of
+ * room. Height would need `container-type: size`, and that collapses a
+ * container whose height is content-derived.
+ *
+ * So key on the real difference: which page you are on. The demo page wraps a
+ * stage in `.stage-wrap`; a gallery card wraps it in `.card-stage`. Guarded
+ * by a min-width so a narrow phone still falls through to the shrink rules
+ * below, which are less specific and would otherwise lose. */
+@container (min-width: 430px) {
+  .stage-wrap .rk-fit-box {
+    /* Room is not a reason to be bigger.
+     *
+     * At 1.5 the control simply grew until it hit the walls, which makes a
+     * 22px tile into a 33px one and reads as a zoom rather than as a demo
+     * with space around it. A modest step up and the rest spent on margin is
+     * the better trade: the tiles stay the size they were designed at, and
+     * the thing gets room to sit in. */
+    --k: 1.18;
+  }
+}
+
+/* The gallery card is narrower than the demo page, and a phone narrower
+   still. Discrete steps rather than a fluid ratio, because CSS cannot divide
+   one length by another to produce the plain number `scale()` wants.
+   
+   The thresholds are the CONTENT width — what `@container` actually measures
+   — and the card carries 16px of padding a side, so they sit well below the
+   340 the control wants. Each step is the largest scale that still fits. */
+@container (max-width: 339px) {
+  .rk-fit-box {
+    --k: 0.96;
+  }
+}
+
+@container (max-width: 325px) {
+  .rk-fit-box {
+    --k: 0.92;
+  }
+}
+
+@container (max-width: 312px) {
+  .rk-fit-box {
+    --k: 0.88;
+  }
+}
+
+@container (max-width: 298px) {
+  .rk-fit-box {
+    --k: 0.84;
+  }
+}
+
+@container (max-width: 285px) {
+  .rk-fit-box {
+    --k: 0.78;
+  }
+}
+
+@container (max-width: 264px) {
+  .rk-fit-box {
+    --k: 0.7;
+  }
+}
+
+/* Whatever is left over after the control has taken its size becomes margin,
+   evenly, rather than being absorbed by making everything larger. */
+.ex:has(.rk-fit-box) {
+  display: grid;
+  place-items: center;
+  padding-block: 16px;
+}
+
+/* One control, scaled as a whole.
+ *
+ * Every seat in this demo is arithmetic in a fixed 340-wide space — which is
+ * what lets the journey be keyframes rather than measurements, and also means
+ * it cannot reflow. In the gallery grid and on a phone it was simply cropped,
+ * and what got cropped was the rack: the demo lost the one thing you touch.
+ * Scaling the whole thing keeps every proportion and every hit target in
+ * agreement with the arithmetic. */
+.rk-fit {
+  width: 340px;
+  height: 376px;
+  transform: scale(var(--k, 1));
+  transform-origin: top left;
+}
+
+.ex:has(.rk-stage) {
+  container-type: inline-size;
+  --tile: #f0e3c2;
+  --tile-lip: rgba(122, 92, 44, 0.42);
+  --tile-top: rgba(255, 253, 244, 0.85);
+  --tile-ink: #3a2b16;
+}
+
+.rk-stage {
+  position: relative;
+  width: 340px;
+  height: 292px;
+}
+
+/* A TILE, as an object.
+ *
+ * Two inset shadows do the whole job: a light line along the top edge and a
+ * darker one along the bottom, which is what a chamfer looks like from
+ * straight on. The letter is a display face rather than the mono the rest of
+ * the page uses — a Scrabble tile is printed, not typeset. */
+.rk-l {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background:
+    radial-gradient(
+      120% 120% at 30% 20%,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0) 60%
+    ),
+    var(--tile);
+  color: var(--tile-ink);
+  box-shadow:
+    inset 0 -2.5px 0 var(--tile-lip),
+    inset 0 1.5px 0 var(--tile-top),
+    inset 2px 0 0 rgba(255, 253, 244, 0.35),
+    inset -2px 0 0 rgba(122, 92, 44, 0.18),
+    0 2px 3px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a))),
+    0 -1px 2px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.rk-l b {
+  font-weight: 700;
+  text-transform: uppercase;
+  /* optically centred: the value in the corner pulls the eye down-right */
+  transform: translate(-1px, -1.5px);
+}
+
+.rk-l i {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 7px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+/* vowels are marked in EVERY arrangement, not only the one that groups them:
+   a colour that arrived on a pose change would have nothing to fade with */
+.rk-l.is-vowel {
+  --tile: #f6d7a2;
+  color: #6b3a10;
+}
+
+/* a blank has no letter and no value — it is the absence, drawn */
+.rk-l.is-blank {
+  --tile: #e7dcc4;
+}
+
+/* ---- the furniture, each piece true in one arrangement ---- */
+
+.rk-axis {
+  position: absolute;
+  background: var(--line);
+  opacity: 0;
+}
+
+.rk-axis.is-x {
+  left: 12px;
+  right: 6px;
+  top: 262px;
+  height: 1px;
+}
+
+.rk-axis.is-y {
+  left: 12px;
+  top: 10px;
+  bottom: 36px;
+  width: 1px;
+}
+
+.rk-alab,
+.rk-tick {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.rk-alab.is-x {
+  right: 8px;
+  top: 276px;
+}
+
+.rk-alab.is-yt {
+  left: 20px;
+  top: 10px;
+}
+
+.rk-alab.is-yb {
+  left: 20px;
+  bottom: 40px;
+}
+
+.rk-tick {
+  top: 266px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
+/* The board: fifteen-by-fifteen is wider than this stage, so it is thirteen
+   squares — enough for the longest word with room around it. Drawn with
+   gradients rather than 169 elements, because it is scenery: nothing on it
+   moves, and the tiles that land on it are the participants. */
+.rk-grid {
+  position: absolute;
+  left: 33px;
+  top: 8px;
+  width: 242px;
+  height: 242px;
+  border-radius: 4px;
+  background-color: #e6ddcd;
+  background-image:
+    linear-gradient(to right, rgba(120, 96, 60, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 96, 60, 0.22) 1px, transparent 1px);
+  background-size: 22px 22px;
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 96, 60, 0.35),
+    0 2px 8px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+  opacity: 0;
+}
+
+:root:not([data-theme='light']) .rk-grid {
+  background-color: #3a332b;
+  background-image:
+    linear-gradient(to right, rgba(226, 205, 170, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 205, 170, 0.16) 1px, transparent 1px);
+}
+
+.rk-alab.is-game {
+  left: 12px;
+  top: 258px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
+.rk-key {
+  position: absolute;
+  top: 232px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.rk-key::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: var(--tile);
+  box-shadow: inset 0 -2px 0 var(--tile-lip);
+}
+
+.rk-key.is-v {
+  left: 40px;
+}
+
+.rk-key.is-v::before {
+  background: #f6d7a2;
+}
+
+.rk-key.is-c {
+  left: 150px;
+}
+
+/* ---- the rack: a slider dressed as the thing it is ---- */
+
+.rk-rail {
+  --pad: 15px;
+  position: relative;
+  width: 340px;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 var(--pad);
+  border-radius: 6px 6px 9px 9px;
+  background: linear-gradient(180deg, #8a6236, #6d4a26 62%, #5b3d1f);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 187, 0.32),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.28),
+    0 3px 6px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+  touch-action: none;
+  cursor: grab;
+}
+
+.rk-rail:active {
+  cursor: grabbing;
+}
+
+.rk-rail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* the groove the marker slides in, filled up to where the playhead is */
+.rk-track {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  top: 13px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 226, 187, 0.55) var(--at, 0%),
+    rgba(0, 0, 0, 0.3) var(--at, 0%)
+  );
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* the marker is a tile, because everything else on this page is */
+/* Positioned inside the TRACK's span, not the rack's.
+   `--f` is a plain fraction the component writes each frame; the arithmetic
+   that turns it into a place belongs here, where the padding is known. */
+.rk-thumb {
+  position: absolute;
+  top: 3px;
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--tile);
+  box-shadow:
+    inset 0 -2px 0 var(--tile-lip),
+    inset 0 1.5px 0 var(--tile-top),
+    0 2px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* the stops sit under the rack, and the one in force says so */
+.rk-notch {
+  position: absolute;
+  top: 34px;
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    font-size 0.18s ease;
+}
+
+/* The end labels are centred on the ends of the TRACK, which leaves them
+   floating a padding's width inside the rack rather than agreeing with it.
+   The first is flush with the rack's left edge and the last with its right,
+   so the row of stops spans exactly what the rack spans — and neither can
+   hang off a narrow card. */
+.rk-notch:first-of-type {
+  left: 0;
+  transform: translateX(0);
+}
+
+.rk-notch:last-of-type {
+  left: 100%;
+  transform: translateX(-100%);
+}
+
+@media (hover: hover) {
+  .rk-notch:hover {
+    color: var(--ink-dim);
+  }
+}
+
+.rk-notch.is-on {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tile-ink);
+  background: var(--tile);
+  box-shadow: inset 0 -2px 0 var(--tile-lip);
+}
+
+.rk-wire {
+  display: none;
+}
+
+.rk-hint {
+  margin: 34px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* a Scrabble tile is a physical object, and the one thing it is not is dark */
+:root:not([data-theme='light']) .rk-l,
+:root:not([data-theme='light']) .rk-thumb {
+  --tile-lip: rgba(92, 68, 28, 0.55);
+}
+
+:root:not([data-theme='light']) .rk-notch.is-on {
+  color: #3a2b16;
 }
 
 /* ---- footer ---- */
@@ -7896,8 +8368,8 @@ html[data-gm-dragging] * {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
@@ -8384,8 +8856,8 @@ html[data-gm-dragging] * {
 
 .ph-hand svg {
   display: block;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   fill: #fff;
   stroke: rgba(0, 0, 0, 0.5);
   stroke-width: 1.2;
@@ -9046,8 +9518,8 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: var(--bg-well);
@@ -9317,7 +9789,7 @@ html[data-gm-dragging] * {
 
 .dd-mode b {
   font-family: var(--font-display);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -9847,7 +10319,7 @@ html[data-gm-dragging] * {
      column's centre off those marks by a third of it — the parcel landed
      five pixels shy of the middle of every bay. The plates are separated by
      their own margin instead, which the grid's arithmetic never sees. */
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 /* a bay is a floor plate, not an outline: it has an edge, a code painted at
@@ -10552,8 +11024,8 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(180deg, #ff9a4a, #ef5f14);
