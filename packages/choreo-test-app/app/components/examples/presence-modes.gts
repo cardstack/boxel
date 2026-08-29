@@ -16,12 +16,28 @@ const notices = [
   { detail: '3 assertions', id: 'fail', title: 'Tests failed', tone: 'fail' },
 ] as const;
 
-const initial = { opacity: 0, y: 18 };
+const initial = { opacity: 0, y: 14 };
 const animate = { opacity: 1, y: 0 };
-const exit = { opacity: 0, y: -28 };
+/**
+ * The leaver's exit is short on purpose, and shorter than it looks like it
+ * needs to be.
+ *
+ * `Presence` unmounts a leaver when its exit finishes — the LONGEST of the
+ * properties in it. With `y` on a 0.4s spring and opacity on a 0.28s tween,
+ * the notice went fully invisible and then went on holding its slot in flow
+ * for the rest of the spring. In `sync` that gap is not free: the newcomer is
+ * laid out below it, so what you saw was the whole column shoved down by the
+ * height of something that was no longer there, and shoved back when it
+ * finally unmounted.
+ *
+ * Stacking IS sync — the newcomer belongs below a leaver that is still in
+ * flow, and that is the entire difference between this mode and popLayout.
+ * The invisible half of it was not. So `y` now lands with the fade.
+ */
+const exit = { opacity: 0, y: -18 };
 const transition = {
-  opacity: { duration: 0.28 },
-  y: { bounce: 0.18, type: 'spring', visualDuration: 0.4 },
+  opacity: { duration: 0.24 },
+  y: { bounce: 0.1, type: 'spring', visualDuration: 0.26 },
 } as const;
 const restMove = {
   bounce: 0.12,

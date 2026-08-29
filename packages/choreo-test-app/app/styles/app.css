@@ -10316,9 +10316,13 @@ html[data-gm-dragging] * {
    `.kf-stage` is the container ELEMENT, and an element never matches a query
    against its own box — the two-column rule would simply never fire. The
    basis widths below are the breakpoint, expressed where it can work. */
+/* `flex: 0 1 auto`, not `1 1 auto`. Growing to fill the stage and then
+   centring the content inside itself leaves the scene's own slack BELOW the
+   schedule — a void between it and the transport. At its natural height the
+   stage centres scene-and-transport together, as one block. */
 .kf-scene {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   gap: 10px 18px;
   align-items: center;
@@ -10364,7 +10368,9 @@ html[data-gm-dragging] * {
 .kf-kiln {
   position: relative;
   display: grid;
-  gap: 4px;
+  /* the flue rises to the very top of the viewBox, so the read-out needs real
+     air under it or the degree sign sits on the chimney */
+  gap: 10px;
   justify-items: center;
 }
 
@@ -10703,6 +10709,34 @@ html[data-gm-dragging] * {
 
   .kf-scene {
     gap: 6px 12px;
+  }
+}
+
+/* A roomy stage gets a bigger stove. The base sizes are tuned for a gallery
+   card, which is 400px tall whatever its width — so this keys on WIDTH only,
+   and the 557px desktop card stays below it and keeps the compact stove that
+   its height actually has room for. */
+@container (min-width: 640px) {
+  .kf-art {
+    max-width: 240px;
+  }
+
+  .kf-scene {
+    max-width: 640px;
+    gap: 12px 26px;
+  }
+
+  .kf-row {
+    padding: 5px 10px;
+  }
+
+  .kf-ledger {
+    max-width: 360px;
+  }
+
+  .kf-transport,
+  .kf-modes {
+    max-width: 640px;
   }
 }
 
