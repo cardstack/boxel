@@ -216,56 +216,60 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
   },
   {
     Example: InlineEdit,
-    apis: ['c.Crossing', 'c.Move', 'c.Tween', 'fontWeight'],
+    apis: ['c.Crossing', 'c.Move', 'c.Tween', 'createArming'],
     group: 'Choreo',
     id: 'inline-edit',
-    lede: 'A record read, then written. Every word flies to the form.',
-    sample: `// A card becoming a form. The two poses are deliberately far apart:
-// email and date of birth share one line along the card's bottom edge, and
-// become two full-width labelled rows. A word that ends 40px from where it
-// started reads as a re-render — this one has somewhere to go.
+    lede: 'A record read, then written. Real fields at both ends.',
+    sample: `// Real DOM, then a flight, then real DOM again.
+//
+//   1. the reading view's own markup — an ordinary string, in flow
+//   2. a layer of words, out of flow, carrying the eye between the poses
+//   3. real fields: a text input, an email input, a segmented date group
+//
+// No element is in both, and none can be. A <span> in flow and the value
+// of an <input> cannot be the same node, and every attempt to make
+// choreography pretend otherwise failed differently: two copies of a word
+// sliding past each other while the arriving one relaid itself out; a line
+// whose gaps went wrong in flight because each word travelled alone and
+// nothing was interpolating the LINE — "14 March 1986" arriving as
+// "14  March1986". The space between two words is a property of neither.
 
-// Every word of every value is ONE element in both states. They used to be
-// two, a value and an editor in opposite branches of an if/else, which made
-// every word a counterpart the crossing had to pin — and it could not,
-// because the arriving copy was animating its own font-size and so moving
-// the very box the pin was computed against. You saw the name twice, large
-// and small, sliding past each other.
-{{#each (this.words field.key) key='id' as |part|}}
-  <span {{motion id=part.id role=field.role}}>{{part.word}}</span>
-{{/each}}
+// WHAT IS MEASURED, AND BY WHOM. The containers are the LIBRARY's: a
+// field's box before the swap and after it is exactly what a changeset is.
+// There is no getBoundingClientRect in the demo, and there was — a
+// hand-rolled FLIP re-deriving what the region had already measured.
+<c.Move @of={{c.moved 'field'}} @duration={{MOVE}} @ease={{EASE}} />
 
-// The SCORE owns the type, not the modifier. An \`animate=(to fontSize=…)\`
-// on an element the region has claimed is applied and never tweened: the
-// words teleported between scales while their boxes flew correctly around
-// them. Inside a region, a property tween is a step.
-<c.Parallel>
-  <c.Crossing @duration={{MOVE}} @ease={{EASE}}
-    @leave={{0.2}} @arrive={{0.28}} @overlap={{0.42}} />
-  <c.Move @of={{c.moved}} @duration={{MOVE}} @ease={{EASE}} />
+// pretext measures the one thing the DOM cannot: where a word will sit in a
+// pose that is NOT rendered. The form does not exist while the reading view
+// is on screen, and in general it is not even the same author's component.
+const view = layoutWords(words, VIEW[key], 0);      // canvas metrics,
+const edit = layoutWords(words, EDIT[key], INSET);  // pure arithmetic
 
-  <c.Tween @of={{c.kept 'name-value'}} @fontSize={{this.nameSize}}
-    @fontWeight={{this.nameWeight}} @duration={{TYPE}} @ease={{SOFT}} />
-  <c.Tween @of={{c.kept 'sub-value'}} @fontSize={{this.subSize}}
-    @fontWeight={{this.subWeight}} @duration={{TYPE}} @ease={{SOFT}} />
-</c.Parallel>
+// One step, one journey per word: a step property may be a function of the
+// sprite it is applied to, so the plan is read per element.
+<c.Tween @of={{c.kept 'name-value'}} @x={{this.wordX}}
+  @fontSize={{this.nameSize}} @fontWeight={{this.nameWeight}}
+  @duration={{MOVE}} @ease={{EASE}} />
 
 // Each of those is a KEYFRAME ARRAY — ['30px', '17px'] — not a target. The
-// rest poses live in CSS keyed by [data-mode], where a rest pose belongs,
-// which also means the new value is already on the element by the time the
-// region measures the pass. A step given one target finds the element
-// already there and animates nothing. The array re-states where to start.
+// rest poses live in CSS keyed by [data-mode], so the new value is already
+// on the element when the region measures; a step given one target finds it
+// already there and animates nothing.
 
-// A VARIABLE FONT is load-bearing. Reading type is 30px/700, the form's is
-// 17px/400. With static cuts those are two files and the browser can only
-// SWAP — the weight pops at whatever frame the swap lands on. Archivo is
-// variable, so fontWeight is a number the engine interpolates, and the
-// library registers it unitless so it interpolates as one.
+// NEVER TWO COPIES. The flight words are hidden at both ends and shown only
+// while the region says a scene change is under way, and the real control's
+// text stands aside for exactly that long. VISIBILITY, not opacity: a
+// participant's opacity belongs to the engine, which renders one inline, so
+// a stylesheet rule is simply outvoted.
+private arming = createArming();
+// .ie-word { visibility: hidden }
+// .ie-card[data-flying] .ie-word { visibility: visible }
 
-// The reading pose has variety: a large bold name over two quiet values.
-// The form has none — every field is the same 17px regular, because a form
-// is a place where all the values are the same kind of thing. Losing that
-// variety IS the animation.`,
+// wdth is said as font-stretch: 87.5%, not font-variation-settings — a
+// variation axis cannot appear in the canvas font shorthand, so pretext
+// would measure the wide cut while the screen drew the narrow one. Thirty
+// pixels of error on a two-word name, all of it in the gaps.`,
     slowmo: true,
     title: 'In place',
   },

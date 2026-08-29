@@ -10997,11 +10997,16 @@ html[data-gm-dragging] * {
   outline-offset: 1px;
 }
 
-/* A word is absolutely positioned and never wraps: it is one word, and its
-   left edge is a number the score tweens. `font-variation-settings` is gone
-   on purpose — a variation axis cannot be said in the canvas font shorthand
-   pretext measures with, so asking for one here would render a face half a
-   line narrower than the widths the layout was computed from. */
+/* PHASE 2 — the flight layer. A word is out of flow, never wraps, and its
+   left edge is a number the score tweens. It is invisible at rest in BOTH
+   poses: the four opacity keyframes on its step are what make it the middle
+   of the transition and nothing else.
+
+   `font-variation-settings` is gone on purpose — a variation axis cannot be
+   said in the canvas font shorthand pretext measures with, so asking for one
+   here would render a face half a line narrower than the widths the layout
+   was computed from. `font-stretch` reaches the same axis and is in the
+   shorthand, so both ends agree. */
 .ie-word {
   position: absolute;
   top: 50%;
@@ -11013,31 +11018,104 @@ html[data-gm-dragging] * {
   color: var(--ink);
   letter-spacing: -0.01em;
   line-height: 1.18;
-  outline: none;
+  /* Hidden at BOTH ends, and shown only while the region says a scene
+     change is under way. There is no fade in either direction on purpose:
+     the word is the ONLY copy of the value for the length of the flight, so
+     there is nothing to blend it with.
+
+     VISIBILITY rather than opacity, and that is not a preference. A
+     participant's opacity is the engine's — it renders one inline, so a
+     rule here is simply outvoted, and the words sat fully opaque over the
+     controls with a stylesheet that clearly said otherwise. Nothing in the
+     library writes `visibility`. */
+  visibility: hidden;
+  pointer-events: none;
 }
 
-/* THE READING POSE has variety: a large bold name over two quiet values. */
-.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-word {
+.ie-card[data-flying] .ie-word {
+  visibility: visible;
+}
+
+/* the real control keeps its box, its caret and its focus for the whole
+   flight — only its TEXT stands aside, because the flight is drawing it */
+.ie-card[data-flying] .ie-value,
+.ie-card[data-flying] .pt-input {
+  color: transparent;
+}
+
+/* PHASE 1 — the reading view's own markup: an ordinary string in ordinary
+   flow, which is to say selectable, wrappable and nothing special at all. */
+.ie-value {
+  display: block;
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-stretch: 87.5%;
+  letter-spacing: -0.01em;
+  line-height: 40px;
+}
+
+.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-value {
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
-.ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-word,
-.ie-card[data-mode='view'] .ie-field[data-field='dob'] .ie-word {
+.ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-value,
+.ie-card[data-mode='view'] .ie-field[data-field='dob'] .ie-value {
   color: var(--ink-dim);
   font-size: 13px;
   font-weight: 500;
 }
 
-/* THE WRITING POSE has none: every field is the same 17px regular, because a
-   form is a place where all the values are the same kind of thing. Losing the
-   variety is the animation — one selector heavier than the rules above, and
-   after them, so it wins on both counts rather than by accident. */
-.ie-card[data-mode='edit'] .ie-field[data-field] .ie-word {
+/* PHASE 3 — real controls. The type here is the form's single scale, and it
+   has to be the same numbers the flight was planned against: a word that
+   lands on an input set one pixel larger has landed on the wrong thing. */
+.pt-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: 'Archivo', var(--font), sans-serif;
   font-size: 17px;
   font-weight: 400;
+  font-stretch: 87.5%;
   letter-spacing: -0.01em;
+  appearance: none;
+}
+
+.pt-input:focus-visible {
+  outline: 2px solid #ff7a28;
+  outline-offset: -2px;
+  border-radius: 9px;
+}
+
+/* the segmented date: day, month, year, each its own control. The widths
+   here are the ones the component states as the flight's landing marks —
+   change one and change the other, or "March" arrives beside its field. */
+.pt-date {
+  display: flex;
+  height: 40px;
+  gap: 6px;
+  align-items: center;
+  padding: 0 11px;
+}
+
+.pt-date .pt-input {
+  padding: 0;
+}
+
+.pt-date-day {
+  width: 32px;
+}
+
+.pt-date-month {
+  width: 104px;
+}
+
+.pt-date-year {
+  width: 52px;
 }
 
 .ie-toggle {

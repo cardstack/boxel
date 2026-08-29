@@ -1,50 +1,60 @@
-import { concat } from '@ember/helper';
+import { concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { modifier } from 'ember-modifier';
-import { Choreo, motion, styles } from 'glimmer-motion';
+import {
+  Choreo,
+  type ChoreoContext,
+  createArming,
+  motion,
+  styles,
+} from 'glimmer-motion';
 import type { Sprite } from 'glimmer-motion';
+import {
+  DateField,
+  EmailField,
+  TextField,
+} from 'test-app/components/pretui/fields';
 import {
   layoutWords,
   type TypeScale,
   typeReady,
 } from 'test-app/lib/word-layout';
 
-/** the record's fields, in the order the card reads them */
+/**
+ * `kind` rather than a component reference, and the template branches on it.
+ * A list of component classes reads better right up until you type it: the
+ * three differ in their root element — two inputs and a group — so a union
+ * of the classes is not invokable, and the cast that would make it invokable
+ * is a lie about three genuinely different shapes.
+ */
 const FIELDS = [
-  { key: 'name', label: 'Name', role: 'name-value' },
-  { key: 'email', label: 'Email', role: 'sub-value' },
-  { key: 'dob', label: 'Date of birth', role: 'sub-value' },
+  { date: false, email: false, key: 'name', label: 'Name', role: 'name-value' },
+  { date: false, email: true, key: 'email', label: 'Email', role: 'sub-value' },
+  {
+    date: true,
+    email: false,
+    key: 'dob',
+    label: 'Date of birth',
+    role: 'sub-value',
+  },
 ] as const;
 
 type Key = (typeof FIELDS)[number]['key'];
 
-/** one duration for the whole crossing, so nothing arrives out of step */
 const MOVE = 0.55;
 const EASE = [0.22, 1, 0.36, 1] as const;
-const SOFT = [0.22, 1, 0.36, 1] as const;
-const BOX = 0.46;
+const BOX = 0.42;
 
-/**
- * The two poses of the type, said in numbers rather than in CSS.
- *
- * These are the source of truth for BOTH the stylesheet's rest poses and
- * pretext's measurements, which is the point: a width measured against one
- * set of numbers and rendered against another is a width that is wrong.
- * `wdth` is deliberately absent — a variation axis cannot be said in the
- * canvas font shorthand, so asking for one here would measure a face the
- * screen is not showing.
- */
 const FAMILY = 'Archivo';
 const WORD_GAP = 0.3;
 
 /**
- * 87.5% of Archivo's width axis, said the one way that both the canvas and
- * the stylesheet understand. `font-variation-settings: 'wdth' 88` renders
- * the same face but cannot appear in a font shorthand, so pretext would
- * measure the wide cut and the screen would draw the narrow one — about
- * thirty pixels of error on a two-word name, all of it in the gaps.
+ * 87.5% of Archivo's width axis, said the one way both the canvas and the
+ * stylesheet understand. `font-variation-settings: 'wdth' 88` renders the
+ * same face but cannot appear in a font shorthand, so pretext would measure
+ * the wide cut while the screen drew the narrow one — about thirty pixels of
+ * error on a two-word name, all of it in the gaps between the words.
  */
 const STRETCH = 'semi-condensed';
 
@@ -71,57 +81,71 @@ const EDIT: Record<Key, TypeScale> = {
   name: scale(17, 400, -0.01),
 };
 
-/** the form insets its values from the plate's edge; the reading view does not */
-const INSET = { edit: 11, view: 0 };
+/** where a control paints its first glyph, measured from the field's left */
+const INSET = 11;
+
+/**
+ * The date field is segmented — day, month, year — so its three controls
+ * have three separate text origins rather than one flowed line. These are
+ * the widths the stylesheet gives them, and they live here because the
+ * flight has to know where "14", "March" and "1986" are going before any of
+ * those controls exist.
+ */
+const SEGMENT = { day: 32, gap: 6, month: 104 };
+const DATE_X = [
+  INSET,
+  INSET + SEGMENT.day + SEGMENT.gap,
+  INSET + SEGMENT.day + SEGMENT.gap + SEGMENT.month + SEGMENT.gap,
+];
 
 interface Word {
   id: string;
   word: string;
-  /** left edge in the reading pose, and in the form — both, always */
   edit: number;
   view: number;
 }
 
 /**
- * The same words, read and written.
+ * Real DOM, then a flight, then real DOM again.
  *
- * A record card in two states — a reading view and a form — and one
- * `<c.Crossing>` between them. Every word of every value is its own identity
- * and its own element in BOTH states, so a value does not dissolve into its
- * editor: each word travels to where the form puts it, changing size and
- * weight on the way.
+ * A record card in two states. The reading view is an ordinary string in
+ * ordinary flow. The form is three REAL fields — a text input, an email
+ * input, and a segmented date group — copied into this app from pretui
+ * rather than depended on, because pretui's own `Input` wraps boxel-ui.
  *
- * THE WORDS ARE NOT IN LAYOUT, AND THAT IS THE WHOLE DESIGN
- * `font-size` is a layout property, and every arrangement that let the
- * browser flow these words collided with it. With a copy per state the
- * arriving one relaid itself out as it grew, so the crossing's pin was
- * computed against a box that was still moving and you saw the name twice,
- * large and small, sliding past each other. With one flowed copy the boxes
- * collapsed under the type. And in both, the gaps inside a multi-word line
- * went wrong mid-flight — "14 March 1986" arrived as "14  March1986" —
- * because each word was flying on its own and nothing was interpolating the
- * LINE. The space between two words is a property of neither of them.
+ * No element is in both, and none can be. A `<span>` in flow and the value
+ * of an `<input>` cannot be the same node, and every attempt to make
+ * choreography pretend otherwise failed in a different way: two copies of a
+ * word sliding past each other while the arriving one relaid itself out; a
+ * line whose inter-word gaps went wrong in flight because each word was
+ * travelling alone and nothing was interpolating the LINE — "14 March 1986"
+ * arriving as "14  March1986". The space between two words is a property of
+ * neither of them.
  *
- * So the words are taken out of flow. `word-layout.ts` asks pretext for each
- * word's left edge at both scales — arithmetic over canvas measurements, no
- * DOM and no reflow — and the score tweens `x` from one number to the other.
- * Nothing is in layout, so nothing can be disturbed by the type resizing,
- * and the line moves as a line because one model produced both ends of it.
+ * So this hands off, in three phases:
  *
- * WHY MEASURING THE POSE YOU ARE NOT SHOWING MATTERS
- * A record's reading view and its editor are not usually one component by
- * one author. They are two, and only one of them is ever rendered, so
- * neither can measure the other by asking the DOM. Pretext can measure a
- * layout that is not on screen. That is what makes this generalise past a
- * demo where both halves happen to live in the same file.
+ *   1. REAL DOM. The reading view's own markup, in flow and selectable.
+ *   2. THE FLIGHT. A layer of words, out of flow, carrying the eye from one
+ *      pose to the other while both real ends crossfade underneath.
+ *   3. REAL DOM AGAIN. The form's fields, with focus, keyboards, autofill —
+ *      everything a span pretending to be an input never had.
  *
- * WHY A VARIABLE FONT IS LOAD-BEARING
- * Reading type is 30px at weight 700; the form's is 17px at 400. With static
- * cuts those are two files and the browser can only swap between them — the
- * weight would pop at whatever frame the swap lands on. Archivo is variable
- * (`wght 400..700`, loaded by the stylesheet), so `fontWeight` is a number
- * the engine can interpolate, and the library registers it unitless so it
- * interpolates as one.
+ * WHAT IS MEASURED, AND BY WHOM
+ * The containers are measured by the LIBRARY. A field's box before the swap
+ * and after it is exactly what a changeset is: `<Choreo>` takes both, and
+ * `c.Move` flies the field between them. There is no `getBoundingClientRect`
+ * in this file, and there was — a hand-rolled FLIP, two reads a frame apart,
+ * re-deriving what the region had already measured and would have kept
+ * correct through interruptions and speed changes that hand-rolling does
+ * not survive.
+ *
+ * pretext measures the one thing the DOM cannot: where a word will sit in a
+ * pose that is not rendered. The form does not exist while the reading view
+ * is on screen, and in the general case it is not even the same author's
+ * component. So each word's x WITHIN its field is arithmetic over canvas
+ * metrics — no DOM, no reflow, no requirement that the text be on screen at
+ * the size being asked about — and the field's own journey is the library's.
+ * Between them there is nothing left to guess.
  */
 export class InlineEdit extends Component {
   @tracked editing = false;
@@ -132,19 +156,44 @@ export class InlineEdit extends Component {
   };
 
   /**
-   * Bumped when the fonts resolve, and when a commit changes the record.
-   *
-   * Canvas measurement is only as good as the face the browser has: ask
-   * before Archivo has arrived and every width comes back in the fallback's
-   * metrics. So the first plan is measured against whatever is loaded, and
-   * this re-measures it once the real face is there.
+   * Bumped when the fonts resolve. Canvas measurement is only as good as the
+   * face the browser has: ask before Archivo has arrived and every width
+   * comes back in the fallback's metrics, which is a whole line of error
+   * that never corrects itself.
    */
   @tracked private generation = 0;
 
-  /** the live editable nodes, so a commit can read what was typed */
-  private live = new Map<string, HTMLElement>();
-
   fields = FIELDS;
+
+  /**
+   * "A scene change is under way", as the library says it.
+   *
+   * The flight words are in the DOM in every phase — that is what lets the
+   * region keep their identity and fly them with the field — so something
+   * has to say when they are the thing being looked at. The first cut said
+   * it with four opacity keyframes on their own step, which put the engine
+   * in charge of a value whose REST pose matters more than its journey: any
+   * pass that did not run the step left the words sitting at whatever the
+   * crossing had last set, fully opaque over the real controls.
+   *
+   * `createArming` is the region's own answer. It stands up when the pass
+   * starts, latches the run once it exists, hands over rather than standing
+   * down when a run is replaced mid-flight, and has a deadline for the
+   * crossing that never produces a pass at all — four subtleties this demo
+   * would otherwise have got wrong one at a time.
+   */
+  private arming = createArming();
+
+  grab = (context: ChoreoContext) => {
+    this.region = context;
+    return '';
+  };
+
+  private region?: ChoreoContext;
+
+  get flying() {
+    return this.arming.active();
+  }
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args as never);
@@ -155,37 +204,6 @@ export class InlineEdit extends Component {
     );
   }
 
-  /**
-   * The plan: every word of every field, with its left edge in both poses.
-   *
-   * Measured once per generation rather than per render — pretext's
-   * `prepare` is the expensive half of it by design, and the answer only
-   * changes when the record or the loaded fonts do.
-   */
-  get plan(): Map<Key, Word[]> {
-    // read the generation so a font arriving re-measures everything
-    this.generation;
-    const plan = new Map<Key, Word[]>();
-    for (const { key } of FIELDS) {
-      const words = this.record[key].split(/\s+/).filter(Boolean);
-      const view = layoutWords(words, VIEW[key], INSET.view);
-      const edit = layoutWords(words, EDIT[key], INSET.edit);
-      plan.set(
-        key,
-        words.map((word, index) => ({
-          edit: edit[index]!.x,
-          id: `${key}-g${this.generation}-w${index}`,
-          view: view[index]!.x,
-          word,
-        }))
-      );
-    }
-    return plan;
-  }
-
-  words = (key: Key) => this.plan.get(key) ?? [];
-
-  /** the record's initials, which cross as one identity of their own */
   get initials() {
     return this.record.name
       .split(/\s+/)
@@ -195,25 +213,56 @@ export class InlineEdit extends Component {
       .join('');
   }
 
-  /* — what the score animates — */
+  update = (key: Key, value: string) => {
+    this.record = { ...this.record, [key]: value };
+  };
+
+  toggle = () => {
+    if (this.region) {
+      this.arming.begin(this.region);
+    }
+    this.editing = !this.editing;
+  };
 
   /**
-   * Every pose below is a PAIR: where the value is coming from, and where it
-   * is going. That is not decoration, it is the only shape that works here.
-   * The rest poses live in the stylesheet, keyed by `[data-mode]`, which is
-   * where a rest pose belongs — but it also means the new value is already
-   * on the element by the time the region measures the pass. A step given
-   * one target finds the element already there and animates nothing. A
-   * keyframe array says both ends in one value.
+   * Where each word of a field sits, relative to that field's own left edge,
+   * in BOTH poses — neither of which needs to be rendered to be known.
+   *
+   * The reading view is one flowed line, so pretext lays it out. The form is
+   * not always one line: the date is three controls, and its words go to the
+   * three text origins the stylesheet gives them.
    */
-  private pair = <T,>(from: T, to: T) =>
-    this.editing ? [from, to] : [to, from];
+  get plan(): Map<Key, Word[]> {
+    // read the generation so a font arriving re-measures everything
+    this.generation;
+    const plan = new Map<Key, Word[]>();
+    for (const { key } of FIELDS) {
+      const words = this.record[key].split(/\s+/).filter(Boolean);
+      const view = layoutWords(words, VIEW[key], 0).map((box) => box.x);
+      const edit =
+        key === 'dob'
+          ? words.map((_, index) => DATE_X[index] ?? INSET)
+          : layoutWords(words, EDIT[key], INSET).map((box) => box.x);
+      plan.set(
+        key,
+        words.map((word, index) => ({
+          edit: edit[index] ?? INSET,
+          id: `${key}-g${this.generation}-w${index}`,
+          view: view[index] ?? 0,
+          word,
+        }))
+      );
+    }
+    return plan;
+  }
+
+  words = (key: Key) => this.plan.get(key) ?? [];
 
   /**
-   * One step, one value per SPRITE. A step property may be a function of the
-   * sprite it is being applied to, which is what lets a single `<c.Tween>`
-   * give every word its own journey: the plan already knows where each id
-   * belongs at both scales, so this is a lookup, not a measurement.
+   * One step, one journey per SPRITE. A step property may be a function of
+   * the sprite it is applied to, which is what lets a single `<c.Tween>`
+   * give every word its own x: the plan already knows where each id belongs
+   * at both scales, so this is a lookup, not a measurement.
    */
   wordX = (sprite: Sprite) => {
     for (const words of this.plan.values()) {
@@ -227,16 +276,15 @@ export class InlineEdit extends Component {
     return 0;
   };
 
+  private pair = <T,>(from: T, to: T) =>
+    this.editing ? [from, to] : [to, from];
+
   get nameSize() {
     return this.pair(`${VIEW.name.size}px`, `${EDIT.name.size}px`);
   }
 
   get nameWeight() {
     return this.pair(VIEW.name.weight, EDIT.name.weight);
-  }
-
-  get nameTracking() {
-    return this.pair(`${VIEW.name.tracking}em`, `${EDIT.name.tracking}em`);
   }
 
   get subSize() {
@@ -255,7 +303,6 @@ export class InlineEdit extends Component {
     return this.pair('36px', '10px');
   }
 
-  /** the plate does not travel: it expands into place and fades up */
   get plateOpacity() {
     return this.pair(0, 1);
   }
@@ -264,49 +311,15 @@ export class InlineEdit extends Component {
     return this.pair(0.72, 1);
   }
 
-  /**
-   * Hold an editable word. Its content is rendered ONCE per pass and then
-   * left alone: the browser owns the text while a word is being typed into,
-   * and re-rendering under a caret is how a contenteditable loses it.
-   */
-  hold = modifier((el: HTMLElement, [id]: [string]) => {
-    this.live.set(id, el);
-    return () => this.live.delete(id);
-  });
-
-  toggle = () => {
-    if (this.editing) {
-      // read what was typed BEFORE the pass, or the nodes are already gone
-      const next = { ...this.record };
-      for (const [key, words] of this.plan) {
-        const typed = words
-          .map((word) => this.live.get(word.id)?.textContent ?? word.word)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (typed) {
-          next[key] = typed;
-        }
-      }
-      const changed = FIELDS.some(({ key }) => next[key] !== this.record[key]);
-      if (changed) {
-        this.record = next;
-        // a fresh generation hands Glimmer keys it has never seen, so it
-        // builds new nodes instead of adopting ones the browser has been
-        // editing behind its back
-        this.generation++;
-      }
-    }
-    this.editing = !this.editing;
-  };
-
   <template>
     <div class="ex ie">
       <Choreo
         class="ie-card"
         data-mode={{if this.editing "edit" "view"}}
+        data-flying={{if this.flying "true"}}
         as |c|
       >
+        {{this.grab c}}
         <div class="ie-head">
           <span
             class="ie-avatar"
@@ -327,12 +340,14 @@ export class InlineEdit extends Component {
         <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
 
         {{#each this.fields as |field|}}
-          <div class="ie-field" data-field={{field.key}}>
-            {{! The form's chrome is its OWN element. While the box holding
-                the words also drew the border, the frame had to fly with the
-                text and the eye read the chrome as the thing that was
-                moving. A plate that is not the text container is left out of
-                every Move: it arrives where the form puts it and fades up. }}
+          <div
+            class="ie-field"
+            data-field={{field.key}}
+            {{motion id=(concat field.key "-field") role="field"}}
+          >
+            {{! The form's chrome is its own element, so it can be left out of
+                every Move: it belongs to the container rather than to the
+                text, and it arrives where the form puts it. }}
             <span
               class="ie-plate"
               {{motion id=(concat field.key "-plate") role="plate"}}
@@ -345,21 +360,52 @@ export class InlineEdit extends Component {
               >{{field.label}}</span>
             {{/if}}
 
-            {{! The line's box travels; the words inside it do not flow. Each
-                one is absolutely positioned at an x pretext worked out for
-                both scales, so the type can change size without anything
-                being laid out and the gaps stay the line's own. }}
-            <div
-              class="ie-box"
-              data-test-field={{field.key}}
-              aria-label={{field.label}}
-            >
+            <div class="ie-box" data-test-field={{field.key}}>
+              {{! PHASE 1 and PHASE 3: real DOM at both ends. Neither carries
+                  a motion id, and that is deliberate — they are not in the
+                  crossing at all. There is never a moment with two copies of
+                  a value on screen: the string is gone the instant the
+                  flight begins, the control's own text is transparent for
+                  exactly as long as the flight is up, and the word lands on
+                  the pixel the control will paint. A crossfade here would be
+                  two identical copies blending, which reads as a ghost — and
+                  a ghost is what you get when the two do not agree, so the
+                  right answer is to make them agree and show one. }}
+              {{#if this.editing}}
+                {{#if field.date}}
+                  <DateField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                  />
+                {{else if field.email}}
+                  <EmailField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                  />
+                {{else}}
+                  <TextField
+                    @id={{concat "ie-" field.key}}
+                    @label={{field.label}}
+                    @value={{get this.record field.key}}
+                    @onChange={{fn this.update field.key}}
+                  />
+                {{/if}}
+              {{else}}
+                <span class="ie-value">{{get this.record field.key}}</span>
+              {{/if}}
+
+              {{! PHASE 2: the flight. These words are in the DOM in every
+                  phase — that is what lets the region keep their identity and
+                  fly them with the field — but they are only ever VISIBLE
+                  between the two real poses. }}
               {{#each (this.words field.key) key="id" as |part|}}
                 <span
                   class="ie-word"
-                  contenteditable={{if this.editing "true" "false"}}
-                  spellcheck="false"
-                  {{this.hold part.id}}
+                  aria-hidden="true"
                   {{motion
                     id=part.id
                     role=field.role
@@ -380,21 +426,23 @@ export class InlineEdit extends Component {
             @overlap={{0.42}}
           />
 
-          {{! The lines travel as boxes; so do the avatar and the hairline.
-              The plates are deliberately in no Move at all. }}
+          {{! The card's boxes travel — the library's measurement, not mine.
+              The plates are in no Move at all: they expand where they land. }}
+          <c.Move @of={{c.moved "field"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
 
-          {{! One step, one journey per word: a step property may be a
-              function of the sprite, so the plan is read per element. }}
+          {{! Each word's x comes from pretext. Whether it can be SEEN comes
+              from the region's arming, in the stylesheet — a rest pose the
+              engine does not own, so a pass that runs no step cannot leave
+              a word opaque over the control it was flying to. }}
           <c.Tween
             @of={{c.kept "name-value"}}
             @x={{this.wordX}}
             @fontSize={{this.nameSize}}
             @fontWeight={{this.nameWeight}}
-            @letterSpacing={{this.nameTracking}}
             @duration={{MOVE}}
-            @ease={{SOFT}}
+            @ease={{EASE}}
           />
           <c.Tween
             @of={{c.kept "sub-value"}}
@@ -402,26 +450,27 @@ export class InlineEdit extends Component {
             @fontSize={{this.subSize}}
             @fontWeight={{this.subWeight}}
             @duration={{MOVE}}
-            @ease={{SOFT}}
+            @ease={{EASE}}
           />
+
           <c.Tween
             @of={{c.kept "initials"}}
             @fontSize={{this.initialSize}}
             @duration={{MOVE}}
-            @ease={{SOFT}}
+            @ease={{EASE}}
           />
           <c.Tween
             @of={{c.kept "avatar"}}
             @borderRadius={{this.avatarRadius}}
             @duration={{BOX}}
-            @ease={{SOFT}}
+            @ease={{EASE}}
           />
           <c.Tween
             @of={{c.kept "plate"}}
             @opacity={{this.plateOpacity}}
             @scaleY={{this.plateScale}}
             @duration={{BOX}}
-            @ease={{SOFT}}
+            @ease={{EASE}}
           />
         </c.Parallel>
       </Choreo>
