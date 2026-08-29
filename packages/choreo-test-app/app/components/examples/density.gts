@@ -16,13 +16,14 @@ import { preventSelect } from 'test-app/lib/pointer';
  * 2 `bag`     stacked by how many of that tile a Scrabble set contains
  * 3 `points`  stacked by what the tile is worth
  * 4 `plot`    frequency against points, with axes
+ * 5 `game`    the whole set played out on a board
  *
  * `points` and `plot` share an x axis on purpose, so the last leg is a purely
  * vertical spread out of the stacks. `bag` comes before them rather than
  * after for the same reason: it has an x axis of its own, and putting it
  * between the two would break the one they share.
  */
-const STOPS = ['A–Z', 'Vowels', 'Bag', 'Points', 'Plot'];
+const STOPS = ['A–Z', 'Vowels', 'Bag', 'Points', 'Plot', 'Game'];
 const LAST = STOPS.length - 1;
 
 /**
@@ -158,12 +159,38 @@ const BAG: Record<string, number> = {
   z: 1,
 };
 
-/* ── the four layouts, arithmetic rather than stylesheet ────────────────── */
+/**
+ * CWM FJORD BANK GLYPHS VEXT QUIZ.
+ *
+ * A perfect pangram: six words, twenty-six letters, not one of them twice.
+ * (A cwm is a steep hollow on a hillside; vext is the archaic spelling of
+ * vexed. Both are good in Scrabble.) Nothing crosses — they are laid out as
+ * separate blocks — which is what makes it placeable at all: an interlocking
+ * version of the same idea is not, and I have the exhaustive search to prove
+ * it. Every letter has to be used exactly once, so VET and BAN would each
+ * need BOTH their repeated letters already adjacent on the board, and no
+ * arrangement of those words provides it.
+ *
+ * The two blanks are not played. They sit in the corner, which is the honest
+ * place for a tile nobody needed.
+ */
+const GAME = ['CWM', 'FJORD', 'BANK', 'GLYPHS', 'VEXT', 'QUIZ'];
+const GRID = 13;
+
+/* ── the layouts, arithmetic rather than stylesheet ─────────────────────── */
 
 const TILE = 24;
 const STEP = 30;
 const COLS = 7;
 const BOARD = { h: 380, w: 340 };
+/** the board's own pitch — one square per cell, a tile centred in each */
+const CELL = 25;
+const BOARD_X = Math.round((BOARD.w - GRID * CELL) / 2);
+const BOARD_Y = 20;
+const square = (col: number, row: number) => ({
+  x: BOARD_X + col * CELL + (CELL - TILE) / 2,
+  y: BOARD_Y + row * CELL + (CELL - TILE) / 2,
+});
 const GRID_X = Math.round((BOARD.w - (COLS - 1) * STEP - TILE) / 2);
 
 const alphabet = Object.keys(FREQ);
@@ -346,6 +373,18 @@ for (const value of values) {
   }
 }
 
+/** every letter's square, worked out from the six words */
+const played = new Map<string, { x: number; y: number }>();
+GAME.forEach((word, w) => {
+  const col = Math.floor((GRID - word.length) / 2);
+  const row = 1 + w * 2;
+  [...word].forEach((ch, j) => {
+    played.set(ch.toLowerCase(), square(col + j, row));
+  });
+});
+// the tiles nobody played, in the corner
+BLANKS.forEach((b, k) => played.set(b, square(GRID - 2 + k, GRID - 1)));
+
 const letters = bagful.map((ch, i) => {
   const blank = isBlank(ch);
   const vowel = VOWELS.has(ch);
@@ -375,6 +414,7 @@ const letters = bagful.map((ch, i) => {
       sack,
       pile,
       spot,
+      played.get(ch)!,
     ],
   };
 });
@@ -729,12 +769,22 @@ export class Density extends Component {
    * array below is one number per stop, so the whole schedule of what is
    * being asserted is readable in five columns.
    *
-   *                        A–Z  Vowels  Bag  Points  Plot
+   *                       A–Z  Vowels  Bag  Points  Plot  Game
    */
-  fadeVowels = [0, 1, 0, 0, 0];
-  fadeBag = [0, 0, 1, 0, 0];
-  fadePoints = [0, 0, 0, 1, 1];
-  fadePlot = [0, 0, 0, 0, 1];
+  fadeVowels = [0, 1, 0, 0, 0, 0];
+  fadeBag = [0, 0, 1, 0, 0, 0];
+  fadePoints = [0, 0, 0, 1, 1, 0];
+  fadePlot = [0, 0, 0, 0, 1, 0];
+  fadeGame = [0, 0, 0, 0, 0, 1];
+  /**
+   * The blanks are part of the SET, not of the last two claims.
+   *
+   * They belong in A–Z, in the vowel split and in both distributions,
+   * because a set contains them. They have no letter frequency to plot and
+   * no part in a pangram that uses every letter exactly once, so they leave
+   * before those two rather than stand around implying otherwise.
+   */
+  fadeBlank = [1, 1, 1, 1, 0, 0];
 
   /** test-support: what the slider and the score are doing */
   get debug() {
@@ -798,6 +848,12 @@ export class Density extends Component {
           >{{value}}</span>
         {{/each}}
 
+        {{! the board, which is only true at the last stop }}
+        <span class="dn-grid" {{motion id="grid" role="game"}}></span>
+        <span class="dn-alab is-game" {{motion id="lab-game" role="game"}}>
+          Cwm fjord bank glyphs vext quiz · 26 tiles, no letter twice
+        </span>
+
         <span class="dn-axis is-y" {{motion id="axis-y" role="plot"}}></span>
         <span class="dn-alab is-yt" {{motion id="lab-yt" role="plot"}}>
           ↑ Rarer
@@ -856,6 +912,18 @@ export class Density extends Component {
             <c.Tween
               @of={{c.role "plot"}}
               @opacity={{this.fadePlot}}
+              @duration={{SPAN}}
+              @ease={{LINEAR}}
+            />
+            <c.Tween
+              @of={{c.role "blank"}}
+              @opacity={{this.fadeBlank}}
+              @duration={{SPAN}}
+              @ease={{LINEAR}}
+            />
+            <c.Tween
+              @of={{c.role "game"}}
+              @opacity={{this.fadeGame}}
               @duration={{SPAN}}
               @ease={{LINEAR}}
             />

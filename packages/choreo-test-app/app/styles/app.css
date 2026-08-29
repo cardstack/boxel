@@ -7815,6 +7815,44 @@ html[data-gm-dragging] * {
   color: var(--ink-dim);
 }
 
+/* The board: fifteen-by-fifteen is wider than this stage, so it is thirteen
+   squares — enough for the longest word with room around it. Drawn with
+   gradients rather than 169 elements, because it is scenery: nothing on it
+   moves, and the tiles that land on it are the participants. */
+.dn-grid {
+  position: absolute;
+  left: 8px;
+  top: 20px;
+  width: 325px;
+  height: 325px;
+  border-radius: 4px;
+  background-color: #e6ddcd;
+  background-image:
+    linear-gradient(to right, rgba(120, 96, 60, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(120, 96, 60, 0.22) 1px, transparent 1px);
+  background-size: 25px 25px;
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 96, 60, 0.35),
+    0 2px 8px rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
+  opacity: 0;
+}
+
+:root:not([data-theme='light']) .dn-grid {
+  background-color: #3a332b;
+  background-image:
+    linear-gradient(to right, rgba(226, 205, 170, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(226, 205, 170, 0.16) 1px, transparent 1px);
+}
+
+.dn-alab.is-game {
+  left: 8px;
+  top: 352px;
+  text-transform: none;
+  letter-spacing: 0.04em;
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
 .dn-key {
   position: absolute;
   top: 290px;
