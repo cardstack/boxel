@@ -43,8 +43,6 @@ export interface TypeScale {
   stretch?: string;
   /** em, as CSS letter-spacing is written; converted to px for the measure */
   tracking: number;
-  /** the space between words, in em of the size */
-  wordGap: number;
   weight: number;
 }
 
@@ -65,6 +63,15 @@ const shorthand = (t: TypeScale) =>
  * view does not, and folding that in here means the inset is tweened with
  * everything else rather than jumping at the frame the mode changes.
  */
+/** one string's natural width at a scale — no wrapping, no DOM */
+export function measureText(text: string, scale: TypeScale): number {
+  return measureNaturalWidth(
+    prepareWithSegments(text, shorthand(scale), {
+      letterSpacing: scale.tracking * scale.size,
+    })
+  );
+}
+
 export function layoutWords(
   words: string[],
   scale: TypeScale,
@@ -72,15 +79,23 @@ export function layoutWords(
 ): WordBox[] {
   const font = shorthand(scale);
   const letterSpacing = scale.tracking * scale.size;
-  const gap = scale.wordGap * scale.size;
+  const measure = (text: string) =>
+    text
+      ? measureNaturalWidth(prepareWithSegments(text, font, { letterSpacing }))
+      : 0;
+
+  // Each word's left edge is the WHOLE line's width less the width of the
+  // line from that word on. Nothing here invents an inter-word gap, and that
+  // is the point: the first version added a flat 0.3em between words, which
+  // put the first word on the pixel and every word after it a few out —
+  // visible as the space between a first and last name changing on handover.
+  // A space's advance is the font's business, it varies with the face and
+  // with letter-spacing, and it is already inside these measurements.
+  const line = measure(words.join(' '));
   const out: WordBox[] = [];
-  let x = start;
-  for (const word of words) {
-    const width = measureNaturalWidth(
-      prepareWithSegments(word, font, { letterSpacing })
-    );
-    out.push({ width, x });
-    x += width + gap;
+  for (let index = 0; index < words.length; index++) {
+    const suffix = measure(words.slice(index).join(' '));
+    out.push({ width: measure(words[index]!), x: start + line - suffix });
   }
   return out;
 }

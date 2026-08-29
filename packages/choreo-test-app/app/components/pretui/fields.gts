@@ -1,6 +1,8 @@
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import type { ComponentLike } from '@glint/template';
+import { motion } from 'glimmer-motion';
 
 /**
  * Three real form fields, written the way pretui writes them.
@@ -90,7 +92,7 @@ export class EmailField extends Component<{
   </template>
 }
 
-const MONTHS = [
+export const MONTHS = [
   'January',
   'February',
   'March',
@@ -105,13 +107,23 @@ const MONTHS = [
   'December',
 ];
 
+const range = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, index) => String(from + index));
+
+const DAYS = range(1, 31);
+const YEARS = range(1930, 2012).reverse();
+
 /**
- * Segmented, as pretui's `KnownDate` is: day, month, year, each its own
- * control. A native `<input type='date'>` is a single opaque widget whose
- * text you cannot address, and a date a person half-remembers — the year
- * without the day — cannot be typed into one at all.
+ * Three dropdowns: day, month, year — pretui's `KnownDate` shape.
  *
- * The segmentation is also what makes the handoff land: "14 March 1986" is
+ * Segmented rather than a native `<input type='date'>`, which is a single
+ * opaque widget whose text you cannot address and which cannot hold a date a
+ * person only half-remembers. Three closed lists rather than three text
+ * boxes, because every part of a date IS a closed list, and a picker that
+ * knows February has no thirtieth is worth more than free text that does
+ * not.
+ *
+ * The segmentation is also what makes the handover land: "14 March 1986" is
  * three words in the reading view and three controls here, so each word has
  * somewhere of its own to arrive.
  */
@@ -119,7 +131,9 @@ export class DateField extends Component<{
   Args: FieldArgs;
   Element: HTMLElement;
 }> {
+  days = DAYS;
   months = MONTHS;
+  years = YEARS;
 
   get parts() {
     const [day = '', month = '', year = ''] = this.args.value.split(/\s+/);
@@ -137,47 +151,48 @@ export class DateField extends Component<{
 
   <template>
     <div class="pt-date" role="group" aria-label={{@label}} ...attributes>
-      <input
+      <select
         class="pt-input pt-date-day"
-        type="text"
+        {{motion id=(concat @id "-day") role="chip"}}
         id={{@id}}
-        value={{this.parts.day}}
         aria-label="Day"
-        inputmode="numeric"
-        maxlength="2"
-        {{on "input" this.day}}
-      />
-      {{! A datalist rather than a <select>, and not for taste: a select
-          paints its text at an inset the browser chooses and does not
-          report, so a word flying to it lands eighteen pixels short in
-          Chrome and somewhere else again elsewhere. An input paints at its
-          content edge, which is a number this app already knows. The month
-          list is still closed — the datalist supplies it — and this is
-          still a segmented date, not a free-text one. }}
-      <input
-        class="pt-input pt-date-month"
-        type="text"
-        list="pt-months"
-        value={{this.parts.month}}
-        aria-label="Month"
-        autocomplete="off"
-        spellcheck="false"
-        {{on "input" this.month}}
-      />
-      <datalist id="pt-months">
-        {{#each this.months as |name|}}
-          <option value={{name}}></option>
+        {{on "change" this.day}}
+      >
+        {{#each this.days as |day|}}
+          <option value={{day}} selected={{isSame day this.parts.day}}>
+            {{day}}
+          </option>
         {{/each}}
-      </datalist>
-      <input
+      </select>
+      <select
+        class="pt-input pt-date-month"
+        {{motion id=(concat @id "-month") role="chip"}}
+        aria-label="Month"
+        {{on "change" this.month}}
+      >
+        {{#each this.months as |month|}}
+          <option value={{month}} selected={{isSame month this.parts.month}}>
+            {{month}}
+          </option>
+        {{/each}}
+      </select>
+      <select
         class="pt-input pt-date-year"
-        type="text"
-        value={{this.parts.year}}
+        {{motion id=(concat @id "-year") role="chip"}}
         aria-label="Year"
-        inputmode="numeric"
-        maxlength="4"
-        {{on "input" this.year}}
-      />
+        {{on "change" this.year}}
+      >
+        {{#each this.years as |year|}}
+          <option value={{year}} selected={{isSame year this.parts.year}}>
+            {{year}}
+          </option>
+        {{/each}}
+      </select>
     </div>
   </template>
+}
+
+/** `selected` wants a boolean, and there is no `eq` in a strict template */
+function isSame(a: string, b: string) {
+  return a === b;
 }

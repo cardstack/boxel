@@ -15,10 +15,12 @@ import type { Sprite } from 'glimmer-motion';
 import {
   DateField,
   EmailField,
+  MONTHS,
   TextField,
 } from 'test-app/components/pretui/fields';
 import {
   layoutWords,
+  measureText,
   type TypeScale,
   typeReady,
 } from 'test-app/lib/word-layout';
@@ -31,15 +33,10 @@ import {
  * would make it invokable is a lie about three genuinely different shapes.
  */
 const FIELDS = [
-  { date: false, email: false, key: 'name', label: 'Name', role: 'name-value' },
-  { date: false, email: true, key: 'email', label: 'Email', role: 'sub-value' },
-  {
-    date: true,
-    email: false,
-    key: 'dob',
-    label: 'Date of birth',
-    role: 'sub-value',
-  },
+  { date: false, email: false, key: 'name', label: 'Name' },
+  { date: false, email: false, key: 'title', label: 'Job title' },
+  { date: false, email: true, key: 'email', label: 'Email' },
+  { date: true, email: false, key: 'dob', label: 'Date of birth' },
 ] as const;
 
 type Key = (typeof FIELDS)[number]['key'];
@@ -105,11 +102,22 @@ const GAP = 8;
  * are what catch it if they ever drift.
  */
 const LANES = {
-  edit: { dob: 56, email: 56, head: 36, name: 56, rule: 1 },
-  view: { dob: 22, email: 22, head: 88, name: 44, rule: 1 },
+  edit: { dob: 56, email: 56, head: 36, name: 56, rule: 1, title: 56 },
+  view: { dob: 22, email: 22, head: 88, name: 40, rule: 1, title: 26 },
 } as const;
 
-const ORDER = ['head', 'rule', 'name', 'email', 'dob'] as const;
+/**
+ * The lanes, in order — DERIVED from the form rather than restated.
+ *
+ * This was a hand-written list beside `FIELDS`, and a stylesheet held a
+ * third copy of it in `grid-template-areas`. Adding a field to the form put
+ * the three out of step: the job title had a lane name no row template knew,
+ * so it fell into an implicit row at the bottom and the form read name,
+ * email, date of birth, job title. The form's order is the only order there
+ * is; everything below is a consequence of it, including the row template,
+ * which is handed to the stylesheet rather than repeated in it.
+ */
+const ORDER = ['head', 'rule', ...FIELDS.map((field) => field.key)] as const;
 
 /** the top of each lane, in the card's padding-box coordinates */
 function lanes(pose: 'edit' | 'view') {
@@ -140,12 +148,27 @@ const INSET = 11;
  * flight has to know where "14", "March" and "1986" are going before any of
  * those controls exist.
  */
-const SEGMENT = { day: 32, gap: 6, month: 104 };
-const DATE_X = [
-  0,
-  SEGMENT.day + SEGMENT.gap,
-  SEGMENT.day + SEGMENT.gap + SEGMENT.month + SEGMENT.gap,
-].map((offset) => BORDER + INSET + offset);
+/**
+ * The date's three segments are a FLEX row whose widths are MEASURED, not
+ * declared. Each is its own chip: a little padding, the widest value it will
+ * ever have to hold, and room for a caret.
+ *
+ * Measured because the two things that have to agree are the width the
+ * browser lays the chip out at and the x pretext tells a word to land on,
+ * and there is one way to be sure of that: derive both from the same
+ * measurement. A hardcoded 104 is a number that was right for "September" in
+ * one face at one size and silently wrong the moment any of those changed.
+ *
+ * The WIDEST value rather than the current one, so a chip does not resize
+ * under its own value when the month changes.
+ */
+const SEGMENT = { caret: 18, gap: 6, pad: 8 };
+const WIDEST = [['28'], MONTHS, ['1986']];
+
+const chip = (widest: readonly string[]) =>
+  SEGMENT.pad +
+  Math.ceil(Math.max(...widest.map((text) => measureText(text, EDIT.dob)))) +
+  SEGMENT.caret;
 
 /**
  * Where the reading view puts the date: on the SAME line as the email, at
@@ -155,7 +178,6 @@ const DATE_X = [
 const SUB_SPLIT = 176;
 
 const FAMILY = 'Archivo';
-const WORD_GAP = 0.3;
 
 /**
  * 87.5% of Archivo's width axis, said the one way both the canvas and the
@@ -172,14 +194,20 @@ const scale = (size: number, weight: number, tracking: number): TypeScale => ({
   stretch: STRETCH,
   tracking,
   weight,
-  wordGap: WORD_GAP,
 });
 
-/** reading: a large bold name over two quiet values */
+/**
+ * Reading: an employee's name at the top of its own hierarchy, the job title
+ * directly under it in the second voice, and the contact metadata quiet
+ * below a rule. Three sizes rather than two, because a record with a title
+ * has three ranks in it and flattening the middle one is what makes an
+ * intranet profile read as a list of fields instead of as a person.
+ */
 const VIEW: Record<Key, TypeScale> = {
   dob: scale(13, 500, -0.01),
   email: scale(13, 500, -0.01),
   name: scale(30, 700, -0.03),
+  title: scale(15, 500, -0.01),
 };
 
 /** writing: every field the same, because a form's values are one kind of thing */
@@ -187,15 +215,31 @@ const EDIT: Record<Key, TypeScale> = {
   dob: scale(17, 400, -0.01),
   email: scale(17, 400, -0.01),
   name: scale(17, 400, -0.01),
+  title: scale(17, 400, -0.01),
 };
 
+/**
+ * One word, and everything about it in both poses.
+ *
+ * Position, size, weight and tracking all live here rather than in a getter
+ * per role, because the foreground layer inherits nothing from a box: a word
+ * out of flow has to be told all four, and the number of distinct type
+ * scales on the card is a design decision, not a shape the score should have
+ * to know. One step covers every word; the plan tells each one apart.
+ */
+interface Pose {
+  size: string;
+  tracking: string;
+  weight: number;
+  x: number;
+  y: number;
+}
+
 interface Word {
+  edit: Pose;
   id: string;
+  view: Pose;
   word: string;
-  editX: number;
-  editY: number;
-  viewX: number;
-  viewY: number;
 }
 
 /** a line's origin — first glyph's left, and the line's centre */
@@ -211,17 +255,27 @@ function origins(pose: 'edit' | 'view'): Record<Key, Origin> {
     // of the platter, one border and one padding in from its left
     const centre = (key: Key) => lane[key].top + lane[key].height - PLATE_H / 2;
     return {
-      dob: { x: DATE_X[0]!, y: centre('dob') },
+      dob: { x: BORDER + INSET + SEGMENT.pad, y: centre('dob') },
       email: { x: BORDER + INSET, y: centre('email') },
       name: { x: BORDER + INSET, y: centre('name') },
+      title: { x: BORDER + INSET, y: centre('title') },
     };
   }
   const middle = (key: Key) => lane[key].top + lane[key].height / 2;
+  /**
+   * The contact line sits on the FLOOR of its lane rather than in the middle
+   * of it. A 13px value in a 22px lane centred looks like it is floating in
+   * a space it was given rather than sitting at the bottom of the card, and
+   * the two secondary values are the last thing on a profile: they should
+   * read as a footer, not as another row.
+   */
+  const floor = (key: Key) => lane[key].top + lane[key].height - 6;
   return {
     // the date shares the email's line, and only the type does
-    dob: { x: SUB_SPLIT, y: middle('email') },
-    email: { x: 0, y: middle('email') },
+    dob: { x: SUB_SPLIT, y: floor('email') },
+    email: { x: 0, y: floor('email') },
     name: { x: 0, y: middle('name') },
+    title: { x: 0, y: middle('title') },
   };
 }
 
@@ -267,6 +321,7 @@ export class InlineEdit extends Component {
     dob: '14 March 1986',
     email: 'm.villanueva@kiln.studio',
     name: 'Marguerite Villanueva',
+    title: 'Principal Engineer',
   };
 
   /**
@@ -315,16 +370,21 @@ export class InlineEdit extends Component {
       // the date's three words go to three controls, not to one flowed line
       const editX =
         key === 'dob'
-          ? words.map((_, i) => DATE_X[i] ?? DATE_X[0]!)
+          ? words.map((_, i) => this.dateX[i] ?? this.dateX[0]!)
           : layoutWords(words, EDIT[key], edit[key].x).map((b) => b.x);
+      const pose = (at: TypeScale, x: number, y: number): Pose => ({
+        size: `${at.size}px`,
+        tracking: `${at.tracking}em`,
+        weight: at.weight,
+        x,
+        y,
+      });
       plan.set(
         key,
         words.map((word, index) => ({
-          editX: editX[index] ?? edit[key].x,
-          editY: edit[key].y,
+          edit: pose(EDIT[key], editX[index] ?? edit[key].x, edit[key].y),
           id: `${key}-g${this.generation}-w${index}`,
-          viewX: viewX[index] ?? view[key].x,
-          viewY: view[key].y,
+          view: pose(VIEW[key], viewX[index] ?? view[key].x, view[key].y),
           word,
         }))
       );
@@ -333,6 +393,56 @@ export class InlineEdit extends Component {
   }
 
   words = (key: Key) => this.plan.get(key) ?? [];
+
+  /**
+   * The date's chip widths, measured once per generation, and the three text
+   * origins that follow from them. One measurement, used by the stylesheet
+   * through custom properties and by the plan through `dateX` — so the chip
+   * the browser lays out and the mark the word flies to cannot disagree.
+   */
+  get chips() {
+    // read the generation so a font arriving re-measures everything
+    this.generation;
+    return WIDEST.map(chip);
+  }
+
+  get dateX() {
+    const [day = 0, month = 0] = this.chips;
+    return [0, day + SEGMENT.gap, day + SEGMENT.gap + month + SEGMENT.gap].map(
+      (offset) => BORDER + INSET + offset + SEGMENT.pad
+    );
+  }
+
+  /**
+   * Everything the stylesheet needs and cannot know: the lane order and
+   * heights for this pose, the card's height that follows from them, and the
+   * measured chip widths. Handed over rather than repeated, so there is no
+   * second copy of the form's order to fall out of step with the first.
+   */
+  get metrics() {
+    const lane = lanes(this.editing ? 'edit' : 'view');
+    const last = lane[ORDER[ORDER.length - 1]!];
+    const [day = 0, month = 0, year = 0] = this.chips;
+    return htmlSafe(
+      [
+        // custom properties rather than the real ones: they are set on the
+        // wrapper and read by the card, because a component's element does
+        // not take a `style` attribute and inheritance does not care
+        `--ie-areas:${ORDER.map((name) => `'${name}'`).join(' ')}`,
+        `--ie-rows:${ORDER.map((n) => `${lane[n].height}px`).join(' ')}`,
+        `--ie-height:${PAD * 2 + last.top + last.height}px`,
+        `--pt-day:${day}px`,
+        `--pt-month:${month}px`,
+        `--pt-year:${year}px`,
+        `--pt-seg-gap:${SEGMENT.gap}px`,
+        `--pt-seg-pad:${SEGMENT.pad}px`,
+        `--pt-caret:${SEGMENT.caret}px`,
+      ].join(';')
+    );
+  }
+
+  /** each row's own lane, so no stylesheet has to name the fields */
+  area = (key: Key) => htmlSafe(`grid-area:${key}`);
 
   /**
    * The reading view's own strings, at the origins the plan computed.
@@ -397,15 +507,27 @@ export class InlineEdit extends Component {
    * give every word its own path: the plan already knows where each id
    * belongs in both poses, so this is a lookup, not a measurement.
    */
-  wordX = (sprite: Sprite) => {
-    const word = this.find(sprite.id);
-    return word ? this.tween(word.viewX, word.editX)() : 0;
-  };
+  /**
+   * One step, one journey per SPRITE, for every property at once.
+   *
+   * A step property may be a function of the sprite it is applied to, which
+   * is what lets a single `<c.Tween>` give every word on the card its own
+   * position, size, weight and kerning — three type scales across four
+   * fields, out of one step. The plan already knows where each id belongs in
+   * both poses, so each of these is a lookup rather than a measurement.
+   */
+  private of =
+    <K extends keyof Pose>(key: K) =>
+    (sprite: Sprite) => {
+      const word = this.find(sprite.id);
+      return word ? this.tween(word.view[key], word.edit[key])() : 0;
+    };
 
-  wordY = (sprite: Sprite) => {
-    const word = this.find(sprite.id);
-    return word ? this.tween(word.viewY, word.editY)() : 0;
-  };
+  wordX = this.of('x');
+  wordY = this.of('y');
+  wordSize = this.of('size');
+  wordWeight = this.of('weight');
+  wordTracking = this.of('tracking');
 
   /**
    * The word fades up ONLY when there is something to fade against.
@@ -419,37 +541,6 @@ export class InlineEdit extends Component {
    * against nothing is the value going missing for a fifth of a second.
    */
   wordFade = () => (this.moving && !this.editing ? [0, 1, 1, 1] : 1);
-
-  get nameSize() {
-    return this.tween(`${VIEW.name.size}px`, `${EDIT.name.size}px`);
-  }
-
-  get nameWeight() {
-    return this.tween(VIEW.name.weight, EDIT.name.weight);
-  }
-
-  /**
-   * Tracking is tweened, not left to the stylesheet, and it has to be. The
-   * reading view sets the name at -0.03em and everything else at -0.01em,
-   * and pretext measured every word against exactly those numbers. Wearing
-   * the shared -0.01em instead, the flight's first letter landed on the
-   * pixel and every letter after it drifted.
-   */
-  get nameTracking() {
-    return this.tween(`${VIEW.name.tracking}em`, `${EDIT.name.tracking}em`);
-  }
-
-  get subSize() {
-    return this.tween(`${VIEW.dob.size}px`, `${EDIT.dob.size}px`);
-  }
-
-  get subWeight() {
-    return this.tween(VIEW.dob.weight, EDIT.dob.weight);
-  }
-
-  get subTracking() {
-    return this.tween(`${VIEW.dob.tracking}em`, `${EDIT.dob.tracking}em`);
-  }
 
   get initialSize() {
     return this.tween('28px', '14px');
@@ -494,6 +585,13 @@ export class InlineEdit extends Component {
       void this.arming.settled().then(() => {
         this.moving = false;
         this.root?.removeAttribute('data-flying');
+        // the form has landed: put the caret in the first field, the way a
+        // sheet that opens for editing does. Not before — a focus ring on a
+        // control whose text is hidden while the flight draws it is a ring
+        // around nothing.
+        if (this.editing) {
+          this.root?.querySelector<HTMLElement>('.ie-plate input')?.focus();
+        }
       });
     }
     this.editing = !this.editing;
@@ -501,7 +599,7 @@ export class InlineEdit extends Component {
 
   <template>
     {{! `data-flying` is set on this element by hand — see `toggle`. }}
-    <div class="ex ie" {{this.hold}}>
+    <div class="ex ie" style={{this.metrics}} {{this.hold}}>
       <Choreo
         class="ie-card"
         data-mode={{if this.editing "edit" "view"}}
@@ -523,8 +621,18 @@ export class InlineEdit extends Component {
           </span>
 
           <span class="ie-kicker" {{motion id="kicker" role="type"}}>
-            {{if this.editing "Editing record" "Customer"}}
+            {{if this.editing "Editing profile" "Kiln Engineering"}}
           </span>
+
+          {{! Top right of the card, the way a phone puts Edit and Done: the
+              control that changes the mode belongs to the thing whose mode
+              it changes, not to the page around it. }}
+          <button
+            type="button"
+            class="ie-toggle"
+            data-test-toggle
+            {{on "click" this.toggle}}
+          >{{if this.editing "Done" "Edit"}}</button>
         </div>
 
         <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
@@ -534,6 +642,7 @@ export class InlineEdit extends Component {
             <span
               class="ie-label"
               data-label={{field.key}}
+              style={{this.area field.key}}
               {{motion id=(concat field.key "-label") role="label"}}
             >{{field.label}}</span>
           {{/if}}
@@ -546,6 +655,7 @@ export class InlineEdit extends Component {
             class="ie-plate"
             data-field={{field.key}}
             data-test-field={{field.key}}
+            style={{this.area field.key}}
             {{motion id=(concat field.key "-plate") role="plate"}}
           >
             {{#if this.editing}}
@@ -603,10 +713,10 @@ export class InlineEdit extends Component {
                 aria-hidden="true"
                 {{motion
                   id=part.id
-                  role=field.role
+                  role="value"
                   style=(styles
-                    x=(if this.editing part.editX part.viewX)
-                    y=(if this.editing part.editY part.viewY)
+                    x=(if this.editing part.edit.x part.view.x)
+                    y=(if this.editing part.edit.y part.view.y)
                   )
                 }}
               >{{part.word}}</span>
@@ -643,26 +753,17 @@ export class InlineEdit extends Component {
             @ease={{EASE}}
           />
 
-          {{! The foreground moves as TYPE: every property of it at once, and
-              all of it from the plan rather than from a box. }}
+          {{! The foreground moves as TYPE: every property of it at once, out
+              of ONE step, because a step property may be a function of the
+              sprite it is applied to. Three type scales across four fields,
+              and the score does not have to know that. }}
           <c.Tween
-            @of={{c.kept "name-value"}}
+            @of={{c.kept "value"}}
             @x={{this.wordX}}
             @y={{this.wordY}}
-            @fontSize={{this.nameSize}}
-            @fontWeight={{this.nameWeight}}
-            @letterSpacing={{this.nameTracking}}
-            @opacity={{this.wordFade}}
-            @duration={{MOVE}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.kept "sub-value"}}
-            @x={{this.wordX}}
-            @y={{this.wordY}}
-            @fontSize={{this.subSize}}
-            @fontWeight={{this.subWeight}}
-            @letterSpacing={{this.subTracking}}
+            @fontSize={{this.wordSize}}
+            @fontWeight={{this.wordWeight}}
+            @letterSpacing={{this.wordTracking}}
             @opacity={{this.wordFade}}
             @duration={{MOVE}}
             @ease={{EASE}}
@@ -682,6 +783,24 @@ export class InlineEdit extends Component {
             @duration={{LEAVE}}
             @ease={{EASE}}
           />
+
+          {{! The date's three chips arrive as part of the crossing rather
+              than by a rule of their own: they are inserted, so the score
+              can address them, and their entrance is the same fade every
+              other arrival on this card gets. Their TEXT is not what fades —
+              the flight is still drawing that — only the grey they sit on. }}
+          <c.Tween
+            @of={{c.inserted "chip"}}
+            @opacity={{FADE_IN}}
+            @duration={{BOX}}
+            @ease={{EASE}}
+          />
+          <c.Tween
+            @of={{c.removed "chip"}}
+            @opacity={{FADE_OUT}}
+            @duration={{LEAVE}}
+            @ease={{EASE}}
+          />
           <c.Tween
             @of={{c.inserted "label"}}
             @opacity={{FADE_IN}}
@@ -696,13 +815,6 @@ export class InlineEdit extends Component {
           />
         </c.Parallel>
       </Choreo>
-
-      <button
-        type="button"
-        class="ie-toggle"
-        data-test-toggle
-        {{on "click" this.toggle}}
-      >{{if this.editing "Done" "Edit"}}</button>
     </div>
   </template>
 }

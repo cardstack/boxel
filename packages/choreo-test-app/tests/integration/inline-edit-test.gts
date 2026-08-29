@@ -134,13 +134,13 @@ module('Integration | inline edit', function (hooks) {
       'and every date word lands on its own segment, to the pixel'
     );
 
-    // the segments are 32 and 104 wide with 6 between, so the three text
-    // origins are 38 and 110 apart wherever the platter's own inset puts them
+    // three separate origins, not one flowed line — and the gaps between
+    // them are the measured chip widths, which is what `controlTextX` above
+    // has already pinned them to
     const [day, month, year] = wordX('dob');
-    assert.deepEqual(
-      [month! - day!, year! - month!],
-      [38, 110],
-      'and the date lands on three separate segments, not one flowed line'
+    assert.ok(
+      day! < month! && month! < year!,
+      `the date lands on three segments in order (${wordX('dob')})`
     );
   });
 

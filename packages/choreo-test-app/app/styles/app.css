@@ -10760,52 +10760,69 @@ html[data-gm-dragging] * {
   }
 }
 
-/* ── In place: a record read, then written ───────────────────────────────
+/* ── In place: an employee profile, read and then written ────────────────
    TWO LAYERS, with different laws.
 
    The BACKGROUND is boxes with borders, and it is a containment hierarchy:
-   the white card holds three beige platters, one per field, each in its own
-   lane. The lanes are in the same order in both poses and a platter never
-   leaves its own, so no box can cross another — they grow, shrink and slide
-   along their lane while the card changes height around them. Which is why
-   the card is a single column even though the reading view does not look
-   like one.
+   the white card holds one beige platter per field, each in its own lane.
+   The lanes are in the same order in both poses and a platter never leaves
+   its own, so no box can cross another — they grow, shrink and slide along
+   their lane while the card changes height around them.
 
    The FOREGROUND is type, and it is a layer OVER the card rather than
    content inside the platters. Nothing lays it out and nothing clips it, so
    it is free to cross: that is how the reading view puts email and date of
-   birth on one line while their platters sit in two separate lanes
-   underneath. The price is that the type inherits nothing — it carries its
-   own position, size, weight and kerning, all from pretext, and this
-   stylesheet only states its rest poses.
+   birth on one line while their platters sit in two separate lanes. The
+   price is that the type inherits nothing — position, size, weight and
+   kerning all come from pretext, and this stylesheet only states rest poses.
+
+   WHAT IS NOT HERE. The lane order, the row heights, the card's height and
+   the date's chip widths are all handed in by the component as inline
+   custom properties, because every one of them is a consequence of the form.
+   A stylesheet that restated the field order is a second copy of it, and the
+   copies fall out of step: a job title added to the form had a lane name no
+   row template knew, so it dropped into an implicit row at the bottom and
+   the form read name, email, date of birth, job title.
 
    Archivo is variable (wght 400..700, loaded at the top of this file), so
    `font-weight` is a plain number the engine interpolates. The width axis is
    reached with `font-stretch`, never `font-variation-settings`: a variation
-   axis cannot appear in the canvas font shorthand pretext measures with, so
-   the two ends would disagree by a whole line's worth of width. */
+   axis cannot appear in the canvas font shorthand pretext measures with. */
 .ie {
   display: grid;
+  /* One fixed row, so the card's top edge is pinned: the two poses are
+     different heights on purpose, and a card centred in an auto row would
+     turn that into vertical drift under every flight. */
+  grid-template-rows: 340px;
   /* An EXPLICIT column. An auto column is sized by what its items ask for,
      and mid-flight the card asks for more than it is given — so the column
      grew, the centred card was centred in something wider than the stage,
      and the whole card lurched 70px right and slid back. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 300px auto;
-  gap: 14px;
   justify-items: center;
   align-content: center;
 }
 
 /* THE WHITE PLATTER. Its top edge is pinned and it grows downward: the two
    poses are different heights on purpose, and a centred card would turn that
-   into vertical drift under every flight. */
+   into vertical drift under every flight. Its rows and its height come from
+   the component — see above. */
 .ie-card {
   position: relative;
   display: grid;
   align-self: start;
   box-sizing: border-box;
   width: min(100%, 340px);
+  /* the lane order, the row heights and the card's height are the form's
+     consequences, so the component hands them over and this only spends
+     them. `minmax(0, …)`, not `1fr`: an `fr` track is floored at the AUTO
+     minimum of its items, and a platter mid-flight carries an inline width
+     from the move it is playing, so the track grew to fit it and every lane
+     started in the wrong place. */
+  height: var(--ie-height);
+  grid-template-areas: var(--ie-areas);
+  grid-template-rows: var(--ie-rows);
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 18px;
   border: 1px solid var(--line);
@@ -10813,22 +10830,50 @@ html[data-gm-dragging] * {
   background: var(--bg-elev);
 }
 
-/* Five lanes, same order in both poses. `minmax(0, …)` on the column, not
-   `1fr`: an `fr` track is floored at the AUTO minimum of its items, and a
-   platter mid-flight carries an inline width from the move it is playing, so
-   the track grew to fit it and every lane started in the wrong place. */
-.ie-card[data-mode='view'] {
-  height: 245px;
-  grid-template-areas: 'head' 'rule' 'name' 'email' 'dob';
-  grid-template-rows: 88px 1px 44px 22px 22px;
-  grid-template-columns: minmax(0, 1fr);
+/* the mode switch belongs to the thing whose mode it changes, in the card's
+   own top-right corner the way a phone puts Done */
+.ie-toggle {
+  position: absolute;
+  top: 13px;
+  right: 13px;
+  z-index: 3;
+  /* One size in both states. EDIT and DONE are different lengths, and a
+     pill that shrink-wraps its label moves its own left edge when the mode
+     changes — the one control that should be the fixed point of the whole
+     transition, twitching. */
+  min-width: 74px;
+  padding: 6px 14px;
+  text-align: center;
+  /* The primary affordance of the whole demo, so it is a real button rather
+     than a hairline outline: a warm fill, a lip of highlight along the top
+     edge, and a shadow it sits on. All three are painted once — the lift on
+     press is a translate, which is the only part that moves. */
+  border: 1px solid rgb(180 60 20 / 55%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff9a4a, #e8531f);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 45%),
+    0 2px 6px rgb(216 69 26 / 32%);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
 }
 
-.ie-card[data-mode='edit'] {
-  height: 273px;
-  grid-template-areas: 'head' 'rule' 'name' 'email' 'dob';
-  grid-template-rows: 36px 1px 56px 56px 56px;
-  grid-template-columns: minmax(0, 1fr);
+.ie-toggle:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 55%),
+    0 3px 10px rgb(216 69 26 / 42%);
+}
+
+.ie-toggle:active {
+  translate: 0 1px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 1px 3px rgb(216 69 26 / 32%);
 }
 
 .ie-head {
@@ -10881,29 +10926,18 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* one hairline, and it travels: under the record in the reading view, under
-   the header in the form, where it reads as the top of a control panel */
+/* the form says so: the eyebrow is the one line that changes meaning between
+   the poses, from a team name to a statement of what the card is doing */
+.ie-card[data-mode='edit'] .ie-kicker {
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+/* one hairline, and it travels */
 .ie-rule {
   grid-area: rule;
   height: 1px;
   background: var(--line);
-}
-
-/* a label and its platter share a lane, so the label can stay put while the
-   platter grows underneath it */
-.ie-label[data-label='name'],
-.ie-plate[data-field='name'] {
-  grid-area: name;
-}
-
-.ie-label[data-label='email'],
-.ie-plate[data-field='email'] {
-  grid-area: email;
-}
-
-.ie-label[data-label='dob'],
-.ie-plate[data-field='dob'] {
-  grid-area: dob;
 }
 
 /* the label exists only in the form: it arrives with the editor and leaves
@@ -10923,13 +10957,15 @@ html[data-gm-dragging] * {
    no text in the reading view, which is why it can be empty there without
    looking like an empty box: it is invisible.
 
-   The platter is 40px including its border, so what it holds gets a 38px
-   line box — the content box exactly. A 40px line inside it overflows by a
-   pixel at each end. The border is 1px in BOTH poses and merely changes
-   colour, so the box does not resize when the form arrives; colour is left
-   to a transition, because a colour cannot smear under a moving box, while
-   the RADIUS rides a tween beside the move, because a corner carried by a
-   crop-scale is a corner that does. */
+   In the form its height is its CONTENT's height, not a number. The line
+   inside it is the one declared measurement, and 1px of border at each end
+   follows from that rather than being asserted alongside it.
+
+   The border is 1px in BOTH poses and merely changes colour, so the box does
+   not resize when the form arrives; colour is left to a transition, because
+   a colour cannot smear under a moving box, while the RADIUS rides a tween
+   beside the move, because a corner carried by a crop-scale is one that
+   does. */
 .ie-plate {
   --ie-line: 38px;
 
@@ -10948,7 +10984,7 @@ html[data-gm-dragging] * {
 }
 
 .ie-card[data-mode='edit'] .ie-plate {
-  height: 40px;
+  height: auto;
   border-color: rgb(28 22 18 / 22%);
   background: var(--bg);
   cursor: text;
@@ -10965,15 +11001,14 @@ html[data-gm-dragging] * {
 }
 
 /* A word in flight. Hidden at BOTH ends and shown only while the region says
-   a scene change is under way — there is no fade in either direction on
-   purpose, because for the length of the flight the word is the ONLY copy of
-   its value and there is nothing to blend it with.
+   a scene change is under way — no fade in either direction on purpose,
+   because for the length of the flight the word is the ONLY copy of its
+   value and there is nothing to blend it with.
 
    VISIBILITY rather than opacity, and not a preference: a participant's
    opacity is the engine's, which renders one inline, so a rule here is
-   outvoted and the words sat fully opaque over the controls with a
-   stylesheet that clearly said otherwise. Nothing in the library writes
-   `visibility`. */
+   outvoted and the words sat fully opaque over the controls. Nothing in the
+   library writes `visibility`. */
 .ie-word {
   position: absolute;
   top: 0;
@@ -11007,25 +11042,41 @@ html[data-gm-dragging] * {
   pointer-events: auto;
 }
 
+/* three ranks, because an employee record has three: who, what they do, and
+   how to reach them */
 .ie-value[data-value='name'] {
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 
+.ie-value[data-value='title'] {
+  color: var(--ink-dim);
+  font-size: 15px;
+  font-weight: 500;
+}
+
 .ie-value[data-value='email'],
 .ie-value[data-value='dob'] {
-  color: var(--ink-dim);
+  color: var(--ink-faint);
   font-size: 13px;
   font-weight: 500;
 }
 
-/* the live value stands aside for exactly as long as the flight is drawing
+/* The live value stands aside for exactly as long as the flight is drawing
    it. A DEPARTING control is in the orphan layer by then, outside the card
-   and so outside this rule, which is what lets it be seen fading out. */
-.ie[data-flying] .ie-value,
-.ie[data-flying] .ie-plate .pt-input {
+   and so outside these rules, which is what lets it be seen fading out.
+
+   The reading string goes with `visibility`, because it is nothing but its
+   text. A control is not: the date's chips are chrome, and they have an
+   entrance of their own to play. So a control loses its COLOUR and keeps its
+   box — the grey fades in underneath a value the flight is still carrying. */
+.ie[data-flying] .ie-value {
   visibility: hidden;
+}
+
+.ie[data-flying] .ie-plate .pt-input {
+  color: transparent;
 }
 
 /* REAL CONTROLS. The type here is the form's single scale, and it has to be
@@ -11054,45 +11105,49 @@ html[data-gm-dragging] * {
   outline-offset: -2px;
 }
 
-/* the segmented date: day, month, year, each its own control. These widths
-   are the flight's landing marks — change one and change the other, or
-   "March" arrives beside its field. */
+/* THE DATE: a flex row of three chips, one per part, each a closed list with
+   a caret. The widths are custom properties the component measured — the
+   chip the browser lays out and the mark a word flies to are the same
+   number, which is the only way the two can be trusted to agree. */
 .pt-date {
   display: flex;
   height: var(--ie-line);
-  gap: 6px;
+  gap: var(--pt-seg-gap);
   align-items: center;
   padding: 0 11px;
 }
 
 .pt-date .pt-input {
-  padding: 0;
-}
-
-.pt-date-day {
-  width: 32px;
-}
-
-.pt-date-month {
-  width: 104px;
-}
-
-.pt-date-year {
-  width: 52px;
-}
-
-.ie-toggle {
-  padding: 6px 16px;
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  flex: none;
+  height: 28px;
+  padding: 0 var(--pt-caret) 0 var(--pt-seg-pad);
+  border-radius: 7px;
+  background: rgb(28 22 18 / 5%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%236b6255' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  line-height: 28px;
   cursor: pointer;
 }
 
-.ie-toggle:active {
-  translate: 0 1px;
+.pt-date .pt-input:hover {
+  background-color: rgb(28 22 18 / 9%);
+}
+
+.pt-date .pt-input:focus-visible {
+  border-radius: 7px;
+  outline: 2px solid #ff7a28;
+  outline-offset: 0;
+}
+
+.pt-date-day {
+  width: var(--pt-day);
+}
+
+.pt-date-month {
+  width: var(--pt-month);
+}
+
+.pt-date-year {
+  width: var(--pt-year);
 }

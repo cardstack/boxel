@@ -219,7 +219,7 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
     apis: ['c.Crossing', 'c.Move', 'c.Tween', 'createArming'],
     group: 'Choreo',
     id: 'inline-edit',
-    lede: 'A record read, then written. Real fields at both ends.',
+    lede: 'An employee profile, read and then written. Real fields at both ends.',
     sample: `// Real DOM, then a flight, then real DOM again.
 //
 //   1. the reading view's own markup — an ordinary string, in flow
