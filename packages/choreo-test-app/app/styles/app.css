@@ -11201,6 +11201,11 @@ html[data-gm-dragging] * {
   transition: outline-color 130ms ease-out;
 }
 
+.pt-plain {
+  display: flex;
+  align-items: center;
+}
+
 .pt-input:focus-visible {
   border-radius: 9px;
   outline-color: #ff7a28;
@@ -11239,7 +11244,12 @@ html[data-gm-dragging] * {
   outline-offset: -1px;
 }
 
-.pt-date .pt-input:focus-visible {
+.pt-date .pt-plain {
+  display: flex;
+  align-items: center;
+}
+
+.pt-input:focus-visible {
   border-radius: 7px;
   outline-color: #ff7a28;
 }

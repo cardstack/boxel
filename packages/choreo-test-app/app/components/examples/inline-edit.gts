@@ -937,7 +937,13 @@ export class InlineEdit extends Component {
             >
               {{#if this.editing}}
                 {{#if (isOff "controls")}}
-                  <span class="ie-value">{{get this.record field.key}}</span>
+                  {{! the probe's stand-in wears the control's own dress, so
+                      what it removes is the native control and not the
+                      layout as well }}
+                  <span class="pt-input pt-plain">{{get
+                      this.record
+                      field.key
+                    }}</span>
                 {{else if field.date}}
                   <DateField
                     @id={{concat "ie-" field.key}}
