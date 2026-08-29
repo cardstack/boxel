@@ -255,11 +255,12 @@ function resolveTarget(
 
 /**
  * The two boxes a shape-matched flight aligns: the declared subjects
- * ([data-choreo-substance]) when either end has one — Keynote matches
- * OBJECTS, not slide frames — with the undeclared end derived by fraction
- * (content laid out proportionally keeps one fraction at both scales; the
- * return trip's card, whose demo has not boarded yet, has nothing to
- * measure). Neither end declared: the frames themselves.
+ * ([data-choreo-substance], or pack="content" ink) when either end has
+ * one — Keynote matches OBJECTS, not slide frames — with the undeclared
+ * end derived by fraction (content laid out proportionally keeps one
+ * fraction at both scales; the return trip's card, whose demo has not
+ * boarded yet, has nothing to measure). Neither end declared: the frames
+ * themselves.
  */
 function matchBoxes(
   initial: Bounds,

@@ -1,9 +1,11 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
+import { Crossing } from 'test-app/components/examples/crossing';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
 import { FarMatch } from 'test-app/components/examples/far-match';
+import { Fold } from 'test-app/components/examples/fold';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
 import { HideHeader } from 'test-app/components/examples/hide-header';
@@ -32,7 +34,9 @@ import { Trail } from 'test-app/components/examples/trail';
 import { Wires } from 'test-app/components/examples/wires';
 import { BuildOrderNotes } from 'test-app/components/notes/build-order';
 import { CameraNotes } from 'test-app/components/notes/camera';
+import { CrossingNotes } from 'test-app/components/notes/crossing';
 import { FarNotes } from 'test-app/components/notes/far';
+import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
@@ -599,6 +603,50 @@ const layer = (sprite) => (sprite.counterpart ? 6 : 1);`,
     title: 'Far match',
   },
   {
+    Example: Crossing,
+    apis: ['c.Crossing', 'pack', 'createArming', 'c.Move'],
+    group: 'Choreo',
+    id: 'crossing',
+    lede: 'Two skins cross inside one flying box. The video never stops.',
+    sample: `// A CROSSING is the canned scene swap: leaves fade, the paired flight
+// carries, arrivals land near the settle. It is written in nothing but
+// the public step vocabulary — no privileged access, no snapshot.
+<c.Parallel>
+  {{! counterparts: same id, different content. Two skins, one box. }}
+  <c.Crossing
+    @duration={{tt.move}} @ease={{EASE}}
+    @leave={{tt.leave}} @arrive={{tt.arrive}} @overlap={{0.18}} />
+
+  {{! kept identities (the plate, the hairline) tween their REAL box —
+      crop-cover would scale Tide's wide plate into Violet's square. }}
+  <c.Move @of={{c.moved}} @duration={{tt.move}} @ease={{EASE}} />
+</c.Parallel>
+
+// The innards are NOT participants. A <video>, an auto-scrolling pane and
+// a spinning mark reflow with the box and keep running mid-flight — the
+// exact case a View Transition snapshot freezes into a still.
+<div class='hero' {{motion id='hero' role='hero'}}>
+  <video src={{CLIP}} muted loop autoplay playsinline></video>
+  <div class='pane' {{liveScroll}}>…</div>
+  {{! an inset caption INSIDE the plate is itself a counterpart, so a skin
+      crosses while its parent is still flying }}
+  <em {{motion id='inset' role='inset' pack='content'}}>{{s.inset}}</em>
+</div>
+
+// Drop-shadows do not tween. Tide's tight teal, Ember's huge warm and
+// Violet's small black are three different LIGHTS: interpolating the
+// box-shadow string reparses every frame and drags the colour through
+// mud. Each rest shadow is its own caster; only opacity crossfades.
+<span class='cast {{s.tone}}' data-slide={{s.n}}></span>
+
+// A cut can land at any phase — including mid-flight. data-phase='crossing'
+// stills the intra-slide CSS loops for the span of the run, because those
+// are transforms on the motion nodes themselves and would fight the Move.`,
+    notes: CrossingNotes,
+    slowmo: false,
+    title: 'Crossing',
+  },
+  {
     Example: Subdivision,
     apis: ['onPan', 'layout', 'instantLayoutTransition'],
     group: 'Drag',
@@ -1134,6 +1182,52 @@ get header() { return { y: this.hidden ? -72 : 0 }; }
 <div {{this.scroll.container}}></div>`,
     slowmo: true,
     title: 'Hide header',
+  },
+  {
+    Example: Fold,
+    apis: ['c.Perform', '@onPerform', '@onPerformReset', 'run.time'],
+    group: 'Timeline',
+    id: 'fold',
+    lede: 'Scrub back through orders the timeline does not own.',
+    sample: `// A COMMAND is not an animation. It is a statement of state the score
+// hands to the app, and the app is what changes. The law is one line:
+// the set of commands at or before the clock IS the commanded state.
+<c.Sequence>
+  {{#each SCHEDULE as |cmd|}}
+    <c.Perform @action={{cmd.action}} @target={{cmd.target}}
+      @payload={{cmd.payload}} />
+    <c.Wait @duration={{cmd.hold}} />
+  {{/each}}
+</c.Sequence>
+
+// The host owns the state; the region only tells it what was ordered.
+<Choreo @onPerform={{this.dispatch}} @onPerformReset={{this.reset}} as |c|>
+
+dispatch = (command) => {
+  switch (command.action) {
+    case 'gas.set':     this.state.gas = Number(command.payload); break;
+    case 'soak.start':  this.state.soak = true;  break;  // LATCHES
+    case 'cone.drop':   this.state.cone = true;  break;  // LATCHES
+  }
+};
+
+// A seek BACKWARDS lands here first, and Choreo replays the remaining
+// prefix after it. So a scrub is a re-derivation, not an undo — and the
+// difference between a correct host and a broken one is this method.
+reset = () => { this.state = { ...COLD }; };
+
+// Refuse to do that work and the replay lands on stale state. The absolute
+// settings overwrite themselves and look fine; \`soak\` and \`cone\` stay
+// latched from a future that no longer exists. That is the No-reset toggle.
+
+// The host's state is NOT tracked. onPerform fires DURING the region's
+// pass; a tracked write there re-renders the region, replays the pass, and
+// cancels the run that was dispatching. The chamber is painted by hand
+// from custom properties instead — Build Order's discipline.
+el.style.setProperty('--kf-gas', String(s.gas));`,
+    notes: FoldNotes,
+    slowmo: false,
+    title: 'Fold',
   },
   {
     Example: PathDraw,

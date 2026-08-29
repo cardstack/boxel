@@ -33,8 +33,9 @@ export interface Bounds {
   /** relative to the element's offset parent — where a kept sprite moves */
   parent: Rect;
   /**
-   * The box of the element's declared subject ([data-choreo-substance]) at
-   * measure time, in page space. A shape-matched flight (size='scale')
+   * The box of the element's declared subject at measure time, in page
+   * space: a `[data-choreo-substance]` descendant, or the shrink-wrap
+   * (`pack="content"`) of the element itself. A shape-matched flight
    * aligns the SUBSTANCE when either end declares one — Keynote matches
    * objects, not slide frames — deriving the undeclared end by fraction.
    */

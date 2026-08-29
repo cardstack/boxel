@@ -167,9 +167,29 @@ export class Camera extends Component {
       // `center`: a glass already fully on screen must not move — the
       // dive changes the world INSIDE the crop, never the page around
       // it.
-      (event.currentTarget as HTMLElement)
-        .closest('.cam-stage')
-        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const stage = (event.currentTarget as HTMLElement).closest('.cam-stage');
+      if (stage) {
+        const box = stage.getBoundingClientRect();
+        const view = window.innerHeight;
+        // `block: 'nearest'` is a no-op for a glass already fully on screen,
+        // which is every glass in a gallery card — so on that page this never
+        // scrolled and the rule read as "a dive never moves the page". On the
+        // demo page the stage is TALLER than the viewport, and `nearest` will
+        // happily scroll a box that can never fit, which is the page lurching
+        // on a zoom. A stage that cannot fit is one scrolling cannot help.
+        const shown =
+          Math.max(0, Math.min(box.bottom, view) - Math.max(box.top, 0)) /
+          Math.max(1, box.height);
+        // Only rescue a glass that is genuinely hidden. `block: 'nearest'`
+        // alone moves the page for a stage that is one pixel short of
+        // whole, and the stage sizes itself to the viewport — so on the demo
+        // page, where a header sits above it, almost every dive nudged the
+        // page. In a gallery card the stage is always fully on screen, which
+        // is why the rule only ever misbehaved on one of the two pages.
+        if (shown < 0.75) {
+          stage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
     }
     this.focus = opening ? id : null;
   };

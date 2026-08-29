@@ -201,6 +201,44 @@ class WidthPages extends Component {
 }
 let widths: WidthPages;
 
+class PackPages extends Component {
+  @tracked page: 'detail' | 'grid' = 'grid';
+  constructor(o: unknown, a: object) {
+    super(o as never, a);
+    packPages = this;
+  }
+  <template>
+    <Choreo
+      @route={{true}}
+      class="stage"
+      style="position:relative;width:400px;height:200px;font-family:sans-serif"
+      as |c|
+    >
+      {{#if (eq this.page "grid")}}
+        {{! a full-bleed title: the LAYOUT box is the stage, the word is not }}
+        <b
+          id="oldType"
+          style="position:absolute;left:0;right:0;top:40px;width:auto;font-size:20px;text-align:center;white-space:nowrap"
+          {{motion id="pack-title" role="type" pack="content"}}
+        >Hi</b>
+      {{else}}
+        <b
+          id="newType"
+          style="position:absolute;left:24px;top:90px;width:max-content;font-size:48px;white-space:nowrap"
+          {{motion id="pack-title" role="type" pack="content"}}
+        >Hello</b>
+      {{/if}}
+      <c.Crossing
+        @duration={{0.4}}
+        @ease="easeInOut"
+        @leave={{0.06}}
+        @arrive={{0.06}}
+      />
+    </Choreo>
+  </template>
+}
+let packPages: PackPages;
+
 class QuietPages extends Component {
   @tracked page: 'detail' | 'grid' = 'grid';
   constructor(o: unknown, a: object) {
@@ -580,6 +618,29 @@ module('Integration | choreo | crossing', function (hooks) {
         Math.abs(rest.top - (region.top + 120)) < 1.5,
       `the frame still lands exactly on its real seat (${rest.left.toFixed(0)},${rest.top.toFixed(0)})`
     );
+    await sleep(20);
+  });
+
+  test('pack=content matches the shrink-wrap, not a stretched title frame', async function (assert) {
+    await render(<template><PackPages /></template>);
+    await animationsSettled();
+    const leaving = find('#oldType') as HTMLElement;
+    assert.true(
+      leaving.getBoundingClientRect().width > 300,
+      'the leaving title layout box is the stage'
+    );
+
+    packPages.page = 'detail';
+    await settled();
+    await nextFrame();
+    await nextFrame();
+    const now = bounds(find('#newType') as HTMLElement);
+    assert.true(
+      now.width < 160,
+      `the receiver opens at the WORD, not the 400px frame (${now.width.toFixed(0)})`
+    );
+
+    await animationsSettled();
     await sleep(20);
   });
 

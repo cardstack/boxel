@@ -792,8 +792,8 @@ summary,
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   margin-top: -19px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1242,6 +1242,14 @@ html[data-gm-dragging] * {
 }
 
 .mode-rest {
+  /* Pinned to the floor of the slot, which is a fixed height already.
+     It used to sit immediately under the notices, so `sync` — the one mode
+     that briefly holds TWO — swung it 63px down and 63px back on every
+     switch. That excursion was the mode's layout being honest, and it read
+     as the panel lurching. Reserving the space instead means the only thing
+     that moves is the notice, which is the thing the mode is about: the
+     newcomer still enters BELOW the leaver and still rises as it unmounts. */
+  margin-top: auto;
   padding: 8px 12px;
   border-radius: 12px;
   background: var(--bg-spot);
@@ -3161,6 +3169,1007 @@ html[data-gm-dragging] * {
   height: 58%;
 }
 
+/* ── Magic Move stress — /crossing-stress ─────────────────────────────
+   Three looping slides, distinct grounds, a cut at any phase. Counterpart
+   trees share ids; data-slide is the rest home; data-phase stills the
+   intra-slide CSS loops for the span of a crossing. Tone classes travel
+   with each sprite so an orphan keeps its own box. */
+.xstress-viewport {
+  /* The scene's unit basis. Every size below is a MULTIPLE of these rather
+     than a raw viewport unit, so the same arithmetic lays the slides out
+     against the window on /crossing-stress and against the card box in the
+     gallery tile — where `vmin` would still be measuring the whole browser.
+     `--xs-u` is the square unit (the old vmin), `--xs-w` the horizontal one.
+     1rem ≈ 1.78 of a 900px-tall viewport's vmin; the display clamps below
+     carry that conversion so their floors and ceilings scale too. */
+  --xs-u: 1vmin;
+  --xs-w: 1vw;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  overflow: hidden;
+  background: #0b2e34;
+  color: #f3ece3;
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+/* The tile variant: the same scene, in flow. The page is `fixed; inset:0;
+   z-index:10000` because it owns the screen; inside a 400px card that would
+   cover the gallery. Everything below is containment only — no colour, no
+   timing, no geometry of the slides themselves, so the tile and the page
+   cannot drift apart the way /crossing-reel drifted from `slides`. */
+.xstress-viewport.is-embedded {
+  /* `.ex` is `container-type: size`, so cq units resolve against the card.
+     The 0.78 is deliberate slack: at a straight 1:1 the plate fills the card
+     and the slide's own type has nowhere to go. Shrinking the OBJECTS while
+     the layout percentages stay put is what buys the title, kicker and chip
+     room to be read at card size. Three tiers follow, all keyed to the
+     ELEMENT's box rather than the window's: a narrow single-column card, the
+     two-up card above, and the demo page's much larger stage. */
+  --xs-u: 1.15cqmin;
+  --xs-w: 1.15cqw;
+
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+}
+
+/* A single-column card is barely wider than the plate wants to be, and the
+   slide's own type has nowhere to go. Give the objects back some room. */
+@container (max-width: 460px) {
+  .xstress-viewport.is-embedded {
+    --xs-u: 0.9cqmin;
+    --xs-w: 0.9cqw;
+  }
+}
+
+/* The roomy tier.
+   A gallery card sits at the base scale above. The demo page hands the same component a stage several
+   times that size, and there the slack reads as a small scene marooned in a
+   large frame — so past a card's width the scene scales UP instead, and the
+   captions, whose px ceilings were chosen for a card, get ceilings to match.
+   This is the one thing a media query could not do: the switch is the
+   ELEMENT's box, not the window's. */
+@container (min-width: 900px) {
+  .xstress-viewport.is-embedded {
+    --xs-u: 1.24cqmin;
+    --xs-w: 1.24cqw;
+  }
+
+  .xstress-viewport.is-embedded .xstress-kicker,
+  .xstress-viewport.is-embedded .xstress-chip {
+    font-size: clamp(14px, calc(1.05 * var(--xs-w)), 24px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-inset {
+    font-size: clamp(12px, calc(1.2 * var(--xs-w)), 20px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-hero-scroll {
+    font-size: clamp(8px, calc(0.72 * var(--xs-w)), 12px);
+  }
+
+  .xstress-viewport.is-embedded .xstress-index {
+    font-size: clamp(12px, calc(1.05 * var(--xs-w)), 20px);
+  }
+}
+
+/* The card's own chin carries title and lede, so the tile's HUD is controls
+   only — pulled in tight, and sized down to a card's scale. */
+.xstress-viewport.is-embedded .xstress-hero-scroll {
+  font-size: clamp(6px, calc(0.72 * var(--xs-w)), 10px);
+}
+
+.xstress-viewport.is-embedded .xstress-kicker,
+.xstress-viewport.is-embedded .xstress-chip {
+  font-size: clamp(12px, calc(1.05 * var(--xs-w)), 17px);
+}
+
+.xstress-viewport.is-embedded .xstress-hud {
+  top: 10px;
+  right: 12px;
+  max-width: none;
+  gap: 0.4em 0.55em;
+  font-size: 11px;
+}
+
+@container (min-width: 900px) {
+  .xstress-viewport.is-embedded .xstress-hud {
+    top: 18px;
+    right: 22px;
+    gap: 0.55em 0.8em;
+    font-size: 13px;
+  }
+}
+
+.xstress-viewport.is-embedded .xstress-index {
+  font-size: 10px;
+}
+
+.xstress-hud {
+  position: absolute;
+  z-index: 2;
+  top: 3%;
+  right: 4%;
+  left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65em 1em;
+  align-items: center;
+  justify-content: flex-end;
+  max-width: min(72ch, calc(70 * var(--xs-w)));
+  text-align: right;
+  pointer-events: auto;
+}
+
+.xstress-index {
+  display: flex;
+  gap: 0.8em;
+  justify-content: flex-end;
+  align-items: baseline;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 18px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #c8c0b6;
+}
+
+.xstress-phase {
+  letter-spacing: 0.2em;
+  color: #8fd0c4;
+}
+
+.xstress-viewport[data-phase='crossing'] .xstress-phase {
+  color: #ffb089;
+}
+
+.xstress-lede {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.xstress-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45em;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.xstress-controls button {
+  appearance: none;
+  margin: 0;
+  padding: 0.35em 0.7em;
+  border: 1px solid rgb(243 236 227 / 22%);
+  border-radius: 999px;
+  background: rgb(12 18 22 / 35%);
+  color: #f3ece3;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.xstress-controls button.is-on {
+  background: rgb(243 236 227 / 16%);
+  border-color: rgb(243 236 227 / 55%);
+}
+
+.xstress-dot {
+  width: 11px;
+  height: 11px;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+
+.xstress-stage {
+  position: absolute;
+  inset: 0;
+  /* a stacking context, so a flying crop-scale cannot cover the HUD */
+  z-index: 0;
+}
+
+.xstress-slide {
+  position: absolute;
+  inset: 0;
+}
+
+.xstress-stage[data-slide='0'] {
+  background: #0b2e34;
+}
+
+.xstress-stage[data-slide='1'] {
+  background: #2c140e;
+}
+
+.xstress-stage[data-slide='2'] {
+  background: #16102c;
+}
+
+.xstress-wash,
+.xstress-orb,
+.xstress-spark,
+.xstress-hero,
+.xstress-title,
+.xstress-kicker,
+.xstress-chip,
+.xstress-rule {
+  position: absolute;
+}
+
+/* Frozen for the flight: loops would write transform on the same node
+   Crossing is flying. Restarts from 0 when data-phase returns to looping.
+   Scoped to the stage so an orphan lifted into the layer is still stilled.
+   Innards of the plate are not participants — freeze them too. */
+.xstress-stage[data-phase='crossing'] .xstress-wash,
+.xstress-stage[data-phase='crossing'] .xstress-orb,
+.xstress-stage[data-phase='crossing'] .xstress-spark,
+.xstress-stage[data-phase='crossing'] .xstress-hero,
+.xstress-stage[data-phase='crossing'] .xstress-title,
+.xstress-stage[data-phase='crossing'] .xstress-kicker,
+.xstress-stage[data-phase='crossing'] .xstress-chip,
+.xstress-stage[data-phase='crossing'] .xstress-rule,
+.xstress-stage[data-phase='crossing'] .xstress-hero-mark,
+.xstress-stage[data-phase='crossing'] .xstress-hero-meter,
+.xstress-stage[data-phase='crossing'] .xstress-hero-ticks i,
+.xstress-stage[data-phase='crossing'] .xstress-inset {
+  animation: none !important;
+}
+
+.xstress-wash {
+  inset: -18%;
+  border-radius: 40%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.xstress-wash.tide {
+  background: radial-gradient(
+    circle at 40% 45%,
+    #1f7c86 0%,
+    rgb(14 58 66 / 0%) 68%
+  );
+  animation: xstress-wash-tide 7.2s ease-in-out infinite alternate;
+}
+
+.xstress-wash.ember {
+  background: radial-gradient(
+    circle at 62% 40%,
+    #c44a22 0%,
+    rgb(44 20 14 / 0%) 70%
+  );
+  animation: xstress-wash-ember 5.6s ease-in-out infinite alternate;
+}
+
+.xstress-wash.violet {
+  background: radial-gradient(
+    circle at 30% 60%,
+    #6b48c4 0%,
+    rgb(22 16 44 / 0%) 66%
+  );
+  animation: xstress-wash-violet 8s ease-in-out infinite alternate;
+}
+
+.xstress-orb {
+  width: calc(18 * var(--xs-u));
+  height: calc(18 * var(--xs-u));
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(1px);
+  z-index: 1;
+}
+
+.xstress-orb.tide {
+  top: 14%;
+  left: 12%;
+  background: rgb(90 210 198 / 28%);
+  animation: xstress-orb-tide 4.6s ease-in-out infinite alternate;
+}
+
+.xstress-orb.ember {
+  top: auto;
+  bottom: 10%;
+  left: 8%;
+  background: rgb(255 140 70 / 30%);
+  animation: xstress-orb-ember 3.4s ease-in-out infinite alternate;
+}
+
+.xstress-orb.violet {
+  top: 18%;
+  right: 10%;
+  left: auto;
+  background: rgb(180 140 255 / 32%);
+  animation: xstress-orb-violet 5.2s ease-in-out infinite alternate;
+}
+
+.xstress-spark {
+  width: calc(2.4 * var(--xs-u));
+  height: calc(2.4 * var(--xs-u));
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.xstress-spark.tide {
+  top: 28%;
+  right: 22%;
+  background: #dff7f2;
+  box-shadow: 0 0 18px #8fd0c4;
+  animation: xstress-spark-tide 1.6s ease-in-out infinite alternate;
+}
+
+.xstress-spark.ember {
+  top: 22%;
+  left: 18%;
+  background: #ffe0c2;
+  box-shadow: 0 0 18px #ff8a4a;
+  animation: xstress-spark-ember 1.15s ease-in-out infinite alternate;
+}
+
+.xstress-spark.violet {
+  bottom: 18%;
+  right: 28%;
+  top: auto;
+  background: #eadbff;
+  box-shadow: 0 0 18px #b48cff;
+  animation: xstress-spark-violet 1.35s ease-in-out infinite alternate;
+}
+
+.xstress-hero {
+  /* never a 0×0 empty span — crop-scale of that is invisible.
+     overflow stays visible: the drop-shadows live on .cast children
+     (static box-shadow, opacity-blended) and clip would eat them.
+     Innards clip on .face. */
+  top: 26%;
+  left: calc(50% - calc(14 * var(--xs-u)));
+  width: calc(28 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
+  /* solid paint so a size tween re-renders the gradient at every box */
+  background-color: #e8d9c4;
+  background-image: linear-gradient(
+    160deg,
+    #f4efe6 0%,
+    #e8d9c4 52%,
+    #d4b48a 100%
+  );
+  z-index: 2;
+}
+
+/* One caster per rest-state light. The shadow string never tweens —
+   only opacity does, so the compositor can dissolve Tide's teal into
+   Ember's warm without parsing box-shadow or mixing colour through mud.
+   Transparent fill: box-shadow still casts from the border box;
+   filter: drop-shadow() would not (it follows alpha, and there is none). */
+.xstress-hero-cast {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-cast.tide,
+.xstress-stage[data-slide='1'] .xstress-hero-cast.ember,
+.xstress-stage[data-slide='2'] .xstress-hero-cast.violet {
+  opacity: 1;
+}
+
+.xstress-hero-cast.tide {
+  box-shadow: 0 18px 42px rgb(6 38 42 / 58%);
+}
+
+.xstress-hero-cast.ember {
+  box-shadow: 0 52px 110px rgb(72 16 4 / 78%);
+}
+
+.xstress-hero-cast.violet {
+  box-shadow: 0 6px 18px rgb(0 0 0 / 42%);
+}
+
+.xstress-hero-face {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  border-radius: inherit;
+}
+
+.xstress-hero-shot {
+  position: absolute;
+  display: block;
+  object-fit: cover;
+  background: #0b2e34;
+  z-index: 1;
+}
+
+.xstress-bg-dust {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 1;
+}
+
+.xstress-hero-scroll {
+  position: absolute;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 1;
+  padding: 0.35em 0.55em;
+  font-family: var(--font-mono);
+  font-size: clamp(6px, calc(0.72 * var(--xs-w)), 10px);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.32;
+  color: #2c140e;
+  background: rgb(44 20 14 / 16%);
+}
+
+.xstress-hero-scroll p {
+  margin: 0;
+}
+
+.xstress-hero-mark {
+  position: absolute;
+  border: 2px solid rgb(44 20 14 / 45%);
+  border-top-color: rgb(11 46 52 / 80%);
+  border-radius: 50%;
+  animation: xstress-hero-spin 2.4s linear infinite;
+}
+
+.xstress-hero-meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 9%;
+  transform-origin: 0 50%;
+  background: rgb(11 46 52 / 28%);
+  animation: xstress-hero-meter 1.7s ease-in-out infinite alternate;
+}
+
+.xstress-hero-ticks {
+  position: absolute;
+  display: flex;
+  gap: 5px;
+}
+
+.xstress-hero-ticks i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(11 46 52 / 55%);
+  animation: xstress-hero-tick 1.1s ease-in-out infinite alternate;
+}
+
+.xstress-hero-ticks i:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.xstress-hero-ticks i:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+.xstress-inset {
+  position: absolute;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: clamp(10px, calc(1.2 * var(--xs-w)), 15px);
+  font-style: normal;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #2c140e;
+  z-index: 1;
+}
+
+.xstress-kicker {
+  width: max-content;
+  z-index: 3;
+  margin: 0;
+  color: #c8c0b6;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 16px);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+.xstress-rule {
+  height: 2px;
+  background: #f3ece3;
+  opacity: 0.55;
+  z-index: 3;
+  animation: xstress-rule-breathe 2.6s ease-in-out infinite alternate;
+}
+
+.xstress-title,
+.xstress-chip {
+  width: max-content;
+  z-index: 3;
+}
+
+.xstress-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  white-space: nowrap;
+}
+
+.xstress-chip {
+  padding: 0.35em 0.85em;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: clamp(11px, calc(1.05 * var(--xs-w)), 16px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+/* Same-DOM plate: layout keyed on the stage, not a tone class — it is
+   never orphaned. Titles/chips keep tone classes so a leaving skin
+   keeps its own box. */
+
+/* 01 Tide — small hero, gentle orbit, type centred */
+.xstress-stage[data-slide='0'] .xstress-hero {
+  top: 26%;
+  left: calc(50% - calc(14 * var(--xs-u)));
+  width: calc(28 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
+  animation: xstress-hero-tide 2.8s ease-in-out infinite alternate;
+}
+
+.xstress-title.tide {
+  /* Crossing crop scales from WIDTH. A `left:0; right:0; width:auto`
+     box is the stage, so Violet's word explodes into a viewport strip.
+     Centre the WORD without `translate` — that fights the flight. */
+  top: 62%;
+  left: 0;
+  right: 0;
+  width: max-content;
+  margin-inline: auto;
+  text-align: center;
+  font-size: clamp(
+    calc(5.7 * var(--xs-u)),
+    calc(9 * var(--xs-w)),
+    calc(12.82 * var(--xs-u))
+  );
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-chip.tide {
+  top: 22%;
+  left: 12%;
+  color: #0b2e34;
+  background: #8fd0c4;
+  box-shadow: 0 10px 24px rgb(143 208 196 / 45%);
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.tide {
+  top: 74%;
+  left: 0;
+  right: 0;
+  width: max-content;
+  margin-inline: auto;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-shot {
+  top: 12%;
+  left: 12%;
+  right: 12%;
+  width: auto;
+  height: 38%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-scroll {
+  left: 12%;
+  right: 12%;
+  bottom: 12%;
+  height: 28%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-mark {
+  top: 14%;
+  right: 12%;
+  width: 18%;
+  height: 18%;
+}
+
+.xstress-stage[data-slide='0'] .xstress-hero-ticks {
+  left: 12%;
+  bottom: 42%;
+}
+
+.xstress-inset.tide {
+  left: 14%;
+  top: 14%;
+  right: auto;
+  bottom: auto;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='0'] .xstress-rule {
+  top: 58%;
+  left: 22%;
+  width: 56%;
+}
+
+/* 02 Ember — tall tile on the right, not a wall */
+.xstress-stage[data-slide='1'] .xstress-hero {
+  top: 18%;
+  right: 10%;
+  bottom: auto;
+  left: auto;
+  width: calc(36 * var(--xs-u));
+  height: calc(56 * var(--xs-u));
+  animation: xstress-hero-ember 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-title.ember {
+  top: 18%;
+  left: 8%;
+  right: auto;
+  width: max-content;
+  text-align: left;
+  font-size: clamp(
+    calc(4.27 * var(--xs-u)),
+    calc(6.4 * var(--xs-w)),
+    calc(9.97 * var(--xs-u))
+  );
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-chip.ember {
+  left: 8%;
+  bottom: 16%;
+  top: auto;
+  color: #2c140e;
+  background: #ffb089;
+  box-shadow: 0 18px 40px rgb(255 138 74 / 40%);
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.ember {
+  top: 38%;
+  left: 8%;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-shot {
+  top: 8%;
+  left: 10%;
+  right: 10%;
+  height: 46%;
+  width: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-scroll {
+  left: 10%;
+  right: 10%;
+  bottom: 9%;
+  height: 30%;
+  width: auto;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-mark {
+  top: 10%;
+  right: 14%;
+  bottom: auto;
+  width: 16%;
+  height: 10%;
+}
+
+.xstress-stage[data-slide='1'] .xstress-hero-ticks {
+  left: 12%;
+  bottom: 40%;
+}
+
+.xstress-inset.ember {
+  left: 12%;
+  top: 10%;
+  bottom: auto;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='1'] .xstress-rule {
+  top: 34%;
+  left: 8%;
+  width: 22%;
+}
+
+/* 03 Violet — wide slab up top */
+.xstress-stage[data-slide='2'] .xstress-hero {
+  top: 12%;
+  left: 10%;
+  right: auto;
+  bottom: auto;
+  width: calc(60 * var(--xs-u));
+  height: calc(28 * var(--xs-u));
+  animation: xstress-hero-violet 3.1s ease-in-out infinite alternate;
+}
+
+.xstress-title.violet {
+  top: auto;
+  bottom: 22%;
+  left: 8%;
+  right: auto;
+  width: max-content;
+  text-align: left;
+  font-size: clamp(
+    calc(4.63 * var(--xs-u)),
+    calc(6.8 * var(--xs-w)),
+    calc(10.32 * var(--xs-u))
+  );
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-chip.violet {
+  right: 8%;
+  bottom: 12%;
+  left: auto;
+  top: auto;
+  color: #16102c;
+  background: #c4b0ff;
+  box-shadow: 0 8px 22px rgb(196 176 255 / 40%);
+  animation: xstress-chip-bob 1.9s ease-in-out infinite alternate;
+}
+
+.xstress-kicker.violet {
+  right: 8%;
+  bottom: 32%;
+  left: auto;
+  animation: xstress-title-drift 3.6s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-shot {
+  top: 14%;
+  left: 6%;
+  width: 54%;
+  bottom: 14%;
+  height: auto;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-scroll {
+  top: 14%;
+  right: 6%;
+  width: 26%;
+  bottom: 14%;
+  height: auto;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-mark {
+  top: 16%;
+  left: 8%;
+  right: auto;
+  width: 10%;
+  height: 22%;
+}
+
+.xstress-stage[data-slide='2'] .xstress-hero-ticks {
+  left: 8%;
+  right: auto;
+  bottom: 8%;
+}
+
+.xstress-inset.violet {
+  left: 8%;
+  top: 18%;
+  bottom: auto;
+  animation: xstress-inset-bob 2.2s ease-in-out infinite alternate;
+}
+
+.xstress-stage[data-slide='2'] .xstress-rule {
+  left: 8%;
+  bottom: 18%;
+  top: auto;
+  width: 28%;
+}
+
+@keyframes xstress-hero-tide {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate(28px, -36px) rotate(8deg);
+  }
+}
+
+@keyframes xstress-hero-ember {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-24px, 56px);
+  }
+}
+
+@keyframes xstress-hero-violet {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(48px, 18px) scale(1.08);
+  }
+}
+
+@keyframes xstress-title-drift {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(0, -10px);
+  }
+}
+
+@keyframes xstress-chip-bob {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(16px, 12px);
+  }
+}
+
+@keyframes xstress-hero-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes xstress-hero-meter {
+  from {
+    transform: scaleX(0.35);
+  }
+  to {
+    transform: scaleX(0.92);
+  }
+}
+
+@keyframes xstress-hero-tick {
+  from {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes xstress-inset-bob {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(6px, -4px);
+  }
+}
+
+@keyframes xstress-rule-breathe {
+  from {
+    opacity: 0.28;
+    transform: scaleX(0.86);
+  }
+  to {
+    opacity: 0.7;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes xstress-wash-tide {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.14) translate(4%, -3%);
+  }
+}
+
+@keyframes xstress-wash-ember {
+  from {
+    transform: scale(1.05) translate(0, 0);
+  }
+  to {
+    transform: scale(0.92) translate(-5%, 4%);
+  }
+}
+
+@keyframes xstress-wash-violet {
+  from {
+    transform: scale(0.96) translate(0, 0);
+  }
+  to {
+    transform: scale(1.18) translate(6%, 5%);
+  }
+}
+
+@keyframes xstress-orb-tide {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(70px, 40px);
+  }
+}
+
+@keyframes xstress-orb-ember {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(50px, -64px);
+  }
+}
+
+@keyframes xstress-orb-violet {
+  from {
+    transform: translate(0, 0);
+  }
+  to {
+    transform: translate(-80px, 36px);
+  }
+}
+
+@keyframes xstress-spark-tide {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-28px, 46px) scale(1.6);
+  }
+}
+
+@keyframes xstress-spark-ember {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(36px, 22px) scale(0.6);
+  }
+}
+
+@keyframes xstress-spark-violet {
+  from {
+    transform: translate(0, 0) scale(1);
+  }
+  to {
+    transform: translate(-22px, -40px) scale(1.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xstress-wash,
+  .xstress-orb,
+  .xstress-spark,
+  .xstress-hero,
+  .xstress-title,
+  .xstress-kicker,
+  .xstress-chip,
+  .xstress-rule,
+  .xstress-hero-mark,
+  .xstress-hero-meter,
+  .xstress-hero-ticks i,
+  .xstress-inset {
+    animation: none !important;
+  }
+}
+
 /* ── The title plane ─────────────────────────────────────────────────────
    Its own Choreo region, a sibling of the camera'd world: viewport-
    anchored on purpose, so the demo camera can dive without dragging the
@@ -3285,12 +4294,24 @@ html[data-gm-dragging] * {
   }
 }
 
+/* A phone keeps THREE. At a 359px container that is a 105px tile over four
+   rows — 340px of grid, which clears both the demo page and the 400px card
+   stage. Two columns had been dropping in here and turning the shelf into a
+   list: the point of this stage is a grid the camera can dive into, and a
+   1x6 strip is not one. Only the spacing tightens. */
 @container (max-width: 420px) {
+  .cam-sheet {
+    --cam-gap: 8px;
+    --cam-pad: 14px;
+  }
+}
+
+/* below a phone, though, three columns is thumbnails */
+@container (max-width: 300px) {
   .cam-sheet {
     --cam-cols: 2;
     --cam-rows: 6;
-    --cam-gap: 8px;
-    --cam-pad: 14px;
+    --cam-pad: 12px;
   }
 }
 
@@ -5559,6 +6580,52 @@ html[data-gm-dragging] * {
 .wires[data-hot='edition'] .wires-note[data-thread='edition'] p,
 .wires[data-hot='hed'] .wires-note[data-thread='hed'] p {
   color: var(--ink);
+}
+
+/* Narrow: the margin stops being a margin.
+   `.wires-board` is `minmax(0, 1.4fr) minmax(148px, 0.68fr)`, and 148px is a
+   floor rather than a preference — so at a 359px phone container the columns
+   resolved to 110px of prose beside a 148px column of comments, and a
+   three-sentence note wrapped to nine lines, two words at a time. Below this
+   width the comments go UNDER the note instead of beside it. The wires still
+   draw: a wire joins a mark to its comment wherever the comment happens to
+   be, which is the whole point of them being wires and not a gutter. */
+@container (max-width: 460px) {
+  .wires-board {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto;
+    row-gap: 10px;
+  }
+
+  /* the paper's own panel spans the note, not the comments below it */
+  .wires-board::before {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .wires-head {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .wires-copy {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .wires-margin {
+    grid-column: 1;
+    grid-row: 3;
+    padding-top: 2px;
+  }
+
+  /* two comments side by side under the note reads as a caption row rather
+     than as a second column of prose */
+  .wires-margin {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
 }
 
 @container (max-height: 240px) {
@@ -9162,4 +10229,533 @@ html[data-gm-dragging] * {
     800 17px/1 'Syne',
     sans-serif;
   letter-spacing: -0.02em;
+}
+
+/* ── Perform: the kiln firing ────────────────────────────────────────────
+   The demo container IS the scene. The stove, the schedule and the transport
+   are objects standing in one room rather than a card on a stage, so a later
+   `<c.Move>` could fly any of them without a second coordinate space.
+
+   WHY NOTHING HERE TWEENS A SHADOW
+   The heat is the one thing that changes continuously, so it is the one worth
+   being strict about. `box-shadow`, `text-shadow`, `filter: blur()` and
+   `drop-shadow()` are all re-rasterised on every frame that touches them, and
+   a shadow string is re-parsed and rebuilt besides — the trap the Crossing
+   demo documents for its three lights. The cheap pair is `opacity` and
+   `transform`, which composite without repainting.
+
+   So every glow is a STATIC gradient drawn once at full strength, and heat is
+   the opacity it is shown at. The flame does not grow by animating `height`,
+   which is layout; it is one path scaled on Y. The cone and the damper
+   rotate. That is the whole vocabulary.
+
+   The stove reads four custom properties the host writes each frame
+   (--kf-gas 0..5, --kf-damper, --kf-soak, --kf-cone). Nothing here is animated
+   BY the score: this is the app's own state, which the score only commands,
+   and no rule below knows the timeline exists. */
+.kf-stage {
+  --kf-gas: 0;
+  --kf-damper: 0;
+  --kf-soak: 0;
+  --kf-cone: 0;
+  /* The scene's whole palette, so one block below can move it into daylight.
+     The FIRE is deliberately not in here: a flame is the same colour in a dark
+     room and a bright one, and the glow reads on either ground because it is
+     opacity over a static gradient rather than a colour being mixed. */
+  --kf-ink: #ffeede;
+  --kf-dim: #a08b7d;
+  --kf-hot: #ff7a28;
+  --kf-ember: #ffb35a;
+  --kf-room-a: #1b1512;
+  --kf-room-b: #100c0a;
+  --kf-brick-a: #3a2f29;
+  --kf-brick-b: #1d1614;
+  --kf-trim: #4a3a31;
+  --kf-void: #120d0b;
+  --kf-shelf: #0d0908;
+  --kf-edge: #6d5647;
+  --kf-flap: #c49a7c;
+  --kf-clay: #f3e6cd;
+  --kf-hair: rgb(255 255 255 / 14%);
+  --kf-mark: rgb(255 255 255 / 34%);
+  /* 0 cold, 1 at full gas — every heat-driven rule reads this, so the mapping
+     lives in exactly one place */
+  --kf-heat: calc(var(--kf-gas) / 5);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  justify-content: center;
+  padding: 10px 12px;
+  background:
+    radial-gradient(
+      70% 55% at 50% 86%,
+      rgb(255 122 40 / calc(var(--kf-heat) * 26%)),
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--kf-room-a) 0%, var(--kf-room-b) 100%);
+  color: var(--kf-ink);
+}
+
+/* Daylight: the same workshop with the lights on. The mouth and the shelf stay
+   dark, because the inside of a kiln is dark at noon too — the theme moves the
+   ROOM and the stove's clay, never the fire or the void it burns in. */
+:root[data-theme='light'] .kf-stage {
+  --kf-ink: #2a1f16;
+  --kf-dim: #7a6857;
+  --kf-ember: #b8430c;
+  --kf-room-a: #e7ddcd;
+  --kf-room-b: #d6c9b4;
+  --kf-brick-a: #bcab95;
+  --kf-brick-b: #97836c;
+  --kf-trim: #8a7660;
+  --kf-void: #241a14;
+  --kf-shelf: #1a120d;
+  --kf-edge: #6e5c48;
+  --kf-flap: #6b563f;
+  --kf-clay: #fdf6e8;
+  --kf-hair: rgb(42 31 22 / 20%);
+  --kf-mark: rgb(42 31 22 / 36%);
+}
+
+/* The stove and the schedule sit side by side, and fall to a stack when the
+   room cannot hold both. A flex wrap rather than a container query on purpose:
+   `.kf-stage` is the container ELEMENT, and an element never matches a query
+   against its own box — the two-column rule would simply never fire. The
+   basis widths below are the breakpoint, expressed where it can work. */
+/* `flex: 0 1 auto`, not `1 1 auto`. Growing to fill the stage and then
+   centring the content inside itself leaves the scene's own slack BELOW the
+   schedule — a void between it and the transport. At its natural height the
+   stage centres scene-and-transport together, as one block. */
+.kf-scene {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: center;
+  /* the demo page's room is far wider than the scene wants to be; past this
+     the objects would just drift apart */
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.kf-kiln {
+  flex: 1 1 165px;
+  max-width: 230px;
+}
+
+.kf-ledger {
+  flex: 2 1 215px;
+  max-width: 330px;
+}
+
+/* the one big number — a game reads its state out loud. Colour is a paint,
+   but it steps once per command rather than tweening per frame. */
+.kf-temp {
+  font:
+    800 clamp(24px, 8cqw, 40px) / 1 'Syne',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  /* No transition on this one. `color-mix()` whose inputs are unregistered
+     custom properties does not re-resolve while a transition is holding the
+     property: the number kept the dark palette's colour after a theme swap.
+     It steps once per command anyway, so there was never much to tween. */
+  color: color-mix(
+    in oklab,
+    var(--kf-dim),
+    var(--kf-ember) calc(var(--kf-heat) * 100%)
+  );
+}
+
+/* — the stove — */
+
+.kf-kiln {
+  position: relative;
+  display: grid;
+  /* the flue rises to the very top of the viewBox, so the read-out needs real
+     air under it or the degree sign sits on the chimney */
+  gap: 10px;
+  justify-items: center;
+}
+
+/* the light it throws into the room: a static bloom, faded in. This is the
+   rule that would otherwise have been an animated box-shadow. */
+.kf-kiln::after {
+  content: '';
+  position: absolute;
+  inset: -16%;
+  background: radial-gradient(
+    56% 44% at 50% 62%,
+    rgb(255 122 40 / 40%),
+    transparent 72%
+  );
+  opacity: var(--kf-heat);
+  pointer-events: none;
+  transition: opacity 420ms linear;
+}
+
+.kf-art {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  height: auto;
+}
+
+.kf-glow {
+  opacity: var(--kf-heat);
+  transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* the flame grows by SCALE, not height: a transform, so no layout and no
+   repaint — drawn once at full size, squashed toward its base */
+.kf-flame {
+  opacity: var(--kf-heat);
+  scale: 1 calc(0.16 + var(--kf-heat) * 0.84);
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transition:
+    scale 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms linear;
+}
+
+/* upright until it drops, then bent for good. The only latching thing the
+   stove draws, and so the one a host that ignores reset leaves bent in a
+   future that has not happened yet. */
+/* Both hinges are given in VIEW-BOX units, not percentages of the shape's own
+   box. `fill-box` percentages are resolved against a bounding box the browser
+   computes for the geometry, which moves the moment the path does — and a
+   rotation whose pivot drifts is the classic reason an SVG part looks
+   detached mid-swing. These pivots are literal points in the drawing: the
+   flap's hinge pin, and the spot the cone is standing on. */
+.kf-cone {
+  rotate: calc(var(--kf-cone) * 52deg);
+  transform-box: view-box;
+  transform-origin: 112px 99px;
+  transition: rotate 560ms cubic-bezier(0.34, 1.32, 0.64, 1);
+}
+
+.kf-damper {
+  rotate: calc(var(--kf-damper) * 74deg);
+  transform-box: view-box;
+  transform-origin: 128px 12.5px;
+  transition: rotate 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* soak is the one latch with nothing of its own to bend, so it gets a word */
+.kf-soak {
+  justify-self: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--kf-void) 82%, transparent);
+  color: var(--kf-clay);
+  font-family: var(--font-mono);
+  font-size: clamp(7px, 1.9cqw, 9px);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  /* holds its box when dark, so lighting it shifts nothing */
+  opacity: var(--kf-soak);
+  transition: opacity 260ms linear;
+}
+
+/* — the schedule — */
+
+.kf-ledger {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kf-row {
+  display: grid;
+  width: 100%;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  opacity: 0.38;
+  transition:
+    opacity 200ms linear,
+    background-color 200ms linear,
+    border-color 200ms linear;
+}
+
+/* lit when the command is at or before the clock — the law, drawn */
+.kf-row.is-on {
+  border-color: rgb(255 122 40 / 28%);
+  background: rgb(255 122 40 / 10%);
+  opacity: 1;
+}
+
+.kf-num {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--kf-hair);
+  border-radius: 50%;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.kf-row.is-on .kf-num {
+  border-color: transparent;
+  background: var(--kf-hot);
+  color: #1a0f08;
+}
+
+.kf-action {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: clamp(8.5px, 2.2cqw, 11px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kf-arg {
+  color: var(--kf-ember);
+  font-family: var(--font-mono);
+  font-size: clamp(8.5px, 2.2cqw, 11px);
+  font-weight: 700;
+}
+
+/* — the transport, in the Playhead idiom — */
+
+.kf-transport {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.kf-play {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #ff9a4a, #ef5f14);
+  color: #2a1206;
+  cursor: pointer;
+}
+
+.kf-play:active {
+  translate: 0 1px;
+}
+
+.kf-icon {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
+}
+
+.kf-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 20px;
+}
+
+.kf-rail,
+.kf-fill {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+}
+
+.kf-rail {
+  background: var(--kf-hair);
+}
+
+/* scaleX from `paint`, so the bar redraws without a render */
+.kf-fill {
+  background: linear-gradient(90deg, #ff9a4a, var(--kf-hot));
+  transform-origin: left center;
+}
+
+/* one mark per command: the schedule, read off the same array the score is
+   built from */
+.kf-mark {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  width: 2px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--kf-mark);
+  transform: translate(-1px, -50%);
+}
+
+.kf-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 2;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--kf-clay);
+  border: 1px solid var(--kf-hot);
+}
+
+/* the real control, invisible over the drawing. `touch-action: none` because
+   a sideways drag here can only mean the playhead — otherwise the scroller
+   takes the gesture and the timeline reads as broken. */
+.kf-range {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: none;
+  opacity: 0;
+  cursor: ew-resize;
+  touch-action: none;
+  appearance: none;
+}
+
+.kf-clock {
+  flex: none;
+  min-width: 42px;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(9px, 2.2cqw, 11px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  text-align: right;
+}
+
+/* — the A/B, now one switch on the transport row — */
+
+.kf-host {
+  flex: none;
+  padding: 5px 10px;
+  border: 1px solid var(--kf-hair);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--kf-dim);
+  font-family: var(--font-mono);
+  font-size: clamp(7.5px, 1.9cqw, 9px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+/* the wrong state wears the warning, so a reader who never presses it still
+   knows which one is the bug */
+.kf-host.is-bad {
+  border-color: transparent;
+  background: linear-gradient(180deg, #ff6b6b, #d33);
+  color: #2a0606;
+}
+
+.kf-host:active {
+  translate: 0 1px;
+}
+
+/* Phone: the scene has to fit a 400px card once it is stacked.
+   Descendants only — `.kf-stage` is the container element itself, and an
+   element never matches a query against its own box, so the stage's own
+   padding is kept modest for every size instead. It also has to sit AFTER
+   the base rules it narrows: same specificity, so the later one wins, and
+   parked above them this whole block was silently overridden. The budget is
+   stove at 128px, six rows at ~20px, and the transport: about 335px of the
+   ~352px a card gives once its padding is taken off. */
+@container (max-width: 430px) {
+  .kf-art {
+    max-width: 128px;
+  }
+
+  .kf-temp {
+    font:
+      800 clamp(20px, 7cqw, 26px) / 1 'Syne',
+      sans-serif;
+  }
+
+  .kf-ledger {
+    gap: 2px;
+  }
+
+  .kf-row {
+    gap: 6px;
+    padding: 2px 6px;
+  }
+
+  .kf-num {
+    width: 14px;
+    height: 14px;
+    font-size: 7px;
+  }
+
+  .kf-scene {
+    gap: 6px 12px;
+  }
+}
+
+/* A roomy stage gets a bigger stove. The base sizes are tuned for a gallery
+   card, which is 400px tall whatever its width — so this keys on WIDTH only,
+   and the 557px desktop card stays below it and keeps the compact stove that
+   its height actually has room for. */
+@container (min-width: 640px) {
+  .kf-art {
+    max-width: 240px;
+  }
+
+  .kf-scene {
+    max-width: 640px;
+    gap: 12px 26px;
+  }
+
+  .kf-row {
+    padding: 5px 10px;
+  }
+
+  .kf-ledger {
+    max-width: 360px;
+  }
+
+  .kf-transport,
+  .kf-modes {
+    max-width: 640px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kf-kiln::after,
+  .kf-glow,
+  .kf-flame,
+  .kf-cone,
+  .kf-damper,
+  .kf-soak,
+  .kf-row {
+    transition: none;
+  }
 }
