@@ -19,32 +19,29 @@ const toggle = () => click('[data-test-toggle]');
 const field = (key: string) =>
   find(`.ie-plate[data-field="${key}"]`) as HTMLElement;
 
+const words = (key: string) => [
+  ...document.querySelectorAll<HTMLElement>(`.ie-word[data-field="${key}"]`),
+];
+
 /**
- * Left edges in LAYOUT pixels, not viewport ones.
+ * Everything in CARD space, and in LAYOUT pixels.
  *
- * `getBoundingClientRect` includes every transform above the element, and
- * QUnit scales `#ember-testing` by half — so a word the demo places at 11
- * measures 5.5, and an assertion written against the numbers the component
- * computed fails for a reason that has nothing to do with the component.
- * The fixture's scale is recovered from the card, which knows its own width
- * in both spaces, and every read is divided by it.
+ * The type is no longer inside the platter it belongs to — it is a layer
+ * over the whole card — so the only frame both layers share is the card's.
+ * And `getBoundingClientRect` includes every transform above the element,
+ * while QUnit scales `#ember-testing` by half, so a word the demo places at
+ * 12 measures 6. The fixture's scale comes back out of the card, which knows
+ * its own width in both spaces.
  */
 const scale = () => card().getBoundingClientRect().width / card().offsetWidth;
 
-const left = (el: HTMLElement) => {
-  const base = el.closest('.ie-plate') as HTMLElement;
-  return (
-    (el.getBoundingClientRect().left - base.getBoundingClientRect().left) /
-    scale()
-  );
-};
+const left = (el: Element) =>
+  (el.getBoundingClientRect().left - card().getBoundingClientRect().left) /
+  scale();
 
 const round = (value: number) => +value.toFixed(1);
 
-const wordX = (key: string) =>
-  [...field(key).querySelectorAll<HTMLElement>('.ie-word')].map((el) =>
-    round(left(el))
-  );
+const wordX = (key: string) => words(key).map((el) => round(left(el)));
 
 /**
  * Where each control PAINTS, not where its box starts. A text input draws
@@ -67,7 +64,7 @@ module('Integration | inline edit', function (hooks) {
 
     assert.strictEqual(mode(), 'view', 'it opens on the reading view');
     assert.strictEqual(
-      find('.ie-plate[data-field="name"] .ie-value')?.textContent?.trim(),
+      find('.ie-value[data-value="name"]')?.textContent?.trim(),
       'Marguerite Villanueva',
       'the reading view is an ordinary string in ordinary flow'
     );
@@ -179,8 +176,10 @@ module('Integration | inline edit', function (hooks) {
     };
 
     for (const key of ['name', 'email', 'dob']) {
-      const real = glyphs(field(key).querySelector('.ie-value')!);
-      const flown = glyphs(field(key).querySelector('.ie-word')!);
+      const real = glyphs(
+        find(`.ie-value[data-value="${key}"]`) as HTMLElement
+      );
+      const flown = glyphs(words(key)[0]!);
       assert.deepEqual(
         [
           Math.round(flown.left - real.left),
@@ -330,7 +329,7 @@ module('Integration | inline edit', function (hooks) {
       for (const key of ['name', 'email', 'dob']) {
         const platter = field(key).getBoundingClientRect();
         for (const el of field(key).querySelectorAll<HTMLElement>(
-          '.pt-input, .pt-date, .ie-value'
+          '.pt-input, .pt-date'
         )) {
           const box = el.getBoundingClientRect();
           if (
@@ -427,14 +426,12 @@ module('Integration | inline edit', function (hooks) {
     await animationsSettled();
 
     assert.strictEqual(
-      find('.ie-plate[data-field="name"] .ie-value')?.textContent?.trim(),
+      find('.ie-value[data-value="name"]')?.textContent?.trim(),
       'Margarethe Vela',
       'the reading view shows what the input was given'
     );
     assert.deepEqual(
-      [...field('name').querySelectorAll<HTMLElement>('.ie-word')].map((el) =>
-        el.textContent?.trim()
-      ),
+      words('name').map((el) => el.textContent?.trim()),
       ['Margarethe', 'Vela'],
       'and the flight was re-planned for the new words'
     );

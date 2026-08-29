@@ -10761,40 +10761,35 @@ html[data-gm-dragging] * {
 }
 
 /* ── In place: a record read, then written ───────────────────────────────
-   Two states of one card. The stylesheet states the REST POSE of each — the
-   crossing is what gets between them, and no rule here knows it exists.
+   TWO LAYERS, with different laws.
 
-   The two poses are deliberately far apart. An earlier cut changed only the
-   type and the chrome, and the flight was correct but nearly invisible: a
-   word that ends 40px from where it started reads as a re-render, not a
-   move. So the card is not one layout with two type scales — it is a
-   BUSINESS CARD becoming a FORM. The avatar is 72px and then 34px. The name
-   sits under it and then drops into a labelled row. Email and date of birth
-   share one line pinned to the card's bottom edge, and then become two
-   full-width rows of their own, which is the longest journey on the stage
-   and the one worth watching.
+   The BACKGROUND is boxes with borders, and it is a containment hierarchy:
+   the white card holds three beige platters, one per field, each in its own
+   lane. The lanes are in the same order in both poses and a platter never
+   leaves its own, so no box can cross another — they grow, shrink and slide
+   along their lane while the card changes height around them. Which is why
+   the card is a single column even though the reading view does not look
+   like one.
 
-   The type is the point underneath that. Reading type is 30px/700; the
-   form's is 17px/400, and `font-variation-settings` is never touched:
+   The FOREGROUND is type, and it is a layer OVER the card rather than
+   content inside the platters. Nothing lays it out and nothing clips it, so
+   it is free to cross: that is how the reading view puts email and date of
+   birth on one line while their platters sit in two separate lanes
+   underneath. The price is that the type inherits nothing — it carries its
+   own position, size, weight and kerning, all from pretext, and this
+   stylesheet only states its rest poses.
+
    Archivo is variable (wght 400..700, loaded at the top of this file), so
-   `font-weight` is a plain number the engine interpolates. The size and
-   weight tweens live on the modifier rather than here, because a CSS
-   transition cannot survive a re-render under a caret. */
-/* The card's top edge is PINNED, and the card grows downward from it. The
-   two poses are different heights on purpose — a form is taller than the
-   card it came from — but a centred card would turn that into 20px of
-   vertical drift on every element inside it, and a flight measured in page
-   space would carry the drift. One fixed row, card aligned to its top:
-   the height difference stays a height difference. */
+   `font-weight` is a plain number the engine interpolates. The width axis is
+   reached with `font-stretch`, never `font-variation-settings`: a variation
+   axis cannot appear in the canvas font shorthand pretext measures with, so
+   the two ends would disagree by a whole line's worth of width. */
 .ie {
   display: grid;
-  /* An EXPLICIT column, and it is load-bearing. An auto column is sized by
-     what its items ask for, and mid-flight the card asks for more than it is
-     given — so the column grew, the centred card was centred in something
-     wider than the stage, and the whole card lurched 70px right and slid
-     back over the next 150ms. That was the yank, and it was never the type.
-     A `minmax(0, 1fr)` column is the stage's width and nobody else's
-     business, so the contents may overflow it without moving anything. */
+  /* An EXPLICIT column. An auto column is sized by what its items ask for,
+     and mid-flight the card asks for more than it is given — so the column
+     grew, the centred card was centred in something wider than the stage,
+     and the whole card lurched 70px right and slid back. */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: 300px auto;
   gap: 14px;
@@ -10802,17 +10797,14 @@ html[data-gm-dragging] * {
   align-content: center;
 }
 
-/* The card's OUTER box is identical in both states, and that is load-bearing.
-   Everything that moves, moves inside it. A container that resizes under a
-   flight takes the flight with it — measured in page space, the words once
-   travelled 27px of which 24 was the card itself moving. Pinning the outside
-   and rearranging the inside means every pixel of motion you see is the
-   thing you are meant to be watching. */
+/* THE WHITE PLATTER. Its top edge is pinned and it grows downward: the two
+   poses are different heights on purpose, and a centred card would turn that
+   into vertical drift under every flight. */
 .ie-card {
   position: relative;
   display: grid;
-  box-sizing: border-box;
   align-self: start;
+  box-sizing: border-box;
   width: min(100%, 340px);
   gap: 8px;
   padding: 18px;
@@ -10821,54 +10813,22 @@ html[data-gm-dragging] * {
   background: var(--bg-elev);
 }
 
-/* the reading pose: a card. Avatar large, name beneath it, and the two
-   secondary values sharing one line along the bottom edge. */
+/* Five lanes, same order in both poses. `minmax(0, …)` on the column, not
+   `1fr`: an `fr` track is floored at the AUTO minimum of its items, and a
+   platter mid-flight carries an inline width from the move it is playing, so
+   the track grew to fit it and every lane started in the wrong place. */
 .ie-card[data-mode='view'] {
-  grid-template-areas:
-    'head head'
-    'name name'
-    'rule rule'
-    'email dob';
-  height: 236px;
-  grid-template-rows: 88px auto 1px 46px;
-  /* email is the longer value and gets the wider half — a 50/50 split here
-     was forcing its type a size smaller than the date beside it. Both tracks
-     are floored at zero: see the edit pose for why. */
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  height: 245px;
+  grid-template-areas: 'head' 'rule' 'name' 'email' 'dob';
+  grid-template-rows: 88px 1px 44px 22px 22px;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-/* the writing pose: a form. Avatar demoted to a chip, and every value on a
-   full-width labelled row of its own. */
 .ie-card[data-mode='edit'] {
-  grid-template-areas:
-    'head head'
-    'rule rule'
-    'name name'
-    'email email'
-    'dob dob';
-  height: 276px;
+  height: 273px;
+  grid-template-areas: 'head' 'rule' 'name' 'email' 'dob';
   grid-template-rows: 36px 1px 56px 56px 56px;
-  /* `minmax(0, 1fr)`, not `1fr`, and this one cost an evening. An `fr` track
-     is floored at the AUTO minimum of its items, and a field mid-flight
-     carries an inline width from the move it is playing — 302px, the width
-     it is coming from. So the two 147px columns became two 302px columns,
-     the card's grid was suddenly twice the card, the date's column started
-     at 328 instead of 198, and the FLIP transform landed it 130px from
-     where it belonged before sliding back. The date jumped. Flooring the
-     track at zero means an oversized item overflows instead of resizing the
-     grid it is in. */
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-/* The hairline is the card's one piece of pure chrome, and it is here to be
-   MOVED: in the reading pose it underlines the record and separates it from
-   the contact line along the bottom edge; in the form it sits directly under
-   the header, where it reads as the top of a control panel. Same element,
-   two jobs, one `c.Move` — the cheapest way to say the card changed mode. */
-.ie-rule {
-  grid-area: rule;
-  height: 1px;
-  background: var(--line);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .ie-head {
@@ -10885,21 +10845,13 @@ html[data-gm-dragging] * {
   place-items: center;
   width: 72px;
   height: 72px;
-  box-shadow: 0 6px 18px rgb(216 69 26 / 22%);
   /* 36px, not 50%. A percentage radius is resolved against the box, so a
      circle tweening to a rounded rect would be interpolating a percentage
-     into a length — the engine cannot, and the corner snaps at one end. Half
-     the width IS the circle, said in the units the other end is said in, so
-     the whole thing is one rounded rect becoming another. The modifier owns
-     the value; this is only the rest pose. */
-  /* the rest pose only — the score's `c.Tween` is what gets between the two */
+     into a length — the engine cannot, and the corner snaps at one end. */
   border-radius: 36px;
   background: linear-gradient(150deg, #ff9a4a, #d8451a);
+  box-shadow: 0 6px 18px rgb(216 69 26 / 22%);
   color: #fff;
-}
-
-.ie-card[data-mode='edit'] .ie-initials {
-  font-size: 14px;
 }
 
 .ie-card[data-mode='edit'] .ie-avatar {
@@ -10916,6 +10868,10 @@ html[data-gm-dragging] * {
   letter-spacing: 0.01em;
 }
 
+.ie-card[data-mode='edit'] .ie-initials {
+  font-size: 14px;
+}
+
 .ie-kicker {
   white-space: nowrap;
   color: var(--ink-faint);
@@ -10925,9 +10881,16 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* A field row is two things sharing one grid area: the label above it, and
-   the PLATTER — which is the field. They are siblings so the label can stay
-   put while the platter travels. */
+/* one hairline, and it travels: under the record in the reading view, under
+   the header in the form, where it reads as the top of a control panel */
+.ie-rule {
+  grid-area: rule;
+  height: 1px;
+  background: var(--line);
+}
+
+/* a label and its platter share a lane, so the label can stay put while the
+   platter grows underneath it */
 .ie-label[data-label='name'],
 .ie-plate[data-field='name'] {
   grid-area: name;
@@ -10954,42 +10917,30 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* THE PLATTER. One box per field, in both poses, and the only thing in a row
-   that travels — `c.Move` animates it explicitly between the two geometries.
-   Everything a field contains rides inside it: the control, the reading
-   string, the words in flight.
+/* A BEIGE PLATTER. One per field, in both poses, in its own lane — it holds
+   the control and draws the field's whole appearance, so the outline cannot
+   escape its bounds for the simple reason that it IS the outline. It carries
+   no text in the reading view, which is why it can be empty there without
+   looking like an empty box: it is invisible.
 
-   It was two elements once — a static plate sharing the grid area with a
-   travelling field — and that can put the outline somewhere the value is
-   not, because only one of them was moving. The outline cannot leave the
-   platter's bounds at any point now, for the simple reason that it IS the
-   platter's border.
-
-   The border is 1px in both poses and merely changes colour, so the box does
-   not resize when the form arrives. Colour is left to a transition here
-   rather than to the score, because a colour cannot smear under a moving
-   box; the RADIUS cannot be left to either — a corner carried by a
-   crop-scale is a corner that smears — so it rides a tween beside the move. */
+   The platter is 40px including its border, so what it holds gets a 38px
+   line box — the content box exactly. A 40px line inside it overflows by a
+   pixel at each end. The border is 1px in BOTH poses and merely changes
+   colour, so the box does not resize when the form arrives; colour is left
+   to a transition, because a colour cannot smear under a moving box, while
+   the RADIUS rides a tween beside the move, because a corner carried by a
+   crop-scale is a corner that does. */
 .ie-plate {
-  /* The platter is 40px including its border, so everything it holds gets a
-     38px line box — the content box exactly. A 40px line inside a 38px
-     content box overflows by a pixel at each end, which under the law below
-     is the reading string escaping its own platter on every frame. */
   --ie-line: 38px;
 
   position: relative;
   align-self: end;
   box-sizing: border-box;
-  height: 40px;
+  height: 100%;
   min-width: 0;
   border: 1px solid rgb(28 22 18 / 0%);
   border-radius: 3px;
   background: rgb(0 0 0 / 0%);
-  /* the law, enforced rather than tuned: nothing a field holds may be drawn
-     outside the platter, at rest or at any frame of the flight. The date's
-     three segments have fixed widths and are wider than the platter is while
-     it is still growing, so without this the form field spills past its own
-     outline for the first third of the way in. */
   overflow: hidden;
   transition:
     border-color 200ms linear,
@@ -10997,108 +10948,89 @@ html[data-gm-dragging] * {
 }
 
 .ie-card[data-mode='edit'] .ie-plate {
+  height: 40px;
   border-color: rgb(28 22 18 / 22%);
   background: var(--bg);
   cursor: text;
 }
 
-/* PHASE 2 — the flight layer. A word is out of flow, never wraps, and its
-   left edge is a number the score tweens.
+/* THE TYPE LAYER. Over the card's padding box, above the platters, and
+   inert: everything in it is positioned absolutely, and pointer events pass
+   through to the real controls underneath. */
+.ie-type {
+  position: absolute;
+  inset: 18px;
+  z-index: 2;
+  pointer-events: none;
+}
 
-   Its LINE BOX is the same 40px the real text gets, and that is a fix rather
-   than a detail. Centring a `line-height: 1.18` box inside the field is not
-   the same as centring a 40px line box: where a glyph sits inside a line box
-   comes from the font's own metrics, so the flight rode 1.2px high on the
-   name and two thirds of a pixel high on the rest, and the handover to the
-   real text was a small vertical jump. Same line box, same baseline.
+/* A word in flight. Hidden at BOTH ends and shown only while the region says
+   a scene change is under way — there is no fade in either direction on
+   purpose, because for the length of the flight the word is the ONLY copy of
+   its value and there is nothing to blend it with.
 
-   `font-variation-settings` is gone on purpose — a variation axis cannot be
-   said in the canvas font shorthand pretext measures with, so asking for one
-   here would render a face half a line narrower than the widths the layout
-   was computed from. `font-stretch` reaches the same axis and IS in the
-   shorthand, so both ends agree. */
+   VISIBILITY rather than opacity, and not a preference: a participant's
+   opacity is the engine's, which renders one inline, so a rule here is
+   outvoted and the words sat fully opaque over the controls with a
+   stylesheet that clearly said otherwise. Nothing in the library writes
+   `visibility`. */
 .ie-word {
   position: absolute;
   top: 0;
   left: 0;
-  height: var(--ie-line);
+  translate: 0 -50%;
+  height: 38px;
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   color: var(--ink);
-  /* the rest tracking mirrors the real text's; the score's keyframes state
-     both ends anyway, so this only has to be right before the first pass */
   letter-spacing: -0.01em;
-  line-height: var(--ie-line);
-  /* Hidden at BOTH ends, and shown only while the region says a scene change
-     is under way. There is no fade in either direction on purpose: the word
-     is the ONLY copy of the value for the length of the flight, so there is
-     nothing to blend it with.
-
-     VISIBILITY rather than opacity, and again not a preference: a
-     participant's opacity is the engine's — it renders one inline — so a
-     rule here is simply outvoted, and the words sat fully opaque over the
-     controls with a stylesheet that clearly said otherwise. Nothing in the
-     library writes `visibility`. */
+  line-height: 38px;
   visibility: hidden;
-  pointer-events: none;
 }
 
 .ie[data-flying] .ie-word {
   visibility: visible;
 }
 
-/* The LIVE value stands aside for exactly as long as the flight is drawing
-   it — `.ie-plate` in the selector, because a DEPARTING control is not in a
-   field any more, it is in the orphan layer, and it is meant to be seen
-   going: it fades and scales away with the plate it sat in. That is only
-   safe now the flight word and the real text are pixel-identical, which is
-   the whole of the previous commit. Two identical renderings crossfading is
-   invisible; the ghost this rule was written for was the mismatch, not the
-   overlap.
-
-   VISIBILITY, not opacity or colour, and not a preference either way:
-   opacity belongs to the engine, which renders one inline, and
-   `color: transparent` was outspecified by the two rules that give the
-   reading view its type scale — three selectors long, because they name the
-   mode and the field — so email and date of birth showed through the flight
-   as a doubled, offset copy of themselves. */
-.ie[data-flying] .ie-plate .ie-value,
-.ie[data-flying] .ie-plate .pt-input {
-  visibility: hidden;
-}
-
-/* PHASE 1 — the reading view's own markup: an ordinary string in ordinary
-   flow, which is to say selectable, wrappable and nothing special at all. */
+/* the reading view's own strings, placed at the same origins the plan
+   computed for the words that leave them */
 .ie-value {
-  display: block;
-  height: var(--ie-line);
+  position: absolute;
+  translate: 0 -50%;
+  height: 38px;
+  white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
-  line-height: var(--ie-line);
+  line-height: 38px;
+  pointer-events: auto;
 }
 
-.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-value,
-.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-word {
+.ie-value[data-value='name'] {
+  font-size: 30px;
+  font-weight: 700;
   letter-spacing: -0.03em;
 }
 
-.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-value {
-  font-size: 30px;
-  font-weight: 700;
-}
-
-.ie-card[data-mode='view'] .ie-plate[data-field='email'] .ie-value,
-.ie-card[data-mode='view'] .ie-plate[data-field='dob'] .ie-value {
+.ie-value[data-value='email'],
+.ie-value[data-value='dob'] {
   color: var(--ink-dim);
   font-size: 13px;
   font-weight: 500;
 }
 
-/* PHASE 3 — real controls. The type here is the form's single scale, and it
-   has to be the same numbers the flight was planned against: a word that
-   lands on an input set one pixel larger has landed on the wrong thing. */
+/* the live value stands aside for exactly as long as the flight is drawing
+   it. A DEPARTING control is in the orphan layer by then, outside the card
+   and so outside this rule, which is what lets it be seen fading out. */
+.ie[data-flying] .ie-value,
+.ie[data-flying] .ie-plate .pt-input {
+  visibility: hidden;
+}
+
+/* REAL CONTROLS. The type here is the form's single scale, and it has to be
+   the same numbers the flight was planned against: a word that lands on an
+   input set one pixel larger has landed on the wrong thing. */
 .pt-input {
   box-sizing: border-box;
   width: 100%;
@@ -11112,20 +11044,19 @@ html[data-gm-dragging] * {
   font-weight: 400;
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
-  /* the same line box the flight lands from — see `.ie-word` */
   line-height: var(--ie-line);
   appearance: none;
 }
 
 .pt-input:focus-visible {
+  border-radius: 9px;
   outline: 2px solid #ff7a28;
   outline-offset: -2px;
-  border-radius: 9px;
 }
 
-/* the segmented date: day, month, year, each its own control. The widths
-   here are the ones the component states as the flight's landing marks —
-   change one and change the other, or "March" arrives beside its field. */
+/* the segmented date: day, month, year, each its own control. These widths
+   are the flight's landing marks — change one and change the other, or
+   "March" arrives beside its field. */
 .pt-date {
   display: flex;
   height: var(--ie-line);
