@@ -17,7 +17,7 @@ const mode = () => card().dataset['mode'];
 const toggle = () => click('[data-test-toggle]');
 
 const field = (key: string) =>
-  find(`.ie-field[data-field="${key}"]`) as HTMLElement;
+  find(`.ie-plate[data-field="${key}"]`) as HTMLElement;
 
 /**
  * Left edges in LAYOUT pixels, not viewport ones.
@@ -32,7 +32,7 @@ const field = (key: string) =>
 const scale = () => card().getBoundingClientRect().width / card().offsetWidth;
 
 const left = (el: HTMLElement) => {
-  const base = el.closest('.ie-field') as HTMLElement;
+  const base = el.closest('.ie-plate') as HTMLElement;
   return (
     (el.getBoundingClientRect().left - base.getBoundingClientRect().left) /
     scale()
@@ -67,7 +67,7 @@ module('Integration | inline edit', function (hooks) {
 
     assert.strictEqual(mode(), 'view', 'it opens on the reading view');
     assert.strictEqual(
-      find('.ie-field[data-field="name"] .ie-value')?.textContent?.trim(),
+      find('.ie-plate[data-field="name"] .ie-value')?.textContent?.trim(),
       'Marguerite Villanueva',
       'the reading view is an ordinary string in ordinary flow'
     );
@@ -88,9 +88,9 @@ module('Integration | inline edit', function (hooks) {
     // the point of copying pretui's field shapes in: real controls, real
     // types. An email input is the mobile keyboard and the autofill
     // category, neither of which a text input with a placeholder gives you.
-    const name = find('.ie-field[data-field="name"] input') as HTMLInputElement;
+    const name = find('.ie-plate[data-field="name"] input') as HTMLInputElement;
     const email = find(
-      '.ie-field[data-field="email"] input'
+      '.ie-plate[data-field="email"] input'
     ) as HTMLInputElement;
     assert.strictEqual(name.type, 'text', 'the name is a text input');
     assert.strictEqual(email.type, 'email', 'the email is an email input');
@@ -137,9 +137,12 @@ module('Integration | inline edit', function (hooks) {
       'and every date word lands on its own segment, to the pixel'
     );
 
+    // the segments are 32 and 104 wide with 6 between, so the three text
+    // origins are 38 and 110 apart wherever the platter's own inset puts them
+    const [day, month, year] = wordX('dob');
     assert.deepEqual(
-      wordX('dob'),
-      [11, 49, 159],
+      [month! - day!, year! - month!],
+      [38, 110],
       'and the date lands on three separate segments, not one flowed line'
     );
   });
@@ -269,33 +272,27 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
-   * The form fades and scales away — which nothing was doing for it.
+   * The departing control fades, which nothing was doing for it.
    *
    * A crossing fades what it CROSSES: a leaver against the arrival that
-   * claimed its identity. The plate, the controls and the labels are claimed
-   * by nobody — the reading view has no counterpart for a form field, which
-   * is the point of the demo — so they were scaling away at full opacity and
-   * then ceasing to exist when the leave window closed, which reads as a
-   * cut. Every fade here is stated by a step.
+   * claimed its identity. A form field is claimed by nobody — the reading
+   * view has no counterpart for one, which is the point of the demo — so it
+   * was ceasing to exist when the leave window closed, which reads as a cut
+   * rather than as the form coming apart.
    */
-  test('the form fades and scales as it leaves, not blinks', async function (assert) {
+  test('the form fades as it leaves, rather than blinking off', async function (assert) {
     await render(<template><InlineEdit /></template>);
     await animationsSettled();
     await toggle();
     await animationsSettled();
 
     const leaving = () =>
-      [
-        ...document.querySelectorAll<HTMLElement>(
-          '[data-choreo-orphans] .ie-plate'
-        ),
-      ].map((el) => ({
-        opacity: Number(getComputedStyle(el).opacity),
-        scaleY: new DOMMatrix(getComputedStyle(el).transform).d,
-      }));
+      [...document.querySelectorAll<HTMLElement>('[data-choreo-orphans] *')]
+        .filter((el) => el.matches('.pt-input, .pt-date'))
+        .map((el) => Number(getComputedStyle(el).opacity));
 
     await click('[data-test-toggle]');
-    const samples: ReturnType<typeof leaving>[] = [];
+    const samples: number[][] = [];
     for (let i = 0; i < 6; i++) {
       await new Promise((go) => requestAnimationFrame(go));
       const shot = leaving();
@@ -304,57 +301,61 @@ module('Integration | inline edit', function (hooks) {
       }
     }
 
-    assert.ok(samples.length >= 2, 'the plates were caught on their way out');
-    const first = samples[0]![0]!;
-    const last = samples[samples.length - 1]![0]!;
+    assert.ok(samples.length >= 2, 'the form was caught on its way out');
     assert.ok(
-      last.opacity < first.opacity,
-      `it is fading (${first.opacity} to ${last.opacity})`
-    );
-    assert.ok(
-      last.scaleY < first.scaleY,
-      `and collapsing (${first.scaleY} to ${last.scaleY})`
+      Math.min(...samples[samples.length - 1]!) < Math.max(...samples[0]!),
+      `it is fading (${JSON.stringify(samples)})`
     );
     await animationsSettled();
   });
 
   /**
-   * The form's chrome belongs to the container, not to the text.
+   * The outline never leaves the platter, at rest or in flight.
    *
-   * The plate and the label used to live INSIDE the field, and the field is
-   * the one thing in a row that travels — the date flies the width of the
-   * card. So the plate stretched and slid across the card behind the words
-   * and the label came sailing in from the right, and the transition read as
-   * the layout being yanked rather than as the type moving. They are
-   * siblings sharing the field's grid area now, in no Move at all: they are
-   * at their destination on the first frame and stay there.
+   * The platter and the field used to be two elements sharing a grid area —
+   * one static, one travelling — and only one of them moved, so mid-flight
+   * the outline stood at its form geometry, full width, while the type was
+   * still laid out for a card. They are one box now, which is what makes
+   * this assertion true by construction rather than by tuning: the outline
+   * IS the platter's border, and everything a field holds is inside it.
    */
-  test('the plates do not travel — they are where they land, from frame one', async function (assert) {
+  test('nothing a field holds is ever outside its platter', async function (assert) {
     await render(<template><InlineEdit /></template>);
     await animationsSettled();
+    await toggle();
+    await animationsSettled();
 
-    const plates = () =>
-      [...document.querySelectorAll<HTMLElement>('.ie-plate')].map((el) => {
-        const box = el.getBoundingClientRect();
-        return [Math.round(box.left), Math.round(box.width)].join('x');
-      });
+    const escapes = () => {
+      const out: string[] = [];
+      for (const key of ['name', 'email', 'dob']) {
+        const platter = field(key).getBoundingClientRect();
+        for (const el of field(key).querySelectorAll<HTMLElement>(
+          '.pt-input, .pt-date, .ie-value'
+        )) {
+          const box = el.getBoundingClientRect();
+          if (
+            box.left < platter.left - 0.5 ||
+            box.right > platter.right + 0.5 ||
+            box.top < platter.top - 0.5 ||
+            box.bottom > platter.bottom + 0.5
+          ) {
+            out.push(`${key}:${el.className}`);
+          }
+        }
+      }
+      return out;
+    };
+
+    assert.deepEqual(escapes(), [], 'nothing escapes at rest in the form');
 
     await click('[data-test-toggle]');
-    const during: string[][] = [];
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       await new Promise((go) => requestAnimationFrame(go));
-      during.push(plates());
+      assert.deepEqual(escapes(), [], 'nor at any frame of the flight');
     }
     await animationsSettled();
-    const landed = plates();
 
-    for (const sample of during) {
-      assert.deepEqual(
-        sample,
-        landed,
-        'the chrome never moves while the type is in flight'
-      );
-    }
+    assert.deepEqual(escapes(), [], 'nor at rest in the reading view');
   });
 
   /**
@@ -420,13 +421,13 @@ module('Integration | inline edit', function (hooks) {
     await toggle();
     await animationsSettled();
 
-    await fillIn('.ie-field[data-field="name"] input', 'Margarethe Vela');
+    await fillIn('.ie-plate[data-field="name"] input', 'Margarethe Vela');
     await settled();
     await toggle();
     await animationsSettled();
 
     assert.strictEqual(
-      find('.ie-field[data-field="name"] .ie-value')?.textContent?.trim(),
+      find('.ie-plate[data-field="name"] .ie-value')?.textContent?.trim(),
       'Margarethe Vela',
       'the reading view shows what the input was given'
     );

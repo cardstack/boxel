@@ -10925,39 +10925,22 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* The three things a field row is made of, all sharing one grid area and
-   stacked on top of each other: the plate behind, the label above, and the
-   text itself. They are SIBLINGS rather than nested, which is what lets the
-   field travel without dragging the chrome with it — see `.ie-field`. */
-.ie-plate[data-plate='name'],
+/* A field row is two things sharing one grid area: the label above it, and
+   the PLATTER — which is the field. They are siblings so the label can stay
+   put while the platter travels. */
 .ie-label[data-label='name'],
-.ie-field[data-field='name'] {
+.ie-plate[data-field='name'] {
   grid-area: name;
 }
 
-.ie-plate[data-plate='email'],
 .ie-label[data-label='email'],
-.ie-field[data-field='email'] {
+.ie-plate[data-field='email'] {
   grid-area: email;
 }
 
-.ie-plate[data-plate='dob'],
 .ie-label[data-label='dob'],
-.ie-field[data-field='dob'] {
+.ie-plate[data-field='dob'] {
   grid-area: dob;
-}
-
-/* The form's chrome, and nothing else. It exists only in the form — there is
-   no invisible copy of it sitting in the reading view — so the crossing owns
-   its fade, and it is in no Move at all: it belongs to the container rather
-   than to the text, and it arrives by expanding where it lands. */
-.ie-plate {
-  align-self: end;
-  height: 40px;
-  border: 1px solid rgb(28 22 18 / 22%);
-  border-radius: 9px;
-  background: var(--bg);
-  pointer-events: none;
 }
 
 /* the label exists only in the form: it arrives with the editor and leaves
@@ -10971,22 +10954,51 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* The line itself, and the only thing in a row that travels. It draws
-   nothing and it holds no layout: every word inside it is out of flow at an
-   x pretext worked out, so the box is a coordinate frame and nothing else,
-   which is exactly what makes the type safe to resize. */
-.ie-field {
+/* THE PLATTER. One box per field, in both poses, and the only thing in a row
+   that travels — `c.Move` animates it explicitly between the two geometries.
+   Everything a field contains rides inside it: the control, the reading
+   string, the words in flight.
+
+   It was two elements once — a static plate sharing the grid area with a
+   travelling field — and that can put the outline somewhere the value is
+   not, because only one of them was moving. The outline cannot leave the
+   platter's bounds at any point now, for the simple reason that it IS the
+   platter's border.
+
+   The border is 1px in both poses and merely changes colour, so the box does
+   not resize when the form arrives. Colour is left to a transition here
+   rather than to the score, because a colour cannot smear under a moving
+   box; the RADIUS cannot be left to either — a corner carried by a
+   crop-scale is a corner that smears — so it rides a tween beside the move. */
+.ie-plate {
+  /* The platter is 40px including its border, so everything it holds gets a
+     38px line box — the content box exactly. A 40px line inside a 38px
+     content box overflows by a pixel at each end, which under the law below
+     is the reading string escaping its own platter on every frame. */
+  --ie-line: 38px;
+
   position: relative;
-  z-index: 1;
   align-self: end;
   box-sizing: border-box;
   height: 40px;
   min-width: 0;
-  background: transparent;
-  overflow: visible;
+  border: 1px solid rgb(28 22 18 / 0%);
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0%);
+  /* the law, enforced rather than tuned: nothing a field holds may be drawn
+     outside the platter, at rest or at any frame of the flight. The date's
+     three segments have fixed widths and are wider than the platter is while
+     it is still growing, so without this the form field spills past its own
+     outline for the first third of the way in. */
+  overflow: hidden;
+  transition:
+    border-color 200ms linear,
+    background-color 200ms linear;
 }
 
-.ie-card[data-mode='edit'] .ie-field {
+.ie-card[data-mode='edit'] .ie-plate {
+  border-color: rgb(28 22 18 / 22%);
+  background: var(--bg);
   cursor: text;
 }
 
@@ -11009,7 +11021,7 @@ html[data-gm-dragging] * {
   position: absolute;
   top: 0;
   left: 0;
-  height: 40px;
+  height: var(--ie-line);
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
@@ -11017,7 +11029,7 @@ html[data-gm-dragging] * {
   /* the rest tracking mirrors the real text's; the score's keyframes state
      both ends anyway, so this only has to be right before the first pass */
   letter-spacing: -0.01em;
-  line-height: 40px;
+  line-height: var(--ie-line);
   /* Hidden at BOTH ends, and shown only while the region says a scene change
      is under way. There is no fade in either direction on purpose: the word
      is the ONLY copy of the value for the length of the flight, so there is
@@ -11037,7 +11049,7 @@ html[data-gm-dragging] * {
 }
 
 /* The LIVE value stands aside for exactly as long as the flight is drawing
-   it — `.ie-field` in the selector, because a DEPARTING control is not in a
+   it — `.ie-plate` in the selector, because a DEPARTING control is not in a
    field any more, it is in the orphan layer, and it is meant to be seen
    going: it fades and scales away with the plate it sat in. That is only
    safe now the flight word and the real text are pixel-identical, which is
@@ -11051,8 +11063,8 @@ html[data-gm-dragging] * {
    reading view its type scale — three selectors long, because they name the
    mode and the field — so email and date of birth showed through the flight
    as a doubled, offset copy of themselves. */
-.ie[data-flying] .ie-field .ie-value,
-.ie[data-flying] .ie-field .pt-input {
+.ie[data-flying] .ie-plate .ie-value,
+.ie[data-flying] .ie-plate .pt-input {
   visibility: hidden;
 }
 
@@ -11060,24 +11072,25 @@ html[data-gm-dragging] * {
    flow, which is to say selectable, wrappable and nothing special at all. */
 .ie-value {
   display: block;
+  height: var(--ie-line);
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
-  line-height: 40px;
+  line-height: var(--ie-line);
 }
 
-.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-value,
-.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-word {
+.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-value,
+.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-word {
   letter-spacing: -0.03em;
 }
 
-.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-value {
+.ie-card[data-mode='view'] .ie-plate[data-field='name'] .ie-value {
   font-size: 30px;
   font-weight: 700;
 }
 
-.ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-value,
-.ie-card[data-mode='view'] .ie-field[data-field='dob'] .ie-value {
+.ie-card[data-mode='view'] .ie-plate[data-field='email'] .ie-value,
+.ie-card[data-mode='view'] .ie-plate[data-field='dob'] .ie-value {
   color: var(--ink-dim);
   font-size: 13px;
   font-weight: 500;
@@ -11089,7 +11102,7 @@ html[data-gm-dragging] * {
 .pt-input {
   box-sizing: border-box;
   width: 100%;
-  height: 40px;
+  height: var(--ie-line);
   padding: 0 11px;
   border: 0;
   background: transparent;
@@ -11100,7 +11113,7 @@ html[data-gm-dragging] * {
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
   /* the same line box the flight lands from — see `.ie-word` */
-  line-height: 40px;
+  line-height: var(--ie-line);
   appearance: none;
 }
 
@@ -11115,7 +11128,7 @@ html[data-gm-dragging] * {
    change one and change the other, or "March" arrives beside its field. */
 .pt-date {
   display: flex;
-  height: 40px;
+  height: var(--ie-line);
   gap: 6px;
   align-items: center;
   padding: 0 11px;

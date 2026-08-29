@@ -69,19 +69,6 @@ const BOX = 0.42;
 const LEAVE = 0.18;
 
 /**
- * The plate arrives by expanding and leaves by collapsing.
- *
- * It leaves further than it arrives, and faster, because of what is inside
- * it: the control's own text is already gone — the flight is drawing that,
- * and two copies of one value is the one thing this demo will not do — so a
- * plate on its way out is an empty box, and an empty box that lingers reads
- * as debris. Collapsing it harder is how it stops looking like something
- * left behind.
- */
-const PLATE_IN = [0.72, 1];
-const PLATE_OUT = [1, 0.58];
-
-/**
  * And the fade, said out loud.
  *
  * A crossing fades what it CROSSES — a leaver against the arrival that
@@ -442,6 +429,10 @@ export class InlineEdit extends Component {
     return this.tween('36px', '10px');
   }
 
+  get plateRadius() {
+    return this.tween('3px', '9px');
+  }
+
   <template>
     {{! `data-flying` is set on this element by hand rather than rendered —
         see `toggle`. Reading the arming as tracked state re-renders the
@@ -473,21 +464,20 @@ export class InlineEdit extends Component {
         <span class="ie-rule" {{motion id="rule" role="rule"}}></span>
 
         {{#each this.fields as |field|}}
-          {{! The plate and the label are SIBLINGS of the field, not children
-              of it, and they share its grid area rather than living inside
-              it. Inside, they were dragged by the field's own Move: the date
-              flies the width of the card, so its plate stretched and slid
-              across the card behind the words and its label came sailing in
-              from the right. Nothing about the form's chrome is travelling —
-              it belongs to the container. Out here it simply expands and
-              fades where it lands, and the only thing the transition moves
-              is the type. }}
+          {{! ONE box per field: the platter IS the field. It was two — a
+              static plate sharing the grid area with a travelling field —
+              and that arrangement can put the outline somewhere the value is
+              not, because only one of them was moving. At rest it was fine;
+              mid-flight the plates stood at their form geometry, full width,
+              while the type was still laid out for a card.
+
+              So the platter is the subject and it is animated explicitly.
+              Everything a field contains — the control, the reading string,
+              the words in flight — is INSIDE it, and rides its box. The
+              outline cannot leave the platter's bounds at any point in the
+              transition for the simple reason that it is the platter's own
+              border. }}
           {{#if this.editing}}
-            <span
-              class="ie-plate"
-              data-plate={{field.key}}
-              {{motion id=(concat field.key "-plate") role="plate"}}
-            ></span>
             <span
               class="ie-label"
               data-label={{field.key}}
@@ -496,21 +486,15 @@ export class InlineEdit extends Component {
           {{/if}}
 
           <div
-            class="ie-field"
+            class="ie-plate"
             data-field={{field.key}}
             data-test-field={{field.key}}
-            {{motion id=(concat field.key "-field") role="field"}}
+            {{motion id=(concat field.key "-plate") role="plate"}}
           >
-            {{! PHASE 1 and PHASE 3: real DOM at both ends. Neither carries
-                  a motion id, and that is deliberate — they are not in the
-                  crossing at all. There is never a moment with two copies of
-                  a value on screen: the string is gone the instant the
-                  flight begins, the control's own text is transparent for
-                  exactly as long as the flight is up, and the word lands on
-                  the pixel the control will paint. A crossfade here would be
-                  two identical copies blending, which reads as a ghost — and
-                  a ghost is what you get when the two do not agree, so the
-                  right answer is to make them agree and show one. }}
+            {{! PHASE 1 and PHASE 3: real DOM at both ends. The reading string
+                carries no motion id — it is not in the crossing, it simply
+                unmounts — and the control carries one only so that it can be
+                seen leaving with the platter it sits in. }}
             {{#if this.editing}}
               {{#if field.date}}
                 <DateField
@@ -541,10 +525,12 @@ export class InlineEdit extends Component {
               <span class="ie-value">{{get this.record field.key}}</span>
             {{/if}}
 
-            {{! PHASE 2: the flight. These words are in the DOM in every
-                  phase — that is what lets the region keep their identity and
-                  fly them with the field — but they are only ever VISIBLE
-                  between the two real poses. }}
+            {{! PHASE 2: the flight, and its own animation entirely. The
+                platter's move carries the words along with everything else in
+                the box; what the words add on top is the part the platter
+                knows nothing about — each one's x within the line, and the
+                scale it is set at, both from pretext. Two animations, one
+                composed inside the other. }}
             {{#each (this.words field.key) key="id" as |part|}}
               <span
                 class="ie-word"
@@ -570,7 +556,7 @@ export class InlineEdit extends Component {
 
           {{! The card's boxes travel — the library's measurement, not mine.
               The plates are in no Move at all: they expand where they land. }}
-          <c.Move @of={{c.moved "field"}} @duration={{MOVE}} @ease={{EASE}} />
+          <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
 
@@ -611,25 +597,16 @@ export class InlineEdit extends Component {
             @duration={{BOX}}
             @ease={{EASE}}
           />
-          {{! The plate is INSERTED and REMOVED, not kept — the form's chrome
-              exists only in the form. So the crossing owns its fade, and the
-              only thing left to say is that it should arrive by expanding.
-              These two need no per-pass guard: an inserted or removed query
-              selects nothing on a pass where nothing was inserted or
-              removed, which is what makes them safe to state as constants
-              while every kept step here has to be a function. }}
+          {{! The platter's CHROME, which is a separate question from its
+              box. Radius rides the tween beside the move rather than being
+              carried by it — a corner carried by a crop-scale is a corner
+              that smears, which is the Crossing demo's rule. The border and
+              the fill are colours, and a colour cannot smear, so they are
+              left to the stylesheet. }}
           <c.Tween
-            @of={{c.inserted "plate"}}
-            @opacity={{FADE_IN}}
-            @scaleY={{PLATE_IN}}
-            @duration={{BOX}}
-            @ease={{EASE}}
-          />
-          <c.Tween
-            @of={{c.removed "plate"}}
-            @opacity={{FADE_OUT}}
-            @scaleY={{PLATE_OUT}}
-            @duration={{LEAVE}}
+            @of={{c.kept "plate"}}
+            @borderRadius={{this.plateRadius}}
+            @duration={{MOVE}}
             @ease={{EASE}}
           />
 
@@ -644,7 +621,6 @@ export class InlineEdit extends Component {
           <c.Tween
             @of={{c.removed "control"}}
             @opacity={{FADE_OUT}}
-            @scaleY={{PLATE_OUT}}
             @duration={{LEAVE}}
             @ease={{EASE}}
           />
