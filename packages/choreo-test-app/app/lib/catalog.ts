@@ -10,6 +10,7 @@ import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
 import { HideHeader } from 'test-app/components/examples/hide-header';
 import { Inbox } from 'test-app/components/examples/inbox';
+import { InlineEdit } from 'test-app/components/examples/inline-edit';
 import { Interrupt } from 'test-app/components/examples/interrupt';
 import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
@@ -212,6 +213,51 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
     notes: InboxNotes,
     slowmo: true,
     title: 'Beacons',
+  },
+  {
+    Example: InlineEdit,
+    apis: ['c.Crossing', 'pack', 'initial', 'fontWeight'],
+    group: 'Choreo',
+    id: 'inline-edit',
+    lede: 'A record read, then written. Every word flies to the form.',
+    sample: `// The SAME words, read and written. Every word of every value is its
+// own identity, so a value does not dissolve into its editor — each word
+// flies to where the form puts it, resetting on the way.
+{{#each (this.words field.key) as |part|}}
+  <span {{motion id=part.id role='word' pack='content'
+    animate=(to fontSize=(this.size field.key)
+                fontWeight=(this.weight field.key))
+    transition=TYPE}}>{{part.word}}</span>
+{{/each}}
+
+// The swap stays ON. A first cut passed swap='none', reasoning that both
+// sides say the same thing so a dissolve would be a word crossfading with
+// itself. But the swap is not about whether the TEXT differs — these are two
+// different DOM nodes, one per branch. Off, neither fades: the departing word
+// stays opaque in the orphan layer and the arriving one sits at opacity 0.
+<c.Parallel>
+  <c.Crossing @duration={{MOVE}} @ease={{EASE}}
+    @leave={{0.2}} @arrive={{0.28}} @overlap={{0.42}} />
+  <c.Move @of={{c.moved}} @duration={{MOVE}} @ease={{EASE}} />
+</c.Parallel>
+
+// A VARIABLE FONT is load-bearing. Reading type is 30px/700, the form's is
+// 17px/400. With static cuts those are two files and the browser can only
+// SWAP — the weight pops at whatever frame the swap lands on. Archivo is
+// variable, so fontWeight is a number the engine interpolates, and the
+// library registers it unitless so it interpolates as one.
+
+// The size/weight tweens live on the MODIFIER, not in CSS: a CSS transition
+// cannot survive the element being re-parented out of the value and into
+// the editor, which is exactly what the crossing does to it.
+
+// The label is in the form only — it arrives with the editor and leaves
+// with it, which is what says the card changed MODE rather than reflowed.
+{{#if this.editing}}
+  <span {{motion id=(concat field.key '-label') role='label'}}>…</span>
+{{/if}}`,
+    slowmo: true,
+    title: 'In place',
   },
   {
     Example: Sequence,

@@ -10759,3 +10759,172 @@ html[data-gm-dragging] * {
     transition: none;
   }
 }
+
+/* ── In place: a record read, then written ───────────────────────────────
+   Two states of one card. The stylesheet states the REST POSE of each — the
+   crossing is what gets between them, and no rule here knows it exists.
+
+   The type is the point. Reading type is 30px/700; the form's is 17px/400,
+   and `font-variation-settings` is never touched: Archivo is variable
+   (wght 400..700, loaded at the top of this file), so `font-weight` is a
+   plain number the engine interpolates. The size and weight tweens live on
+   the modifier rather than here, because a CSS transition cannot survive the
+   element being re-parented from the value into the editor. */
+.ie {
+  display: grid;
+  gap: 14px;
+  place-items: center;
+  align-content: center;
+}
+
+.ie-card {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  width: min(100%, 340px);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-elev);
+}
+
+/* The card's height is constant BY CONSTRUCTION, not by a pinned total.
+   It grew 76px when the labels and field chrome arrived, and a container that
+   resizes under a flight takes the flight with it — measured in page space,
+   the words travelled 27px of which 24 was the card moving. The first fix was
+   a `min-height` on the card, which is a number measured once and wrong the
+   moment anything inside it changes: freezing the field boxes at 40px put the
+   form 12px over it again within the hour. So each row reserves its own
+   taller state instead, and the sum takes care of itself. */
+.ie-head {
+  display: flex;
+  height: 54px;
+  gap: 11px;
+  align-items: center;
+}
+
+/* the avatar is one identity in both states; only its box changes */
+.ie-avatar {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #ff9a4a, #d8451a);
+  color: #fff;
+}
+
+.ie-card[data-mode='edit'] .ie-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+}
+
+.ie-initials {
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-weight: 700;
+  font-variation-settings: 'wdth' 88;
+  letter-spacing: 0.01em;
+}
+
+.ie-kicker {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* label (14) + gap (4) + box (40) — reserved whether or not the label is
+   there, which is what stops the form pushing the reading view around */
+.ie-field {
+  display: grid;
+  height: 58px;
+  align-content: end;
+  gap: 4px;
+}
+
+/* the label exists only in the form: it arrives with the editor and leaves
+   with it, which is what says the card changed MODE rather than reflowed */
+.ie-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* — the two rest poses of a value — */
+
+/* Both rest poses are the SAME box, and a fixed one.
+   `initial` states that an arriving word starts at the type it is leaving —
+   30px for the name — and font-size is layout, so without a fixed height the
+   editor laid those words out full-size, wrapped them to two lines, and stood
+   87px tall before collapsing to 36. That 51px collapse was the jolt: the
+   words were flying correctly and the boxes underneath them were not holding
+   still. Fixed, an oversized word simply overflows for the length of the
+   flight, which is what `overflow: visible` is for.
+
+   It also makes the two states geometrically parallel, which is what lets a
+   crossing read as one thing moving rather than two layouts trading places. */
+.ie-value,
+.ie-input {
+  display: flex;
+  box-sizing: border-box;
+  height: 40px;
+  align-items: center;
+  gap: 0.34em;
+  min-width: 0;
+  overflow: visible;
+}
+
+.ie-input {
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--bg);
+  cursor: text;
+}
+
+.ie-input:focus-visible {
+  outline: 2px solid #ff7a28;
+  outline-offset: 1px;
+}
+
+/* One rule for a word in either state. The SIZE and WEIGHT are deliberately
+   absent — the modifier owns them, so they can be interpolated across the
+   re-parent rather than snapped by a class change. */
+.ie-word {
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-variation-settings: 'wdth' 88;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.18;
+}
+
+.ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-word {
+  letter-spacing: -0.03em;
+}
+
+.ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-word,
+.ie-card[data-mode='view'] .ie-field[data-field='dob'] .ie-word {
+  color: var(--ink-dim);
+}
+
+.ie-toggle {
+  padding: 6px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.ie-toggle:active {
+  translate: 0 1px;
+}
