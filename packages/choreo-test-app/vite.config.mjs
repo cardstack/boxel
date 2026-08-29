@@ -19,6 +19,22 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
   },
+  // ember-cli-deprecation-workflow is a CLASSIC addon: its `main` is the
+  // Node-side build hook and its browser half is an AMD file that
+  // `classicEmberSupport()` wires up — `vendor/…/main.js`, which calls
+  // `window.require` at module scope. Let Vite pre-bundle that and the
+  // optimised copy can run before `@embroider/virtual/vendor.js` has defined
+  // `window.require`, and the app boots into a blank page with no error
+  // anywhere except one console line. It happened on the first load after
+  // any edit that made the optimiser re-run, which made it look like the
+  // dev server randomly dying; the only recovery was `vite --force`.
+  //
+  // `ember()` excludes `@embroider/macros` for exactly this reason. This is
+  // the same fix for the same shape of dependency. Anything else classic and
+  // AMD-flavoured belongs on this list too.
+  optimizeDeps: {
+    exclude: ['ember-cli-deprecation-workflow'],
+  },
   build: {
     rollupOptions: {
       // The tests entry only exists for the development build (see `test` in

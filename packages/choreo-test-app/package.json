@@ -5,12 +5,13 @@
   "description": "glimmer-motion's test app: Motion's Jest suites and Cypress fixtures, ported",
   "scripts": {
     "build": "vite build",
-    "start": "vite",
+    "start": "vite --host ::",
     "lint:types": "glint",
     "test": "vite build --mode=development --out-dir dist-tests && ember test --path dist-tests",
     "start:test": "vite dev --open /tests/"
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
     "choreo-player": "workspace:*",
     "glimmer-motion": "workspace:*",
     "motion": "^13.1.1",

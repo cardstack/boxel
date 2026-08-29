@@ -10,6 +10,7 @@ import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
 import { HideHeader } from 'test-app/components/examples/hide-header';
 import { Inbox } from 'test-app/components/examples/inbox';
+import { InlineEdit } from 'test-app/components/examples/inline-edit';
 import { Interrupt } from 'test-app/components/examples/interrupt';
 import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
@@ -38,6 +39,7 @@ import { CrossingNotes } from 'test-app/components/notes/crossing';
 import { FarNotes } from 'test-app/components/notes/far';
 import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
+import { InlineEditNotes } from 'test-app/components/notes/inline-edit';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
@@ -212,6 +214,66 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
     notes: InboxNotes,
     slowmo: true,
     title: 'Beacons',
+  },
+  {
+    Example: InlineEdit,
+    apis: ['c.Crossing', 'c.Move', 'c.Tween', 'createArming'],
+    group: 'Choreo',
+    id: 'inline-edit',
+    lede: 'An employee profile, read and then written. Real fields at both ends.',
+    sample: `// Real DOM, then a flight, then real DOM again.
+//
+//   1. the reading view's own markup — an ordinary string, in flow
+//   2. a layer of words, out of flow, carrying the eye between the poses
+//   3. real fields: a text input, an email input, a segmented date group
+//
+// No element is in both, and none can be. A <span> in flow and the value
+// of an <input> cannot be the same node, and every attempt to make
+// choreography pretend otherwise failed differently: two copies of a word
+// sliding past each other while the arriving one relaid itself out; a line
+// whose gaps went wrong in flight because each word travelled alone and
+// nothing was interpolating the LINE — "14 March 1986" arriving as
+// "14  March1986". The space between two words is a property of neither.
+
+// WHAT IS MEASURED, AND BY WHOM. The containers are the LIBRARY's: a
+// field's box before the swap and after it is exactly what a changeset is.
+// There is no getBoundingClientRect in the demo, and there was — a
+// hand-rolled FLIP re-deriving what the region had already measured.
+<c.Move @of={{c.moved 'field'}} @duration={{MOVE}} @ease={{EASE}} />
+
+// pretext measures the one thing the DOM cannot: where a word will sit in a
+// pose that is NOT rendered. The form does not exist while the reading view
+// is on screen, and in general it is not even the same author's component.
+const view = layoutWords(words, VIEW[key], 0);      // canvas metrics,
+const edit = layoutWords(words, EDIT[key], INSET);  // pure arithmetic
+
+// One step, one journey per word: a step property may be a function of the
+// sprite it is applied to, so the plan is read per element.
+<c.Tween @of={{c.kept 'name-value'}} @x={{this.wordX}}
+  @fontSize={{this.nameSize}} @fontWeight={{this.nameWeight}}
+  @duration={{MOVE}} @ease={{EASE}} />
+
+// Each of those is a KEYFRAME ARRAY — ['30px', '17px'] — not a target. The
+// rest poses live in CSS keyed by [data-mode], so the new value is already
+// on the element when the region measures; a step given one target finds it
+// already there and animates nothing.
+
+// NEVER TWO COPIES. The flight words are hidden at both ends and shown only
+// while the region says a scene change is under way, and the real control's
+// text stands aside for exactly that long. VISIBILITY, not opacity: a
+// participant's opacity belongs to the engine, which renders one inline, so
+// a stylesheet rule is simply outvoted.
+private arming = createArming();
+// .ie-word { visibility: hidden }
+// .ie-card[data-flying] .ie-word { visibility: visible }
+
+// wdth is said as font-stretch: 87.5%, not font-variation-settings — a
+// variation axis cannot appear in the canvas font shorthand, so pretext
+// would measure the wide cut while the screen drew the narrow one. Thirty
+// pixels of error on a two-word name, all of it in the gaps.`,
+    notes: InlineEditNotes,
+    slowmo: true,
+    title: 'In place',
   },
   {
     Example: Sequence,

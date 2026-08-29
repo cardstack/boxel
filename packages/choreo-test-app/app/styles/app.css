@@ -10759,3 +10759,509 @@ html[data-gm-dragging] * {
     transition: none;
   }
 }
+
+/* ── In place: an employee profile, read and then written ────────────────
+   TWO LAYERS, with different laws.
+
+   The BACKGROUND is boxes with borders, and it is a containment hierarchy:
+   the white card holds one beige platter per field, each in its own lane.
+   The lanes are in the same order in both poses and a platter never leaves
+   its own, so no box can cross another — they grow, shrink and slide along
+   their lane while the card changes height around them.
+
+   The FOREGROUND is type, and it is a layer OVER the card rather than
+   content inside the platters. Nothing lays it out and nothing clips it, so
+   it is free to cross: that is how the reading view puts email and date of
+   birth on one line while their platters sit in two separate lanes. The
+   price is that the type inherits nothing — position, size, weight and
+   kerning all come from pretext, and this stylesheet only states rest poses.
+
+   WHAT IS NOT HERE. The lane order, the row heights, the card's height and
+   the date's chip widths are all handed in by the component as inline
+   custom properties, because every one of them is a consequence of the form.
+   A stylesheet that restated the field order is a second copy of it, and the
+   copies fall out of step: a job title added to the form had a lane name no
+   row template knew, so it dropped into an implicit row at the bottom and
+   the form read name, email, date of birth, job title.
+
+   Archivo is variable (wght 400..700, loaded at the top of this file), so
+   `font-weight` is a plain number the engine interpolates. The width axis is
+   reached with `font-stretch`, never `font-variation-settings`: a variation
+   axis cannot appear in the canvas font shorthand pretext measures with. */
+.ie {
+  display: grid;
+  /* One fixed row, so the card's top edge is pinned: the two poses are
+     different heights on purpose, and a card centred in an auto row would
+     turn that into vertical drift under every flight. */
+  grid-template-rows: 340px;
+  /* An EXPLICIT column. An auto column is sized by what its items ask for,
+     and mid-flight the card asks for more than it is given — so the column
+     grew, the centred card was centred in something wider than the stage,
+     and the whole card lurched 70px right and slid back. */
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  align-content: center;
+}
+
+/* THE WHITE PLATTER. Its top edge is pinned and it grows downward: the two
+   poses are different heights on purpose, and a centred card would turn that
+   into vertical drift under every flight. Its rows and its height come from
+   the component — see above. */
+.ie-stage {
+  position: relative;
+  display: grid;
+  align-self: start;
+  justify-items: center;
+  width: 100%;
+}
+
+/* Depth for the form, and the cheap kind of depth. A shadow is not a
+   composited property: every frame that changes one re-rasterises the box it
+   is drawn on. So this is not the card's shadow — it is its own layer, at a
+   FIXED size, never moved and never resized, carrying four shadows painted
+   once at full strength. Only its opacity animates, which is the one channel
+   that composites, and the card grows into it while it fades up. */
+.ie-shade {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  translate: -50% 0;
+  width: min(100%, 340px);
+  height: var(--ie-height-edit);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(28 22 18 / 5%),
+    0 4px 8px rgb(28 22 18 / 5%),
+    0 12px 24px rgb(28 22 18 / 6%),
+    0 28px 56px rgb(28 22 18 / 6%);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.ie-card {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  box-sizing: border-box;
+  width: min(100%, 340px);
+  /* the lane order, the row heights and the card's height are the form's
+     consequences, so the component hands them over and this only spends
+     them. `minmax(0, …)`, not `1fr`: an `fr` track is floored at the AUTO
+     minimum of its items, and a platter mid-flight carries an inline width
+     from the move it is playing, so the track grew to fit it and every lane
+     started in the wrong place. */
+  grid-template-areas: var(--ie-areas);
+  grid-template-columns: minmax(0, 1fr);
+  padding: var(--ie-pad);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-elev);
+}
+
+/* the card picks its pose with its OWN attribute, which changes inside the
+   region — where a change is a pass, and a pass is what measures the boxes
+   the move is going to interpolate */
+.ie-card[data-mode='view'] {
+  height: var(--ie-height-view);
+  grid-template-rows: var(--ie-rows-view);
+}
+
+.ie-card[data-mode='edit'] {
+  height: var(--ie-height-edit);
+  grid-template-rows: var(--ie-rows-edit);
+}
+
+/* the mode switch belongs to the thing whose mode it changes, in the card's
+   own top-right corner the way a phone puts Done */
+.ie-toggle {
+  /* against the padding, in the card's own corner, and the SAME corner in
+     both poses: EDIT and DONE are different lengths, and a pill that
+     shrink-wraps its label moves the one control that should be the fixed
+     point of the whole transition */
+  position: absolute;
+  top: var(--ie-pad);
+  right: var(--ie-pad);
+  z-index: 3;
+  /* One size in both states. EDIT and DONE are different lengths, and a
+     pill that shrink-wraps its label moves its own left edge when the mode
+     changes — the one control that should be the fixed point of the whole
+     transition, twitching. */
+  min-width: 74px;
+  padding: 6px 14px;
+  text-align: center;
+  /* The primary affordance of the whole demo, so it is a real button rather
+     than a hairline outline: a warm fill, a lip of highlight along the top
+     edge, and a shadow it sits on. All three are painted once — the lift on
+     press is a translate, which is the only part that moves. */
+  border: 1px solid rgb(180 60 20 / 55%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ff9a4a, #e8531f);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 45%),
+    0 2px 6px rgb(216 69 26 / 32%);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.ie-toggle:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 55%),
+    0 3px 10px rgb(216 69 26 / 42%);
+}
+
+.ie-toggle:active {
+  translate: 0 1px;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 35%),
+    0 1px 3px rgb(216 69 26 / 32%);
+}
+
+/* The header is NOT a flex row, and that is a fix rather than a preference.
+   `c.Move` writes an inline width while it plays, and in a flex row that
+   width is layout: the avatar shrinking under its own move pulled the
+   eyebrow beside it to a new position, out from under the FLIP transform
+   that was meant to be holding IT still. The two were then offset by the
+   same 38px twice and overlapped by 27 for the first frames of every pass
+   back. Both are placed against the lane instead, so neither one's size is
+   the other one's business. */
+.ie-head {
+  position: relative;
+  grid-area: head;
+}
+
+/* the avatar is one identity in both states; only its box changes */
+.ie-avatar {
+  /* positioned by its TOP EDGE, never centred: a centred box is positioned
+     against its own size, and `c.Move` overrides that size while it plays —
+     so the avatar slid out from under its own FLIP by half the change in its
+     height and the initials jumped with it */
+  position: absolute;
+  top: var(--ie-avatar-top-view);
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: var(--ie-avatar-view);
+  height: var(--ie-avatar-view);
+  /* 36px, not 50%. A percentage radius is resolved against the box, so a
+     circle tweening to a rounded rect would be interpolating a percentage
+     into a length — the engine cannot, and the corner snaps at one end. */
+  border-radius: 36px;
+  background: linear-gradient(150deg, #ff9a4a, #d8451a);
+  box-shadow: 0 6px 18px rgb(216 69 26 / 22%);
+  color: #fff;
+}
+
+.ie-card[data-mode='edit'] .ie-avatar {
+  top: var(--ie-avatar-top-edit);
+  width: var(--ie-avatar-edit);
+  height: var(--ie-avatar-edit);
+  border-radius: 10px;
+}
+
+.ie-initials {
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  font-stretch: 87.5%;
+  letter-spacing: 0.01em;
+}
+
+.ie-card[data-mode='edit'] .ie-initials {
+  font-size: 14px;
+}
+
+.ie-kicker {
+  /* one avatar and one gutter in from the lane's left, per pose — the same
+     numbers the avatar is sized from, so the two cannot disagree */
+  position: absolute;
+  top: 50%;
+  left: var(--ie-kicker-view);
+  translate: 0 -50%;
+  white-space: nowrap;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* the form says so: the eyebrow is the one line that changes meaning between
+   the poses, from a team name to a statement of what the card is doing */
+.ie-card[data-mode='edit'] .ie-kicker {
+  left: var(--ie-kicker-edit);
+  color: var(--ink-dim);
+  font-weight: 700;
+}
+
+/* one hairline, and it travels */
+.ie-rule {
+  grid-area: rule;
+  height: 1px;
+  background: var(--line);
+}
+
+/* the label exists only in the form: it arrives with the editor and leaves
+   with it, which is what says the card changed MODE rather than reflowed */
+.ie-label {
+  /* under its own platter, which is painted over it: the label rises out
+     from behind the field it names rather than appearing above it */
+  z-index: 0;
+  align-self: end;
+  padding-bottom: 4px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* A BEIGE PLATTER. One per field, in both poses, in its own lane — it holds
+   the control and draws the field's whole appearance, so the outline cannot
+   escape its bounds for the simple reason that it IS the outline. It carries
+   no text in the reading view, which is why it can be empty there without
+   looking like an empty box: it is invisible.
+
+   In the form its height is its CONTENT's height, not a number. The line
+   inside it is the one declared measurement, and 1px of border at each end
+   follows from that rather than being asserted alongside it.
+
+   The border is 1px in BOTH poses and merely changes colour, so the box does
+   not resize when the form arrives; colour is left to a transition, because
+   a colour cannot smear under a moving box, while the RADIUS rides a tween
+   beside the move, because a corner carried by a crop-scale is one that
+   does. */
+.ie-plate {
+  position: relative;
+  /* it FILLS its lane — never `align-self: end`. A moved element's FLIP
+     transform is computed against where the layout puts it, and `c.Move`
+     overrides its height while it plays, so an element held to the bottom of
+     a lane moves out from under the transform that was holding it still. */
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  border: 1px solid rgb(28 22 18 / 0%);
+  border-radius: 3px;
+  background: rgb(0 0 0 / 0%);
+  transition:
+    border-color 200ms linear,
+    background-color 200ms linear;
+}
+
+/* THE CLIP IS FOR THE FLIGHT ONLY.
+   Nothing a field holds may be drawn outside the platter WHILE THE PLATTER
+   IS MOVING — the date's three segments are wider than it is while it is
+   still growing, so without this the form spills past its own outline on the
+   way in. At rest there is nothing to contain.
+
+   It used to be unconditional: four rounded clips against four boxes,
+   permanently. A rounded clip is cheap on a box that holds still and is a
+   known WebKit hotspot on one that does not, so scoping it to the pass is
+   both the correct scope and the cheaper one. */
+.ie[data-flying] .ie-plate {
+  overflow: hidden;
+}
+
+.ie-card[data-mode='edit'] .ie-plate {
+  border-color: rgb(28 22 18 / 22%);
+  background: var(--bg);
+  cursor: text;
+}
+
+/* TEMPORARY — the bisect switch, `?off=clip,shade`. See `OFF` in the
+   component, and delete both together. */
+.ie[data-off~='clip'] .ie-plate {
+  overflow: visible;
+}
+
+.ie[data-off~='shade'] .ie-shade {
+  display: none;
+}
+
+/* THE TYPE LAYER. Over the card's padding box, above the platters, and
+   inert: everything in it is positioned absolutely, and pointer events pass
+   through to the real controls underneath. */
+.ie-type {
+  position: absolute;
+  inset: var(--ie-pad);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* A word in flight. Hidden at BOTH ends and shown only while the region says
+   a scene change is under way — no fade in either direction on purpose,
+   because for the length of the flight the word is the ONLY copy of its
+   value and there is nothing to blend it with.
+
+   VISIBILITY rather than opacity, and not a preference: a participant's
+   opacity is the engine's, which renders one inline, so a rule here is
+   outvoted and the words sat fully opaque over the controls. Nothing in the
+   library writes `visibility`. */
+.ie-word {
+  position: absolute;
+  top: 0;
+  left: 0;
+  translate: 0 -50%;
+  height: var(--ie-line);
+  white-space: nowrap;
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-stretch: 87.5%;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: var(--ie-line);
+  visibility: hidden;
+}
+
+.ie[data-flying] .ie-word {
+  visibility: visible;
+}
+
+/* the reading view's own strings, placed at the same origins the plan
+   computed for the words that leave them */
+.ie-value {
+  position: absolute;
+  translate: 0 -50%;
+  height: var(--ie-line);
+  white-space: nowrap;
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-stretch: 87.5%;
+  letter-spacing: -0.01em;
+  line-height: var(--ie-line);
+  pointer-events: auto;
+}
+
+/* three ranks, because an employee record has three: who, what they do, and
+   how to reach them */
+.ie-value[data-value='name'] {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.ie-value[data-value='title'] {
+  color: var(--ink-dim);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.ie-value[data-value='email'],
+.ie-value[data-value='dob'] {
+  color: var(--ink-faint);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The live value stands aside for exactly as long as the flight is drawing
+   it. A DEPARTING control is in the orphan layer by then, outside the card
+   and so outside these rules, which is what lets it be seen fading out.
+
+   The reading string goes with `visibility`, because it is nothing but its
+   text. A control is not: the date's chips are chrome, and they have an
+   entrance of their own to play. So a control loses its COLOUR and keeps its
+   box — the grey fades in underneath a value the flight is still carrying. */
+.ie[data-flying] .ie-value {
+  visibility: hidden;
+}
+
+.ie[data-flying] .ie-plate .pt-input {
+  color: transparent;
+}
+
+/* REAL CONTROLS. The type here is the form's single scale, and it has to be
+   the same numbers the flight was planned against: a word that lands on an
+   input set one pixel larger has landed on the wrong thing. */
+.pt-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--ie-line);
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: 'Archivo', var(--font), sans-serif;
+  font-size: 17px;
+  font-weight: 400;
+  font-stretch: 87.5%;
+  letter-spacing: -0.01em;
+  line-height: var(--ie-line);
+  appearance: none;
+}
+
+.pt-input {
+  /* a real focus ring, and it arrives rather than appearing: the colour is
+     what fades, from transparent to the ring, so the outline is always there
+     and only its ink is animated */
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 130ms ease-out;
+}
+
+.pt-plain {
+  display: flex;
+  align-items: center;
+}
+
+.pt-input:focus-visible {
+  border-radius: 9px;
+  outline-color: #ff7a28;
+}
+
+/* THE DATE: a flex row of three chips, one per part, each a closed list with
+   a caret. The widths are custom properties the component measured — the
+   chip the browser lays out and the mark a word flies to are the same
+   number, which is the only way the two can be trusted to agree. */
+.pt-date {
+  display: flex;
+  height: var(--ie-line);
+  gap: var(--pt-seg-gap);
+  align-items: center;
+  padding: 0 11px;
+}
+
+.pt-date .pt-input {
+  flex: none;
+  height: 28px;
+  padding: 0 var(--pt-caret) 0 var(--pt-seg-pad);
+  border-radius: 7px;
+  background: rgb(28 22 18 / 5%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6' viewBox='0 0 9 6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%236b6255' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  line-height: 28px;
+  cursor: pointer;
+}
+
+.pt-date .pt-input:hover {
+  background-color: rgb(28 22 18 / 9%);
+}
+
+.pt-date .pt-input {
+  outline-offset: -1px;
+}
+
+.pt-date .pt-plain {
+  display: flex;
+  align-items: center;
+}
+
+.pt-input:focus-visible {
+  border-radius: 7px;
+  outline-color: #ff7a28;
+}
+
+.pt-date-day {
+  width: var(--pt-day);
+}
+
+.pt-date-month {
+  width: var(--pt-month);
+}
+
+.pt-date-year {
+  width: var(--pt-year);
+}
