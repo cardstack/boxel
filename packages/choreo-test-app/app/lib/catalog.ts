@@ -39,6 +39,7 @@ import { CrossingNotes } from 'test-app/components/notes/crossing';
 import { FarNotes } from 'test-app/components/notes/far';
 import { FoldNotes } from 'test-app/components/notes/fold';
 import { InboxNotes } from 'test-app/components/notes/inbox';
+import { InlineEditNotes } from 'test-app/components/notes/inline-edit';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
@@ -270,6 +271,7 @@ private arming = createArming();
 // variation axis cannot appear in the canvas font shorthand, so pretext
 // would measure the wide cut while the screen drew the narrow one. Thirty
 // pixels of error on a two-word name, all of it in the gaps.`,
+    notes: InlineEditNotes,
     slowmo: true,
     title: 'In place',
   },
