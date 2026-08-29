@@ -1,6 +1,7 @@
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { motion } from 'glimmer-motion';
 
@@ -131,9 +132,38 @@ export class DateField extends Component<{
   Args: FieldArgs;
   Element: HTMLElement;
 }> {
-  days = DAYS;
-  months = MONTHS;
-  years = YEARS;
+  /**
+   * A closed list is not free, and on WebKit it is expensive.
+   *
+   * Day, month and year is 31 + 12 + 83 options — a hundred and twenty-six
+   * elements, built every time the form opens. Blink does that in about
+   * fifty milliseconds. WebKit builds a native menu structure per select and
+   * is an order of magnitude slower at it, which is where the FOUR SECONDS
+   * between clicking Edit and the card settling came from. It looked like an
+   * animation problem for a long time, and it survived turning the entire
+   * choreography off — which is what finally placed it.
+   *
+   * So a select holds exactly one option, the one it is showing, until it is
+   * about to be used. `pointerdown` fires before the menu opens and `focus`
+   * covers the keyboard, so by the time a list is needed it is there.
+   */
+  @tracked private live = new Set<string>();
+
+  private fill = (part: string) => () => {
+    if (!this.live.has(part)) {
+      this.live = new Set([...this.live, part]);
+    }
+  };
+
+  options = (part: 'day' | 'month' | 'year') => {
+    const all = { day: DAYS, month: MONTHS, year: YEARS }[part];
+    if (this.live.has(part)) {
+      return all;
+    }
+    // one option, so the control shows its value and costs nothing
+    const current = this.parts[part];
+    return all.includes(current) ? [current] : all.slice(0, 1);
+  };
 
   get parts() {
     const [day = '', month = '', year = ''] = this.args.value.split(/\s+/);
@@ -157,8 +187,11 @@ export class DateField extends Component<{
         id={{@id}}
         aria-label="Day"
         {{on "change" this.day}}
+        {{on "pointerdown" (this.fill "day")}}
+        {{on "focus" (this.fill "day")}}
+        {{on "keydown" (this.fill "day")}}
       >
-        {{#each this.days as |day|}}
+        {{#each (this.options "day") as |day|}}
           <option value={{day}} selected={{isSame day this.parts.day}}>
             {{day}}
           </option>
@@ -169,8 +202,11 @@ export class DateField extends Component<{
         {{motion id=(concat @id "-month") role="chip"}}
         aria-label="Month"
         {{on "change" this.month}}
+        {{on "pointerdown" (this.fill "month")}}
+        {{on "focus" (this.fill "month")}}
+        {{on "keydown" (this.fill "month")}}
       >
-        {{#each this.months as |month|}}
+        {{#each (this.options "month") as |month|}}
           <option value={{month}} selected={{isSame month this.parts.month}}>
             {{month}}
           </option>
@@ -181,8 +217,11 @@ export class DateField extends Component<{
         {{motion id=(concat @id "-year") role="chip"}}
         aria-label="Year"
         {{on "change" this.year}}
+        {{on "pointerdown" (this.fill "year")}}
+        {{on "focus" (this.fill "year")}}
+        {{on "keydown" (this.fill "year")}}
       >
-        {{#each this.years as |year|}}
+        {{#each (this.options "year") as |year|}}
           <option value={{year}} selected={{isSame year this.parts.year}}>
             {{year}}
           </option>
