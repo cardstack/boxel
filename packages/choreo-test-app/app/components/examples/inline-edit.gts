@@ -56,8 +56,17 @@ const MOVE = 0.55;
 const EASE = [0.4, 0, 0.2, 1] as const;
 const BOX = 0.42;
 
-/** the form comes apart faster than it assembles */
-const LEAVE = 0.24;
+/**
+ * The form comes apart faster than it assembles, and the number is not free.
+ *
+ * The departing control's text and the flight word are the same pixels at
+ * the instant of the swap, so they can be crossfaded — but only while they
+ * are still in the same place. This is the window in which the word is
+ * fading up and the form is fading out, and it has to close before the word
+ * has travelled far enough for the pair to read as two. With the softer
+ * curve's slow start, an eighth of a second is about four pixels.
+ */
+const LEAVE = 0.18;
 
 /**
  * The plate arrives by expanding and leaves by collapsing.
@@ -71,6 +80,19 @@ const LEAVE = 0.24;
  */
 const PLATE_IN = [0.72, 1];
 const PLATE_OUT = [1, 0.58];
+
+/**
+ * And the fade, said out loud.
+ *
+ * A crossing fades what it CROSSES — a leaver against the arrival that
+ * claimed its identity. The plate and the controls are claimed by nobody:
+ * the reading view has no counterpart for a form field, which is the whole
+ * point of the demo. So they were scaling away at full opacity and then
+ * simply ceasing to exist at the end of the leave window, which reads as a
+ * cut. Nothing is inferring this for us, so it is stated.
+ */
+const FADE_IN = [0, 1];
+const FADE_OUT = [1, 0];
 
 const FAMILY = 'Archivo';
 const WORD_GAP = 0.3;
@@ -387,6 +409,23 @@ export class InlineEdit extends Component {
     return this.tween(`${VIEW.dob.tracking}em`, `${EDIT.dob.tracking}em`);
   }
 
+  /**
+   * The word fades up ONLY when there is something to fade against.
+   *
+   * Leaving the form, the departing control still holds the value at full
+   * strength while the word has begun to move off it — additive, and you see
+   * the same text twice a few pixels apart. Fading the word up over the same
+   * short window makes that a crossfade instead, and the two are the same
+   * pixels while it lasts.
+   *
+   * Entering it there is no such partner: the reading string is not a
+   * participant, so it simply unmounts, and a word that ramps from zero
+   * against nothing is just the value going missing for a fifth of a second.
+   * The whole card washed out on the way in until this asked which direction
+   * it was going.
+   */
+  wordFade = () => (this.moving && !this.editing ? [0, 1, 1, 1] : 1);
+
   get subSize() {
     return this.tween(`${VIEW.dob.size}px`, `${EDIT.dob.size}px`);
   }
@@ -545,6 +584,7 @@ export class InlineEdit extends Component {
             @fontSize={{this.nameSize}}
             @fontWeight={{this.nameWeight}}
             @letterSpacing={{this.nameTracking}}
+            @opacity={{this.wordFade}}
             @duration={{MOVE}}
             @ease={{EASE}}
           />
@@ -554,6 +594,7 @@ export class InlineEdit extends Component {
             @fontSize={{this.subSize}}
             @fontWeight={{this.subWeight}}
             @letterSpacing={{this.subTracking}}
+            @opacity={{this.wordFade}}
             @duration={{MOVE}}
             @ease={{EASE}}
           />
@@ -579,12 +620,14 @@ export class InlineEdit extends Component {
               while every kept step here has to be a function. }}
           <c.Tween
             @of={{c.inserted "plate"}}
+            @opacity={{FADE_IN}}
             @scaleY={{PLATE_IN}}
             @duration={{BOX}}
             @ease={{EASE}}
           />
           <c.Tween
             @of={{c.removed "plate"}}
+            @opacity={{FADE_OUT}}
             @scaleY={{PLATE_OUT}}
             @duration={{LEAVE}}
             @ease={{EASE}}
@@ -600,25 +643,27 @@ export class InlineEdit extends Component {
               it be seen going at all. }}
           <c.Tween
             @of={{c.removed "control"}}
+            @opacity={{FADE_OUT}}
             @scaleY={{PLATE_OUT}}
             @duration={{LEAVE}}
             @ease={{EASE}}
           />
 
-          {{! The controls leave WITH the plate. On the way in they are
-              invisible until the flight lands, so there is nothing to
-              animate; on the way out the form should come apart as one
-              thing rather than have its values blink off a frame before
-              their chrome. The departing control is in the orphan layer by
-              then — outside the card, and so outside the rule that hides a
-              real value while the flight is drawing it — which is what lets
-              it be seen going. }}
+          {{! and the labels, for the same reason: claimed by nobody, so
+              nothing was fading them either }}
           <c.Tween
-            @of={{c.removed "control"}}
-            @scaleY={{PLATE_OUT}}
+            @of={{c.inserted "label"}}
+            @opacity={{FADE_IN}}
+            @duration={{BOX}}
+            @ease={{EASE}}
+          />
+          <c.Tween
+            @of={{c.removed "label"}}
+            @opacity={{FADE_OUT}}
             @duration={{LEAVE}}
             @ease={{EASE}}
           />
+
         </c.Parallel>
       </Choreo>
 

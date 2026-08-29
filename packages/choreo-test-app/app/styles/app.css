@@ -10832,8 +10832,9 @@ html[data-gm-dragging] * {
   height: 236px;
   grid-template-rows: 88px auto 1px 46px;
   /* email is the longer value and gets the wider half — a 50/50 split here
-     was forcing its type a size smaller than the date beside it */
-  grid-template-columns: 1.4fr 1fr;
+     was forcing its type a size smaller than the date beside it. Both tracks
+     are floored at zero: see the edit pose for why. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 }
 
 /* the writing pose: a form. Avatar demoted to a chip, and every value on a
@@ -10847,7 +10848,16 @@ html[data-gm-dragging] * {
     'dob dob';
   height: 276px;
   grid-template-rows: 36px 1px 56px 56px 56px;
-  grid-template-columns: 1fr 1fr;
+  /* `minmax(0, 1fr)`, not `1fr`, and this one cost an evening. An `fr` track
+     is floored at the AUTO minimum of its items, and a field mid-flight
+     carries an inline width from the move it is playing — 302px, the width
+     it is coming from. So the two 147px columns became two 302px columns,
+     the card's grid was suddenly twice the card, the date's column started
+     at 328 instead of 198, and the FLIP transform landed it 130px from
+     where it belonged before sliding back. The date jumped. Flooring the
+     track at zero means an oversized item overflows instead of resizing the
+     grid it is in. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 /* The hairline is the card's one piece of pure chrome, and it is here to be
@@ -11026,15 +11036,23 @@ html[data-gm-dragging] * {
   visibility: visible;
 }
 
-/* The real value stands aside for exactly as long as the flight is drawing
-   it. VISIBILITY again, and again not a preference: `color: transparent` was
-   outspecified by the two rules that give the reading view its type scale —
-   which are three selectors long, because they name the mode and the field —
-   so the name went quiet and email and date of birth showed through the
-   flight as a doubled, offset copy of themselves. Nothing else in this
-   stylesheet sets `visibility`, so one selector is enough. */
-.ie[data-flying] .ie-value,
-.ie[data-flying] .pt-input {
+/* The LIVE value stands aside for exactly as long as the flight is drawing
+   it — `.ie-field` in the selector, because a DEPARTING control is not in a
+   field any more, it is in the orphan layer, and it is meant to be seen
+   going: it fades and scales away with the plate it sat in. That is only
+   safe now the flight word and the real text are pixel-identical, which is
+   the whole of the previous commit. Two identical renderings crossfading is
+   invisible; the ghost this rule was written for was the mismatch, not the
+   overlap.
+
+   VISIBILITY, not opacity or colour, and not a preference either way:
+   opacity belongs to the engine, which renders one inline, and
+   `color: transparent` was outspecified by the two rules that give the
+   reading view its type scale — three selectors long, because they name the
+   mode and the field — so email and date of birth showed through the flight
+   as a doubled, offset copy of themselves. */
+.ie[data-flying] .ie-field .ie-value,
+.ie[data-flying] .ie-field .pt-input {
   visibility: hidden;
 }
 

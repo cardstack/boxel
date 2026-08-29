@@ -235,6 +235,90 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
+   * The two directions are not mirror images, and treating them as one broke
+   * the other.
+   *
+   * Leaving the form there is a departing control holding the value at full
+   * strength, so the word fades UP against it and the pair crossfades.
+   * Entering it there is no such partner — the reading string is not a
+   * participant, it simply unmounts — so a word that ramps from zero against
+   * nothing is the value going missing for a fifth of a second. The whole
+   * card washed out on the way in until the fade asked which way it was
+   * going.
+   */
+  test('the type is never missing on the way into the form', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+
+    const faint = () =>
+      [...document.querySelectorAll<HTMLElement>('.ie-word')]
+        .filter((el) => !el.closest('[data-choreo-orphans]'))
+        .map((el) => Number(getComputedStyle(el).opacity))
+        .filter((value) => value < 0.99);
+
+    await click('[data-test-toggle]');
+    for (let i = 0; i < 6; i++) {
+      await new Promise((go) => requestAnimationFrame(go));
+      assert.deepEqual(
+        faint(),
+        [],
+        'every word is at full strength from the first frame in'
+      );
+    }
+    await animationsSettled();
+  });
+
+  /**
+   * The form fades and scales away — which nothing was doing for it.
+   *
+   * A crossing fades what it CROSSES: a leaver against the arrival that
+   * claimed its identity. The plate, the controls and the labels are claimed
+   * by nobody — the reading view has no counterpart for a form field, which
+   * is the point of the demo — so they were scaling away at full opacity and
+   * then ceasing to exist when the leave window closed, which reads as a
+   * cut. Every fade here is stated by a step.
+   */
+  test('the form fades and scales as it leaves, not blinks', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+    await toggle();
+    await animationsSettled();
+
+    const leaving = () =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          '[data-choreo-orphans] .ie-plate'
+        ),
+      ].map((el) => ({
+        opacity: Number(getComputedStyle(el).opacity),
+        scaleY: new DOMMatrix(getComputedStyle(el).transform).d,
+      }));
+
+    await click('[data-test-toggle]');
+    const samples: ReturnType<typeof leaving>[] = [];
+    for (let i = 0; i < 6; i++) {
+      await new Promise((go) => requestAnimationFrame(go));
+      const shot = leaving();
+      if (shot.length) {
+        samples.push(shot);
+      }
+    }
+
+    assert.ok(samples.length >= 2, 'the plates were caught on their way out');
+    const first = samples[0]![0]!;
+    const last = samples[samples.length - 1]![0]!;
+    assert.ok(
+      last.opacity < first.opacity,
+      `it is fading (${first.opacity} to ${last.opacity})`
+    );
+    assert.ok(
+      last.scaleY < first.scaleY,
+      `and collapsing (${first.scaleY} to ${last.scaleY})`
+    );
+    await animationsSettled();
+  });
+
+  /**
    * The form's chrome belongs to the container, not to the text.
    *
    * The plate and the label used to live INSIDE the field, and the field is
