@@ -90,9 +90,8 @@ const FADE_OUT = [1, 0];
  * is no longer inside.
  */
 
-/** the card's own padding, and the gutter between lanes */
+/** the card's own padding. There is no grid gap: see `LANES`. */
 const PAD = 18;
-const GAP = 8;
 
 /**
  * Lane heights, in order, per pose. The same five lanes in the same order in
@@ -102,44 +101,81 @@ const GAP = 8;
  * are what catch it if they ever drift.
  */
 const LANES = {
-  edit: { dob: 56, email: 56, head: 36, name: 56, rule: 1, title: 56 },
-  view: { dob: 22, email: 22, head: 88, name: 40, rule: 1, title: 26 },
+  edit: {
+    dob: 40,
+    'dob-label': 22,
+    email: 40,
+    'email-label': 22,
+    head: 40,
+    name: 40,
+    'name-label': 22,
+    rule: 9,
+    title: 40,
+    'title-label': 22,
+  },
+  view: {
+    dob: 26,
+    'dob-label': 0,
+    email: 26,
+    'email-label': 0,
+    head: 96,
+    name: 48,
+    'name-label': 0,
+    rule: 9,
+    title: 30,
+    'title-label': 0,
+  },
 } as const;
 
 /**
- * The lanes, in order — DERIVED from the form rather than restated.
+ * The lanes, in order — DERIVED from the form rather than restated, and TWO
+ * per field: the label's own, and the platter's.
  *
- * This was a hand-written list beside `FIELDS`, and a stylesheet held a
- * third copy of it in `grid-template-areas`. Adding a field to the form put
- * the three out of step: the job title had a lane name no row template knew,
- * so it fell into an implicit row at the bottom and the form read name,
- * email, date of birth, job title. The form's order is the only order there
- * is; everything below is a consequence of it, including the row template,
- * which is handed to the stylesheet rather than repeated in it.
+ * They were one lane each, with the label pinned to its top and the platter
+ * to its bottom, and that was a real bug rather than a tidiness question. A
+ * moved element's FLIP transform is computed against where the layout puts
+ * it, and `c.Move` overrides its height while it plays — so an element held
+ * to the BOTTOM of a lane moves when its height is overridden, out from
+ * under the transform that was supposed to hold it still. The platter
+ * arrived eighteen pixels high and animated the remainder, which is what put
+ * the date outside its own boundary on the way back. A platter that fills
+ * its lane cannot be shifted by its own height.
+ *
+ * And no grid gap, for the same reason a lane is explicit: a gap is spacing
+ * you cannot see in the numbers. Each lane carries its own.
  */
-const ORDER = ['head', 'rule', ...FIELDS.map((field) => field.key)] as const;
+const ORDER = [
+  'head',
+  'rule',
+  ...FIELDS.flatMap((field) => [`${field.key}-label`, field.key] as const),
+] as const;
+
+type Lane = (typeof ORDER)[number];
 
 /** the top of each lane, in the card's padding-box coordinates */
 function lanes(pose: 'edit' | 'view') {
-  const out = {} as Record<
-    (typeof ORDER)[number],
-    { height: number; top: number }
-  >;
+  const out = {} as Record<Lane, { height: number; top: number }>;
   let top = 0;
   for (const name of ORDER) {
     const height = LANES[pose][name];
     out[name] = { height, top };
-    top += height + GAP;
+    top += height;
   }
   return out;
 }
 
-/** a platter is 40px tall and sits at the bottom of its lane, in the form */
-const PLATE_H = 40;
-
 /** 1px of border, then the control's own padding, then the first glyph */
 const BORDER = 1;
 const INSET = 11;
+
+/**
+ * The line box everything type sits in — the flight's words, the reading
+ * view's strings, and the real controls — declared once here and handed to
+ * the stylesheet. It is the platter's content box: 40px of platter less its
+ * border at each end. A line box that disagrees with the one the real text
+ * gets is a baseline that jumps on handover.
+ */
+const LINE = 38;
 
 /**
  * The date field is segmented — day, month, year — so its three controls
@@ -251,9 +287,9 @@ interface Origin {
 function origins(pose: 'edit' | 'view'): Record<Key, Origin> {
   const lane = lanes(pose);
   if (pose === 'edit') {
-    // the platter sits at the bottom of its lane; the text sits in the middle
-    // of the platter, one border and one padding in from its left
-    const centre = (key: Key) => lane[key].top + lane[key].height - PLATE_H / 2;
+    // the platter fills its lane, so its middle is the lane's middle; the
+    // text sits there, one border and one padding in from its left
+    const centre = (key: Key) => lane[key].top + lane[key].height / 2;
     return {
       dob: { x: BORDER + INSET + SEGMENT.pad, y: centre('dob') },
       email: { x: BORDER + INSET, y: centre('email') },
@@ -269,11 +305,20 @@ function origins(pose: 'edit' | 'view'): Record<Key, Origin> {
    * the two secondary values are the last thing on a profile: they should
    * read as a footer, not as another row.
    */
-  const floor = (key: Key) => lane[key].top + lane[key].height - 6;
+  /**
+   * The line's box sits flush on the FLOOR of the content area — its bottom
+   * edge on the top edge of the card's bottom padding, so the padding around
+   * the card is the same on all four sides. Derived, not dialled in: the
+   * lane's bottom less half the line box everything type is set in.
+   */
+  const floor = (key: Key) => lane[key].top + lane[key].height - LINE / 2;
   return {
-    // the date shares the email's line, and only the type does
-    dob: { x: SUB_SPLIT, y: floor('email') },
-    email: { x: 0, y: floor('email') },
+    // Both secondary values share one line, and it is the floor of the LAST
+    // lane rather than of either of theirs: they are the footer of a profile,
+    // so they dock to the bottom of the card instead of sitting in the middle
+    // of a lane with an empty one beneath them.
+    dob: { x: SUB_SPLIT, y: floor('dob') },
+    email: { x: 0, y: floor('dob') },
     name: { x: 0, y: middle('name') },
     title: { x: 0, y: middle('title') },
   };
@@ -414,23 +459,35 @@ export class InlineEdit extends Component {
   }
 
   /**
-   * Everything the stylesheet needs and cannot know: the lane order and
-   * heights for this pose, the card's height that follows from them, and the
-   * measured chip widths. Handed over rather than repeated, so there is no
-   * second copy of the form's order to fall out of step with the first.
+   * Everything the stylesheet needs and cannot know: the lane order, and BOTH
+   * poses' row heights and card heights, and the measured chip widths.
+   *
+   * Both poses, and that is the whole point of the shape. These are inline on
+   * the wrapper, which is OUTSIDE the region — and a wrapper whose style
+   * changed when the mode did changed the card's layout before the region
+   * had taken its before-picture, so every platter measured the same box
+   * twice, `c.moved` selected nothing, and the platters snapped to their new
+   * lane while the type flew. It looked like the move had been forgotten.
+   *
+   * Nothing here depends on the mode. The card picks a pose with its own
+   * `[data-mode]`, which changes inside the region, where a change is a pass.
    */
   get metrics() {
-    const lane = lanes(this.editing ? 'edit' : 'view');
-    const last = lane[ORDER[ORDER.length - 1]!];
     const [day = 0, month = 0, year = 0] = this.chips;
+    const rows = (pose: 'edit' | 'view') => {
+      const lane = lanes(pose);
+      const last = lane[ORDER[ORDER.length - 1]!];
+      return [
+        `--ie-rows-${pose}:${ORDER.map((n) => `${lane[n].height}px`).join(' ')}`,
+        `--ie-height-${pose}:${PAD * 2 + last.top + last.height}px`,
+      ];
+    };
     return htmlSafe(
       [
-        // custom properties rather than the real ones: they are set on the
-        // wrapper and read by the card, because a component's element does
-        // not take a `style` attribute and inheritance does not care
         `--ie-areas:${ORDER.map((name) => `'${name}'`).join(' ')}`,
-        `--ie-rows:${ORDER.map((n) => `${lane[n].height}px`).join(' ')}`,
-        `--ie-height:${PAD * 2 + last.top + last.height}px`,
+        `--ie-line:${LINE}px`,
+        ...rows('view'),
+        ...rows('edit'),
         `--pt-day:${day}px`,
         `--pt-month:${month}px`,
         `--pt-year:${year}px`,
@@ -442,7 +499,9 @@ export class InlineEdit extends Component {
   }
 
   /** each row's own lane, so no stylesheet has to name the fields */
-  area = (key: Key) => htmlSafe(`grid-area:${key}`);
+  area = (key: string) => htmlSafe(`grid-area:${key}`);
+
+  labelArea = (key: Key) => this.area(`${key}-label`);
 
   /**
    * The reading view's own strings, at the origins the plan computed.
@@ -642,7 +701,7 @@ export class InlineEdit extends Component {
             <span
               class="ie-label"
               data-label={{field.key}}
-              style={{this.area field.key}}
+              style={{this.labelArea field.key}}
               {{motion id=(concat field.key "-label") role="label"}}
             >{{field.label}}</span>
           {{/if}}

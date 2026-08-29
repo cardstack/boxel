@@ -10819,15 +10819,25 @@ html[data-gm-dragging] * {
      minimum of its items, and a platter mid-flight carries an inline width
      from the move it is playing, so the track grew to fit it and every lane
      started in the wrong place. */
-  height: var(--ie-height);
   grid-template-areas: var(--ie-areas);
-  grid-template-rows: var(--ie-rows);
   grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--bg-elev);
+}
+
+/* the card picks its pose with its OWN attribute, which changes inside the
+   region — where a change is a pass, and a pass is what measures the boxes
+   the move is going to interpolate */
+.ie-card[data-mode='view'] {
+  height: var(--ie-height-view);
+  grid-template-rows: var(--ie-rows-view);
+}
+
+.ie-card[data-mode='edit'] {
+  height: var(--ie-height-edit);
+  grid-template-rows: var(--ie-rows-edit);
 }
 
 /* the mode switch belongs to the thing whose mode it changes, in the card's
@@ -10943,7 +10953,8 @@ html[data-gm-dragging] * {
 /* the label exists only in the form: it arrives with the editor and leaves
    with it, which is what says the card changed MODE rather than reflowed */
 .ie-label {
-  align-self: start;
+  align-self: end;
+  padding-bottom: 4px;
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: 9.5px;
@@ -10967,10 +10978,11 @@ html[data-gm-dragging] * {
    beside the move, because a corner carried by a crop-scale is one that
    does. */
 .ie-plate {
-  --ie-line: 38px;
-
   position: relative;
-  align-self: end;
+  /* it FILLS its lane — never `align-self: end`. A moved element's FLIP
+     transform is computed against where the layout puts it, and `c.Move`
+     overrides its height while it plays, so an element held to the bottom of
+     a lane moves out from under the transform that was holding it still. */
   box-sizing: border-box;
   height: 100%;
   min-width: 0;
@@ -10984,7 +10996,6 @@ html[data-gm-dragging] * {
 }
 
 .ie-card[data-mode='edit'] .ie-plate {
-  height: auto;
   border-color: rgb(28 22 18 / 22%);
   background: var(--bg);
   cursor: text;
@@ -11014,13 +11025,13 @@ html[data-gm-dragging] * {
   top: 0;
   left: 0;
   translate: 0 -50%;
-  height: 38px;
+  height: var(--ie-line);
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   color: var(--ink);
   letter-spacing: -0.01em;
-  line-height: 38px;
+  line-height: var(--ie-line);
   visibility: hidden;
 }
 
@@ -11033,12 +11044,12 @@ html[data-gm-dragging] * {
 .ie-value {
   position: absolute;
   translate: 0 -50%;
-  height: 38px;
+  height: var(--ie-line);
   white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-stretch: 87.5%;
   letter-spacing: -0.01em;
-  line-height: 38px;
+  line-height: var(--ie-line);
   pointer-events: auto;
 }
 
@@ -11099,10 +11110,18 @@ html[data-gm-dragging] * {
   appearance: none;
 }
 
+.pt-input {
+  /* a real focus ring, and it arrives rather than appearing: the colour is
+     what fades, from transparent to the ring, so the outline is always there
+     and only its ink is animated */
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 130ms ease-out;
+}
+
 .pt-input:focus-visible {
   border-radius: 9px;
-  outline: 2px solid #ff7a28;
-  outline-offset: -2px;
+  outline-color: #ff7a28;
 }
 
 /* THE DATE: a flex row of three chips, one per part, each a closed list with
@@ -11134,10 +11153,13 @@ html[data-gm-dragging] * {
   background-color: rgb(28 22 18 / 9%);
 }
 
+.pt-date .pt-input {
+  outline-offset: -1px;
+}
+
 .pt-date .pt-input:focus-visible {
   border-radius: 7px;
-  outline: 2px solid #ff7a28;
-  outline-offset: 0;
+  outline-color: #ff7a28;
 }
 
 .pt-date-day {

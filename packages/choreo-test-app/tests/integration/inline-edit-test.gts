@@ -271,6 +271,42 @@ module('Integration | inline edit', function (hooks) {
   });
 
   /**
+   * The platters TWEEN. They snapped once, and how they snapped is worth a
+   * case of its own.
+   *
+   * The card's row heights were inline on the WRAPPER, which is outside the
+   * region — so the mode change resized the card before the region had taken
+   * its before-picture, every platter measured the same box twice, `c.moved`
+   * selected nothing, and they arrived at their new lane on the first frame
+   * while the type flew across on its own. Nothing errored, and every other
+   * step still ran. The card picks its pose with its own attribute now, which
+   * changes inside the region, where a change is a pass.
+   */
+  test('the platters tween their geometry rather than snapping', async function (assert) {
+    await render(<template><InlineEdit /></template>);
+    await animationsSettled();
+
+    await click('[data-test-toggle]');
+    // The MOVE writing to the element is the assertion, not the rendered
+    // height: `#ember-testing` is scaled, and a scaled box part-way through a
+    // projection is not a number worth reasoning about. If the move is
+    // playing, the library owns the platter's box and says so inline.
+    let played = 0;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((go) => requestAnimationFrame(go));
+      if (/height|transform/.test(field('dob').getAttribute('style') ?? '')) {
+        played++;
+      }
+    }
+    await animationsSettled();
+
+    assert.ok(
+      played >= 2,
+      `the platter's box was the move's for more than one frame (${played})`
+    );
+  });
+
+  /**
    * The departing control fades, which nothing was doing for it.
    *
    * A crossing fades what it CROSSES: a leaver against the arrival that
