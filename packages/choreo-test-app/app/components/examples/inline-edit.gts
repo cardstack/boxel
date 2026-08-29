@@ -53,16 +53,22 @@ const MOVE = 0.55;
  * gently it lands. This eases in as well as out.
  */
 const EASE = [0.4, 0, 0.2, 1] as const;
-const BOX = 0.42;
 
 /**
- * The form comes apart faster than it assembles, and the number is not free.
+ * ONE duration and ONE curve, for every box and every letter on the card.
  *
- * The departing control's text and the flight word are the same pixels at
- * the instant of the swap, so they can be crossfaded — but only while they
- * are still in the same place. This is the window in which the word fades up
- * and the form fades out, and it has to close before the word has travelled
- * far enough for the pair to read as two.
+ * The header had its own for a while — shorter and sharper, to stop the
+ * avatar and the eyebrow crowding each other as one shrank into the other's
+ * space. It fixed the crowding and broke the ensemble: the header arrived
+ * while the fields under it were still travelling, and a card whose parts
+ * finish at different times does not read as one thing changing state. The
+ * crowding is a spacing problem and belongs to the layout, not to the
+ * clock.
+ *
+ * The only exception below is `LEAVE`, and it is not a second taste — it is
+ * a constraint. The departing control's text and the flight word are the
+ * same pixels at the instant of the swap, so they can be crossfaded, but
+ * only while they are still in the same place.
  */
 const LEAVE = 0.18;
 const FADE_IN = [0, 1];
@@ -881,10 +887,10 @@ export class InlineEdit extends Component {
           <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
-          <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
           {{! the eyebrow moves because the avatar beside it shrinks and the
               lane under it gets shorter — two reasons, neither of them its
               own, and without a Move of its own it simply jumped }}
+          <c.Move @of={{c.moved "avatar"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "kicker"}} @duration={{MOVE}} @ease={{EASE}} />
           <c.Move @of={{c.moved "rule"}} @duration={{MOVE}} @ease={{EASE}} />
 
@@ -899,7 +905,7 @@ export class InlineEdit extends Component {
           <c.Tween
             @of={{c.kept "avatar"}}
             @borderRadius={{this.avatarRadius}}
-            @duration={{BOX}}
+            @duration={{MOVE}}
             @ease={{EASE}}
           />
           <c.Tween
@@ -949,7 +955,7 @@ export class InlineEdit extends Component {
           <c.Tween
             @of={{c.inserted "chip"}}
             @opacity={{FADE_IN}}
-            @duration={{BOX}}
+            @duration={{MOVE}}
             @ease={{EASE}}
           />
           <c.Tween
@@ -961,7 +967,7 @@ export class InlineEdit extends Component {
           <c.Tween
             @of={{c.inserted "label"}}
             @opacity={{FADE_IN}}
-            @duration={{BOX}}
+            @duration={{MOVE}}
             @ease={{EASE}}
           />
           <c.Tween

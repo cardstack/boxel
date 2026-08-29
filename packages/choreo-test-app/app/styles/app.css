@@ -10918,17 +10918,26 @@ html[data-gm-dragging] * {
     0 1px 3px rgb(216 69 26 / 32%);
 }
 
+/* The header is NOT a flex row, and that is a fix rather than a preference.
+   `c.Move` writes an inline width while it plays, and in a flex row that
+   width is layout: the avatar shrinking under its own move pulled the
+   eyebrow beside it to a new position, out from under the FLIP transform
+   that was meant to be holding IT still. The two were then offset by the
+   same 38px twice and overlapped by 27 for the first frames of every pass
+   back. Both are placed against the lane instead, so neither one's size is
+   the other one's business. */
 .ie-head {
-  display: flex;
+  position: relative;
   grid-area: head;
-  gap: 11px;
-  align-items: center;
 }
 
 /* the avatar is one identity in both states; only its box changes */
 .ie-avatar {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  translate: 0 -50%;
   display: grid;
-  flex: none;
   place-items: center;
   width: 72px;
   height: 72px;
@@ -10960,6 +10969,11 @@ html[data-gm-dragging] * {
 }
 
 .ie-kicker {
+  /* one avatar and one gutter in from the lane's left, per pose */
+  position: absolute;
+  top: 50%;
+  left: 83px;
+  translate: 0 -50%;
   white-space: nowrap;
   color: var(--ink-faint);
   font-family: var(--font-mono);
@@ -10971,6 +10985,7 @@ html[data-gm-dragging] * {
 /* the form says so: the eyebrow is the one line that changes meaning between
    the poses, from a team name to a statement of what the card is doing */
 .ie-card[data-mode='edit'] .ie-kicker {
+  left: 45px;
   color: var(--ink-dim);
   font-weight: 700;
 }
