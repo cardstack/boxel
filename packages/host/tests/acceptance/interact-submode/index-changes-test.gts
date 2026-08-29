@@ -38,12 +38,14 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
     // caches under this module's name, which the outer prefix cannot match.
     setupRealmCacheTeardown(hooks);
 
-    test('a card the realm has not indexed yet reads as being prepared, then renders itself once indexing lands', async function (assert) {
-      // Writing through the adapter puts the instance on the realm's file
-      // system with no indexing pass behind it, holding open for the length of
-      // the test the window a client normally sees only for as long as
-      // indexing takes.
+    test('a card another client created reads as being prepared, then renders itself once indexing lands', async function (assert) {
+      // Another client's write lands on the realm's file system, with no
+      // indexing pass behind it yet. Writing through the adapter reproduces
+      // that: the bytes are on the realm, and nothing about the card has
+      // passed through this tab — no instance in its store to fall back on,
+      // which is what makes the placeholder the right thing to show.
       let { adapter } = getTestRealmRegistry().get(testRealmURL)!;
+      let cardURL = `${testRealmURL}Person/late`;
       await adapter.write(
         'Person/late.json',
         JSON.stringify({
@@ -57,8 +59,23 @@ module('Acceptance | interact submode | index changes tests', function (hooks) {
         } as LooseSingleCardDocument),
       );
 
+      // The file event is how this tab finds out an outside write happened —
+      // it is what puts the file in the tree, ahead of any index row for it.
+      getService('message-service').relayRealmEvent({
+        eventName: 'update',
+        added: ['Person/late.json'],
+        realmURL: testRealmURL,
+      });
+      await settled();
+
+      assert.strictEqual(
+        getService('store').peek(cardURL),
+        undefined,
+        'the card never passed through this tab, so nothing of it is in the store',
+      );
+
       await visitOperatorMode({
-        stacks: [[{ id: `${testRealmURL}Person/late`, format: 'isolated' }]],
+        stacks: [[{ id: cardURL, format: 'isolated' }]],
       });
 
       assert
