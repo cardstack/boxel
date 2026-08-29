@@ -1,6 +1,7 @@
 import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
 import { Crossing } from 'test-app/components/examples/crossing';
+import { Density } from 'test-app/components/examples/density';
 import { DragWell } from 'test-app/components/examples/drag-well';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
@@ -777,6 +778,45 @@ drop = () => { this.col = Math.round(this.col); };
 </div>`,
     slowmo: false,
     title: 'Drag',
+  },
+  {
+    Example: Density,
+    apis: ['c.run', 'run.time', 'run.paused', 'c.Gate', 'c.Move'],
+    group: 'Drag',
+    id: 'density',
+    lede: 'Tap a stop and it plays. Drag the knob and it is yours.',
+    sample: `{{! Three arrangements is TWO scores, because a changeset has exactly two
+    ends. The component keeps the right one loaded; the thumb writes the clock.
+
+    Every letter carries all three of its boxes as custom properties and the
+    class picks which pair is in force — so the stylesheet owns the poses and
+    the arithmetic stays derived from the data. }}
+<Choreo class='dn-stage' as |c|>
+  <span {{this.wire c this.stage}}></span>
+  <div class='dn-board is-{{this.pose}}'>
+    {{#each this.letters as |l|}}
+      <span class='dn-l' style={{box l}} {{motion id=l.ch}}>{{l.ch}}</span>
+    {{/each}}
+  </div>
+  <c.Sequence>
+    <c.Gate />
+    <c.Move @of={{c.all}} @duration={{0.5}} @ease='linear' />
+  </c.Sequence>
+</Choreo>
+
+// The thumb writes run.time. Nothing here is @tracked except the pose index:
+// a render inside a region is a PASS, so assigning tracked state from a
+// pointermove would recompile the score sixty times a second.
+move = (event) => {
+  this.p = this.at(event.clientX);
+  this.run.pause();
+  // parked a hair short: a run allowed to reach its own duration is FINISHED,
+  // and a finished run replays itself on any later render
+  const local = (this.p - this.from) / (this.stage - this.from);
+  this.run.time = local * (this.run.duration - 0.001);
+};`,
+    slowmo: false,
+    title: 'Density',
   },
   {
     Example: Sheet,

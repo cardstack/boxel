@@ -1371,7 +1371,7 @@ html[data-gm-dragging] * {
 
 .apps {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px 12px;
   width: min(86%, 280px);
 }
@@ -1745,8 +1745,8 @@ html[data-gm-dragging] * {
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
@@ -6226,7 +6226,7 @@ html[data-gm-dragging] * {
   right: var(--pres-m);
   bottom: 7cqw;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4cqw;
   margin: 0;
   padding: 0;
@@ -6841,7 +6841,7 @@ html[data-gm-dragging] * {
   align-self: start;
   margin-top: 52px;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: start;
   gap: 8px;
   width: min(94%, 330px);
@@ -7616,8 +7616,8 @@ html[data-gm-dragging] * {
 
 .sheet.is-rows .share-mark,
 .sheet.is-app .share-mark {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border-radius: 9px;
   background: var(--bg-spot);
 }
@@ -7663,6 +7663,317 @@ html[data-gm-dragging] * {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* ---- density: a slider IS a playhead --------------------------------------
+   Twenty-eight Scrabble tiles in five arrangements, on ONE score.
+
+   Nothing here is a pose class. The tiles never change shape and the DOM
+   never changes at all: every seat is a keyframe, and the rack scrubs one
+   clock from end to end. That is why none of the geometry traps the rest of
+   this stylesheet documents can arise — there is no layout to be measured out
+   from under anything.
+
+   It is also dressed as a game rather than as a chart. The arrangements are
+   real claims about English and about Scrabble, and they are easier to
+   believe from objects you recognise than from dots. */
+
+.ex:has(.dn-stage) {
+  container-type: inline-size;
+  --tile: #f0e3c2;
+  --tile-lip: rgba(122, 92, 44, 0.42);
+  --tile-top: rgba(255, 253, 244, 0.85);
+  --tile-ink: #3a2b16;
+}
+
+.dn-stage {
+  position: relative;
+  width: 340px;
+  height: 380px;
+  max-width: 96cqw;
+}
+
+/* A TILE, as an object.
+ *
+ * Two inset shadows do the whole job: a light line along the top edge and a
+ * darker one along the bottom, which is what a chamfer looks like from
+ * straight on. The letter is a display face rather than the mono the rest of
+ * the page uses — a Scrabble tile is printed, not typeset. */
+.dn-l {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background:
+    radial-gradient(
+      120% 120% at 30% 20%,
+      rgba(255, 255, 255, 0.55),
+      rgba(255, 255, 255, 0) 60%
+    ),
+    var(--tile);
+  color: var(--tile-ink);
+  box-shadow:
+    inset 0 -2.5px 0 var(--tile-lip),
+    inset 0 1.5px 0 var(--tile-top),
+    inset 2px 0 0 rgba(255, 253, 244, 0.35),
+    inset -2px 0 0 rgba(122, 92, 44, 0.18),
+    0 2px 3px rgba(var(--shadow-rgb), calc(0.55 * var(--shadow-a))),
+    0 -1px 2px rgba(var(--shadow-rgb), calc(0.3 * var(--shadow-a)));
+  font-family: var(--font-display);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dn-l b {
+  font-weight: 700;
+  text-transform: uppercase;
+  /* optically centred: the value in the corner pulls the eye down-right */
+  transform: translate(-1px, -1.5px);
+}
+
+.dn-l i {
+  position: absolute;
+  right: 2px;
+  bottom: 1px;
+  font-family: var(--font-mono);
+  font-style: normal;
+  font-size: 7px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+/* vowels are marked in EVERY arrangement, not only the one that groups them:
+   a colour that arrived on a pose change would have nothing to fade with */
+.dn-l.is-vowel {
+  --tile: #f6d7a2;
+  color: #6b3a10;
+}
+
+/* a blank has no letter and no value — it is the absence, drawn */
+.dn-l.is-blank {
+  --tile: #e7dcc4;
+}
+
+/* ---- the furniture, each piece true in one arrangement ---- */
+
+.dn-axis {
+  position: absolute;
+  background: var(--line);
+  opacity: 0;
+}
+
+.dn-axis.is-x {
+  left: 12px;
+  right: 6px;
+  top: 328px;
+  height: 1px;
+}
+
+.dn-axis.is-y {
+  left: 12px;
+  top: 18px;
+  bottom: 46px;
+  width: 1px;
+}
+
+.dn-alab,
+.dn-tick {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.dn-alab.is-x {
+  right: 8px;
+  top: 350px;
+}
+
+.dn-alab.is-yt {
+  left: 20px;
+  top: 18px;
+}
+
+.dn-alab.is-yb {
+  left: 20px;
+  bottom: 52px;
+}
+
+.dn-tick {
+  top: 333px;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--ink-dim);
+}
+
+.dn-key {
+  position: absolute;
+  top: 290px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  opacity: 0;
+  white-space: nowrap;
+}
+
+.dn-key::before {
+  content: '';
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: var(--tile);
+  box-shadow: inset 0 -2px 0 var(--tile-lip);
+}
+
+.dn-key.is-v {
+  left: 40px;
+}
+
+.dn-key.is-v::before {
+  background: #f6d7a2;
+}
+
+.dn-key.is-c {
+  left: 150px;
+}
+
+/* ---- the rack: a slider dressed as the thing it is ---- */
+
+.dn-rail {
+  --pad: 15px;
+  position: relative;
+  width: 340px;
+  max-width: 96cqw;
+  height: 30px;
+  margin-top: 14px;
+  padding: 0 var(--pad);
+  border-radius: 6px 6px 9px 9px;
+  background: linear-gradient(180deg, #8a6236, #6d4a26 62%, #5b3d1f);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 226, 187, 0.32),
+    inset 0 -3px 0 rgba(0, 0, 0, 0.28),
+    0 3px 6px rgba(var(--shadow-rgb), calc(0.6 * var(--shadow-a)));
+  touch-action: none;
+  cursor: grab;
+}
+
+.dn-rail:active {
+  cursor: grabbing;
+}
+
+.dn-rail:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* the groove the marker slides in, filled up to where the playhead is */
+.dn-track {
+  position: absolute;
+  left: var(--pad);
+  right: var(--pad);
+  top: 13px;
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 226, 187, 0.55) var(--at, 0%),
+    rgba(0, 0, 0, 0.3) var(--at, 0%)
+  );
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* the marker is a tile, because everything else on this page is */
+/* Positioned inside the TRACK's span, not the rack's.
+   `--f` is a plain fraction the component writes each frame; the arithmetic
+   that turns it into a place belongs here, where the padding is known. */
+.dn-thumb {
+  position: absolute;
+  top: 4px;
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: var(--tile);
+  box-shadow:
+    inset 0 -2px 0 var(--tile-lip),
+    inset 0 1.5px 0 var(--tile-top),
+    0 2px 4px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+/* the stops sit under the rack, and the one in force says so */
+.dn-notch {
+  position: absolute;
+  top: 38px;
+  left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--f, 0));
+  transform: translateX(-50%);
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  white-space: nowrap;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    font-size 0.18s ease;
+}
+
+@media (hover: hover) {
+  .dn-notch:hover {
+    color: var(--ink-dim);
+  }
+}
+
+.dn-notch.is-on {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--tile-ink);
+  background: var(--tile);
+  box-shadow: inset 0 -2px 0 var(--tile-lip);
+}
+
+.dn-wire {
+  display: none;
+}
+
+.dn-hint {
+  margin: 34px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* a Scrabble tile is a physical object, and the one thing it is not is dark */
+:root:not([data-theme='light']) .dn-l,
+:root:not([data-theme='light']) .dn-thumb {
+  --tile-lip: rgba(92, 68, 28, 0.55);
+}
+
+:root:not([data-theme='light']) .dn-notch.is-on {
+  color: #3a2b16;
 }
 
 /* ---- footer ---- */
@@ -7896,8 +8207,8 @@ html[data-gm-dragging] * {
   display: grid;
   place-items: center;
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
@@ -9847,7 +10158,7 @@ html[data-gm-dragging] * {
      column's centre off those marks by a third of it — the parcel landed
      five pixels shy of the middle of every bay. The plates are separated by
      their own margin instead, which the grid's arithmetic never sees. */
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 /* a bay is a floor plate, not an outline: it has an edge, a code painted at
@@ -10552,8 +10863,8 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 0;
   border-radius: 50%;
   background: linear-gradient(180deg, #ff9a4a, #ef5f14);
