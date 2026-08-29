@@ -11048,10 +11048,23 @@ html[data-gm-dragging] * {
   border: 1px solid rgb(28 22 18 / 0%);
   border-radius: 3px;
   background: rgb(0 0 0 / 0%);
-  overflow: hidden;
   transition:
     border-color 200ms linear,
     background-color 200ms linear;
+}
+
+/* THE CLIP IS FOR THE FLIGHT ONLY.
+   Nothing a field holds may be drawn outside the platter WHILE THE PLATTER
+   IS MOVING — the date's three segments are wider than it is while it is
+   still growing, so without this the form spills past its own outline on the
+   way in. At rest there is nothing to contain.
+
+   It used to be unconditional: four rounded clips against four boxes,
+   permanently. A rounded clip is cheap on a box that holds still and is a
+   known WebKit hotspot on one that does not, so scoping it to the pass is
+   both the correct scope and the cheaper one. */
+.ie[data-flying] .ie-plate {
+  overflow: hidden;
 }
 
 .ie-card[data-mode='edit'] .ie-plate {
