@@ -11060,6 +11060,16 @@ html[data-gm-dragging] * {
   cursor: text;
 }
 
+/* TEMPORARY — the bisect switch, `?off=clip,shade`. See `OFF` in the
+   component, and delete both together. */
+.ie[data-off~='clip'] .ie-plate {
+  overflow: visible;
+}
+
+.ie[data-off~='shade'] .ie-shade {
+  display: none;
+}
+
 /* THE TYPE LAYER. Over the card's padding box, above the platters, and
    inert: everything in it is positioned absolutely, and pointer events pass
    through to the real controls underneath. */

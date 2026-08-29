@@ -256,6 +256,64 @@ const FAMILY = 'Archivo';
  */
 const STRETCH = 'semi-condensed';
 
+/* ── TEMPORARY: a bisect switch for the Safari slowness ──────────────────
+ *
+ * `?off=clip,size` disables one suspect at a time so a browser that is slow
+ * can be watched with each candidate removed. This exists because the last
+ * performance fix here was a guess that cost a user-agent sniff and a
+ * doubled DOM and bought nothing; the next one gets measured first.
+ *
+ *   clip      the rounded `overflow: hidden` on every platter — a rounded
+ *             clip against a box that resizes every frame is a known WebKit
+ *             hotspot, and it is what keeps a field inside its platter
+ *   radius    the corner tweens on the platters and the avatar
+ *   size      `font-size` on every word — the one that re-shapes every glyph
+ *   weight    `font-weight` — already tested, already innocent, kept for
+ *             completeness so the set can be bisected as a whole
+ *   tracking  `letter-spacing`
+ *   color     the ink tween
+ *   shade     the form's shadow layer
+ *   boxes     the card's and the platters' geometry moves
+ *
+ * And two groups, for splitting the space quickly:
+ *
+ *   text      size + weight + tracking + color — everything the foreground
+ *             layer animates except where a word is
+ *   all       every suspect at once. If `all` is still slow, nothing on this
+ *             list is the cause and the next place to look is outside it.
+ *
+ * A switched-off property is REMOVED from its step rather than given a
+ * single target — a lone target is still a target, and the engine animates
+ * to it just the same. Which means the card looks wrong with a suspect
+ * disabled: that value simply stops being written. You are watching
+ * smoothness, not correctness.
+ *
+ * DELETE THIS, and everything that reads `OFF`, once the cause is known.
+ */
+const OFF_GROUPS: Record<string, string[]> = {
+  all: [
+    'clip',
+    'radius',
+    'size',
+    'weight',
+    'tracking',
+    'color',
+    'shade',
+    'boxes',
+  ],
+  text: ['size', 'weight', 'tracking', 'color'],
+};
+
+const OFF = new Set<string>(
+  (typeof location === 'undefined'
+    ? []
+    : (new URLSearchParams(location.search).get('off') ?? '')
+        .split(',')
+        .map((name) => name.trim())
+        .filter(Boolean)
+  ).flatMap((name) => OFF_GROUPS[name] ?? [name])
+);
+
 const scale = (size: number, weight: number, tracking: number): TypeScale => ({
   family: FAMILY,
   size,
@@ -614,15 +672,20 @@ export class InlineEdit extends Component {
   private moving = false;
 
   private tween =
-    <T,>(view: T, edit: T) =>
-    () =>
-      this.moving
+    <T,>(view: T, edit: T, off?: string) =>
+    () => {
+      if (off && OFF.has(off)) {
+        // removed from the step entirely: a step skips an undefined prop
+        return undefined as never;
+      }
+      return this.moving
         ? this.editing
           ? [view, edit]
           : [edit, view]
         : this.editing
           ? edit
           : view;
+    };
 
   private find(id: string | null) {
     for (const words of this.plan.values()) {
@@ -650,18 +713,18 @@ export class InlineEdit extends Component {
    * both poses, so each of these is a lookup rather than a measurement.
    */
   private of =
-    <K extends keyof Pose>(key: K) =>
+    <K extends keyof Pose>(key: K, off?: string) =>
     (sprite: Sprite) => {
       const word = this.find(sprite.id);
-      return word ? this.tween(word.view[key], word.edit[key])() : 0;
+      return word ? this.tween(word.view[key], word.edit[key], off)() : 0;
     };
 
   wordX = this.of('x');
   wordY = this.of('y');
-  wordSize = this.of('size');
-  wordWeight = this.of('weight');
-  wordTracking = this.of('tracking');
-  wordColor = this.of('color');
+  wordSize = this.of('size', 'size');
+  wordWeight = this.of('weight', 'weight');
+  wordTracking = this.of('tracking', 'tracking');
+  wordColor = this.of('color', 'color');
 
   /**
    * The word fades up ONLY when there is something to fade against.
@@ -681,12 +744,19 @@ export class InlineEdit extends Component {
   }
 
   get avatarRadius() {
-    return this.tween('36px', '10px');
+    return this.tween('36px', '10px', 'radius');
   }
 
   get plateRadius() {
-    return this.tween('3px', '9px');
+    return this.tween('3px', '9px', 'radius');
   }
+
+  /** TEMPORARY, see `OFF` */
+  get off() {
+    return OFF.size ? [...OFF].join(' ') : undefined;
+  }
+
+  boxesMove = !OFF.has('boxes');
 
   /** the form is lifted off the page; the reading card lies flat on it */
   get shade() {
@@ -765,7 +835,12 @@ export class InlineEdit extends Component {
 
   <template>
     {{! `data-flying` is set on this element by hand — see `toggle`. }}
-    <div class="ex ie" style={{this.metrics}} {{this.hold}}>
+    <div
+      class="ex ie"
+      style={{this.metrics}}
+      data-off={{this.off}}
+      {{this.hold}}
+    >
       <Choreo class="ie-stage" as |c|>
         {{this.grab c}}
 
@@ -927,8 +1002,10 @@ export class InlineEdit extends Component {
 
           {{! The background moves as boxes: real geometry, along its lane. }}
           <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
-          <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
-          <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
+          {{#if this.boxesMove}}
+            <c.Move @of={{c.moved "card"}} @duration={{MOVE}} @ease={{EASE}} />
+            <c.Move @of={{c.moved "plate"}} @duration={{MOVE}} @ease={{EASE}} />
+          {{/if}}
           {{! the eyebrow moves because the avatar beside it shrinks and the
               lane under it gets shorter — two reasons, neither of them its
               own, and without a Move of its own it simply jumped }}
