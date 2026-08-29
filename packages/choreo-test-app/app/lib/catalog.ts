@@ -216,30 +216,45 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
   },
   {
     Example: InlineEdit,
-    apis: ['c.Crossing', 'pack', 'initial', 'fontWeight'],
+    apis: ['c.Crossing', 'c.Move', 'c.Tween', 'fontWeight'],
     group: 'Choreo',
     id: 'inline-edit',
     lede: 'A record read, then written. Every word flies to the form.',
-    sample: `// The SAME words, read and written. Every word of every value is its
-// own identity, so a value does not dissolve into its editor — each word
-// flies to where the form puts it, resetting on the way.
-{{#each (this.words field.key) as |part|}}
-  <span {{motion id=part.id role='word' pack='content'
-    animate=(to fontSize=(this.size field.key)
-                fontWeight=(this.weight field.key))
-    transition=TYPE}}>{{part.word}}</span>
+    sample: `// A card becoming a form. The two poses are deliberately far apart:
+// email and date of birth share one line along the card's bottom edge, and
+// become two full-width labelled rows. A word that ends 40px from where it
+// started reads as a re-render — this one has somewhere to go.
+
+// Every word of every value is ONE element in both states. They used to be
+// two, a value and an editor in opposite branches of an if/else, which made
+// every word a counterpart the crossing had to pin — and it could not,
+// because the arriving copy was animating its own font-size and so moving
+// the very box the pin was computed against. You saw the name twice, large
+// and small, sliding past each other.
+{{#each (this.words field.key) key='id' as |part|}}
+  <span {{motion id=part.id role=field.role}}>{{part.word}}</span>
 {{/each}}
 
-// The swap stays ON. A first cut passed swap='none', reasoning that both
-// sides say the same thing so a dissolve would be a word crossfading with
-// itself. But the swap is not about whether the TEXT differs — these are two
-// different DOM nodes, one per branch. Off, neither fades: the departing word
-// stays opaque in the orphan layer and the arriving one sits at opacity 0.
+// The SCORE owns the type, not the modifier. An \`animate=(to fontSize=…)\`
+// on an element the region has claimed is applied and never tweened: the
+// words teleported between scales while their boxes flew correctly around
+// them. Inside a region, a property tween is a step.
 <c.Parallel>
   <c.Crossing @duration={{MOVE}} @ease={{EASE}}
     @leave={{0.2}} @arrive={{0.28}} @overlap={{0.42}} />
   <c.Move @of={{c.moved}} @duration={{MOVE}} @ease={{EASE}} />
+
+  <c.Tween @of={{c.kept 'name-value'}} @fontSize={{this.nameSize}}
+    @fontWeight={{this.nameWeight}} @duration={{TYPE}} @ease={{SOFT}} />
+  <c.Tween @of={{c.kept 'sub-value'}} @fontSize={{this.subSize}}
+    @fontWeight={{this.subWeight}} @duration={{TYPE}} @ease={{SOFT}} />
 </c.Parallel>
+
+// Each of those is a KEYFRAME ARRAY — ['30px', '17px'] — not a target. The
+// rest poses live in CSS keyed by [data-mode], where a rest pose belongs,
+// which also means the new value is already on the element by the time the
+// region measures the pass. A step given one target finds the element
+// already there and animates nothing. The array re-states where to start.
 
 // A VARIABLE FONT is load-bearing. Reading type is 30px/700, the form's is
 // 17px/400. With static cuts those are two files and the browser can only
@@ -247,15 +262,10 @@ this.stage.querySelector(\`[data-cue="\${cue}"]\`).click();
 // variable, so fontWeight is a number the engine interpolates, and the
 // library registers it unitless so it interpolates as one.
 
-// The size/weight tweens live on the MODIFIER, not in CSS: a CSS transition
-// cannot survive the element being re-parented out of the value and into
-// the editor, which is exactly what the crossing does to it.
-
-// The label is in the form only — it arrives with the editor and leaves
-// with it, which is what says the card changed MODE rather than reflowed.
-{{#if this.editing}}
-  <span {{motion id=(concat field.key '-label') role='label'}}>…</span>
-{{/if}}`,
+// The reading pose has variety: a large bold name over two quiet values.
+// The form has none — every field is the same 17px regular, because a form
+// is a place where all the values are the same kind of thing. Losing that
+// variety IS the animation.`,
     slowmo: true,
     title: 'In place',
   },

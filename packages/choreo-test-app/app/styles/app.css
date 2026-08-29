@@ -10764,42 +10764,98 @@ html[data-gm-dragging] * {
    Two states of one card. The stylesheet states the REST POSE of each — the
    crossing is what gets between them, and no rule here knows it exists.
 
-   The type is the point. Reading type is 30px/700; the form's is 17px/400,
-   and `font-variation-settings` is never touched: Archivo is variable
-   (wght 400..700, loaded at the top of this file), so `font-weight` is a
-   plain number the engine interpolates. The size and weight tweens live on
-   the modifier rather than here, because a CSS transition cannot survive the
-   element being re-parented from the value into the editor. */
+   The two poses are deliberately far apart. An earlier cut changed only the
+   type and the chrome, and the flight was correct but nearly invisible: a
+   word that ends 40px from where it started reads as a re-render, not a
+   move. So the card is not one layout with two type scales — it is a
+   BUSINESS CARD becoming a FORM. The avatar is 72px and then 34px. The name
+   sits under it and then drops into a labelled row. Email and date of birth
+   share one line pinned to the card's bottom edge, and then become two
+   full-width rows of their own, which is the longest journey on the stage
+   and the one worth watching.
+
+   The type is the point underneath that. Reading type is 30px/700; the
+   form's is 17px/400, and `font-variation-settings` is never touched:
+   Archivo is variable (wght 400..700, loaded at the top of this file), so
+   `font-weight` is a plain number the engine interpolates. The size and
+   weight tweens live on the modifier rather than here, because a CSS
+   transition cannot survive a re-render under a caret. */
+/* The card's top edge is PINNED, and the card grows downward from it. The
+   two poses are different heights on purpose — a form is taller than the
+   card it came from — but a centred card would turn that into 20px of
+   vertical drift on every element inside it, and a flight measured in page
+   space would carry the drift. One fixed row, card aligned to its top:
+   the height difference stays a height difference. */
 .ie {
   display: grid;
+  grid-template-rows: 300px auto;
   gap: 14px;
-  place-items: center;
+  justify-items: center;
   align-content: center;
 }
 
+/* The card's OUTER box is identical in both states, and that is load-bearing.
+   Everything that moves, moves inside it. A container that resizes under a
+   flight takes the flight with it — measured in page space, the words once
+   travelled 27px of which 24 was the card itself moving. Pinning the outside
+   and rearranging the inside means every pixel of motion you see is the
+   thing you are meant to be watching. */
 .ie-card {
   position: relative;
   display: grid;
-  gap: 10px;
-  align-content: start;
+  box-sizing: border-box;
+  align-self: start;
   width: min(100%, 340px);
+  gap: 8px;
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--bg-elev);
 }
 
-/* The card's height is constant BY CONSTRUCTION, not by a pinned total.
-   It grew 76px when the labels and field chrome arrived, and a container that
-   resizes under a flight takes the flight with it — measured in page space,
-   the words travelled 27px of which 24 was the card moving. The first fix was
-   a `min-height` on the card, which is a number measured once and wrong the
-   moment anything inside it changes: freezing the field boxes at 40px put the
-   form 12px over it again within the hour. So each row reserves its own
-   taller state instead, and the sum takes care of itself. */
+/* the reading pose: a card. Avatar large, name beneath it, and the two
+   secondary values sharing one line along the bottom edge. */
+.ie-card[data-mode='view'] {
+  grid-template-areas:
+    'head head'
+    'name name'
+    'rule rule'
+    'email dob';
+  height: 236px;
+  grid-template-rows: 88px auto 1px 46px;
+  /* email is the longer value and gets the wider half — a 50/50 split here
+     was forcing its type a size smaller than the date beside it */
+  grid-template-columns: 1.4fr 1fr;
+}
+
+/* the writing pose: a form. Avatar demoted to a chip, and every value on a
+   full-width labelled row of its own. */
+.ie-card[data-mode='edit'] {
+  grid-template-areas:
+    'head head'
+    'rule rule'
+    'name name'
+    'email email'
+    'dob dob';
+  height: 276px;
+  grid-template-rows: 36px 1px 56px 56px 56px;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* The hairline is the card's one piece of pure chrome, and it is here to be
+   MOVED: in the reading pose it underlines the record and separates it from
+   the contact line along the bottom edge; in the form it sits directly under
+   the header, where it reads as the top of a control panel. Same element,
+   two jobs, one `c.Move` — the cheapest way to say the card changed mode. */
+.ie-rule {
+  grid-area: rule;
+  height: 1px;
+  background: var(--line);
+}
+
 .ie-head {
   display: flex;
-  height: 54px;
+  grid-area: head;
   gap: 11px;
   align-items: center;
 }
@@ -10809,27 +10865,41 @@ html[data-gm-dragging] * {
   display: grid;
   flex: none;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
+  width: 72px;
+  height: 72px;
+  box-shadow: 0 6px 18px rgb(216 69 26 / 22%);
+  /* 36px, not 50%. A percentage radius is resolved against the box, so a
+     circle tweening to a rounded rect would be interpolating a percentage
+     into a length — the engine cannot, and the corner snaps at one end. Half
+     the width IS the circle, said in the units the other end is said in, so
+     the whole thing is one rounded rect becoming another. The modifier owns
+     the value; this is only the rest pose. */
+  /* the rest pose only — the score's `c.Tween` is what gets between the two */
+  border-radius: 36px;
   background: linear-gradient(150deg, #ff9a4a, #d8451a);
   color: #fff;
 }
 
+.ie-card[data-mode='edit'] .ie-initials {
+  font-size: 14px;
+}
+
 .ie-card[data-mode='edit'] .ie-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
 }
 
 .ie-initials {
   font-family: 'Archivo', var(--font), sans-serif;
+  font-size: 28px;
   font-weight: 700;
   font-variation-settings: 'wdth' 88;
   letter-spacing: 0.01em;
 }
 
 .ie-kicker {
+  white-space: nowrap;
   color: var(--ink-faint);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -10837,13 +10907,50 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* label (14) + gap (4) + box (40) — reserved whether or not the label is
-   there, which is what stops the form pushing the reading view around */
+/* A field owns no height of its own: the card's row template states it, once
+   per mode, where the difference between the two poses is legible. The box
+   sits at the BOTTOM of whatever room it is given, so the label above it
+   arrives by pushing down from the top rather than shoving the value. */
 .ie-field {
+  position: relative;
   display: grid;
-  height: 58px;
-  align-content: end;
   gap: 4px;
+  align-content: end;
+  min-width: 0;
+}
+
+/* The form's chrome, and nothing else. It is a SIBLING of the text rather
+   than its container, so it can be left out of every Move: the words fly,
+   the plate stays where the form puts it and fades up in place. Its rest
+   pose here is the FORM's — the reading view is where it is invisible,
+   which is the honest way round for a thing only the form has. */
+.ie-plate {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 40px;
+  border: 1px solid rgb(28 22 18 / 22%);
+  border-radius: 9px;
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ie-card[data-mode='edit'] .ie-plate {
+  opacity: 1;
+}
+
+.ie-field[data-field='name'] {
+  grid-area: name;
+}
+
+.ie-field[data-field='email'] {
+  grid-area: email;
+}
+
+.ie-field[data-field='dob'] {
+  grid-area: dob;
 }
 
 /* the label exists only in the form: it arrives with the editor and leaves
@@ -10856,47 +10963,47 @@ html[data-gm-dragging] * {
   text-transform: uppercase;
 }
 
-/* — the two rest poses of a value — */
-
-/* Both rest poses are the SAME box, and a fixed one.
-   `initial` states that an arriving word starts at the type it is leaving —
-   30px for the name — and font-size is layout, so without a fixed height the
-   editor laid those words out full-size, wrapped them to two lines, and stood
-   87px tall before collapsing to 36. That 51px collapse was the jolt: the
-   words were flying correctly and the boxes underneath them were not holding
-   still. Fixed, an oversized word simply overflows for the length of the
-   flight, which is what `overflow: visible` is for.
-
-   It also makes the two states geometrically parallel, which is what lets a
-   crossing read as one thing moving rather than two layouts trading places. */
-.ie-value,
-.ie-input {
+/* ONE box in both states, so there is nothing to align.
+   These were two rules — a value and an editor — and the words inside them
+   were counterpart pairs the crossing had to pin together. It could not,
+   because the arriving copy animated its own font-size and so moved the box
+   the pin was computed from: mid-flight the name appeared twice, large and
+   small, sliding past each other. The box now persists and only its chrome
+   changes, which is also why the height can be fixed without a fight. */
+.ie-box {
+  position: relative;
   display: flex;
   box-sizing: border-box;
   height: 40px;
   align-items: center;
   gap: 0.34em;
   min-width: 0;
+  padding: 7px 0;
+  /* no chrome at all any more — the plate behind it draws every bit of that,
+     and a box that draws nothing is a box the crossing never has to move */
+  background: transparent;
   overflow: visible;
 }
 
-.ie-input {
-  padding: 7px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  background: var(--bg);
+/* the chrome is the only thing the mode switches, and it is a colour change
+   on a box that never moves — cheap, and it cannot disturb the type */
+.ie-card[data-mode='edit'] .ie-box {
+  padding: 7px 11px;
   cursor: text;
 }
 
-.ie-input:focus-visible {
+.ie-box:focus-visible {
   outline: 2px solid #ff7a28;
   outline-offset: 1px;
 }
 
 /* One rule for a word in either state. The SIZE and WEIGHT are deliberately
    absent — the modifier owns them, so they can be interpolated across the
-   re-parent rather than snapped by a class change. */
+   mode change rather than snapped by a class change. */
 .ie-word {
+  /* a word is one word: it may overflow its box for the length of a flight,
+     but it must never break in the middle of itself to fit */
+  white-space: nowrap;
   font-family: 'Archivo', var(--font), sans-serif;
   font-variation-settings: 'wdth' 88;
   color: var(--ink);
@@ -10904,13 +11011,28 @@ html[data-gm-dragging] * {
   line-height: 1.18;
 }
 
+/* THE READING POSE has variety: a large bold name over two quiet values. */
 .ie-card[data-mode='view'] .ie-field[data-field='name'] .ie-word {
+  font-size: 30px;
+  font-weight: 700;
   letter-spacing: -0.03em;
 }
 
 .ie-card[data-mode='view'] .ie-field[data-field='email'] .ie-word,
 .ie-card[data-mode='view'] .ie-field[data-field='dob'] .ie-word {
   color: var(--ink-dim);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* THE WRITING POSE has none: every field is the same 17px regular, because a
+   form is a place where all the values are the same kind of thing. Losing the
+   variety is the animation — one selector heavier than the rules above, and
+   after them, so it wins on both counts rather than by accident. */
+.ie-card[data-mode='edit'] .ie-field[data-field] .ie-word {
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .ie-toggle {

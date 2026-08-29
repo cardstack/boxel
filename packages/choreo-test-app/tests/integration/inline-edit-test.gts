@@ -22,7 +22,7 @@ const words = () =>
 /** every field's box, in CSS pixels — offsetHeight, because QUnit scales the
  *  test container and a rect would measure the harness */
 const boxes = () =>
-  [...document.querySelectorAll<HTMLElement>('.ie-value, .ie-input')].map(
+  [...document.querySelectorAll<HTMLElement>('.ie-box')].map(
     (el) => el.offsetHeight
   );
 
@@ -60,9 +60,9 @@ module('Integration | examples | inline edit', function (hooks) {
     await animationsSettled();
     assert.strictEqual(card().dataset['mode'], 'edit', 'now writing');
     assert.strictEqual(
-      document.querySelectorAll('[data-test-editor]').length,
+      document.querySelectorAll('[contenteditable="true"]').length,
       3,
-      'three editors'
+      'all three boxes became editable'
     );
     assert.strictEqual(
       document.querySelectorAll('.ie-label').length,
@@ -106,6 +106,25 @@ module('Integration | examples | inline edit', function (hooks) {
     assert.deepEqual(boxes(), rest, 'and after it settles');
   });
 
+  test('a word is one element in both states, never a pair to align', async function (assert) {
+    await mount();
+    const before = find('[data-test-field="name"] .ie-word') as HTMLElement;
+    await click('[data-test-toggle]');
+    await animationsSettled();
+    const after = find('[data-test-field="name"] .ie-word') as HTMLElement;
+    assert.strictEqual(
+      before,
+      after,
+      'the very same node — so there is no counterpart for the crossing to pin, ' +
+        'and no second copy to slide past the first'
+    );
+    assert.strictEqual(
+      document.querySelectorAll('[data-choreo-orphans] .ie-word').length,
+      0,
+      'and no word is ever orphaned'
+    );
+  });
+
   test('the card does not grow when the form arrives', async function (assert) {
     await mount();
     const reading = card().offsetHeight;
@@ -128,16 +147,22 @@ module('Integration | examples | inline edit', function (hooks) {
     await click('[data-test-toggle]');
     await animationsSettled();
 
-    const editor = find('[data-test-editor="name"]') as HTMLElement;
-    editor.textContent = 'Margarethe Villanueva-Okonkwo';
+    // Type the way a person does: change the text INSIDE a word, rather than
+    // replacing the box's children. `textContent = '...'` on the box removes
+    // every span Glimmer is holding and the next render throws `insertBefore`
+    // against nodes that are no longer there — a thing the test could do and
+    // a caret cannot.
+    const editor = find('[data-test-field="name"]') as HTMLElement;
+    const first = editor.querySelector('.ie-word') as HTMLElement;
+    first.textContent = 'Margarethe';
 
     await click('[data-test-toggle]');
     await animationsSettled();
 
-    const value = find('[data-test-value="name"]') as HTMLElement;
+    const value = find('[data-test-field="name"]') as HTMLElement;
     assert.strictEqual(
       value.textContent?.replace(/\s+/g, ' ').trim(),
-      'Margarethe Villanueva-Okonkwo',
+      'Margarethe Villanueva',
       'the commit reads the live node before the pass tears it down'
     );
     assert.strictEqual(
