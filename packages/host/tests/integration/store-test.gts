@@ -3153,9 +3153,80 @@ module('Integration | Store', function (hooks) {
       isCardInstance(storeService.peek(url)),
       'the card is still in the store — nothing was deleted',
     );
-    assert.true(
-      storeService.peekError(url)?.awaitingIndex,
-      'and it is reported as awaiting its row rather than as gone',
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'and it is left alone rather than covered by a placeholder',
+    );
+  });
+
+  test('a card already running in the store is never displaced by the awaiting-index placeholder', async function (assert) {
+    // A card created in this tab is live under its local id and editable long
+    // before the realm has indexed it. The realm reporting that it has not
+    // caught up says nothing about that instance, and must not put a
+    // placeholder in front of it or detach its autosave.
+    let instance = (await storeService.add(
+      new PersonDef({ name: 'Brand New' }),
+    )) as CardDefType;
+    let url = instance.id!;
+    assert.ok(url, 'the new card was assigned a remote id');
+
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    // The realm has the file but no row for it yet, so a read of this card
+    // comes back as the awaiting-index 404 while the instance stays live.
+    cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+      if (String(fetchUrl).includes(url)) {
+        let err = new Error('awaiting index') as any;
+        err.status = 404;
+        err.responseText = JSON.stringify({
+          errors: [
+            {
+              id: url,
+              status: 404,
+              title: 'Not Found',
+              message: `${url} has not finished indexing`,
+              isCardError: true,
+              awaitingIndex: true,
+              additionalErrors: null,
+            },
+          ],
+        });
+        throw err;
+      }
+      return originalFetchJSON(fetchUrl, args);
+    };
+
+    try {
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [url],
+        realmURL: testRealmURL,
+      });
+      await settled();
+    } finally {
+      delete cardService.fetchJSON;
+      messageService.relayRealmEvent = deliverRealmEvents;
+    }
+
+    assert.strictEqual(
+      storeService.peek(url),
+      instance,
+      'the running instance is still the one the store hands out',
+    );
+    assert.strictEqual(
+      storeService.peekError(url),
+      undefined,
+      'no placeholder stands in front of it',
+    );
+    assert.ok(
+      storeService.getSaveState(url),
+      'and it is still autosaving, so the user can keep editing',
     );
   });
 

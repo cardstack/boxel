@@ -2446,17 +2446,20 @@ export default class StoreService extends Service implements StoreInterface {
         maybeReloadedInstance = await this.reloadInstance(instance);
       } catch (err: any) {
         let cardError = processCardError(instance.id, err).errors[0];
-        if (err.status === 404 && !cardError?.awaitingIndex) {
+        if (cardError?.awaitingIndex) {
+          // The realm holds this card's source and has not indexed it yet.
+          // That is a statement about the index, not about the instance this
+          // tab is already running — so keep it exactly as it is, autosave and
+          // all, and let the index event that follows bring the fresh state.
+          // Treating it as a deletion would evict a card that still exists;
+          // recording it as an error would stand a placeholder in front of one
+          // the user is working in.
+          maybeReloadedInstance = instance;
+        } else if (err.status === 404) {
           // in this case the document was invalidated in the index because the
           // file was deleted
           isDelete = true;
         } else {
-          // Every other failure — including a 404 the realm marked as awaiting
-          // indexing — leaves the card in an error state rather than deleting
-          // it. That marker means the realm still holds the source, so
-          // treating it as a deletion would evict the instance and rewrite
-          // every consumer's link to a not-found sentinel over a row that is
-          // on its way back.
           maybeReloadedInstance = cardError;
         }
       }
@@ -2548,6 +2551,22 @@ export default class StoreService extends Service implements StoreInterface {
       ? instanceOrError
       : undefined;
     if (!instance && !instanceOrError.id) {
+      return;
+    }
+    // An awaiting-index error says the realm has not caught up with a card it
+    // holds. It is never a statement about a card this tab is already running:
+    // a newly created instance is live in the store under its local id, and
+    // editable there, long before the realm has indexed it. Recording the error
+    // would make `peekError` report it, and every render site reads that to
+    // decide whether to stand a placeholder in front of the card — so a card
+    // the user is working in would be replaced by one. `getCard` correlates a
+    // remote URL back to a locally-created instance, so this holds from the
+    // moment the server assigns an id.
+    if (
+      !instance &&
+      (instanceOrError as CardErrorJSONAPI).awaitingIndex &&
+      this.store.getCard(instanceOrError.id!)
+    ) {
       return;
     }
     this.store.addCardInstanceOrError(
@@ -2834,6 +2853,15 @@ export default class StoreService extends Service implements StoreInterface {
     } catch (error: any) {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
+      // A card this tab is already running outranks the realm's report that it
+      // has not indexed it yet — see `setIdentityContext`. A cache-bypassing
+      // read is the one that gets here with an instance already in hand.
+      let running =
+        cardError?.awaitingIndex && id ? this.store.getCard(id) : undefined;
+      if (running) {
+        deferred?.fulfill(running as T);
+        return running as T;
+      }
       deferred?.fulfill(cardError);
       this.setIdentityContext(cardError);
       let status = cardError?.status ?? error?.status;
