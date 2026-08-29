@@ -274,6 +274,8 @@ const STRETCH = 'semi-condensed';
  *   color     the ink tween
  *   shade     the form's shadow layer
  *   boxes     the card's and the platters' geometry moves
+ *   focus     the caret going into the first field when the form lands
+ *   controls  the real inputs and selects, replaced by plain text
  *   score     the WHOLE choreography — no crossing, no moves, no tweens.
  *             The card still swaps poses; it just snaps. If this is still
  *             slow then the animation is not what is slow, and the next
@@ -296,6 +298,8 @@ const STRETCH = 'semi-condensed';
  */
 const OFF_GROUPS: Record<string, string[]> = {
   all: [
+    'focus',
+    'controls',
     'clip',
     'radius',
     'size',
@@ -307,6 +311,8 @@ const OFF_GROUPS: Record<string, string[]> = {
   ],
   text: ['size', 'weight', 'tracking', 'color'],
 };
+
+const isOff = (name: string) => OFF.has(name);
 
 const OFF = new Set<string>(
   (typeof location === 'undefined'
@@ -779,6 +785,7 @@ export class InlineEdit extends Component {
 
   boxesMove = !OFF.has('boxes');
   scored = !OFF.has('score');
+  realControls = !OFF.has('controls');
 
   /** the form is lifted off the page; the reading card lies flat on it */
   get shade() {
@@ -847,7 +854,7 @@ export class InlineEdit extends Component {
         // sheet that opens for editing does. Not before — a focus ring on a
         // control whose text is hidden while the flight draws it is a ring
         // around nothing.
-        if (this.editing) {
+        if (this.editing && !OFF.has('focus')) {
           this.root?.querySelector<HTMLElement>('.ie-plate input')?.focus();
         }
       });
@@ -929,7 +936,9 @@ export class InlineEdit extends Component {
               {{motion id=(concat field.key "-plate") role="plate"}}
             >
               {{#if this.editing}}
-                {{#if field.date}}
+                {{#if (isOff "controls")}}
+                  <span class="ie-value">{{get this.record field.key}}</span>
+                {{else if field.date}}
                   <DateField
                     @id={{concat "ie-" field.key}}
                     @label={{field.label}}
