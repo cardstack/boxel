@@ -8,12 +8,12 @@ invite/hot states) so the prototype reads as a sibling of the real app.
 
 ## The cast
 
-| plane | document | job |
-| ----- | -------- | --- |
-| 1 | `?role=app` | inert app chrome, its own process and rAF clock |
-| 2 | `?role=panel&name=a` | **Panel A** — three bays, cards drag out and adopt in |
-| 3 | `?role=panel&name=b` | **Panel B** — its twin; drops travel both ways |
-| 4 | `?role=overlay` | the carried card and nothing else; `pointer-events: none` |
+| plane | document             | job                                                       |
+| ----- | -------------------- | --------------------------------------------------------- |
+| 1     | `?role=app`          | inert app chrome, its own process and rAF clock           |
+| 2     | `?role=panel&name=a` | **Panel A** — three bays, cards drag out and adopt in     |
+| 3     | `?role=panel&name=b` | **Panel B** — its twin; drops travel both ways            |
+| 4     | `?role=overlay`      | the carried card and nothing else; `pointer-events: none` |
 
 Files: host `test-app/app/components/plane-host.gts`; child (all four
 roles) `test-app/public/planes/plane.html`; probe

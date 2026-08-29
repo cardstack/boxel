@@ -9232,7 +9232,11 @@ html[data-gm-dragging] * {
   border-radius: 999px;
   padding: 6px 16px;
   color: #8b93a7;
-  font: 600 12px/1.2 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  font:
+    600 12px/1.2 'Avenir Next',
+    'Segoe UI',
+    system-ui,
+    sans-serif;
   pointer-events: none;
 }
 

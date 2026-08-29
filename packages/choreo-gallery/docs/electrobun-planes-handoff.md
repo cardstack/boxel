@@ -116,7 +116,7 @@ relative positions across takes.
 - **No PRs** — commit on a branch and push; Chris merges. Never
   `git add -A`; stage named files. Commit style: narrative-sentence
   title + prose body + `Co-Authored-By: Claude Fable 5
-  <noreply@anthropic.com>`.
+<noreply@anthropic.com>`.
 - Red-first tests where the harness allows; probes where it doesn't.
 - Features must be equally valuable in live interactive apps — no
   recorder-only or demo-only hacks.
