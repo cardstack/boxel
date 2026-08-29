@@ -7711,7 +7711,14 @@ html[data-gm-dragging] * {
  * below, which are less specific and would otherwise lose. */
 @container (min-width: 430px) {
   .stage-wrap .rk-fit-box {
-    --k: 1.5;
+    /* Room is not a reason to be bigger.
+     *
+     * At 1.5 the control simply grew until it hit the walls, which makes a
+     * 22px tile into a 33px one and reads as a zoom rather than as a demo
+     * with space around it. A modest step up and the rest spent on margin is
+     * the better trade: the tiles stay the size they were designed at, and
+     * the thing gets room to sit in. */
+    --k: 1.18;
   }
 }
 
@@ -7756,6 +7763,14 @@ html[data-gm-dragging] * {
   .rk-fit-box {
     --k: 0.7;
   }
+}
+
+/* Whatever is left over after the control has taken its size becomes margin,
+   evenly, rather than being absorbed by making everything larger. */
+.ex:has(.rk-fit-box) {
+  display: grid;
+  place-items: center;
+  padding-block: 16px;
 }
 
 /* One control, scaled as a whole.
