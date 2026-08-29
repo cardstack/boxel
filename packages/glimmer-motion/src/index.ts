@@ -14,6 +14,8 @@ export type { Changeset } from './choreo/changeset.ts';
 export { easeIn, easeInAndOut, easeOut } from './choreo/easings.ts';
 export type { GestureRef } from './choreo/gesture.ts';
 export type { ChoreoRun } from './choreo/run.ts';
+export type { PlanePoint } from './choreo/space.ts';
+export { appliedCamera, toLocal, toPage } from './choreo/space.ts';
 export type { StepArgs, StepArgsBase } from './choreo/steps.gts';
 export { StepComponent, toMs } from './choreo/steps.gts';
 export type {
@@ -26,6 +28,7 @@ export type {
   Easing,
   FollowSource,
   GateNode,
+  PerformCommand,
   PropSource,
   PropValue,
   Query,

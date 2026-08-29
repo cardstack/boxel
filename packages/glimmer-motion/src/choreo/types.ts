@@ -287,6 +287,30 @@ export interface WaitStep extends SubjectlessBase {
   kind: 'wait';
   ms: number;
 }
+
+/**
+ * A semantic command on the timeline (§C4): dispatched once as playback
+ * crosses its time, included by a seek that lands past it, excluded — via
+ * reset-and-replay — by a seek that lands before it. A command is an
+ * idempotent statement of state (`lightbox.open`), never a time-sensitive
+ * toggle: the fold re-derives the commanded state from the clock, so a
+ * command may be dispatched again whenever the state is re-derived.
+ */
+export interface PerformStep extends SubjectlessBase {
+  action: string;
+  kind: 'perform';
+  payload?: unknown;
+  target?: string;
+}
+
+/** a `c.Perform` command as the run hands it to the host's dispatcher */
+export interface PerformCommand {
+  action: string;
+  payload?: unknown;
+  target?: string;
+  /** the command's place on the run's clock, seconds at 1× */
+  time: number;
+}
 /** scroll the sprite's container so the sprite lands at @align (§6.1) */
 export interface ScrollStep extends StepBase {
   align?: 'center' | 'end' | 'start';
@@ -313,7 +337,6 @@ export interface RaiseStep extends StepBase {
  * size (damped by default — the relative-scale research's curves, §6.4).
  */
 export interface CameraStep extends StepBase {
-  ease?: Easing;
   /**
    * Dive on this sprite and centre it: the library computes zoom AND pan
    * from the sprite's rest-layout box and the frame's own size — the same
@@ -322,6 +345,9 @@ export interface CameraStep extends StepBase {
    * says "fit nothing": back to the resting identity. `@zoom` alongside
    * overrides the computed magnification but keeps the centring.
    */
+  /** recentre on this sprite, zoom held — the Aim preset's field */
+  aim?: Query;
+  ease?: Easing;
   fit?: Query | null;
   kind: 'camera';
   /**
@@ -332,12 +358,16 @@ export interface CameraStep extends StepBase {
   ms?: number;
   /** aim the zoom at this sprite's centre — held in place, not recentred */
   origin?: Query;
+  /** shift the pose in force by this many px — the Pan preset's field */
+  panBy?: { x?: number; y?: number };
   spring?: SpringSpec;
   /** sprites that hold their size against the zoom, damped */
   steady?: Query | Query[];
   x?: number;
   y?: number;
   zoom?: number;
+  /** multiply the zoom in force by this factor — the SlowZoom preset */
+  zoomBy?: number;
 }
 
 /**
@@ -423,6 +453,7 @@ export type Step =
   | FollowStep
   | HoldStep
   | MoveStep
+  | PerformStep
   | RaiseStep
   | ScrollStep
   | SpringStep
@@ -510,6 +541,8 @@ export interface Cue {
   borrow?: boolean;
   /** camera: drive the region's frame */
   camera?: {
+    /** relative move: resolved against the pose in force at cue start */
+    by?: { x?: number; y?: number; zoom?: number };
     /** the frame's centre in the same final layout `origin` was measured in */
     centre?: { x: number; y: number };
     origin?: { x: number; y: number };
@@ -535,6 +568,8 @@ export interface Cue {
   kind: Step['kind'];
   /** an infinite-repeat tween: plays past the run's end, excluded from its length */
   loop?: boolean;
+  /** perform: the semantic command the fold dispatches at this cue's time */
+  perform?: { action: string; payload?: unknown; target?: string };
   /** raise: promote to the elevated layer for the window */
   raise?: { shadow: boolean };
   /** scroll: animate the sprite's scroll container to this alignment */

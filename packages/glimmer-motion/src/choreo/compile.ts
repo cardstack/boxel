@@ -846,7 +846,8 @@ function resolveStep(
         // fit mode is DECLARED, not inferred: `fit: null` (fit nothing)
         // still means the step owns the whole pose and returns it to rest
         const fitting = step.fit !== undefined;
-        const aimQuery = fitting ? step.fit : step.origin;
+        const aiming = step.aim !== undefined;
+        const aimQuery = fitting ? step.fit : (step.aim ?? step.origin);
         const originSprite = aimQuery ? cs.sprite(aimQuery) : null;
         const box =
           originSprite?.final?.context ?? originSprite?.initial?.context;
@@ -861,6 +862,24 @@ function resolveStep(
             }
           : undefined;
         let to = { x: step.x, y: step.y, zoom: step.zoom };
+        // relative direction (Pan / SlowZoom): nothing absolute compiles —
+        // the run resolves the target against the pose in force at start
+        const by =
+          step.panBy || step.zoomBy !== undefined
+            ? { x: step.panBy?.x, y: step.panBy?.y, zoom: step.zoomBy }
+            : undefined;
+        if (aiming && !fitting) {
+          // Aim: the fit centring WITHOUT the fit zoom — x/y land the
+          // target on the frame's centre, zoom stays whatever it was
+          to =
+            box && origin && cs.frame
+              ? {
+                  x: cs.frame.width / 2 - origin.x,
+                  y: cs.frame.height / 2 - origin.y,
+                  zoom: undefined,
+                }
+              : { x: 0, y: 0, zoom: 1 };
+        }
         if (fitting) {
           if (box && origin && cs.frame) {
             // Fit-and-centre, from the same rest-layout measurement FLIP
@@ -888,6 +907,7 @@ function resolveStep(
         }
         cues.push({
           camera: {
+            by,
             // centre and origin from the SAME final layout: the aim term
             // (origin − centre) is frozen numbers the run lerps — a board
             // that reflows mid-cue cannot move the camera
@@ -1024,6 +1044,20 @@ function resolveStep(
       case 'wait':
         cues.push({ duration: step.ms, kind: 'wait', offset, sprite });
         longest = Math.max(longest, offset + step.ms);
+        break;
+      case 'perform':
+        cues.push({
+          duration: 0,
+          kind: 'perform',
+          offset,
+          perform: {
+            action: step.action,
+            payload: step.payload,
+            target: step.target,
+          },
+          sprite,
+        });
+        longest = Math.max(longest, offset);
         break;
     }
   }

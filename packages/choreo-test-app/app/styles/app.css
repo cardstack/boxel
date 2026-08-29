@@ -2659,6 +2659,32 @@ html[data-gm-dragging] * {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  /* the demos inside each scene animate continuously; containment keeps
+     their layout and paint invalidations from re-pricing the whole
+     camera'd world layer every frame (the Safari half of the live gap) */
+  contain: layout style paint;
+}
+
+/* Glass under a moving camera is repriced every frame — a
+   backdrop-filter can never be cached, and Safari re-samples and
+   re-blurs the scene behind the lightbox panels on every frame of
+   camera motion (the orphan lesson, § app.css line ~9079, applied to
+   the live world). The panels sit over their own dim wash, so a plain
+   translucent ground reads the same at speed; the interactive gallery
+   keeps its true glass. */
+.reel-world .backdrop,
+.reel-world .lightbox-body,
+.reel-world .lightbox-close,
+.reel-world .stage-arrow,
+.reel-world .replay {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.reel-world .lightbox-body {
+  /* the blur carried most of the panel's legibility; without it the
+     wash is a touch deeper, same hue, photo tint still showing through */
+  background: rgba(12, 9, 8, 0.62);
 }
 
 .reel-lightbox {
@@ -3133,6 +3159,84 @@ html[data-gm-dragging] * {
   top: 20%;
   width: 37%;
   height: 58%;
+}
+
+/* ── The title plane ─────────────────────────────────────────────────────
+   Its own Choreo region, a sibling of the camera'd world: viewport-
+   anchored on purpose, so the demo camera can dive without dragging the
+   typography with it. Ported from videos/choreo-feature-reel. */
+.reel-titles {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.reel-lower-third {
+  position: absolute;
+  top: 8.5%;
+  left: 4.2%;
+  width: min(680px, 48%);
+  color: #f3ece3;
+  pointer-events: none;
+  text-shadow: 0 2px 14px rgba(12, 9, 8, 0.5);
+  /* the rest pose is the stylesheet's: a lower third rests invisible and
+     slightly low; only the plane's score brings it up */
+  opacity: 0;
+  transform: translateY(14px);
+}
+
+.reel-lower-third__rule {
+  display: block;
+  width: 64px;
+  height: 2px;
+  margin-bottom: 16px;
+  background: #ff3b1f;
+  transform-origin: left center;
+}
+
+.reel-lower-third__label,
+.reel-lower-third__title,
+.reel-lower-third__detail {
+  margin: 0;
+}
+
+.reel-lower-third__label {
+  font:
+    500 20px/1.1 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.reel-lower-third__title {
+  max-width: 12ch;
+  margin-top: 12px;
+  font:
+    700 58px/0.96 'Syne',
+    sans-serif;
+  letter-spacing: -0.035em;
+}
+
+.reel-lower-third__detail {
+  margin-top: 10px;
+  color: #d2c9bf;
+  font:
+    400 26px/1.3 'IBM Plex Sans',
+    sans-serif;
+}
+
+.reel-lower-third[data-variant='eyebrow'] {
+  width: auto;
+}
+
+.reel-lower-third[data-variant='eyebrow'] .reel-lower-third__rule {
+  width: 42px;
+}
+
+.reel-lower-third[data-variant='proof'] {
+  top: auto;
+  bottom: 19%;
 }
 
 /* four columns on a roomy glass — a library, not a contact strip.
@@ -8931,4 +9035,131 @@ html[data-gm-dragging] * {
 .esc-note b {
   font-weight: 500;
   color: var(--ink);
+}
+
+/* ── The poster cut ──────────────────────────────────────────────────────
+   A full-frame plate the poster clip mounts for the film's first beat;
+   its removal at 0.45s IS the hard cut — no transition, by definition. */
+.reel-poster {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  background: #090b10;
+  color: #f3ece3;
+}
+
+.reel-poster-rule {
+  width: 84px;
+  height: 3px;
+  background: #ff3b1f;
+  margin-bottom: 26px;
+}
+
+.reel-poster-word {
+  margin: 0;
+  font:
+    800 clamp(64px, 9vw, 168px) / 0.92 'Syne',
+    sans-serif;
+  letter-spacing: -0.04em;
+}
+
+.reel-poster-tag {
+  margin: 18px 0 0;
+  color: #d2c9bf;
+  font:
+    500 22px/1.2 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* ── The brand plane ─────────────────────────────────────────────────────
+   Poster and corner chip share one identity; the flight between them is
+   the brand region's own score. The chip rests where the crossing lands. */
+.reel-brand {
+  position: absolute;
+  inset: 0;
+  z-index: 16;
+  pointer-events: none;
+}
+
+.reel-brand-chip {
+  position: absolute;
+  top: 4.5%;
+  right: 4.2%;
+}
+
+.reel-brand-mark {
+  display: inline-block;
+  color: #f3ece3;
+  opacity: 0.85;
+  font:
+    800 26px/1 'Syne',
+    sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ── The plane family and the clock plane ────────────────────────────────
+   Every overlay is a named plane: its own Choreo region, its own camera.
+   The clock is the debug member — an SMPTE readout whose plane camera
+   pulses in during scene transitions, independent of the world's dive. */
+.reel-plane {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.reel-clock {
+  z-index: 18;
+}
+
+.reel-clock-face {
+  position: absolute;
+  bottom: 3.4%;
+  left: 50%;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border: 1px solid rgba(243, 236, 227, 0.28);
+  border-radius: 4px;
+  background: rgba(9, 11, 16, 0.72);
+  color: #f3ece3;
+  transform: translateX(-50%);
+}
+
+.reel-clock-label {
+  color: #ff3b1f;
+  font:
+    500 12px/1 'IBM Plex Mono',
+    monospace;
+  letter-spacing: 0.18em;
+}
+
+.reel-clock-tc {
+  font:
+    500 20px/1 'IBM Plex Mono',
+    monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+/* the docked mark: the chip's homecoming — a cross-plane arrival into the
+   clock plane, perched above the timecode for the lockup. Centred by
+   margin, NOT transform: the mark is a flight target, and a stylesheet
+   transform on a participant is clobbered by the flight — rest measured
+   WITH it, flown WITHOUT it, landing beside itself. */
+.reel-world .reel-dock-mark {
+  position: absolute;
+  top: 63.9%;
+  left: 36.9%;
+  z-index: 4;
+  color: rgb(243 236 227 / 85%);
+  font:
+    800 17px/1 'Syne',
+    sans-serif;
+  letter-spacing: -0.02em;
 }

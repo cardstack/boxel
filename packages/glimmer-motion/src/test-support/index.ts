@@ -252,6 +252,11 @@ export function strandedTransforms(root: HTMLElement = testRoot()): string[] {
       if (!t || t === 'none' || IDENTITY.test(t)) {
         return false;
       }
+      // a region root's transform is its camera, and a directed plane
+      // RESTS transformed — a held zoom is a pose, not a leak
+      if (el.hasAttribute('data-choreo')) {
+        return false;
+      }
       return !isFollower(el);
     })
     .map(

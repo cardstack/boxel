@@ -352,6 +352,33 @@ export class Wait extends StepComponent<
 }
 
 /**
+ * `<c.Perform />` — a semantic command on the timeline (§C4). It occupies
+ * an instant, positioned like any step (sequence order, `@at`, `@delay`),
+ * and carries `@action` (required), `@target` and `@payload` to the
+ * region's dispatcher (`<Choreo @onPerform>`). The fold's law: forward
+ * playback dispatches it once as the clock crosses it; a seek past it
+ * includes it; a seek before it resets the host and replays the remaining
+ * prefix. Commands are idempotent statements of state — `lightbox.open`,
+ * never `lightbox.toggle`.
+ */
+export class Perform extends StepComponent<
+  StepArgsBase & { action: string; payload?: unknown; target?: string }
+> {
+  node(): TimelineNode {
+    const { action, delay, payload, target } = this.args;
+    return {
+      action,
+      at: this.args.at,
+      delay: msOf(delay),
+      kind: 'perform',
+      name: this.args.name,
+      payload,
+      target,
+    };
+  }
+}
+
+/**
  * `<c.Scroll />` — animate the sprite's scroll container so the sprite lands
  * at `@align`; occupies the sequence like any step (§6.1).
  */
@@ -440,6 +467,140 @@ export class Camera extends StepComponent<
       x,
       y,
       zoom,
+    };
+  }
+}
+
+/* ---- the direction vocabulary (docs/choreo-composition.md C5) ----
+   Presets expand into the SAME seekable camera cue — sugar, never a new
+   runtime primitive. Frame and Aim are absolute (computed from measured
+   geometry at compile); Pan and SlowZoom are RELATIVE, resolved against
+   the pose in force when the cue starts, so they compose with whatever
+   shot preceded them and reconstruct under random access like any cue. */
+
+/**
+ * `<c.Frame @of={{c.id 'hero'}} @padding={{0.8}} />` — fit-and-centre the
+ * target: the fit camera under its editorial name. `@padding` is the
+ * share of the frame the target fills on whichever axis fits first.
+ */
+export class Frame extends StepComponent<
+  StepArgsBase & {
+    duration?: number;
+    ease?: Easing;
+    of: Query | null;
+    padding?: number;
+    spring?: SpringSpec;
+    steady?: Query | Query[];
+  }
+> {
+  node(): TimelineNode {
+    const { duration, ease, delay, of, padding, spring, steady } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      ease,
+      fit: of,
+      kind: 'camera',
+      margin: padding,
+      ms: msOf(duration),
+      name: this.args.name,
+      of: {},
+      spring,
+      steady,
+    };
+  }
+}
+
+/**
+ * `<c.Aim @of={{c.id 'hero'}} />` — recentre the picture on the target
+ * with the zoom HELD: the reframe that does not change magnification.
+ */
+export class Aim extends StepComponent<
+  StepArgsBase & {
+    duration?: number;
+    ease?: Easing;
+    of: Query;
+    spring?: SpringSpec;
+    steady?: Query | Query[];
+  }
+> {
+  node(): TimelineNode {
+    const { duration, ease, delay, of, spring, steady } = this.args;
+    return {
+      aim: of,
+      at: this.args.at,
+      delay: msOf(delay),
+      ease,
+      kind: 'camera',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: {},
+      spring,
+      steady,
+    };
+  }
+}
+
+/**
+ * `<c.Pan @x={{40}} @y={{-20}} />` — shift the picture by exactly this
+ * many pixels from wherever it stands. Relative on purpose: a pan after
+ * any shot means "from here", not "to there".
+ */
+export class Pan extends StepComponent<
+  StepArgsBase & {
+    duration?: number;
+    ease?: Easing;
+    spring?: SpringSpec;
+    steady?: Query | Query[];
+    x?: number;
+    y?: number;
+  }
+> {
+  node(): TimelineNode {
+    const { duration, ease, delay, spring, steady, x, y } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      ease,
+      kind: 'camera',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: {},
+      panBy: { x, y },
+      spring,
+      steady,
+    };
+  }
+}
+
+/**
+ * `<c.SlowZoom @by={{1.05}} @duration={{2}} />` — multiply the zoom in
+ * force: the push-in (or, below 1, the pull-back) that gives a hold its
+ * life. The aim in force is kept, so it pushes toward what the previous
+ * shot was looking at.
+ */
+export class SlowZoom extends StepComponent<
+  StepArgsBase & {
+    by: number;
+    duration?: number;
+    ease?: Easing;
+    spring?: SpringSpec;
+    steady?: Query | Query[];
+  }
+> {
+  node(): TimelineNode {
+    const { by, duration, ease, delay, spring, steady } = this.args;
+    return {
+      at: this.args.at,
+      delay: msOf(delay),
+      ease,
+      kind: 'camera',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: {},
+      spring,
+      steady,
+      zoomBy: by,
     };
   }
 }
