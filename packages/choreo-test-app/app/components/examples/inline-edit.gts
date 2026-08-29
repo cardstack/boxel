@@ -681,6 +681,22 @@ export class InlineEdit extends Component {
    */
   private moving = false;
 
+  /**
+   * The real controls are DISPLAYED only once the flight has landed.
+   *
+   * They used to be painted throughout it, with their text transparent so
+   * the flight could draw it — which meant five native form controls sitting
+   * inside four boxes whose geometry animated every frame, and WebKit
+   * re-renders a native control when its box changes. Measured by removing
+   * them: the pass goes from a hitch in its last stretch to smooth.
+   *
+   * `display: none` rather than unmounting, and driven by an ATTRIBUTE
+   * rather than by tracked state. Unmounting them is a render inside the
+   * region, and a render inside the region is a pass — mounting them at the
+   * settle kicked off a second crossing, which was a worse flicker than the
+   * one it fixed, in every browser. Two attribute writes a frame apart do
+   * the same job and the region never hears about it.
+   */
   private tween =
     <T,>(view: T, edit: T, off?: string) =>
     () => {
@@ -845,18 +861,24 @@ export class InlineEdit extends Component {
   toggle = () => {
     this.moving = true;
     this.root?.setAttribute('data-flying', 'true');
+    this.root?.removeAttribute('data-landed');
     if (this.region) {
       this.arming.begin(this.region);
       void this.arming.settled().then(() => {
         this.moving = false;
-        this.root?.removeAttribute('data-flying');
-        // the form has landed: put the caret in the first field, the way a
-        // sheet that opens for editing does. Not before — a focus ring on a
-        // control whose text is hidden while the flight draws it is a ring
-        // around nothing.
-        if (this.editing && !OFF.has('focus')) {
-          this.root?.querySelector<HTMLElement>('.ie-plate input')?.focus();
-        }
+        // The controls take their layout now, still with transparent text
+        // and the flight still drawing the value. A frame later they are
+        // laid out and painted, and the handover is a colour and a
+        // visibility in one paint with no layout in it — do both in the same
+        // breath and there is a frame with the real text not yet laid out
+        // and the flight text already gone, which is the flicker.
+        this.root?.setAttribute('data-landed', 'true');
+        requestAnimationFrame(() => {
+          this.root?.removeAttribute('data-flying');
+          if (this.editing && !OFF.has('focus')) {
+            this.root?.querySelector<HTMLElement>('.ie-plate input')?.focus();
+          }
+        });
       });
     }
     this.editing = !this.editing;

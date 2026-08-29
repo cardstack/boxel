@@ -343,6 +343,17 @@ const InlineEditNotes: TOC<object> = <template>
           letter after it drifting.
         </p>
         <p>
+          <b>The engine may not measure the way it renders.</b>
+          The four above are things the author gets wrong. This one is not:
+          Blink honours `font-stretch` in the canvas font shorthand — 311px
+          becomes 280px for the same string — and WebKit has historically
+          ignored it, so the same plan was right in Chrome and wrong in Safari,
+          first word landing and every word after it drifting. Rather than
+          encode which engine honours what, one sample string is measured BOTH
+          ways once per face and every width scaled by the ratio between them.
+          Where they already agree the ratio is 1.
+        </p>
+        <p>
           <b>The line box has to match.</b>
           Centring a
           <code>line-height: 1.18</code>
@@ -356,7 +367,7 @@ const InlineEditNotes: TOC<object> = <template>
     </section>
 
     <section class="dd">
-      <h3>A variable font, and a hypothesis that did not survive</h3>
+      <h3>A variable font, and two hypotheses that did not survive</h3>
       <div class="dd-col">
         <p>
           A variable font is what makes a weight change animatable at all: with
@@ -366,38 +377,94 @@ const InlineEditNotes: TOC<object> = <template>
           as unitless in the library is what lets it interpolate as a number.
         </p>
         <p>
-          It is also expensive, at least in theory. Every distinct weight is a
-          fresh glyph raster, and engines differ in how they cache that — so
-          when this demo turned out to be markedly slower in Safari than in
-          Chrome, the weight tween was the obvious suspect. A dozen words each
-          interpolating weight for half a second is a dozen text runs
-          re-rendered sixty times a second.
+          It is also expensive in theory — every distinct weight is a fresh
+          glyph raster — so when this demo turned out markedly slower in Safari,
+          the weight tween was the obvious suspect. Disabling it made no
+          measurable difference, and the branch came out rather than stay on the
+          strength of a plausible story. It had cost a user-agent sniff, a
+          doubled DOM and two extra steps.
         </p>
         <p>
-          <b>It was not the cause.</b>
-          Disabling the weight tween in Safari — snapping it, and crossfading
-          two constant-weight copies so the change still read — made no
-          measurable difference, and the branch was removed rather than kept on
-          the strength of a plausible story. It cost a user-agent sniff, a
-          doubled DOM and two extra steps, for nothing.
-        </p>
-        <p>
-          Which leaves the real cause unfound, and the remaining suspects worth
-          writing down for whoever looks next. A rounded
+          The second wrong guess was the rounded
           <code>overflow: hidden</code>
-          clip on four platters that resize every frame is a known WebKit
-          hotspot. So is repainting a rounded, filled box while its geometry
-          animates — which is what the card and every platter are doing. And the
-          weight was only one of four text properties in flight: size, tracking
-          and colour all re-shape or re-paint the run too, and
-          <code>font-size</code>
-          is the one that re-shapes every glyph.
+          clip on four resizing platters — another good story, another no
+          difference. What both had in common is that they were guesses about an
+          ANIMATED property, and the bisect switch built to test them could only
+          ever have found an animated property. It was structurally incapable of
+          finding the real cause.
+        </p>
+      </div>
+    </section>
+
+    <section class="dd">
+      <h3>What was actually slow: a form control inside a moving box</h3>
+      <div class="dd-col">
+        <p>
+          The flag that found it was the one that turned the whole feature off.
+          With
+          <code>?off=score</code>
+          — no crossing, no moves, no tweens — the delay was still there, and it
+          was FOUR SECONDS: the text sat still and then snapped to its final
+          position in one frame. That is not a slow animation, it is a blocked
+          main thread with the animation's whole duration elapsing behind it.
         </p>
         <p>
-          The lesson is the ordinary one and it is worth stating plainly: a
-          performance hypothesis you cannot measure is a guess, and shipping a
-          guess costs complexity whether or not it was right. Bisect by
-          disabling one suspect at a time in the browser that is slow.
+          Two separate costs, both belonging to the design system's controls
+          rather than to any animation.
+        </p>
+        <p>
+          <b>Building a closed list is not free.</b>
+          Day, month and year is 31 + 12 + 83 options — a hundred and twenty-six
+          elements, built every time the form opened. Blink does that in about
+          fifty milliseconds, measured; WebKit builds a native menu structure
+          per select and is an order of magnitude slower. A select now holds
+          exactly one option, the one it is showing, until `pointerdown` or
+          `focus` says it is about to be used.
+        </p>
+        <p>
+          <b>A native control inside an animating box is re-rendered.</b>
+          Five of them sat in four platters whose geometry changed every frame.
+          They were already invisible — their text transparent so the flight
+          could draw it — but invisible is not absent: they were still being
+          laid out and painted sixty times a second. They are
+          <code>display: none</code>
+          for the length of the pass now, which costs nothing.
+        </p>
+      </div>
+    </section>
+
+    <section class="dd">
+      <h3>Handing over without a flicker, in two attribute writes</h3>
+      <div class="dd-col">
+        <p>
+          Taking the controls out of the flight creates a new problem at the end
+          of it: something has to put them back, and whatever does that lands in
+          the same frame as the handover.
+        </p>
+        <p>
+          The first attempt unmounted them and re-mounted them at the settle,
+          which is a render INSIDE the region — and a render inside the region
+          is a pass. Mounting the form kicked off a second crossing, which
+          flickered in every browser, worse than the thing it fixed. That is the
+          same trap as the tracked arming flag, arrived at from a different
+          direction:
+          <b>anything that reaches the region's reactivity during a settle will
+            start another pass.</b>
+        </p>
+        <p>
+          So the controls never leave the DOM. Two imperative attribute writes,
+          a frame apart, do the whole handover and the region never hears about
+          either:
+        </p>
+        <p>
+          <b>At the settle</b>, `data-landed` gives the controls their layout —
+          still with transparent text, with the flight still drawing the value.
+          <b>One frame later</b>, `data-flying` comes off: the words hide and
+          the controls ink, in a single paint with no layout in it. Do both in
+          one breath instead and there is a frame where the real text is not yet
+          laid out and the flight text is already gone, which is exactly what a
+          flicker is. Measured across the pass: zero frames with no text on
+          screen, and one state change per frame.
         </p>
       </div>
     </section>
@@ -560,6 +627,14 @@ const InlineEditNotes: TOC<object> = <template>
         </p>
         <p>
           <b>6.</b>
+          When something is slow, turn the whole subsystem OFF before suspecting
+          anything inside it. Two careful guesses about animated properties cost
+          hours here and were both wrong; the flag that disabled the entire
+          choreography answered it in one click, and the answer was that the
+          animation was never involved.
+        </p>
+        <p>
+          <b>7.</b>
           Only then choose durations. Everything on one clock unless a
           constraint says otherwise; the one exception here is the leave fade,
           which has to close before the departing copy and the flight have moved
