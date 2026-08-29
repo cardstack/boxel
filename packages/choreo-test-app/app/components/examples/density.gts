@@ -172,9 +172,7 @@ const bagful = [...alphabet, ...BLANKS];
 const isBlank = (ch: string) => ch.startsWith('blank');
 const topFreq = Math.max(...Object.values(FREQ));
 for (const b of BLANKS) {
-  // a blank is worth nothing, and there is no zero column: it rides with the
-  // ones, where a player actually keeps it
-  POINTS[b] = 1;
+  POINTS[b] = 0;
   BAG[b] = 2;
 }
 /**
@@ -185,9 +183,11 @@ for (const b of BLANKS) {
  * from 1 to 2, and hides that there is no letter you hold six of. An ordinal
  * axis with empty columns says the true shape, and the gaps are part of it.
  */
-const range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
-const values = range(Math.max(...Object.values(POINTS)));
-const counts = range(Math.max(...Object.values(BAG)));
+const range = (lo: number, hi: number) =>
+  Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+/** points start at ZERO, because the blanks are worth nothing and are real */
+const values = range(0, Math.max(...Object.values(POINTS)));
+const counts = range(1, Math.max(...Object.values(BAG)));
 
 const cell = (n: number, x0: number, y0: number) => ({
   x: x0 + (n % COLS) * STEP,
@@ -312,15 +312,17 @@ for (const value of values) {
   });
 
   for (const ch of members) {
-    if (isBlank(ch)) {
-      // no letter, no frequency, no place on this chart — it fades instead
-      plotted.set(ch, stacked.get(ch)!);
-      continue;
-    }
-    const y0 =
-      PLOT.top +
-      Math.sqrt(FREQ[ch]! / topFreq) * (PLOT.bottom - PLOT.top) -
-      TILE / 2;
+    // A BLANK IS THE OUTLIER, not an omission.
+    //
+    // It has no letter, so it has no letter frequency — but it can stand for
+    // any letter, which means it plays as often as the commonest one does.
+    // Worth nothing and worth everything: zero points, and as useful as E.
+    // Dropping it off the chart would have been the tidier lie.
+    const y0 = isBlank(ch)
+      ? PLOT.top + (PLOT.bottom - PLOT.top) - TILE / 2
+      : PLOT.top +
+        Math.sqrt(FREQ[ch]! / topFreq) * (PLOT.bottom - PLOT.top) -
+        TILE / 2;
     // Widen the search until something is clear.
     //
     // Sideways first and as far as a whole tile, because height is the
@@ -381,6 +383,27 @@ const seats = new Map(letters.map((l) => [l.key, l.seats]));
 
 const clamp = (v: number, lo: number, hi: number) =>
   v < lo ? lo : v > hi ? hi : v;
+
+/**
+ * A detent under the finger: the playhead is drawn toward whichever stop it
+ * is nearest, hardest when it is nearly there.
+ *
+ * Not a snap — the drag stays continuous and every value in between is still
+ * reachable — but a stop becomes slightly sticky, so letting go anywhere near
+ * one leaves the arrangement dead centre rather than a few percent past it. A
+ * rack with notches in it should feel like it has notches in it.
+ */
+const detent = (p: number) => {
+  const near = Math.round(p);
+  const off = p - near;
+  // pull only inside a quarter of a stop, and taper to nothing at the edge
+  const reach = 0.25;
+  if (Math.abs(off) >= reach) {
+    return p;
+  }
+  const pull = 1 - Math.abs(off) / reach;
+  return p - off * pull * 0.55;
+};
 
 /** easeInOutQuint — still, then quick, then a long settle */
 const quint = (t: number) =>
@@ -537,7 +560,7 @@ export class Density extends Component {
     if (!this.dragging) {
       return;
     }
-    const next = this.at(event.clientX);
+    const next = detent(this.at(event.clientX));
     this.v = (next - this.p) * 60;
     this.p = next;
     this.draw();
@@ -655,6 +678,11 @@ export class Density extends Component {
 
   railed = modifier((el: HTMLElement) => {
     this.rail = el;
+    // the first stop is where the playhead already is, so it has to read as
+    // selected before anyone touches anything — `paint` only writes the class
+    // on a change, and until the rack exists there is nothing to write to
+    this.lit = -1;
+    this.paint();
     return () => {
       this.rail = undefined;
     };
@@ -703,8 +731,6 @@ export class Density extends Component {
    *
    *                        A–Z  Vowels  Bag  Points  Plot
    */
-  /** the blanks belong everywhere but the chart, where they have no height */
-  fadeBlank = [1, 1, 1, 1, 0];
   fadeVowels = [0, 1, 0, 0, 0];
   fadeBag = [0, 0, 1, 0, 0];
   fadePoints = [0, 0, 0, 1, 1];
@@ -806,12 +832,6 @@ export class Density extends Component {
               @of={{array (c.role "tile") (c.role "blank")}}
               @x={{this.xs}}
               @y={{this.ys}}
-              @duration={{SPAN}}
-              @ease={{LINEAR}}
-            />
-            <c.Tween
-              @of={{c.role "blank"}}
-              @opacity={{this.fadeBlank}}
               @duration={{SPAN}}
               @ease={{LINEAR}}
             />
