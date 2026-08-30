@@ -6,6 +6,7 @@
  * @types/three pull is Rapier and friends we do not want.
  */
 declare module 'three' {
+  export const ACESFilmicToneMapping: number;
   export const AdditiveBlending: number;
   export const CustomBlending: number;
   export const EquirectangularReflectionMapping: number;
@@ -66,6 +67,7 @@ declare module 'three' {
 
   // ── the mockup spike's slice of three (still hand-written: see above) ──
 
+  export const ACESFilmicToneMapping: number;
   export const AdditiveBlending: number;
   export const CustomBlending: number;
   export const EquirectangularReflectionMapping: number;
@@ -93,7 +95,15 @@ declare module 'three' {
     elements: number[];
   }
 
+  export class Layers {
+    disable(channel: number): void;
+    enable(channel: number): void;
+    set(channel: number): void;
+    test(layers: Layers): boolean;
+  }
+
   export class Object3D {
+    layers: Layers;
     matrixWorld: Matrix4;
     parent: Object3D | null;
     name: string;
@@ -103,6 +113,7 @@ declare module 'three' {
     visible: boolean;
     add(object: Object3D): this;
     clone(): this;
+    lookAt(x: number, y: number, z: number): void;
     traverse(callback: (object: Object3D) => void): void;
     updateMatrixWorld(force?: boolean): void;
   }
@@ -131,6 +142,7 @@ declare module 'three' {
       color?: number;
       depthWrite?: boolean;
       envMap?: unknown;
+      envMapIntensity?: number;
       metalness?: number;
       opacity?: number;
       roughness?: number;
@@ -151,6 +163,25 @@ declare module 'three' {
     constructor(color?: number, intensity?: number);
   }
 
+  export class RectAreaLight extends Object3D {
+    color: Color;
+    constructor(
+      color?: number,
+      intensity?: number,
+      width?: number,
+      height?: number
+    );
+  }
+
+  export class PointLight extends Object3D {
+    constructor(
+      color?: number,
+      intensity?: number,
+      distance?: number,
+      decay?: number
+    );
+  }
+
   export class PMREMGenerator {
     constructor(renderer: WebGLRenderer);
     fromEquirectangular(texture: CanvasTexture): { texture: unknown };
@@ -168,6 +199,8 @@ declare module 'three' {
     setClearColor(hex: number, alpha: number): void;
     setPixelRatio(ratio: number): void;
     domElement: HTMLCanvasElement;
+    toneMapping: number;
+    toneMappingExposure: number;
     setSize(width: number, height: number, updateStyle?: boolean): void;
     render(scene: Scene, camera: PerspectiveCamera): void;
     dispose(): void;
@@ -192,6 +225,10 @@ declare module 'three/examples/jsm/loaders/DRACOLoader.js' {
   export class DRACOLoader {
     setDecoderPath(path: string): this;
   }
+}
+
+declare module 'three/examples/jsm/lights/RectAreaLightUniformsLib.js' {
+  export const RectAreaLightUniformsLib: { init(): void };
 }
 
 declare module 'three/examples/jsm/environments/RoomEnvironment.js' {
