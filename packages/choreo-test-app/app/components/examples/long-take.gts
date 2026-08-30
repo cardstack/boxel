@@ -144,6 +144,15 @@ export class LongTake extends Component {
     void this.boot?.().then(() => {
       this.arming = false;
       this.mode = '3d';
+      // ENTERING 3D IS ASKING FOR THE FILM. Nobody presses 3D to look at
+      // a still of a laptop — and a region does not collect its score on
+      // the pass that first renders it, so the take that made the film
+      // exist has to be followed by one that can compile it.
+      this.cameraOn = true;
+      this.ended = false;
+      requestAnimationFrame(() => {
+        this.take += 1;
+      });
     });
   };
 
@@ -215,17 +224,34 @@ export class LongTake extends Component {
   // camera control already hands it back. A second button that means
   // "undo the first button" is furniture.
 
+  /** the run reached its end: resuming has to compile a fresh one */
+  private ended = false;
+
   toggleCamera = () => {
     const next = !this.cameraOn;
     this.cameraOn = next;
+    const run = this.region?.run;
     if (!next) {
-      this.region?.run?.pause();
+      run?.pause();
       return;
     }
-    // RESUMING TAKES THE CAMERA BACK COMPLETELY. Whatever the sticks left
-    // behind is discarded, because a film that resumes from someone
-    // else's framing is not the film.
-    this.resetHost?.();
+    // RESUME, DO NOT RESTART.
+    //
+    // Bumping the take compiles a fresh score and starts it at zero, and
+    // on a rapid double press that stacks one film on top of another —
+    // each one snapping the pose back to its first shot. That is the
+    // throb. There is a run standing right there with a clock on it, so
+    // press play; only a run that has actually ENDED needs a new one.
+    //
+    // The stick's lean is dropped either way, because a film that resumes
+    // holding someone's pull is not the film. The POSE is left alone: it
+    // is where the shot was, and the next cue tweens out of it.
+    this.leanHost?.({});
+    if (run && !this.ended) {
+      run.play();
+      return;
+    }
+    this.ended = false;
     this.take += 1;
   };
 
@@ -238,8 +264,14 @@ export class LongTake extends Component {
     }
     let live = true;
     void run.finished.then(() => {
-      if (live && this.cameraOn) {
+      if (!live) {
+        return;
+      }
+      if (this.cameraOn) {
         this.take += 1;
+      } else {
+        // stopped at the end: there is nothing left to press play on
+        this.ended = true;
       }
     });
     return () => {
@@ -356,27 +388,24 @@ export class LongTake extends Component {
     layer.style.perspective = '';
 
     /**
-     * IS THERE ROOM TO PLAY A FILM HERE? Decided from the OBSERVED
-     * height: `.ex` is `position:absolute; inset:0` and has not been laid
-     * out when the modifier runs, so an early read reports a box far
-     * smaller than the one the demo ends up in.
+     * IS THIS THE DEMO'S OWN PAGE, OR A CARD IN THE GALLERY?
+     *
+     * A film that loops forever is right on a page you opened to watch it
+     * and wrong in a grid of thirty-odd cards, where it is a WebGL context
+     * and a permanent repaint behind everything else. So the gallery gets
+     * it paused, with the controls right there to start it.
+     *
+     * That used to be guessed from the stage's HEIGHT, and the guess was
+     * wrong twice. It read the box before layout, so a full page could be
+     * mistaken for a card — and on a phone, where the demo IS the page, a
+     * short stage is exactly the case the rule was meant to exclude. The
+     * page and the card have different containers; ask which one this is.
      */
-    let decided = false;
-    const decideRoom = (h: number) => {
-      if (decided || h <= 0) {
-        return;
-      }
-      decided = true;
-      this.roomy = h >= 460;
-      if (!this.roomy) {
-        this.cameraOn = false;
-        return;
-      }
-      // a region does not collect its score on its first render
-      requestAnimationFrame(() => {
-        this.take += 1;
-      });
-    };
+    const onOwnPage = !!host.closest('.stage-wrap');
+    this.roomy = onOwnPage;
+    if (!onOwnPage) {
+      this.cameraOn = false;
+    }
 
     /**
      * ONE FIT, TWO CONSUMERS. The 3D camera solves a distance that fills
@@ -392,10 +421,7 @@ export class LongTake extends Component {
      * Fitting them separately would be scaling a projection against its
      * own image, which comes apart the moment the lid is not square on.
      */
-    const watch = (decide = false) => {
-      if (decide) {
-        decideRoom(host.clientHeight);
-      }
+    const watch = () => {
       const w = host.clientWidth || 1;
       const h = host.clientHeight || 1;
       host.style.setProperty(
@@ -424,7 +450,7 @@ export class LongTake extends Component {
     // with no film. The ResizeObserver's first callback carries the box
     // the browser actually settled on.
     watch();
-    const ro = new ResizeObserver(() => watch(true));
+    const ro = new ResizeObserver(watch);
     ro.observe(host);
 
     let raf = 0;
@@ -1206,20 +1232,22 @@ export class LongTake extends Component {
           </div>
         {{/if}}
 
-        <div class="lt-pads">
-          <div class="lt-pad" {{this.padDrag "orbit"}}>
-            <span class="lt-pad-dot"></span>
-            <span class="lt-pad-name">rotate</span>
+        {{#if this.roomy}}
+          <div class="lt-pads">
+            <div class="lt-pad" {{this.padDrag "orbit"}}>
+              <span class="lt-pad-dot"></span>
+              <span class="lt-pad-name">rotate</span>
+            </div>
+            <div class="lt-pad" {{this.padDrag "pan"}}>
+              <span class="lt-pad-dot"></span>
+              <span class="lt-pad-name">pan</span>
+            </div>
+            <div class="lt-zoom" {{this.padDrag "dolly"}}>
+              <span class="lt-zoom-dot"></span>
+              <span class="lt-pad-name">dolly</span>
+            </div>
           </div>
-          <div class="lt-pad" {{this.padDrag "pan"}}>
-            <span class="lt-pad-dot"></span>
-            <span class="lt-pad-name">pan</span>
-          </div>
-          <div class="lt-zoom" {{this.padDrag "dolly"}}>
-            <span class="lt-zoom-dot"></span>
-            <span class="lt-pad-name">dolly</span>
-          </div>
-        </div>
+        {{/if}}
       </div>
 
       <style>
@@ -1528,9 +1556,29 @@ export class LongTake extends Component {
           margin: -9.5px 0 0 -9.5px;
           transform: translate(0, calc(var(--knob-y, 0) * 14px));
         }
-        @container (max-height: 460px) {
+        /* THE STICKS BELONG TO THE DEMO'S OWN PAGE, and that is a
+           question about the CONTAINER, not about its height. Hiding them
+           under a height threshold also hid them on a phone — where the
+           demo is the page, the stage is short by definition, and turning
+           the device by hand is the whole point. They are gated on the
+           same fact the film is: see `onOwnPage`. */
+        /* SMALLER ON A NARROW SCREEN, not absent. Three 54px discs are
+           half the width of a phone; at 42 they are a control rather than
+           a panel, and the demo keeps the one affordance that makes the
+           device feel like an object you can turn. */
+        @media (max-width: 760px) {
           .lt-pads {
-            display: none;
+            gap: 10px;
+            right: 10px;
+            bottom: 22px;
+          }
+          .lt-pad {
+            width: 42px;
+            height: 42px;
+          }
+          .lt-zoom {
+            width: 26px;
+            height: 42px;
           }
         }
       </style>
