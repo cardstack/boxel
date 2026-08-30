@@ -63,7 +63,6 @@ type App = (typeof APPS)[number];
  * getting bigger.
  */
 const EASE = [0.22, 1, 0.36, 1] as const;
-const FADE = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
 
 interface SpikeWindow extends Window {
   __glb?: unknown;
@@ -166,29 +165,6 @@ export class MockupGlb extends Component {
       const pmrem = new T.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture;
 
-      /**
-       * A SEPARATE environment for the glass alone: a plain vertical
-       * gradient, no geometry in it at all. A room reflects as
-       * recognisable boxes, and a phone screen with furniture in it is a
-       * picture of a phone rather than a screen you are meant to read. A
-       * gradient reflected sharply is still a hard-edged sheen — glossy,
-       * not matte — but there is nothing in it to look at.
-       */
-      const sky = document.createElement('canvas');
-      sky.width = 4;
-      sky.height = 256;
-      const sctx = sky.getContext('2d')!;
-      const grad = sctx.createLinearGradient(0, 0, 0, 256);
-      grad.addColorStop(0, '#ffffff');
-      grad.addColorStop(0.34, '#c9d4e4');
-      grad.addColorStop(0.52, '#39414f');
-      grad.addColorStop(1, '#0b0d12');
-      sctx.fillStyle = grad;
-      sctx.fillRect(0, 0, 4, 256);
-      const skyTex = new T.CanvasTexture(sky);
-      skyTex.mapping = T.EquirectangularReflectionMapping;
-      const skyEnv = pmrem.fromEquirectangular(skyTex).texture;
-
       const camera = new T.PerspectiveCamera(38, 1, 1, 20000);
       camera.position.set(0, 0, 1500);
 
@@ -197,8 +173,8 @@ export class MockupGlb extends Component {
       // puts its highlight over the middle of the screen; from above, the
       // sheen sits at the top of the panel where a real room light would
       // put it, and the UI keeps the rest.
-      const key = new T.DirectionalLight(0xffffff, 2.3);
-      key.position.set(0, 1800, 620);
+      const key = new T.DirectionalLight(0xffffff, 2.1);
+      key.position.set(0, 1800, -140);
       scene.add(key);
       const fill = new T.DirectionalLight(0x9fc4ff, 0.85);
       fill.position.set(-900, 500, -700);
@@ -300,39 +276,20 @@ export class MockupGlb extends Component {
           // With NoBlending the alpha written IS this opacity, uniformly,
           // so every point of tint is a point of haze over the UI: clear
           // glass wants it near zero.
+          // NO GLARE ON THE FACE. A clearcoat this smooth turns every
+          // light in the scene into a hot spot across the middle of the
+          // screen, and a mirror pass on top of it blew the whole panel
+          // out to white. The glass is now a plain, rough, barely-there
+          // tint: it still darkens and still catches the rim, and the UI
+          // underneath is the only thing to look at.
           found.mesh.material = new T.MeshPhysicalMaterial({
             blending: T.NoBlending,
-            clearcoat: 1,
-            clearcoatRoughness: 0.02,
             color: 0x05070b,
             metalness: 0,
             opacity: 0.06,
-            roughness: 0.02,
+            roughness: 0.85,
             transparent: true,
           });
-
-          // THE REFLECTION, as its own pass, because clear glass can only
-          // be as bright as its alpha. Plain AdditiveBlending adds the
-          // source alpha too and the canvas turns opaque; CustomBlending
-          // separates them — RGB One+One, alpha Zero+One — so it adds
-          // light without adding cover. It reflects the gradient, not the
-          // room, and `color` on a metal multiplies what comes back, so
-          // that is the one dial for how much sheen there is.
-          const glare = found.mesh.clone();
-          glare.material = new T.MeshPhysicalMaterial({
-            blendDst: T.OneFactor,
-            blendDstAlpha: T.OneFactor,
-            blendSrc: T.OneFactor,
-            blendSrcAlpha: T.ZeroFactor,
-            blending: T.CustomBlending,
-            color: 0x2b3038,
-            depthWrite: false,
-            envMap: skyEnv,
-            metalness: 1,
-            roughness: 0.02,
-            transparent: true,
-          });
-          found.mesh.parent?.add(glare);
 
           ready = true;
           mapped =
