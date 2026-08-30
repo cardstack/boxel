@@ -16,6 +16,7 @@ import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
 import { Lightbox } from 'test-app/components/examples/lightbox';
 import { Lists } from 'test-app/components/examples/lists';
+import { Mockup } from 'test-app/components/examples/mockup';
 import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
 import { Playhead } from 'test-app/components/examples/playhead';
@@ -44,6 +45,7 @@ import { InlineEditNotes } from 'test-app/components/notes/inline-edit';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
+import { MockupNotes } from 'test-app/components/notes/mockup';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
 import { PresentationNotes } from 'test-app/components/notes/presentation';
@@ -427,6 +429,61 @@ private arming = createArming();
 </Choreo>`,
     slowmo: true,
     title: 'Slides',
+  },
+  {
+    Example: Mockup,
+    apis: ['c.Camera3D', '@onCamera3D', 'c.Perform', 'c.Camera'],
+    group: 'Choreo',
+    id: 'mockup',
+    lede: 'A phone you can turn, and an app you can still use.',
+    notes: MockupNotes,
+    sample: `{{! ONE SCORE, TWO LENSES. The beats are identical in both
+    modes — the same apps open and close on the same counts — and only
+    the camera differs. That symmetry is the argument for making the 3D
+    camera a STEP rather than a callback. }}
+<c.Parallel>
+  {{! the beats: semantic commands on the timeline, not remembered
+      clicks. A seek past one includes its result; a seek before it
+      excludes it. }}
+  <c.Sequence>
+    {{#each SHOTS as |shot|}}
+      <c.Wait @duration={{TRAVEL}} />
+      <c.Perform @action='open' @target={{shot.app}} />
+      <c.Wait @duration={{shot.hold}} />
+      <c.Perform @action='close' @target={{shot.app}} />
+    {{/each}}
+  </c.Sequence>
+
+  {{! the camera. c.Camera moves a region's own frame — a 2D transform
+      on real DOM. A 3D scene has no such frame, so c.Camera3D carries
+      only the POSE and the host draws with it. }}
+  <c.Sequence>
+    {{#each SHOTS as |shot|}}
+      <c.Camera3D
+        @yaw={{shot.yaw}} @pitch={{shot.pitch}} @dolly={{shot.dolly}}
+        @duration={{TRAVEL}} @ease={{GLIDE}}
+      />
+      {{! the hold is not a hold: it closes in while the app is open }}
+      <c.Camera3D @by={{true}} @dolly={{0.94}} @yaw={{6}}
+        @duration={{shot.hold}} @ease={{GLIDE}} />
+    {{/each}}
+  </c.Sequence>
+</c.Parallel>
+
+// The host applies the pose to whatever it is actually drawing with.
+// Choreo owns the clock and the easing; this is the whole adapter:
+<Choreo @onCamera3D={{this.shot}} @onPerform={{this.dispatch}} as |c|>
+
+shot = (pose) => {
+  ry = Math.PI + (pose.yaw * Math.PI) / 180;
+  rx = (pose.pitch * Math.PI) / 180;
+  dolly = pose.dolly;          // x the distance the framing solved for
+};
+
+// A drag means "let me look" and stops the camera; a tap on the screen
+// means "let me use it" and stops the cues. Two tracks, two switches.`,
+    slowmo: false,
+    title: 'Mockup',
   },
   {
     Example: Camera,

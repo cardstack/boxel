@@ -27,7 +27,8 @@ export function setupFixtureViewport(
 ) {
   const { width = 1000, height = 660, scroll = false } = opts;
   let style: HTMLStyleElement | undefined;
-  let appSheets: HTMLLinkElement[] = [];
+  /** the app stylesheets this fixture muted, with the media query each had */
+  let muted: { link: HTMLLinkElement; media: string }[] = [];
   hooks.beforeEach(function () {
     style = document.createElement('style');
     style.id = 'fixture-viewport';
@@ -41,13 +42,34 @@ export function setupFixtureViewport(
     `;
     document.head.appendChild(style);
     // a Cypress page has only the fixture's CSS: the app's stylesheet stays out of fixture tests
-    appSheets = Array.from(
+    //
+    // It is muted with `media`, NOT with `disabled`, and the difference is
+    // measurable: setting `link.disabled = true` DETACHES the sheet in
+    // Chromium — `link.sheet` goes null — and clearing the flag again does
+    // not put it back synchronously. The page keeps rendering with no app
+    // CSS until the sheet is reattached a few frames later (~17ms on an idle
+    // machine; unbounded on a loaded one). So this helper's afterEach could
+    // not restore what its beforeEach took away, and every fixture test left
+    // a window behind it with the app stylesheet missing.
+    //
+    // The subdivision demo test is the one test that reads its geometry out
+    // of that stylesheet, and it runs right after a module that uses this
+    // fixture — which is how it came to measure a completely unstyled
+    // component in CI and report tiles 95x21 (an untouched `button`) instead
+    // of the grid it was asserting about.
+    //
+    // `media="not all"` takes the sheet out of the cascade without unloading
+    // it: `link.sheet` stays, and both muting and restoring take effect in
+    // the same frame.
+    muted = Array.from(
       document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')
-    ).filter(
-      (l) => /app\.css|\/assets\/app/.test(l.href) && !/tests/.test(l.href)
-    );
-    appSheets.forEach((l) => {
-      l.disabled = true;
+    )
+      .filter(
+        (l) => /app\.css|\/assets\/app/.test(l.href) && !/tests/.test(l.href)
+      )
+      .map((link) => ({ link, media: link.media }));
+    muted.forEach(({ link }) => {
+      link.media = 'not all';
     });
     window.scrollTo(0, 0);
     // Cypress visits a fresh page per test: the document projection node (root of every projection tree,
@@ -55,9 +77,10 @@ export function setupFixtureViewport(
     (rootProjectionNode as { current: unknown }).current = undefined;
   });
   hooks.afterEach(function () {
-    appSheets.forEach((l) => {
-      l.disabled = false;
+    muted.forEach(({ link, media }) => {
+      link.media = media;
     });
+    muted = [];
     style?.remove();
     window.scrollTo(0, 0);
   });

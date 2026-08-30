@@ -39,6 +39,15 @@ import { setupRenderingTest } from 'test-app/tests/helpers';
  *   load: the spring can finish inside the gap. `setMotionSpeed` stretches
  *   the transition so being mid-flight is a fact rather than a hope — the
  *   speed is reset for us by `setupMotion`'s beforeEach.
+ *
+ * A third cause outlived both, and it was not this file's fault: fixture
+ * tests used to hide the app stylesheet by setting `link.disabled`, which
+ * detaches the sheet and reattaches it a few frames later rather than on the
+ * clearing statement. This is the only test that reads its geometry out of
+ * that stylesheet, so it was the only one that noticed, and what it measured
+ * was an untouched `button` — 95x21. `setupFixtureViewport` mutes with
+ * `media` now, which is synchronous both ways. `appCss` is reported below so
+ * that a fourth cause has to name itself.
  */
 async function mount() {
   await render(
@@ -84,7 +93,16 @@ async function mount() {
   const seam = root?.querySelector(
     '[data-test-seam="col"]'
   ) as HTMLElement | null;
-  return { grid, seam, stage, tile };
+  return { grid, root, seam, stage, tile };
+}
+
+/**
+ * whether the app stylesheet is in the cascade at all: `.ex` is `absolute`
+ * there and `static` everywhere else, so one computed value separates "the
+ * demo laid out wrong" from "the demo had no CSS".
+ */
+function appCss(root: HTMLElement | null) {
+  return root ? getComputedStyle(root).position : '(no root)';
 }
 
 function report(parts: Record<string, unknown>) {
@@ -96,7 +114,7 @@ module('Integration | motion | subdivision', function (hooks) {
   setupMotion(hooks);
 
   test('evening a seam commits a new column split', async function (assert) {
-    const { grid, seam, stage, tile } = await mount();
+    const { grid, root, seam, stage, tile } = await mount();
     assert.ok(grid && tile && seam, 'the fixture mounted its grid, tile, seam');
     if (!grid || !tile || !seam) {
       return;
@@ -106,6 +124,7 @@ module('Integration | motion | subdivision', function (hooks) {
     assert.true(
       tileBox.width > 20 && tileBox.height > 20,
       `the demo came up with real tiles ${report({
+        appCss: appCss(root),
         grid: bounds(grid),
         stage: bounds(stage),
         tile: tileBox,
@@ -125,6 +144,7 @@ module('Integration | motion | subdivision', function (hooks) {
       Math.abs(after.width - before.width) > 8,
       `the tile resizes ${report({
         after,
+        appCss: appCss(root),
         before,
         grid: bounds(grid),
         stage: bounds(stage),

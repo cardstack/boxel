@@ -471,6 +471,63 @@ export class Camera extends StepComponent<
   }
 }
 
+/**
+ * `<c.Camera3D @yaw={{-24}} @pitch={{-6}} @dolly={{0.9}} />` — the shot,
+ * for a scene Choreo is not the one drawing.
+ *
+ * `c.Camera` moves the region's own frame, which is a 2D transform on real
+ * DOM. A 3D scene has no such frame: its camera belongs to whatever is
+ * rendering it. So this step carries the POSE and nothing else — yaw and
+ * pitch in degrees, dolly as a multiple of the host's own framing — and
+ * the region hands it to `@onCamera3D` every frame it changes. The host
+ * applies it to three.js, to a CSS 3D stage, to anything that takes three
+ * numbers.
+ *
+ * What Choreo keeps is the part it is actually good at: the pose is a pure
+ * function of the clock, so a scrub lands the shot exactly where playing
+ * there would, and a preset expands into this one seekable cue rather than
+ * a second scheduler.
+ *
+ * `@by` makes it relative — added to the pose in force when the cue
+ * starts, the way `Pan` and `SlowZoom` are relative — so a drift composes
+ * with whatever shot preceded it.
+ */
+export class Camera3D extends StepComponent<
+  StepArgsBase & {
+    by?: boolean;
+    dolly?: number;
+    duration?: number;
+    ease?: Easing;
+    of?: Query | Query[];
+    pitch?: number;
+    spring?: SpringSpec;
+    x?: number;
+    y?: number;
+    yaw?: number;
+  }
+> {
+  node(): TimelineNode {
+    const { by, delay, dolly, duration, ease, pitch, spring, x, y, yaw } =
+      this.args;
+    return {
+      at: this.args.at,
+      by,
+      delay: msOf(delay),
+      dolly,
+      ease,
+      kind: 'camera3d',
+      ms: msOf(duration),
+      name: this.args.name,
+      of: this.args.of ?? {},
+      pitch,
+      spring,
+      x,
+      y,
+      yaw,
+    };
+  }
+}
+
 /* ---- the direction vocabulary (docs/choreo-composition.md C5) ----
    Presets expand into the SAME seekable camera cue — sugar, never a new
    runtime primitive. Frame and Aim are absolute (computed from measured

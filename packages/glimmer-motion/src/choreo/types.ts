@@ -376,6 +376,53 @@ export interface CameraStep extends StepBase {
  * (and every scrubbed still), `@path` receives both endpoints' boxes,
  * region-relative, and returns the path data the tether draws.
  */
+/**
+ * An orbit pose, in the terms a shoot uses rather than a matrix: where the
+ * eye stands relative to the subject.
+ *
+ * Choreo does not own a 3D renderer and should not pretend to. What it owns
+ * is TIME — the ordering, the easing, and the guarantee that a pose is a
+ * pure function of the clock — so `Camera3D` carries intent and the host
+ * applies it to whatever it is actually drawing with: three.js, a CSS 3D
+ * stage, anything that can take three numbers. That is the same split the
+ * composition doc asks for (§ "The second primitive: camera"): the preset
+ * expands into one seekable step, and an adapter does the drawing.
+ */
+export interface Camera3DState {
+  /** distance as a multiple of the host's own framing; 1 is "as framed" */
+  dolly: number;
+  /** degrees above the subject */
+  pitch: number;
+  /**
+   * Truck and pedestal, as fractions of the subject's framed height.
+   *
+   * Dolly alone cannot hold a tall subject in frame: push in on a phone
+   * and its top leaves the picture. A real operator moves the camera
+   * sideways and up as they push, so the part being read stays centred —
+   * these are that move, and they are what makes a close-up legible
+   * rather than a crop.
+   */
+  x: number;
+  y: number;
+  /** degrees around it */
+  yaw: number;
+}
+
+export interface Camera3DStep extends StepBase {
+  /** add to the pose in force instead of replacing it — Pan's rule, in 3D */
+  by?: boolean;
+  dolly?: number;
+  ease?: Easing;
+  kind: 'camera3d';
+  ms?: number;
+  pitch?: number;
+  spring?: SpringSpec;
+  /** truck / pedestal, in fractions of the framed height */
+  x?: number;
+  y?: number;
+  yaw?: number;
+}
+
 export interface TetherStep extends SubjectlessBase {
   from: Query;
   kind: 'tether';
@@ -450,6 +497,7 @@ export interface FollowStep extends StepBase {
 }
 
 export type Step =
+  | Camera3DStep
   | CameraStep
   | FollowStep
   | HoldStep
@@ -549,6 +597,17 @@ export interface Cue {
     origin?: { x: number; y: number };
     steady: Sprite[];
     to: { x?: number; y?: number; zoom?: number };
+  };
+  /** camera3d: hand an orbit pose to the host, every frame it changes */
+  camera3d?: {
+    by?: boolean;
+    to: {
+      dolly?: number;
+      pitch?: number;
+      x?: number;
+      y?: number;
+      yaw?: number;
+    };
   };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };
