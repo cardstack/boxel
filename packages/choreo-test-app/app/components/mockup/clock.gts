@@ -97,7 +97,8 @@ export class ClockApp extends Component<ClockAppSignature> {
     const total = Math.max(0, this.remaining);
     const minutes = Math.floor(total / 60);
     const seconds = total % 60;
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    const tenths = Math.floor((total * 10) % 10);
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}`;
   }
 
   /**
@@ -126,7 +127,8 @@ export class ClockApp extends Component<ClockAppSignature> {
       this.remaining = TIMER_START;
     }
     this.running = true;
-    this.intervalId = setInterval(this.tick, 1000);
+    // sub-second, so a running timer LOOKS like one
+    this.intervalId = setInterval(this.tick, 100);
   };
 
   resetTimer = () => {
@@ -135,12 +137,12 @@ export class ClockApp extends Component<ClockAppSignature> {
   };
 
   tick = () => {
-    if (this.remaining <= 1) {
+    if (this.remaining <= 0.1) {
       this.remaining = 0;
       this.stopTicking();
       return;
     }
-    this.remaining = this.remaining - 1;
+    this.remaining = Math.round((this.remaining - 0.1) * 10) / 10;
   };
 
   /** the one place the interval is cleared, so pause and destroy agree */

@@ -69,7 +69,6 @@ const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const TICK = 250;
 
 /** the queue reflow: firm, no overshoot worth speaking of */
-const glide = { damping: 26, stiffness: 300 };
 
 function clock(total: number): string {
   const whole = Math.max(0, Math.round(total));
@@ -358,7 +357,6 @@ export class MusicApp extends Component {
           <c.Tween @of={{c.removed "art"}} @opacity={{0}} @duration={{0.28}} />
 
           {{! …and the queue reflows around it on one spring }}
-          <c.Move @of={{c.moved "queue"}} @spring={{glide}} @size={{false}} />
           <c.Tween
             @of={{c.inserted "queue"}}
             @opacity={{array 0 1}}

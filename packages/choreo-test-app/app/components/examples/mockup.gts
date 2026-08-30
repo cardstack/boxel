@@ -142,6 +142,16 @@ interface Beat {
   pitch: number;
   /** seconds */
   t: number;
+  /**
+   * Something to press as this beat begins, matched by its visible text.
+   *
+   * The composition doc calls a synthesised click a COMPATIBILITY
+   * ADAPTER: legitimate, but not the durable recording format, which is a
+   * semantic port on the actor. These apps were written without ports, so
+   * the cue addresses what a person would address — the words on the
+   * control — rather than a class name that a redesign would break.
+   */
+  tap?: string;
   x: number;
   y: number;
   yaw: number;
@@ -171,7 +181,15 @@ const SCENES: { app: string; beats: Beat[] }[] = [
     beats: [
       // the header and the filter, then down into the list, then out
       { dolly: 0.6, pitch: -4, t: 2.6, x: 0.02, y: 0.24, yaw: -9 },
-      { dolly: 0.5, pitch: -1, t: 3.0, x: -0.02, y: -0.02, yaw: 5 },
+      {
+        dolly: 0.5,
+        pitch: -1,
+        t: 3.0,
+        tap: 'Unread',
+        x: -0.02,
+        y: -0.02,
+        yaw: 5,
+      },
       { dolly: 0.74, pitch: -7, t: 2.2, x: 0, y: 0.1, yaw: -15 },
     ],
   },
@@ -179,7 +197,15 @@ const SCENES: { app: string; beats: Beat[] }[] = [
     app: 'maps',
     beats: [
       { dolly: 0.58, pitch: -3, t: 2.8, x: -0.04, y: -0.16, yaw: 12 },
-      { dolly: 0.46, pitch: 0, t: 3.2, x: 0.06, y: -0.02, yaw: -4 },
+      {
+        dolly: 0.46,
+        pitch: 0,
+        t: 3.2,
+        tap: 'Transit',
+        x: 0.06,
+        y: -0.02,
+        yaw: -4,
+      },
       { dolly: 0.7, pitch: -6, t: 2.4, x: 0, y: 0.06, yaw: 16 },
     ],
   },
@@ -188,7 +214,7 @@ const SCENES: { app: string; beats: Beat[] }[] = [
     beats: [
       // the plate, then the transport, then the queue
       { dolly: 0.56, pitch: -4, t: 2.8, x: 0.03, y: 0.2, yaw: 14 },
-      { dolly: 0.48, pitch: 0, t: 2.6, x: 0.0, y: -0.05, yaw: 4 },
+      { dolly: 0.48, pitch: 0, t: 2.6, tap: 'play', x: 0.0, y: -0.05, yaw: 4 },
       { dolly: 0.62, pitch: -3, t: 2.6, x: -0.03, y: -0.2, yaw: -8 },
     ],
   },
@@ -196,14 +222,23 @@ const SCENES: { app: string; beats: Beat[] }[] = [
     app: 'notes',
     beats: [
       { dolly: 0.62, pitch: -4, t: 2.6, x: 0.02, y: 0.2, yaw: -10 },
-      { dolly: 0.52, pitch: -1, t: 2.8, x: -0.02, y: -0.06, yaw: 6 },
+      {
+        dolly: 0.52,
+        pitch: -1,
+        t: 2.8,
+        tap: 'Dinner, Saturday',
+        x: -0.02,
+        y: -0.06,
+        yaw: 6,
+      },
     ],
   },
   {
     app: 'clock',
     beats: [
       { dolly: 0.66, pitch: -3, t: 2.4, x: 0, y: 0.16, yaw: 9 },
-      { dolly: 0.54, pitch: 0, t: 2.6, x: 0, y: -0.04, yaw: -3 },
+      { dolly: 0.54, pitch: 0, t: 1.2, tap: 'Timer', x: 0, y: -0.04, yaw: -3 },
+      { dolly: 0.5, pitch: 0, t: 2.6, tap: 'Start', x: 0, y: -0.02, yaw: 2 },
     ],
   },
   {
@@ -359,17 +394,28 @@ export class Mockup extends Component {
     };
   });
 
+  /** pressed 3D, engine still downloading: stay flat until it can draw */
+  @tracked arming = false;
+
   setMode = (mode: '2d' | '3d') => {
-    if (mode === this.mode) {
+    if (mode === this.mode || this.arming) {
       return;
     }
-    this.mode = mode;
-    if (mode === '3d') {
-      void this.boot?.();
-    } else {
+    if (mode === '2d') {
+      this.mode = '2d';
       this.halt?.();
-      this.status = 'flat — the same DOM, no engine loaded';
+      return;
     }
+    // FLIP ONLY WHEN 3D CAN ACTUALLY DRAW. Switching first and loading
+    // after meant a second and a half of stage with no phone on it, then
+    // a pop — a flash where a transition should be. The flat phone stays
+    // up, the button says so, and the swap happens when the model has
+    // landed and the first frame is mapped.
+    this.arming = true;
+    void this.boot?.().then(() => {
+      this.arming = false;
+      this.mode = '3d';
+    });
   };
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
@@ -394,7 +440,33 @@ export class Mockup extends Component {
   dispatch = (command: PerformCommand) => {
     const app = APPS.find((a) => a.id === command.target);
     requestAnimationFrame(() => {
-      if (command.action === 'open' && app) {
+      if (command.action === 'tap') {
+        // find it the way a person would: by what it says
+        const want = String(command.payload ?? '').toLowerCase();
+        const ui = document.querySelector('.mg-app-ui');
+        const hit = [
+          ...(ui?.querySelectorAll<HTMLElement>('button, [role="button"]') ??
+            []),
+        ]
+          .filter((el) => {
+            const text = (el.textContent ?? '').trim().toLowerCase();
+            const label = (el.getAttribute('aria-label') ?? '').toLowerCase();
+            return text.startsWith(want) || label.includes(want);
+          })
+          // the SHORTEST match: a note card contains its own title plus a
+          // date and a snippet, and a whole list contains every card
+          .sort(
+            (a, b) =>
+              (a.textContent ?? '').length - (b.textContent ?? '').length
+          )[0];
+        // THE FILM MUST NOT DESYNC ITSELF. A synthesised click bubbles to
+        // the stage exactly like a real one, where the "someone touched
+        // the screen" guard is waiting — so the film's own tap would stop
+        // the film. Flagged for the duration of the dispatch.
+        this.selfTap = true;
+        hit?.click();
+        this.selfTap = false;
+      } else if (command.action === 'open' && app) {
         this.parked = app;
         this.open = app;
         this.tint?.(hsl(app.hue));
@@ -447,10 +519,10 @@ export class Mockup extends Component {
     const k = lean ? 1 : dt;
     const move =
       kind === 'orbit'
-        ? { pitch: y * (lean ? 16 : 90), yaw: x * (lean ? 26 : 150) }
+        ? { pitch: y * (lean ? 30 : 90), yaw: x * (lean ? 52 : 150) }
         : kind === 'pan'
-          ? { x: x * (lean ? 0.16 : 0.9), y: -y * (lean ? 0.16 : 0.9) }
-          : { dolly: -y * (lean ? 0.34 : 1.5) };
+          ? { x: x * (lean ? 0.38 : 0.9), y: -y * (lean ? 0.38 : 0.9) }
+          : { dolly: -y * (lean ? 0.7 : 1.5) };
     const scaled = Object.fromEntries(
       Object.entries(move).map(([key, v]) => [key, v * k])
     ) as Partial<Camera3DState>;
@@ -470,6 +542,9 @@ export class Mockup extends Component {
 
   /** a TAP on the screen means "let me use it": the app cues stop */
   seizeApps = () => {
+    if (this.selfTap) {
+      return;
+    }
     if (this.syncOn) {
       this.syncOn = false;
     }
@@ -489,8 +564,23 @@ export class Mockup extends Component {
     }
   };
 
+  /** hand the whole thing back to the film: both tracks, from the top */
+  resync = () => {
+    this.cameraOn = true;
+    this.syncOn = true;
+    this.take += 1;
+  };
+
   get running() {
     return this.cameraOn || this.syncOn;
+  }
+
+  /** true only while the film is pressing something itself */
+  private selfTap = false;
+
+  /** the film only drives the phone when it is driving the camera too */
+  get autoplay() {
+    return this.cameraOn && this.syncOn;
   }
 
   /**
@@ -517,7 +607,6 @@ export class Mockup extends Component {
    */
   padDrag = modifier((el: HTMLElement, [kind]: [string]) => {
     /** where the finger is asking the knob to be, -1..1 on each axis */
-    let want = { x: 0, y: 0 };
     /** where the knob actually is: a spring chasing `want` */
     const knob = { vx: 0, vy: 0, x: 0, y: 0 };
     let held = false;
@@ -546,6 +635,7 @@ export class Mockup extends Component {
     const HOME = { k: 150, c: 15 };
     let last = 0;
 
+    let want = { x: 0, y: 0 };
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
@@ -562,7 +652,15 @@ export class Mockup extends Component {
       el.style.setProperty('--knob-y', knob.y.toFixed(4));
       // THE STICK IS A RATE. A held stick keeps turning the camera, which
       // is why it can spring home without undoing what it did.
-      this.nudge(kind, knob.x, knob.y, dt);
+      // THE NUDGE IS NOT EASED. While the film is playing the stick is a
+      // modifier laid on top of a moving pose, so it follows the FINGER
+      // directly — running it through the knob's spring would add a
+      // second easing on top of the camera's own and the shot would
+      // wobble. The knob still springs; only what it looks like is
+      // damped. Stopped, there is no film to fight, so the damped value
+      // is the nicer one to integrate.
+      const lean = this.cameraOn;
+      this.nudge(kind, lean ? want.x : knob.x, lean ? want.y : knob.y, dt);
       if (
         !held &&
         Math.hypot(knob.x, knob.y) < 0.002 &&
@@ -1516,7 +1614,7 @@ export class Mockup extends Component {
   });
 
   <template>
-    <div class="mg-page">
+    <div class="mg-page" data-mode={{this.mode}}>
       <Choreo
         class="mg-stage"
         data-mode={{this.mode}}
@@ -1568,10 +1666,6 @@ export class Mockup extends Component {
                 {{/each}}
 
                 {{! page one of one, said the way a home screen says it }}
-                <div class="mg-dots" aria-hidden="true">
-                  <span class="mg-dot" data-on="yes"></span>
-                  <span class="mg-dot"></span>
-                </div>
 
                 {{! ONE element, two named poses, the corner radius
                     travelling with the box }}
@@ -1658,7 +1752,11 @@ export class Mockup extends Component {
                 <c.Wait @duration={{this.travel}} />
               {{/if}}
 
-              {{#if this.syncOn}}
+              {{! ONLY WHEN BOTH ARE ON. A stopped camera means someone is
+                  looking at something; opening and closing apps under them
+                  is the demo talking over them. And a desynced phone is
+                  theirs to drive. }}
+              {{#if this.autoplay}}
                 <c.Perform @action="open" @target={{scene.app}} />
               {{/if}}
 
@@ -1667,6 +1765,15 @@ export class Mockup extends Component {
                   pose to three.js, in 2D to the CSS plane. There is no
                   second camera track to keep in sync. }}
               {{#each scene.beats as |beat|}}
+                {{#if beat.tap}}
+                  {{#if this.autoplay}}
+                    <c.Perform
+                      @action="tap"
+                      @target={{scene.app}}
+                      @payload={{beat.tap}}
+                    />
+                  {{/if}}
+                {{/if}}
                 {{#if this.cameraOn}}
                   <c.Camera3D
                     @yaw={{beat.yaw}}
@@ -1682,7 +1789,7 @@ export class Mockup extends Component {
                 {{/if}}
               {{/each}}
 
-              {{#if this.syncOn}}
+              {{#if this.autoplay}}
                 <c.Perform @action="close" @target={{scene.app}} />
               {{/if}}
 
@@ -1721,7 +1828,7 @@ export class Mockup extends Component {
             type="button"
             aria-pressed="{{this.isMode '3d'}}"
             {{on "click" (fn this.setMode "3d")}}
-          >3D</button>
+          >{{if this.arming "3D…" "3D"}}</button>
         </div>
 
         <div class="mg-transport">
@@ -1734,12 +1841,12 @@ export class Mockup extends Component {
           {{! NO BUTTON WHILE IT IS SYNCED. A control that only ever says
               "on" is furniture; this one appears the moment you take the
               phone over, which is also the moment it means something. }}
-          {{#unless this.syncOn}}
-            <button
-              type="button"
-              class="mg-resync"
-              {{on "click" this.toggleSync}}
-            >↺ resync</button>
+          {{! shown whenever the film is NOT fully driving — a stopped
+              camera leaves the phone just as out of sync as a tapped
+              screen does, and both want the same way back }}
+          {{#unless this.autoplay}}
+            <button type="button" class="mg-resync" {{on "click" this.resync}}>↺
+              resync</button>
           {{/unless}}
         </div>
 
@@ -1999,17 +2106,6 @@ export class Mockup extends Component {
         /* PAGE DOTS. Two, the first one lit — the smallest mark that
            says "this is page one of a home screen" rather than a grid
            of squares. Above the home-bar area, and never a target. */
-        .mg-dots {
-          position: absolute;
-          z-index: 1;
-          left: 0;
-          right: 0;
-          bottom: 54px;
-          display: flex;
-          justify-content: center;
-          gap: 9px;
-          pointer-events: none;
-        }
         .mg-dot {
           width: 7px;
           height: 7px;
@@ -2023,6 +2119,9 @@ export class Mockup extends Component {
           pointer-events: none;
         }
         .mg-app {
+          /* above the home screen, which stays mounted underneath so it
+             never reflows — without this the icons paint over the app */
+          z-index: 6;
           position: absolute;
           overflow: hidden;
           display: grid;
@@ -2248,7 +2347,7 @@ export class Mockup extends Component {
         /* THERE IS NOTHING TO ROTATE IN 2D. The flat phone faces you by
            definition, so a rotate stick there is a control that does
            nothing — worse than one that is missing. */
-        .mg-stage[data-mode="2d"] .mg-pad-orbit {
+        .mg-page[data-mode="2d"] .mg-pad-orbit {
           display: none;
         }
         .mg-pad-name {
