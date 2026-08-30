@@ -160,6 +160,10 @@ export class MockupGlb extends Component {
     let built = false;
     let building = false;
     let ready = false;
+    /** set once the scene exists; re-entry restarts THIS, not the build */
+    let tick: (() => void) | undefined;
+    let clear: (() => void) | undefined;
+    let mapped = '';
     let rx = -0.12;
     let ry = Math.PI + 0.3;
     let dispose: (() => void) | undefined;
@@ -364,16 +368,17 @@ export class MockupGlb extends Component {
           found.mesh.parent?.add(glare);
 
           ready = true;
-          this.status =
+          mapped =
             `iPhone 15 Pro GLB · screen "${found.mesh.name}" · ` +
             `${SCREEN.w}×${Math.round(dims.y)} css px = ` +
             `${dims.x.toFixed(1)}×${dims.y.toFixed(1)} world · 1:1`;
+          this.status = mapped;
           resolve();
         });
       });
 
-      const tick = () => {
-        raf = requestAnimationFrame(tick);
+      tick = () => {
+        raf = requestAnimationFrame(tick!);
         const w = host.clientWidth;
         const h = host.clientHeight;
         if (renderer.domElement.width !== w || camera.aspect !== w / h) {
@@ -399,6 +404,9 @@ export class MockupGlb extends Component {
         plane.style.transform = objectCss(anchor.matrixWorld.elements);
       };
 
+      // leaving 3D stops the loop, and a stopped canvas keeps its last
+      // frame forever — a ghost phone under the flat bezel. Clear it.
+      clear = () => renderer.clear();
       dispose = () => {
         cancelAnimationFrame(raf);
         raf = 0;
@@ -406,9 +414,6 @@ export class MockupGlb extends Component {
       };
       built = true;
       building = false;
-      if (running) {
-        tick();
-      }
       (window as SpikeWindow).__glb = {
         close: () => {
           this.open = null;
@@ -425,12 +430,20 @@ export class MockupGlb extends Component {
         },
         plane: () => plane.getBoundingClientRect().toJSON(),
       };
-      const loop = () => {
-        if (running && !raf) {
-          tick();
-        }
-      };
-      loop();
+    };
+
+    /** idempotent: safe on every entry into 3D, built or not */
+    const run3d = async () => {
+      running = true;
+      await build();
+      if (!running || raf || !tick) {
+        return;
+      }
+      host.dataset['ready'] = mapped ? 'yes' : '';
+      if (mapped) {
+        this.status = mapped;
+      }
+      tick();
     };
 
     // orbit — only meaningful in 3D, and harmless otherwise
@@ -456,16 +469,15 @@ export class MockupGlb extends Component {
     host.addEventListener('pointermove', move);
     host.addEventListener('pointerup', up);
 
-    this.boot = async () => {
-      running = true;
-      await build();
-    };
+    this.boot = run3d;
     this.halt = () => {
       running = false;
       if (raf) {
         cancelAnimationFrame(raf);
         raf = 0;
       }
+      delete host.dataset['ready'];
+      clear?.();
       // hand the plane back to CSS: in 2D it is an ordinary centred box
       layer.style.perspective = '';
       cam.style.transform = '';

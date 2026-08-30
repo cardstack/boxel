@@ -164,6 +164,7 @@ declare module 'three' {
       canvas?: HTMLCanvasElement;
       powerPreference?: string;
     });
+    clear(): void;
     setClearColor(hex: number, alpha: number): void;
     setPixelRatio(ratio: number): void;
     domElement: HTMLCanvasElement;
