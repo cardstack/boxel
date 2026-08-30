@@ -88,6 +88,8 @@ const SWELL = {
   opacity: { duration: 0.12, ease: 'linear' },
 } as const;
 const FADE = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
+/** while a finger is on it, the pose is not animated — it IS the finger */
+const LIVE = { duration: 0.001, ease: 'linear' } as const;
 
 interface SpikeWindow extends Window {
   __glb?: unknown;
@@ -95,6 +97,13 @@ interface SpikeWindow extends Window {
 
 export class MockupGlb extends Component {
   @tracked open: App | null = null;
+  /**
+   * How far the swipe-up has carried the app back toward its tile, 0..1.
+   * The gesture drives this directly, so the panel is under the finger
+   * rather than playing a canned animation at it — which is the whole
+   * difference between a phone gesture and a button.
+   */
+  @tracked swipe = 0;
   /** which tile the panel is parked on while closed */
   @tracked parked: App = APPS[0]!;
   /** 2D by default: the 3D engine is not downloaded until it is asked for */
@@ -116,8 +125,58 @@ export class MockupGlb extends Component {
 
   close = () => {
     this.open = null;
+    this.swipe = 0;
     this.tint?.(HOME_GLOW);
   };
+
+  /**
+   * THE HOME GESTURE. A swipe up from the bottom edge sends the app back
+   * to its icon; anything short of the threshold falls back into place.
+   *
+   * It has to stop the pointer reaching the stage, or the same drag would
+   * also be orbiting the phone — the gesture starts inside the screen,
+   * which is otherwise a place you turn the device from.
+   */
+  swiper = modifier((el: HTMLElement) => {
+    const TRAVEL = 150;
+    const COMMIT = 0.4;
+    let from: number | null = null;
+    const move = (ev: PointerEvent) => {
+      if (from === null) {
+        return;
+      }
+      this.swipe = Math.max(0, Math.min(1, (from - ev.clientY) / TRAVEL));
+    };
+    const done = () => {
+      if (from === null) {
+        return;
+      }
+      from = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', done);
+      window.removeEventListener('pointercancel', done);
+      if (this.swipe >= COMMIT) {
+        this.close();
+      } else {
+        this.swipe = 0;
+      }
+    };
+    const start = (ev: PointerEvent) => {
+      if (!this.open) {
+        return;
+      }
+      ev.stopPropagation(); // this drag is a gesture, not an orbit
+      from = ev.clientY;
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', done);
+      window.addEventListener('pointercancel', done);
+    };
+    el.addEventListener('pointerdown', start);
+    return () => {
+      el.removeEventListener('pointerdown', start);
+      done();
+    };
+  });
 
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode) {
@@ -150,24 +209,49 @@ export class MockupGlb extends Component {
    * arithmetic on the authored grid.
    */
   get panel() {
-    const app = this.open;
-    return app
-      ? {
-          borderRadius: RADIUS.app,
-          height: SCREEN.h,
-          left: 0,
-          opacity: 1,
-          top: 0,
-          width: SCREEN.w,
-        }
-      : {
-          borderRadius: RADIUS.tile,
-          height: TILE,
-          left: this.parked.x,
-          opacity: 0,
-          top: this.parked.y,
-          width: TILE,
-        };
+    const tile = {
+      borderRadius: RADIUS.tile,
+      height: TILE,
+      left: this.parked.x,
+      opacity: 0,
+      top: this.parked.y,
+      width: TILE,
+    };
+    if (!this.open) {
+      return tile;
+    }
+    const full = {
+      borderRadius: RADIUS.app,
+      height: SCREEN.h,
+      left: 0,
+      opacity: 1,
+      top: 0,
+      width: SCREEN.w,
+    };
+    const p = this.swipe;
+    if (p === 0) {
+      return full;
+    }
+    // mid-gesture: the app rides between the two poses. iOS only takes it
+    // PART of the way home while the finger is down — the last of the
+    // journey belongs to the release — so the drag is scaled to 0.55 and
+    // opacity is left alone, because a card you can still let go of has
+    // not started disappearing.
+    const k = p * 0.55;
+    const at = (a: number, b: number) => a + (b - a) * k;
+    return {
+      borderRadius: at(full.borderRadius, tile.borderRadius),
+      height: at(full.height, tile.height),
+      left: at(full.left, tile.left),
+      opacity: 1,
+      top: at(full.top, tile.top),
+      width: at(full.width, tile.width),
+    };
+  }
+
+  /** under the finger the pose must be immediate; released, it springs */
+  get swell() {
+    return this.swipe > 0 ? LIVE : SWELL;
   }
 
   /** the app's own title: it FADES. It is never the icon's label morphed. */
@@ -726,13 +810,30 @@ export class MockupGlb extends Component {
 
   <template>
     <div class="mg-page">
-      <div class="mg-stage" data-mode={{this.mode}} {{this.stage}}>
+      <div
+        class="mg-stage"
+        data-mode={{this.mode}}
+        style="--glow:{{this.shown.hue}}"
+        {{this.stage}}
+      >
+        {{! THE SPILL. A panel that emits throws light on the room around
+            it, and nothing sells "this is on" like the backdrop picking
+            up its colour. Behind everything, tinted by the open app. }}
+        <div class="mg-bloom" data-lit={{if this.open "yes" ""}}></div>
         <canvas></canvas>
 
         <div class="mg-css">
           <div class="mg-cam">
             <div class="mg-plane">
               <div class="mg-screen">
+                {{! THE BOOST. `backdrop-filter` re-renders everything
+                    BEHIND this pane, so a transparent sheet laid over the
+                    UI lifts the whole panel's luminance and saturation
+                    without touching a single colour in the markup. It is
+                    the closest thing the platform has to turning a screen
+                    up, and unlike brightening the CSS by hand it also
+                    lifts whatever a real app would render here. }}
+                <div class="mg-boost" aria-hidden="true"></div>
                 {{#if (this.isMode "2d")}}
                   <span class="mg-island" aria-hidden="true"></span>
                 {{/if}}
@@ -760,7 +861,7 @@ export class MockupGlb extends Component {
                   class="mg-app"
                   data-open={{if this.open "yes" ""}}
                   style="--hue:{{this.shown.hue}}"
-                  {{motion animate=this.panel transition=SWELL}}
+                  {{motion animate=this.panel transition=this.swell}}
                 >
                   <span
                     class="mg-app-name"
@@ -773,12 +874,14 @@ export class MockupGlb extends Component {
                       followed by any stray click and the app would shut
                       again before you saw it — which reads exactly like
                       "tapping icons does not work". }}
-                  <button
-                    type="button"
-                    class="mg-home"
-                    aria-label="Close {{this.shown.label}}"
-                    {{on "click" this.close}}
-                  ></button>
+                  <div class="mg-swipe" {{this.swiper}}>
+                    <button
+                      type="button"
+                      class="mg-home"
+                      aria-label="Close {{this.shown.label}}"
+                      {{on "click" this.close}}
+                    ></button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -815,13 +918,31 @@ export class MockupGlb extends Component {
           height: 640px;
           touch-action: none;
         }
+        .mg-bloom {
+          position: absolute;
+          z-index: 0;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 420ms ease;
+          background: radial-gradient(
+            38% 42% at 50% 50%,
+            hsl(var(--glow) 95% 62% / 0.5) 0%,
+            hsl(var(--glow) 95% 58% / 0.18) 40%,
+            transparent 72%
+          );
+          filter: blur(52px);
+        }
+        .mg-bloom[data-lit="yes"] {
+          opacity: 0.85;
+        }
         .mg-stage[data-mode="3d"] {
           cursor: grab;
         }
         .mg-stage canvas {
           position: absolute;
           inset: 0;
-          z-index: 1;
+          z-index: 2;
           width: 100%;
           height: 100%;
           pointer-events: none;
@@ -878,7 +999,7 @@ export class MockupGlb extends Component {
           inset: 0;
           overflow: hidden;
           border-radius: 46px;
-          background: #0d1220;
+          background: #16203a;
         }
         .mg-stage[data-mode="2d"] .mg-screen {
           inset: 0;
@@ -889,8 +1010,29 @@ export class MockupGlb extends Component {
            it or it is black type on a black page. */
         .mg-screen {
           background-image:
-            radial-gradient(120% 80% at 50% -10%, #2b3350 0%, #0d122000 70%),
-            radial-gradient(90% 60% at 20% 110%, #1d2a44 0%, #0d122000 70%);
+            radial-gradient(110% 72% at 50% -8%, #3d4c7a 0%, #16203a00 64%),
+            radial-gradient(82% 56% at 18% 108%, #26365c 0%, #16203a00 70%);
+        }
+        /* 3D ONLY. Behind the glass the panel is composited under a
+           tinted, reflective surface and needs a lift to read as lit;
+           flat, there is nothing over it and the same boost is just an
+           oversaturated picture. Gentle on purpose — enough that the
+           screen is the brightest thing in frame, not so much that the
+           icons go neon. */
+        .mg-boost {
+          position: absolute;
+          z-index: 3;
+          inset: 0;
+          pointer-events: none;
+          border-radius: inherit;
+        }
+        .mg-stage[data-mode="3d"] .mg-boost {
+          backdrop-filter: brightness(1.16) saturate(1.06) contrast(1.02);
+          -webkit-backdrop-filter: brightness(1.16) saturate(1.06)
+            contrast(1.02);
+          /* if the display has headroom and anything here is ever HDR,
+             let it use it; on an SDR panel this is a no-op */
+          dynamic-range-limit: no-limit;
         }
         .mg-island {
           position: absolute;
@@ -927,6 +1069,8 @@ export class MockupGlb extends Component {
           justify-items: center;
           gap: 9px;
         }
+        /* icons carry the panel's luminance: an OLED is bright BECAUSE
+           its content is, not because a filter over it is lighter */
         .mg-tile {
           display: block;
           width: 82px;
@@ -934,12 +1078,13 @@ export class MockupGlb extends Component {
           border-radius: 20px;
           background: linear-gradient(
             150deg,
-            hsl(var(--hue) 78% 62%),
-            hsl(var(--hue) 70% 42%)
+            hsl(var(--hue) 84% 66%),
+            hsl(var(--hue) 78% 47%)
           );
+          box-shadow: 0 0 16px hsl(var(--hue) 85% 58% / 0.25);
         }
         .mg-icon-name {
-          color: #dfe4f2;
+          color: #ffffff;
           font-size: 15px;
           font-family: ui-sans-serif, system-ui;
         }
@@ -959,19 +1104,34 @@ export class MockupGlb extends Component {
             hsl(var(--hue) 70% 42%)
           );
         }
-        /* the home bar: the only thing that closes an app */
+        /* the bottom edge, where the home gesture lives */
+        .mg-swipe {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          height: 132px;
+          touch-action: none;
+          cursor: grab;
+        }
+        /* the home bar: tap it, or swipe up anywhere along the edge */
+        /* a demo needs a target you can hit: the bar LOOKS like an iOS
+           home indicator and hits like a button, with the padding doing
+           the work rather than the ink */
         .mg-home {
           all: unset;
           cursor: pointer;
           position: absolute;
-          bottom: 12px;
+          bottom: 10px;
           left: 50%;
-          width: 140px;
-          height: 5px;
-          border-radius: 3px;
+          width: 210px;
+          height: 46px;
           transform: translateX(-50%);
-          background: #ffffffcc;
-          box-shadow: 0 0 12px #ffffff66;
+          border-radius: 24px;
+          background:
+            linear-gradient(#ffffffe6, #ffffffe6) center / 150px 6px no-repeat,
+            #ffffff14;
+          box-shadow: 0 0 16px #ffffff40;
         }
         .mg-app-name {
           color: #fff;
