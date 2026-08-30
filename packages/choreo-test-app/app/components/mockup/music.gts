@@ -425,7 +425,9 @@ export class MusicApp extends Component {
           inset: 0;
           display: flex;
           flex-direction: column;
-          padding: 10px 22px 16px;
+          /* the app is full-bleed — its background runs edge to edge —
+             and only the CONTENT starts below the island */
+          padding: 58px 22px 16px;
         }
 
         .music-topbar {
@@ -742,14 +744,6 @@ export class MusicApp extends Component {
           font-size: 11px;
           font-variant-numeric: tabular-nums;
           color: hsl(275 24% 62%);
-        }
-
-        /* CLEAR THE ISLAND. The phone's cutout is hardware and paints over
-         everything; the player's top bar was sitting under it. Pushed
-         below, the way an app's safe area works on the real device. */
-        .music-app {
-          padding-top: 46px;
-          box-sizing: border-box;
         }
       </style>
     </div>

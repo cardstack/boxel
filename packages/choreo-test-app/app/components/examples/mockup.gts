@@ -8,6 +8,7 @@ import {
   type Camera3DState,
   Choreo,
   type ChoreoContext,
+  type ChoreoRun,
   motion,
   type PerformCommand,
 } from 'glimmer-motion';
@@ -164,103 +165,101 @@ interface Beat {
 
 const SCENES: { app: string; beats: Beat[] }[] = [
   /**
-   * THE FILM LIVES IN THE APPS.
+   * THE SHOT LIST, and it is a list of intentions rather than numbers.
    *
-   * The home screen is a hallway. It has to be passed through — an app
-   * that cuts straight to the next never shows where it came from — but
-   * nobody came to watch a hallway, so the travel between scenes is under
-   * a second and every scene is several seconds of looking at something.
-   * Roughly nine tenths of the running time is inside an app.
+   * One grammar runs through all six: TURN WIDE to introduce the object,
+   * STRAIGHTEN AND PUSH to read it, ACCENT on the moment something is
+   * pressed, then TURN AWAY wide to leave. Rotation is how the film
+   * changes its subject — swinging left, then right, then back — and it
+   * always straightens as it closes in, because nobody reads a screen
+   * from forty degrees off axis. The push is never decoration: every one
+   * of them lands on something there is a reason to look at.
    *
-   * Each scene is a list of BEATS rather than one move, because a camera
-   * that pushes in once and sits there has stopped being a camera. A beat
-   * locks onto one part of the screen — the top of a list, a control, the
-   * thing that just changed — holds it, and hands over to the next.
-   *
-   * `y` is the beat that does the real work: dolly alone crops a tall
-   * subject, so pushing in without lifting the camera loses the top of
-   * the screen. Positive `y` brings it back.
-   *
-   * And no beat pushes past the GEOMETRIC floor. The device only stays in
-   * frame while `rest * dolly >= phoneHeight / (2·tan(fov/2))`, which for
-   * this framing is dolly 0.86. Below that the display mesh — which IS
-   * the hole the DOM shows through — fills the whole viewport, so the
-   * entire canvas becomes a hole and you get edge-to-edge app UI with no
-   * phone at all. That reads as the 3D having broken rather than as a
-   * close-up, and it is why every beat here starts at 0.88. Closeness
-   * comes from the PAN, not from driving the camera through the glass.
+   * The same poses drive both modes. In 3D they are an orbit; flat, the
+   * yaw and pitch have nowhere to go and what survives is the zoom and
+   * the pan — which is why the dolly range is wide enough to read as a
+   * push on its own, and why the pans are aimed at content rather than
+   * at nothing in particular.
    */
   {
+    // THE OPENER. Hard left and wide: meet the device before the app.
     app: 'mail',
     beats: [
-      // the header and the filter, then down into the list, then out
-      { dolly: 0.925, pitch: -4, t: 2.6, x: 0.02, y: 0.24, yaw: -9 },
+      { dolly: 1.24, pitch: -12, t: 2.2, x: 0.04, y: 0.02, yaw: -30 },
+      // straighten onto the header and the filter, and press Unread there
       {
-        dolly: 0.88,
-        pitch: -1,
-        t: 3.0,
+        dolly: 0.94,
+        pitch: -4,
+        t: 2.8,
         tap: 'Unread',
-        x: -0.02,
-        y: -0.02,
-        yaw: 5,
+        x: 0.01,
+        y: 0.18,
+        yaw: -8,
       },
-      { dolly: 1.06, pitch: -7, t: 2.2, x: 0, y: 0.1, yaw: -15 },
+      // then simply fall down the list that just changed
+      { dolly: 0.9, pitch: -1, t: 2.6, x: 0, y: -0.08, yaw: -2 },
     ],
   },
   {
+    // SWING THE OTHER WAY. A map is a surface, so come down onto it.
     app: 'maps',
     beats: [
-      { dolly: 0.903, pitch: -3, t: 2.8, x: -0.04, y: -0.16, yaw: 12 },
+      { dolly: 1.2, pitch: 9, t: 2.4, x: -0.02, y: 0.04, yaw: 26 },
       {
-        dolly: 0.88,
-        pitch: 0,
-        t: 3.2,
+        dolly: 0.92,
+        pitch: 2,
+        t: 3.0,
         tap: 'Transit',
-        x: 0.06,
-        y: -0.02,
-        yaw: -4,
+        x: 0.02,
+        y: 0.02,
+        yaw: 10,
       },
-      { dolly: 1.038, pitch: -6, t: 2.4, x: 0, y: 0.06, yaw: 16 },
+      // settle level on the sheet, which is where the answer is
+      { dolly: 0.88, pitch: -2, t: 2.6, x: -0.05, y: -0.14, yaw: 0 },
     ],
   },
   {
+    // HIGH AND LEFT, then a vertical move: art, transport, queue.
     app: 'music',
     beats: [
-      // the plate, then the transport, then the queue
-      { dolly: 0.88, pitch: -4, t: 2.8, x: 0.03, y: 0.2, yaw: 14 },
-      { dolly: 0.88, pitch: 0, t: 2.6, tap: 'play', x: 0.0, y: -0.05, yaw: 4 },
-      { dolly: 0.97, pitch: -3, t: 2.6, x: -0.03, y: -0.2, yaw: -8 },
+      { dolly: 1.18, pitch: -15, t: 2.4, x: 0.03, y: 0.12, yaw: -22 },
+      { dolly: 0.9, pitch: 0, t: 2.6, tap: 'play', x: 0, y: 0.02, yaw: -4 },
+      // tip down to the queue as it starts playing
+      { dolly: 0.94, pitch: 7, t: 2.8, x: 0.02, y: -0.18, yaw: 7 },
     ],
   },
   {
+    // A QUIET ONE. Barely moves: open a note and let it be read.
     app: 'notes',
     beats: [
-      { dolly: 0.948, pitch: -4, t: 2.6, x: 0.02, y: 0.2, yaw: -10 },
+      { dolly: 1.1, pitch: -7, t: 2.2, x: 0, y: 0.03, yaw: 17 },
       {
-        dolly: 0.88,
-        pitch: -1,
-        t: 2.8,
+        dolly: 0.92,
+        pitch: -2,
+        t: 3.0,
         tap: 'Dinner, Saturday',
-        x: -0.02,
-        y: -0.06,
-        yaw: 6,
+        x: 0.01,
+        y: 0.12,
+        yaw: 4,
       },
     ],
   },
   {
+    // FRONT ON. You watch numbers square, not at an angle.
     app: 'clock',
     beats: [
-      { dolly: 0.992, pitch: -3, t: 2.4, x: 0, y: 0.16, yaw: 9 },
-      { dolly: 0.88, pitch: 0, t: 1.2, tap: 'Timer', x: 0, y: -0.04, yaw: -3 },
-      { dolly: 0.88, pitch: 0, t: 2.6, tap: 'Start', x: 0, y: -0.02, yaw: 2 },
+      { dolly: 1.06, pitch: -5, t: 2.0, x: 0, y: 0.02, yaw: -13 },
+      { dolly: 0.9, pitch: 0, t: 1.6, tap: 'Timer', x: 0, y: 0, yaw: -2 },
+      // and hold on the dial once it is running
+      { dolly: 0.88, pitch: 2, t: 2.6, tap: 'Start', x: 0, y: -0.02, yaw: 2 },
     ],
   },
   {
-    // seen, not studied
+    // THE SIGN-OFF. Turn away and pull out; the film ends on the object.
     app: 'photos',
     beats: [
-      { dolly: 1.06, pitch: -4, t: 1.4, x: 0, y: 0.12, yaw: -5 },
-      { dolly: 0.925, pitch: -1, t: 1.4, x: 0.02, y: -0.06, yaw: 3 },
+      { dolly: 1.12, pitch: -8, t: 1.6, x: 0, y: 0.06, yaw: 22 },
+      { dolly: 1.32, pitch: -13, t: 2.2, x: -0.02, y: 0, yaw: 31 },
     ],
   },
 ];
@@ -316,7 +315,7 @@ export class Mockup extends Component {
   @tracked roomy = true;
   /** bumped to recompile the score, which is how the film loops */
   @tracked take = 0;
-  private region?: { run: { finished: Promise<void> } | null };
+  private region?: { run: ChoreoRun | null };
   private shotHost?: (state: Camera3DState) => void;
   /** drag a pad: hand the host a pose directly, and stop the film's camera */
   private poseHost?: (
@@ -561,11 +560,31 @@ export class Mockup extends Component {
     }
   };
 
-  /** a DRAG means "let me look": the camera stops, the apps carry on */
+  /**
+   * A DRAG MEANS "LET ME LOOK", and that stops the whole film — not just
+   * the camera. Leaving the app cues running while the camera is parked
+   * means the phone keeps opening and closing things under someone who
+   * has just taken hold of it, which is the demo talking over them.
+   * Stopping one stops both; resync brings both back.
+   */
   seizeCamera = () => {
-    if (this.cameraOn) {
+    if (this.cameraOn || this.syncOn) {
       this.cameraOn = false;
+      this.syncOn = false;
+      this.stopFilm();
     }
+  };
+
+  /**
+   * STOP MEANS STOP. Swapping the camera steps for waits of the same
+   * length keeps the timing honest, but it also means the score is still
+   * RUNNING — a clock ticking through a film nobody can see, looping
+   * forever. Two parallel tracks are a convenience of authoring, not a
+   * reason that turning one off cannot end the whole thing. So the run
+   * itself is paused, and pressing play compiles a fresh one.
+   */
+  stopFilm = () => {
+    this.region?.run?.pause();
   };
 
   /** a TAP on the screen means "let me use it": the app cues stop */
@@ -579,8 +598,13 @@ export class Mockup extends Component {
   };
 
   toggleCamera = () => {
-    this.cameraOn = !this.cameraOn;
-    if (this.cameraOn) {
+    const next = !this.cameraOn;
+    this.cameraOn = next;
+    this.syncOn = next;
+    if (!next) {
+      this.stopFilm();
+    }
+    if (next) {
       // RESUMING TAKES THE CAMERA BACK COMPLETELY. Whatever the sticks
       // left behind — a lean, or a pose driven while it was stopped — is
       // discarded, because a film that resumes from someone else's
@@ -766,7 +790,7 @@ export class Mockup extends Component {
 
   /** hold the region so the film can loop when its score finishes */
   wire = modifier((_el: HTMLElement, [c]: [ChoreoContext, number]) => {
-    this.region = c as unknown as { run: { finished: Promise<void> } | null };
+    this.region = c as unknown as { run: ChoreoRun | null };
     const run = this.region.run;
     if (!run) {
       return;
@@ -853,6 +877,8 @@ export class Mockup extends Component {
   }
 
   stage = modifier((host: HTMLElement) => {
+    /** timers the teardown must clear */
+    const openings: ReturnType<typeof setTimeout>[] = [];
     const canvas = host.querySelector('canvas')!;
     const layer = host.querySelector<HTMLElement>('.mg-css')!;
     const cam = host.querySelector<HTMLElement>('.mg-cam')!;
@@ -884,9 +910,20 @@ export class Mockup extends Component {
       // first render — there is nothing to animate away from yet — so the
       // film needs one more pass before it exists. Without this the flat
       // demo just sits there on load, which is exactly what it was doing.
+      // THE OPENING BUMP, TWICE. A region does not collect its score on
+      // the first render, so the film needs a later pass to exist at all
+      // — and one rAF is a race: if it lands before Glimmer has committed
+      // the marker, the pass it triggers has nothing new in it and the
+      // score is never compiled. A second, later bump costs one render
+      // and makes starting deterministic.
       requestAnimationFrame(() => {
         this.take += 1;
       });
+      openings.push(
+        setTimeout(() => {
+          this.take += 1;
+        }, 180)
+      );
     }
 
     const fitFlat = () => {
@@ -1755,6 +1792,7 @@ export class Mockup extends Component {
       this.halt?.();
       dispose?.();
       release();
+      openings.forEach(clearTimeout);
       stopTheme?.();
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('click', swallow, true);
@@ -2416,15 +2454,6 @@ export class Mockup extends Component {
         }
         /* the SELECTED half is filled, the other is an outline — a pair
            of outlines makes the switch read as two links */
-        .mg-seg button[aria-pressed="true"],
-        .mg-transport button[data-on="yes"] {
-          border-color: transparent;
-          background: var(--ink, #f3ece3);
-          color: var(--bg, #2a2521);
-        }
-        .mg-seg button[aria-pressed="false"] {
-          background: transparent;
-        }
 
         /* CLIP THE EXPANDING PANEL. The app grows from an 82px tile to the
            full 390x844 screen, and mid-flight its rounded box does not yet
@@ -2595,12 +2624,6 @@ export class Mockup extends Component {
         /* 3D IS THE POINT, and 2D is only the default because the engine
            is a megabyte and a half. So the switch says so: while you are
            flat, the other half of it is drawn as the live option. */
-        .mg-page[data-mode="2d"] .mg-seg button:last-child {
-          border-color: var(--ember-hot, #ff6a3a);
-          background: transparent;
-          color: var(--ember-hot, #ff6a3a);
-          font-weight: 700;
-        }
 
         /* the flat set, in the same two tones the WebGL cyc uses, so
            switching 2D/3D does not change the room */
@@ -2623,6 +2646,38 @@ export class Mockup extends Component {
               #3f444e 100%
             ),
             #5b626e;
+        }
+
+        /* THE SWITCH READS AT A GLANCE. Both halves stay legible white on
+           the set; the selected one is the only thing that changes. 3D is
+           the ember pill because it is the thing worth pressing; 2D is the
+           white outline, which is a state rather than an invitation. */
+        .mg-seg button {
+          color: #ffffff;
+          border-color: #ffffff5c;
+          background: transparent;
+        }
+        .mg-seg button:last-child[aria-pressed="true"] {
+          background: var(--ember-hot, #ff6a3a);
+          border-color: var(--ember-hot, #ff6a3a);
+          color: #ffffff;
+          font-weight: 700;
+        }
+        .mg-seg button:first-child[aria-pressed="true"] {
+          background: #ffffff;
+          border-color: #ffffff;
+          color: #16181d;
+          font-weight: 700;
+        }
+        /* while flat, the other half is tinted to say it is worth a press */
+        .mg-page[data-mode="2d"] .mg-seg button:last-child {
+          color: var(--ember-hot, #ff6a3a);
+          border-color: var(--ember-hot, #ff6a3a);
+        }
+        .mg-transport button[data-on="yes"] {
+          border-color: #ffffff8f;
+          background: #ffffff1f;
+          color: #ffffff;
         }
       </style>
     </div>
