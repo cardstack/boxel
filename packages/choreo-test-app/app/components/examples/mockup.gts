@@ -2042,8 +2042,19 @@ export class Mockup extends Component {
               camera leaves the phone just as out of sync as a tapped
               screen does, and both want the same way back }}
           {{#unless this.autoplay}}
-            <button type="button" class="mg-resync" {{on "click" this.resync}}>↺
-              resync</button>
+            <button type="button" class="mg-resync" {{on "click" this.resync}}>
+              <svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                />
+                <path d="M19.6 3.6v5.2h-5.2z" />
+              </svg>
+              resync
+            </button>
           {{/unless}}
         </div>
 
