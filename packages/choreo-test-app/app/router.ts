@@ -8,7 +8,6 @@ export default class Router extends EmberRouter {
 
 Router.map(function () {
   this.route('feature-reel', { path: '/_feature-reel' });
-  this.route('mockup-spike', { path: '/_mockup-spike' });
   this.route('mockup-glb', { path: '/_mockup-glb' });
   // Own URLs, declared before /:demo_id so Ember does not eat them as ids.
   this.route('crossing-stress');
