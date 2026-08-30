@@ -583,6 +583,7 @@ export class Mockup extends Component {
    * reason that turning one off cannot end the whole thing. So the run
    * itself is paused, and pressing play compiles a fresh one.
    */
+
   stopFilm = () => {
     this.region?.run?.pause();
   };
@@ -877,8 +878,6 @@ export class Mockup extends Component {
   }
 
   stage = modifier((host: HTMLElement) => {
-    /** timers the teardown must clear */
-    const openings: ReturnType<typeof setTimeout>[] = [];
     const canvas = host.querySelector('canvas')!;
     const layer = host.querySelector<HTMLElement>('.mg-css')!;
     const cam = host.querySelector<HTMLElement>('.mg-cam')!;
@@ -900,35 +899,40 @@ export class Mockup extends Component {
     cam.style.transform = '';
     layer.style.perspective = '';
 
-    // decided once, on mount: is there room to play a film here?
-    this.roomy = host.clientHeight >= 460;
-    if (!this.roomy) {
-      this.cameraOn = false;
-      this.syncOn = false;
-    } else {
-      // THE OPENING BUMP. A region does not collect its score on the very
-      // first render — there is nothing to animate away from yet — so the
-      // film needs one more pass before it exists. Without this the flat
-      // demo just sits there on load, which is exactly what it was doing.
-      // THE OPENING BUMP, TWICE. A region does not collect its score on
-      // the first render, so the film needs a later pass to exist at all
-      // — and one rAF is a race: if it lands before Glimmer has committed
-      // the marker, the pass it triggers has nothing new in it and the
-      // score is never compiled. A second, later bump costs one render
-      // and makes starting deterministic.
+    /**
+     * IS THERE ROOM TO PLAY A FILM HERE?
+     *
+     * Decided from the OBSERVED height, not from one read at modifier
+     * time. `.ex` is `position:absolute; inset:0` and has not been laid
+     * out when the modifier runs, so an early `clientHeight` reports a
+     * box far smaller than the one the demo ends up in — and a full page
+     * was being mistaken for a gallery card, which opens paused. That is
+     * why the film would not start: not the score, not the transport,
+     * just a measurement taken a frame too early.
+     */
+    let decided = false;
+    const decideRoom = (h: number) => {
+      if (decided || h <= 0) {
+        return;
+      }
+      decided = true;
+      this.roomy = h >= 460;
+      if (!this.roomy) {
+        this.cameraOn = false;
+        this.syncOn = false;
+        return;
+      }
+      // a region does not collect its score on its first render, so the
+      // film needs one more pass before it exists at all
       requestAnimationFrame(() => {
         this.take += 1;
       });
-      openings.push(
-        setTimeout(() => {
-          this.take += 1;
-        }, 180)
-      );
-    }
+    };
 
     const fitFlat = () => {
       const w = host.clientWidth || 1;
       const h = host.clientHeight || 1;
+      decideRoom(host.clientHeight);
       const fill = fillFor(h);
       const k = Math.min((h * fill) / SCREEN.h, (w * fill) / SCREEN.w);
       host.style.setProperty('--k', String(k));
@@ -1792,7 +1796,6 @@ export class Mockup extends Component {
       this.halt?.();
       dispose?.();
       release();
-      openings.forEach(clearTimeout);
       stopTheme?.();
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('click', swallow, true);
@@ -1810,7 +1813,6 @@ export class Mockup extends Component {
         data-mode={{this.mode}}
         data-ready={{if this.drawn "yes" ""}}
         style="--glow:{{this.shown.hue}}"
-        @quiet={{true}}
         @onCamera3D={{this.shot}}
         @onPerform={{this.dispatch}}
         @onPerformReset={{this.reset}}
