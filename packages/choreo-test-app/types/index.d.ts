@@ -28,9 +28,10 @@ declare module 'three' {
     dispose(): void;
   }
 
-  export class PerspectiveCamera {
+  export class PerspectiveCamera extends Object3D {
     aspect: number;
-    position: { z: number };
+    matrixWorldInverse: Matrix4;
+    projectionMatrix: Matrix4;
     constructor(fov: number, aspect: number, near: number, far: number);
     updateProjectionMatrix(): void;
   }
@@ -50,13 +51,91 @@ declare module 'three' {
     dispose(): void;
   }
 
-  export class Points {
-    rotation: { x: number; y: number };
+  export class Points extends Object3D {
     constructor(geometry: BufferGeometry, material: PointsMaterial);
   }
 
-  export class Scene {
-    add(object: Points): this;
+  export class Scene extends Object3D {
+    environment: unknown;
+  }
+
+  // ── the mockup spike's slice of three (still hand-written: see above) ──
+
+  export const NoBlending: number;
+
+  export class Vector3 {
+    x: number;
+    y: number;
+    z: number;
+    multiplyScalar(s: number): this;
+    set(x: number, y: number, z: number): this;
+    sub(v: Vector3): this;
+  }
+
+  export class Euler {
+    x: number;
+    y: number;
+    z: number;
+    set(x: number, y: number, z: number): this;
+  }
+
+  export class Matrix4 {
+    elements: number[];
+  }
+
+  export class Object3D {
+    matrixWorld: Matrix4;
+    name: string;
+    position: Vector3;
+    rotation: Euler;
+    scale: Vector3;
+    visible: boolean;
+    add(object: Object3D): this;
+    traverse(callback: (object: Object3D) => void): void;
+    updateMatrixWorld(force?: boolean): void;
+  }
+
+  export class Box3 {
+    max: Vector3;
+    min: Vector3;
+    getCenter(target: Vector3): Vector3;
+    getSize(target: Vector3): Vector3;
+    setFromObject(object: Object3D): this;
+  }
+
+  export class Material {
+    dispose(): void;
+  }
+
+  export class MeshPhysicalMaterial extends Material {
+    constructor(params?: {
+      blending?: number;
+      clearcoat?: number;
+      clearcoatRoughness?: number;
+      color?: number;
+      metalness?: number;
+      opacity?: number;
+      roughness?: number;
+      transparent?: boolean;
+    });
+  }
+
+  export class Mesh extends Object3D {
+    isMesh: boolean;
+    material: Material | Material[];
+  }
+
+  export class AmbientLight extends Object3D {
+    constructor(color?: number, intensity?: number);
+  }
+
+  export class DirectionalLight extends Object3D {
+    constructor(color?: number, intensity?: number);
+  }
+
+  export class PMREMGenerator {
+    constructor(renderer: WebGLRenderer);
+    fromScene(scene: Object3D, sigma?: number): { texture: unknown };
   }
 
   export class WebGLRenderer {
@@ -68,8 +147,34 @@ declare module 'three' {
     });
     setClearColor(hex: number, alpha: number): void;
     setPixelRatio(ratio: number): void;
+    domElement: HTMLCanvasElement;
     setSize(width: number, height: number, updateStyle?: boolean): void;
     render(scene: Scene, camera: PerspectiveCamera): void;
     dispose(): void;
   }
+}
+
+/** three's addons ship no types either; the spike uses three of them */
+declare module 'three/examples/jsm/loaders/GLTFLoader.js' {
+  import type { Object3D } from 'three';
+  export class GLTFLoader {
+    load(
+      url: string,
+      onLoad: (gltf: { scene: Object3D }) => void,
+      onProgress?: (event: ProgressEvent) => void,
+      onError?: (error: unknown) => void
+    ): void;
+    setDRACOLoader(loader: unknown): this;
+  }
+}
+
+declare module 'three/examples/jsm/loaders/DRACOLoader.js' {
+  export class DRACOLoader {
+    setDecoderPath(path: string): this;
+  }
+}
+
+declare module 'three/examples/jsm/environments/RoomEnvironment.js' {
+  import type { Object3D } from 'three';
+  export class RoomEnvironment extends Object3D {}
 }
