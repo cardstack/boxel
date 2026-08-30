@@ -446,28 +446,73 @@ export class MockupGlb extends Component {
       tick();
     };
 
-    // orbit — only meaningful in 3D, and harmless otherwise
-    let down: { x: number; y: number } | null = null;
+    /**
+     * ORBIT, INCLUDING ACROSS THE SCREEN ITSELF. A phone you can only
+     * turn by grabbing its bezel is a phone with a dead face, so the
+     * whole plane drags — and a press that never moves is still a tap.
+     * Four pixels is the whole rule: under it the press was a click and
+     * the icon gets it, over it the press was a rotation and the click
+     * that follows is swallowed.
+     */
+    const SLOP = 4;
+    let press: { lx: number; ly: number; ox: number; oy: number } | null = null;
+    let dragged = false;
+
     const grab = (ev: PointerEvent) => {
-      if ((ev.target as Element).closest('.mg-plane, .mg-seg')) {
-        return; // the screen is UI, and so is the switch
+      if (!running) {
+        return; // 2D has nothing to orbit
       }
-      down = { x: ev.clientX, y: ev.clientY };
+      if ((ev.target as Element).closest('.mg-seg')) {
+        return; // the switch is a control, not the scene
+      }
+      press = {
+        lx: ev.clientX,
+        ly: ev.clientY,
+        ox: ev.clientX,
+        oy: ev.clientY,
+      };
+      dragged = false;
       host.setPointerCapture(ev.pointerId);
     };
     const move = (ev: PointerEvent) => {
-      if (!down) {
+      if (!press) {
         return;
       }
-      ry += (ev.clientX - down.x) * 0.008;
-      rx += (ev.clientY - down.y) * 0.008;
+      if (
+        !dragged &&
+        Math.hypot(ev.clientX - press.ox, ev.clientY - press.oy) < SLOP
+      ) {
+        return;
+      }
+      if (!dragged) {
+        dragged = true;
+        host.dataset['dragging'] = 'yes';
+        host.setPointerCapture(ev.pointerId);
+      }
+      ry += (ev.clientX - press.lx) * 0.008;
+      rx += (ev.clientY - press.ly) * 0.008;
       rx = Math.max(-0.9, Math.min(0.9, rx));
-      down = { x: ev.clientX, y: ev.clientY };
+      press.lx = ev.clientX;
+      press.ly = ev.clientY;
     };
-    const up = () => (down = null);
+    const up = () => {
+      press = null;
+      delete host.dataset['dragging'];
+    };
+    // the click arrives AFTER pointerup, so `dragged` is still standing
+    // here; swallow it on the way down, before any icon can hear it
+    const swallow = (ev: MouseEvent) => {
+      if (!dragged) {
+        return;
+      }
+      dragged = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
     host.addEventListener('pointerdown', grab);
     host.addEventListener('pointermove', move);
     host.addEventListener('pointerup', up);
+    host.addEventListener('click', swallow, true);
 
     this.boot = run3d;
     this.halt = () => {
@@ -490,6 +535,7 @@ export class MockupGlb extends Component {
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('pointermove', move);
       host.removeEventListener('pointerup', up);
+      host.removeEventListener('click', swallow, true);
       delete (window as SpikeWindow).__glb;
       this.boot = undefined;
       this.halt = undefined;
@@ -505,6 +551,9 @@ export class MockupGlb extends Component {
           <div class="mg-cam">
             <div class="mg-plane">
               <div class="mg-screen">
+                {{#if (this.isMode "2d")}}
+                  <span class="mg-island" aria-hidden="true"></span>
+                {{/if}}
                 {{! the home screen. Absolutely placed at authored
                     coordinates, so it never reflows and never moves —
                     opening an app changes no other element's box. }}
@@ -526,6 +575,7 @@ export class MockupGlb extends Component {
                 <button
                   type="button"
                   class="mg-app"
+                  data-open={{if this.open "yes" ""}}
                   style="--hue:{{this.shown.hue}}"
                   {{on "click" this.close}}
                   {{motion animate=this.panel transition=SWELL}}
@@ -609,13 +659,21 @@ export class MockupGlb extends Component {
           left: 50%;
           width: 390px;
           height: 844px;
-          transform: translate(-50%, -50%) scale(0.66);
-          border-radius: 62px;
-          padding: 14px;
-          background: #15171c;
+          transform: translate(-50%, -50%) scale(0.62);
+          border-radius: 58px;
+          padding: 11px;
+          background: linear-gradient(
+            147deg,
+            #8b9099 0%,
+            #33373f 16%,
+            #1b1d22 46%,
+            #24272d 74%,
+            #6f747e 100%
+          );
           box-shadow:
-            0 0 0 2px #3a3d45 inset,
-            0 30px 60px -20px #0007;
+            0 0 0 1px #00000066 inset,
+            0 1px 0 #ffffff22 inset,
+            0 26px 50px -18px #00000088;
         }
         .mg-screen {
           position: absolute;
@@ -625,8 +683,28 @@ export class MockupGlb extends Component {
           background: #0d1220;
         }
         .mg-stage[data-mode="2d"] .mg-screen {
-          inset: 14px;
-          border-radius: 50px;
+          inset: 11px;
+          border-radius: 48px;
+        }
+        /* the island, so the flat phone is recognisably the same device
+           the GLB draws over the DOM in 3D. It needs a wallpaper behind
+           it or it is black type on a black page. */
+        .mg-screen {
+          background-image:
+            radial-gradient(120% 80% at 50% -10%, #2b3350 0%, #0d122000 70%),
+            radial-gradient(90% 60% at 20% 110%, #1d2a44 0%, #0d122000 70%);
+        }
+        .mg-island {
+          position: absolute;
+          z-index: 2;
+          left: 50%;
+          top: 13px;
+          width: 118px;
+          height: 35px;
+          border-radius: 18px;
+          background: #05070a;
+          transform: translateX(-50%);
+          pointer-events: none;
         }
         /* it is a phone screen, not a document: a drag across it is a
            gesture, never a text selection */
