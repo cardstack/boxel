@@ -253,7 +253,10 @@ export class Mockup extends Component {
   private region?: { run: { finished: Promise<void> } | null };
   private shotHost?: (state: Camera3DState) => void;
   /** drag a pad: hand the host a pose directly, and stop the film's camera */
-  private poseHost?: (partial: Partial<Camera3DState>) => void;
+  private poseHost?: (
+    partial: Partial<Camera3DState>,
+    relative?: boolean
+  ) => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
   private tint?: (hex: number) => void;
@@ -405,6 +408,18 @@ export class Mockup extends Component {
     this.poseHost?.(partial);
   };
 
+  /** a stick's offset, integrated into the pose — degrees (or units) per second */
+  nudge = (kind: string, dx: number, dy: number) => {
+    this.seizeCamera();
+    if (kind === 'orbit') {
+      this.poseHost?.({ pitch: dy * 90, yaw: dx * 150 }, true);
+    } else if (kind === 'pan') {
+      this.poseHost?.({ x: dx * 0.9, y: -dy * 0.9 }, true);
+    } else {
+      this.poseHost?.({ dolly: -dx * 1.1 }, true);
+    }
+  };
+
   /** a DRAG means "let me look": the camera stops, the apps carry on */
   seizeCamera = () => {
     if (this.cameraOn) {
@@ -442,51 +457,121 @@ export class Mockup extends Component {
    * pad to yaw and pitch, the pan pad to truck and pedestal, the rail to
    * dolly — and writes straight through to the host.
    */
+  /**
+   * THUMBSTICKS, not sliders.
+   *
+   * Three things make a stick feel like a stick rather than a dot you
+   * drag. It RESISTS — the further out you pull, the more travel each
+   * pixel of finger buys you less of, so the edge of the pad is somewhere
+   * you have to mean to reach. It is DAMPED — the knob chases the finger
+   * on a spring rather than teleporting under it, the way
+   * `follow-pointer` chases. And it SNAPS HOME on release, slightly
+   * under-damped, so letting go reads as elastic rather than as a slide
+   * back to zero.
+   *
+   * The camera integrates the stick's offset: a held stick keeps turning,
+   * it does not jump. That is what makes centring on release sensible —
+   * the stick is a rate, not a position, and the camera keeps whatever
+   * the stick gave it.
+   */
   padDrag = modifier((el: HTMLElement, [kind]: [string]) => {
-    const at = (ev: PointerEvent) => {
+    /** where the finger is asking the knob to be, -1..1 on each axis */
+    let want = { x: 0, y: 0 };
+    /** where the knob actually is: a spring chasing `want` */
+    const knob = { vx: 0, vy: 0, x: 0, y: 0 };
+    let held = false;
+    let raf = 0;
+
+    /**
+     * Progressive resistance. A linear pad hits its limit the moment you
+     * leave the middle; this spends the first half of the travel on fine
+     * control and makes the outer reaches cost real distance.
+     */
+    const resist = (t: number) =>
+      Math.sign(t) * Math.min(1, Math.abs(t)) ** 1.7;
+
+    const read = (ev: PointerEvent) => {
       const b = el.getBoundingClientRect();
-      return {
-        u: Math.max(0, Math.min(1, (ev.clientX - b.left) / (b.width || 1))),
-        v: Math.max(0, Math.min(1, (ev.clientY - b.top) / (b.height || 1))),
+      const half = Math.min(b.width, b.height) / 2 || 1;
+      const raw = {
+        x: (ev.clientX - (b.left + b.width / 2)) / half,
+        y: (ev.clientY - (b.top + b.height / 2)) / half,
       };
+      want = { x: resist(raw.x), y: resist(raw.y) };
     };
-    const lerp = ([lo, hi]: readonly [number, number], t: number) =>
-      lo + (hi - lo) * t;
-    const write = (ev: PointerEvent) => {
-      const { u, v } = at(ev);
-      if (kind === 'orbit') {
-        this.grabPose({
-          pitch: lerp(RANGE.pitch, v),
-          yaw: lerp(RANGE.yaw, u),
-        });
-      } else if (kind === 'pan') {
-        this.grabPose({ x: lerp(RANGE.pan, u), y: lerp(RANGE.pan, 1 - v) });
-      } else {
-        this.grabPose({ dolly: lerp(RANGE.dolly, 1 - u) });
+
+    // the spring the knob rides: chasing while held, homing when let go
+    const CHASE = { k: 340, c: 26 };
+    const HOME = { k: 150, c: 15 };
+    let last = 0;
+
+    const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
+      last = now;
+      const target = held ? want : { x: 0, y: 0 };
+      const s = held ? CHASE : HOME;
+      for (const axis of ['x', 'y'] as const) {
+        const v = axis === 'x' ? 'vx' : 'vy';
+        const a = s.k * (target[axis] - knob[axis]) - s.c * knob[v];
+        knob[v] += a * dt;
+        knob[axis] += knob[v] * dt;
+      }
+      el.style.setProperty('--knob-x', knob.x.toFixed(4));
+      el.style.setProperty('--knob-y', knob.y.toFixed(4));
+      // THE STICK IS A RATE. A held stick keeps turning the camera, which
+      // is why it can spring home without undoing what it did.
+      if (Math.abs(knob.x) > 0.004 || Math.abs(knob.y) > 0.004) {
+        this.nudge(kind, knob.x * dt, knob.y * dt);
+      }
+      if (
+        !held &&
+        Math.hypot(knob.x, knob.y) < 0.002 &&
+        Math.hypot(knob.vx, knob.vy) < 0.01
+      ) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        knob.x = 0;
+        knob.y = 0;
+        el.style.setProperty('--knob-x', '0');
+        el.style.setProperty('--knob-y', '0');
       }
     };
-    let down = false;
+
+    const spin = () => {
+      if (!raf) {
+        last = 0;
+        raf = requestAnimationFrame(tick);
+      }
+    };
     const move = (ev: PointerEvent) => {
-      if (down) {
-        write(ev);
+      if (held) {
+        read(ev);
       }
     };
     const up = () => {
-      down = false;
+      held = false;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      spin();
     };
     const start = (ev: PointerEvent) => {
       ev.stopPropagation();
-      down = true;
-      write(ev);
+      held = true;
+      read(ev);
+      spin();
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
     };
     el.addEventListener('pointerdown', start);
     return () => {
       el.removeEventListener('pointerdown', start);
       up();
+      if (raf) {
+        cancelAnimationFrame(raf);
+      }
     };
   });
 
@@ -1093,7 +1178,14 @@ export class Mockup extends Component {
           w,
           h
         );
-        plane.style.transform = objectCss(anchor.matrixWorld.elements);
+        // TUCK THE EDGE UNDER THE GLASS. The DOM plane and the display
+        // mesh are exactly coplanar and exactly the same size, so their
+        // silhouettes land on the same pixels — the browser antialiases
+        // one edge and the GPU antialiases the other, and the two do not
+        // agree, which reads as a jagged seam all the way round. Insetting
+        // the DOM by half a percent puts its edge just inside the mesh, so
+        // the body covers the seam and only one edge is ever drawn.
+        plane.style.transform = objectCss(anchor.matrixWorld.elements, 0.995);
       };
 
       // leaving 3D stops the loop, and a stopped canvas keeps its last
@@ -1287,8 +1379,30 @@ export class Mockup extends Component {
       Object.assign(pose, next);
       apply();
     };
-    this.poseHost = (partial) => {
-      Object.assign(pose, partial);
+    this.poseHost = (partial, relative) => {
+      if (relative) {
+        // a stick's contribution ADDS, and every axis is clamped to the
+        // same range the script writes within
+        const clamp = (v: number, [lo, hi]: readonly [number, number]) =>
+          Math.max(lo, Math.min(hi, v));
+        if (partial.yaw !== undefined) {
+          pose.yaw = clamp(pose.yaw + partial.yaw, RANGE.yaw);
+        }
+        if (partial.pitch !== undefined) {
+          pose.pitch = clamp(pose.pitch + partial.pitch, RANGE.pitch);
+        }
+        if (partial.x !== undefined) {
+          pose.x = clamp(pose.x + partial.x, RANGE.pan);
+        }
+        if (partial.y !== undefined) {
+          pose.y = clamp(pose.y + partial.y, RANGE.pan);
+        }
+        if (partial.dolly !== undefined) {
+          pose.dolly = clamp(pose.dolly + partial.dolly, RANGE.dolly);
+        }
+      } else {
+        Object.assign(pose, partial);
+      }
       apply();
     };
     share();
@@ -1545,6 +1659,24 @@ export class Mockup extends Component {
           {{/unless}}
         </div>
 
+        {{! THE POSE, SHOWN AND SETTABLE. Every dot is positioned from a
+            custom property the adapter writes each frame, so the film
+            moves them; dragging one writes the same pose back and takes
+            the camera over. One pose, two ways to set it. }}
+        <div class="mg-pads">
+          <div class="mg-pad" {{this.padDrag "orbit"}}>
+            <span class="mg-pad-dot mg-dot-orbit"></span>
+            <span class="mg-pad-name">rotate</span>
+          </div>
+          <div class="mg-pad" {{this.padDrag "pan"}}>
+            <span class="mg-pad-dot mg-dot-pan"></span>
+            <span class="mg-pad-name">pan</span>
+          </div>
+          <div class="mg-rail" {{this.padDrag "dolly"}}>
+            <span class="mg-rail-dot"></span>
+            <span class="mg-pad-name">zoom</span>
+          </div>
+        </div>
       </div>
 
       <style>
@@ -1930,65 +2062,10 @@ export class Mockup extends Component {
         .mg-plane {
           overflow: hidden;
         }
-
-        .mg-pads {
-          position: absolute;
-          z-index: 4;
-          left: 10px;
-          bottom: 10px;
-          display: flex;
-          gap: 8px;
-          align-items: flex-end;
-        }
-        .mg-pad,
-        .mg-rail {
-          position: relative;
-          cursor: crosshair;
-          border: 1px solid var(--line, #ffffff17);
-          border-radius: 10px;
-          background: var(--bg-elev, #00000066);
-          touch-action: none;
-        }
-        .mg-pad {
-          width: 66px;
-          height: 66px;
-        }
-        .mg-rail {
-          width: 96px;
-          height: 66px;
-        }
-        .mg-pad-name {
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 4px;
-          text-align: center;
-          font: 9px/1 var(--font-mono, ui-monospace, monospace);
-          color: var(--ink-faint, #b8aea3);
-          pointer-events: none;
-        }
         .mg-pad-dot,
-        .mg-rail-dot {
-          position: absolute;
-          width: 9px;
-          height: 9px;
-          margin: -4.5px 0 0 -4.5px;
-          border-radius: 50%;
-          background: var(--ember-hot, #ff6a3a);
-          box-shadow: 0 0 8px #ff6a3a80;
-          pointer-events: none;
-        }
         /* THE DOTS ARE THE CAMERA. Positioned from the properties the
            adapter writes every frame, so they travel with the film and
            sit wherever a drag last put them. */
-        .mg-dot-orbit {
-          left: calc(var(--yaw-at, 50) * 1%);
-          top: calc(var(--pitch-at, 50) * 1%);
-        }
-        .mg-dot-pan {
-          left: calc(var(--pan-x-at, 50) * 1%);
-          top: calc(100% - var(--pan-y-at, 50) * 1%);
-        }
         .mg-rail-dot {
           top: 50%;
           left: calc(100% - var(--dolly-at, 50) * 1%);
@@ -2012,6 +2089,111 @@ export class Mockup extends Component {
         @media (prefers-reduced-motion: reduce) {
           .mg-stage[data-mode="2d"] .mg-seg button:last-child {
             animation: none;
+          }
+        }
+
+        /* THE ISLAND IS HARDWARE. It is cut into the panel, so it paints
+           over whatever the app is drawing — and the app's own content
+           starts below it rather than sliding underneath. Every screen
+           gets the same safe area, so no app has to know about it. */
+        .mg-island {
+          z-index: 9;
+        }
+        .mg-app-ui > * {
+          top: 48px !important;
+        }
+
+        /* GLASSMORPHIC THUMB CONTROLS, the way a game overlays them on an
+           iPad: a frosted disc that sits on the picture rather than in a
+           panel beside it, and a knob that rides a spring inside it. */
+        .mg-pads {
+          position: absolute;
+          z-index: 5;
+          right: 14px;
+          /* room for the labels, which hang below each disc */
+          bottom: 30px;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+        .mg-pad,
+        .mg-rail {
+          position: relative;
+          touch-action: none;
+          cursor: grab;
+          border-radius: 999px;
+          border: 1px solid #ffffff2e;
+          background: linear-gradient(
+            160deg,
+            #ffffff26 0%,
+            #ffffff0f 42%,
+            #ffffff08 100%
+          );
+          backdrop-filter: blur(14px) saturate(1.4);
+          -webkit-backdrop-filter: blur(14px) saturate(1.4);
+          box-shadow:
+            0 1px 0 #ffffff3d inset,
+            0 8px 20px -8px #00000073;
+        }
+        .mg-pad:active,
+        .mg-rail:active {
+          cursor: grabbing;
+        }
+        .mg-pad {
+          width: 78px;
+          height: 78px;
+        }
+        .mg-rail {
+          width: 108px;
+          height: 46px;
+          border-radius: 999px;
+        }
+        .mg-pad-name {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: -14px;
+          text-align: center;
+          font: 9px/1 var(--font-mono, ui-monospace, monospace);
+          color: var(--ink-faint, #b8aea3);
+          letter-spacing: 0.04em;
+          pointer-events: none;
+        }
+        /* the knob: pushed by --knob-x/y, which the spring writes each
+           frame while the stick is held and unwinds when it is let go */
+        .mg-pad-dot,
+        .mg-rail-dot {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 30px;
+          height: 30px;
+          margin: -15px 0 0 -15px;
+          border-radius: 50%;
+          pointer-events: none;
+          background: radial-gradient(
+            120% 120% at 34% 26%,
+            #ffffffe6 0%,
+            #ffffff8c 40%,
+            #ffffff33 100%
+          );
+          box-shadow:
+            0 2px 6px #00000059,
+            0 0 0 1px #ffffff40 inset;
+          transform: translate(
+            calc(var(--knob-x, 0) * 22px),
+            calc(var(--knob-y, 0) * 22px)
+          );
+        }
+        .mg-rail-dot {
+          width: 26px;
+          height: 26px;
+          margin: -13px 0 0 -13px;
+          transform: translate(calc(var(--knob-x, 0) * 36px), 0);
+        }
+        @container (max-height: 460px) {
+          .mg-pads {
+            display: none;
           }
         }
       </style>
