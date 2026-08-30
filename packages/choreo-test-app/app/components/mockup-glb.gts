@@ -3,7 +3,20 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { beacon, motion } from 'glimmer-motion';
+import {
+  beacon,
+  type Camera3DState,
+  Choreo,
+  type ChoreoContext,
+  motion,
+  type PerformCommand,
+} from 'glimmer-motion';
+import { ClockApp } from 'test-app/components/mockup/clock';
+import { MailApp } from 'test-app/components/mockup/mail';
+import { MapsApp } from 'test-app/components/mockup/maps';
+import { MusicApp } from 'test-app/components/mockup/music';
+import { NotesApp } from 'test-app/components/mockup/notes';
+import { PhotosApp } from 'test-app/components/mockup/photos';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import type * as THREE from 'three';
 
@@ -18,9 +31,10 @@ import type * as THREE from 'three';
  * in both 2D and 3D. That is the whole claim, and the segmented control
  * exists so the two can be put side by side.
  *
- * Nothing here uses `<Choreo>`. The point of this demo is the 3D, and an
- * icon that grows into an app is more precisely done by naming both
- * poses than by measuring them: see `panel` below.
+ * The icon-to-app flight names both poses rather than measuring them —
+ * see `panel` — but the FILM is Choreo through and through: `c.Perform`
+ * cues open and close the apps, `c.Camera3D` flies the shot in 3D, and
+ * `c.Camera` zooms the platter in 2D. One score, two lenses.
  */
 
 /** the DOM screen is authored at a real iPhone's logical resolution */
@@ -28,9 +42,12 @@ const SCREEN = { h: 844, w: 390 };
 /** the home screen, in that resolution's own pixels */
 const TILE = 82;
 const RADIUS = { app: 46, tile: 20 };
-const PAD = 34;
+/** 36 is the one pad that makes the gutter equal it: 390 = 2·36 + 2·36 + 3·82 */
+const PAD = 36;
 const GAP = (SCREEN.w - PAD * 2 - TILE * 3) / 2;
-const ROW = [96, 236];
+/** a cell is 82 tile + 9 gap + 18 label = 109, so 146 apart is a 37px
+ *  gutter — the same air between the rows as between the columns */
+const ROW = [104, 250];
 
 /**
  * The grid is AUTHORED, not measured. Every tile's box is a constant in
@@ -42,12 +59,12 @@ const ROW = [96, 236];
  * other element's layout at all.
  */
 const APPS = [
-  { hue: 8, id: 'mail', label: 'Mail' },
-  { hue: 140, id: 'notes', label: 'Notes' },
-  { hue: 210, id: 'maps', label: 'Maps' },
-  { hue: 275, id: 'music', label: 'Music' },
-  { hue: 32, id: 'photos', label: 'Photos' },
-  { hue: 190, id: 'clock', label: 'Clock' },
+  { Ui: MailApp, hue: 8, id: 'mail', label: 'Mail' },
+  { Ui: NotesApp, hue: 140, id: 'notes', label: 'Notes' },
+  { Ui: MapsApp, hue: 210, id: 'maps', label: 'Maps' },
+  { Ui: MusicApp, hue: 275, id: 'music', label: 'Music' },
+  { Ui: PhotosApp, hue: 32, id: 'photos', label: 'Photos' },
+  { Ui: ClockApp, hue: 190, id: 'clock', label: 'Clock' },
 ].map((app, i) => ({
   ...app,
   x: PAD + (i % 3) * (TILE + GAP),
@@ -77,6 +94,9 @@ const hsl = (hue: number): number => {
   return (f(0) << 16) | (f(8) << 8) | f(4);
 };
 
+/** the share of the platter the phone fills once framed */
+const FILL = 0.76;
+
 /** the layer the eye-level key light lives on, and the screen does not */
 const EYE_LEVEL = 1;
 
@@ -90,6 +110,33 @@ const SWELL = {
 const FADE = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
 /** while a finger is on it, the pose is not animated — it IS the finger */
 const LIVE = { duration: 0.001, ease: 'linear' } as const;
+
+/**
+ * THE SHOT LIST. One score, two cameras.
+ *
+ * The beats are identical in both modes — the same apps open and close on
+ * the same counts — and only the camera differs: `c.Camera3D` hands an
+ * orbit pose to three.js in 3D, `c.Camera` moves the region's own frame
+ * in 2D. That is the argument for making the 3D camera a step rather than
+ * a callback: the direction reads the same either way, and both are
+ * seekable because both are sampled from the clock.
+ */
+const SHOTS = [
+  // A HERO ANGLE, NOT A STUNT. Product films sit the camera slightly
+  // BELOW the object and look up: it puts the device over your eye line
+  // and reads as imposing rather than inspected. So pitch stays negative
+  // throughout and the lateral swing stays modest — past about 25° the
+  // screen foreshortens into a sliver and the UI, which is the subject,
+  // stops being readable. The drama comes from the push-in, not the arc.
+  { app: 'mail', dolly: 0.86, hold: 3.4, pitch: -13, yaw: -17, zoom: 1.34 },
+  { app: 'photos', dolly: 1.02, hold: 3.4, pitch: -7, yaw: 15, zoom: 1.08 },
+  { app: 'music', dolly: 0.82, hold: 3.4, pitch: -15, yaw: 24, zoom: 1.42 },
+  { app: 'clock', dolly: 0.94, hold: 3.4, pitch: -6, yaw: -9, zoom: 1.2 },
+] as const;
+/** how long the camera takes to travel between shots */
+const TRAVEL = 2.2;
+/** the editorial curve: recorded motion glides where a UI snaps */
+const GLIDE = [0.65, 0, 0.35, 1] as const;
 
 interface SpikeWindow extends Window {
   __glb?: unknown;
@@ -110,6 +157,21 @@ export class MockupGlb extends Component {
   @tracked mode: '2d' | '3d' = '2d';
   @tracked status = 'flat — the same DOM, no engine loaded';
 
+  /**
+   * TWO TRACKS, TWO SWITCHES.
+   *
+   * The film drives two independent things: the CAMERA (where the shot
+   * stands) and the APP INTERACTION (which app is open). They are stopped
+   * by different gestures because they answer to different intents — a
+   * drag means "let me look", a tap on the screen means "let me use it" —
+   * and either can be handed back without disturbing the other.
+   */
+  @tracked cameraOn = true;
+  @tracked syncOn = true;
+  /** bumped to recompile the score, which is how the film loops */
+  @tracked take = 0;
+  private region?: { run: { finished: Promise<void> } | null };
+  private shotHost?: (state: Camera3DState) => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
   private tint?: (hex: number) => void;
@@ -118,9 +180,24 @@ export class MockupGlb extends Component {
   readonly screen = SCREEN;
 
   choose = (app: App) => {
+    // TWO STEPS, ON PURPOSE. `{{motion}}` animates from where the element
+    // actually IS, and while closed the panel is parked on whichever tile
+    // it last came out of. Flipping `parked` and `open` in one render
+    // makes it grow out of the OLD icon on its way to the screen. So the
+    // panel is planted on the tapped tile first — a render with `open`
+    // still false, which is instant because the pose it is moving to is
+    // the pose it is already drawn at — and only then told to open.
     this.parked = app;
-    this.open = app;
     this.tint?.(hsl(app.hue));
+    if (this.open) {
+      this.open = app; // already up: a straight swap, nothing to plant
+      return;
+    }
+    requestAnimationFrame(() => {
+      if (this.parked === app) {
+        this.open = app;
+      }
+    });
   };
 
   close = () => {
@@ -192,6 +269,97 @@ export class MockupGlb extends Component {
   };
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
+
+  readonly shots = SHOTS;
+  readonly travel = TRAVEL;
+  readonly glide = GLIDE;
+
+  /**
+   * The film's cues arrive here. `c.Perform` is the construct for exactly
+   * this: a semantic command on the timeline that the host executes, so
+   * the score says "open mail" rather than remembering a click.
+   *
+   * The write is deferred a frame ON PURPOSE. A command is dispatched
+   * during the region's own pass, and a tracked write there re-renders
+   * the region, replays the pass, and cancels the run that was
+   * dispatching — the trap `examples/fold.gts` documents. A frame later
+   * the pass is over and the write is an ordinary one.
+   */
+  dispatch = (command: PerformCommand) => {
+    const app = APPS.find((a) => a.id === command.target);
+    requestAnimationFrame(() => {
+      if (command.action === 'open' && app) {
+        this.parked = app;
+        this.open = app;
+        this.tint?.(hsl(app.hue));
+      } else if (command.action === 'close') {
+        this.open = null;
+        this.tint?.(HOME_GLOW);
+      }
+    });
+  };
+
+  /** a seek backwards cannot un-execute a command; it re-derives from zero */
+  reset = () => {
+    requestAnimationFrame(() => {
+      this.open = null;
+    });
+  };
+
+  /** the shot, straight from the score, applied to whatever is drawing */
+  shot = (state: Camera3DState) => {
+    this.shotHost?.(state);
+  };
+
+  /** a DRAG means "let me look": the camera stops, the apps carry on */
+  seizeCamera = () => {
+    if (this.cameraOn) {
+      this.cameraOn = false;
+    }
+  };
+
+  /** a TAP on the screen means "let me use it": the app cues stop */
+  seizeApps = () => {
+    if (this.syncOn) {
+      this.syncOn = false;
+    }
+  };
+
+  toggleCamera = () => {
+    this.cameraOn = !this.cameraOn;
+    if (this.cameraOn) {
+      this.take += 1;
+    }
+  };
+
+  toggleSync = () => {
+    this.syncOn = !this.syncOn;
+    if (this.syncOn) {
+      this.take += 1;
+    }
+  };
+
+  get running() {
+    return this.cameraOn || this.syncOn;
+  }
+
+  /** hold the region so the film can loop when its score finishes */
+  wire = modifier((_el: HTMLElement, [c]: [ChoreoContext, number]) => {
+    this.region = c as unknown as { run: { finished: Promise<void> } | null };
+    const run = this.region.run;
+    if (!run) {
+      return;
+    }
+    let live = true;
+    void run.finished.then(() => {
+      if (live && this.running) {
+        this.take += 1;
+      }
+    });
+    return () => {
+      live = false;
+    };
+  });
 
   /**
    * THE APP, as two named poses again.
@@ -280,6 +448,8 @@ export class MockupGlb extends Component {
     let mapped = '';
     let rx = -0.12;
     let ry = Math.PI + 0.3;
+    /** the score's push-in, as a multiple of the fitted distance */
+    let dolly = 1;
     let dispose: (() => void) | undefined;
     let keyLight: THREE.Object3D | undefined;
     let screenGlow: THREE.RectAreaLight | undefined;
@@ -366,6 +536,7 @@ export class MockupGlb extends Component {
           g.restore();
         }
         const tex = new T.CanvasTexture(c);
+        tex.colorSpace = T.SRGBColorSpace;
         tex.mapping = T.EquirectangularReflectionMapping;
         return pmrem.fromEquirectangular(tex).texture;
       };
@@ -393,6 +564,25 @@ export class MockupGlb extends Component {
 
       const camera = new T.PerspectiveCamera(38, 1, 1, 20000);
       camera.position.set(0, 0, 1500);
+      /**
+       * FIT THE PHONE TO THE PLATTER. World units are CSS pixels here, so
+       * framing is arithmetic: the height a perspective camera shows at
+       * distance d is 2·d·tan(fov/2), and the same in width once the
+       * aspect is folded in. Solve both for d, take whichever is further
+       * away, and the phone fills its share of whatever box the demo is
+       * given — a gallery card, a full page, a phone in portrait.
+       */
+      let phone = { h: 900, w: 420 };
+      let rest = 1500;
+      const frame2 = () => {
+        const w = host.clientWidth || 1;
+        const h = host.clientHeight || 1;
+        const vFov = (camera.fov * Math.PI) / 180;
+        const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h));
+        const dV = phone.h / FILL / 2 / Math.tan(vFov / 2);
+        const dH = phone.w / FILL / 2 / Math.tan(hFov / 2);
+        rest = Math.max(dV, dH);
+      };
 
       /**
        * THE RIG. A product shoot, not a scene: big soft sources for the
@@ -481,6 +671,51 @@ export class MockupGlb extends Component {
       screenGlow = glow;
       keyLight = key;
 
+      /**
+       * THE SET. A backdrop the phone stands in front of, so the eye can
+       * tell the two motions apart: when the SHOT moves, the set slides
+       * and the horizon shifts; when the DEVICE turns, the set holds
+       * still and only the phone rotates. Without it a yaw and an orbit
+       * are the same picture, which makes `c.Camera3D` impossible to
+       * read — and impossible to demo.
+       *
+       * It is deliberately plain: a sweep from wall to floor with a soft
+       * pool of light where the phone stands, the way a cyc is painted.
+       * Nothing recognisable, because it must not compete with the
+       * screen.
+       */
+      const cycTex = (() => {
+        const c = document.createElement('canvas');
+        c.width = 512;
+        c.height = 512;
+        const g = c.getContext('2d')!;
+        const wall = g.createLinearGradient(0, 0, 0, 512);
+        wall.addColorStop(0, '#080a0e');
+        wall.addColorStop(0.42, '#141922');
+        wall.addColorStop(0.58, '#242c39'); // the horizon: wall meets floor
+        wall.addColorStop(0.63, '#171d26');
+        wall.addColorStop(1, '#07080b');
+        g.fillStyle = wall;
+        g.fillRect(0, 0, 512, 512);
+        const pool = g.createRadialGradient(256, 322, 8, 256, 322, 200);
+        pool.addColorStop(0, '#3d4757');
+        pool.addColorStop(1, '#3d475700');
+        g.fillStyle = pool;
+        g.fillRect(0, 0, 512, 512);
+        const t = new T.CanvasTexture(c);
+        // A canvas is authored in sRGB. Without saying so, three treats it
+        // as linear and converts on output, which lifts every dark value —
+        // a near-black cyc comes out as a pale grey wall.
+        t.colorSpace = T.SRGBColorSpace;
+        return t;
+      })();
+      const setPlane = new T.Mesh(
+        new T.PlaneGeometry(6200, 6200),
+        new T.MeshBasicMaterial({ map: cycTex })
+      );
+      setPlane.position.set(0, 0, -2600);
+      scene.add(setPlane);
+
       /** everything the pointer orbits */
       const pivot = new T.Object3D();
       scene.add(pivot);
@@ -555,6 +790,13 @@ export class MockupGlb extends Component {
           const bounds = new T.Box3().setFromObject(model);
           model.position.sub(bounds.getCenter(new T.Vector3()));
           pivot.updateMatrixWorld(true);
+          const whole2 = new T.Box3()
+            .setFromObject(model)
+            .getSize(new T.Vector3());
+          // the silhouette a turned phone sweeps, so a yaw does not push
+          // a corner out of frame
+          phone = { h: whole2.y, w: Math.hypot(whole2.x, whole2.z) };
+          frame2();
 
           const box = new T.Box3().setFromObject(found.mesh);
           const dims = box.getSize(new T.Vector3());
@@ -604,10 +846,36 @@ export class MockupGlb extends Component {
             transparent: true,
           });
 
-          // every mesh joins the key light's layer EXCEPT this one
           model.traverse((child) => {
-            if ((child as THREE.Mesh).isMesh && child !== found.mesh) {
-              child.layers.enable(EYE_LEVEL);
+            if (!(child as THREE.Mesh).isMesh) {
+              return;
+            }
+            const mesh = child as THREE.Mesh;
+            // every mesh joins the key light's layer EXCEPT the display
+            if (mesh !== found.mesh) {
+              mesh.layers.enable(EYE_LEVEL);
+            }
+            // THE LOGO IS COPLANAR WITH THE BACK GLASS. Two surfaces at the
+            // same depth is a coin toss per pixel per frame, which reads as
+            // the mark tearing through the panel as the phone turns. A
+            // polygon offset biases the decal toward the camera in DEPTH
+            // ONLY — nothing moves, the tie is just broken the same way
+            // every frame. It is the standard fix for a decal, and cheaper
+            // and safer than nudging geometry.
+            const paint = (m: THREE.Material) => {
+              const p = m as THREE.Material & {
+                polygonOffset?: boolean;
+                polygonOffsetFactor?: number;
+                polygonOffsetUnits?: number;
+              };
+              p.polygonOffset = true;
+              p.polygonOffsetFactor = -2;
+              p.polygonOffsetUnits = -2;
+            };
+            if (Array.isArray(mesh.material)) {
+              mesh.material.forEach(paint);
+            } else {
+              paint(mesh.material);
             }
           });
 
@@ -629,7 +897,9 @@ export class MockupGlb extends Component {
           renderer.setSize(w, h, false);
           camera.aspect = w / h;
           camera.updateProjectionMatrix();
+          frame2();
         }
+        camera.position.z = rest * dolly;
         pivot.rotation.set(rx, ry, 0);
         pivot.updateMatrixWorld(true);
         renderer.render(scene, camera);
@@ -734,6 +1004,8 @@ export class MockupGlb extends Component {
       if (!dragged) {
         dragged = true;
         host.dataset['dragging'] = 'yes';
+        // the gesture that means "let me look"
+        this.seizeCamera();
       }
       ry += (ev.clientX - press.lx) * 0.008;
       rx += (ev.clientY - press.ly) * 0.008;
@@ -779,8 +1051,25 @@ export class MockupGlb extends Component {
     };
     host.addEventListener('pointerdown', grab);
     host.addEventListener('click', swallow, true);
+    // a tap that lands anywhere on the SCREEN is someone using the phone,
+    // so the film stops opening and closing apps underneath them. The
+    // cues never dispatch DOM clicks, so this cannot fire on itself.
+    const touched = (ev: Event) => {
+      if ((ev.target as Element).closest('.mg-screen')) {
+        this.seizeApps();
+      }
+    };
+    host.addEventListener('click', touched, true);
 
     this.tint = (hex: number) => screenGlow?.color.setHex(hex);
+    // THE ADAPTER. Choreo owns the clock and the easing; this is the four
+    // lines that turn its pose into a picture. Degrees to radians, and a
+    // dolly that multiplies whatever distance the framing solved for.
+    this.shotHost = (pose) => {
+      ry = Math.PI + (pose.yaw * Math.PI) / 180;
+      rx = (pose.pitch * Math.PI) / 180;
+      dolly = pose.dolly;
+    };
     this.boot = run3d;
     this.halt = () => {
       running = false;
@@ -802,6 +1091,7 @@ export class MockupGlb extends Component {
       release();
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('click', swallow, true);
+      host.removeEventListener('click', touched, true);
       delete (window as SpikeWindow).__glb;
       this.boot = undefined;
       this.halt = undefined;
@@ -810,11 +1100,16 @@ export class MockupGlb extends Component {
 
   <template>
     <div class="mg-page">
-      <div
+      <Choreo
         class="mg-stage"
         data-mode={{this.mode}}
         style="--glow:{{this.shown.hue}}"
+        @quiet={{true}}
+        @onCamera3D={{this.shot}}
+        @onPerform={{this.dispatch}}
+        @onPerformReset={{this.reset}}
         {{this.stage}}
+        as |c|
       >
         {{! THE SPILL. A panel that emits throws light on the room around
             it, and nothing sells "this is on" like the backdrop picking
@@ -855,6 +1150,12 @@ export class MockupGlb extends Component {
                   </button>
                 {{/each}}
 
+                {{! page one of one, said the way a home screen says it }}
+                <div class="mg-dots" aria-hidden="true">
+                  <span class="mg-dot" data-on="yes"></span>
+                  <span class="mg-dot"></span>
+                </div>
+
                 {{! ONE element, two named poses, the corner radius
                     travelling with the box }}
                 <div
@@ -863,10 +1164,23 @@ export class MockupGlb extends Component {
                   style="--hue:{{this.shown.hue}}"
                   {{motion animate=this.panel transition=this.swell}}
                 >
-                  <span
-                    class="mg-app-name"
-                    {{motion animate=this.title transition=FADE}}
-                  >{{this.shown.label}}</span>
+                  {{! THE APP ITSELF. Each one is an ordinary Glimmer
+                      component with its own Choreo region inside — real
+                      UI you can tap while the shot is moving, which is
+                      the entire claim this demo exists to make. It is
+                      only rendered while open: parked, the panel is
+                      82x82 and a phone screen squeezed into an icon is
+                      just an expensive way to draw a coloured square. }}
+                  {{#if this.open}}
+                    <div
+                      class="mg-app-ui"
+                      {{motion animate=this.title transition=FADE}}
+                    >
+                      <this.open.Ui />
+                    </div>
+                  {{else}}
+                    <span class="mg-app-name">{{this.shown.label}}</span>
+                  {{/if}}
 
                   {{! CLOSING IS A GESTURE ON THE HOME BAR, not a tap
                       anywhere on the app. A full-screen close target
@@ -888,8 +1202,89 @@ export class MockupGlb extends Component {
           </div>
         </div>
 
-        {{! the switch, on the platter — 3D is not downloaded until it is
-            pressed, so the flat page costs nothing }}
+        {{! THE FILM. A hidden marker whose only job is to change on every
+            take, because a region does not compile a score for a pass in
+            which nothing moved — bumping it is what makes the loop a
+            loop. }}
+        {{#if this.running}}
+          <div
+            class="mg-clock"
+            data-take={{this.take}}
+            {{motion id="clock"}}
+            {{this.wire c this.take}}
+          >{{this.take}}</div>
+
+          <c.Parallel>
+            {{! the beats: identical in both modes, and stopped the moment
+                someone touches the screen }}
+            {{#if this.syncOn}}
+              <c.Sequence>
+                {{#each this.shots as |shot|}}
+                  <c.Wait @duration={{this.travel}} />
+                  <c.Perform @action="open" @target={{shot.app}} />
+                  <c.Wait @duration={{shot.hold}} />
+                  <c.Perform @action="close" @target={{shot.app}} />
+                {{/each}}
+                <c.Wait @duration={{1}} />
+              </c.Sequence>
+            {{/if}}
+
+            {{! the camera: a shot per app, and the mode picks the lens }}
+            {{#if this.cameraOn}}
+              <c.Sequence>
+                {{#each this.shots as |shot|}}
+                  {{#if (this.isMode "3d")}}
+                    <c.Camera3D
+                      @yaw={{shot.yaw}}
+                      @pitch={{shot.pitch}}
+                      @dolly={{shot.dolly}}
+                      @duration={{this.travel}}
+                      @ease={{this.glide}}
+                    />
+                    {{! the hold breathes: a frozen frame reads as a hang }}
+                    {{! THE PUSH. The hold is not a hold — it closes in
+                        slowly while the app is open, which is what makes
+                        the interaction feel observed rather than paused. }}
+                    <c.Camera3D
+                      @by={{true}}
+                      @dolly={{0.94}}
+                      @yaw={{6}}
+                      @pitch={{-2}}
+                      @duration={{shot.hold}}
+                      @ease={{this.glide}}
+                    />
+                  {{else}}
+                    <c.Camera
+                      @zoom={{shot.zoom}}
+                      @duration={{this.travel}}
+                      @ease={{this.glide}}
+                    />
+                    <c.Wait @duration={{shot.hold}} />
+                  {{/if}}
+                {{/each}}
+                {{#if (this.isMode "2d")}}
+                  <c.Camera @zoom={{1}} @duration={{1}} @ease={{this.glide}} />
+                {{else}}
+                  <c.Camera3D
+                    @yaw={{-17}}
+                    @pitch={{-13}}
+                    @dolly={{1}}
+                    @duration={{1}}
+                    @ease={{this.glide}}
+                  />
+                {{/if}}
+              </c.Sequence>
+            {{/if}}
+          </c.Parallel>
+        {{/if}}
+      </Choreo>
+
+      {{! THE CHROME PLANE. Deliberately OUTSIDE the region: in 2D the
+          film's `c.Camera` zooms the region's own frame, and anything
+          inside it is zoomed and cropped along with the phone. The
+          switch, the transport and the caption belong to the viewer, not
+          to the shot, so they sit above the camera and never move. }}
+      <div class="mg-chrome">
         <div class="mg-seg" role="group" aria-label="Presentation">
           <button
             type="button"
@@ -902,8 +1297,22 @@ export class MockupGlb extends Component {
             {{on "click" (fn this.setMode "3d")}}
           >3D</button>
         </div>
+
+        <div class="mg-transport">
+          <button
+            type="button"
+            data-on={{if this.cameraOn "yes" ""}}
+            {{on "click" this.toggleCamera}}
+          >{{if this.cameraOn "❚❚" "▶"}} camera</button>
+          <button
+            type="button"
+            data-on={{if this.syncOn "yes" ""}}
+            {{on "click" this.toggleSync}}
+          >{{if this.syncOn "◉" "○"}} sync app interaction</button>
+        </div>
+
+        <p class="mg-status">{{this.status}}</p>
       </div>
-      <p class="mg-status">{{this.status}}</p>
 
       <style>
         .mg-page {
@@ -912,10 +1321,16 @@ export class MockupGlb extends Component {
             12px/1.4 ui-monospace,
             monospace;
         }
+        /* THE PLATTER IS THE APP'S OWN SURFACE. --bg is the recessed
+           canvas the gallery already uses for a camera stage, so the demo
+           sits in light and dark without a second palette — and the WebGL
+           set fades in over it rather than replacing it. */
         .mg-stage {
           position: relative;
           width: 100%;
-          height: 640px;
+          height: min(78vh, 720px);
+          overflow: hidden;
+          background: var(--bg, #2a2521);
           touch-action: none;
         }
         .mg-bloom {
@@ -939,6 +1354,13 @@ export class MockupGlb extends Component {
         .mg-stage[data-mode="3d"] {
           cursor: grab;
         }
+        /* THE SWITCH IS A DISSOLVE, not a cut. `display:none` made 3D
+           snap in the moment the engine finished downloading and snap out
+           again on the way back; an opacity pair means the set and the
+           device arrive over the flat phone and leave the same way. The
+           canvas stays mounted either way — tearing down a WebGL context
+           to toggle a control is far more expensive than compositing a
+           transparent one. */
         .mg-stage canvas {
           position: absolute;
           inset: 0;
@@ -946,9 +1368,11 @@ export class MockupGlb extends Component {
           width: 100%;
           height: 100%;
           pointer-events: none;
+          opacity: 0;
+          transition: opacity 420ms ease;
         }
-        .mg-stage[data-mode="2d"] canvas {
-          display: none;
+        .mg-stage[data-mode="3d"][data-ready="yes"] canvas {
+          opacity: 1;
         }
         .mg-css {
           position: absolute;
@@ -982,6 +1406,7 @@ export class MockupGlb extends Component {
            projects to at the default camera, so the switch does not
            resize the phone under you. */
         .mg-stage[data-mode="2d"] .mg-plane {
+          transition: opacity 300ms ease;
           top: 50%;
           left: 50%;
           width: 390px;
@@ -1048,10 +1473,6 @@ export class MockupGlb extends Component {
         }
         /* it is a phone screen, not a document: a drag across it is a
            gesture, never a text selection */
-        /* it is a phone screen, not a document: a drag across it is a
-           gesture, never a text selection */
-        .mg-plane,
-        .mg-screen,
         .mg-icon,
         .mg-icon-name,
         .mg-app,
@@ -1059,6 +1480,19 @@ export class MockupGlb extends Component {
           user-select: none;
           -webkit-user-select: none;
           -webkit-touch-callout: none;
+        }
+        /* THE LAYERS THAT FILL THEIR PARENT'S BOX — and ONLY those. An
+           icon's label is not one of them: swallowed into this list it
+           gets `position:absolute; inset:0` and lands on top of its own
+           tile at the corner, instead of sitting under it in the grid. */
+        .mg-plane,
+        .mg-screen,
+        .mg-app,
+        .mg-app-ui {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          border-radius: inherit;
         }
         .mg-icon {
           all: unset;
@@ -1081,12 +1515,49 @@ export class MockupGlb extends Component {
             hsl(var(--hue) 84% 66%),
             hsl(var(--hue) 78% 47%)
           );
-          box-shadow: 0 0 16px hsl(var(--hue) 85% 58% / 0.25);
+          /* a tile is a lit square on a wallpaper, not a neon sign: it
+             drops a shadow DOWNWARD in its own darkened hue, rather than
+             throwing a halo out in every direction */
+          box-shadow: 0 5px 12px -6px hsl(var(--hue) 55% 18% / 0.5);
         }
         .mg-icon-name {
+          display: block;
+          max-width: 100%;
           color: #ffffff;
-          font-size: 15px;
-          font-family: ui-sans-serif, system-ui;
+          font:
+            15px/1.2 ui-sans-serif,
+            system-ui,
+            sans-serif;
+          text-align: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          /* the wallpaper is dark, but not everywhere: a tight shadow
+             keeps the type legible wherever the label lands */
+          text-shadow: 0 1px 2px #000000a6;
+        }
+        /* PAGE DOTS. Two, the first one lit — the smallest mark that
+           says "this is page one of a home screen" rather than a grid
+           of squares. Above the home-bar area, and never a target. */
+        .mg-dots {
+          position: absolute;
+          z-index: 1;
+          left: 0;
+          right: 0;
+          bottom: 54px;
+          display: flex;
+          justify-content: center;
+          gap: 9px;
+          pointer-events: none;
+        }
+        .mg-dot {
+          width: 7px;
+          height: 7px;
+          border-radius: 50%;
+          background: #ffffff40;
+        }
+        .mg-dot[data-on="yes"] {
+          background: #ffffffd9;
         }
         .mg-app:not([data-open="yes"]) {
           pointer-events: none;
@@ -1133,11 +1604,52 @@ export class MockupGlb extends Component {
             #ffffff14;
           box-shadow: 0 0 16px #ffffff40;
         }
+        .mg-app-ui {
+          position: absolute;
+          inset: 0;
+          overflow: hidden;
+          border-radius: inherit;
+        }
         .mg-app-name {
           color: #fff;
           font-size: 40px;
           font-weight: 600;
           font-family: ui-sans-serif, system-ui;
+        }
+        .mg-clock {
+          position: absolute;
+          left: -9999px;
+          top: 0;
+          opacity: 0;
+          pointer-events: none;
+        }
+        /* TOP LEFT, NOT BOTTOM RIGHT. The stage is min(78vh,720px) tall and
+           the page has a header above it, so anything pinned to the
+           stage's bottom edge sits below the fold — which is exactly what
+           "the buttons don't work" looks like. */
+        .mg-transport {
+          position: absolute;
+          z-index: 4;
+          top: 8px;
+          left: 8px;
+          display: flex;
+          gap: 6px;
+        }
+        .mg-transport button {
+          all: unset;
+          cursor: pointer;
+          padding: 6px 12px;
+          border-radius: 8px;
+          font:
+            600 12px/1 ui-monospace,
+            monospace;
+          color: #9aa2b2;
+          background: #000000a6;
+          border: 1px solid #ffffff1f;
+        }
+        .mg-transport button[data-on="yes"] {
+          color: #f2efe9;
+          border-color: #ffffff45;
         }
         .mg-seg {
           position: absolute;
@@ -1164,8 +1676,14 @@ export class MockupGlb extends Component {
           color: #f6f4ef;
         }
         .mg-status {
-          color: #889;
-          margin-top: 12px;
+          position: absolute;
+          z-index: 4;
+          left: 12px;
+          top: 42px;
+          margin: 0;
+          max-width: calc(100% - 24px);
+          color: #8b94a6;
+          text-shadow: 0 1px 2px #0009;
         }
       </style>
     </div>

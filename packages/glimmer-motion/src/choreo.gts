@@ -43,6 +43,7 @@ import { type ChoreoRun, execute } from './choreo/run.ts';
 import {
   Aim,
   Camera,
+  Camera3D,
   collect,
   Crossing,
   Follow,
@@ -64,6 +65,7 @@ import {
 } from './choreo/steps.gts';
 import type {
   Bounds,
+  Camera3DState,
   CameraState,
   ChoreoNode,
   Cue,
@@ -89,6 +91,7 @@ const selector = (type?: Query['type']): Selector =>
 export interface ChoreoContext {
   Aim: typeof Aim;
   Camera: typeof Camera;
+  Camera3D: typeof Camera3D;
   Crossing: typeof Crossing;
   Follow: typeof Follow;
   Frame: typeof Frame;
@@ -140,6 +143,7 @@ function contextFor(region: Choreo): ChoreoContext {
   return {
     Aim,
     Camera,
+    Camera3D,
     Crossing,
     Follow,
     Frame,
@@ -193,6 +197,12 @@ interface Signature {
      * Dispatches are deferred past the render pass, so a command may
      * mutate tracked state freely.
      */
+    /**
+     * A `c.Camera3D` cue moved the shot. Called every frame it changes —
+     * scrubs included, since the pose is sampled from the score — with a
+     * pose the host applies to whatever it is drawing with.
+     */
+    onCamera3D?: (state: Camera3DState) => void;
     onPerform?: (command: PerformCommand) => void;
     /**
      * The backward half of the fold: the clock moved to before a command
@@ -318,6 +328,8 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * that read it would be invalidated by the very landing it causes, and
    * the region would render forever.
    */
+  /** where a c.Camera3D left the shot, carried between runs */
+  private resting3d: Camera3DState = { dolly: 1, pitch: 0, yaw: 0 };
   private restingCamera: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */
@@ -795,6 +807,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
           ? { aim: prior.initialAim, camera: prior.initialCamera }
           : { aim: prior.cameraAim, camera: prior.camera }
         : { aim: prior?.cameraAim ?? null, camera: this.restingCamera };
+    // the shot carries run to run for the same reason the frame does: a
+    // replacement pass must continue the move, not snap back to framing
+    const shot3d =
+      prior !== undefined && !prior.isDone() ? prior.camera3d : this.resting3d;
     prior?.cancel(new Set([...named].map((s) => s.node)));
     for (const s of removed) {
       if (!named.has(s)) {
@@ -829,6 +845,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     this.run = execute(compiled, {
       camera: { ...inherited.camera },
+      camera3d: { ...shot3d },
       cameraFrame: this.element,
       // the aim point in force carries run to run, so a re-aim lerps from
       // what is actually applied rather than assuming an unaimed frame —
@@ -838,6 +855,10 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       // read. Guarded by equality: the landing itself renders, the render
       // is an all-kept pass, and the pass replays the camera step — an
       // unguarded set would revalidate forever.
+      onCamera3D: (state) => {
+        this.resting3d = state;
+        this.args.onCamera3D?.(state);
+      },
       onCamera: (state) => {
         const prior = this.restingCamera;
         this.restingCamera = state;

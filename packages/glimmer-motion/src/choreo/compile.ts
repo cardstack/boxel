@@ -581,6 +581,7 @@ function resolveStep(
     // no subject at all
     if (
       (step.kind === 'camera' ||
+        step.kind === 'camera3d' ||
         step.kind === 'tether' ||
         step.of === undefined) &&
       index > 0
@@ -921,6 +922,24 @@ function resolveStep(
           },
           duration: ms,
           kind: 'camera',
+          offset,
+          sprite,
+          transition: step.spring
+            ? springTransition(step.spring)
+            : { duration: ms / 1000, ease: step.ease ?? 'easeInOut' },
+        });
+        longest = Math.max(longest, offset + ms);
+        break;
+      }
+      case 'camera3d': {
+        const ms = step.ms ?? 600;
+        cues.push({
+          camera3d: {
+            by: step.by,
+            to: { dolly: step.dolly, pitch: step.pitch, yaw: step.yaw },
+          },
+          duration: ms,
+          kind: 'camera3d',
           offset,
           sprite,
           transition: step.spring

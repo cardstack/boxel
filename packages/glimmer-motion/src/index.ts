@@ -21,6 +21,7 @@ export { StepComponent, toMs } from './choreo/steps.gts';
 export type {
   Block,
   Bounds,
+  Camera3DState,
   CameraState,
   DeliveryBy,
   DeliveryOrder,

@@ -7,6 +7,7 @@
  */
 declare module 'three' {
   export const ACESFilmicToneMapping: number;
+  export const SRGBColorSpace: string;
   export const AdditiveBlending: number;
   export const CustomBlending: number;
   export const EquirectangularReflectionMapping: number;
@@ -14,6 +15,7 @@ declare module 'three' {
   export const ZeroFactor: number;
 
   export class CanvasTexture {
+    colorSpace: string;
     mapping: number;
     needsUpdate: boolean;
     constructor(canvas: HTMLCanvasElement);
@@ -36,6 +38,7 @@ declare module 'three' {
 
   export class PerspectiveCamera extends Object3D {
     aspect: number;
+    fov: number;
     matrixWorldInverse: Matrix4;
     projectionMatrix: Matrix4;
     constructor(fov: number, aspect: number, near: number, far: number);
@@ -68,6 +71,7 @@ declare module 'three' {
   // ── the mockup spike's slice of three (still hand-written: see above) ──
 
   export const ACESFilmicToneMapping: number;
+  export const SRGBColorSpace: string;
   export const AdditiveBlending: number;
   export const CustomBlending: number;
   export const EquirectangularReflectionMapping: number;
@@ -127,7 +131,18 @@ declare module 'three' {
   }
 
   export class Material {
+    polygonOffset?: boolean;
+    polygonOffsetFactor?: number;
+    polygonOffsetUnits?: number;
     dispose(): void;
+  }
+
+  export class PlaneGeometry {
+    constructor(width?: number, height?: number);
+  }
+
+  export class MeshBasicMaterial extends Material {
+    constructor(params?: { color?: number; map?: CanvasTexture });
   }
 
   export class MeshPhysicalMaterial extends Material {
@@ -153,6 +168,7 @@ declare module 'three' {
   export class Mesh extends Object3D {
     isMesh: boolean;
     material: Material | Material[];
+    constructor(geometry?: unknown, material?: Material);
   }
 
   export class AmbientLight extends Object3D {

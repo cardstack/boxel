@@ -26,6 +26,7 @@ import { easingDefinitionToFunction } from 'motion-utils';
 import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
 import type {
+  Camera3DState,
   CameraState,
   ChoreoNode,
   Compiled,
@@ -121,6 +122,8 @@ export interface Run {
 interface RunOptions {
   /** where the region's frame stands as this run begins */
   camera?: CameraState;
+  /** where the SHOT stands as this run begins — a 3D host's own pose */
+  camera3d?: Camera3DState;
   /** the aim point the prior run left applied — see ChoreoRun.cameraAim */
   cameraAim?: { x: number; y: number } | null;
   /** the element the camera transform drives (the region's scene wrapper) */
@@ -128,6 +131,13 @@ interface RunOptions {
   inherit?: Velocities;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
+  /**
+   * The 3D shot moved. Called every frame a `c.Camera3D` cue changes the
+   * pose — including on a scrub, because the pose is sampled from the
+   * score rather than remembered from playback. Choreo has no renderer of
+   * its own; this is where the host's does the drawing.
+   */
+  onCamera3D?(state: Camera3DState): void;
   /**
    * A `c.Perform` command entered the folded set: dispatch it (§C4).
    * Deferred past the render pass, in time order, once per fold entry.
@@ -287,6 +297,8 @@ interface Track {
   delivery?: Delivery;
   /** scaled window on the master clock */
   end: number;
+  /** camera3d: the shot as this cue began, and where it resolves to */
+  from3d?: Camera3DState;
   held?: HeldValue[];
   loopAnimation?: Animation;
   /** where each value stood when this track first started — the scrub-back frame */
@@ -309,6 +321,8 @@ interface Track {
   };
   start: number;
   started: boolean;
+  /** camera3d: the resolved absolute shot this cue lands on */
+  to3d?: Camera3DState;
   /** tether: the wire this step draws */
   wire?: SVGPathElement;
 }
@@ -375,6 +389,8 @@ export class ChoreoRun implements Run {
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
+    this.camera3d = options.camera3d ?? { dolly: 1, pitch: 0, yaw: 0 };
+    this.initial3d = { ...this.camera3d };
     this.cameraAim = options.cameraAim ?? null;
     // frozen: the fold a random-access seek reconstructs the camera from
     this.initialCamera = { ...this.camera };
@@ -839,6 +855,26 @@ export class ChoreoRun implements Run {
   private evaluate(limit = Infinity) {
     const now = this.master;
     const rewinds: Track[] = [];
+    /**
+     * The shot is FOLDED, not remembered.
+     *
+     * Every other cue kind owns an element and can be started and rewound
+     * in place. A camera3d cue owns one shared triple, and per-cue state
+     * does not survive that: seeking back from cue two to inside cue one
+     * runs cue one's lerp (correct) and then cue two's rewind (which
+     * restores the pose cue two INHERITED — cue one's end), and the
+     * second write wins because it comes later in the list. The shot
+     * ended up at the boundary value for every seek backwards.
+     *
+     * So it is recomputed from the score on every evaluate: start at the
+     * pose the run inherited, walk the cues in order, and let each one
+     * pass through, lerp, or land. A relative cue resolves against
+     * whatever the walk has accumulated by the time it is reached, which
+     * is precisely "the pose in force at cue start" — and it means a
+     * direct seek is identical to having played there, by construction
+     * rather than by bookkeeping.
+     */
+    let shot: Camera3DState | null = null;
     for (const t of this.tracks) {
       const { cue } = t;
       // a completed track scrubbed back into range plays again; its
@@ -927,6 +963,32 @@ export class ChoreoRun implements Run {
             t.passed = true;
             this.options.onCamera?.({ ...this.camera });
           }
+        }
+        continue;
+      }
+      if (cue.camera3d) {
+        const from: Camera3DState = shot ?? { ...this.initial3d };
+        const want = cue.camera3d.to;
+        const to = cue.camera3d.by
+          ? {
+              dolly: from.dolly * (want.dolly ?? 1),
+              pitch: from.pitch + (want.pitch ?? 0),
+              yaw: from.yaw + (want.yaw ?? 0),
+            }
+          : {
+              dolly: want.dolly ?? from.dolly,
+              pitch: want.pitch ?? from.pitch,
+              yaw: want.yaw ?? from.yaw,
+            };
+        if (now <= t.start) {
+          shot = from; // not yet: the walk passes straight through
+        } else {
+          const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
+          shot = {
+            dolly: from.dolly + (to.dolly - from.dolly) * p,
+            pitch: from.pitch + (to.pitch - from.pitch) * p,
+            yaw: from.yaw + (to.yaw - from.yaw) * p,
+          };
         }
         continue;
       }
@@ -1090,6 +1152,20 @@ export class ChoreoRun implements Run {
         }
       }
     }
+    // the folded shot, published once the whole score has been walked and
+    // only when it actually moved — a host that redraws on every call
+    // would redraw on every evaluate, playing or not
+    if (shot) {
+      const was = this.camera3d;
+      if (
+        was.yaw !== shot.yaw ||
+        was.pitch !== shot.pitch ||
+        was.dolly !== shot.dolly
+      ) {
+        this.camera3d = shot;
+        this.options.onCamera3D?.({ ...shot });
+      }
+    }
     this.rewind(rewinds, now);
     this.foldPerforms(limit);
   }
@@ -1205,6 +1281,16 @@ export class ChoreoRun implements Run {
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     return easingDefinitionToFunction('easeInOut')(raw);
   }
+
+  /* ---- c.Camera3D: the shot, for a scene Choreo does not draw ---- */
+
+  /**
+   * The orbit pose in force. Public for the same reason `camera` is: it is
+   * hand-off state, and a replacement run must continue from where this
+   * one left the shot rather than snapping back to the framing.
+   */
+  camera3d: Camera3DState;
+  private readonly initial3d: Camera3DState;
 
   /* ---- c.Camera: the region's frame (§6.3) ---- */
 
