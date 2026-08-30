@@ -604,19 +604,28 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     // seams landed every shot hundreds of pixels off, differently per
     // loop). getComputedStyle samples the same frozen timeline the rects
     // above were measured under, so zoom and boxes are one measurement.
-    const paintedTf = getComputedStyle(root).transform;
-    const painted =
-      paintedTf === 'none' || paintedTf === ''
-        ? 1
-        : parseFloat(/^matrix\(([-\d.eE+]+),/.exec(paintedTf)?.[1] ?? '');
+    //
+    // It is the TOTAL scale between the page and this region's local
+    // space: the root's painted width over its LAYOUT width, not the
+    // region's own camera alone. Those two are the same number right up
+    // until something above the region is scaled, and then they are not.
+    // An ancestor `transform: scale(s)` multiplies every box this pass
+    // measures while the run still writes local pixels, so every flight
+    // is off by exactly s — a region inside a scale(1.5) card starts its
+    // flights a thousand pixels from where they belong. Reading the
+    // root's own rect subsumes the camera and everything above it in one
+    // measurement, taken in the same window as the boxes.
+    const layoutWidth = root.offsetWidth;
     const shadow = this.run?.camera.zoom ?? this.restingCamera.zoom;
+    const painted = layoutWidth > 0 ? after.width / layoutWidth : 0;
     // …snapped to the exact bookkeeping value whenever the two agree: the
-    // computed matrix is serialized to a handful of digits, and letting
-    // that quantisation into the divide gives two passes of the same
-    // still landings a thousandth of a pixel apart. The painted value
-    // only OVERRULES the shadow when they genuinely diverge.
+    // layout width is an integer, and letting that quantisation into the
+    // divide gives two passes of the same still landings a thousandth of
+    // a pixel apart. The painted value only OVERRULES the shadow when
+    // they genuinely diverge — which now means "something outside is
+    // scaling us" as well as "the camera is mid-cue".
     const measureZoom =
-      !painted || Math.abs(painted - shadow) < 0.002 ? shadow : painted;
+      !painted || Math.abs(painted - shadow) < 0.004 ? shadow : painted;
     const changeset = new Changeset(
       inserted.filter((s) => s.type === 'inserted'),
       removed,
