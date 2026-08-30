@@ -1,9 +1,9 @@
-import { fn } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { motion } from 'glimmer-motion';
+import { beacon, Choreo, motion } from 'glimmer-motion';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import type * as THREE from 'three';
 
@@ -62,11 +62,7 @@ type App = (typeof APPS)[number];
  * opaque by the time it has left the tile, it reads as the tile itself
  * getting bigger.
  */
-const SWELL = {
-  duration: 0.5,
-  ease: [0.22, 1, 0.36, 1],
-  opacity: { duration: 0.12, ease: 'linear' },
-} as const;
+const EASE = [0.22, 1, 0.36, 1] as const;
 const FADE = { duration: 0.2, ease: [0.22, 1, 0.36, 1] } as const;
 
 interface SpikeWindow extends Window {
@@ -110,35 +106,6 @@ export class MockupGlb extends Component {
   };
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
-
-  /**
-   * The app panel, as one `{{motion}}` target. Open is the whole screen;
-   * closed is exactly the tile it came from — both read off the authored
-   * constants above, so the two poses are known numbers rather than a
-   * measurement taken through a 3D camera. The corner radius travels
-   * with the box, which is what sells it as the tile GROWING rather than
-   * a card appearing over it.
-   */
-  get panel() {
-    const app = this.open;
-    return app
-      ? {
-          borderRadius: RADIUS.app,
-          height: SCREEN.h,
-          left: 0,
-          opacity: 1,
-          top: 0,
-          width: SCREEN.w,
-        }
-      : {
-          borderRadius: RADIUS.tile,
-          height: TILE,
-          left: this.parked.x,
-          opacity: 0,
-          top: this.parked.y,
-          width: TILE,
-        };
-  }
 
   /** the app's own title: it FADES. It is never the icon's label morphed. */
   get title() {
@@ -550,13 +517,16 @@ export class MockupGlb extends Component {
         <div class="mg-css">
           <div class="mg-cam">
             <div class="mg-plane">
-              <div class="mg-screen">
+              <Choreo class="mg-screen" as |c|>
                 {{#if (this.isMode "2d")}}
                   <span class="mg-island" aria-hidden="true"></span>
                 {{/if}}
+
                 {{! the home screen. Absolutely placed at authored
                     coordinates, so it never reflows and never moves —
-                    opening an app changes no other element's box. }}
+                    opening an app changes no other element's box. Each
+                    tile claims a beacon under its own name, which is what
+                    the app flies out of and back into. }}
                 {{#each this.apps as |app|}}
                   <button
                     type="button"
@@ -565,27 +535,56 @@ export class MockupGlb extends Component {
                     style="--hue:{{app.hue}};left:{{app.x}}px;top:{{app.y}}px"
                     {{on "click" (fn this.choose app)}}
                   >
-                    <span class="mg-tile"></span>
+                    <span class="mg-tile" {{beacon app.id}}></span>
                     <span class="mg-icon-name">{{app.label}}</span>
                   </button>
                 {{/each}}
 
-                {{! the app: ONE element, two named poses, and the corner
-                    radius travelling with the box }}
-                <button
-                  type="button"
-                  class="mg-app"
-                  data-open={{if this.open "yes" ""}}
-                  style="--hue:{{this.shown.hue}}"
-                  {{on "click" this.close}}
-                  {{motion animate=this.panel transition=SWELL}}
-                >
-                  <span
-                    class="mg-app-name"
-                    {{motion animate=this.title transition=FADE}}
-                  >{{this.shown.label}}</span>
-                </button>
-              </div>
+                {{#if this.open}}
+                  <button
+                    type="button"
+                    class="mg-app"
+                    style="--hue:{{this.shown.hue}}"
+                    {{on "click" this.close}}
+                    {{motion id="app" role="app"}}
+                  >
+                    <span class="mg-app-name">{{this.shown.label}}</span>
+                  </button>
+                {{/if}}
+
+                {{! out of the tile that names it, and back into the same
+                    one — the corner radius travelling with the box is
+                    what sells it as the tile growing rather than a card
+                    appearing over it }}
+                <c.Parallel>
+                  <c.Move
+                    @of={{c.inserted "app"}}
+                    @from={{c.beacon this.parked.id}}
+                    @duration={{0.5}}
+                    @ease={{EASE}}
+                  />
+                  <c.Move
+                    @of={{c.removed "app"}}
+                    @to={{c.beacon this.parked.id}}
+                    @duration={{0.5}}
+                    @ease={{EASE}}
+                  />
+                  <c.Tween
+                    @of={{c.inserted "app"}}
+                    @borderRadius={{array RADIUS.tile RADIUS.app}}
+                    @opacity={{array 0 1}}
+                    @duration={{0.5}}
+                    @ease={{EASE}}
+                  />
+                  <c.Tween
+                    @of={{c.removed "app"}}
+                    @borderRadius={{array RADIUS.app RADIUS.tile}}
+                    @opacity={{array 1 0}}
+                    @duration={{0.5}}
+                    @ease={{EASE}}
+                  />
+                </c.Parallel>
+              </Choreo>
             </div>
           </div>
         </div>
@@ -654,26 +653,29 @@ export class MockupGlb extends Component {
         }
         /* 2D: no camera, no matrices — the same plane, centred by CSS,
            inside a plain bezel so the comparison is like for like */
+        /* THE SCREEN IS 390x844 IN BOTH MODES. It has to be: the icons
+           are placed at authored coordinates in that space, so any inset
+           here would put them somewhere else than the 3D phone puts them.
+           The rim is therefore drawn OUTSIDE the box with rings, never as
+           padding — padding here plus the screen's own inset was insetting
+           it twice, and the flat screen came out 368x821, a different
+           shape from the one the GLB displays.
+
+           0.656 is not a taste: it is 554/844, the height the 3D plane
+           projects to at the default camera, so the switch does not
+           resize the phone under you. */
         .mg-stage[data-mode="2d"] .mg-plane {
           top: 50%;
           left: 50%;
           width: 390px;
           height: 844px;
-          transform: translate(-50%, -50%) scale(0.62);
-          border-radius: 58px;
-          padding: 11px;
-          background: linear-gradient(
-            147deg,
-            #8b9099 0%,
-            #33373f 16%,
-            #1b1d22 46%,
-            #24272d 74%,
-            #6f747e 100%
-          );
+          transform: translate(-50%, -50%) scale(0.656);
+          border-radius: 46px;
           box-shadow:
-            0 0 0 1px #00000066 inset,
-            0 1px 0 #ffffff22 inset,
-            0 26px 50px -18px #00000088;
+            0 0 0 12px #212429,
+            0 0 0 13px #71767f,
+            0 0 0 15px #2b2e34,
+            0 34px 60px -18px #00000088;
         }
         .mg-screen {
           position: absolute;
@@ -683,8 +685,8 @@ export class MockupGlb extends Component {
           background: #0d1220;
         }
         .mg-stage[data-mode="2d"] .mg-screen {
-          inset: 11px;
-          border-radius: 48px;
+          inset: 0;
+          border-radius: 46px;
         }
         /* the island, so the flat phone is recognisably the same device
            the GLB draws over the DOM in 3D. It needs a wallpaper behind
@@ -747,6 +749,8 @@ export class MockupGlb extends Component {
           all: unset;
           cursor: pointer;
           position: absolute;
+          inset: 0;
+          border-radius: 46px;
           overflow: hidden;
           display: grid;
           place-items: center;
