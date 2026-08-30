@@ -121,89 +121,106 @@ const LIVE = { duration: 0.001, ease: 'linear' } as const;
  * a callback: the direction reads the same either way, and both are
  * seekable because both are sampled from the clock.
  */
-const SCENES = [
+/**
+ * The ranges every pose is clamped to — the script writes within them and
+ * the sticks cannot leave them, so there is one set of limits rather than
+ * two that can disagree.
+ */
+const RANGE = {
+  dolly: [0.24, 1.9],
+  pan: [-0.5, 0.5],
+  // NEVER FAR ENOUGH TO SEE THE BACK. The screen is the subject; past
+  // about 45 degrees it foreshortens into a sliver and then the phone
+  // simply turns round, which is a different demo.
+  pitch: [-28, 28],
+  yaw: [-45, 45],
+} as const;
+
+/** one lock-on: where the camera goes, and how long it stays */
+interface Beat {
+  dolly: number;
+  pitch: number;
+  /** seconds */
+  t: number;
+  x: number;
+  y: number;
+  yaw: number;
+}
+
+const SCENES: { app: string; beats: Beat[] }[] = [
   /**
-   * THE SHOT LIST, written as a shoot would write it.
+   * THE FILM LIVES IN THE APPS.
    *
-   * Every scene is APPROACH → OPEN → READ → CLOSE, and between scenes the
-   * camera returns to HOME. That return is not decoration: an app that
-   * cuts straight to the next app never shows you where it came from, and
-   * the whole point of a phone film is that the home screen is the hub.
+   * The home screen is a hallway. It has to be passed through — an app
+   * that cuts straight to the next never shows where it came from — but
+   * nobody came to watch a hallway, so the travel between scenes is under
+   * a second and every scene is several seconds of looking at something.
+   * Roughly nine tenths of the running time is inside an app.
    *
-   * `read` is where the money is. It pushes in — often very close — and
-   * PANS at the same time, because dolly alone crops a tall subject: push
-   * on a phone and its top leaves frame. `x` and `y` are fractions of the
-   * framed height, so a positive `y` lifts the camera and brings the top
-   * of the screen back down into the picture.
+   * Each scene is a list of BEATS rather than one move, because a camera
+   * that pushes in once and sits there has stopped being a camera. A beat
+   * locks onto one part of the screen — the top of a list, a control, the
+   * thing that just changed — holds it, and hands over to the next.
    *
-   * Dwell is earned, not equal. Maps and Music have things to look at and
-   * get five and a half seconds with a slow drift across them. Photos is
-   * not what this demo is about and gets two and a half — long enough to
-   * register, short enough not to sit there.
+   * `y` is the beat that does the real work: dolly alone crops a tall
+   * subject, so pushing in without lifting the camera loses the top of
+   * the screen. Positive `y` brings it back.
    */
   {
     app: 'mail',
-    approach: { dolly: 1.0, pitch: -9, x: 0, y: 0, yaw: -18 },
-    hold: 4.4,
-    read: { dolly: 0.62, pitch: -4, x: 0.02, y: 0.2, yaw: -7 },
-    zoom: { x: 6, y: 96, z: 1.6 },
+    beats: [
+      // the header and the filter, then down into the list, then out
+      { dolly: 0.6, pitch: -4, t: 2.6, x: 0.02, y: 0.24, yaw: -9 },
+      { dolly: 0.5, pitch: -1, t: 3.0, x: -0.02, y: -0.02, yaw: 5 },
+      { dolly: 0.74, pitch: -7, t: 2.2, x: 0, y: 0.1, yaw: -15 },
+    ],
   },
   {
     app: 'maps',
-    approach: { dolly: 1.02, pitch: -7, x: 0, y: 0, yaw: 14 },
-    hold: 5.6,
-    read: { dolly: 0.56, pitch: -2, x: -0.04, y: -0.12, yaw: 9 },
-    zoom: { x: -10, y: -70, z: 1.8 },
+    beats: [
+      { dolly: 0.58, pitch: -3, t: 2.8, x: -0.04, y: -0.16, yaw: 12 },
+      { dolly: 0.46, pitch: 0, t: 3.2, x: 0.06, y: -0.02, yaw: -4 },
+      { dolly: 0.7, pitch: -6, t: 2.4, x: 0, y: 0.06, yaw: 16 },
+    ],
   },
   {
     app: 'music',
-    approach: { dolly: 0.98, pitch: -11, x: 0, y: 0, yaw: 22 },
-    hold: 5.6,
-    read: { dolly: 0.54, pitch: -3, x: 0.05, y: 0.14, yaw: 11 },
-    zoom: { x: 8, y: 74, z: 1.85 },
+    beats: [
+      // the plate, then the transport, then the queue
+      { dolly: 0.56, pitch: -4, t: 2.8, x: 0.03, y: 0.2, yaw: 14 },
+      { dolly: 0.48, pitch: 0, t: 2.6, x: 0.0, y: -0.05, yaw: 4 },
+      { dolly: 0.62, pitch: -3, t: 2.6, x: -0.03, y: -0.2, yaw: -8 },
+    ],
   },
   {
     app: 'notes',
-    approach: { dolly: 1.0, pitch: -8, x: 0, y: 0, yaw: -12 },
-    hold: 4.2,
-    read: { dolly: 0.66, pitch: -4, x: 0.02, y: 0.17, yaw: -5 },
-    zoom: { x: 6, y: 84, z: 1.55 },
+    beats: [
+      { dolly: 0.62, pitch: -4, t: 2.6, x: 0.02, y: 0.2, yaw: -10 },
+      { dolly: 0.52, pitch: -1, t: 2.8, x: -0.02, y: -0.06, yaw: 6 },
+    ],
   },
   {
     app: 'clock',
-    approach: { dolly: 1.0, pitch: -6, x: 0, y: 0, yaw: 8 },
-    hold: 3.6,
-    read: { dolly: 0.7, pitch: -2, x: 0, y: 0.04, yaw: 4 },
-    zoom: { x: 0, y: 18, z: 1.45 },
+    beats: [
+      { dolly: 0.66, pitch: -3, t: 2.4, x: 0, y: 0.16, yaw: 9 },
+      { dolly: 0.54, pitch: 0, t: 2.6, x: 0, y: -0.04, yaw: -3 },
+    ],
   },
   {
-    // not the feature: seen, not studied
+    // seen, not studied
     app: 'photos',
-    approach: { dolly: 1.02, pitch: -7, x: 0, y: 0, yaw: -6 },
-    hold: 2.5,
-    read: { dolly: 0.84, pitch: -5, x: 0, y: 0.08, yaw: -2 },
-    zoom: { x: 0, y: 34, z: 1.2 },
+    beats: [
+      { dolly: 0.72, pitch: -4, t: 1.4, x: 0, y: 0.12, yaw: -5 },
+      { dolly: 0.6, pitch: -1, t: 1.4, x: 0.02, y: -0.06, yaw: 3 },
+    ],
   },
-] as const;
+];
 
-/**
- * The ranges the manual controls span. They are the same numbers the
- * script writes, so the dots the film moves and the dots you drag are the
- * same dots — there is one pose, and two ways to set it.
- */
-const RANGE = {
-  dolly: [0.45, 1.3],
-  pan: [-0.5, 0.5],
-  pitch: [-35, 35],
-  yaw: [-70, 70],
-} as const;
-
-/** where the camera waits while the home screen is up, between scenes */
-const HOME_SHOT = { dolly: 1.06, pitch: -8, x: 0, y: -0.05, yaw: 4 } as const;
-/** the camera travels to the approach in this long */
-const TRAVEL = 1.8;
-/** and comes home in this long, which IS the home-screen beat */
-const RETURN = 1.5;
+/** where the camera passes through while the home screen is up */
+const HOME_SHOT = { dolly: 1.02, pitch: -8, x: 0, y: -0.05, yaw: 4 } as const;
+/** the hallway is short on purpose */
+const TRAVEL = 0.5;
+const RETURN = 0.3;
 /** the editorial curve: recorded motion glides where a UI snaps */
 const GLIDE = [0.65, 0, 0.35, 1] as const;
 
@@ -257,6 +274,8 @@ export class Mockup extends Component {
     partial: Partial<Camera3DState>,
     relative?: boolean
   ) => void;
+  /** the stick's temporary pull, layered on whatever the film is doing */
+  private leanHost?: (partial: Partial<Camera3DState>) => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
   private tint?: (hex: number) => void;
@@ -408,15 +427,37 @@ export class Mockup extends Component {
     this.poseHost?.(partial);
   };
 
-  /** a stick's offset, integrated into the pose — degrees (or units) per second */
-  nudge = (kind: string, dx: number, dy: number) => {
-    this.seizeCamera();
-    if (kind === 'orbit') {
-      this.poseHost?.({ pitch: dy * 90, yaw: dx * 150 }, true);
-    } else if (kind === 'pan') {
-      this.poseHost?.({ x: dx * 0.9, y: -dy * 0.9 }, true);
+  /**
+   * A stick moved. What that MEANS depends on whether the film is running,
+   * and the difference is the whole design.
+   *
+   * With the camera playing, a stick is a NUDGE: a temporary pull away
+   * from wherever the film currently is, layered on top of it. The film
+   * never stops, the knob springs back to centre on release, and the pull
+   * unwinds with it — so you can lean in to read something and simply let
+   * go to be handed back to the shot. Taking the camera away from the
+   * film to look at one thing, and then having to give it back by hand, is
+   * the friction this avoids.
+   *
+   * With the camera off, there is no film to lean on, so the same stick
+   * INTEGRATES: it drives the pose itself, from wherever you left it.
+   */
+  nudge = (kind: string, x: number, y: number, dt: number) => {
+    const lean = this.cameraOn;
+    const k = lean ? 1 : dt;
+    const move =
+      kind === 'orbit'
+        ? { pitch: y * (lean ? 16 : 90), yaw: x * (lean ? 26 : 150) }
+        : kind === 'pan'
+          ? { x: x * (lean ? 0.16 : 0.9), y: -y * (lean ? 0.16 : 0.9) }
+          : { dolly: -y * (lean ? 0.34 : 1.5) };
+    const scaled = Object.fromEntries(
+      Object.entries(move).map(([key, v]) => [key, v * k])
+    ) as Partial<Camera3DState>;
+    if (lean) {
+      this.leanHost?.(scaled);
     } else {
-      this.poseHost?.({ dolly: -dx * 1.1 }, true);
+      this.poseHost?.(scaled, true);
     }
   };
 
@@ -521,9 +562,7 @@ export class Mockup extends Component {
       el.style.setProperty('--knob-y', knob.y.toFixed(4));
       // THE STICK IS A RATE. A held stick keeps turning the camera, which
       // is why it can spring home without undoing what it did.
-      if (Math.abs(knob.x) > 0.004 || Math.abs(knob.y) > 0.004) {
-        this.nudge(kind, knob.x * dt, knob.y * dt);
-      }
+      this.nudge(kind, knob.x, knob.y, dt);
       if (
         !held &&
         Math.hypot(knob.x, knob.y) < 0.002 &&
@@ -558,6 +597,9 @@ export class Mockup extends Component {
     };
     const start = (ev: PointerEvent) => {
       ev.stopPropagation();
+      // a stick is a control, not a scroll surface: hold it and drag as
+      // far as you like without the page moving under your thumb
+      ev.preventDefault();
       held = true;
       read(ev);
       spin();
@@ -1086,6 +1128,12 @@ export class Mockup extends Component {
           // white-out was never to sand it down, it was to keep the one
           // eye-level source off it. Everything else in the rig is above,
           // beside or behind, so what it reflects reads as a highlight.
+          // NOT alphaTest. It discards fragments below the threshold, and
+          // this material's whole point is a uniform 0.05 alpha — every
+          // fragment fails, the display mesh disappears, and you are left
+          // looking through the front of the phone at the inside of its
+          // own back shell. The seam is handled on the DOM side instead:
+          // see the scale passed to objectCss.
           found.mesh.material = new T.MeshPhysicalMaterial({
             blending: T.NoBlending,
             clearcoat: 1,
@@ -1178,14 +1226,14 @@ export class Mockup extends Component {
           w,
           h
         );
-        // TUCK THE EDGE UNDER THE GLASS. The DOM plane and the display
-        // mesh are exactly coplanar and exactly the same size, so their
-        // silhouettes land on the same pixels — the browser antialiases
-        // one edge and the GPU antialiases the other, and the two do not
-        // agree, which reads as a jagged seam all the way round. Insetting
-        // the DOM by half a percent puts its edge just inside the mesh, so
-        // the body covers the seam and only one edge is ever drawn.
-        plane.style.transform = objectCss(anchor.matrixWorld.elements, 0.995);
+        // THE SEAM ROUND THE SCREEN. The hole is a polygon edge, and the
+        // GPU antialiases it by writing partial coverage into ALPHA —
+        // which NoBlending then writes verbatim, so the boundary pixels
+        // come out half-transparent in a stair-step that MSAA cannot fix
+        // because MSAA is what makes it. The DOM plane's own rounded rect
+        // IS properly antialiased, so oversizing it a touch lays that
+        // clean edge over the ragged one and only one edge is ever seen.
+        plane.style.transform = objectCss(anchor.matrixWorld.elements, 1.008);
       };
 
       // leaving 3D stops the loop, and a stopped canvas keeps its last
@@ -1347,65 +1395,98 @@ export class Mockup extends Component {
      * the readouts still track the shot frame by frame.
      */
     const pose: Camera3DState = { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
-    const share = () => {
+    /** the stick's pull, ADDED to the film's pose and unwound on release */
+    const lean: Camera3DState = { dolly: 0, pitch: 0, x: 0, y: 0, yaw: 0 };
+    /**
+     * The limits, held locally. They are the module's RANGE, captured
+     * once — a destructure of a missing binding throws inside the render
+     * loop, and a camera that throws every frame leaves the phone facing
+     * whichever way it happened to be pointing.
+     */
+    const LIMIT = RANGE;
+    const clamp = (v: number, span?: readonly [number, number]) =>
+      span ? Math.max(span[0], Math.min(span[1], v)) : v;
+    const shown = (): Camera3DState => ({
+      dolly: clamp(pose.dolly + lean.dolly, LIMIT.dolly),
+      pitch: clamp(pose.pitch + lean.pitch, LIMIT.pitch),
+      x: clamp(pose.x + lean.x, LIMIT.pan),
+      y: clamp(pose.y + lean.y, LIMIT.pan),
+      yaw: clamp(pose.yaw + lean.yaw, LIMIT.yaw),
+    });
+    const share = (at: Camera3DState) => {
       const pct = (v: number, [lo, hi]: readonly [number, number]) =>
         Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
-      host.style.setProperty('--yaw-at', String(pct(pose.yaw, RANGE.yaw)));
+      const pose = at;
+      host.style.setProperty('--yaw-at', String(pct(pose.yaw, LIMIT.yaw)));
       host.style.setProperty(
         '--pitch-at',
-        String(pct(pose.pitch, RANGE.pitch))
+        String(pct(pose.pitch, LIMIT.pitch))
       );
-      host.style.setProperty('--pan-x-at', String(pct(pose.x, RANGE.pan)));
-      host.style.setProperty('--pan-y-at', String(pct(pose.y, RANGE.pan)));
+      host.style.setProperty('--pan-x-at', String(pct(pose.x, LIMIT.pan)));
+      host.style.setProperty('--pan-y-at', String(pct(pose.y, LIMIT.pan)));
       host.style.setProperty(
         '--dolly-at',
-        String(pct(pose.dolly, RANGE.dolly))
+        String(pct(pose.dolly, LIMIT.dolly))
       );
       host.style.setProperty('--yaw-n', pose.yaw.toFixed(0));
       host.style.setProperty('--pitch-n', pose.pitch.toFixed(0));
       host.style.setProperty('--dolly-n', pose.dolly.toFixed(2));
     };
     const apply = () => {
-      ry = Math.PI + (pose.yaw * Math.PI) / 180;
-      rx = (pose.pitch * Math.PI) / 180;
-      dolly = pose.dolly;
+      const at = shown();
+      ry = Math.PI + (at.yaw * Math.PI) / 180;
+      rx = (at.pitch * Math.PI) / 180;
+      dolly = at.dolly;
       // truck and pedestal: fractions of the framed height, so the same
       // pose reads the same whatever box the demo was given
-      truck = pose.x * SCREEN.h;
-      pedestal = pose.y * SCREEN.h;
-      share();
+      truck = at.x * SCREEN.h;
+      pedestal = at.y * SCREEN.h;
+      // THE FLAT PHONE HAS NO THREE.JS CAMERA. In 2D everything above
+      // writes to a renderer that is not running, so the same pose is
+      // also published as plain custom properties and the CSS plane is
+      // transformed by them — one pose, two renderers. Moving the camera
+      // right is the subject moving left, hence the sign.
+      host.style.setProperty('--zoom-mul', (1 / at.dolly).toFixed(4));
+      host.style.setProperty(
+        '--pan-x-px',
+        `${(-at.x * SCREEN.h).toFixed(1)}px`
+      );
+      host.style.setProperty('--pan-y-px', `${(at.y * SCREEN.h).toFixed(1)}px`);
+      share(at);
     };
     this.shotHost = (next) => {
       Object.assign(pose, next);
+      apply();
+    };
+    this.leanHost = (partial) => {
+      Object.assign(lean, { dolly: 0, pitch: 0, x: 0, y: 0, yaw: 0 }, partial);
       apply();
     };
     this.poseHost = (partial, relative) => {
       if (relative) {
         // a stick's contribution ADDS, and every axis is clamped to the
         // same range the script writes within
-        const clamp = (v: number, [lo, hi]: readonly [number, number]) =>
-          Math.max(lo, Math.min(hi, v));
         if (partial.yaw !== undefined) {
-          pose.yaw = clamp(pose.yaw + partial.yaw, RANGE.yaw);
+          pose.yaw = clamp(pose.yaw + partial.yaw, LIMIT.yaw);
         }
         if (partial.pitch !== undefined) {
-          pose.pitch = clamp(pose.pitch + partial.pitch, RANGE.pitch);
+          pose.pitch = clamp(pose.pitch + partial.pitch, LIMIT.pitch);
         }
         if (partial.x !== undefined) {
-          pose.x = clamp(pose.x + partial.x, RANGE.pan);
+          pose.x = clamp(pose.x + partial.x, LIMIT.pan);
         }
         if (partial.y !== undefined) {
-          pose.y = clamp(pose.y + partial.y, RANGE.pan);
+          pose.y = clamp(pose.y + partial.y, LIMIT.pan);
         }
         if (partial.dolly !== undefined) {
-          pose.dolly = clamp(pose.dolly + partial.dolly, RANGE.dolly);
+          pose.dolly = clamp(pose.dolly + partial.dolly, LIMIT.dolly);
         }
       } else {
         Object.assign(pose, partial);
       }
       apply();
     };
-    share();
+    apply();
     this.boot = run3d;
     this.halt = () => {
       running = false;
@@ -1562,14 +1643,14 @@ export class Mockup extends Component {
               not change when you stop one of them. }}
           <c.Sequence>
             {{#each this.scenes as |scene|}}
-              {{! APPROACH — wide enough that the home screen still reads }}
+              {{! APPROACH — short, because nobody came for the hallway }}
               {{#if this.cameraOn}}
                 <c.Camera3D
-                  @yaw={{scene.approach.yaw}}
-                  @pitch={{scene.approach.pitch}}
-                  @dolly={{scene.approach.dolly}}
-                  @x={{scene.approach.x}}
-                  @y={{scene.approach.y}}
+                  @yaw={{this.home.yaw}}
+                  @pitch={{this.home.pitch}}
+                  @dolly={{this.home.dolly}}
+                  @x={{this.home.x}}
+                  @y={{this.home.y}}
                   @duration={{this.travel}}
                   @ease={{this.glide}}
                 />
@@ -1581,28 +1662,31 @@ export class Mockup extends Component {
                 <c.Perform @action="open" @target={{scene.app}} />
               {{/if}}
 
-              {{! READ — in close, and PANNING, so the part being read
-                  stays in frame instead of the push cropping it away }}
-              {{#if this.cameraOn}}
-                <c.Camera3D
-                  @yaw={{scene.read.yaw}}
-                  @pitch={{scene.read.pitch}}
-                  @dolly={{scene.read.dolly}}
-                  @x={{scene.read.x}}
-                  @y={{scene.read.y}}
-                  @duration={{scene.hold}}
-                  @ease={{this.glide}}
-                />
-              {{else}}
-                <c.Wait @duration={{scene.hold}} />
-              {{/if}}
+              {{! THE BEATS — one lock-on per thing worth looking at.
+                  ONE STEP DRIVES BOTH MODES: in 3D the host applies the
+                  pose to three.js, in 2D to the CSS plane. There is no
+                  second camera track to keep in sync. }}
+              {{#each scene.beats as |beat|}}
+                {{#if this.cameraOn}}
+                  <c.Camera3D
+                    @yaw={{beat.yaw}}
+                    @pitch={{beat.pitch}}
+                    @dolly={{beat.dolly}}
+                    @x={{beat.x}}
+                    @y={{beat.y}}
+                    @duration={{beat.t}}
+                    @ease={{this.glide}}
+                  />
+                {{else}}
+                  <c.Wait @duration={{beat.t}} />
+                {{/if}}
+              {{/each}}
 
               {{#if this.syncOn}}
                 <c.Perform @action="close" @target={{scene.app}} />
               {{/if}}
 
-              {{! HOME — the return IS the home-screen beat. Every app is
-                  entered from the hub and left back to it. }}
+              {{! and back to the hub, briefly }}
               {{#if this.cameraOn}}
                 <c.Camera3D
                   @yaw={{this.home.yaw}}
@@ -1664,7 +1748,7 @@ export class Mockup extends Component {
             moves them; dragging one writes the same pose back and takes
             the camera over. One pose, two ways to set it. }}
         <div class="mg-pads">
-          <div class="mg-pad" {{this.padDrag "orbit"}}>
+          <div class="mg-pad mg-pad-orbit" {{this.padDrag "orbit"}}>
             <span class="mg-pad-dot mg-dot-orbit"></span>
             <span class="mg-pad-name">rotate</span>
           </div>
@@ -1680,6 +1764,13 @@ export class Mockup extends Component {
       </div>
 
       <style>
+        /* A DEMO IS NOT A DOCUMENT. Nothing here is text to select, and a
+           drag on a stick must not scroll the page out from under it. */
+        .mg-page,
+        .mg-page * {
+          user-select: none;
+          -webkit-user-select: none;
+        }
         .mg-page {
           padding: 24px;
           font:
@@ -1775,7 +1866,12 @@ export class Mockup extends Component {
           left: 50%;
           width: 390px;
           height: 844px;
-          transform: translate(-50%, -50%) scale(var(--k, 0.6));
+          /* the pan and zoom sit INSIDE the scale, so they are expressed
+             in the screen's own 390x844 pixels and read identically at
+             any container size */
+          transform: translate(-50%, -50%)
+            scale(calc(var(--k, 0.6) * var(--zoom-mul, 1)))
+            translate(var(--pan-x-px, 0px), var(--pan-y-px, 0px));
           border-radius: 46px;
           box-shadow:
             0 0 0 12px #212429,
@@ -2099,9 +2195,10 @@ export class Mockup extends Component {
         .mg-island {
           z-index: 9;
         }
-        .mg-app-ui > * {
-          top: 48px !important;
-        }
+        /* The apps already lay their own status bars out around the
+           island; pushing their content down as well only exposed a band
+           of app background above it. The island paints on top and that
+           is enough. */
 
         /* GLASSMORPHIC THUMB CONTROLS, the way a game overlays them on an
            iPad: a frosted disc that sits on the picture rather than in a
@@ -2111,7 +2208,7 @@ export class Mockup extends Component {
           z-index: 5;
           right: 14px;
           /* room for the labels, which hang below each disc */
-          bottom: 30px;
+          bottom: 26px;
           display: flex;
           gap: 12px;
           align-items: center;
@@ -2140,19 +2237,25 @@ export class Mockup extends Component {
           cursor: grabbing;
         }
         .mg-pad {
-          width: 78px;
-          height: 78px;
+          width: 54px;
+          height: 54px;
         }
         .mg-rail {
-          width: 108px;
-          height: 46px;
+          width: 32px;
+          height: 54px;
           border-radius: 999px;
+        }
+        /* THERE IS NOTHING TO ROTATE IN 2D. The flat phone faces you by
+           definition, so a rotate stick there is a control that does
+           nothing — worse than one that is missing. */
+        .mg-stage[data-mode="2d"] .mg-pad-orbit {
+          display: none;
         }
         .mg-pad-name {
           position: absolute;
           left: 0;
           right: 0;
-          bottom: -14px;
+          bottom: -12px;
           text-align: center;
           font: 9px/1 var(--font-mono, ui-monospace, monospace);
           color: var(--ink-faint, #b8aea3);
@@ -2166,9 +2269,9 @@ export class Mockup extends Component {
           position: absolute;
           left: 50%;
           top: 50%;
-          width: 30px;
-          height: 30px;
-          margin: -15px 0 0 -15px;
+          width: 21px;
+          height: 21px;
+          margin: -10.5px 0 0 -10.5px;
           border-radius: 50%;
           pointer-events: none;
           background: radial-gradient(
@@ -2181,15 +2284,18 @@ export class Mockup extends Component {
             0 2px 6px #00000059,
             0 0 0 1px #ffffff40 inset;
           transform: translate(
-            calc(var(--knob-x, 0) * 22px),
-            calc(var(--knob-y, 0) * 22px)
+            calc(var(--knob-x, 0) * 15px),
+            calc(var(--knob-y, 0) * 15px)
           );
         }
+        /* zoom runs UP AND DOWN, and the same height as the sticks beside
+           it — a horizontal slider among two round pads reads as a
+           different kind of control than it is */
         .mg-rail-dot {
-          width: 26px;
-          height: 26px;
-          margin: -13px 0 0 -13px;
-          transform: translate(calc(var(--knob-x, 0) * 36px), 0);
+          width: 19px;
+          height: 19px;
+          margin: -9.5px 0 0 -9.5px;
+          transform: translate(0, calc(var(--knob-y, 0) * 14px));
         }
         @container (max-height: 460px) {
           .mg-pads {

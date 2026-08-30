@@ -147,6 +147,7 @@ declare module 'three' {
 
   export class MeshPhysicalMaterial extends Material {
     constructor(params?: {
+      alphaTest?: number;
       blendDst?: number;
       blendDstAlpha?: number;
       blendSrc?: number;
