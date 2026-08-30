@@ -8,10 +8,12 @@ import { FarMatch } from 'test-app/components/examples/far-match';
 import { Fold } from 'test-app/components/examples/fold';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
+import { Grip } from 'test-app/components/examples/grip';
 import { HideHeader } from 'test-app/components/examples/hide-header';
 import { Inbox } from 'test-app/components/examples/inbox';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';
 import { Interrupt } from 'test-app/components/examples/interrupt';
+import { Jump } from 'test-app/components/examples/jump';
 import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
 import { Lightbox } from 'test-app/components/examples/lightbox';
@@ -26,6 +28,7 @@ import { Presentation } from 'test-app/components/examples/presentation';
 import { Rack } from 'test-app/components/examples/rack';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
+import { Release } from 'test-app/components/examples/release';
 import { Reveal } from 'test-app/components/examples/reveal';
 import { Sequence } from 'test-app/components/examples/sequence';
 import { SharedTabs } from 'test-app/components/examples/shared-tabs';
@@ -1126,6 +1129,30 @@ const tile = {
     title: 'Trail',
   },
   {
+    Example: Jump,
+    apis: ['c.Scroll', '@align', 'c.Raise', 'c.Hold @fill', '@debug'],
+    group: 'Choreo',
+    id: 'jump',
+    lede: 'Jump to it and flash it — without a scroll racing a timer.',
+    sample: `// The genre this replaces is a scrollIntoView racing a classList write
+// racing a setTimeout. Here it is three steps on one clock, and a wheel
+// mid-jump simply takes the scroll back.
+<c.Sequence>
+  <c.Parallel>
+    <c.Scroll @of={{c.id this.target}} @align='center' @duration={{0.5}} />
+    {{! above every stacking context AND outside the list's clip —
+        the part z-index cannot buy }}
+    <c.Raise @of={{c.id this.target}} @shadow={{true}} @duration={{1.2}} />
+  </c.Parallel>
+  {{! @fill is the difference between a flash and a selection:
+      released with the window, or kept after it }}
+  <c.Hold @of={{c.id this.target}} @backgroundColor='var(--ember)'
+    @duration={{0.7}} @fill={{this.keep}} />
+</c.Sequence>`,
+    slowmo: true,
+    title: 'Jump',
+  },
+  {
     Example: Keyframes,
     apis: ['animate', 'keyframes'],
     group: 'Animate',
@@ -1185,6 +1212,37 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
   @duration={{legFor shot}} />`,
     slowmo: false,
     title: 'Long Take',
+  },
+  {
+    Example: Grip,
+    apis: [
+      'createDragControls',
+      'dragControls',
+      'dragListener',
+      'onTap',
+      'onPanSessionStart',
+    ],
+    group: 'Drag',
+    id: 'grip',
+    lede: 'Only the handle drags. Everything else the pointer says, said out loud.',
+    sample: `// drag=true normally swallows the element's pointer whole. dragListener=false
+// hands it back — the body is selectable, clickable, still reports a tap — and
+// a DragControls object is the only thing that can lift the card.
+const controls = createDragControls();
+
+<button {{on 'pointerdown' (fn controls.start)}}>grip</button>
+
+<div {{motion
+  drag=true
+  dragControls=controls
+  dragListener=false     {{! the card's own listener, off }}
+  dragSnapToOrigin=true
+  onPanSessionStart=this.session   {{! pointerdown, BEFORE the drag threshold }}
+  onTap=this.press                 {{! released ON it }}
+  onTapCancel=this.pressCancel     {{! released off it — the two ways a press ends }}
+}}>…</div>`,
+    slowmo: false,
+    title: 'Grip',
   },
   {
     Example: Gestures,
@@ -1319,6 +1377,29 @@ word = {
 </Presence>`,
     slowmo: true,
     title: 'Enter',
+  },
+  {
+    Example: Release,
+    apis: ['c.gesture', 'c.counterpart', 'c.still', 'c.received', 'Move @from'],
+    group: 'Choreo',
+    id: 'release',
+    lede: 'Throw it. It arrives at the speed you threw it.',
+    sample: `// The chip is REMOVED from the tray and INSERTED in a bay: two elements,
+// one id, so the arrival claims the leaver and the pass has both boxes.
+// Measurement can supply both — and still not the one thing a throw has.
+<c.Parallel>
+  <c.Move @of={{c.received 'chip'}}
+    @from={{c.gesture}}          {{! centred on the finger, AT THE FINGER'S SPEED }}
+    @spring={{TOSS}} @size={{false}} @swap='none' />
+
+  {{! the half it claimed, parked in the orphan layer and still measurable }}
+  <c.Tween @of={{c.counterpart}} @opacity={{0}} @duration={{0.12}} />
+
+  {{! and the bays nobody threw at: not moved, not removed — STILL }}
+  <c.Hold @of={{c.still 'bay'}} @opacity={{0.4}} @duration={{0.42}} />
+</c.Parallel>`,
+    slowmo: true,
+    title: 'Release',
   },
   {
     Example: Reveal,

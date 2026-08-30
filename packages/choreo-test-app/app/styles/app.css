@@ -11770,3 +11770,368 @@ html[data-gm-dragging] * {
 .pt-date-year {
   width: var(--pt-year);
 }
+
+/* ---- Grip: the pointer surface, one card at a time ---- */
+
+.grip-ex {
+  align-items: stretch;
+  display: grid;
+  gap: 22px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(230px, 0.9fr);
+  width: min(760px, 100%);
+}
+
+.grip-stage {
+  align-items: center;
+  background:
+    linear-gradient(var(--line) 2px, transparent 2px) 0 0 / 100% 34px,
+    linear-gradient(90deg, var(--line) 2px, transparent 2px) 0 0 / 34px 100%,
+    var(--bg);
+  border: 2px solid var(--line-strong);
+  border-radius: 14px;
+  display: flex;
+  justify-content: center;
+  min-height: 264px;
+  padding: 28px;
+}
+
+.grip-card {
+  align-items: stretch;
+  background: var(--bg-elev);
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  cursor: default;
+  display: flex;
+  max-width: 330px;
+  overflow: hidden;
+  transition: box-shadow 0.22s var(--ease);
+}
+
+.grip-card.is-lifted {
+  box-shadow: 0 18px 34px -18px
+    rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
+}
+
+.grip-handle {
+  align-items: center;
+  background: var(--bg-well);
+  border: 0;
+  border-right: 2px solid var(--line-strong);
+  cursor: grab;
+  display: flex;
+  justify-content: center;
+  padding: 0 13px;
+  touch-action: none;
+}
+
+.grip-handle:active {
+  cursor: grabbing;
+}
+
+.grip-dots {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(2, 4px);
+}
+
+.grip-dots i {
+  background: var(--ink-faint);
+  border-radius: 50%;
+  height: 4px;
+  width: 4px;
+}
+
+.grip-body {
+  padding: 15px 17px 17px;
+}
+
+.grip-kicker {
+  color: var(--copper-ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  margin: 0 0 7px;
+  text-transform: uppercase;
+}
+
+.grip-line {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  user-select: text;
+}
+
+.grip-pin {
+  background: var(--ember);
+  border-radius: 999px;
+  color: #fff;
+  cursor: grab;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  margin-top: 13px;
+  padding: 4px 12px;
+  text-transform: uppercase;
+  touch-action: none;
+}
+
+.grip-pin.is-open {
+  background: var(--iris);
+}
+
+.grip-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.grip-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.grip-hint {
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  min-height: 36px;
+}
+
+.grip-tape {
+  background: var(--bg-well);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  list-style: none;
+  margin: 0;
+  min-height: 172px;
+  padding: 11px;
+}
+
+.grip-note {
+  align-items: baseline;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.grip-at {
+  color: var(--ink-faint);
+  flex: none;
+  width: 46px;
+}
+
+.grip-note.is-press .grip-text {
+  color: var(--ember-hot);
+}
+
+.grip-note.is-drag .grip-text {
+  color: var(--ink);
+}
+
+.grip-note.is-session .grip-text {
+  color: var(--copper-ink);
+}
+
+.grip-note.is-empty .grip-text,
+.grip-note.is-hover .grip-text {
+  color: var(--ink-faint);
+}
+
+@media (max-width: 700px) {
+  .grip-ex {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Release: where the drag ended, and how fast ---- */
+
+.rel-ex {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(720px, 100%);
+}
+
+.rel-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rel-hint {
+  color: var(--ink-dim);
+  flex: 1 1 260px;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.rel-board {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rel-tray {
+  align-items: center;
+  background: var(--bg);
+  border: 2px dashed var(--line-strong);
+  border-radius: 12px;
+  display: flex;
+  gap: 14px;
+  min-height: 92px;
+  padding: 14px 16px;
+}
+
+.rel-bays {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rel-bay {
+  align-items: center;
+  background: var(--bg-elev);
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: flex-start;
+  min-height: 104px;
+  padding: 12px;
+}
+
+.rel-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rel-chip {
+  background: var(--ember);
+  border-radius: 9px;
+  box-shadow: 0 6px 16px -8px rgba(var(--shadow-rgb), var(--shadow-a));
+  color: #fff;
+  cursor: grab;
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 9px 14px;
+  text-transform: uppercase;
+  touch-action: none;
+  white-space: nowrap;
+}
+
+.rel-chip:active {
+  cursor: grabbing;
+}
+
+.rel-chip.is-home {
+  background: var(--iris);
+}
+
+@media (max-width: 640px) {
+  .rel-bays {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---- Jump: scroll, raise and mark, on one clock ---- */
+
+.jump-ex {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(680px, 100%);
+}
+
+.jump-controls,
+.jump-asks {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.jump-legend {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.jump-sep {
+  background: var(--line-strong);
+  height: 18px;
+  width: 2px;
+}
+
+.jump-region {
+  position: relative;
+}
+
+.jump-list {
+  background: var(--bg);
+  border: 2px solid var(--line-strong);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 268px;
+  list-style: none;
+  margin: 0;
+  overflow-y: auto;
+  padding: 8px;
+  scrollbar-width: thin;
+}
+
+.jump-row {
+  align-items: center;
+  background: var(--bg-elev);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px 84px minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+.jump-n {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-align: right;
+}
+
+.jump-slate {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jump-bar {
+  background: var(--line-strong);
+  border-radius: 2px;
+  height: 4px;
+}
+
+.chip.is-ask {
+  font-family: var(--font-mono);
+}
