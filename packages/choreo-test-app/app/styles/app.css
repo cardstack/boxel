@@ -865,6 +865,16 @@ summary,
    --bg is the recessed end of the surface ladder in both themes, so the
    prints sit on a canvas a notch below the page rather than on a copper
    light-table that only belonged to the film pass. */
+/* A LAPTOP IS A WIDE, SHORT SUBJECT ON A TALL PLATTER. The default stage
+   is sized for demos that fill their width, and a machine seen from a low
+   three-quarter angle wants headroom above the lid and floor under the
+   base — without it the framing solver keeps pulling the camera back to
+   fit the height, and the drawing on the screen goes too small to read.
+   So this one demo gets a taller well on its own page. */
+.stage-wrap:has(.lt-page) {
+  min-height: min(84vh, 860px);
+}
+
 .stage-wrap:has(.cam) {
   background:
     radial-gradient(

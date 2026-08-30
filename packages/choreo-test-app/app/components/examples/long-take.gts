@@ -145,6 +145,11 @@ export class LongTake extends Component {
     }
   };
 
+  // NO RESYNC BUTTON. The drawing is inert — there is nothing on it to
+  // press, so the only thing a person can take over is the camera, and the
+  // camera control already hands it back. A second button that means
+  // "undo the first button" is furniture.
+
   toggleCamera = () => {
     const next = !this.cameraOn;
     this.cameraOn = next;
@@ -156,11 +161,6 @@ export class LongTake extends Component {
     // behind is discarded, because a film that resumes from someone
     // else's framing is not the film.
     this.resetHost?.();
-    this.take += 1;
-  };
-
-  resync = () => {
-    this.cameraOn = true;
     this.take += 1;
   };
 
@@ -1030,22 +1030,6 @@ export class LongTake extends Component {
             {{/if}}
             camera
           </button>
-
-          {{#unless this.cameraOn}}
-            <button type="button" {{on "click" this.resync}}>
-              <svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                />
-                <path d="M19.6 3.6v5.2h-5.2z" />
-              </svg>
-              resync
-            </button>
-          {{/unless}}
         </div>
 
         <div class="lt-pads">

@@ -46,6 +46,7 @@ import { InlineEditNotes } from 'test-app/components/notes/inline-edit';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
+import { LongTakeNotes } from 'test-app/components/notes/long-take';
 import { MockupNotes } from 'test-app/components/notes/mockup';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
@@ -488,10 +489,11 @@ shot = (pose) => {
   },
   {
     Example: LongTake,
-    apis: ['c.Frame', 'c.Aim', 'c.Pan', 'c.SlowZoom', 'c.Follow', 'c.Camera3D'],
+    apis: ['c.Frame', 'c.Aim', 'c.Pan', 'c.SlowZoom', 'c.Camera3D'],
     group: 'Choreo',
     id: 'long-take',
     lede: 'Nothing on this screen changes. Every frame of it is the camera.',
+    notes: LongTakeNotes,
     sample: `{{! FIVE CONSTRUCTS, and between them every move a camera can make
     over something that is not moving. Note what is NOT here: no c.Move, no
     changeset, no c.Perform. The drawing is inert. }}
@@ -514,21 +516,6 @@ shot = (pose) => {
     <c.SlowZoom @by={{shot.push}} @duration={{shot.hold}} />
   {{/each}}
 </c.Sequence>
-
-{{! THE FOLLOW FOCUS — a scrim with a soft hole that sits wherever the
-    camera is looking and closes down as it leans in. Not an animation: a
-    pure function of where the frame stands THIS frame, so a seek, an
-    interruption or a drag is correct on the very next one. }}
-<c.Follow @of={{c.id 'focus'}} @to={{c.id 'board'}} @read={{focus}} @rest={{FOCUS_REST}} />
-
-const focus = ({ camera, rest }) => {
-  const k = 1 / camera.zoom;                    // the camera's transform,
-  const cx = (CENTRE.x - camera.x) * k;         // inverted: the board point
-  const cy = (CENTRE.y - camera.y) * k;         // under the middle of the screen
-  const lean = clamp01((camera.zoom - 1) / 1.6);
-  return { opacity: 0.1 + 0.74 * lean, scale: k * (1.28 - 0.42 * lean),
-           x: cx - centreOf(rest).x, y: cy - centreOf(rest).y };
-};
 
 // and OUTSIDE, a second camera on the same list — its leg for a shot is
 // that shot's own move + hold, so neither region owns the timing and

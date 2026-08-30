@@ -1,71 +1,7 @@
 import { array } from '@ember/helper';
 import Component from '@glimmer/component';
-import {
-  Choreo,
-  type DeriveContext,
-  motion,
-  type PropValue,
-} from 'glimmer-motion';
-import {
-  BOARD,
-  GLIDE,
-  RUNTIME,
-  SHOTS,
-} from 'test-app/components/long-take/shots';
-
-/**
- * THE FOLLOW FOCUS.
- *
- * A camera assistant's job on a moving shot is to keep the thing that
- * matters sharp while everything else falls off. This is that, in one
- * derived element: a scrim with a soft hole in it that sits wherever the
- * camera is looking and closes down as the camera leans in.
- *
- * It is a `c.Follow` and not an animation, and the difference is the
- * whole point. There is no from-value and no to-value: the scrim's pose
- * is a pure function of where the frame stands THIS frame. Interrupt the
- * camera halfway, drag it somewhere else, seek the run backwards — the
- * focus is correct on the very next frame, with nothing to re-aim,
- * because it was never aiming at anything. It is reading.
- *
- * The arithmetic is the camera's own transform, inverted. The region is
- * drawn as `translate(camera.x, camera.y) scale(camera.zoom)` about its
- * top-left, so the board point currently under the middle of the screen
- * is `(centre - camera) / zoom`, and an element that must stay the same
- * SIZE on screen while living inside that transform has to be scaled by
- * `1 / zoom`. Both fall out of one number.
- */
-const CENTRE = { x: BOARD.w / 2, y: BOARD.h / 2 };
-
-/** how far in the camera goes on the tightest shot, for normalising attention */
-const TIGHTEST = 3.4;
-
-const focus = ({ camera, rest }: DeriveContext): Record<string, PropValue> => {
-  const k = 1 / camera.zoom;
-  // the board point under the centre of the screen, in board coordinates
-  const cx = (CENTRE.x - camera.x) * k;
-  const cy = (CENTRE.y - camera.y) * k;
-  // ATTENTION IS THE ZOOM. Wide, the scrim is barely there and the whole
-  // drawing is readable; leaning in, it closes down and the rest of the
-  // board falls away. So the focus is not a separate track that has to be
-  // kept in step with the camera — it IS the camera, read differently.
-  const lean = Math.min(1, Math.max(0, (camera.zoom - 1) / (TIGHTEST - 1)));
-  return {
-    opacity: 0.1 + 0.74 * lean,
-    // the hole tightens as the shot does, on top of holding its size
-    scale: k * (1.28 - 0.42 * lean),
-    x: cx - (rest.x + rest.width / 2),
-    y: cy - (rest.y + rest.height / 2),
-  };
-};
-
-/** what the follower's properties are at rest, so a measure pass can undo them */
-const FOCUS_REST: Record<string, PropValue> = {
-  opacity: 0,
-  scale: 1,
-  x: 0,
-  y: 0,
-};
+import { Choreo, motion } from 'glimmer-motion';
+import { GLIDE, SHOTS } from 'test-app/components/long-take/shots';
 
 /** the signal path, as an engineering drawing rather than as boxes */
 const WIRES = [
@@ -74,7 +10,10 @@ const WIRES = [
   'M 1016 232 L 1098 232',
   'M 1214 316 L 1214 392 L 596 392 L 596 470',
   'M 852 586 L 962 586',
-  'M 214 316 L 214 700 L 330 700',
+  // capsule down the left margin and into the desk, ABOVE the patch bay
+  'M 214 316 L 214 600 L 330 600',
+  // and the patch bay back up into the desk's underside
+  'M 314 748 L 372 748 L 372 712',
 ];
 
 interface BoardSignature {
@@ -102,15 +41,12 @@ interface BoardSignature {
  * A drawing that never changes. Not one element mounts, unmounts, moves
  * or animates for the length of the film — there is no `@animate`, no
  * changeset, no `c.Move` anywhere in this region. Every frame of it is
- * the camera and the focus reading the camera.
+ * the camera.
  */
 export class Board extends Component<BoardSignature> {
   readonly shots = SHOTS;
   readonly wires = WIRES;
   readonly glide = GLIDE;
-  readonly runtime = RUNTIME;
-  readonly focus = focus;
-  readonly focusRest = FOCUS_REST;
 
   isKind = (shot: (typeof SHOTS)[number], kind: string) => shot.kind === kind;
 
@@ -230,19 +166,18 @@ export class Board extends Component<BoardSignature> {
           <div class="lt-tb-row"><span>SHEET</span><b>1 OF 1</b></div>
           <div class="lt-tb-row"><span>SCALE</span><b>AS DRAWN</b></div>
         </div>
-
-        {{! THE FOLLOW FOCUS. Inside the region, so the camera carries it —
-            which is exactly why it has to divide the zoom back out. }}
-        <span class="lt-focus" aria-hidden="true" {{motion id="focus"}}></span>
       </div>
 
-      {{! the marker whose only job is to change on every take — see @take }}
+      {{! The marker whose only job is to change on every take — see @take.
+          Its id is `take` and not `clock`, because the drawing already has
+          a station called Clock and two sprites answering to one id is one
+          identity as far as the region is concerned. }}
       {{#if @playing}}
         <span
           class="lt-clock"
           data-take={{@take}}
           aria-hidden="true"
-          {{motion id="clock"}}
+          {{motion id="take"}}
         ></span>
       {{/if}}
 
@@ -254,57 +189,43 @@ export class Board extends Component<BoardSignature> {
             c.Aim       recentre on it, ZOOM HELD — the travelling shot
             c.Pan       shift by exact pixels — the drift
             c.SlowZoom  multiply the zoom in force — the push under a hold
-            c.Hold      the beat itself
 
           Nothing on the board changes while they run. }}
       {{#if @playing}}
-        <c.Parallel>
-          <c.Sequence>
-            {{#each this.shots key="@index" as |shot|}}
-              {{#if (this.isKind shot "frame")}}
-                <c.Frame
-                  @of={{c.id shot.at}}
-                  @padding={{shot.fill}}
-                  @duration={{shot.move}}
-                  @ease={{this.glide}}
-                />
-              {{else if (this.isKind shot "aim")}}
-                <c.Aim
-                  @of={{c.id shot.at}}
-                  @duration={{shot.move}}
-                  @ease={{this.glide}}
-                />
-              {{else}}
-                <c.Pan
-                  @x={{shot.x}}
-                  @y={{shot.y}}
-                  @duration={{shot.move}}
-                  @ease={{this.glide}}
-                />
-              {{/if}}
+        <c.Sequence>
+          {{#each this.shots key="@index" as |shot|}}
+            {{#if (this.isKind shot "frame")}}
+              <c.Frame
+                @of={{c.id shot.at}}
+                @padding={{shot.fill}}
+                @duration={{shot.move}}
+                @ease={{this.glide}}
+              />
+            {{else if (this.isKind shot "aim")}}
+              <c.Aim
+                @of={{c.id shot.at}}
+                @duration={{shot.move}}
+                @ease={{this.glide}}
+              />
+            {{else}}
+              <c.Pan
+                @x={{shot.x}}
+                @y={{shot.y}}
+                @duration={{shot.move}}
+                @ease={{this.glide}}
+              />
+            {{/if}}
 
-              {{! THE HOLD IS NOT A FREEZE. A shot that stops dead reads as a
+            {{! THE HOLD IS NOT A FREEZE. A shot that stops dead reads as a
                 still; the slow push is what keeps it alive, and it is one
                 step rather than a second animation to keep in step. }}
-              <c.SlowZoom
-                @by={{shot.push}}
-                @duration={{shot.hold}}
-                @ease="linear"
-              />
-            {{/each}}
-          </c.Sequence>
-
-          {{! ONE FOLLOWER FOR THE WHOLE FILM. It is not anchored to any
-            shot, because it is not about any shot: it reads the camera,
-            and the camera is always somewhere. }}
-          <c.Follow
-            @of={{c.id "focus"}}
-            @to={{c.id "board"}}
-            @read={{this.focus}}
-            @rest={{this.focusRest}}
-            @duration={{this.runtime}}
-          />
-        </c.Parallel>
+            <c.SlowZoom
+              @by={{shot.push}}
+              @duration={{shot.hold}}
+              @ease="linear"
+            />
+          {{/each}}
+        </c.Sequence>
       {{/if}}
     </Choreo>
 
@@ -444,10 +365,13 @@ export class Board extends Component<BoardSignature> {
         top: 470px;
         width: 388px;
       }
+      /* clear of the desk on both axes: it used to share the desk's left
+         edge exactly, and two boxes that touch read as one box with a line
+         through it */
       .is-patch {
         left: 90px;
-        top: 646px;
-        width: 240px;
+        top: 706px;
+        width: 224px;
       }
 
       .lt-meters {
@@ -541,31 +465,6 @@ export class Board extends Component<BoardSignature> {
         font-weight: 600;
         color: #cfe6f5;
         letter-spacing: 0.04em;
-      }
-
-      /* THE SCRIM. Deliberately much larger than the board: it is scaled
-         DOWN by the follower (1/zoom), so it has to start big enough that
-         its dark outer ring still covers the corners when the camera is
-         pushed all the way in. The hole is the transparent middle of a
-         radial gradient — a soft edge, because a hard-edged spotlight
-         reads as a mask rather than as focus. */
-      .lt-focus {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 3400px;
-        height: 3400px;
-        margin: -1700px 0 0 -1700px;
-        pointer-events: none;
-        border-radius: 50%;
-        background: radial-gradient(
-          circle closest-side,
-          #04080e00 0%,
-          #04080e00 13%,
-          #04080ecc 26%,
-          #04080ef2 44%,
-          #04080e 100%
-        );
       }
     </style>
   </template>
