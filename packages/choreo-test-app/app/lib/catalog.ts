@@ -9,6 +9,7 @@ import { Fold } from 'test-app/components/examples/fold';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
 import { Grip } from 'test-app/components/examples/grip';
+import { Hang } from 'test-app/components/examples/hang';
 import { HideHeader } from 'test-app/components/examples/hide-header';
 import { Inbox } from 'test-app/components/examples/inbox';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';
@@ -26,9 +27,9 @@ import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { Presentation } from 'test-app/components/examples/presentation';
 import { Rack } from 'test-app/components/examples/rack';
+import { Release } from 'test-app/components/examples/release';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
-import { Release } from 'test-app/components/examples/release';
 import { Reveal } from 'test-app/components/examples/reveal';
 import { Sequence } from 'test-app/components/examples/sequence';
 import { SharedTabs } from 'test-app/components/examples/shared-tabs';
@@ -1461,6 +1462,64 @@ count = (pour) => {
 };`,
     slowmo: false,
     title: 'Reveal',
+  },
+  {
+    Example: Hang,
+    apis: ['c.gesture', 'c.beacon', 'c.Follow', 'c.moved', 'c.still'],
+    group: 'Choreo',
+    id: 'hang',
+    lede: 'Shuffleboard. The puck goes as far as you flick it, and no further.',
+    sample: `// The shooting area is walled — dragConstraints, not a foul line — so the
+// puck cannot be carried to where you want it and the distance has to come
+// out of the THROW. A wall teaches the same lesson as a rule and never tells
+// anyone off for crossing it.
+//
+// dragMomentum=false on purpose. Motion's inertia would slide the puck for
+// free and prove nothing: inertia has no destination and no rules. Here the
+// throw is READ, a resting place is RESOLVED from it, and only then is the
+// flight AUTHORED to that place with the throw's own speed borrowed as its
+// opening velocity. And COAST is not a free parameter — an overdamped spring
+// decays over damping/stiffness, so the projection has to use the spring's
+// own time constant or the puck visibly lies about how hard you threw it.
+const SLIDE = { damping: 28, stiffness: 100 };
+const COAST = SLIDE.damping / SLIDE.stiffness;
+
+<c.Parallel>
+  <c.Move @of={{c.received 'puck'}} @from={{c.gesture}} @spring={{SLIDE}}
+    @size={{false}} @swap='none' />
+
+  {{! the knock. Nothing told these to move — the collision sweep changed
+      their seats and the changeset noticed. A different spring, because a
+      transferred shove is not a throw. }}
+  <c.Move @of={{c.moved 'puck'}} @spring={{KNOCK}} @size={{false}} />
+
+  {{! what the throw did NOT disturb, so a chain reaction reads as one }}
+  <c.Hold @of={{c.still 'puck'}} @opacity={{0.38}} @duration={{0.55}} />
+
+  {{! shoved off the end: claimed by nobody, so it has nowhere to land }}
+  <c.Move @of={{c.removed 'puck'}} @to={{c.beacon 'gutter'}} @spring={{OFF}} />
+
+  {{! the lead line. Which puck is furthest can change PART WAY THROUGH the
+      flight — the thrown one, one it knocked forward, or the old leader —
+      at a moment no keyframe can name. @read takes the max every frame, so
+      the line changes allegiance exactly when the lead changes hands. }}
+  <c.Follow @of={{c.id 'lead'}} @to={{c.kept 'puck'}}
+    @read={{lead}} @rest={{LEAD_REST}} @duration={{1.6}} />
+</c.Parallel>
+
+// And the aim preview is deliberately NOT in the score. It runs on every
+// pointer move while nothing is animating, so putting it through the
+// renderer would re-measure every sprite in the region sixty times a second
+// to move one dashed ring. It previews info.velocity.x through the same
+// projection onDragEnd will use, so the ghost is not an approximation of the
+// throw — it is the throw, asked early.
+aim = (event, info) => {
+  const x = this.project(event.clientX, info.velocity.x, rect);
+  ghost.style.setProperty('--at', String(clamp01(x)));
+  ghost.textContent = callIt(x);
+};`,
+    slowmo: true,
+    title: 'Hang',
   },
   {
     Example: HideHeader,

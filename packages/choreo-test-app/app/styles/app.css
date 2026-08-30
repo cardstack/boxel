@@ -12135,3 +12135,292 @@ html[data-gm-dragging] * {
 .chip.is-ask {
   font-family: var(--font-mono);
 }
+
+/* ---- Hang: a throw is a number no layout pass contains ---- */
+
+.hang-ex {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(760px, 100%);
+}
+
+.hang-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  gap: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hang-turn {
+  border-radius: 999px;
+  color: #fff;
+  padding: 5px 11px;
+}
+
+.hang-turn.is-red {
+  background: var(--ember);
+}
+
+.hang-turn.is-blue {
+  background: var(--azure);
+}
+
+.hang-tally,
+.hang-speed {
+  color: var(--ink-faint);
+}
+
+.hang-speed {
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.hang-standing {
+  color: var(--ink-dim);
+}
+
+.hang-standing b.is-red {
+  color: var(--ember);
+}
+
+.hang-standing b.is-blue {
+  color: var(--azure);
+}
+
+.hang-standing i {
+  color: var(--ink-faint);
+  font-style: normal;
+}
+
+.hang-table {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The board. Everything in it is placed by `left` as a fraction of THIS
+   box, so a puck's seat survives a resize and nothing here competes with
+   the transforms Choreo writes. */
+.hang-lane {
+  background: var(--bg-well);
+  border: 2px solid var(--line-strong);
+  border-radius: 14px;
+  height: 132px;
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+
+.hang-zone {
+  border-left: 1px solid var(--line);
+  bottom: 0;
+  position: absolute;
+  top: 0;
+}
+
+.hang-zone:nth-child(1) {
+  background: rgba(var(--shadow-rgb), 0.04);
+}
+
+.hang-zone:nth-child(2) {
+  background: rgba(var(--shadow-rgb), 0.07);
+}
+
+.hang-zone:nth-child(3) {
+  background: rgba(var(--shadow-rgb), 0.1);
+}
+
+.hang-zone:nth-child(4) {
+  background: rgba(var(--shadow-rgb), 0.14);
+}
+
+.hang-zone i {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  left: 5px;
+  letter-spacing: 0.1em;
+  position: absolute;
+  text-transform: uppercase;
+  top: 6px;
+}
+
+/* the shooting area. Its far edge is a WALL — dragConstraints stops the
+   puck here — so the distance has to come out of the throw and nobody is
+   ever told off for crossing a line. */
+.hang-pen {
+  background: rgba(var(--shadow-rgb), 0.05);
+  border-right: 2px solid var(--line-strong);
+  bottom: 0;
+  left: 0;
+  position: absolute;
+  top: 0;
+}
+
+.hang-puck {
+  align-items: center;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px -4px rgba(var(--shadow-rgb), var(--shadow-a));
+  color: #fff;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  height: 44px;
+  justify-content: center;
+  position: absolute;
+  top: calc(50% - 22px);
+  touch-action: none;
+  width: 44px;
+}
+
+/* `left` is the puck's CENTRE, so a collision is a distance between
+   centres and nothing has to know about box edges */
+.hang-lane > .hang-puck {
+  margin-left: -22px;
+}
+
+.hang-puck.is-red {
+  background: var(--ember);
+}
+
+.hang-puck.is-blue {
+  background: var(--azure);
+}
+
+.hang-shot {
+  cursor: grab;
+  left: 8px;
+}
+
+.hang-shot:active {
+  cursor: grabbing;
+}
+
+/* the lead line: parked by the stylesheet at the furthest puck, carried
+   between two parkings by c.Follow */
+.hang-lead {
+  background: var(--ink-faint);
+  bottom: 0;
+  left: calc(var(--lead, 0) * 100%);
+  position: absolute;
+  top: 0;
+  width: 1px;
+}
+
+.hang-lane.is-empty .hang-lead {
+  opacity: 0;
+}
+
+/* the aim preview: where it would land if you let go now. Written straight
+   to the element from onDrag, so it costs no render — see `aim`. */
+.hang-ghost {
+  align-items: center;
+  border: 2px dashed var(--ink-faint);
+  border-radius: 50%;
+  color: var(--ink-dim);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  height: 44px;
+  justify-content: center;
+  left: calc(var(--at, 0) * 100%);
+  letter-spacing: 0.04em;
+  margin-left: -22px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: calc(50% - 22px);
+  width: 44px;
+}
+
+.hang-ghost[data-call] {
+  opacity: 1;
+}
+
+.hang-ghost[data-call='off the end'],
+.hang-ghost[data-call='too soft'] {
+  border-color: var(--ember-hot);
+  color: var(--ember-hot);
+  font-size: 8px;
+}
+
+.hang-ghost[data-call='the hang'] {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* the wind-up */
+.hang-power {
+  background: var(--bg-elev);
+  border-radius: 999px;
+  height: 5px;
+  overflow: hidden;
+  width: 72px;
+}
+
+.hang-power i {
+  background: var(--teal);
+  display: block;
+  height: 100%;
+  transform: scaleX(var(--power, 0));
+  transform-origin: left;
+  width: 100%;
+}
+
+.hang-legend {
+  color: var(--ink-faint);
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.hang-legend b {
+  color: var(--ink-dim);
+  font-family: var(--font-mono);
+  font-weight: 400;
+}
+
+.hang-foot {
+  align-items: center;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  gap: 12px;
+  justify-content: space-between;
+  letter-spacing: 0.06em;
+}
+
+.hang-note {
+  color: var(--ink-dim);
+}
+
+.hang-gutter {
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: var(--ink-faint);
+  padding: 7px 12px;
+  text-transform: uppercase;
+}
+
+.hang-gutter b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-left: 6px;
+}
+
+@media (max-width: 640px) {
+  .hang-lane {
+    height: 108px;
+  }
+
+  .hang-speed {
+    margin-left: 0;
+  }
+}
