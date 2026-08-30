@@ -1797,6 +1797,7 @@ export class Mockup extends Component {
       dispose?.();
       release();
       stopTheme?.();
+      ro.disconnect();
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('click', swallow, true);
       host.removeEventListener('click', touched, true);
