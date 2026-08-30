@@ -329,7 +329,13 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * the region would render forever.
    */
   /** where a c.Camera3D left the shot, carried between runs */
-  private resting3d: Camera3DState = { dolly: 1, pitch: 0, yaw: 0 };
+  private resting3d: Camera3DState = {
+    dolly: 1,
+    pitch: 0,
+    x: 0,
+    y: 0,
+    yaw: 0,
+  };
   private restingCamera: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */

@@ -936,7 +936,13 @@ function resolveStep(
         cues.push({
           camera3d: {
             by: step.by,
-            to: { dolly: step.dolly, pitch: step.pitch, yaw: step.yaw },
+            to: {
+              dolly: step.dolly,
+              pitch: step.pitch,
+              x: step.x,
+              y: step.y,
+              yaw: step.yaw,
+            },
           },
           duration: ms,
           kind: 'camera3d',

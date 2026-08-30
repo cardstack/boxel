@@ -72,7 +72,7 @@ const frames = (n: number) =>
 
 /** the pose the host last received */
 const latest = (): Camera3DState =>
-  shots[shots.length - 1] ?? { dolly: 1, pitch: 0, yaw: 0 };
+  shots[shots.length - 1] ?? { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
 
 /** stand the run at `t` and report what the host was handed */
 const at = async (t: number): Promise<Camera3DState> => {

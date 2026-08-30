@@ -1,3 +1,3 @@
-import { MockupGlb } from 'test-app/components/mockup-glb';
+import { Mockup } from 'test-app/components/examples/mockup';
 
-<template><MockupGlb /></template>
+<template><Mockup /></template>

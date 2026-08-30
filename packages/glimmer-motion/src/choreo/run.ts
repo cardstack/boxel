@@ -389,7 +389,13 @@ export class ChoreoRun implements Run {
   constructor(compiled: Compiled, options: RunOptions) {
     this.options = options;
     this.camera = options.camera ?? { x: 0, y: 0, zoom: 1 };
-    this.camera3d = options.camera3d ?? { dolly: 1, pitch: 0, yaw: 0 };
+    this.camera3d = options.camera3d ?? {
+      dolly: 1,
+      pitch: 0,
+      x: 0,
+      y: 0,
+      yaw: 0,
+    };
     this.initial3d = { ...this.camera3d };
     this.cameraAim = options.cameraAim ?? null;
     // frozen: the fold a random-access seek reconstructs the camera from
@@ -973,11 +979,15 @@ export class ChoreoRun implements Run {
           ? {
               dolly: from.dolly * (want.dolly ?? 1),
               pitch: from.pitch + (want.pitch ?? 0),
+              x: from.x + (want.x ?? 0),
+              y: from.y + (want.y ?? 0),
               yaw: from.yaw + (want.yaw ?? 0),
             }
           : {
               dolly: want.dolly ?? from.dolly,
               pitch: want.pitch ?? from.pitch,
+              x: want.x ?? from.x,
+              y: want.y ?? from.y,
               yaw: want.yaw ?? from.yaw,
             };
         if (now <= t.start) {
@@ -987,6 +997,8 @@ export class ChoreoRun implements Run {
           shot = {
             dolly: from.dolly + (to.dolly - from.dolly) * p,
             pitch: from.pitch + (to.pitch - from.pitch) * p,
+            x: from.x + (to.x - from.x) * p,
+            y: from.y + (to.y - from.y) * p,
             yaw: from.yaw + (to.yaw - from.yaw) * p,
           };
         }
@@ -1160,7 +1172,9 @@ export class ChoreoRun implements Run {
       if (
         was.yaw !== shot.yaw ||
         was.pitch !== shot.pitch ||
-        was.dolly !== shot.dolly
+        was.dolly !== shot.dolly ||
+        was.x !== shot.x ||
+        was.y !== shot.y
       ) {
         this.camera3d = shot;
         this.options.onCamera3D?.({ ...shot });

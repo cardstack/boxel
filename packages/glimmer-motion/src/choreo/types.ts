@@ -393,6 +393,17 @@ export interface Camera3DState {
   dolly: number;
   /** degrees above the subject */
   pitch: number;
+  /**
+   * Truck and pedestal, as fractions of the subject's framed height.
+   *
+   * Dolly alone cannot hold a tall subject in frame: push in on a phone
+   * and its top leaves the picture. A real operator moves the camera
+   * sideways and up as they push, so the part being read stays centred —
+   * these are that move, and they are what makes a close-up legible
+   * rather than a crop.
+   */
+  x: number;
+  y: number;
   /** degrees around it */
   yaw: number;
 }
@@ -406,6 +417,9 @@ export interface Camera3DStep extends StepBase {
   ms?: number;
   pitch?: number;
   spring?: SpringSpec;
+  /** truck / pedestal, in fractions of the framed height */
+  x?: number;
+  y?: number;
   yaw?: number;
 }
 
@@ -587,7 +601,13 @@ export interface Cue {
   /** camera3d: hand an orbit pose to the host, every frame it changes */
   camera3d?: {
     by?: boolean;
-    to: { dolly?: number; pitch?: number; yaw?: number };
+    to: {
+      dolly?: number;
+      pitch?: number;
+      x?: number;
+      y?: number;
+      yaw?: number;
+    };
   };
   /** text delivery: the run splits the sprite and plays the slots inside `duration` */
   delivery?: { by: DeliveryBy; order: DeliveryOrder; stagger: number };

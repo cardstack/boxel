@@ -119,7 +119,22 @@ export class PhotosApp extends Component<PhotosAppSignature> {
           {{/if}}
         {{/let}}
 
-        <c.Move @of={{c.moved "shot"}} @spring={{spring}} />
+        {{! @size="scale" is load-bearing, not decoration.
+
+            The default layout mode writes real width/height for the
+            flight — and the large view is CENTRED by the viewer's flex
+            box, so shrinking it to the tile's size moves its own layout
+            origin down by half the difference. FLIP had already measured
+            the translate against the full-size position, so the flight
+            began 116px below the thumbnail (76 painted px on a 1:1 2D
+            phone) and closed with the same jump mirrored. The size
+            animation was feeding back into the very layout the delta was
+            measured from.
+
+            Under 'scale' the box never changes size, so nothing reflows
+            and the delta stays true. Both ends are aspect-ratio 1, so the
+            per-axis scale is uniform and nothing stretches. }}
+        <c.Move @of={{c.moved "shot"}} @size="scale" @spring={{spring}} />
       </Choreo>
 
       <div class="photos-home"></div>

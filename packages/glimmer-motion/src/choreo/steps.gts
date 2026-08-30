@@ -501,11 +501,14 @@ export class Camera3D extends StepComponent<
     of?: Query | Query[];
     pitch?: number;
     spring?: SpringSpec;
+    x?: number;
+    y?: number;
     yaw?: number;
   }
 > {
   node(): TimelineNode {
-    const { by, delay, dolly, duration, ease, pitch, spring, yaw } = this.args;
+    const { by, delay, dolly, duration, ease, pitch, spring, x, y, yaw } =
+      this.args;
     return {
       at: this.args.at,
       by,
@@ -518,6 +521,8 @@ export class Camera3D extends StepComponent<
       of: this.args.of ?? {},
       pitch,
       spring,
+      x,
+      y,
       yaw,
     };
   }

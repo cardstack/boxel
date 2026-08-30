@@ -121,20 +121,89 @@ const LIVE = { duration: 0.001, ease: 'linear' } as const;
  * a callback: the direction reads the same either way, and both are
  * seekable because both are sampled from the clock.
  */
-const SHOTS = [
-  // A HERO ANGLE, NOT A STUNT. Product films sit the camera slightly
-  // BELOW the object and look up: it puts the device over your eye line
-  // and reads as imposing rather than inspected. So pitch stays negative
-  // throughout and the lateral swing stays modest — past about 25° the
-  // screen foreshortens into a sliver and the UI, which is the subject,
-  // stops being readable. The drama comes from the push-in, not the arc.
-  { app: 'mail', dolly: 0.86, hold: 3.4, pitch: -13, yaw: -17, zoom: 1.34 },
-  { app: 'photos', dolly: 1.02, hold: 3.4, pitch: -7, yaw: 15, zoom: 1.08 },
-  { app: 'music', dolly: 0.82, hold: 3.4, pitch: -15, yaw: 24, zoom: 1.42 },
-  { app: 'clock', dolly: 0.94, hold: 3.4, pitch: -6, yaw: -9, zoom: 1.2 },
+const SCENES = [
+  /**
+   * THE SHOT LIST, written as a shoot would write it.
+   *
+   * Every scene is APPROACH → OPEN → READ → CLOSE, and between scenes the
+   * camera returns to HOME. That return is not decoration: an app that
+   * cuts straight to the next app never shows you where it came from, and
+   * the whole point of a phone film is that the home screen is the hub.
+   *
+   * `read` is where the money is. It pushes in — often very close — and
+   * PANS at the same time, because dolly alone crops a tall subject: push
+   * on a phone and its top leaves frame. `x` and `y` are fractions of the
+   * framed height, so a positive `y` lifts the camera and brings the top
+   * of the screen back down into the picture.
+   *
+   * Dwell is earned, not equal. Maps and Music have things to look at and
+   * get five and a half seconds with a slow drift across them. Photos is
+   * not what this demo is about and gets two and a half — long enough to
+   * register, short enough not to sit there.
+   */
+  {
+    app: 'mail',
+    approach: { dolly: 1.0, pitch: -9, x: 0, y: 0, yaw: -18 },
+    hold: 4.4,
+    read: { dolly: 0.62, pitch: -4, x: 0.02, y: 0.2, yaw: -7 },
+    zoom: { x: 6, y: 96, z: 1.6 },
+  },
+  {
+    app: 'maps',
+    approach: { dolly: 1.02, pitch: -7, x: 0, y: 0, yaw: 14 },
+    hold: 5.6,
+    read: { dolly: 0.56, pitch: -2, x: -0.04, y: -0.12, yaw: 9 },
+    zoom: { x: -10, y: -70, z: 1.8 },
+  },
+  {
+    app: 'music',
+    approach: { dolly: 0.98, pitch: -11, x: 0, y: 0, yaw: 22 },
+    hold: 5.6,
+    read: { dolly: 0.54, pitch: -3, x: 0.05, y: 0.14, yaw: 11 },
+    zoom: { x: 8, y: 74, z: 1.85 },
+  },
+  {
+    app: 'notes',
+    approach: { dolly: 1.0, pitch: -8, x: 0, y: 0, yaw: -12 },
+    hold: 4.2,
+    read: { dolly: 0.66, pitch: -4, x: 0.02, y: 0.17, yaw: -5 },
+    zoom: { x: 6, y: 84, z: 1.55 },
+  },
+  {
+    app: 'clock',
+    approach: { dolly: 1.0, pitch: -6, x: 0, y: 0, yaw: 8 },
+    hold: 3.6,
+    read: { dolly: 0.7, pitch: -2, x: 0, y: 0.04, yaw: 4 },
+    zoom: { x: 0, y: 18, z: 1.45 },
+  },
+  {
+    // not the feature: seen, not studied
+    app: 'photos',
+    approach: { dolly: 1.02, pitch: -7, x: 0, y: 0, yaw: -6 },
+    hold: 2.5,
+    read: { dolly: 0.84, pitch: -5, x: 0, y: 0.08, yaw: -2 },
+    zoom: { x: 0, y: 34, z: 1.2 },
+  },
 ] as const;
-/** how long the camera takes to travel between shots */
-const TRAVEL = 2.2;
+
+/**
+ * The ranges the manual controls span. They are the same numbers the
+ * script writes, so the dots the film moves and the dots you drag are the
+ * same dots — there is one pose, and two ways to set it.
+ */
+const RANGE = {
+  dolly: [0.45, 1.3],
+  pan: [-0.5, 0.5],
+  pitch: [-35, 35],
+  yaw: [-70, 70],
+} as const;
+
+/** where the camera waits while the home screen is up, between scenes */
+const HOME_SHOT = { dolly: 1.06, pitch: -8, x: 0, y: -0.05, yaw: 4 } as const;
+/** the camera travels to the approach in this long */
+const TRAVEL = 1.8;
+/** and comes home in this long, which IS the home-screen beat */
+const RETURN = 1.5;
 /** the editorial curve: recorded motion glides where a UI snaps */
 const GLIDE = [0.65, 0, 0.35, 1] as const;
 
@@ -142,7 +211,7 @@ interface SpikeWindow extends Window {
   __glb?: unknown;
 }
 
-export class MockupGlb extends Component {
+export class Mockup extends Component {
   @tracked open: App | null = null;
   /**
    * How far the swipe-up has carried the app back toward its tile, 0..1.
@@ -168,10 +237,23 @@ export class MockupGlb extends Component {
    */
   @tracked cameraOn = true;
   @tracked syncOn = true;
+  /**
+   * A GALLERY CARD DOES NOT RUN A FILM.
+   *
+   * The film loops by design, so on the demo's own page it simply plays.
+   * In the grid that is thirty-odd cards each holding a WebGL context and
+   * re-rendering the page forever — expensive, distracting, and it kept
+   * the gallery's own entrance animation from ever settling. So a stage
+   * shorter than a card's worth of room opens paused, with the controls
+   * right there to start it.
+   */
+  @tracked roomy = true;
   /** bumped to recompile the score, which is how the film loops */
   @tracked take = 0;
   private region?: { run: { finished: Promise<void> } | null };
   private shotHost?: (state: Camera3DState) => void;
+  /** drag a pad: hand the host a pose directly, and stop the film's camera */
+  private poseHost?: (partial: Partial<Camera3DState>) => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
   private tint?: (hex: number) => void;
@@ -270,8 +352,10 @@ export class MockupGlb extends Component {
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
 
-  readonly shots = SHOTS;
+  readonly scenes = SCENES;
   readonly travel = TRAVEL;
+  readonly returnFor = RETURN;
+  readonly home = HOME_SHOT;
   readonly glide = GLIDE;
 
   /**
@@ -311,6 +395,16 @@ export class MockupGlb extends Component {
     this.shotHost?.(state);
   };
 
+  /**
+   * A pad was dragged. Taking hold of the camera stops the film's camera
+   * track — the same rule a drag on the phone follows — and the pose goes
+   * straight to the host.
+   */
+  grabPose = (partial: Partial<Camera3DState>) => {
+    this.seizeCamera();
+    this.poseHost?.(partial);
+  };
+
   /** a DRAG means "let me look": the camera stops, the apps carry on */
   seizeCamera = () => {
     if (this.cameraOn) {
@@ -342,6 +436,59 @@ export class MockupGlb extends Component {
   get running() {
     return this.cameraOn || this.syncOn;
   }
+
+  /**
+   * Drag a pad. Each maps its box to a pair of pose values — the orbit
+   * pad to yaw and pitch, the pan pad to truck and pedestal, the rail to
+   * dolly — and writes straight through to the host.
+   */
+  padDrag = modifier((el: HTMLElement, [kind]: [string]) => {
+    const at = (ev: PointerEvent) => {
+      const b = el.getBoundingClientRect();
+      return {
+        u: Math.max(0, Math.min(1, (ev.clientX - b.left) / (b.width || 1))),
+        v: Math.max(0, Math.min(1, (ev.clientY - b.top) / (b.height || 1))),
+      };
+    };
+    const lerp = ([lo, hi]: readonly [number, number], t: number) =>
+      lo + (hi - lo) * t;
+    const write = (ev: PointerEvent) => {
+      const { u, v } = at(ev);
+      if (kind === 'orbit') {
+        this.grabPose({
+          pitch: lerp(RANGE.pitch, v),
+          yaw: lerp(RANGE.yaw, u),
+        });
+      } else if (kind === 'pan') {
+        this.grabPose({ x: lerp(RANGE.pan, u), y: lerp(RANGE.pan, 1 - v) });
+      } else {
+        this.grabPose({ dolly: lerp(RANGE.dolly, 1 - u) });
+      }
+    };
+    let down = false;
+    const move = (ev: PointerEvent) => {
+      if (down) {
+        write(ev);
+      }
+    };
+    const up = () => {
+      down = false;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    const start = (ev: PointerEvent) => {
+      ev.stopPropagation();
+      down = true;
+      write(ev);
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    };
+    el.addEventListener('pointerdown', start);
+    return () => {
+      el.removeEventListener('pointerdown', start);
+      up();
+    };
+  });
 
   /** hold the region so the film can loop when its score finishes */
   wire = modifier((_el: HTMLElement, [c]: [ChoreoContext, number]) => {
@@ -437,6 +584,31 @@ export class MockupGlb extends Component {
     const cam = host.querySelector<HTMLElement>('.mg-cam')!;
     const plane = host.querySelector<HTMLElement>('.mg-plane')!;
 
+    /**
+     * ONE FIT, TWO CONSUMERS. The 3D camera solves its distance so the
+     * phone fills FILL of the box; the flat phone must land at exactly
+     * the same size or the 2D/3D switch resizes the device under you.
+     * So the same fraction is written out as `--k` and the flat phone is
+     * scaled by it — continuously, at any container size, rather than at
+     * a handful of breakpoints.
+     */
+    // decided once, on mount: is there room to play a film here?
+    this.roomy = host.clientHeight >= 460;
+    if (!this.roomy) {
+      this.cameraOn = false;
+      this.syncOn = false;
+    }
+
+    const fitFlat = () => {
+      const w = host.clientWidth || 1;
+      const h = host.clientHeight || 1;
+      const k = Math.min((h * FILL) / SCREEN.h, (w * FILL) / SCREEN.w);
+      host.style.setProperty('--k', String(k));
+    };
+    fitFlat();
+    const ro = new ResizeObserver(fitFlat);
+    ro.observe(host);
+
     let raf = 0;
     let running = false;
     let built = false;
@@ -450,6 +622,9 @@ export class MockupGlb extends Component {
     let ry = Math.PI + 0.3;
     /** the score's push-in, as a multiple of the fitted distance */
     let dolly = 1;
+    /** the score's truck and pedestal, in world px */
+    let truck = 0;
+    let pedestal = 0;
     let dispose: (() => void) | undefined;
     let keyLight: THREE.Object3D | undefined;
     let screenGlow: THREE.RectAreaLight | undefined;
@@ -574,6 +749,9 @@ export class MockupGlb extends Component {
        */
       let phone = { h: 900, w: 420 };
       let rest = 1500;
+      /** the phone sits slightly low in frame, so the control bar across
+       *  the top has air above the device instead of crowding it */
+      const DROP = 0.045;
       const frame2 = () => {
         const w = host.clientWidth || 1;
         const h = host.clientHeight || 1;
@@ -899,7 +1077,7 @@ export class MockupGlb extends Component {
           camera.updateProjectionMatrix();
           frame2();
         }
-        camera.position.z = rest * dolly;
+        camera.position.set(truck, pedestal + phone.h * DROP, rest * dolly);
         pivot.rotation.set(rx, ry, 0);
         pivot.updateMatrixWorld(true);
         renderer.render(scene, camera);
@@ -1065,11 +1243,55 @@ export class MockupGlb extends Component {
     // THE ADAPTER. Choreo owns the clock and the easing; this is the four
     // lines that turn its pose into a picture. Degrees to radians, and a
     // dolly that multiplies whatever distance the framing solved for.
-    this.shotHost = (pose) => {
+    /**
+     * THE POSE IS PAINTED, NOT TRACKED.
+     *
+     * The film moves the camera every frame, and the control dots have to
+     * move with it. A tracked write here would re-render the component,
+     * which re-renders the region, which replays the pass and cancels the
+     * very run that is dispatching — the trap `examples/fold.gts`
+     * documents. So the pose is written to custom properties and the dots
+     * are positioned by CSS from them. No render, no cancellation, and
+     * the readouts still track the shot frame by frame.
+     */
+    const pose: Camera3DState = { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
+    const share = () => {
+      const pct = (v: number, [lo, hi]: readonly [number, number]) =>
+        Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+      host.style.setProperty('--yaw-at', String(pct(pose.yaw, RANGE.yaw)));
+      host.style.setProperty(
+        '--pitch-at',
+        String(pct(pose.pitch, RANGE.pitch))
+      );
+      host.style.setProperty('--pan-x-at', String(pct(pose.x, RANGE.pan)));
+      host.style.setProperty('--pan-y-at', String(pct(pose.y, RANGE.pan)));
+      host.style.setProperty(
+        '--dolly-at',
+        String(pct(pose.dolly, RANGE.dolly))
+      );
+      host.style.setProperty('--yaw-n', pose.yaw.toFixed(0));
+      host.style.setProperty('--pitch-n', pose.pitch.toFixed(0));
+      host.style.setProperty('--dolly-n', pose.dolly.toFixed(2));
+    };
+    const apply = () => {
       ry = Math.PI + (pose.yaw * Math.PI) / 180;
       rx = (pose.pitch * Math.PI) / 180;
       dolly = pose.dolly;
+      // truck and pedestal: fractions of the framed height, so the same
+      // pose reads the same whatever box the demo was given
+      truck = pose.x * SCREEN.h;
+      pedestal = pose.y * SCREEN.h;
+      share();
     };
+    this.shotHost = (next) => {
+      Object.assign(pose, next);
+      apply();
+    };
+    this.poseHost = (partial) => {
+      Object.assign(pose, partial);
+      apply();
+    };
+    share();
     this.boot = run3d;
     this.halt = () => {
       running = false;
@@ -1210,72 +1432,78 @@ export class MockupGlb extends Component {
           <div
             class="mg-clock"
             data-take={{this.take}}
+            aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}
           >{{this.take}}</div>
 
-          <c.Parallel>
-            {{! the beats: identical in both modes, and stopped the moment
-                someone touches the screen }}
-            {{#if this.syncOn}}
-              <c.Sequence>
-                {{#each this.shots as |shot|}}
-                  <c.Wait @duration={{this.travel}} />
-                  <c.Perform @action="open" @target={{shot.app}} />
-                  <c.Wait @duration={{shot.hold}} />
-                  <c.Perform @action="close" @target={{shot.app}} />
-                {{/each}}
-                <c.Wait @duration={{1}} />
-              </c.Sequence>
-            {{/if}}
+          {{! ONE SEQUENCE, NOT TWO.
+              The cues and the camera used to be parallel sequences whose
+              Waits had to add up to the same total by hand — one edit and
+              they drift. `c.Perform` takes no time, so interleaving them
+              in a single sequence makes the alignment structural: the app
+              opens exactly when the approach lands, and closes exactly
+              when the read ends. Each track is switched off by swapping
+              its step for a Wait of the same length, so the timing does
+              not change when you stop one of them. }}
+          <c.Sequence>
+            {{#each this.scenes as |scene|}}
+              {{! APPROACH — wide enough that the home screen still reads }}
+              {{#if this.cameraOn}}
+                <c.Camera3D
+                  @yaw={{scene.approach.yaw}}
+                  @pitch={{scene.approach.pitch}}
+                  @dolly={{scene.approach.dolly}}
+                  @x={{scene.approach.x}}
+                  @y={{scene.approach.y}}
+                  @duration={{this.travel}}
+                  @ease={{this.glide}}
+                />
+              {{else}}
+                <c.Wait @duration={{this.travel}} />
+              {{/if}}
 
-            {{! the camera: a shot per app, and the mode picks the lens }}
-            {{#if this.cameraOn}}
-              <c.Sequence>
-                {{#each this.shots as |shot|}}
-                  {{#if (this.isMode "3d")}}
-                    <c.Camera3D
-                      @yaw={{shot.yaw}}
-                      @pitch={{shot.pitch}}
-                      @dolly={{shot.dolly}}
-                      @duration={{this.travel}}
-                      @ease={{this.glide}}
-                    />
-                    {{! the hold breathes: a frozen frame reads as a hang }}
-                    {{! THE PUSH. The hold is not a hold — it closes in
-                        slowly while the app is open, which is what makes
-                        the interaction feel observed rather than paused. }}
-                    <c.Camera3D
-                      @by={{true}}
-                      @dolly={{0.94}}
-                      @yaw={{6}}
-                      @pitch={{-2}}
-                      @duration={{shot.hold}}
-                      @ease={{this.glide}}
-                    />
-                  {{else}}
-                    <c.Camera
-                      @zoom={{shot.zoom}}
-                      @duration={{this.travel}}
-                      @ease={{this.glide}}
-                    />
-                    <c.Wait @duration={{shot.hold}} />
-                  {{/if}}
-                {{/each}}
-                {{#if (this.isMode "2d")}}
-                  <c.Camera @zoom={{1}} @duration={{1}} @ease={{this.glide}} />
-                {{else}}
-                  <c.Camera3D
-                    @yaw={{-17}}
-                    @pitch={{-13}}
-                    @dolly={{1}}
-                    @duration={{1}}
-                    @ease={{this.glide}}
-                  />
-                {{/if}}
-              </c.Sequence>
-            {{/if}}
-          </c.Parallel>
+              {{#if this.syncOn}}
+                <c.Perform @action="open" @target={{scene.app}} />
+              {{/if}}
+
+              {{! READ — in close, and PANNING, so the part being read
+                  stays in frame instead of the push cropping it away }}
+              {{#if this.cameraOn}}
+                <c.Camera3D
+                  @yaw={{scene.read.yaw}}
+                  @pitch={{scene.read.pitch}}
+                  @dolly={{scene.read.dolly}}
+                  @x={{scene.read.x}}
+                  @y={{scene.read.y}}
+                  @duration={{scene.hold}}
+                  @ease={{this.glide}}
+                />
+              {{else}}
+                <c.Wait @duration={{scene.hold}} />
+              {{/if}}
+
+              {{#if this.syncOn}}
+                <c.Perform @action="close" @target={{scene.app}} />
+              {{/if}}
+
+              {{! HOME — the return IS the home-screen beat. Every app is
+                  entered from the hub and left back to it. }}
+              {{#if this.cameraOn}}
+                <c.Camera3D
+                  @yaw={{this.home.yaw}}
+                  @pitch={{this.home.pitch}}
+                  @dolly={{this.home.dolly}}
+                  @x={{this.home.x}}
+                  @y={{this.home.y}}
+                  @duration={{this.returnFor}}
+                  @ease={{this.glide}}
+                />
+              {{else}}
+                <c.Wait @duration={{this.returnFor}} />
+              {{/if}}
+            {{/each}}
+          </c.Sequence>
         {{/if}}
       </Choreo>
 
@@ -1304,14 +1532,19 @@ export class MockupGlb extends Component {
             data-on={{if this.cameraOn "yes" ""}}
             {{on "click" this.toggleCamera}}
           >{{if this.cameraOn "❚❚" "▶"}} camera</button>
-          <button
-            type="button"
-            data-on={{if this.syncOn "yes" ""}}
-            {{on "click" this.toggleSync}}
-          >{{if this.syncOn "◉" "○"}} sync app interaction</button>
+
+          {{! NO BUTTON WHILE IT IS SYNCED. A control that only ever says
+              "on" is furniture; this one appears the moment you take the
+              phone over, which is also the moment it means something. }}
+          {{#unless this.syncOn}}
+            <button
+              type="button"
+              class="mg-resync"
+              {{on "click" this.toggleSync}}
+            >↺ resync</button>
+          {{/unless}}
         </div>
 
-        <p class="mg-status">{{this.status}}</p>
       </div>
 
       <style>
@@ -1326,9 +1559,8 @@ export class MockupGlb extends Component {
            sits in light and dark without a second palette — and the WebGL
            set fades in over it rather than replacing it. */
         .mg-stage {
-          position: relative;
-          width: 100%;
-          height: min(78vh, 720px);
+          position: absolute;
+          inset: 0;
           overflow: hidden;
           background: var(--bg, #2a2521);
           touch-action: none;
@@ -1407,11 +1639,11 @@ export class MockupGlb extends Component {
            resize the phone under you. */
         .mg-stage[data-mode="2d"] .mg-plane {
           transition: opacity 300ms ease;
-          top: 50%;
+          top: 54%;
           left: 50%;
           width: 390px;
           height: 844px;
-          transform: translate(-50%, -50%) scale(0.656);
+          transform: translate(-50%, -50%) scale(var(--k, 0.6));
           border-radius: 46px;
           box-shadow:
             0 0 0 12px #212429,
@@ -1627,67 +1859,164 @@ export class MockupGlb extends Component {
            the page has a header above it, so anything pinned to the
            stage's bottom edge sits below the fold — which is exactly what
            "the buttons don't work" looks like. */
+        @container (max-height: 460px) {
+          .mg-transport button,
+          .mg-seg button {
+            padding: 4px 8px;
+            font-size: 11px;
+          }
+        }
+
+        /* ONE HOME STRIP, NOT TWO. Every app screen draws its own home
+           indicator, and the phone draws the real one — the swipe target
+           that actually closes the app. The app's is decoration sitting on
+           top of a control, so the control stays and the decoration goes.
+           Appended at the END of the block on purpose: an insertion
+           anywhere else in this stylesheet has silently spliced itself
+           into a neighbouring selector list more than once. */
+        .mg-app-ui .mail-home-indicator,
+        .mg-app-ui .maps-home-indicator,
+        .mg-app-ui .clock-home,
+        .mg-app-ui .notes-home,
+        .mg-app-ui .photos-home {
+          display: none !important;
+        }
+
+        /* ONE CONTROL STYLE, and it is the site's own: the pill, the hairline
+           and the mono 11px that the top nav and the speed control already
+           use (--line / --ink-dim / --bg-spot). A demo that invents its own
+           buttons reads as a different product bolted into the page. */
+        .mg-seg,
         .mg-transport {
           position: absolute;
           z-index: 4;
-          top: 8px;
-          left: 8px;
+          top: 10px;
           display: flex;
           gap: 6px;
         }
+        .mg-seg {
+          right: 10px;
+        }
+        .mg-transport {
+          left: 10px;
+        }
+        .mg-seg button,
         .mg-transport button {
           all: unset;
           cursor: pointer;
-          padding: 6px 12px;
-          border-radius: 8px;
-          font:
-            600 12px/1 ui-monospace,
-            monospace;
-          color: #9aa2b2;
-          background: #000000a6;
-          border: 1px solid #ffffff1f;
+          padding: 7px 12px;
+          border: 1px solid var(--line, #ffffff17);
+          border-radius: 999px;
+          background: var(--bg-elev, #00000066);
+          color: var(--ink-dim, #d2c9bf);
+          font-family: var(--font-mono, ui-monospace, monospace);
+          font-size: 11px;
+          line-height: 1;
+          white-space: nowrap;
         }
+        .mg-seg button[aria-pressed="true"],
         .mg-transport button[data-on="yes"] {
-          color: #f2efe9;
-          border-color: #ffffff45;
+          border-color: var(--line-strong, #ffffff2e);
+          background: var(--bg-spot, #443c35);
+          color: var(--ink, #f3ece3);
         }
-        .mg-seg {
-          position: absolute;
-          top: 0;
-          right: 0;
-          z-index: 3;
-          display: flex;
-          border-radius: 8px;
+
+        /* CLIP THE EXPANDING PANEL. The app grows from an 82px tile to the
+           full 390x844 screen, and mid-flight its rounded box does not yet
+           match the screen's — so without a second clip on the plane
+           itself the corners paint over the mockup's chin. The bezel is
+           drawn with rings OUTSIDE the box, and overflow does not clip an
+           element's own shadow, so this costs the bezel nothing. */
+        .mg-plane {
           overflow: hidden;
-          border: 1px solid #c9c6bd;
-          background: #fbf9f5;
         }
-        .mg-seg button {
-          all: unset;
-          cursor: pointer;
-          padding: 5px 14px;
-          font:
-            600 12px/1 ui-monospace,
-            monospace;
-          color: #6b6960;
-        }
-        .mg-seg button[aria-pressed="true"] {
-          background: #22242a;
-          color: #f6f4ef;
-        }
-        .mg-status {
+
+        .mg-pads {
           position: absolute;
           z-index: 4;
-          left: 12px;
-          top: 42px;
-          margin: 0;
-          max-width: calc(100% - 24px);
-          color: #8b94a6;
-          text-shadow: 0 1px 2px #0009;
+          left: 10px;
+          bottom: 10px;
+          display: flex;
+          gap: 8px;
+          align-items: flex-end;
+        }
+        .mg-pad,
+        .mg-rail {
+          position: relative;
+          cursor: crosshair;
+          border: 1px solid var(--line, #ffffff17);
+          border-radius: 10px;
+          background: var(--bg-elev, #00000066);
+          touch-action: none;
+        }
+        .mg-pad {
+          width: 66px;
+          height: 66px;
+        }
+        .mg-rail {
+          width: 96px;
+          height: 66px;
+        }
+        .mg-pad-name {
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 4px;
+          text-align: center;
+          font: 9px/1 var(--font-mono, ui-monospace, monospace);
+          color: var(--ink-faint, #b8aea3);
+          pointer-events: none;
+        }
+        .mg-pad-dot,
+        .mg-rail-dot {
+          position: absolute;
+          width: 9px;
+          height: 9px;
+          margin: -4.5px 0 0 -4.5px;
+          border-radius: 50%;
+          background: var(--ember-hot, #ff6a3a);
+          box-shadow: 0 0 8px #ff6a3a80;
+          pointer-events: none;
+        }
+        /* THE DOTS ARE THE CAMERA. Positioned from the properties the
+           adapter writes every frame, so they travel with the film and
+           sit wherever a drag last put them. */
+        .mg-dot-orbit {
+          left: calc(var(--yaw-at, 50) * 1%);
+          top: calc(var(--pitch-at, 50) * 1%);
+        }
+        .mg-dot-pan {
+          left: calc(var(--pan-x-at, 50) * 1%);
+          top: calc(100% - var(--pan-y-at, 50) * 1%);
+        }
+        .mg-rail-dot {
+          top: 50%;
+          left: calc(100% - var(--dolly-at, 50) * 1%);
+        }
+        /* 2D is the default because 3D is a megabyte and a half; this is
+           the nudge that says the other one is worth the wait */
+        .mg-stage[data-mode="2d"] .mg-seg button:last-child {
+          border-color: var(--ember-hot, #ff6a3a);
+          color: var(--ember-hot, #ff6a3a);
+          animation: mg-beckon 2.6s ease-in-out infinite;
+        }
+        @keyframes mg-beckon {
+          0%,
+          100% {
+            box-shadow: 0 0 0 0 #ff6a3a00;
+          }
+          50% {
+            box-shadow: 0 0 0 4px #ff6a3a26;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mg-stage[data-mode="2d"] .mg-seg button:last-child {
+            animation: none;
+          }
         }
       </style>
     </div>
   </template>
 }
 
-export default MockupGlb;
+export default Mockup;
