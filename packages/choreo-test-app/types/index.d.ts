@@ -80,6 +80,7 @@ declare module 'three' {
   export const NoBlending: number;
 
   export class Vector3 {
+    toArray(): number[];
     x: number;
     y: number;
     z: number;

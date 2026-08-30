@@ -92,13 +92,19 @@ export class ClockApp extends Component<ClockAppSignature> {
     return this.tab === 'timer';
   }
 
-  /** MM:SS, so the readout never changes width as it counts down. */
+  /**
+   * MM:SS.t — fixed width, so the readout never reflows as it counts.
+   *
+   * Everything is derived from an INTEGER number of tenths. Doing the
+   * arithmetic on the fractional seconds instead gives `total % 60` of
+   * 59.7 and a readout of "04:59.7.7"; floating point has no business in
+   * a clock face.
+   */
   get readout(): string {
-    const total = Math.max(0, this.remaining);
-    const minutes = Math.floor(total / 60);
-    const seconds = total % 60;
-    const tenths = Math.floor((total * 10) % 10);
-    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}`;
+    const tenths = Math.max(0, Math.round(this.remaining * 10));
+    const minutes = Math.floor(tenths / 600);
+    const seconds = Math.floor((tenths % 600) / 10);
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths % 10}`;
   }
 
   /**

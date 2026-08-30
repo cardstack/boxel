@@ -95,7 +95,12 @@ const hsl = (hue: number): number => {
 };
 
 /** the share of the platter the phone fills once framed */
-const FILL = 0.76;
+/**
+ * The share of the platter the phone fills. A big page can afford air
+ * around the device; a gallery card cannot — at the page's framing the
+ * phone in a card is a stamp. So the fraction rises as the box shrinks.
+ */
+const fillFor = (h: number) => (h < 520 ? 0.94 : h < 660 ? 0.86 : 0.78);
 
 /** the layer the eye-level key light lives on, and the screen does not */
 const EYE_LEVEL = 1;
@@ -175,14 +180,23 @@ const SCENES: { app: string; beats: Beat[] }[] = [
    * `y` is the beat that does the real work: dolly alone crops a tall
    * subject, so pushing in without lifting the camera loses the top of
    * the screen. Positive `y` brings it back.
+   *
+   * And no beat pushes past the GEOMETRIC floor. The device only stays in
+   * frame while `rest * dolly >= phoneHeight / (2·tan(fov/2))`, which for
+   * this framing is dolly 0.86. Below that the display mesh — which IS
+   * the hole the DOM shows through — fills the whole viewport, so the
+   * entire canvas becomes a hole and you get edge-to-edge app UI with no
+   * phone at all. That reads as the 3D having broken rather than as a
+   * close-up, and it is why every beat here starts at 0.88. Closeness
+   * comes from the PAN, not from driving the camera through the glass.
    */
   {
     app: 'mail',
     beats: [
       // the header and the filter, then down into the list, then out
-      { dolly: 0.6, pitch: -4, t: 2.6, x: 0.02, y: 0.24, yaw: -9 },
+      { dolly: 0.925, pitch: -4, t: 2.6, x: 0.02, y: 0.24, yaw: -9 },
       {
-        dolly: 0.5,
+        dolly: 0.88,
         pitch: -1,
         t: 3.0,
         tap: 'Unread',
@@ -190,15 +204,15 @@ const SCENES: { app: string; beats: Beat[] }[] = [
         y: -0.02,
         yaw: 5,
       },
-      { dolly: 0.74, pitch: -7, t: 2.2, x: 0, y: 0.1, yaw: -15 },
+      { dolly: 1.06, pitch: -7, t: 2.2, x: 0, y: 0.1, yaw: -15 },
     ],
   },
   {
     app: 'maps',
     beats: [
-      { dolly: 0.58, pitch: -3, t: 2.8, x: -0.04, y: -0.16, yaw: 12 },
+      { dolly: 0.903, pitch: -3, t: 2.8, x: -0.04, y: -0.16, yaw: 12 },
       {
-        dolly: 0.46,
+        dolly: 0.88,
         pitch: 0,
         t: 3.2,
         tap: 'Transit',
@@ -206,24 +220,24 @@ const SCENES: { app: string; beats: Beat[] }[] = [
         y: -0.02,
         yaw: -4,
       },
-      { dolly: 0.7, pitch: -6, t: 2.4, x: 0, y: 0.06, yaw: 16 },
+      { dolly: 1.038, pitch: -6, t: 2.4, x: 0, y: 0.06, yaw: 16 },
     ],
   },
   {
     app: 'music',
     beats: [
       // the plate, then the transport, then the queue
-      { dolly: 0.56, pitch: -4, t: 2.8, x: 0.03, y: 0.2, yaw: 14 },
-      { dolly: 0.48, pitch: 0, t: 2.6, tap: 'play', x: 0.0, y: -0.05, yaw: 4 },
-      { dolly: 0.62, pitch: -3, t: 2.6, x: -0.03, y: -0.2, yaw: -8 },
+      { dolly: 0.88, pitch: -4, t: 2.8, x: 0.03, y: 0.2, yaw: 14 },
+      { dolly: 0.88, pitch: 0, t: 2.6, tap: 'play', x: 0.0, y: -0.05, yaw: 4 },
+      { dolly: 0.97, pitch: -3, t: 2.6, x: -0.03, y: -0.2, yaw: -8 },
     ],
   },
   {
     app: 'notes',
     beats: [
-      { dolly: 0.62, pitch: -4, t: 2.6, x: 0.02, y: 0.2, yaw: -10 },
+      { dolly: 0.948, pitch: -4, t: 2.6, x: 0.02, y: 0.2, yaw: -10 },
       {
-        dolly: 0.52,
+        dolly: 0.88,
         pitch: -1,
         t: 2.8,
         tap: 'Dinner, Saturday',
@@ -236,17 +250,17 @@ const SCENES: { app: string; beats: Beat[] }[] = [
   {
     app: 'clock',
     beats: [
-      { dolly: 0.66, pitch: -3, t: 2.4, x: 0, y: 0.16, yaw: 9 },
-      { dolly: 0.54, pitch: 0, t: 1.2, tap: 'Timer', x: 0, y: -0.04, yaw: -3 },
-      { dolly: 0.5, pitch: 0, t: 2.6, tap: 'Start', x: 0, y: -0.02, yaw: 2 },
+      { dolly: 0.992, pitch: -3, t: 2.4, x: 0, y: 0.16, yaw: 9 },
+      { dolly: 0.88, pitch: 0, t: 1.2, tap: 'Timer', x: 0, y: -0.04, yaw: -3 },
+      { dolly: 0.88, pitch: 0, t: 2.6, tap: 'Start', x: 0, y: -0.02, yaw: 2 },
     ],
   },
   {
     // seen, not studied
     app: 'photos',
     beats: [
-      { dolly: 0.72, pitch: -4, t: 1.4, x: 0, y: 0.12, yaw: -5 },
-      { dolly: 0.6, pitch: -1, t: 1.4, x: 0.02, y: -0.06, yaw: 3 },
+      { dolly: 1.06, pitch: -4, t: 1.4, x: 0, y: 0.12, yaw: -5 },
+      { dolly: 0.925, pitch: -1, t: 1.4, x: 0.02, y: -0.06, yaw: 3 },
     ],
   },
 ];
@@ -311,6 +325,8 @@ export class Mockup extends Component {
   ) => void;
   /** the stick's temporary pull, layered on whatever the film is doing */
   private leanHost?: (partial: Partial<Camera3DState>) => void;
+  /** discard every manual edit and hand the shot back to the score */
+  private resetHost?: () => void;
   private boot?: () => Promise<void>;
   private halt?: () => void;
   private tint?: (hex: number) => void;
@@ -396,6 +412,18 @@ export class Mockup extends Component {
 
   /** pressed 3D, engine still downloading: stay flat until it can draw */
   @tracked arming = false;
+  /**
+   * The 3D scene has drawn a frame and may be shown.
+   *
+   * THIS IS TRACKED STATE, NOT A dataset WRITE. It used to be set with
+   * `host.dataset.ready = 'yes'` while `data-mode` came from the
+   * template — and every re-render re-applied the template's attributes
+   * and dropped the imperative one, which left the canvas matching
+   * `opacity: 0` forever. The engine, the model and the render loop were
+   * all healthy; the picture was simply invisible. Anything the
+   * stylesheet keys off belongs to the template.
+   */
+  @tracked drawn = false;
 
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
@@ -553,6 +581,11 @@ export class Mockup extends Component {
   toggleCamera = () => {
     this.cameraOn = !this.cameraOn;
     if (this.cameraOn) {
+      // RESUMING TAKES THE CAMERA BACK COMPLETELY. Whatever the sticks
+      // left behind — a lean, or a pose driven while it was stopped — is
+      // discarded, because a film that resumes from someone else's
+      // framing is not the film. From the top.
+      this.resetHost?.();
       this.take += 1;
     }
   };
@@ -578,9 +611,25 @@ export class Mockup extends Component {
   /** true only while the film is pressing something itself */
   private selfTap = false;
 
-  /** the film only drives the phone when it is driving the camera too */
+  /**
+   * THE CAMERA TRACK IS A 3D THING. Flat, the phone faces you and there
+   * is nowhere to move to — a zoom on a flat mockup is just a resize, and
+   * it fought the app's own layout. So 2D plays the app interactions and
+   * leaves the camera alone.
+   */
+  get cameraTrack() {
+    return this.cameraOn;
+  }
+
+  /**
+   * Whether the film may drive the PHONE. In 3D a stopped camera means
+   * someone is looking at something and the demo should not open apps
+   * under them; flat, there is no camera to stop, so being synced is the
+   * whole condition — which is why 2D starts playing the moment the page
+   * does.
+   */
   get autoplay() {
-    return this.cameraOn && this.syncOn;
+    return this.syncOn && (this.mode === '2d' || this.cameraOn);
   }
 
   /**
@@ -817,17 +866,34 @@ export class Mockup extends Component {
      * scaled by it — continuously, at any container size, rather than at
      * a handful of breakpoints.
      */
+    // START CLEAN. An inline transform is how the 3D tick drives the
+    // plane, and anything left on it — from a previous mount, or an HMR
+    // swap — beats the 2D stylesheet and leaves a flat phone wearing a
+    // 3D matrix with no bezel.
+    plane.style.transform = '';
+    cam.style.transform = '';
+    layer.style.perspective = '';
+
     // decided once, on mount: is there room to play a film here?
     this.roomy = host.clientHeight >= 460;
     if (!this.roomy) {
       this.cameraOn = false;
       this.syncOn = false;
+    } else {
+      // THE OPENING BUMP. A region does not collect its score on the very
+      // first render — there is nothing to animate away from yet — so the
+      // film needs one more pass before it exists. Without this the flat
+      // demo just sits there on load, which is exactly what it was doing.
+      requestAnimationFrame(() => {
+        this.take += 1;
+      });
     }
 
     const fitFlat = () => {
       const w = host.clientWidth || 1;
       const h = host.clientHeight || 1;
-      const k = Math.min((h * FILL) / SCREEN.h, (w * FILL) / SCREEN.w);
+      const fill = fillFor(h);
+      const k = Math.min((h * fill) / SCREEN.h, (w * fill) / SCREEN.w);
       host.style.setProperty('--k', String(k));
     };
     fitFlat();
@@ -851,6 +917,7 @@ export class Mockup extends Component {
     let truck = 0;
     let pedestal = 0;
     let dispose: (() => void) | undefined;
+    let stopTheme: (() => void) | undefined;
     let keyLight: THREE.Object3D | undefined;
     let screenGlow: THREE.RectAreaLight | undefined;
 
@@ -982,8 +1049,9 @@ export class Mockup extends Component {
         const h = host.clientHeight || 1;
         const vFov = (camera.fov * Math.PI) / 180;
         const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (w / h));
-        const dV = phone.h / FILL / 2 / Math.tan(vFov / 2);
-        const dH = phone.w / FILL / 2 / Math.tan(hFov / 2);
+        const fill = fillFor(h);
+        const dV = phone.h / fill / 2 / Math.tan(vFov / 2);
+        const dH = phone.w / fill / 2 / Math.tan(hFov / 2);
         rest = Math.max(dV, dH);
       };
 
@@ -1049,6 +1117,19 @@ export class Mockup extends Component {
       bounce.layers.set(EYE_LEVEL);
       scene.add(bounce);
 
+      /**
+       * THE FLOOR BOUNCE. Wide, low and BEHIND — a big soft source coming
+       * up off the table at the back of the phone. It never lights the
+       * face; what it does is catch the bottom and rear edges of the
+       * titanium and draw a bright hairline all the way round the
+       * silhouette, which is the thing that separates a device from its
+       * background in every product shot ever lit.
+       */
+      const bounceUp = new T.RectAreaLight(0xdfe7f5, 3.6, 1500, 620);
+      bounceUp.position.set(0, -880, -640);
+      bounceUp.lookAt(0, 0, 0);
+      scene.add(bounceUp);
+
       /** one hard source for the glint on the camera ring. three counts
        *  point lights in candela, so reaching this far with decay 2 is a
        *  large number by construction, not by taste. */
@@ -1087,11 +1168,13 @@ export class Mockup extends Component {
        * Nothing recognisable, because it must not compete with the
        * screen.
        */
+      const cycCanvas = document.createElement('canvas');
+      cycCanvas.width = 512;
+      cycCanvas.height = 512;
+      const cycCtx = cycCanvas.getContext('2d')!;
       const cycTex = (() => {
-        const c = document.createElement('canvas');
-        c.width = 512;
-        c.height = 512;
-        const g = c.getContext('2d')!;
+        const c = cycCanvas;
+        const g = cycCtx;
         const wall = g.createLinearGradient(0, 0, 0, 512);
         wall.addColorStop(0, '#080a0e');
         wall.addColorStop(0.42, '#141922');
@@ -1116,6 +1199,48 @@ export class Mockup extends Component {
         new T.PlaneGeometry(6200, 6200),
         new T.MeshBasicMaterial({ map: cycTex })
       );
+      /**
+       * THE SET FOLLOWS THE PAGE. The backdrop is painted from the
+       * gallery's own `--bg`, so the shot sits in light and dark without
+       * a second palette — and it is repainted when the visitor flips the
+       * theme, because a dark cyc behind a light page reads as a hole.
+       */
+      const dressSet = () => {
+        // TWO SETS, NOT ONE TINTED. A product shot needs the device to be
+        // the brightest thing in frame, so neither set is the page colour:
+        // dark mode gets a near-black warm cyc, light mode a medium slate
+        // that is clearly darker than the paper around it but visibly its
+        // own tone rather than the dark set reused.
+        const light =
+          document.documentElement.getAttribute('data-theme') === 'light';
+        const base = light ? '#5b626e' : '#14161b';
+        const floor = light ? '#3f444e' : '#090a0d';
+        const pool = light ? '#ffffff2e' : '#ffffff1c';
+        const g = cycCtx;
+        g.fillStyle = base;
+        g.fillRect(0, 0, 512, 512);
+        const wash = g.createLinearGradient(0, 0, 0, 512);
+        wash.addColorStop(0, '#00000047');
+        wash.addColorStop(0.55, '#00000000');
+        wash.addColorStop(0.6, '#ffffff12');
+        wash.addColorStop(0.64, floor);
+        wash.addColorStop(1, floor);
+        g.fillStyle = wash;
+        g.fillRect(0, 0, 512, 512);
+        const spot = g.createRadialGradient(256, 322, 8, 256, 322, 200);
+        spot.addColorStop(0, pool);
+        spot.addColorStop(1, '#ffffff00');
+        g.fillStyle = spot;
+        g.fillRect(0, 0, 512, 512);
+        cycTex.needsUpdate = true;
+      };
+      dressSet();
+      const themeWatch = new MutationObserver(dressSet);
+      themeWatch.observe(document.documentElement, {
+        attributeFilter: ['data-theme'],
+        attributes: true,
+      });
+      stopTheme = () => themeWatch.disconnect();
       setPlane.position.set(0, 0, -2600);
       scene.add(setPlane);
 
@@ -1255,6 +1380,10 @@ export class Mockup extends Component {
             transparent: true,
           });
 
+          let biggest: { bulk: number; mesh: THREE.Mesh | null } = {
+            bulk: 0,
+            mesh: null,
+          };
           model.traverse((child) => {
             if (!(child as THREE.Mesh).isMesh) {
               return;
@@ -1264,29 +1393,46 @@ export class Mockup extends Component {
             if (mesh !== found.mesh) {
               mesh.layers.enable(EYE_LEVEL);
             }
-            // THE LOGO IS COPLANAR WITH THE BACK GLASS. Two surfaces at the
-            // same depth is a coin toss per pixel per frame, which reads as
-            // the mark tearing through the panel as the phone turns. A
-            // polygon offset biases the decal toward the camera in DEPTH
-            // ONLY — nothing moves, the tie is just broken the same way
-            // every frame. It is the standard fix for a decal, and cheaper
-            // and safer than nudging geometry.
-            const paint = (m: THREE.Material) => {
-              const p = m as THREE.Material & {
-                polygonOffset?: boolean;
-                polygonOffsetFactor?: number;
-                polygonOffsetUnits?: number;
-              };
-              p.polygonOffset = true;
-              p.polygonOffsetFactor = -2;
-              p.polygonOffsetUnits = -2;
-            };
-            if (Array.isArray(mesh.material)) {
-              mesh.material.forEach(paint);
-            } else {
-              paint(mesh.material);
+            // THE LOGO IS COPLANAR WITH THE BACK SHELL, and two surfaces
+            // at the same depth is a coin toss per pixel per frame — the
+            // stripes tearing through the mark as the phone turns.
+            //
+            // A polygon offset breaks the tie by biasing one surface in
+            // DEPTH ONLY, and it has to be ONE: applying it to every
+            // material moves both by the same amount and changes nothing,
+            // which is what the first attempt did. Identifying the decal
+            // is fiddly — a logo may be flat or extruded, its own mesh or
+            // a submesh — but identifying the SHELL is trivial: it is the
+            // biggest thing in the model. So the shell is pushed back and
+            // everything sitting on it wins the tie by default.
+            const vol = new T.Box3()
+              .setFromObject(mesh)
+              .getSize(new T.Vector3());
+            const bulk = vol.x * vol.y * vol.z;
+            if (bulk > biggest.bulk) {
+              biggest = { bulk, mesh };
             }
           });
+
+          // ...applied after the walk, once the biggest is actually known
+          const shove = (m: THREE.Material) => {
+            const p = m as THREE.Material & {
+              polygonOffset?: boolean;
+              polygonOffsetFactor?: number;
+              polygonOffsetUnits?: number;
+            };
+            p.polygonOffset = true;
+            p.polygonOffsetFactor = 6;
+            p.polygonOffsetUnits = 6;
+          };
+          if (biggest.mesh) {
+            const mat = biggest.mesh.material;
+            if (Array.isArray(mat)) {
+              mat.forEach(shove);
+            } else {
+              shove(mat);
+            }
+          }
 
           ready = true;
           mapped =
@@ -1371,7 +1517,7 @@ export class Mockup extends Component {
       if (!running || raf || !tick) {
         return;
       }
-      host.dataset['ready'] = mapped ? 'yes' : '';
+      this.drawn = Boolean(mapped);
       if (mapped) {
         this.status = mapped;
       }
@@ -1556,6 +1702,11 @@ export class Mockup extends Component {
       Object.assign(pose, next);
       apply();
     };
+    this.resetHost = () => {
+      Object.assign(pose, { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 });
+      Object.assign(lean, { dolly: 0, pitch: 0, x: 0, y: 0, yaw: 0 });
+      apply();
+    };
     this.leanHost = (partial) => {
       Object.assign(lean, { dolly: 0, pitch: 0, x: 0, y: 0, yaw: 0 }, partial);
       apply();
@@ -1592,7 +1743,7 @@ export class Mockup extends Component {
         cancelAnimationFrame(raf);
         raf = 0;
       }
-      delete host.dataset['ready'];
+      this.drawn = false;
       clear?.();
       // hand the plane back to CSS: in 2D it is an ordinary centred box
       layer.style.perspective = '';
@@ -1604,6 +1755,7 @@ export class Mockup extends Component {
       this.halt?.();
       dispose?.();
       release();
+      stopTheme?.();
       host.removeEventListener('pointerdown', grab);
       host.removeEventListener('click', swallow, true);
       host.removeEventListener('click', touched, true);
@@ -1618,6 +1770,7 @@ export class Mockup extends Component {
       <Choreo
         class="mg-stage"
         data-mode={{this.mode}}
+        data-ready={{if this.drawn "yes" ""}}
         style="--glow:{{this.shown.hue}}"
         @quiet={{true}}
         @onCamera3D={{this.shot}}
@@ -1721,6 +1874,7 @@ export class Mockup extends Component {
           <div
             class="mg-clock"
             data-take={{this.take}}
+            style="width:{{this.take}}px"
             aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}
@@ -1737,14 +1891,19 @@ export class Mockup extends Component {
               not change when you stop one of them. }}
           <c.Sequence>
             {{#each this.scenes as |scene|}}
-              {{! APPROACH — short, because nobody came for the hallway }}
-              {{#if this.cameraOn}}
+              {{! HOME, WITHOUT GOING BACK TO THE BEGINNING.
+                  This beat is RELATIVE: it pulls back far enough to see
+                  the whole home screen, and that is all it does. An
+                  absolute home pose meant every app switch yanked the
+                  phone to the same front-on posture, so the film kept
+                  re-introducing a device you had been watching for half a
+                  minute. Relative, the hallway keeps whatever angle the
+                  last scene left it at and only the distance changes. }}
+              {{#if this.cameraTrack}}
                 <c.Camera3D
-                  @yaw={{this.home.yaw}}
-                  @pitch={{this.home.pitch}}
-                  @dolly={{this.home.dolly}}
-                  @x={{this.home.x}}
-                  @y={{this.home.y}}
+                  @by={{true}}
+                  @dolly={{1.22}}
+                  @y={{-0.03}}
                   @duration={{this.travel}}
                   @ease={{this.glide}}
                 />
@@ -1774,7 +1933,7 @@ export class Mockup extends Component {
                     />
                   {{/if}}
                 {{/if}}
-                {{#if this.cameraOn}}
+                {{#if this.cameraTrack}}
                   <c.Camera3D
                     @yaw={{beat.yaw}}
                     @pitch={{beat.pitch}}
@@ -1793,20 +1952,6 @@ export class Mockup extends Component {
                 <c.Perform @action="close" @target={{scene.app}} />
               {{/if}}
 
-              {{! and back to the hub, briefly }}
-              {{#if this.cameraOn}}
-                <c.Camera3D
-                  @yaw={{this.home.yaw}}
-                  @pitch={{this.home.pitch}}
-                  @dolly={{this.home.dolly}}
-                  @x={{this.home.x}}
-                  @y={{this.home.y}}
-                  @duration={{this.returnFor}}
-                  @ease={{this.glide}}
-                />
-              {{else}}
-                <c.Wait @duration={{this.returnFor}} />
-              {{/if}}
             {{/each}}
           </c.Sequence>
         {{/if}}
@@ -1836,7 +1981,19 @@ export class Mockup extends Component {
             type="button"
             data-on={{if this.cameraOn "yes" ""}}
             {{on "click" this.toggleCamera}}
-          >{{if this.cameraOn "❚❚" "▶"}} camera</button>
+          >
+            {{#if this.cameraOn}}
+              <svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
+              </svg>
+            {{else}}
+              <svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            {{/if}}
+            camera
+          </button>
 
           {{! NO BUTTON WHILE IT IS SYNCED. A control that only ever says
               "on" is furniture; this one appears the moment you take the
@@ -1923,6 +2080,11 @@ export class Mockup extends Component {
            canvas stays mounted either way — tearing down a WebGL context
            to toggle a control is far more expensive than compositing a
            transparent one. */
+        /* Shown whenever the scene is up, hidden otherwise. This was an
+           opacity cross-fade keyed on two data attributes, and the canvas
+           sat at opacity 0 with a live renderer painting behind it: the
+           engine, the model and the loop were all healthy and the picture
+           was simply invisible. A dissolve is not worth that. */
         .mg-stage canvas {
           position: absolute;
           inset: 0;
@@ -1930,11 +2092,9 @@ export class Mockup extends Component {
           width: 100%;
           height: 100%;
           pointer-events: none;
-          opacity: 0;
-          transition: opacity 420ms ease;
         }
-        .mg-stage[data-mode="3d"][data-ready="yes"] canvas {
-          opacity: 1;
+        .mg-stage[data-mode="2d"] canvas {
+          display: none;
         }
         .mg-css {
           position: absolute;
@@ -2055,11 +2215,15 @@ export class Mockup extends Component {
         .mg-plane,
         .mg-screen,
         .mg-app,
+        /* an open app is opaque: several of these screens have their own
+           translucent grounds, and the home screen was reading straight
+           through them */
         .mg-app-ui {
           position: absolute;
           inset: 0;
           overflow: hidden;
           border-radius: inherit;
+          background: #0b0d12;
         }
         .mg-icon {
           all: unset;
@@ -2163,11 +2327,15 @@ export class Mockup extends Component {
             #ffffff14;
           box-shadow: 0 0 16px #ffffff40;
         }
+        /* an open app is opaque: several of these screens have their own
+           translucent grounds, and the home screen was reading straight
+           through them */
         .mg-app-ui {
           position: absolute;
           inset: 0;
           overflow: hidden;
           border-radius: inherit;
+          background: #0b0d12;
         }
         .mg-app-name {
           color: #fff;
@@ -2175,6 +2343,11 @@ export class Mockup extends Component {
           font-weight: 600;
           font-family: ui-sans-serif, system-ui;
         }
+        /* THE MARKER MUST MOVE, NOT JUST CHANGE. A region declines a pass
+           in which no participant's box changed, so a marker with a fixed
+           off-screen box let the loop's bump be thrown away and the film
+           never started. Its width is the take, so every bump is a real
+           layout change. */
         .mg-clock {
           position: absolute;
           left: -9999px;
@@ -2400,6 +2573,55 @@ export class Mockup extends Component {
           .mg-pads {
             display: none;
           }
+        }
+
+        .mg-ico {
+          width: 12px;
+          height: 12px;
+          margin-right: 5px;
+          vertical-align: -1px;
+          fill: currentColor;
+        }
+        .mg-seg button,
+        .mg-transport button {
+          display: inline-flex;
+          align-items: center;
+        }
+        /* 3D IS THE POINT, and 2D is only the default because the engine
+           is a megabyte and a half. So the switch says so: while you are
+           flat, the other half of it is drawn as the live option. */
+        .mg-page[data-mode="2d"] .mg-seg button:last-child {
+          border-color: var(--ember-hot, #ff6a3a);
+          background: color-mix(
+            in srgb,
+            var(--ember-hot, #ff6a3a) 16%,
+            transparent
+          );
+          color: var(--ember-hot, #ff6a3a);
+          font-weight: 700;
+        }
+
+        /* the flat set, in the same two tones the WebGL cyc uses, so
+           switching 2D/3D does not change the room */
+        .mg-stage {
+          background:
+            radial-gradient(
+              120% 90% at 50% 8%,
+              #23262d 0%,
+              #14161b 46%,
+              #090a0d 100%
+            ),
+            #14161b;
+        }
+        :root[data-theme="light"] .mg-stage {
+          background:
+            radial-gradient(
+              120% 90% at 50% 8%,
+              #6d7481 0%,
+              #5b626e 46%,
+              #3f444e 100%
+            ),
+            #5b626e;
         }
       </style>
     </div>

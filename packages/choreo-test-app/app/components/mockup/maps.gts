@@ -140,6 +140,27 @@ export class MapsApp extends Component {
           <div class="maps-block maps-block-a"></div>
           <div class="maps-block maps-block-b"></div>
           <div class="maps-block maps-block-c"></div>
+          {{! the transit network: three lines, each a pair of rotated
+              strokes that meet at a bend, plus a white dot wherever two
+              of them cross. Painted at all times, revealed only in
+              transit mode. }}
+          {{! ROUTES RUN ON ROADS. Each route shares its road's exact
+              geometry — same origin, same length, same rotation, inset to
+              sit centred in the carriageway — so the network reads as
+              buses on streets rather than ribbons thrown over a map. The
+              buses are markers pinned along those same lines. }}
+          <div class="maps-transit">
+            <div class="maps-route maps-route-a"></div>
+            <div class="maps-route maps-route-b"></div>
+            <div class="maps-route maps-route-c"></div>
+            <div class="maps-bus maps-bus-a1"></div>
+            <div class="maps-bus maps-bus-a2"></div>
+            <div class="maps-bus maps-bus-b1"></div>
+            <div class="maps-bus maps-bus-c1"></div>
+            <div class="maps-stop maps-stop-a"></div>
+            <div class="maps-stop maps-stop-b"></div>
+            <div class="maps-stop maps-stop-c"></div>
+          </div>
         </div>
 
         <div class="maps-statusbar">
@@ -375,61 +396,129 @@ export class MapsApp extends Component {
         transform: rotate(-13deg);
       }
 
-      /* Transit: the ground drains of colour and the roads come forward as
-         lines, the way a transit diagram reads. */
+      /* Transit: the base map drains to near-neutral — water, park, roads and
+         blocks all within a few points of grey — so the network is the only
+         saturated thing on the screen. */
       .maps-ground-transit {
         background:
           radial-gradient(
             120% 70% at 50% 10%,
-            hsl(210 12% 27%) 0%,
-            hsl(210 12% 20%) 55%,
-            hsl(210 14% 15%) 100%
+            hsl(214 8% 25%) 0%,
+            hsl(214 9% 18%) 55%,
+            hsl(214 10% 14%) 100%
           ),
-          hsl(210 14% 15%);
+          hsl(214 10% 14%);
       }
 
       .maps-ground-transit .maps-water {
-        background: hsl(205 24% 27%);
+        background: hsl(206 12% 23%);
       }
 
       .maps-ground-transit .maps-park {
-        background: hsl(146 12% 27%);
+        background: hsl(150 9% 23%);
       }
 
       .maps-ground-transit .maps-road {
-        background: hsl(196 76% 52%);
+        background: hsl(214 7% 31%);
       }
 
       .maps-ground-transit .maps-block {
-        background: hsl(210 8% 23%);
+        background: hsl(214 7% 20%);
       }
 
-      /* Satellite: no cartography left, just ground and water. */
+      /* ── the transit network ──────────────────────────────────── */
+
+      /* Three lines, each a pair of rotated strokes meeting at a bend, all
+         the same 6px weight with rounded caps. Rotated about their left
+         edge, so a segment's stated left/top is the point it starts from. */
+      .maps-transit {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 320ms ease;
+      }
+
+      .maps-ground-transit .maps-transit {
+        opacity: 1;
+      }
+
+      /* blue: (10,236) → (176,300) → (330,292) */
+
+      /* amber: (56,176) → (176,300) → (250,520) */
+
+      /* green: (350,180) → (196,380) → (40,470) */
+
+      .maps-stop {
+        position: absolute;
+        box-sizing: border-box;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: hsl(0 0% 100%);
+        box-shadow: 0 1px 3px hsl(214 40% 6% / 0.55);
+      }
+
+      /* blue × amber, the one interchange, so it carries a wider ring */
+      .maps-stop-a {
+        left: 166px;
+        top: 290px;
+        width: 20px;
+        height: 20px;
+        border: 4px solid hsl(214 68% 55%);
+      }
+
+      /* blue × green */
+      .maps-stop-b {
+        left: 253px;
+        top: 288px;
+        border: 3.5px solid hsl(158 44% 44%);
+      }
+
+      /* amber × green */
+      .maps-stop-c {
+        left: 193px;
+        top: 366px;
+        border: 3.5px solid hsl(36 74% 55%);
+      }
+
+      /* Satellite: no cartography left, just ground and water — muted greens
+         and browns, with two soft blooms standing in for terrain mottle. */
       .maps-ground-satellite {
         background:
           radial-gradient(
-            120% 70% at 50% 10%,
-            hsl(78 22% 26%) 0%,
-            hsl(60 18% 18%) 55%,
-            hsl(40 20% 12%) 100%
+            70% 48% at 22% 34%,
+            hsl(96 16% 24% / 0.5) 0%,
+            hsl(96 16% 24% / 0) 70%
           ),
-          hsl(40 20% 12%);
+          radial-gradient(
+            60% 42% at 78% 64%,
+            hsl(44 14% 17% / 0.55) 0%,
+            hsl(44 14% 17% / 0) 72%
+          ),
+          radial-gradient(
+            120% 70% at 50% 10%,
+            hsl(92 14% 21%) 0%,
+            hsl(74 13% 16%) 55%,
+            hsl(48 14% 12%) 100%
+          ),
+          hsl(48 14% 12%);
       }
 
       .maps-ground-satellite .maps-water {
-        background: hsl(212 58% 16%);
+        background: hsl(198 26% 17%);
       }
 
       .maps-ground-satellite .maps-park {
-        background: hsl(104 32% 22%);
+        background: hsl(108 20% 20%);
       }
 
       .maps-ground-satellite .maps-road {
-        background: hsl(38 14% 38%);
+        background: hsl(40 8% 30%);
       }
 
       .maps-ground-satellite .maps-block {
-        background: hsl(34 16% 27%);
+        background: hsl(36 10% 24%);
       }
 
       /* ── chrome ───────────────────────────────────────────────── */
@@ -761,6 +850,88 @@ export class MapsApp extends Component {
         border-radius: 3px;
         background: hsl(210 15% 82% / 0.8);
         z-index: 5;
+      }
+
+      /* THE ROUTES. Geometry copied from the roads above, not invented:
+         a route is the road's own rect, thinned and centred. */
+      .maps-route {
+        position: absolute;
+        border-radius: 3px;
+        opacity: 0;
+        transition: opacity 260ms ease;
+      }
+      .maps-route-a {
+        left: -50px;
+        top: 351px;
+        width: 500px;
+        height: 7px;
+        transform: rotate(-6deg);
+        background: hsl(214 72% 58%);
+      }
+      .maps-route-b {
+        left: 126px;
+        top: -60px;
+        width: 7px;
+        height: 980px;
+        transform: rotate(9deg);
+        background: hsl(36 78% 56%);
+      }
+      .maps-route-c {
+        left: -70px;
+        top: 550px;
+        width: 540px;
+        height: 6px;
+        transform: rotate(22deg);
+        background: hsl(158 48% 46%);
+      }
+      /* the buses: squat rounded markers sitting ON the line, turned to
+         match the street they are running down */
+      .maps-bus {
+        position: absolute;
+        width: 17px;
+        height: 11px;
+        border-radius: 3px;
+        background: #f7f9fc;
+        box-shadow: 0 1px 3px #00000073;
+        opacity: 0;
+        transition: opacity 260ms ease;
+      }
+      .maps-bus::after {
+        content: "";
+        position: absolute;
+        inset: 2px 3px;
+        border-radius: 1px;
+        background: currentColor;
+        opacity: 0.5;
+      }
+      .maps-bus-a1 {
+        left: 96px;
+        top: 336px;
+        transform: rotate(-6deg);
+        color: hsl(214 72% 45%);
+      }
+      .maps-bus-a2 {
+        left: 292px;
+        top: 316px;
+        transform: rotate(-6deg);
+        color: hsl(214 72% 45%);
+      }
+      .maps-bus-b1 {
+        left: 152px;
+        top: 226px;
+        transform: rotate(9deg);
+        color: hsl(36 78% 42%);
+      }
+      .maps-bus-c1 {
+        left: 214px;
+        top: 662px;
+        transform: rotate(22deg);
+        color: hsl(158 48% 34%);
+      }
+      /* only in transit mode — the network is the mode, not decoration */
+      .maps-ground-transit .maps-route,
+      .maps-ground-transit .maps-bus {
+        opacity: 1;
       }
     </style>
   </template>

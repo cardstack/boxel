@@ -743,6 +743,14 @@ export class MusicApp extends Component {
           font-variant-numeric: tabular-nums;
           color: hsl(275 24% 62%);
         }
+
+        /* CLEAR THE ISLAND. The phone's cutout is hardware and paints over
+         everything; the player's top bar was sitting under it. Pushed
+         below, the way an app's safe area works on the real device. */
+        .music-app {
+          padding-top: 46px;
+          box-sizing: border-box;
+        }
       </style>
     </div>
   </template>
