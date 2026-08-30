@@ -18,6 +18,7 @@ import { MapsApp } from 'test-app/components/mockup/maps';
 import { MusicApp } from 'test-app/components/mockup/music';
 import { NotesApp } from 'test-app/components/mockup/notes';
 import { PhotosApp } from 'test-app/components/mockup/photos';
+import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import type * as THREE from 'three';
 
@@ -37,6 +38,30 @@ import type * as THREE from 'three';
  * cues open and close the apps, `c.Camera3D` flies the shot in 3D, and
  * `c.Camera` zooms the platter in 2D. One score, two lenses.
  */
+
+/**
+ * PUBLIC ASSETS ARE ADDRESSED FROM THE ROOT URL, NEVER FROM `/`.
+ *
+ * These are hand-written strings handed to a loader (or an `img`) at runtime,
+ * so nothing rewrites them. Vite rewrites the script and stylesheet hrefs it
+ * emits into index.html and it rewrites `?url` imports, but a literal inside
+ * a call it never parses is just a literal. At `/` — every dev server, every
+ * test — a root-absolute path is indistinguishable from a correct one, which
+ * is why this class of bug can only ever appear on the deploy.
+ *
+ * On GitHub Pages the app is served from `/choreo/`, so `/models/x.glb` is a
+ * 404 and `/choreo/models/x.glb` is the file. `config.rootURL` is the same
+ * `APP_BASE` that sets Vite's `base`, so deriving from it keeps the two in
+ * step by construction.
+ *
+ * It fails quietly, too, which is what made it expensive: a decoder that 404s
+ * leaves the GLTF load hanging forever, so the canvas is never sized off the
+ * model and the scene renders as a 300x150 default with nothing drawn in it.
+ * No exception, no failed promise — just a blank rectangle that looks for all
+ * the world like a WebGL problem.
+ */
+const DRACO = `${config.rootURL}draco/`;
+const PHONE = `${config.rootURL}models/iphone-15-pro.glb`;
 
 /** the DOM screen is authored at a real iPhone's logical resolution */
 const SCREEN = { h: 844, w: 390 };
@@ -1321,10 +1346,10 @@ export class Mockup extends Component {
       const anchor = new T.Object3D();
       pivot.add(anchor);
 
-      const draco = new DRACOLoader().setDecoderPath('/draco/');
+      const draco = new DRACOLoader().setDecoderPath(DRACO);
       const loader = new GLTFLoader().setDRACOLoader(draco);
       await new Promise<void>((resolve) => {
-        loader.load('/models/iphone-15-pro.glb', (gltf) => {
+        loader.load(PHONE, (gltf) => {
           const model = gltf.scene;
           model.updateMatrixWorld(true);
 
