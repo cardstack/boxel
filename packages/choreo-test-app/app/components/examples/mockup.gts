@@ -442,6 +442,15 @@ export class Mockup extends Component {
     void this.boot?.().then(() => {
       this.arming = false;
       this.mode = '3d';
+      // ENTERING 3D IS ASKING FOR THE FILM. Nobody presses 3D to look at
+      // a still phone, and asking them to press play afterwards is asking
+      // twice for one thing.
+      this.cameraOn = true;
+      this.syncOn = true;
+      this.ended = false;
+      requestAnimationFrame(() => {
+        this.take += 1;
+      });
     });
   };
 
@@ -598,21 +607,36 @@ export class Mockup extends Component {
     }
   };
 
+  /** the run reached its end: resuming has to compile a fresh one */
+  private ended = false;
+
   toggleCamera = () => {
     const next = !this.cameraOn;
     this.cameraOn = next;
     this.syncOn = next;
+    const run = this.region?.run;
     if (!next) {
-      this.stopFilm();
+      run?.pause();
+      return;
     }
-    if (next) {
-      // RESUMING TAKES THE CAMERA BACK COMPLETELY. Whatever the sticks
-      // left behind — a lean, or a pose driven while it was stopped — is
-      // discarded, because a film that resumes from someone else's
-      // framing is not the film. From the top.
-      this.resetHost?.();
-      this.take += 1;
+    // RESUME, DO NOT RESTART.
+    //
+    // Bumping the take compiles a fresh score and starts it at zero, and
+    // on a rapid double press that stacks one film on top of another —
+    // each one snapping the pose back to its first shot. That is the
+    // throb. There is a run standing right there with a clock on it, so
+    // press play; only a run that has actually ENDED needs a new one.
+    //
+    // The stick's lean is dropped either way, because a film that resumes
+    // holding someone's pull is not the film. The POSE is left alone: it
+    // is where the shot was, and the next cue tweens out of it.
+    this.leanHost?.({});
+    if (run && !this.ended) {
+      run.play();
+      return;
     }
+    this.ended = false;
+    this.take += 1;
   };
 
   toggleSync = () => {
@@ -623,9 +647,11 @@ export class Mockup extends Component {
   };
 
   /** hand the whole thing back to the film: both tracks, from the top */
+  /** resync is a deliberate RESTART — "from the top" — not a resume */
   resync = () => {
     this.cameraOn = true;
     this.syncOn = true;
+    this.ended = false;
     this.take += 1;
   };
 
@@ -798,8 +824,14 @@ export class Mockup extends Component {
     }
     let live = true;
     void run.finished.then(() => {
-      if (live && this.running) {
+      if (!live) {
+        return;
+      }
+      if (this.running) {
         this.take += 1;
+      } else {
+        // stopped at the end: there is nothing left to press play on
+        this.ended = true;
       }
     });
     return () => {
@@ -900,39 +932,36 @@ export class Mockup extends Component {
     layer.style.perspective = '';
 
     /**
-     * IS THERE ROOM TO PLAY A FILM HERE?
+     * IS THIS THE DEMO'S OWN PAGE, OR A CARD IN THE GALLERY?
      *
-     * Decided from the OBSERVED height, not from one read at modifier
-     * time. `.ex` is `position:absolute; inset:0` and has not been laid
-     * out when the modifier runs, so an early `clientHeight` reports a
-     * box far smaller than the one the demo ends up in — and a full page
-     * was being mistaken for a gallery card, which opens paused. That is
-     * why the film would not start: not the score, not the transport,
-     * just a measurement taken a frame too early.
+     * A film that loops forever is right on a page you opened to watch it
+     * and wrong in a grid of thirty-odd cards, where it is a WebGL context
+     * and a permanent repaint behind everything else. So the gallery gets
+     * it paused, with the controls right there to start it.
+     *
+     * That used to be guessed from the stage's HEIGHT, and the guess was
+     * wrong twice. It read the box before layout, so a full page could be
+     * mistaken for a card — and on a PHONE, where the demo IS the page and
+     * the stage is short by definition, it classified the real thing as a
+     * card and the demo arrived stopped. The page and the card have
+     * different containers; ask which one this is.
      */
-    let decided = false;
-    const decideRoom = (h: number) => {
-      if (decided || h <= 0) {
-        return;
-      }
-      decided = true;
-      this.roomy = h >= 460;
-      if (!this.roomy) {
-        this.cameraOn = false;
-        this.syncOn = false;
-        return;
-      }
-      // a region does not collect its score on its first render, so the
-      // film needs one more pass before it exists at all
+    const onOwnPage = !!host.closest('.stage-wrap');
+    this.roomy = onOwnPage;
+    if (!onOwnPage) {
+      this.cameraOn = false;
+      this.syncOn = false;
+    } else {
+      // a region does not collect its score on the pass that first renders
+      // it, so the film needs one more pass before it exists at all
       requestAnimationFrame(() => {
         this.take += 1;
       });
-    };
+    }
 
     const fitFlat = () => {
       const w = host.clientWidth || 1;
       const h = host.clientHeight || 1;
-      decideRoom(host.clientHeight);
       const fill = fillFor(h);
       const k = Math.min((h * fill) / SCREEN.h, (w * fill) / SCREEN.w);
       host.style.setProperty('--k', String(k));
@@ -2063,20 +2092,22 @@ export class Mockup extends Component {
             custom property the adapter writes each frame, so the film
             moves them; dragging one writes the same pose back and takes
             the camera over. One pose, two ways to set it. }}
-        <div class="mg-pads">
-          <div class="mg-pad mg-pad-orbit" {{this.padDrag "orbit"}}>
-            <span class="mg-pad-dot mg-dot-orbit"></span>
-            <span class="mg-pad-name">rotate</span>
+        {{#if this.roomy}}
+          <div class="mg-pads">
+            <div class="mg-pad mg-pad-orbit" {{this.padDrag "orbit"}}>
+              <span class="mg-pad-dot mg-dot-orbit"></span>
+              <span class="mg-pad-name">rotate</span>
+            </div>
+            <div class="mg-pad" {{this.padDrag "pan"}}>
+              <span class="mg-pad-dot mg-dot-pan"></span>
+              <span class="mg-pad-name">pan</span>
+            </div>
+            <div class="mg-rail" {{this.padDrag "dolly"}}>
+              <span class="mg-rail-dot"></span>
+              <span class="mg-pad-name">zoom</span>
+            </div>
           </div>
-          <div class="mg-pad" {{this.padDrag "pan"}}>
-            <span class="mg-pad-dot mg-dot-pan"></span>
-            <span class="mg-pad-name">pan</span>
-          </div>
-          <div class="mg-rail" {{this.padDrag "dolly"}}>
-            <span class="mg-rail-dot"></span>
-            <span class="mg-pad-name">zoom</span>
-          </div>
-        </div>
+        {{/if}}
       </div>
 
       <style>
@@ -2617,9 +2648,29 @@ export class Mockup extends Component {
           margin: -9.5px 0 0 -9.5px;
           transform: translate(0, calc(var(--knob-y, 0) * 14px));
         }
-        @container (max-height: 460px) {
+        /* THE STICKS BELONG TO THE DEMO'S OWN PAGE, and that is a
+           question about the CONTAINER, not about its height. Hiding them
+           under a height threshold also hid them on a phone — where the
+           demo is the page, the stage is short by definition, and turning
+           the device by hand is the whole point. They are gated on the
+           same fact the film is: see onOwnPage. */
+        /* SMALLER ON A NARROW SCREEN, not absent. Three 54px discs are
+           half the width of a phone; at 42 they are a control rather than
+           a panel, and the demo keeps the one affordance that makes the
+           device feel like an object you can turn. */
+        @media (max-width: 760px) {
           .mg-pads {
-            display: none;
+            gap: 10px;
+            right: 10px;
+            bottom: 22px;
+          }
+          .mg-pad {
+            width: 42px;
+            height: 42px;
+          }
+          .mg-rail {
+            width: 26px;
+            height: 42px;
           }
         }
 

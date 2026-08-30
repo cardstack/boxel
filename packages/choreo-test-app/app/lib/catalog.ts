@@ -16,6 +16,7 @@ import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
 import { Lightbox } from 'test-app/components/examples/lightbox';
 import { Lists } from 'test-app/components/examples/lists';
+import { LongTake } from 'test-app/components/examples/long-take';
 import { Mockup } from 'test-app/components/examples/mockup';
 import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
@@ -45,6 +46,7 @@ import { InlineEditNotes } from 'test-app/components/notes/inline-edit';
 import { InterruptNotes } from 'test-app/components/notes/interrupt';
 import { LayoutNotes } from 'test-app/components/notes/layout';
 import { LightboxNotes } from 'test-app/components/notes/lightbox';
+import { LongTakeNotes } from 'test-app/components/notes/long-take';
 import { MockupNotes } from 'test-app/components/notes/mockup';
 import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
@@ -62,6 +64,7 @@ export const groups = [
   'Drag',
   'Scroll',
   'Choreo',
+  '3D',
   'Timeline',
 ] as const;
 
@@ -433,7 +436,7 @@ private arming = createArming();
   {
     Example: Mockup,
     apis: ['c.Camera3D', '@onCamera3D', 'c.Perform', 'c.Camera'],
-    group: 'Choreo',
+    group: '3D',
     id: 'mockup',
     lede: 'A phone you can turn, and an app you can still use.',
     notes: MockupNotes,
@@ -1144,6 +1147,44 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
 <div {{motion animate=morph transition=transition}}></div>`,
     slowmo: true,
     title: 'Keyframes',
+  },
+  {
+    Example: LongTake,
+    apis: ['c.Frame', 'c.Aim', 'c.Pan', 'c.SlowZoom', 'c.Camera3D'],
+    group: '3D',
+    id: 'long-take',
+    lede: 'Nothing on this screen changes. Every frame of it is the camera.',
+    notes: LongTakeNotes,
+    sample: `{{! FIVE CONSTRUCTS, and between them every move a camera can make
+    over something that is not moving. Note what is NOT here: no c.Move, no
+    changeset, no c.Perform. The drawing is inert. }}
+<c.Sequence>
+  {{#each SHOTS as |shot|}}
+    {{! arrive — the shot that changes magnification. @padding is the
+        FRACTION of the frame the station should fill, not pixels: it is
+        multiplied into the fitted zoom, so 0 is a camera zoomed to
+        nothing rather than a tight crop. }}
+    <c.Frame @of={{c.id shot.at}} @padding={{shot.fill}} @duration={{shot.move}} />
+    {{! ...or travel, with the zoom HELD. The move you cannot fake with a
+        zoom: attention goes somewhere, scale does not. }}
+    <c.Aim @of={{c.id shot.at}} @duration={{shot.move}} />
+    {{! ...or drift, by exact pixels from wherever we stand }}
+    <c.Pan @x={{shot.x}} @y={{shot.y}} @duration={{shot.move}} />
+
+    {{! A HOLD IS NOT A FREEZE. The slow push is what keeps a held shot
+        alive, and it is one step rather than a second track to keep in
+        step with the first. }}
+    <c.SlowZoom @by={{shot.push}} @duration={{shot.hold}} />
+  {{/each}}
+</c.Sequence>
+
+// and OUTSIDE, a second camera on the same list — its leg for a shot is
+// that shot's own move + hold, so neither region owns the timing and
+// neither can drift.
+<c.Camera3D @yaw={{shot.yaw}} @pitch={{shot.pitch}} @dolly={{shot.dolly}}
+  @duration={{legFor shot}} />`,
+    slowmo: false,
+    title: 'Long Take',
   },
   {
     Example: Gestures,

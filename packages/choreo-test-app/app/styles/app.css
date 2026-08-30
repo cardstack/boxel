@@ -865,6 +865,39 @@ summary,
    --bg is the recessed end of the surface ladder in both themes, so the
    prints sit on a canvas a notch below the page rather than on a copper
    light-table that only belonged to the film pass. */
+/* A LAPTOP IS A WIDE, SHORT SUBJECT ON A TALL PLATTER. The default stage
+   is sized for demos that fill their width, and a machine seen from a low
+   three-quarter angle wants headroom above the lid and floor under the
+   base — without it the framing solver keeps pulling the camera back to
+   fit the height, and the drawing on the screen goes too small to read.
+   So this one demo gets a taller well on its own page. */
+.stage-wrap:has(.lt-page) {
+  min-height: min(84vh, 860px);
+}
+
+/* ...and on a narrow screen the well takes the COMPOSITE'S OWN ASPECT
+   instead. The flat laptop is 1178x838 scaled by `min(w/1178, h/838)`, so
+   on a phone it is width-bound — and a tall well then holds a very small
+   machine with a band of empty air above and below it. Matching the
+   aspect makes the fit exact at any width, which is the same framing the
+   desktop gets, only smaller. */
+@media (max-width: 760px) {
+  .stage-wrap:has(.lt-page) {
+    min-height: 0;
+    aspect-ratio: 1178 / 838;
+  }
+
+  /* AND THE PHONE DEMO TAKES THE OPPOSITE SHAPE, for the same reason: its
+     subject is portrait. A landscape well holds a very small phone with
+     air either side; a tall one lets the device fill the frame. Neither
+     demo can use the site default here — a well sized for a page is the
+     wrong shape for whichever device is standing in it. */
+  .stage-wrap:has(.mg-page) {
+    min-height: 0;
+    aspect-ratio: 5 / 7;
+  }
+}
+
 .stage-wrap:has(.cam) {
   background:
     radial-gradient(

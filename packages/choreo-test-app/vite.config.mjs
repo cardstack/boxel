@@ -1,6 +1,7 @@
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
@@ -52,6 +53,59 @@ vendorDraco();
 // rootURL have to agree on that prefix — set APP_BASE=/choreo/ for a Pages
 // build. Empty (the default) keeps a root-served build, which is what the dev
 // server, the test build, and Vercel/Cloudflare all want.
+/**
+ * REGENERATING THE LAPTOP STILL (dev server only).
+ *
+ * The Long Take demo's 2D mode is a WebP of the WebGL laptop at its rest
+ * pose, not a CSS drawing of one — so the 2D/3D switch changes what is
+ * animating rather than what the machine looks like. The still has to be
+ * remade whenever the model, the lighting rig or the rest pose changes,
+ * and a still that can only be remade by hand is a still that goes stale.
+ *
+ * So the browser can post one back. In the demo, with 3D up:
+ *
+ *     await window.__take.capture()
+ *
+ * renders one frame at the rest pose, reads the canvas — alpha and all,
+ * so the hole where the screen goes is transparent in the file exactly as
+ * it is in the live canvas — and posts it here. The response carries the
+ * frozen `perspective` and `matrix3d` strings to paste into
+ * `examples/long-take.gts`, because the image and those matrices are one
+ * measurement and must be replaced together.
+ *
+ * `apply: 'serve'` and a single hard-coded destination: this writes one
+ * file and can write nothing else.
+ */
+function captureStill() {
+  const dest = join(
+    dirname(fileURLToPath(import.meta.url)),
+    'public/still/macbook.webp',
+  );
+  return {
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__capture-still', (req, res, next) => {
+        if (req.method !== 'POST') {
+          next();
+          return;
+        }
+        const chunks = [];
+        req.on('data', (c) => chunks.push(c));
+        req.on('end', () => {
+          const body = Buffer.concat(chunks).toString('utf8');
+          const b64 = body.slice(body.indexOf(',') + 1);
+          mkdirSync(dirname(dest), { recursive: true });
+          const bytes = Buffer.from(b64, 'base64');
+          writeFileSync(dest, bytes);
+          res.setHeader('content-type', 'application/json');
+          res.end(JSON.stringify({ bytes: bytes.length, wrote: dest }));
+        });
+      });
+    },
+    name: 'capture-still',
+  };
+}
+
 const base = process.env.APP_BASE || '/';
 
 export default defineConfig(({ mode }) => ({
@@ -90,6 +144,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [
+    captureStill(),
     classicEmberSupport(),
     ember(),
     // extra plugins here
