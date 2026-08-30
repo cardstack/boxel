@@ -1,6 +1,46 @@
+import { copyFileSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+
 import { classicEmberSupport, ember, extensions } from '@embroider/vite';
 import { babel } from '@rollup/plugin-babel';
 import { defineConfig } from 'vite';
+
+/**
+ * THE DRACO DECODER COMES FROM THREE, not from the repository.
+ *
+ * `DRACOLoader.setDecoderPath()` takes a directory PREFIX and builds
+ * `${path}draco_wasm_wrapper.js` itself, so the decoder cannot be a
+ * hashed `?url` import — it has to exist at a stable, servable path. The
+ * usual answer is to check the files into `public/`, which means carrying
+ * ~190KB of someone else's build artefact in the tree and letting it
+ * drift from the `three` we actually resolve.
+ *
+ * Instead they are copied out of the installed package at config time, so
+ * they are always the decoder that matches this three, and the copy is
+ * gitignored. Config time rather than a build hook because `public/` is
+ * read by the dev server too, and this way one mechanism serves both.
+ */
+const require = createRequire(import.meta.url);
+function vendorDraco() {
+  // resolved through an EXPORTED subpath: three's package.json is not
+  // itself exported, so the loader is the way in and the decoder sits
+  // beside it
+  const from = join(
+    dirname(require.resolve('three/examples/jsm/loaders/DRACOLoader.js')),
+    '../libs/draco',
+  );
+  const to = join(dirname(new URL(import.meta.url).pathname), 'public/draco');
+  mkdirSync(to, { recursive: true });
+  for (const file of [
+    'draco_decoder.js',
+    'draco_decoder.wasm',
+    'draco_wasm_wrapper.js',
+  ]) {
+    copyFileSync(join(from, file), join(to, file));
+  }
+}
+vendorDraco();
 
 // Like cardstack/boxel: the test suite is built in development mode (engine warnings and dev
 // assertions stay live) into dist-tests, with tests/index.html as an explicit entry.
