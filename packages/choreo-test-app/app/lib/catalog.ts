@@ -16,6 +16,7 @@ import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
 import { Lightbox } from 'test-app/components/examples/lightbox';
 import { Lists } from 'test-app/components/examples/lists';
+import { LongTake } from 'test-app/components/examples/long-take';
 import { Mockup } from 'test-app/components/examples/mockup';
 import { Parallax } from 'test-app/components/examples/parallax';
 import { PathDraw } from 'test-app/components/examples/path-draw';
@@ -484,6 +485,58 @@ shot = (pose) => {
 // means "let me use it" and stops the cues. Two tracks, two switches.`,
     slowmo: false,
     title: 'Mockup',
+  },
+  {
+    Example: LongTake,
+    apis: ['c.Frame', 'c.Aim', 'c.Pan', 'c.SlowZoom', 'c.Follow', 'c.Camera3D'],
+    group: 'Choreo',
+    id: 'long-take',
+    lede: 'Nothing on this screen changes. Every frame of it is the camera.',
+    sample: `{{! FIVE CONSTRUCTS, and between them every move a camera can make
+    over something that is not moving. Note what is NOT here: no c.Move, no
+    changeset, no c.Perform. The drawing is inert. }}
+<c.Sequence>
+  {{#each SHOTS as |shot|}}
+    {{! arrive — the shot that changes magnification. @padding is the
+        FRACTION of the frame the station should fill, not pixels: it is
+        multiplied into the fitted zoom, so 0 is a camera zoomed to
+        nothing rather than a tight crop. }}
+    <c.Frame @of={{c.id shot.at}} @padding={{shot.fill}} @duration={{shot.move}} />
+    {{! ...or travel, with the zoom HELD. The move you cannot fake with a
+        zoom: attention goes somewhere, scale does not. }}
+    <c.Aim @of={{c.id shot.at}} @duration={{shot.move}} />
+    {{! ...or drift, by exact pixels from wherever we stand }}
+    <c.Pan @x={{shot.x}} @y={{shot.y}} @duration={{shot.move}} />
+
+    {{! A HOLD IS NOT A FREEZE. The slow push is what keeps a held shot
+        alive, and it is one step rather than a second track to keep in
+        step with the first. }}
+    <c.SlowZoom @by={{shot.push}} @duration={{shot.hold}} />
+  {{/each}}
+</c.Sequence>
+
+{{! THE FOLLOW FOCUS — a scrim with a soft hole that sits wherever the
+    camera is looking and closes down as it leans in. Not an animation: a
+    pure function of where the frame stands THIS frame, so a seek, an
+    interruption or a drag is correct on the very next one. }}
+<c.Follow @of={{c.id 'focus'}} @to={{c.id 'board'}} @read={{focus}} @rest={{FOCUS_REST}} />
+
+const focus = ({ camera, rest }) => {
+  const k = 1 / camera.zoom;                    // the camera's transform,
+  const cx = (CENTRE.x - camera.x) * k;         // inverted: the board point
+  const cy = (CENTRE.y - camera.y) * k;         // under the middle of the screen
+  const lean = clamp01((camera.zoom - 1) / 1.6);
+  return { opacity: 0.1 + 0.74 * lean, scale: k * (1.28 - 0.42 * lean),
+           x: cx - centreOf(rest).x, y: cy - centreOf(rest).y };
+};
+
+// and OUTSIDE, a second camera on the same list — its leg for a shot is
+// that shot's own move + hold, so neither region owns the timing and
+// neither can drift.
+<c.Camera3D @yaw={{shot.yaw}} @pitch={{shot.pitch}} @dolly={{shot.dolly}}
+  @duration={{legFor shot}} />`,
+    slowmo: false,
+    title: 'Long Take',
   },
   {
     Example: Camera,

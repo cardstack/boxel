@@ -32,6 +32,8 @@ declare module 'three' {
   }
 
   export class BufferGeometry {
+    boundingBox: Box3 | null;
+    computeBoundingBox(): void;
     setAttribute(name: string, attribute: Float32BufferAttribute): this;
     dispose(): void;
   }
@@ -84,7 +86,13 @@ declare module 'three' {
     x: number;
     y: number;
     z: number;
+    constructor(x?: number, y?: number, z?: number);
+    addScaledVector(v: Vector3, s: number): this;
+    applyQuaternion(q: Quaternion): this;
+    clone(): Vector3;
+    copy(v: Vector3): this;
     multiplyScalar(s: number): this;
+    normalize(): this;
     set(x: number, y: number, z: number): this;
     sub(v: Vector3): this;
   }
@@ -93,7 +101,20 @@ declare module 'three' {
     x: number;
     y: number;
     z: number;
+    constructor(x?: number, y?: number, z?: number, order?: string);
     set(x: number, y: number, z: number): this;
+  }
+
+  export class Quaternion {
+    x: number;
+    y: number;
+    z: number;
+    w: number;
+    constructor(x?: number, y?: number, z?: number, w?: number);
+    copy(q: Quaternion): this;
+    invert(): this;
+    multiply(q: Quaternion): this;
+    setFromEuler(euler: Euler): this;
   }
 
   export class Matrix4 {
@@ -116,8 +137,11 @@ declare module 'three' {
     rotation: Euler;
     scale: Vector3;
     visible: boolean;
+    quaternion: Quaternion;
     add(object: Object3D): this;
     clone(): this;
+    getWorldQuaternion(target: Quaternion): Quaternion;
+    getWorldScale(target: Vector3): Vector3;
     lookAt(x: number, y: number, z: number): void;
     traverse(callback: (object: Object3D) => void): void;
     updateMatrixWorld(force?: boolean): void;
@@ -126,12 +150,14 @@ declare module 'three' {
   export class Box3 {
     max: Vector3;
     min: Vector3;
+    clone(): Box3;
     getCenter(target: Vector3): Vector3;
     getSize(target: Vector3): Vector3;
     setFromObject(object: Object3D): this;
   }
 
   export class Material {
+    name: string;
     polygonOffset?: boolean;
     polygonOffsetFactor?: number;
     polygonOffsetUnits?: number;
@@ -169,6 +195,7 @@ declare module 'three' {
 
   export class Mesh extends Object3D {
     isMesh: boolean;
+    geometry: BufferGeometry;
     material: Material | Material[];
     constructor(geometry?: unknown, material?: Material);
   }
