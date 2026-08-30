@@ -65,7 +65,7 @@ export class Board extends Component<BoardSignature> {
                 d="M 40 0 L 0 0 0 40"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1"
+                stroke-width="2"
               />
             </pattern>
           </defs>
@@ -259,13 +259,21 @@ export class Board extends Component<BoardSignature> {
           radial-gradient(120% 90% at 30% 0%, #14324a 0%, #0a1420 60%), #0a1420;
       }
 
+      /* NO HAIRLINES ANYWHERE INSIDE THIS BOARD.
+         A CSS 3D-transformed subtree is rasterised ONCE at its layout
+         resolution and then sampled through the matrix, so the inner
+         camera's 3x push-in is magnifying a texture rather than redrawing
+         it. A 1px stroke lands on a fractional number of device pixels and
+         crawls as the camera moves; 2px at half the opacity is the same
+         amount of ink on screen and resamples cleanly. Every rule in this
+         stylesheet that used to say 1px says 2px for that reason. */
       .lt-grid {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
         color: #1e3a52;
-        opacity: 0.55;
+        opacity: 0.34;
       }
 
       .lt-wires {
@@ -285,7 +293,7 @@ export class Board extends Component<BoardSignature> {
         border: 2px solid #2f7fb5;
         border-radius: 4px;
         background: #0d1c2c;
-        box-shadow: inset 0 0 0 1px #0a1420;
+        box-shadow: inset 0 0 0 2px #0a1420;
       }
 
       .lt-ref {
@@ -388,7 +396,7 @@ export class Board extends Component<BoardSignature> {
         display: flex;
         align-items: flex-end;
         background: #0a1420;
-        border: 1px solid #1e3a52;
+        border: 2px solid #16293a;
       }
 
       .lt-meter i {
@@ -447,7 +455,7 @@ export class Board extends Component<BoardSignature> {
 
       .lt-tb-row {
         display: flex;
-        border-bottom: 1px solid #1e3a52;
+        border-bottom: 2px solid #16293a;
         font-size: 15px;
       }
       .lt-tb-row:last-child {
@@ -458,7 +466,7 @@ export class Board extends Component<BoardSignature> {
         padding: 9px 12px;
         color: #56809c;
         letter-spacing: 0.12em;
-        border-right: 1px solid #1e3a52;
+        border-right: 2px solid #16293a;
       }
       .lt-tb-row b {
         padding: 9px 12px;

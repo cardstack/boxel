@@ -18,6 +18,19 @@ export interface Shot {
   // ── and the same shot, from outside the laptop ──────────────────────
   /** multiples of the fitted distance. Small numbers: this is a drift. */
   dolly: number;
+  /**
+   * How much of the FRAME the station should fill, 0..1 — `c.Frame`'s
+   * `@padding`, which is a fraction and not a number of pixels. It
+   * compiles straight into the zoom:
+   *
+   *     zoom = fill × min(frame.w / box.w, frame.h / box.h)
+   *
+   * so `0` is not "no padding", it is a camera zoomed to nothing, and the
+   * region collapses to a point with no way back — every later
+   * measurement is then taken through its own zero scale. Worth knowing
+   * before you type the number you meant in pixels.
+   */
+  fill?: number;
   /** seconds the camera sits there afterwards */
   hold: number;
   /**
@@ -33,19 +46,6 @@ export interface Shot {
   kind: 'aim' | 'frame' | 'pan';
   /** seconds of travel */
   move: number;
-  /**
-   * How much of the FRAME the station should fill, 0..1 — `c.Frame`'s
-   * `@padding`, which is a fraction and not a number of pixels. It
-   * compiles straight into the zoom:
-   *
-   *     zoom = fill × min(frame.w / box.w, frame.h / box.h)
-   *
-   * so `0` is not "no padding", it is a camera zoomed to nothing, and the
-   * region collapses to a point with no way back — every later
-   * measurement is then taken through its own zero scale. Worth knowing
-   * before you type the number you meant in pixels.
-   */
-  fill?: number;
   pitch: number;
   /** the push-in under the hold: `c.SlowZoom @by`. 1 is a dead hold. */
   push: number;

@@ -144,6 +144,59 @@ const LongTakeNotes: TOC<object> = <template>
     </section>
 
     <section class="dd">
+      <h3>The flat laptop is a photograph of the round one</h3>
+      <div class="dd-col">
+        <p>
+          2D is a 53&nbsp;KB WebP of the WebGL laptop at its rest pose, not a
+          laptop drawn in CSS. It works because of the hole: the canvas is
+          rendered with alpha and the display mesh punches itself out of it, so
+          a straight readback is a laptop with a
+          <em>transparent screen</em>. An
+          <code>&lt;img&gt;</code>
+          of that, laid over the DOM exactly where the canvas goes, composites
+          the drawing through it in exactly the same way.
+        </p>
+        <p>
+          So the switch changes what is
+          <em>animating</em>, not what the machine looks like — the plane
+          measures 696px flat and 697px in 3D. The engine stays a megabyte and a
+          half that you only pay for when you ask the camera to move.
+        </p>
+        <p>
+          The catch is that the picture and the frozen
+          <code>perspective</code>
+          and
+          <code>matrix3d</code>
+          strings are one measurement, taken at one reference size. Replace one
+          and you must replace all of them, which is why the capture endpoint
+          returns the matrices along with the file — and why the whole flat
+          composite is scaled as a single unit rather than fitted piece by
+          piece.
+        </p>
+      </div>
+    </section>
+
+    <section class="dd">
+      <h3>No hairlines inside a layer that will be magnified</h3>
+      <div class="dd-col">
+        <p>
+          A CSS 3D-transformed subtree is rasterised
+          <em>once</em>
+          at its layout resolution and then sampled through the matrix. The
+          inner camera pushes in past 3×, so it is magnifying a texture rather
+          than redrawing it — and a 1px stroke lands on a fractional number of
+          device pixels and crawls as the camera moves.
+        </p>
+        <p>
+          Every rule on the drawing that used to say 1px says 2px at half the
+          opacity: the same amount of ink on screen, resampled cleanly. MSAA and
+          its relatives are no help here — they anti-alias the canvas, not the
+          DOM layer behind it.
+        </p>
+      </div>
+    </section>
+
+    <section class="dd">
       <h3>Why the laptop's own body hides the drawing</h3>
       <div class="dd-col">
         <p>

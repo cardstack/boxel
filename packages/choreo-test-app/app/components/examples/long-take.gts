@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -47,6 +48,43 @@ import type * as THREE from 'three';
 /** the DOM screen, at the model's own display aspect */
 const SCREEN = { h: BOARD.h, w: BOARD.w };
 
+/**
+ * THE FLAT LAPTOP IS A PHOTOGRAPH OF THE ROUND ONE.
+ *
+ * 2D used to be a laptop drawn in CSS, which meant the switch changed what
+ * the machine LOOKED like as well as whether it moved — two devices, and
+ * the flat one always the poor relation. This is a WebP of the WebGL
+ * laptop at its rest pose instead, so the two modes are the same picture
+ * and the only difference is that one of them is alive.
+ *
+ * It works because of the hole. The canvas is drawn with alpha and the
+ * display mesh punches itself out of it, so a straight readback of that
+ * canvas is a laptop with a transparent screen — and an `<img>` of it,
+ * laid over the DOM exactly where the canvas goes, composites the drawing
+ * through it in exactly the same way. 53 KB against a megabyte and a half
+ * of engine.
+ *
+ * The catch is that the picture and the matrices below are ONE
+ * measurement, taken at REF and no other size. Replace one and you must
+ * replace all of them: `window.__take.capture()` in the dev server writes
+ * the file AND returns these three strings for exactly that reason. The
+ * whole flat composite is then scaled as a unit — see `--k` — because
+ * scaling a projection is only sound when everything projected scales
+ * with it.
+ */
+const REF = { h: 838, w: 1178 };
+
+const FROZEN = {
+  cam:
+    'translateZ(1289.55px) matrix3d(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, ' +
+    '0, 32.0808, -2178.15, 1) translate(589px, 419px)',
+  perspective: '1289.55px',
+  plane:
+    'translate(-50%, -50%) matrix3d(1, 6.88338e-08, 0.000571805, 0, ' +
+    '8.24339e-06, -0.999898, -0.0142961, 0, -0.000571745, -0.0142961, ' +
+    '0.999898, 0, 0.507889, 24.78, -511.221, 1) scale(1.006)',
+};
+
 /** how much of the box the laptop fills — closer than the mockup's, on purpose */
 const fillFor = (h: number) => (h < 520 ? 1.06 : h < 660 ? 1.0 : 0.94);
 
@@ -66,7 +104,11 @@ interface LongTakeWindow extends Window {
 }
 
 export class LongTake extends Component {
-  @tracked status = 'warming up the room…';
+  /** flat by default: the engine is a megabyte and a half, the still is 53 KB */
+  @tracked mode: '2d' | '3d' = '2d';
+  /** pressed 3D, engine still downloading: stay flat until it can draw */
+  @tracked arming = false;
+  @tracked status = 'flat — the same picture, no engine loaded';
   @tracked cameraOn = true;
   @tracked roomy = true;
   @tracked take = 0;
@@ -81,6 +123,29 @@ export class LongTake extends Component {
   private leanHost?: (partial: Partial<Camera3DState>) => void;
   private resetHost?: () => void;
   private boot?: () => Promise<void>;
+  private halt?: () => void;
+
+  isMode = (mode: '2d' | '3d') => this.mode === mode;
+
+  setMode = (mode: '2d' | '3d') => {
+    if (mode === this.mode || this.arming) {
+      return;
+    }
+    if (mode === '2d') {
+      this.mode = '2d';
+      this.halt?.();
+      return;
+    }
+    // FLIP ONLY WHEN 3D CAN ACTUALLY DRAW. Switching first and loading
+    // after is a second and a half of empty stage and then a pop — a flash
+    // where a transition should be. The still stays up, the button says
+    // so, and the swap happens when the first frame is mapped.
+    this.arming = true;
+    void this.boot?.().then(() => {
+      this.arming = false;
+      this.mode = '3d';
+    });
+  };
 
   readonly shots = SHOTS;
   readonly glide = GLIDE;
@@ -102,7 +167,7 @@ export class LongTake extends Component {
    * time there is a laptop to look at.
    */
   get playing() {
-    return this.cameraOn && this.drawn && this.roomy;
+    return this.mode === '3d' && this.cameraOn && this.drawn && this.roomy;
   }
 
   /** the outer camera's leg for a shot is exactly the shot's own length */
@@ -318,11 +383,40 @@ export class LongTake extends Component {
      * FILL of the box; the flat laptop is scaled by the same fraction, so
      * the 2D/3D switch does not resize the device under you.
      */
+    /**
+     * ONE SCALE FOR THE WHOLE FLAT COMPOSITE.
+     *
+     * The still and the frozen matrices were measured together at REF, so
+     * flat mode reproduces that box exactly and scales it as a unit —
+     * image, perspective, camera element and plane all by the same `--k`.
+     * Fitting them separately would be scaling a projection against its
+     * own image, which comes apart the moment the lid is not square on.
+     */
     const watch = (decide = false) => {
       if (decide) {
         decideRoom(host.clientHeight);
       }
+      const w = host.clientWidth || 1;
+      const h = host.clientHeight || 1;
+      host.style.setProperty(
+        '--k',
+        String(Math.min(w / REF.w, h / REF.h).toFixed(4))
+      );
     };
+
+    /**
+     * Put the flat composite's transforms back. In 3D the tick overwrites
+     * all three every frame; flat, they are the ones the still was shot
+     * with and nothing else will do.
+     */
+    const freeze = () => {
+      layer.style.perspective = FROZEN.perspective;
+      cam.style.transform = FROZEN.cam;
+      plane.style.transform = FROZEN.plane;
+      plane.style.width = `${SCREEN.w}px`;
+      plane.style.height = `${SCREEN.h}px`;
+    };
+    freeze();
     // THE ROOM IS DECIDED BY THE OBSERVER, NEVER BY THIS CALL. A modifier
     // runs before its element has been laid out, so the height here is
     // whatever the box happened to be mid-render — and a full page read a
@@ -789,6 +883,49 @@ export class LongTake extends Component {
       built = true;
       building = false;
       (window as LongTakeWindow).__take = {
+        /**
+         * REMAKE THE 2D STILL. See `captureStill()` in vite.config.mjs.
+         *
+         * Renders one frame at the rest pose and posts the canvas back to
+         * the dev server, alpha included — so the hole where the screen
+         * goes is transparent in the file exactly as it is live, and the
+         * still composites over the DOM the same way the canvas does.
+         *
+         * It returns the three strings the tick had just written, because
+         * the picture and those matrices are ONE measurement: paste them
+         * into FROZEN below in the same edit that replaces the file, or
+         * the flat laptop and the flat screen will disagree.
+         */
+        capture: async () => {
+          const was = { dolly, pedestal, rx, ry, truck };
+          rx = 0;
+          ry = 0;
+          dolly = 1;
+          truck = 0;
+          pedestal = 0;
+          tick?.();
+          // read in the same turn as the draw: without
+          // preserveDrawingBuffer the buffer is not guaranteed past it
+          const data = canvas.toDataURL('image/webp', 0.94);
+          const said = await fetch('/__capture-still', {
+            body: data,
+            method: 'POST',
+          }).then((r) => r.json());
+          Object.assign(was, {});
+          rx = was.rx;
+          ry = was.ry;
+          dolly = was.dolly;
+          truck = was.truck;
+          pedestal = was.pedestal;
+          return {
+            ...said,
+            cam: cam.style.transform,
+            h: host.clientHeight,
+            perspective: layer.style.perspective,
+            plane: plane.style.transform,
+            w: host.clientWidth,
+          };
+        },
         state: () => ({ built, raf, ready, running, tick: !!tick }),
         look: (x: number, y: number) => {
           rx = x;
@@ -921,20 +1058,21 @@ export class LongTake extends Component {
     apply();
 
     this.boot = run3d;
-    // NO SWITCH, SO NO WAITING TO BE ASKED. The mockup keeps the engine
-    // behind a 2D/3D control because flat is a real thing to look at
-    // there. Here flat is nothing — a camera inside a camera has no
-    // meaning with one of them missing — so the engine is fetched as soon
-    // as the stage exists, and the room says so until it lands.
-    void run3d();
-
-    return () => {
+    this.halt = () => {
       running = false;
       if (raf) {
         cancelAnimationFrame(raf);
         raf = 0;
       }
+      this.drawn = false;
+      // a stopped canvas keeps its last frame forever — a ghost laptop
+      // under the still, at whatever angle the film had reached
       clear?.();
+      freeze();
+    };
+
+    return () => {
+      this.halt?.();
       dispose?.();
       release();
       stopTheme?.();
@@ -942,11 +1080,12 @@ export class LongTake extends Component {
       host.removeEventListener('pointerdown', grab);
       delete (window as LongTakeWindow).__take;
       this.boot = undefined;
+      this.halt = undefined;
     };
   });
 
   <template>
-    <div class="lt-page">
+    <div class="lt-page" data-mode={{this.mode}}>
       <Choreo
         class="lt-stage"
         data-ready={{if this.drawn "yes" ""}}
@@ -954,32 +1093,50 @@ export class LongTake extends Component {
         {{this.stage}}
         as |c|
       >
-        <canvas></canvas>
+        {{! THE WORLD. Flat, this is REF-sized and scaled as one piece, so
+            the still and the frozen matrices stay the single measurement
+            they were taken as. In 3D it is the whole stage and the tick
+            does the framing. }}
+        <div class="lt-world">
+          {{#if (this.isMode "2d")}}
+            {{! the SAME laptop, photographed. Its screen is a transparent
+                hole, punched by the display mesh at capture time, so the
+                drawing composites through it exactly as it does live. }}
+            <img
+              class="lt-still"
+              src="/still/macbook.webp"
+              alt="A MacBook Pro at rest, the drawing on its screen"
+              width={{REF.w}}
+              height={{REF.h}}
+            />
+          {{/if}}
+          <canvas></canvas>
 
-        <div class="lt-css">
-          <div class="lt-cam">
-            <div class="lt-plane">
-              <div class="lt-screen">
-                {{! THE BOOST. `backdrop-filter` re-renders everything
+          <div class="lt-css">
+            <div class="lt-cam">
+              <div class="lt-plane">
+                <div class="lt-screen">
+                  {{! THE BOOST. `backdrop-filter` re-renders everything
                     BEHIND this pane, so a transparent sheet over the
                     drawing lifts the whole panel's luminance without
                     touching a colour in the markup — the closest thing
                     the platform has to turning a screen up. }}
-                <div class="lt-boost" aria-hidden="true"></div>
+                  <div class="lt-boost" aria-hidden="true"></div>
 
-                {{! THE INNER CAMERA'S WHOLE WORLD. Its own region, its
+                  {{! THE INNER CAMERA'S WHOLE WORLD. Its own region, its
                     own frame, its own score — and the outer stage tells
                     it only two things: whether to play, and which take
                     this is. }}
-                <Board @playing={{this.playing}} @take={{this.take}} />
+                  <Board @playing={{this.playing}} @take={{this.take}} />
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {{#unless this.drawn}}
-          <p class="lt-loading">{{this.status}}</p>
-        {{/unless}}
+        {{#if this.arming}}
+          <p class="lt-loading">fetching the 3D engine…</p>
+        {{/if}}
 
         {{! THE OUTER FILM. One `c.Camera3D` per shot, and its duration is
             the shot's own `move + hold` — the same number the board's
@@ -1012,25 +1169,42 @@ export class LongTake extends Component {
       {{! THE CHROME PLANE. Outside the region: the transport and the
           sticks belong to the viewer, not to the shot. }}
       <div class="lt-chrome">
-        <div class="lt-transport">
+        <div class="lt-seg" role="group" aria-label="Presentation">
           <button
             type="button"
-            data-on={{if this.cameraOn "yes" ""}}
-            {{on "click" this.toggleCamera}}
-          >
-            {{#if this.cameraOn}}
-              <svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="6" y="5" width="4" height="14" rx="1" />
-                <rect x="14" y="5" width="4" height="14" rx="1" />
-              </svg>
-            {{else}}
-              <svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M8 5v14l11-7z" />
-              </svg>
-            {{/if}}
-            camera
-          </button>
+            aria-pressed="{{this.isMode '2d'}}"
+            {{on "click" (fn this.setMode "2d")}}
+          >2D</button>
+          <button
+            type="button"
+            aria-pressed="{{this.isMode '3d'}}"
+            {{on "click" (fn this.setMode "3d")}}
+          >{{if this.arming "3D…" "3D"}}</button>
         </div>
+
+        {{! NOTHING TO TRANSPORT WHILE FLAT. The still does not play, so a
+            pause button over it is a control with nothing behind it. }}
+        {{#if (this.isMode "3d")}}
+          <div class="lt-transport">
+            <button
+              type="button"
+              data-on={{if this.cameraOn "yes" ""}}
+              {{on "click" this.toggleCamera}}
+            >
+              {{#if this.cameraOn}}
+                <svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="6" y="5" width="4" height="14" rx="1" />
+                  <rect x="14" y="5" width="4" height="14" rx="1" />
+                </svg>
+              {{else}}
+                <svg class="lt-ico" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              {{/if}}
+              camera
+            </button>
+          </div>
+        {{/if}}
 
         <div class="lt-pads">
           <div class="lt-pad" {{this.padDrag "orbit"}}>
@@ -1100,6 +1274,34 @@ export class LongTake extends Component {
            With the layers the other way round the DOM paints over
            everything and the board floats in front of the keyboard — the
            giveaway that a mockup is a texture pretending to be a screen. */
+        /* FLAT: the reference box, scaled as one piece. In 3D the world
+           is simply the stage and the framing solver does the work. */
+        .lt-world {
+          position: absolute;
+          inset: 0;
+        }
+        .lt-page[data-mode="2d"] .lt-world {
+          inset: auto;
+          top: 50%;
+          left: 50%;
+          width: 1178px;
+          height: 838px;
+          transform: translate(-50%, -50%) scale(var(--k, 1));
+        }
+        .lt-still {
+          position: absolute;
+          inset: 0;
+          z-index: 2;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          /* the still already carries the set it was shot on; nothing may
+             tint or scale it independently of the plane behind it */
+          user-select: none;
+        }
+        .lt-page[data-mode="2d"] .lt-stage canvas {
+          display: none;
+        }
         .lt-stage canvas {
           position: absolute;
           inset: 0;
@@ -1163,14 +1365,21 @@ export class LongTake extends Component {
 
         /* ── the player ──────────────────────────────────────────────── */
 
+        .lt-seg,
         .lt-transport {
           position: absolute;
           z-index: 4;
           top: 10px;
-          left: 10px;
           display: flex;
           gap: 6px;
         }
+        .lt-transport {
+          left: 10px;
+        }
+        .lt-seg {
+          right: 10px;
+        }
+        .lt-seg button,
         .lt-transport button {
           all: unset;
           display: inline-flex;
@@ -1185,6 +1394,39 @@ export class LongTake extends Component {
           font-size: 11px;
           line-height: 1;
           white-space: nowrap;
+        }
+        /* 3D is the ember pill because it is the thing worth pressing; 2D
+           is the white one, which is a state rather than an invitation. */
+        .lt-seg button:last-child[aria-pressed="true"] {
+          background: var(--ember-hot, #ff6a3a);
+          border-color: var(--ember-hot, #ff6a3a);
+          color: #ffffff;
+          font-weight: 700;
+        }
+        .lt-seg button:first-child[aria-pressed="true"] {
+          background: #ffffff;
+          border-color: #ffffff;
+          color: #16181d;
+          font-weight: 700;
+        }
+        .lt-page[data-mode="2d"] .lt-seg button:last-child {
+          color: var(--ember-hot, #ff6a3a);
+          border-color: var(--ember-hot, #ff6a3a);
+          animation: lt-beckon 2.6s ease-in-out infinite;
+        }
+        @keyframes lt-beckon {
+          0%,
+          100% {
+            box-shadow: 0 0 0 0 #ff6a3a00;
+          }
+          50% {
+            box-shadow: 0 0 0 4px #ff6a3a26;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .lt-page[data-mode="2d"] .lt-seg button:last-child {
+            animation: none;
+          }
         }
         .lt-transport button[data-on="yes"] {
           border-color: #ffffff8f;
@@ -1240,6 +1482,10 @@ export class LongTake extends Component {
         .lt-zoom {
           width: 32px;
           height: 54px;
+        }
+        /* THERE IS NOTHING TO ROTATE IN A PHOTOGRAPH. */
+        .lt-page[data-mode="2d"] .lt-pads {
+          display: none;
         }
         .lt-pad-name {
           position: absolute;
