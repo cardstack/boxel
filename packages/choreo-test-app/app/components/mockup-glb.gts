@@ -66,7 +66,30 @@ export class MockupGlb extends Component {
     // something for the glass to reflect: without an environment the
     // screen is a flat tint and the trick reads as a coloured overlay
     const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.03).texture;
+
+    /**
+     * A SEPARATE environment for the glass alone: a plain vertical
+     * gradient, no geometry in it at all. A room reflects as recognisable
+     * boxes, and a phone screen with furniture in it is a picture of a
+     * phone rather than a screen you are meant to read. A gradient
+     * reflected sharply is still a hard-edged sheen — glossy, not matte —
+     * but there is nothing in it to look at.
+     */
+    const sky = document.createElement('canvas');
+    sky.width = 4;
+    sky.height = 256;
+    const sctx = sky.getContext('2d')!;
+    const grad = sctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#ffffff');
+    grad.addColorStop(0.34, '#c9d4e4');
+    grad.addColorStop(0.52, '#39414f');
+    grad.addColorStop(1, '#0b0d12');
+    sctx.fillStyle = grad;
+    sctx.fillRect(0, 0, 4, 256);
+    const skyTex = new THREE.CanvasTexture(sky);
+    skyTex.mapping = THREE.EquirectangularReflectionMapping;
+    const skyEnv = pmrem.fromEquirectangular(skyTex).texture;
     const camera = new THREE.PerspectiveCamera(38, 1, 1, 20000);
     camera.position.set(0, 0, 1500);
 
@@ -141,30 +164,36 @@ export class MockupGlb extends Component {
       // projected rect goes to five figures and hit-testing stops working.
       // So scale the model until the display mesh is exactly as wide as
       // the DOM screen, and every matrix below is in pixels.
-      const found0 = found.box.getSize(new THREE.Vector3());
-      model.scale.multiplyScalar(SCREEN.w / found0.x);
-      model.updateMatrixWorld(true);
-      const bounds = new THREE.Box3().setFromObject(model);
-      model.position.sub(bounds.getCenter(new THREE.Vector3()));
+      // EVERY MEASUREMENT BELOW HAPPENS WITH THE ORBIT AT REST. A Box3 is
+      // world-space and axis-aligned, so measuring the display under a
+      // rotated pivot returns the bounding box of the ROTATED panel — its
+      // centre and its front face both wrong, and wrong by more the
+      // further the phone is turned. That is what made the DOM float off
+      // the glass at grazing angles. The tick loop rewrites the rotation
+      // on the next frame, so zeroing it here costs nothing.
+      pivot.rotation.set(0, 0, 0);
+      pivot.updateMatrixWorld(true);
+
+      const raw = found.box.getSize(new THREE.Vector3());
+      model.scale.multiplyScalar(SCREEN.w / raw.x);
       pivot.add(model);
       loaded = model;
-      model.updateMatrixWorld(true);
+      pivot.updateMatrixWorld(true);
 
-      // one correction pass: the first scale is computed from the raw
-      // model and lands ~4% out once the node transforms compose, and the
-      // plane has to match the mesh to the pixel or the DOM spills past
-      // the silhouette
-      const after = new THREE.Box3()
-        .setFromObject(found.mesh)
-        .getSize(new THREE.Vector3());
-      model.scale.multiplyScalar(SCREEN.w / after.x);
-      model.updateMatrixWorld(true);
+      // centre the phone on its own bounds
+      const bounds = new THREE.Box3().setFromObject(model);
+      model.position.sub(bounds.getCenter(new THREE.Vector3()));
+      pivot.updateMatrixWorld(true);
+
       const box = new THREE.Box3().setFromObject(found.mesh);
       const dims = box.getSize(new THREE.Vector3());
       const centre = box.getCenter(new THREE.Vector3());
-      // this model's front faces -Z: the plane sits a pixel proud of the
-      // glass and is turned to face the same way
-      anchor.position.set(centre.x, centre.y, box.min.z - 1);
+      // FLUSH: the plane sits exactly ON the display's front face (this
+      // model faces -Z, so that is box.min.z). There is no z-fighting to
+      // avoid — the DOM is on the CSS layer and never enters the depth
+      // buffer — and any offset at all is parallax you can see the moment
+      // the phone turns.
+      anchor.position.set(centre.x, centre.y, box.min.z);
       anchor.rotation.y = Math.PI;
       plane.style.width = `${SCREEN.w}px`;
       plane.style.height = `${Math.round(dims.y)}px`;
@@ -179,13 +208,50 @@ export class MockupGlb extends Component {
       found.mesh.material = new THREE.MeshPhysicalMaterial({
         blending: THREE.NoBlending,
         clearcoat: 1,
-        clearcoatRoughness: 0.04,
-        color: 0x2a2f38,
+        clearcoatRoughness: 0.02,
+        // near-black and barely there: with NoBlending the alpha written
+        // IS this opacity, uniformly, so every point of tint is a point of
+        // haze over the UI. Clear glass wants the tint near zero — the
+        // reflection is added back by the mesh below, which can be bright
+        // without making the glass frosted.
+        color: 0x05070b,
         metalness: 0,
-        opacity: 0.16,
-        roughness: 0.06,
+        opacity: 0.06,
+        roughness: 0.02,
         transparent: true,
       });
+      // THE REFLECTION, as its own pass. The clear-glass material above
+      // can only be as bright as its alpha, so a specular strong enough to
+      // read would also be a haze strong enough to fog the screen. A
+      // coincident black mirror has no diffuse of its own — it contributes
+      // only what the environment reflects.
+      //
+      // But it must add LIGHT without adding COVER. Plain AdditiveBlending
+      // adds the source alpha too, so the canvas turns opaque over the
+      // whole panel and the screen goes muddy — which is the opposite of
+      // the ask. CustomBlending separates the two: RGB is One+One (add the
+      // reflection), alpha is Zero+One (leave the hole exactly as the
+      // glass left it).
+      //
+      // It reflects the gradient, not the room, and `color` on a metal
+      // multiplies what comes back — so this is the one dial for how much
+      // sheen there is. Keep it low: the screen is the subject.
+      const glare = found.mesh.clone();
+      glare.material = new THREE.MeshPhysicalMaterial({
+        blendDst: THREE.OneFactor,
+        blendDstAlpha: THREE.OneFactor,
+        blendSrc: THREE.OneFactor,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blending: THREE.CustomBlending,
+        color: 0x2b3038,
+        depthWrite: false,
+        envMap: skyEnv,
+        metalness: 1,
+        roughness: 0.02,
+        transparent: true,
+      });
+      found.mesh.parent?.add(glare);
+
       ready = true;
       this.status =
         `screen "${found.mesh.name}" · ${SCREEN.w}×${Math.round(dims.y)} css px ` +
@@ -393,6 +459,21 @@ export class MockupGlb extends Component {
           left: 0;
           transform-style: preserve-3d;
           pointer-events: auto;
+        }
+        /* it is a phone screen, not a document: a drag across it is a
+           gesture, never a text selection. Declared on every element the
+           screen owns because `all: unset` on the buttons resets
+           user-select back to auto and would undo an inherited value. */
+        .mg-plane,
+        .mg-screen,
+        .mg-grid,
+        .mg-icon,
+        .mg-icon-name,
+        .mg-app,
+        .mg-app-name {
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-touch-callout: none;
         }
         .mg-screen {
           position: absolute;

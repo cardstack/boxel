@@ -7,8 +7,13 @@
  */
 declare module 'three' {
   export const AdditiveBlending: number;
+  export const CustomBlending: number;
+  export const EquirectangularReflectionMapping: number;
+  export const OneFactor: number;
+  export const ZeroFactor: number;
 
   export class CanvasTexture {
+    mapping: number;
     needsUpdate: boolean;
     constructor(canvas: HTMLCanvasElement);
     dispose(): void;
@@ -61,6 +66,11 @@ declare module 'three' {
 
   // ── the mockup spike's slice of three (still hand-written: see above) ──
 
+  export const AdditiveBlending: number;
+  export const CustomBlending: number;
+  export const EquirectangularReflectionMapping: number;
+  export const OneFactor: number;
+  export const ZeroFactor: number;
   export const NoBlending: number;
 
   export class Vector3 {
@@ -85,12 +95,14 @@ declare module 'three' {
 
   export class Object3D {
     matrixWorld: Matrix4;
+    parent: Object3D | null;
     name: string;
     position: Vector3;
     rotation: Euler;
     scale: Vector3;
     visible: boolean;
     add(object: Object3D): this;
+    clone(): this;
     traverse(callback: (object: Object3D) => void): void;
     updateMatrixWorld(force?: boolean): void;
   }
@@ -109,10 +121,16 @@ declare module 'three' {
 
   export class MeshPhysicalMaterial extends Material {
     constructor(params?: {
+      blendDst?: number;
+      blendDstAlpha?: number;
+      blendSrc?: number;
+      blendSrcAlpha?: number;
       blending?: number;
       clearcoat?: number;
       clearcoatRoughness?: number;
       color?: number;
+      depthWrite?: boolean;
+      envMap?: unknown;
       metalness?: number;
       opacity?: number;
       roughness?: number;
@@ -135,6 +153,7 @@ declare module 'three' {
 
   export class PMREMGenerator {
     constructor(renderer: WebGLRenderer);
+    fromEquirectangular(texture: CanvasTexture): { texture: unknown };
     fromScene(scene: Object3D, sigma?: number): { texture: unknown };
   }
 
