@@ -2414,11 +2414,16 @@ export class Mockup extends Component {
           line-height: 1;
           white-space: nowrap;
         }
+        /* the SELECTED half is filled, the other is an outline — a pair
+           of outlines makes the switch read as two links */
         .mg-seg button[aria-pressed="true"],
         .mg-transport button[data-on="yes"] {
-          border-color: var(--line-strong, #ffffff2e);
-          background: var(--bg-spot, #443c35);
-          color: var(--ink, #f3ece3);
+          border-color: transparent;
+          background: var(--ink, #f3ece3);
+          color: var(--bg, #2a2521);
+        }
+        .mg-seg button[aria-pressed="false"] {
+          background: transparent;
         }
 
         /* CLIP THE EXPANDING PANEL. The app grows from an 82px tile to the
@@ -2592,11 +2597,7 @@ export class Mockup extends Component {
            flat, the other half of it is drawn as the live option. */
         .mg-page[data-mode="2d"] .mg-seg button:last-child {
           border-color: var(--ember-hot, #ff6a3a);
-          background: color-mix(
-            in srgb,
-            var(--ember-hot, #ff6a3a) 16%,
-            transparent
-          );
+          background: transparent;
           color: var(--ember-hot, #ff6a3a);
           font-weight: 700;
         }
