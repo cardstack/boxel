@@ -139,15 +139,38 @@ module('Unit | job-scoped instance residency', function (hooks) {
 
   test('a card stays resident for the life of one job', async function (assert) {
     let store = makeStore();
+    // Take the same-job path deliberately, rather than resting on a store that
+    // has not observed a job yet: load first so the job is held, and observe it
+    // again after the card is resident.
+    await store.loadCardDocument(otherURL);
     let jade = makePerson('Jade');
     store.setCard(residentURL, jade);
 
+    store.observeIndexingJob();
     await store.loadCardDocument(otherURL);
 
     assert.strictEqual(
       store.getCard(residentURL),
       jade,
       'a shared target still loads once per job',
+    );
+  });
+
+  test('a store built during a job holds that job, not "no job yet"', async function (assert) {
+    // `resetCache` replaces the store mid-job, and a card can become resident
+    // through `add` alone — no load, no model build. A store that recorded no
+    // job would then hand those instances to the next one.
+    let store = makeStore();
+    let jade = makePerson('Jade');
+    store.setCard(residentURL, jade);
+
+    (globalThis as any).__boxelJobId = '18.24';
+    store.observeIndexingJob();
+
+    assert.strictEqual(
+      store.getCard(residentURL),
+      undefined,
+      'the job it was built under is the one it drops at',
     );
   });
 

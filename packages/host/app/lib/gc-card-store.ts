@@ -79,6 +79,21 @@ type StoreHooks = {
   ): StoreSearchResource<T>;
 };
 
+// The indexing job this render belongs to, or undefined when there isn't one —
+// the live app and any job-less render. Both halves matter: the render flag
+// alone is set by host-test renders that carry no job, and a job id alone
+// would let a stray global leak into the app's own store.
+function currentIndexingJobId(): string | undefined {
+  let g = globalThis as unknown as {
+    __boxelRenderContext?: boolean;
+    __boxelJobId?: string;
+  };
+  if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+    return undefined;
+  }
+  return g.__boxelJobId;
+}
+
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
 // opposing id, it will trigger a glimmer invalidation on all the cards in the
@@ -140,6 +155,16 @@ class IDResolver {
     }
     this.#localIds = new Map();
     this.#remoteIds = new Map();
+  }
+
+  // Forget every pairing outright, rollover included. `reset` keeps the old
+  // local ids answerable across a loader refresh, which is right when the
+  // refresh is a one-off; a caller that runs on a repeating boundary needs
+  // this instead, or the rollover map grows for the life of the tab.
+  clear() {
+    this.#localIds = new Map();
+    this.#remoteIds = new Map();
+    this.#oldRemoteIds = new Map();
   }
 }
 
@@ -241,7 +266,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     string,
     SingleCardDocument | SingleFileMetaDocument
   >();
-  #jobScopedDocCacheJobId: string | undefined;
+  #jobScopedStateJobId: string | undefined;
   // Bumped on every clear (the jobId-change clear and `reset()`). A load
   // captures this alongside its cache key and skips its populate when the
   // generation moved while the fetch was in flight — a document fetched
@@ -268,11 +293,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     kind: 'card' | 'file',
     url: string,
   ): string | undefined {
-    let g = globalThis as unknown as {
-      __boxelRenderContext?: boolean;
-      __boxelJobId?: string;
-    };
-    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+    if (currentIndexingJobId() === undefined) {
       return undefined;
     }
     this.observeIndexingJob();
@@ -288,19 +309,16 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // boundary has to be observed before the root is hydrated, so that no owner
   // in this job can be handed a target from the last one.
   observeIndexingJob(): void {
-    let g = globalThis as unknown as {
-      __boxelRenderContext?: boolean;
-      __boxelJobId?: string;
-    };
-    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+    let jobId = currentIndexingJobId();
+    if (jobId === undefined) {
       return;
     }
-    if (g.__boxelJobId === this.#jobScopedDocCacheJobId) {
+    if (jobId === this.#jobScopedStateJobId) {
       return;
     }
     this.#jobScopedDocCache.clear();
     this.#dropResidentInstancesForNewJob();
-    this.#jobScopedDocCacheJobId = g.__boxelJobId;
+    this.#jobScopedStateJobId = jobId;
     this.#jobScopedDocCacheGeneration++;
   }
 
@@ -322,11 +340,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // URL from the previous job's view of the realm, and the fix for it lands in
   // exactly the same way a value change does.
   #dropResidentInstancesForNewJob() {
-    if (this.#jobScopedDocCacheJobId === undefined) {
-      // This store has not served a job yet, so nothing resident can belong to
-      // an earlier one. Keeping the first job's own loads is the whole point.
-      return;
-    }
     this.#cardInstances.clear();
     this.#cardInstanceErrors.clear();
     this.#nonTrackedCardInstances.clear();
@@ -336,7 +349,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#nonTrackedFileMetaInstances.clear();
     this.#nonTrackedFileMetaInstanceErrors.clear();
     this.#gcCandidates.clear();
-    this.#idResolver.reset();
+    // A hard clear, not `reset`: this runs once per job for the life of a
+    // prerender tab, and `reset`'s rollover map is never emptied, so it would
+    // accumulate every local id the tab ever saw. The pairings it drops belong
+    // to instances that are going with them.
+    this.#idResolver.clear();
   }
 
   #readJobScopedDoc(
@@ -385,6 +402,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#fetch = fetch;
     this.#virtualNetwork = virtualNetwork;
     this.#storeHooks = storeHooks;
+    // A store built during an indexing render belongs to the job running at
+    // the time — `resetCache` replaces the store mid-job, and a card can then
+    // become resident through `add` alone, which touches neither the load path
+    // nor the model build. Without this the held id would still read "no job
+    // observed" while the store holds that job's instances, and the next job
+    // would be handed them.
+    this.#jobScopedStateJobId = currentIndexingJobId();
   }
 
   resolveURL(reference: string, base?: string): URL | undefined {
@@ -877,7 +901,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     // the resetter deliberately discarded. The generation bump makes any
     // in-flight load skip its populate on resolve.
     this.#jobScopedDocCache.clear();
-    this.#jobScopedDocCacheJobId = undefined;
+    this.#jobScopedStateJobId = undefined;
     this.#jobScopedDocCacheGeneration++;
     this.#idResolver.reset();
   }
