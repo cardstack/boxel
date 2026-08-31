@@ -12426,29 +12426,61 @@ html[data-gm-dragging] * {
 }
 
 /* ---- the dial spike ----
-   Almost nothing, which is the point: `data-mode="inline"` and
-   `.dialkit-panel-inner` are dialkit's own, so the panel's surface, borders,
-   sliders and type all come from the package's stylesheet. What is left here
-   is the spike's own header, which dialkit has no equivalent of — its real
-   toolbar is `PresetManager` and friends. See docs/dialkit.md. */
+   Almost nothing, which is the point: `data-mode="inline"`,
+   `.dialkit-panel-inner` and `.dialkit-folder-inner` are dialkit's own, so the
+   panel's surface, borders, row spacing, sliders and type all come from the
+   package's stylesheet.
+
+   THE HANDLE IS THE EXCEPTION, and it is the one correction this spike makes
+   to the "the stylesheet is free" claim in docs/dialkit.md. dialkit's theme
+   gives `.dialkit-slider-handle` only `top: 50%`; the centring translate and
+   the resting scale live in the React component's inline `style` and
+   `animate` props (`y: '-50%'`, `scaleX: isActive ? 1 : 0.25`). A port that
+   emits the class and nothing else gets a fat handle hanging below the track,
+   bleeding into the row underneath. So: some of dialkit's visual design is
+   NOT in theme.css, and a port has to read the components to find the rest. */
 .dial-spike {
   align-self: flex-start;
-  width: 260px;
+  width: 280px;
+}
+
+/* dialkit's own inner padding is `10px 12px 0 12px` — no bottom, because in
+   dialkit the last thing in a panel is a folder that brings its own. This
+   panel ends on a slider, so it gets even padding on all four sides. */
+.dial-spike .dialkit-panel-inner {
+  padding: 14px;
+}
+
+/* ...and the row container's own bottom padding comes off, or the panel is
+   14px on three sides and 24px underneath */
+.dial-spike .dialkit-folder-inner {
+  padding-bottom: 0;
+}
+
+.dial-spike .dialkit-slider-handle {
+  transform: translateY(-50%) scaleX(0.25);
+  transition: transform 200ms var(--ease);
+}
+
+.dial-spike .dialkit-slider-active .dialkit-slider-handle {
+  transform: translateY(-50%) scaleX(1);
 }
 
 .dial-spike-head {
   align-items: center;
   display: flex;
   gap: 8px;
-  padding: 10px 12px 6px;
+  margin-bottom: 10px;
 }
 
+/* the title takes the slack and never wraps: the buttons are the fixed part
+   of this row, and a two-line header pushes the whole panel out of shape */
 .dial-spike-name {
-  color: var(--ink-dim);
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dial-spike-btn {

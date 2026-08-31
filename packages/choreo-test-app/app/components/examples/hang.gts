@@ -264,7 +264,7 @@ export class Hang extends Component {
    * region's `treePrint` changes, so the pass replays: you watch the spring
    * you are editing, while you edit it.
    */
-  dial = new Dial('hang-slide', 'Hang · the slide', TUNING);
+  dial = new Dial('hang-slide', 'The slide', TUNING);
 
   get slide() {
     return this.dial.values as unknown as {

@@ -120,6 +120,24 @@ export class DialPanel extends Component<Signature> {
   isActive = (control: ControlMeta) => this.active === control.path;
 
   /**
+   * The track's classes as one string, rather than a multi-line `class="..."`
+   * with an `{{if}}` inside it.
+   *
+   * Both forms are legal Glimmer. The one-string form is here because the
+   * template parser is fragile about what sits inside a `<template>` at depth,
+   * and it fails in a way that names neither the line nor the cause: the whole
+   * file is rejected with `Parsing error: Invalid count value: -1`, which is a
+   * negative `String.repeat` deep in its indentation maths. A `>` inside an
+   * `{{! }}` comment does the same thing — writing a CSS child selector in
+   * prose is enough to take the file out. Both were found by bisection, and
+   * neither is worth re-discovering.
+   */
+  classFor = (control: ControlMeta) =>
+    this.isActive(control)
+      ? 'dialkit-slider dialkit-slider-active'
+      : 'dialkit-slider';
+
+  /**
    * Motion hands us the offset from where the finger went down, so the value
    * is the value AT GRAB plus that offset scaled to the range. Reading the
    * live value instead would compound rounding on every frame and drift away
@@ -172,8 +190,12 @@ export class DialPanel extends Component<Signature> {
     >
       <div class="dialkit-panel" data-mode="inline">
         <div class="dialkit-panel-inner">
-          <header class="dial-spike-head">
-            <span class="dial-spike-name">{{@dial.name}}</span>
+          {{! dialkit's own header and title classes, so the type and the rule
+              under it come from the package rather than approximate it }}
+          <header class="dialkit-panel-header dial-spike-head">
+            <span
+              class="dialkit-folder-title dial-spike-name"
+            >{{@dial.name}}</span>
             <button
               type="button"
               class="dial-spike-btn"
@@ -188,38 +210,45 @@ export class DialPanel extends Component<Signature> {
             </button>
           </header>
 
-          {{#each this.sliders key="path" as |control|}}
-            <div class="dialkit-slider-wrapper">
-              <div
-                class="dialkit-slider
-                  {{if (this.isActive control) 'dialkit-slider-active'}}"
-                {{this.bindTrack control.path}}
-                {{motion
-                  drag="x"
-                  dragConstraints=PINNED
-                  dragMomentum=false
-                  dragElastic=0
-                  onDragStart=(fn this.grab control)
-                  onDrag=(fn this.drag control)
-                  onDragEnd=this.drop
-                }}
-              >
+          {{! `.dialkit-folder-inner` is dialkit's own control-row container: a
+              flex column with a 6px gap. Using it rather than spacing the rows
+              by hand is the same trade as the rest of this panel — the package
+              decides what it looks like. dialkit nests it inside two more
+              wrappers that carry the collapse behaviour and a divider, which
+              this panel has no use for, so it stands alone here. }}
+          <div class="dialkit-folder-inner">
+            {{#each this.sliders key="path" as |control|}}
+              <div class="dialkit-slider-wrapper">
                 <div
-                  class="dialkit-slider-fill"
-                  style={{this.fillStyle control}}
+                  class={{this.classFor control}}
+                  {{this.bindTrack control.path}}
+                  {{motion
+                    drag="x"
+                    dragConstraints=PINNED
+                    dragMomentum=false
+                    dragElastic=0
+                    onDragStart=(fn this.grab control)
+                    onDrag=(fn this.drag control)
+                    onDragEnd=this.drop
+                  }}
                 >
+                  <div
+                    class="dialkit-slider-fill"
+                    style={{this.fillStyle control}}
+                  >
+                  </div>
+                  <div
+                    class="dialkit-slider-handle"
+                    style={{this.handleStyle control}}
+                  ></div>
+                  <span class="dialkit-slider-label">{{control.label}}</span>
+                  <span class="dialkit-slider-value">
+                    {{this.valueOf control.path}}
+                  </span>
                 </div>
-                <div
-                  class="dialkit-slider-handle"
-                  style={{this.handleStyle control}}
-                ></div>
-                <span class="dialkit-slider-label">{{control.label}}</span>
-                <span class="dialkit-slider-value">
-                  {{this.valueOf control.path}}
-                </span>
               </div>
-            </div>
-          {{/each}}
+            {{/each}}
+          </div>
         </div>
       </div>
     </div>
