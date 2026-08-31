@@ -392,6 +392,14 @@ export default class RenderRoute extends Route<Model> {
     // Reset before any await so a reader can never see a previous card's
     // settle-time snapshot; #settleModelAfterRender repopulates it.
     (globalThis as any).__boxelRenderCapturedDeps = undefined;
+    // Bind the store to this visit's indexing job before anything is fetched
+    // or hydrated. A tab serves visits from many jobs and holds the instances
+    // they loaded, and a resident link target is handed to deserialization
+    // without a freshness check — so a render whose targets are all resident
+    // performs no load at all, and a load is the only other place the store
+    // learns the job moved on. Observing it here is what keeps an owner in
+    // this job from reducing over a copy the last one left behind.
+    this.store.observeIndexingJob();
     // Loader-epoch synchronization: indexing renders thread the realm's
     // loader epoch (re-minted whenever an index pass invalidates executable
     // modules — see RealmGenerationsTable.loader_epoch). When it differs

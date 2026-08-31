@@ -394,6 +394,14 @@ export default class StoreService extends Service implements StoreInterface {
     this.inflightSearch.clear();
   }
 
+  // Bind the store to the indexing job now in progress. The render route calls
+  // this before it hydrates a card, which is the only point early enough to
+  // matter: a render whose link targets are all resident never loads anything,
+  // so the store would otherwise never see that the job had moved on.
+  observeIndexingJob(): void {
+    this.store.observeIndexingJob();
+  }
+
   // Drop every resolved-doc search-cache entry. Used for hard resets
   // (`resetState`, `resetCache`) and by tests; NOT called from the
   // render route's per-visit deactivate, because the cache is meant

@@ -117,6 +117,26 @@ module('Unit | job-scoped instance residency', function (hooks) {
     );
   });
 
+  test('the job boundary is observed even when the new job loads nothing', async function (assert) {
+    let store = makeStore();
+    await store.loadCardDocument(otherURL);
+    let jade = makePerson('Jade');
+    store.setCard(residentURL, jade);
+
+    // The render route fetches a card's source itself rather than through the
+    // store, and a render whose link targets are all resident never loads
+    // anything — so this is the only call that tells the store the job moved
+    // on, and it has to be enough on its own.
+    (globalThis as any).__boxelJobId = '18.24';
+    store.observeIndexingJob();
+
+    assert.strictEqual(
+      store.getCard(residentURL),
+      undefined,
+      'residency ended at the boundary without a load to trigger it',
+    );
+  });
+
   test('a card stays resident for the life of one job', async function (assert) {
     let store = makeStore();
     let jade = makePerson('Jade');

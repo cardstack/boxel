@@ -275,13 +275,33 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
       return undefined;
     }
-    if (g.__boxelJobId !== this.#jobScopedDocCacheJobId) {
-      this.#jobScopedDocCache.clear();
-      this.#dropResidentInstancesForNewJob();
-      this.#jobScopedDocCacheJobId = g.__boxelJobId;
-      this.#jobScopedDocCacheGeneration++;
-    }
+    this.observeIndexingJob();
     return `${kind}:${url}`;
+  }
+
+  // Bind this store to the indexing job now in progress, dropping what it
+  // holds from a previous one. Called at both points a job's work can reach
+  // the store: a document load, and the render route's model build — which
+  // fetches the root card's source itself rather than through the store. The
+  // model build is the one that matters for correctness, because a render
+  // whose every link target is already resident performs no load at all: the
+  // boundary has to be observed before the root is hydrated, so that no owner
+  // in this job can be handed a target from the last one.
+  observeIndexingJob(): void {
+    let g = globalThis as unknown as {
+      __boxelRenderContext?: boolean;
+      __boxelJobId?: string;
+    };
+    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+      return;
+    }
+    if (g.__boxelJobId === this.#jobScopedDocCacheJobId) {
+      return;
+    }
+    this.#jobScopedDocCache.clear();
+    this.#dropResidentInstancesForNewJob();
+    this.#jobScopedDocCacheJobId = g.__boxelJobId;
+    this.#jobScopedDocCacheGeneration++;
   }
 
   // Instance residency is job-scoped for the same reason the document cache
@@ -295,8 +315,8 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // the owner, so its row is rebuilt from the stale copy and nothing later
   // disagrees with it.
   //
-  // Safe by construction at this point: the clear runs on the first document
-  // load of a job, before any of that job's own instances exist. Within a job
+  // Safe by construction at the points it runs from: the job's first touch of
+  // the store, before any of that job's own instances exist. Within a job
   // residency is untouched, so a target shared by many owners still loads once.
   // Errors are dropped alongside instances — an error row is a claim about a
   // URL from the previous job's view of the realm, and the fix for it lands in
