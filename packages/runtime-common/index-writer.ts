@@ -41,6 +41,7 @@ import {
   type SerializedError,
 } from './error.ts';
 import type { DBAdapter } from './db.ts';
+import type { ScreenshotManifest } from './capture-spec.ts';
 import type { RealmMetaTable } from './index-structure.ts';
 import type { FileMetaResource } from './resource-types.ts';
 import type { Diagnostics } from './index.ts';
@@ -208,6 +209,10 @@ export interface PrerenderedHtmlEntry {
   // too so operators can retrospectively answer "why did this rendering
   // take N seconds?".
   diagnostics?: Diagnostics;
+  // The declared-screenshot manifest for this row — every slot the visit
+  // captured or carried forward. Absent/null clears the column: the
+  // manifest always reflects what THIS pass captured, never a stale one.
+  screenshots?: ScreenshotManifest | null;
 }
 
 export interface PrerenderedHtmlErrorEntry {
@@ -1345,6 +1350,7 @@ export class Batch {
           last_known_good_deps: deps,
           error_doc: null,
           diagnostics: entry.diagnostics ?? null,
+          screenshots: entry.screenshots ?? null,
         };
         break;
       }
@@ -1401,6 +1407,10 @@ export class Batch {
           last_known_good_deps: production?.last_known_good_deps ?? null,
           error_doc: errorDoc,
           diagnostics: entry.diagnostics ?? null,
+          // Like the HTML columns above: the manifest is a last-known-good
+          // artifact — its objects still exist in the MediaCache and the
+          // preserved HTML may reference them by name.
+          screenshots: production?.screenshots ?? null,
         };
         break;
       }
@@ -1437,6 +1447,19 @@ export class Batch {
         valueExpressions,
       ),
     ]);
+  }
+
+  // The declared-screenshot manifest the previous pass published for this
+  // row, read from production `prerendered_html` — the carry-forward input
+  // for `keyBy: 'file-content'` slots (skip re-rendering when the source
+  // bytes are unchanged). Null when no prior row exists or it carried no
+  // manifest.
+  async priorScreenshotManifest(
+    url: URL,
+    type: PrerenderedHtmlTable['type'],
+  ): Promise<ScreenshotManifest | null> {
+    let production = await this.getPrerenderedHtmlProductionVersion(url, type);
+    return (production?.screenshots as ScreenshotManifest | null) ?? null;
   }
 
   private async getPrerenderedHtmlProductionVersion(
@@ -2010,6 +2033,10 @@ export class Batch {
         this.#prerenderedHtmlTombstonedLiveTypes.set(url, liveTypes);
       }
     }
+    // The HTML columns and the `screenshots` manifest are deliberately NOT
+    // in this list: on an existing working row a tombstone leaves those
+    // artifacts in place (is_deleted hides them), matching how the HTML
+    // columns have always behaved through delete/restore cycles.
     let columns = [
       'url',
       'file_alias',

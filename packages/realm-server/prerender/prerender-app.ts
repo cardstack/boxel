@@ -10,6 +10,7 @@ import {
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
   SCREENSHOT_FORMATS,
+  type DeclaredScreenshotVisitArgs,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
@@ -877,6 +878,15 @@ export function buildPrerenderApp(options: {
             (t): t is string => typeof t === 'string',
           )
         : undefined;
+      // Declared-screenshot capture opt-in. Presence (even `{}`) turns the
+      // capture step on for a prerender-html visit; the fields inside are
+      // carry-forward inputs the capture step treats as advisory.
+      let screenshots: DeclaredScreenshotVisitArgs | undefined =
+        attrs.screenshots &&
+        typeof attrs.screenshots === 'object' &&
+        !Array.isArray(attrs.screenshots)
+          ? (attrs.screenshots as DeclaredScreenshotVisitArgs)
+          : undefined;
 
       let isNonEmptyString = (value: unknown): value is string =>
         typeof value === 'string' && value.trim().length > 0;
@@ -990,6 +1000,7 @@ export function buildPrerenderApp(options: {
           ...(batchId ? { batchId } : {}),
           ...(priority !== undefined ? { priority } : {}),
           ...(jobId ? { jobId } : {}),
+          ...(screenshots ? { screenshots } : {}),
           signal: ac.signal,
         })
         .then((result) => ({ result }));

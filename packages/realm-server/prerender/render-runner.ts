@@ -1,4 +1,5 @@
 import {
+  type DeclaredScreenshotVisitResult,
   type FusedIndexMeta,
   type PrerenderMeta,
   type PrerenderTypes,
@@ -33,6 +34,7 @@ import {
   captureResult,
   captureModule,
   captureFileExtract,
+  captureDeclaredScreenshots,
   captureScreenshot,
   isRenderError,
   renderAncestors,
@@ -869,6 +871,7 @@ export class RenderRunner {
     cardTypes,
     priority,
     jobId,
+    screenshots,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -1593,6 +1596,65 @@ export class RenderRunner {
               step.format,
             );
             if (v !== undefined) step.assign(v);
+          }
+        }
+
+        // Declared screenshots capture on the same warm tab, after the
+        // format renders (the hydrated card and its images are already
+        // settled and cached). Only the prerender-html half captures — the
+        // caller opts in by sending `screenshots` when it has a MediaCache
+        // to persist into. Deliberately NOT a runTimedStep: that helper
+        // promotes a step failure into the card error, but a failed capture
+        // is an absent screenshot, not an errored row (the broken-links
+        // model) — only an evicted page or an auth failure escalates, since
+        // the page itself is then unusable for anyone.
+        if (
+          !cardShortCircuit &&
+          runHtmlSteps &&
+          !runIndexSteps &&
+          screenshots
+        ) {
+          let stepStart = Date.now();
+          let stepResult = await this.#step(
+            affinityKey,
+            'visit card declared screenshots',
+            () =>
+              withTimeout(
+                page,
+                () =>
+                  captureDeclaredScreenshots(page, screenshots, captureOptions),
+                opts?.timeoutMs,
+                this.#profileContext(
+                  affinityKey,
+                  url,
+                  'visit card declared screenshots',
+                  jobId,
+                ),
+                signal,
+              ),
+          );
+          recordFormatMs('card', 'screenshots', Date.now() - stepStart);
+          let allSlotsErrored = (error: RenderError) => {
+            response.screenshots = {
+              entries: [],
+              errors: [
+                {
+                  name: '*',
+                  message:
+                    error.error?.message ??
+                    'declared screenshot capture failed',
+                },
+              ],
+            };
+          };
+          if (!stepResult.ok) {
+            if (stepResult.evicted || this.#isAuthError(stepResult.error)) {
+              applyStepError(stepResult.error, stepResult.evicted);
+            }
+            allSlotsErrored(stepResult.error);
+          } else {
+            response.screenshots =
+              stepResult.value as DeclaredScreenshotVisitResult;
           }
         }
 

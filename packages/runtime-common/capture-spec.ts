@@ -680,6 +680,115 @@ export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
   return qs.length > 0 ? `?${qs}` : '';
 }
 
+// ---------------------------------------------------------------------------
+// Declared-screenshot capture identity + manifest — the grammar shared by the
+// prerender pass (which captures and persists) and the realm's
+// `_screenshot/…?name=` route (which joins a manifest entry to the ledger).
+// ---------------------------------------------------------------------------
+
+export const SCREENSHOT_IMAGE_TYPES = ['png', 'jpeg', 'webp'] as const;
+export type ScreenshotImageType = (typeof SCREENSHOT_IMAGE_TYPES)[number];
+export const SCREENSHOT_DEFAULT_IMAGE_TYPE: ScreenshotImageType = 'png';
+export const SCREENSHOT_DEFAULT_BACKGROUND = 'white';
+
+export function isScreenshotImageType(
+  value: unknown,
+): value is ScreenshotImageType {
+  return (SCREENSHOT_IMAGE_TYPES as readonly unknown[]).includes(value);
+}
+
+export function screenshotContentType(type: ScreenshotImageType): string {
+  switch (type) {
+    case 'png':
+      return 'image/png';
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+  }
+}
+
+// One merged `static screenshots` entry as it crosses the render-page
+// boundary: everything in the declaration except the capture-only component
+// itself, which cannot serialize — it is flagged `render: true` and
+// re-resolved in-page by slot name when the capture renders.
+export interface DeclaredScreenshotSpecPayload {
+  width: number;
+  height: number;
+  deviceScaleFactor?: number;
+  background?: string;
+  useAsThumbnail?: boolean;
+  keyBy?: 'generation' | 'file-content';
+  type?: ScreenshotImageType;
+  format?: DeclaredScreenshotFormat;
+  render?: true;
+}
+
+export type DeclaredScreenshotRoster = Record<
+  string,
+  DeclaredScreenshotSpecPayload
+>;
+
+// The canonical identity of one declared capture. Unlike the wire spec —
+// whose canonical form elides defaults so equivalent spellings collapse —
+// this keys the *effective* pixel parameters with declaration defaults
+// applied, so a later change to a default is a change of identity (and thus
+// a recapture) rather than a silent aliasing of old bytes under new intent.
+// The slot name is part of the identity: a capture-only component's pixels
+// are identified only by the slot that declares it, and format twins sharing
+// a ledger row would let one slot's re-persist reclaim the other's object.
+// `keyBy` and `useAsThumbnail` steer invalidation and consumption, not
+// pixels, so they stay out.
+export function canonicalDeclaredCaptureString(
+  name: string,
+  payload: DeclaredScreenshotSpecPayload,
+): string {
+  let canonical: Record<string, unknown> = {
+    background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
+    declared: name,
+    deviceScaleFactor:
+      payload.deviceScaleFactor ?? SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+    height: payload.height,
+    source: payload.render ? 'render' : payload.format,
+    type: payload.type ?? SCREENSHOT_DEFAULT_IMAGE_TYPE,
+    width: payload.width,
+  };
+  return JSON.stringify(
+    Object.fromEntries(
+      Object.entries(canonical).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  );
+}
+
+export async function declaredCaptureSpecHash(
+  name: string,
+  payload: DeclaredScreenshotSpecPayload,
+): Promise<string> {
+  return await computeMediaCacheKey(
+    new TextEncoder().encode(canonicalDeclaredCaptureString(name, payload)),
+  );
+}
+
+// One name's entry in a `prerendered_html.screenshots` manifest — the
+// indexing-time artifact that joins a `?name=` request to its MediaCache
+// ledger row (`specHash`) and object (`objectKey`), and carries the
+// dimensions/consumption facts serve-time readers need without a ledger
+// round-trip. `sourceContentHash` is recorded for `keyBy: 'file-content'`
+// slots so the next prerender pass can carry the entry forward without
+// re-rendering when the source file's bytes are unchanged.
+export interface ScreenshotManifestEntry {
+  specHash: string;
+  objectKey: string;
+  contentType: string;
+  width: number;
+  height: number;
+  deviceScaleFactor: number;
+  useAsThumbnail?: true;
+  sourceContentHash?: string;
+}
+
+export type ScreenshotManifest = Record<string, ScreenshotManifestEntry>;
+
 // The durable served URL for one capture of one instance: the platform's
 // only public screenshot URL form. A re-capture changes what this URL
 // serves, never the URL itself.
