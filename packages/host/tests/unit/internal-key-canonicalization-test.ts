@@ -5,14 +5,19 @@ import { VirtualNetwork, internalKeyFor, rri } from '@cardstack/runtime-common';
 const REAL_BASE = 'https://realms.example.test/base/';
 const ALIAS_BASE = 'https://cardstack.com/base/';
 const REAL_CATALOG = 'https://realms.example.test/catalog/';
+// A realm reached by a URL mapping with no prefix of its own, the shape the
+// test realm takes in environment mode.
+const VIRTUAL_TEST = 'https://localhost:4202/test/';
+const REAL_TEST = 'https://realm-test.example.test/test/';
 
-// The definition store is keyed by `internalKeyFor`, and the lookup does a
-// single keyed read. That is only correct because `internalKeyFor` is a
-// canonicalization rather than a formatting choice: it resolves the module
+// The definition store is keyed by `internalKeyFor`, which resolves a module
 // reference to a real URL and unresolves that back through the registered realm
-// mappings, so every spelling of one module reduces to one string. If that ever
-// stopped holding, a definition would be stored under a key no lookup produces
-// — a miss that surfaces as "definition not found" rather than as a form bug.
+// mappings. Whether that collapses every spelling of one module into one key
+// depends on the realm having a prefix mapping, and `definitionEntryFor` reads
+// under two keys precisely because some realms do not have one. These tests pin
+// both halves of that, because the difference decides whether a definition can
+// be stored under a key no lookup produces — a miss that surfaces as
+// "definition not found" rather than as anything recognisable as a form bug.
 module('Unit | internalKeyFor canonicalization', function () {
   function configuredNetwork() {
     let virtualNetwork = new VirtualNetwork();
@@ -85,35 +90,60 @@ module('Unit | internalKeyFor canonicalization', function () {
     );
   });
 
-  test('an unregistered realm does not canonicalize, which is why the mappings matter', function (assert) {
-    // The negative case, recorded because it is the reason the prefix set has
-    // to be the same in every process: without the prefix mapping the alias and
-    // served spellings stay distinct, and neither becomes the prefix-form key
-    // that a configured process stores under.
+  test('a realm mapped by URL alone keys its two spellings separately', function (assert) {
+    // The reason `definitionEntryFor` reads under two keys. The test realm in
+    // environment mode has this exact shape — a URL mapping onto a
+    // per-environment host and no prefix of its own — so a definition stored
+    // under one spelling is invisible to a lookup holding the other.
     let virtualNetwork = new VirtualNetwork();
-    virtualNetwork.addURLMapping(new URL(ALIAS_BASE), new URL(REAL_BASE));
+    virtualNetwork.addURLMapping(new URL(VIRTUAL_TEST), new URL(REAL_TEST));
 
-    let aliasKey = internalKeyFor(
-      { module: rri(`${ALIAS_BASE}card-api`), name: 'CardDef' },
+    let servedKey = internalKeyFor(
+      { module: rri(`${REAL_TEST}captain`), name: 'Captain' },
       undefined,
       virtualNetwork,
     );
-    let servedKey = internalKeyFor(
-      { module: rri(`${REAL_BASE}card-api`), name: 'CardDef' },
+    let virtualKey = internalKeyFor(
+      { module: rri(`${VIRTUAL_TEST}captain`), name: 'Captain' },
       undefined,
       virtualNetwork,
     );
 
     assert.notStrictEqual(
-      aliasKey,
       servedKey,
-      'the two spellings split when no realm mapping covers them',
+      virtualKey,
+      'without a prefix to fold onto, each URL spelling keys its own entry',
     );
-    for (let key of [aliasKey, servedKey]) {
-      assert.false(
-        key.startsWith('@cardstack/base/'),
-        `${key} is not the prefix-form key a configured process would use`,
-      );
-    }
+    assert.strictEqual(
+      servedKey,
+      `${REAL_TEST}captain/Captain`,
+      'the served spelling keys under the served URL',
+    );
+    assert.strictEqual(
+      virtualKey,
+      `${VIRTUAL_TEST}captain/Captain`,
+      'and the virtual spelling under the virtual URL',
+    );
+  });
+
+  test('giving that realm a prefix collapses both spellings', function (assert) {
+    // And the condition under which the second lookup becomes redundant.
+    let virtualNetwork = new VirtualNetwork();
+    virtualNetwork.addURLMapping(new URL(VIRTUAL_TEST), new URL(REAL_TEST));
+    virtualNetwork.addRealmMapping('@test/realm/', REAL_TEST);
+
+    let keys = [`${REAL_TEST}captain`, `${VIRTUAL_TEST}captain`].map((module) =>
+      internalKeyFor(
+        { module: rri(module), name: 'Captain' },
+        undefined,
+        virtualNetwork,
+      ),
+    );
+
+    assert.deepEqual(
+      keys,
+      ['@test/realm/captain/Captain', '@test/realm/captain/Captain'],
+      'a prefix mapping is what makes the key independent of the spelling',
+    );
   });
 });

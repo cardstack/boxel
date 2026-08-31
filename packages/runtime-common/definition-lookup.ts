@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index.ts';
-import { rri } from './realm-identifiers.ts';
+import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
@@ -457,7 +457,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        let entry = this.definitionEntryFor(cached.definitions, codeRef);
+        let entry = this.definitionEntryFor(
+          cached.definitions,
+          codeRef,
+          canonicalModuleURL,
+        );
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -860,24 +864,40 @@ export class CachingDefinitionLookup implements DefinitionLookup {
     });
   }
 
-  // The definition store keys entries by internalKeyFor. Across virtual
-  // networks the registered-prefix form and the canonical fetchable (alias)
-  // form do not always unresolve to the same key, and a given module may be
-  // stored under either. Try the prefix form (from the original codeRef)
-  // first, then the canonical form.
+  // Two keys, because `internalKeyFor` is a total canonicalization only for a
+  // realm that has a registered prefix mapping. For one that does, the prefix
+  // identifier, the url-mapped alias and the served URL all reduce to the same
+  // prefix-form string and the second lookup recomputes the first key.
+  //
+  // A realm reached through a URL mapping alone does not reduce: `unresolveURL`
+  // finds no prefix to fold onto, so the key keeps whichever URL spelling it
+  // arrived in, and `canonicalURL` deliberately produces the other one — it
+  // maps real back to virtual for fetching. The two spellings therefore key
+  // separate entries, and which one a module is stored under depends on the
+  // spelling its writer held. The test realm in environment mode is exactly
+  // this shape: mapped from `https://localhost:4202/test/` to a per-environment
+  // host, with no prefix of its own.
+  //
+  // So this is not a cross-process concern — both keys come from one
+  // VirtualNetwork. It is a same-network, two-URL-spellings concern, and it
+  // stops being needed when every realm on this path has a prefix mapping (or
+  // the key becomes a total fold over url-mapped aliases).
   private definitionEntryFor(
     definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
     codeRef: ResolvedCodeRef,
+    canonicalModuleURL: string,
   ): ModuleDefinitionResult | ErrorEntry | undefined {
-    // One key, because `internalKeyFor` is already a canonicalization: it
-    // resolves the module reference to a real URL and then unresolves that back
-    // through the registered realm mappings, so a prefix identifier, a
-    // url-mapped alias and the served URL all reduce to the same string. A
-    // second lookup under the fetchable spelling would recompute the identical
-    // key.
-    return definitions[
-      internalKeyFor(codeRef, undefined, this.#virtualNetwork)
-    ];
+    let entry =
+      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
+    if (!entry && canonicalModuleURL !== codeRef.module) {
+      let canonicalModuleId = internalKeyFor(
+        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
+        undefined,
+        this.#virtualNetwork,
+      );
+      entry = definitions[canonicalModuleId];
+    }
+    return entry;
   }
 
   private async lookupDefinitionWithContext(
@@ -928,7 +948,11 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    let defOrError = this.definitionEntryFor(moduleEntry.definitions, codeRef);
+    let defOrError = this.definitionEntryFor(
+      moduleEntry.definitions,
+      codeRef,
+      canonicalModuleURL,
+    );
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
