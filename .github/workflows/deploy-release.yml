@@ -12,6 +12,10 @@ name: Deploy release phase [boxel]
 # Every input is a :<git-sha> image reference produced by the caller's build
 # phase; the host bundle arrives instead as the run-scoped `host-dist`
 # artifact that build-host uploaded.
+#
+# manual-deploy.yml calls this workflow, and ci.yaml calls that one on the
+# auto-deploy path, so the host and ECS deploys nested below sit four levels
+# down — GitHub allows ten.
 
 on:
   workflow_call:
@@ -234,11 +238,12 @@ jobs:
   # Destructive ("removal") migrations — column/table drops and renames, held in
   # packages/postgres/migrations-removal/ — run HERE, after deploy-realm-server
   # has reached stability. `wait-for-service-stability: true` on that job means
-  # the previous realm-server task set has fully drained (and, via its
-  # post-deploy-worker dependency, the previous worker task set too), so no task
-  # on the old code revision is left to query a column this phase drops. That is
-  # the whole point: running drops before the old tasks drain is what takes the
-  # published realms down (old code 500s on `column i.<x> does not exist`).
+  # the previous realm-server task set has fully drained, and its
+  # post-deploy-worker dependency has given the previous worker task set a
+  # fixed settle window to do the same, so no task on the old code revision is
+  # expected to be left querying a column this phase drops. That is the whole
+  # point: running drops before the old tasks drain is what takes the published
+  # realms down (old code 500s on `column i.<x> does not exist`).
   #
   # A failure here is non-fatal to serving: the new code, by definition, no
   # longer reads the removed columns, so it is already live and healthy — the

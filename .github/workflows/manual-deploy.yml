@@ -37,16 +37,30 @@ permissions:
 # services. As one job it is all-or-nothing — a superseded run is dropped
 # while still pending, before it has changed anything.
 #
-# Newest-commit-wins survives without a workflow-level cancel:
+# What the two phases enforce between them is entry order — of the runs
+# contending for a group, the one that entered later is the one that lands:
 #
-#   * A run still building when a newer run starts loses its builds to the
-#     build-phase cancel, and the release job needs every build, so it never
-#     starts.
-#   * A run already in the release phase took the group first, so a newer
-#     run waits and lands after it.
+#   * A run still building when another enters the build groups loses its
+#     builds to the build-phase cancel, and the release job needs every
+#     build, so its release phase never starts.
+#   * A run already inside the release phase holds that group, so the next
+#     entrant waits and lands after it.
 #   * GitHub keeps at most one pending job per group and cancels the older
-#     one, so a mid-train run drops out of the queue while the newest stays
-#     in it — and because it was still pending, it flipped nothing.
+#     pending one, so a run that queues and is then overtaken drops out —
+#     and because it was still pending, it flipped nothing.
+#
+# Entry order follows commit order in the ordinary case: a run reaches the
+# build groups shortly after its merge, while any earlier run is still
+# holding them. It is not guaranteed to. ci.yaml's deploy job waits on four
+# test suites, so a slow suite, a retried job, or a re-run of an older run
+# from the Actions UI can put an older commit into a group second — and then
+# the older commit is the one that wins it, either cancelling the newer
+# run's builds or completing a full deploy after the newer run's. The
+# workflow-level cancel this replaced had the same blind spot. Closing it
+# would take a check against the revision actually deployed, not against
+# main's tip: bailing out whenever `github.sha` is behind main would starve
+# staging through a merge train, because nearly every run is behind main by
+# the time its builds finish.
 #
 # Staging (auto-deployed on every merge to main) therefore takes a per-run
 # workflow-level group: runs neither cancel nor queue as a whole, and all
@@ -227,6 +241,13 @@ jobs:
   # concurrency group for its full duration. `needs` lists every build so the
   # phase cannot start on a partial set of images — and so a run whose build
   # was superseded never reaches it.
+  #
+  # Waiting for all eight trades some deploy latency for that atomicity. It
+  # is usually free: the prerender image is normally the slowest build and it
+  # sits at the head of the release chain, so the phase would have waited for
+  # it anyway. When some other image is slower — a cold layer cache — the
+  # prerender chain, and with it the critical path through worker and realm
+  # server, starts that much later.
   release:
     name: Release
     needs:
