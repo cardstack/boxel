@@ -225,6 +225,82 @@ module('Unit | declared screenshots', function (hooks) {
     );
   });
 
+  test('each edge × deviceScaleFactor must fit the physical-pixel cap', function (assert) {
+    // in-cap CSS height, but the default 2× scale puts it past the
+    // 16384-physical-px texture cap
+    class ImplicitScale extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        tall: { format: 'fitted', width: 300, height: 16384 },
+      };
+    }
+    assert.throws(
+      () => cardApi.getScreenshots(ImplicitScale),
+      /height × deviceScaleFactor must be <= 16384 physical pixels/,
+    );
+    class ExplicitScale extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        tall: {
+          format: 'fitted',
+          width: 300,
+          height: 8192,
+          deviceScaleFactor: 3,
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getScreenshots(ExplicitScale),
+      /height × deviceScaleFactor must be <= 16384 physical pixels/,
+    );
+    // at the cap exactly, both implicitly and explicitly scaled
+    class AtCap extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        implicit: { format: 'fitted', width: 300, height: 8192 },
+        explicit: {
+          format: 'fitted',
+          width: 300,
+          height: 16384,
+          deviceScaleFactor: 1,
+        },
+      };
+    }
+    assert.deepEqual(Object.keys(cardApi.getScreenshots(AtCap)).sort(), [
+      'explicit',
+      'implicit',
+    ]);
+  });
+
+  test("keyBy 'file-content' is refused off FileDef chains", function (assert) {
+    class Bad extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getScreenshots(Bad),
+      /keyBy 'file-content' requires a file-backed def/,
+    );
+    class Doc extends cardApi.FileDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          keyBy: 'file-content',
+        },
+      };
+    }
+    assert.strictEqual(
+      cardApi.getScreenshots(Doc).shot.keyBy,
+      'file-content',
+      'legal on a FileDef subclass',
+    );
+  });
+
   test('keyBy and type are constrained to their rosters', function (assert) {
     class BadKeyBy extends cardApi.CardDef {
       static screenshots: Record<string, any> = {

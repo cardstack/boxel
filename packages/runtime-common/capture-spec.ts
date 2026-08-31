@@ -110,6 +110,13 @@ export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
 export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
 // A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
 export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
+// The scale a *declared* screenshot (a `static screenshots` entry) captures
+// at when the author writes no deviceScaleFactor — retina-quality output by
+// default. Distinct from the wire-spec identity, where an absent
+// deviceScaleFactor means 1: declaration readers and the capture pass must
+// share this value so a declaration that validates clean cannot exceed the
+// physical-edge cap once the default is applied.
+export const SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR = 2;
 // The Chromium single-texture cap the viewport bounds are derived from,
 // enforced on *physical* pixels: CSS dimension × deviceScaleFactor. The CSS
 // caps alone would admit e.g. a 16384-tall viewport at 3× (~49k physical px).

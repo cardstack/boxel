@@ -112,6 +112,8 @@ import {
   SCREENSHOT_MAX_VIEWPORT_WIDTH,
   SCREENSHOT_MAX_VIEWPORT_HEIGHT,
   SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
+  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
   type DeclaredScreenshotFormat,
 } from '@cardstack/runtime-common';
 import {
@@ -2772,7 +2774,9 @@ export type ScreenshotSpec = {
   // CSS px of the capture box (the fitted envelope).
   width: number;
   height: number;
-  // Output px = size × deviceScaleFactor. Default 2.
+  // Output px = size × deviceScaleFactor. Defaults to
+  // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
+  // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
   // 'transparent' or any CSS color. Default 'white'.
   background?: string;
@@ -2782,6 +2786,8 @@ export type ScreenshotSpec = {
   // What invalidates the capture: the instance's index generation (any
   // edit), or — for file-backed defs — the file's content hash, so a
   // metadata-only edit skips recapture. Default 'generation'.
+  // 'file-content' is only legal on FileDef chains: a CardDef has no file
+  // bytes to key by, so getScreenshots refuses it there.
   keyBy?: 'generation' | 'file-content';
   // Encoded image type. Default 'png'.
   type?: 'png' | 'jpeg' | 'webp';
@@ -2882,6 +2888,24 @@ function assertValidScreenshotSpec(
       );
     }
   }
+  // The Chromium single-texture cap is on physical pixels, so the CSS bounds
+  // above are necessary but not sufficient: compose each edge with the scale
+  // the capture will actually apply — the declared one, or the default when
+  // the author writes none.
+  let effectiveScale =
+    typeof entry.deviceScaleFactor === 'number'
+      ? entry.deviceScaleFactor
+      : SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR;
+  for (let field of ['width', 'height'] as const) {
+    if (
+      (entry[field] as number) * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      throw new Error(
+        `${prefix}: ${field} × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR})`,
+      );
+    }
+  }
   if (
     entry.background !== undefined &&
     (typeof entry.background !== 'string' || entry.background.length === 0)
@@ -2954,9 +2978,23 @@ export function getScreenshots(
     current = Object.getPrototypeOf(current);
   }
   let merged: Record<string, ScreenshotSpec> = {};
+  // keyBy 'file-content' needs file bytes to key by, so it is only legal
+  // when the class being read is file-backed. Checked against the merge
+  // target rather than the declaring owner — a FileDef chain can never feed
+  // a CardDef chain, so any 'file-content' entry reachable from a CardDef
+  // was declared on that CardDef chain itself.
+  let isFileBacked =
+    cardOrFileClass === FileDef || cardOrFileClass.prototype instanceof FileDef;
   for (let { owner, declarations } of levels) {
     for (let [name, spec] of Object.entries(declarations)) {
       assertValidScreenshotSpec(owner, name, spec);
+      if (spec.keyBy === 'file-content' && !isFileBacked) {
+        throw new Error(
+          `screenshot "${name}" on ${screenshotOwnerName(
+            owner,
+          )}: keyBy 'file-content' requires a file-backed def (FileDef or a subclass); a card has no file content to key by — use 'generation' or omit keyBy`,
+        );
+      }
       merged[name] = spec;
     }
   }
