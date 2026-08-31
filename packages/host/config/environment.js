@@ -225,10 +225,23 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {};
 
-    // Catalog realms are not available in test environment
-    ENV.resolvedCatalogRealmURL = undefined;
-    // Neither is the OpenRouter catalog realm; tests that exercise the model
-    // cost-tier lookup point this at their own test realm explicitly.
+    // The catalog realm follows SKIP_CATALOG, the same signal the realm-server
+    // gates START_CATALOG on, so the two processes register the same set of
+    // realm prefixes. Nulling it unconditionally here made a host built for
+    // tests disagree with a realm-server that had started the catalog, and
+    // `internalKeyFor` resolves through each process's own prefix set — so the
+    // definitions cache one writes is keyed differently from what the other
+    // reads. Host CI sets SKIP_CATALOG=true, so this is already undefined
+    // there; what changes is that it is no longer undefined when the catalog
+    // realm is in fact running.
+    if (skipCatalog) {
+      ENV.resolvedCatalogRealmURL = undefined;
+    }
+    // The OpenRouter realm stays unconditionally absent: tests that exercise
+    // the model cost-tier lookup point this at their own test realm
+    // explicitly, so a real mapping would be overridden anyway. This is test
+    // isolation rather than a mirror of a realm-server switch, which is why it
+    // is not gated the way the catalog above is.
     ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
