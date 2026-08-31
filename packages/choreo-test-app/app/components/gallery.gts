@@ -324,6 +324,19 @@ export class Gallery extends Component {
         <Presence
           @items={{this.demos}}
           @key={{demoKey}}
+          {{! popLayout, so the grid closes up WHILE the leavers fade rather
+              than after them. Under the default mode a filter reads as three
+              separate events — a fade, a pause, then the survivors moving —
+              because nothing may move until the last exit has finished.
+
+              This was unusable until a parked run learned to hand its leavers
+              back (see `park` in run.ts). Rack's score is a gate waiting on a
+              slider, so filtering its card away parked a run holding all
+              sixty-one of its participants on a clock that never moved — and
+              <Presence> releases its leavers as a batch, so those sixty-one
+              kept all forty cards in the DOM, lifted out of flow, invisible,
+              and still taking the clicks meant for the cards you could see. }}
+          @mode="popLayout"
           {{! sync, not popLayout: a popLayout leaver here never reports its
               exit complete, so the card stays in the DOM at opacity 0 and
               coming back leaves it stuck there. }}

@@ -131,6 +131,17 @@ export interface Car {
    * than square on to it.
    */
   pinned: boolean;
+  /**
+   * The autopilot's hands, and how steady they are.
+   *
+   * `seed` is a plain LCG and `wander` the smoothed value it drives. They live
+   * on the car rather than in the driver so that a run is REPRODUCIBLE: the
+   * whole point of the demo is that a tune can be judged by driving it, and a
+   * bot that takes a different line every time cannot be compared against
+   * itself. Two cars stepped from the same seed wander identically; the suite
+   * depends on that, and so does anyone A/B-ing a dial.
+   */
+  seed: number;
   /** true once the tyres have let go, and it STAYS true down to `release`×0.55 */
   sliding: boolean;
   /** 0..1 — how much of the car's motion is sideways */
@@ -149,6 +160,8 @@ export interface Car {
    * tune is drivable, and it is not something you can see from a lap time.
    */
   walled: boolean;
+  /** the current steering wobble, -1..1 — see `seed` */
+  wander: number;
   x: number;
   y: number;
   /** the chassis, lagging the nose. Drawn; never simulated against */
@@ -185,8 +198,10 @@ export function makeCar(x: number, y: number, heading = 0): Car {
     braking: false,
     heading,
     pinned: false,
+    seed: 0x9e3779b9,
     sliding: false,
     walled: false,
+    wander: 0,
     slip: 0,
     steer: 0,
     steerV: 0,
@@ -657,6 +672,13 @@ export interface Driver {
  * This one gets 11, 12, 13 and 18 laps, at a mean 508 px/s, with 65% of the lap
  * over the traction threshold.
  */
+/** how much of full lock the bot's hands wander by — see `autopilot` */
+const WANDER = 0.02;
+/** the one-pole coefficient: about a third of a second to change its mind */
+const WANDER_A = 0.06;
+/** and the standard deviation that follows from it, sqrt(A/(2-A) · 1/3) */
+const WANDER_SD = Math.sqrt((WANDER_A / (2 - WANDER_A)) * (1 / 3));
+
 export const DRIVER: Driver = {
   corner: 150,
   counter: 1.3,
@@ -770,6 +792,32 @@ export function autopilot(
   const limit = clamp(able, d0.corner, d0.top);
   const over = vf - limit;
 
+  /**
+   * THE HANDS, which are not perfectly steady.
+   *
+   * A pure controller drives the same corner the same way every lap, and the
+   * stage is duller for it: the car settles into one groove and every lap after
+   * the first tells you nothing new. Two percent of lock is far too little to
+   * cost it a gate and just enough that the line breathes — it clips an apex a
+   * little differently each time round, catches a slide it would have driven
+   * straight through, and generally behaves like somebody is holding the wheel.
+   *
+   * LOW FREQUENCY, deliberately. White noise at 120Hz is not a wobble, it is a
+   * buzz, and the steering spring would filter most of it out anyway — what is
+   * left reads as a rattle in the model rather than a person. Passing it
+   * through a one-pole filter first gives a wander that takes about a third of
+   * a second to change its mind, which is roughly how often a driver does.
+   *
+   * The gain is derived, not dialled. A one-pole filter at `WANDER_A` on noise
+   * uniform over ±1 settles to a standard deviation of
+   * `sqrt(A/(2-A) · 1/3)` — 0.1015 here — so dividing by three of those puts
+   * the usual excursion inside ±1, and the clamp catches the tail.
+   */
+  car.seed = (car.seed * 1664525 + 1013904223) >>> 0;
+  const white = (car.seed / 0x1_0000_0000) * 2 - 1;
+  car.wander += (white - car.wander) * WANDER_A;
+  const hands = clamp(car.wander / (3 * WANDER_SD), -1, 1) * WANDER;
+
   return {
     // eased rather than bang-bang: a car that snaps between full brakes and
     // full throttle at a threshold does not look like anything is driving it
@@ -782,7 +830,7 @@ export function autopilot(
      */
     brake: clamp(over / 110, 0, 1) * (1 - panic),
     steer: clamp(
-      err * d0.p * (1 - panic) + slip * (d0.counter + panic * 0.7),
+      err * d0.p * (1 - panic) + slip * (d0.counter + panic * 0.7) + hands,
       -1,
       1
     ),
@@ -838,13 +886,18 @@ export const CHARACTERS: Character[] = [
      * power went up and 12 could not hold it: the same tune that lapped
      * cleanly at 450 managed one lap in ninety seconds at 520, spinning at
      * every corner. More engine needs more damping, not less grip; dropping the
-     * power back would have been the easy fix and the wrong one, since a drift
-     * car with no power cannot get the tail out in the first place.
+     * power back to fix a spin would have been the easy answer and the wrong
+     * one, since a drift car with no power cannot get the tail out at all.
+     *
+     * The 490 it now runs is a later and different decision — a car asked to be
+     * a little less brutal to drive, with the damping that held 520 left where
+     * it is. It keeps the tail out; it just does not arrive at the corner quite
+     * so far ahead of the driver.
      */
     values: {
       looseness: 0.6,
       'engine.drag': 1.1,
-      'engine.power': 520,
+      'engine.power': 490,
       'grip.bite': 10,
       'grip.release': 0.13,
       'steering.damping': 20,

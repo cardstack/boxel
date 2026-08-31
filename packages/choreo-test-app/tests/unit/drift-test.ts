@@ -9,6 +9,7 @@
  * numbers in the panel do what their labels say, and that the car can drift.
  */
 import { module, test } from 'qunit';
+import { TUNING } from 'test-app/components/examples/drift';
 import {
   applied,
   autopilot,
@@ -701,6 +702,52 @@ module('Unit | drift', function () {
     assert.ok(
       shot.x >= halfW - 0.001 && shot.x <= WORLD.w - halfW + 0.001,
       'and it is still clamped inside the track'
+    );
+  });
+});
+
+/**
+ * The panel's defaults and the Drifty character are ONE car, and nothing but
+ * this test says so.
+ *
+ * The stage loads from the dial config — `this.dial.values`, resolved from the
+ * first number of each tuple in TUNING. The shipped characters are buttons you
+ * press. So the two can drift apart silently, and when they do the car you get
+ * on arrival is one no preset describes and no test covers: every assertion in
+ * this file runs `fromCharacter`, so a suite that is entirely green can be
+ * green about a car nobody drives.
+ *
+ * That happened. Drifty's engine was taken from 520 to 490 in `lib/drift.ts`
+ * alone; the tests went on passing at 490 while the stage kept starting at 520,
+ * and the tuning note in CHARACTERS described a car you could only reach by
+ * clicking its own name.
+ */
+module('Unit | drift | the default car', function () {
+  test('the panel loads the Drifty character exactly', function (assert) {
+    const drifty = CHARACTERS[0]!;
+    assert.strictEqual(drifty.name, 'Drifty', 'Drifty is still the first');
+
+    /** the first entry of a dialkit tuple is the value the panel starts on */
+    const defaults: Record<string, number> = {};
+    const walk = (node: Record<string, unknown>, prefix: string) => {
+      for (const [key, value] of Object.entries(node)) {
+        if (key.startsWith('_')) {
+          continue;
+        }
+        const path = prefix ? `${prefix}.${key}` : key;
+        if (Array.isArray(value)) {
+          defaults[path] = value[0] as number;
+        } else if (typeof value === 'object' && value !== null) {
+          walk(value as Record<string, unknown>, path);
+        }
+      }
+    };
+    walk(TUNING as unknown as Record<string, unknown>, '');
+
+    assert.deepEqual(
+      defaults,
+      drifty.values as Record<string, number>,
+      'every dial default is the value Drifty ships'
     );
   });
 });

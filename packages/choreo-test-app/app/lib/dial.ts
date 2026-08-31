@@ -88,6 +88,8 @@ export class Dial<T extends DialConfig> {
   @tracked private revision = 0;
 
   private off: () => void;
+  private bumping = false;
+  private gone = false;
 
   constructor(
     private id: string,
@@ -99,8 +101,44 @@ export class Dial<T extends DialConfig> {
       persist: options.persist ?? true,
       retainOnUnmount: options.retain ?? true,
     });
+    /**
+     * DEFERRED, and this is the third property the header should have named.
+     *
+     * A store notification can arrive at ANY time, including part-way through
+     * a render — and the one that proves it is two panels sharing an id. The
+     * store is a singleton keyed by panel id, so mounting a second component
+     * on the same panel calls `registerPanel` during that component's
+     * construction, which is inside the render pass, and the store answers by
+     * notifying every existing subscriber. The FIRST component's listener then
+     * runs mid-render and writes `revision` — a value that render has already
+     * read. Glimmer calls that a backtracking re-render and throws.
+     *
+     * It is not hypothetical and it is not exotic: it is what happens when you
+     * click through from a demo's gallery tile to its own page. Both are alive
+     * at once for one pass, the panel is registered twice, and the tile's
+     * bridge scribbles on the render in progress. The page came up with its
+     * stage empty and no clue as to why, because the throw is swallowed as a
+     * render error a long way from here.
+     *
+     * A microtask is enough. Glimmer's render is synchronous, so anything
+     * queued during it runs after the pass has closed, and the bump lands as
+     * an ordinary invalidation on the next revalidation instead of a write
+     * into a transaction that is still open. Coalesced, because a `setAll` is
+     * one intention however many paths it touches, and the store is the source
+     * of truth in the meantime — nothing is lost by signalling a moment later,
+     * only by signalling in the middle of a read.
+     */
     this.off = DialStore.subscribe(id, () => {
-      this.revision += 1;
+      if (this.bumping || this.gone) {
+        return;
+      }
+      this.bumping = true;
+      queueMicrotask(() => {
+        this.bumping = false;
+        if (!this.gone) {
+          this.revision += 1;
+        }
+      });
     });
   }
 
@@ -203,6 +241,10 @@ export class Dial<T extends DialConfig> {
    * leaks.
    */
   teardown() {
+    // before `off`, so a bump already queued this microtask finds it and
+    // declines: writing tracked state on a destroyed component is the same
+    // class of mistake as writing it mid-render
+    this.gone = true;
     this.off();
   }
 }

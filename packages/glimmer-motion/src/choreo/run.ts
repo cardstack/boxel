@@ -128,6 +128,12 @@ interface RunOptions {
   cameraAim?: { x: number; y: number } | null;
   /** the element the camera transform drives (the region's scene wrapper) */
   cameraFrame?: HTMLElement;
+  /**
+   * Nothing in this region is staying — every participant it can see is a
+   * leaver. See the note in `park`: it decides whether a gate this run stops
+   * at is a gate anybody could still open.
+   */
+  doomed?: boolean;
   inherit?: Velocities;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
@@ -681,6 +687,47 @@ export class ChoreoRun implements Run {
     this.parkedAt = gate as GateMark & { opened: boolean };
     this.playing = false;
     this.stopTicking();
+    /**
+     * HAND BACK THE LEAVERS, but only when nobody is left to open the gate.
+     *
+     * `pending` is removed sprites and nothing else — elements a <Presence>
+     * is holding in the document only because this run undertook to see them
+     * out. Parking stops the clock (above), so from here nothing advances:
+     * every row end still ahead of `master` is unreachable, `onSpriteDone`
+     * can never fire for it, and `finished` never resolves. The Presence
+     * waits on a beat that is not coming.
+     *
+     * `doomed` is what separates that from an ordinary build, and the
+     * distinction is real rather than a hedge. A gated build parks with the
+     * same sprites pending and means it: the slide is still on screen, the
+     * click is still coming, and the leaver is meant to fly out when it
+     * arrives — releasing it there would make the item vanish instead, which
+     * is the animation the registration exists to protect. A region where
+     * every participant is leaving has no slide left to click on. Nothing
+     * stays, so nothing can ask, and the gate is waiting on an event that
+     * cannot happen.
+     *
+     * That is not hypothetical. Rack's score is a gate followed by one
+     * parallel over sixty-one tiles, held still until its slider asks — so
+     * filtering its card out of the gallery compiled a score that parked at
+     * t=0 with all sixty-one of its participants pending and a clock that
+     * never moved. Because <Presence> releases its leavers as a BATCH, those
+     * sixty-one held all forty cards leaving beside them: under the default
+     * mode the survivors never closed up, and under popLayout forty
+     * invisible cards stayed lifted over the grid taking clicks meant for
+     * the two you could see.
+     *
+     * A parked run is a STILL, in this file's own words — settled, not in
+     * flight. A still is not an exit animation, so there is nothing here to
+     * cut short. If the gate is ever opened the elements are simply gone,
+     * which is what leaving means.
+     */
+    if (this.options.doomed) {
+      for (const sprite of [...this.pending]) {
+        this.pending.delete(sprite);
+        this.options.onSpriteDone(sprite);
+      }
+    }
     // the engine's clock and this one drift by a frame: anything that ends
     // at or before the gate LANDS — a parked segment is complete, exactly
     // (§4.1's click-through rule, applied to the natural arrival too)

@@ -129,6 +129,15 @@ const BOARD = 5;
 /**
  * The panel, as dialkit reads it.
  *
+ * EVERY DEFAULT HERE IS DRIFTY'S. The first number in each tuple is what the
+ * stage loads with, and the shipped characters are things you PRESS — so if
+ * these two ever disagree, the car you drive on arrival is one that no preset
+ * describes and no test covers. That is not a hypothetical: reducing Drifty's
+ * engine in `lib/drift.ts` and not here left the suite validating 490 while
+ * the stage ran 520, and the tuning note in CHARACTERS describing a car you
+ * could only reach by clicking its own name. `drift-test.ts` pins the two
+ * together now.
+ *
  * Nested by construction, which is the reason this demo needed the panel to
  * grow folders: a macro on top, then the three pairs that make up a car, then
  * the engine. `_collapsed: true` is dialkit's own key for a folder that opens
@@ -160,12 +169,12 @@ const BOARD = 5;
  * once and spends the whole lap sideways. See CHARACTERS in `lib/drift.ts` for
  * why those two numbers in that combination are the entire recipe.
  */
-const TUNING = {
+export const TUNING = {
   looseness: [0.6, 0, 1, 0.02],
   engine: {
     _collapsed: true,
     drag: [1.1, 0.6, 2.2, 0.05],
-    power: [520, 200, 700, 10],
+    power: [490, 200, 700, 10],
   },
   grip: {
     _collapsed: true,
