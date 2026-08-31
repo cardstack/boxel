@@ -152,27 +152,14 @@ export default class RoomMessageTool extends Component<Signature> {
   };
 
   private scrollBottomIntoView = modifier((element: HTMLElement) => {
-    // Consume the toggle flag so the modifier re-runs when the code area is
-    // hidden, then clear the stamped inline height so the container collapses
-    // back to its header-only size. Without this, a container that mounted
-    // while expanded keeps its stamped height after "Hide Info" removes the
-    // editor, leaving an empty gap.
+    // Consume the toggle flag so this re-runs when the code area opens or
+    // closes. The code block sizes to its content on its own — the Monaco
+    // modifier sets the editor's height and CSS caps it — so there is no inline
+    // height to stamp or clear; collapsing the editor lets the block shrink
+    // back to its header. When the code opens, bring it into view.
     if (!this.isDisplayingCode) {
-      element.style.height = '';
       return;
     }
-    let editor = this.args.monacoSDK.editor
-      .getEditors()
-      .find((editor) => element.contains(editor.getContainerDomNode()));
-    let editorHeight = editor?.getContentHeight() ?? 0;
-    if (!editorHeight || editorHeight < 0) {
-      element.style.height = '';
-      return;
-    }
-    let heightOfOtherChildren = [...element.children]
-      .filter((childEl) => childEl !== editor?.getContainerDomNode())
-      .reduce((acc, childEl) => acc + (childEl as HTMLElement).offsetHeight, 0);
-    element.style.height = `${editorHeight + heightOfOtherChildren}px`; // max-height is constrained by CSS
     this.scrollIntoView(element.parentElement as HTMLElement);
   });
 
@@ -323,6 +310,7 @@ export default class RoomMessageTool extends Component<Signature> {
           data-test-tool-call-card-idle={{not
             (eq this.applyButtonState 'applying')
           }}
+          data-test-tool-code-block
           as |codeBlock|
         >
           <codeBlock.commandHeader
