@@ -57,13 +57,6 @@ interface QueryFieldState {
     message: string;
     status?: number;
   }>;
-  // Identity of the seed the owner's most recent document carried, and of the
-  // one the search resource is holding. Only an indexer-resolved umbrella gets
-  // a signature: a raw source document carries no authoritative answer, so it
-  // must never supersede one. The two together are what let a document fetched
-  // after the resource started hand it a fresher result set.
-  seedSignature?: string;
-  appliedSeedSignature?: string;
   searchResource?: StoreSearchResource;
   renderCycleBarrier?: Promise<void>;
   // The sentinel `surfaceSearchResourceErrorState` planted on the most
@@ -142,23 +135,6 @@ export function ensureQueryFieldSearchResource(
     log.debug(
       `ensureQueryFieldSearchResource: reusing existing resource from fieldState for field=${field.name}`,
     );
-    // A document fetched after the resource started carries this field resolved
-    // as of that read, which supersedes what the resource holds — its live
-    // subscription only refreshes on events it actually received. Handing the
-    // newer seed over costs nothing (the document already paid for the
-    // resolution) and is skipped entirely when the seed is the one already
-    // applied, which is the steady-state case on every re-read of a field.
-    let seedSignature = fieldState.seedSignature;
-    if (seedSignature && seedSignature !== fieldState.appliedSeedSignature) {
-      let seed = currentSeed(fieldState);
-      if (seed) {
-        log.info(
-          `ensureQueryFieldSearchResource: applying refreshed seed for field=${field.name}; count=${seed.cards.length}`,
-        );
-        fieldState.appliedSeedSignature = seedSignature;
-        searchResource.reseed?.(seed);
-      }
-    }
     surfaceSearchResourceErrorState(
       fieldState,
       instance,
@@ -221,7 +197,6 @@ export function ensureQueryFieldSearchResource(
     },
   );
   fieldState.searchResource = searchResource;
-  fieldState.appliedSeedSignature = fieldState.seedSignature;
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
@@ -625,38 +600,6 @@ export function captureQueryFieldSeedData(
     ? parseRealmsParam(new URL(fieldState.seedSearchURL))
     : [];
   fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
-  fieldState.seedSignature = seedSignatureFor(fieldState);
-}
-
-// The identity of an authoritative seed: the query the indexer resolved, plus
-// the result set it resolved to. An unauthoritative seed has none, so it can
-// never be mistaken for a fresher answer than the one a resource already holds.
-function seedSignatureFor(fieldState: QueryFieldState): string | undefined {
-  if (!fieldState.seedSearchURL) {
-    return undefined;
-  }
-  let ids =
-    fieldState.seedCardURLs ??
-    (fieldState.seedRecords ?? [])
-      .map((card) => card.id)
-      .filter((id): id is string => Boolean(id));
-  return `${fieldState.seedSearchURL}\n${ids.join(',')}`;
-}
-
-// The seed the owner's most recent document produced, in the shape the search
-// resource consumes.
-function currentSeed(fieldState: QueryFieldState) {
-  let seedRecords = fieldState.seedRecords;
-  if (!seedRecords) {
-    return undefined;
-  }
-  return {
-    cards: seedRecords,
-    searchURL: fieldState.seedSearchURL ?? undefined,
-    realms: fieldState.seedRealms,
-    queryErrors: fieldState.seedErrors,
-    cardURLs: fieldState.seedCardURLs,
-  };
 }
 
 function resolveQueryAndRealm(

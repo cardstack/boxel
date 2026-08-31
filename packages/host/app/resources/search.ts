@@ -570,25 +570,6 @@ export class SearchResource<
     return canonicalQuerySignature(query, this.network.virtualNetwork);
   }
 
-  // Apply a seed to a resource that is already running. A newly fetched
-  // document for the owner carries this field resolved as of that read, which
-  // supersedes what the resource holds: its live subscription only refreshes on
-  // events it actually received, so a session that missed them (offline, a
-  // dropped subscription, a tab resumed after a gap) is behind until something
-  // hands it a fresher answer. Suppressing the search the same way the initial
-  // seed does keeps this free — the document already paid for the resolution.
-  reseed(seed: NonNullable<Args<T>['named']['seed']>): void {
-    this.trackStoreLoad(this.applySeed.perform(seed), 'seed');
-    let hasQueryErrors = seed.queryErrors && seed.queryErrors.length > 0;
-    if (seed.searchURL && !hasQueryErrors) {
-      let { query: seedQuery } = parseSearchURL(seed.searchURL);
-      this.#previousQueryString = this.querySignature(seedQuery);
-    }
-    if (seed.realms) {
-      this.#previousRealms = seed.realms;
-    }
-  }
-
   get isLoading() {
     return this.search.isRunning;
   }

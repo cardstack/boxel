@@ -77,9 +77,6 @@ module('Integration | query-field relationship status', function (hooks) {
         'test-cards.gts': { Person, Host },
         'Person/one.json': new Person({ name: 'Anchor' }),
         'Person/two.json': new Person({ name: 'Anchor' }),
-        // Deliberately outside the query. A live search can never return this
-        // card, so its presence in the field is proof a seed put it there.
-        'Person/three.json': new Person({ name: 'Different' }),
         'Host/anchor.json': new Host({ cardTitle: 'Anchor' }),
       },
     });
@@ -171,65 +168,6 @@ module('Integration | query-field relationship status', function (hooks) {
       deferred.membership?.length,
       2,
       'and it carries the same membership as its eager twin',
-    );
-  });
-
-  test('a document fetched after the field resolved hands it the fresher result set', async function (this: RenderingTestContext, assert) {
-    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
-    let network = getService('network');
-    let host = await loadHost();
-
-    assert.strictEqual(
-      getRelationshipMembershipState(host, 'matches').membership?.length,
-      2,
-      'the field resolves to the two cards the query matches',
-    );
-
-    // Start from the document the realm actually serves — the server resolves
-    // query fields at read time, so this carries `matches` already resolved —
-    // and splice in a third member. The spliced card claims a name the query
-    // matches, while the copy the realm indexed does not, so a search can never
-    // return it: the field can only hold it if this document put it there.
-    // (It has to claim a matching name because the resource reconciles its
-    // result set against the filter and drops rows that fail it.)
-    let asJSON = async (url: string) =>
-      await (
-        await network.authedFetch(url, {
-          headers: { Accept: 'application/vnd.card+json' },
-        })
-      ).json();
-    let hostDoc = await asJSON(HOST_URL);
-
-    // Clone a member the document already carries and repoint it at the third
-    // card, so the spliced entry and its relationship reference are spelled the
-    // way this document spells every other one.
-    let template = hostDoc.included.find((resource: { id: string }) =>
-      resource.id.endsWith('Person/one'),
-    );
-    let spliced = JSON.parse(JSON.stringify(template));
-    spliced.id = template.id.replace('Person/one', 'Person/three');
-    hostDoc.included.push(spliced);
-    hostDoc.data.relationships.matches.data.push({
-      type: 'card',
-      id: spliced.id,
-    });
-
-    await updateFromSerialized(host as any, hostDoc);
-    await settled();
-
-    let matches = getRelationshipMembershipState(host, 'matches');
-    assert.strictEqual(
-      matches.membership?.length,
-      3,
-      'the newer document supersedes the result set the resource was holding',
-    );
-    assert.true(
-      matches.membership?.some(
-        (member) =>
-          member.kind === 'present' &&
-          member.reference.endsWith('Person/three'),
-      ),
-      'including the card no live search for this query could return',
     );
   });
 });

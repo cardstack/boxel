@@ -485,10 +485,6 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
-  // Hand a resource that is already running a seed from a document fetched
-  // since it started. Absent on stores whose resources hold no state worth
-  // superseding.
-  reseed?(seed: NonNullable<GetSearchResourceFuncOpts['seed']>): void;
 }
 
 export type GetSearchResourceFuncOpts = {
