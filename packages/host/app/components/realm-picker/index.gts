@@ -4,10 +4,14 @@ import { cached } from '@glimmer/tracking';
 
 import { Picker, type PickerOption } from '@cardstack/boxel-ui/components';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { realmIdentifierSegments } from '../../lib/realm-utils';
+import {
+  realmIdentifierSegments,
+  resolvedRealmURLHref,
+} from '../../lib/realm-utils';
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 export interface RealmFilter {
@@ -30,6 +34,7 @@ interface Signature {
 }
 
 export default class RealmPicker extends Component<Signature> {
+  @service declare private network: NetworkService;
   @service declare realm: RealmService;
   @service declare realmServer: RealmServerService;
 
@@ -63,14 +68,21 @@ export default class RealmPicker extends Component<Signature> {
   }
 
   get realmOptions(): PickerOption[] {
-    const urls = this.realmServer.availableRealmIdentifiers;
+    const identifiers = this.realmServer.availableRealmIdentifiers;
     const options: PickerOption[] = [this.selectAllOption];
-    for (const realmURL of urls) {
-      const info = this.realm.info(realmURL);
-      const label = info?.name ?? this.realmDisplayNameFromURL(realmURL);
+    for (const identifier of identifiers) {
+      const info = this.realm.info(identifier);
+      const label = info?.name ?? this.realmDisplayNameFromURL(identifier);
       const icon = info?.iconURL ?? undefined;
       options.push({
-        id: realmURL,
+        // Minted resolved, because an option id has to survive two things a
+        // realm identifier does not: `Picker` decides which option is selected
+        // by comparing ids against `pickerSelected`, which mints its own from
+        // `URL.href`, and `onChange` parses the id back into a `URL`. Both need
+        // the two ends to spell a realm the same way, and only one of the two
+        // ends gets to choose. `PickerOption.id` is a plain string, so nothing
+        // downstream can tell that a prefix ever arrived.
+        id: resolvedRealmURLHref(this.network.virtualNetwork, identifier),
         icon,
         label,
         type: 'option',

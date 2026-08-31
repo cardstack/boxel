@@ -55,6 +55,32 @@ export function resolveCardRealmUrl(
 }
 
 /**
+ * A realm identifier as a URL href, whichever form it arrives in.
+ *
+ * `virtualNetwork.toURL` already resolves a registered prefix and parses a URL
+ * form unchanged, so it covers both spellings on its own. What it does not do
+ * is tolerate an identifier that is neither — an unregistered prefix, a bare
+ * local id — where it throws. The callers here are display and lookup paths
+ * that must not fail a render over an identifier they cannot place, so an
+ * unresolvable identifier comes back untouched and the caller's existing
+ * handling for an unplaceable realm applies.
+ *
+ * @example
+ * // with '@cardstack/base/' mapped to 'https://realms.example.com/base/'
+ * resolvedRealmURLHref(vn, '@cardstack/base/')  // 'https://realms.example.com/base/'
+ * resolvedRealmURLHref(vn, 'https://x.test/r/') // 'https://x.test/r/'
+ * resolvedRealmURLHref(vn, '@unmapped/thing/')  // '@unmapped/thing/'
+ */
+export function resolvedRealmURLHref(
+  virtualNetwork: VirtualNetwork,
+  realmIdentifier: string,
+): string {
+  return virtualNetwork.isRegisteredPrefix(realmIdentifier)
+    ? virtualNetwork.toURL(realmIdentifier).href
+    : realmIdentifier;
+}
+
+/**
  * The segments that *name* a realm, in whichever form its identifier is
  * expressed. For naming a realm — a label, a heading — not for locating it.
  *
