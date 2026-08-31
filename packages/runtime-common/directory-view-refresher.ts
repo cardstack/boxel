@@ -23,6 +23,19 @@ import type { LocalPath } from './paths.ts';
 // write, so it needs one that starts later). When the pending listing starts
 // it becomes the running one, so a request arriving during it can queue a
 // fresh follow-up in turn.
+//
+// Budget: a single-path notification costs one listing per ancestor (realm
+// root included) on every instance with the realm mounted — the emitting
+// instance receives its own NOTIFY too. That is deliberate: realm trees are
+// shallow, bursts coalesce per directory, and the simpler shape is easier to
+// reason about than walking up only when the written name is missing from its
+// parent's entries.
+//
+// Containment: one ancestor failing does not stop the rest of the chain —
+// the immediate parent is the listing that matters, and the realm root (first
+// in the chain, always present) is the one least worth dying for. A listing
+// that never settles is timed out so it stops occupying the per-directory
+// slot; the kernel's own cache TTL remains the backstop either way.
 interface DirectoryListing {
   running: Promise<void>;
   // Requested but not yet started; becomes `running` when it starts.
@@ -33,14 +46,30 @@ export class DirectoryViewRefresher {
   #listings = new Map<LocalPath, DirectoryListing>();
 
   #listDirectory: (directory: LocalPath) => Promise<void>;
+  #timeoutMs: number;
 
-  constructor(listDirectory: (directory: LocalPath) => Promise<void>) {
+  constructor(
+    listDirectory: (directory: LocalPath) => Promise<void>,
+    opts?: { timeoutMs?: number },
+  ) {
     this.#listDirectory = listDirectory;
+    this.#timeoutMs = opts?.timeoutMs ?? 15_000;
   }
 
   async refresh(path: LocalPath): Promise<void> {
+    let errors: unknown[] = [];
     for (let directory of ancestorDirectories(path)) {
-      await this.#list(directory);
+      try {
+        await this.#list(directory);
+      } catch (err) {
+        errors.push(err);
+      }
+    }
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    if (errors.length > 1) {
+      throw new AggregateError(errors, 'directory refresh partially failed');
     }
   }
 
@@ -63,7 +92,11 @@ export class DirectoryViewRefresher {
   }
 
   #startListing(directory: LocalPath): Promise<void> {
-    let running = this.#listDirectory(directory);
+    // The timeout does not cancel the underlying listing — it releases the
+    // per-directory slot, so a hung filesystem call stops blocking every
+    // later refresh of this directory for the life of the process. A fresh
+    // listing may then overlap the hung one; overlapping reads are safe.
+    let running = this.#withTimeout(this.#listDirectory(directory), directory);
     let listing: DirectoryListing = { running };
     // Replaces any predecessor (whose `pending` was this very listing), so a
     // request arriving from here on queues behind this listing instead of
@@ -76,6 +109,30 @@ export class DirectoryViewRefresher {
     };
     running.then(cleanup, cleanup);
     return running;
+  }
+
+  #withTimeout(listing: Promise<void>, directory: LocalPath): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let timer = setTimeout(() => {
+        reject(
+          new Error(
+            `timed out listing "${directory}" after ${this.#timeoutMs}ms`,
+          ),
+        );
+      }, this.#timeoutMs);
+      // In Node, don't let a pending timer hold the process open.
+      (timer as { unref?: () => void }).unref?.();
+      listing.then(
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        (err) => {
+          clearTimeout(timer);
+          reject(err);
+        },
+      );
+    });
   }
 }
 

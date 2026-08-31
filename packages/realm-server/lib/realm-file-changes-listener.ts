@@ -23,7 +23,11 @@ const log = logger('realm-server:file-changes-listener');
 // `realm.clearLocalSourceCaches()` drops every cached path for that realm. Emitted
 // by the publish-realm / unpublish-realm / delete-realm handlers after the
 // FS swap or removal so peers (whose file-watcher events do NOT cross
-// replicas) bypass their pre-swap cached bytes on the next read.
+// replicas) bypass their pre-swap cached bytes on the next read. Note the
+// wildcard branch clears only the in-memory byte caches: the kernel's view of
+// the swapped directory tree is NOT refreshed here (that would take a
+// recursive walk of the realm), so a peer can still serve stale
+// file-not-found for files a republish added, until the kernel cache expires.
 //
 // The LISTEN is backed by `PgAdapter.subscribe` (shared multiplexed
 // notification client). There is no periodic work to run between

@@ -52,20 +52,20 @@ module(basename(import.meta.filename), function () {
       1,
       'PersonCard listings never overlap',
     );
-    let rootCoalesced = count('') < names.length;
-    let dirCoalesced = count('PersonCard') < names.length;
-    assert.true(
-      rootCoalesced,
-      `root listed fewer times than refreshes (${count('')})`,
+    // The five refresh() calls reach their first `await` synchronously, so
+    // the first starts the root listing and the other four share one pending
+    // follow-up: the root count is structurally exactly 2. The PersonCard
+    // count depends on how its first listing interleaves with the root
+    // follow-up, so a bound is the honest assertion there.
+    assert.strictEqual(
+      count(''),
+      2,
+      'root listed once, then one follow-up for the four that arrived during it',
     );
+    let dirBounded = count('PersonCard') <= 3;
     assert.true(
-      dirCoalesced,
-      `PersonCard listed fewer times than refreshes (${count('PersonCard')})`,
-    );
-    let followUpRan = count('') >= 2;
-    assert.true(
-      followUpRan,
-      'a refresh that arrived mid-listing got a follow-up listing',
+      dirBounded,
+      `PersonCard listings stayed bounded (${count('PersonCard')})`,
     );
 
     calls.length = 0;
@@ -108,6 +108,42 @@ module(basename(import.meta.filename), function () {
 
     await Promise.all([first, second, third]);
     assert.strictEqual(started(), 3, 'the late request got its own listing');
+  });
+
+  test('one ancestor failing does not stop the rest of the chain', async function (assert) {
+    let listed: string[] = [];
+    let refresher = new DirectoryViewRefresher(async (dir) => {
+      listed.push(dir);
+      if (dir === '') {
+        throw new Error('root EIO');
+      }
+    });
+
+    await assert.rejects(refresher.refresh('a/b/c.json'), /root EIO/);
+    assert.deepEqual(
+      listed,
+      ['', 'a', 'a/b'],
+      'the parent directories were still listed after the root failed',
+    );
+  });
+
+  test('a listing that never settles is timed out and stops blocking later refreshes', async function (assert) {
+    let calls = 0;
+    let refresher = new DirectoryViewRefresher(
+      (_dir) =>
+        new Promise<void>((resolve) => {
+          calls++;
+          if (calls > 1) {
+            resolve();
+          }
+          // the first listing never settles
+        }),
+      { timeoutMs: 20 },
+    );
+
+    await assert.rejects(refresher.refresh('a.json'), /timed out listing ""/);
+    await refresher.refresh('b.json');
+    assert.strictEqual(calls, 2, 'the second refresh got a fresh listing');
   });
 
   test('a failed listing rejects that refresh and does not poison later ones', async function (assert) {
