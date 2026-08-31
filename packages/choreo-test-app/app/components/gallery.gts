@@ -324,9 +324,20 @@ export class Gallery extends Component {
         <Presence
           @items={{this.demos}}
           @key={{demoKey}}
-          {{! sync, not popLayout: a popLayout leaver here never reports its
-              exit complete, so the card stays in the DOM at opacity 0 and
-              coming back leaves it stuck there. }}
+          {{! popLayout, so the grid closes up WHILE the leavers fade rather
+              than after them. Under sync a filter reads as three separate
+              events — a fade, a pause, then the survivors moving — because
+              nothing may move until the last exit has finished. Lifting each
+              leaver out of flow at the box it last occupied turns that back
+              into one gesture.
+
+              This mode was unusable here until the binding learned to report a
+              choreographed leaver's exit (see the note in node.ts): a demo
+              carrying a <Choreo> of its own held every card leaving beside it,
+              and <Presence> releases its leavers as a batch, so all forty
+              stayed lifted over the grid at opacity 0 — invisible, and still
+              taking the clicks meant for the two cards you could see. }}
+          @mode="popLayout"
           {{! No initial=false handle here, however tempting: the presence
               context is INHERITED, so blocking the first entrance blocks it
               for every motion node inside every demo as well — the pour log

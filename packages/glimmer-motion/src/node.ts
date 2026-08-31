@@ -745,6 +745,36 @@ export class MotionNode implements ChoreoNode, PopMeasurable {
     } else if (!projection && pops && this.lastPresent !== isPresent) {
       this.pop(element, isPresent, ownPresence!);
     }
+    if (presenceFlipped && !isPresent && !projection && this.choreo) {
+      // A choreographed leaver with no projection has exactly one thing that can
+      // report it: the region, when the row it ran for it ends. If no row is
+      // coming, nothing ever does — and because <Presence> releases its leavers
+      // as a batch, ONE such node strands every other card leaving with it.
+      //
+      // That is not a corner: it is what a region nested inside a leaving
+      // presence child always looks like. Filtering the gallery is where it
+      // showed — one demo carrying a <Choreo> of its own held all forty of the
+      // cards leaving beside it, so under `sync` the survivors never closed up
+      // and under `popLayout` forty invisible cards stayed lifted over the grid,
+      // taking the clicks meant for the ones you could see.
+      //
+      // The question can only be asked once the region has had its pass, hence
+      // the settle. If the region is still mid-pass we ask again, and if it
+      // never settles we report anyway: a leaver released a little early loses
+      // an animation, while one never released is a card you cannot click.
+      let asks = 0;
+      const ask = () => {
+        if (this.destroyed || this.isPresent) {
+          return;
+        }
+        if (this.choreo?.handling(this) && ++asks < 10) {
+          afterSettle(ask);
+          return;
+        }
+        this.exitComplete();
+      };
+      afterSettle(ask);
+    }
     this.applyStyle(element, props, ve.getProps());
     ve.update(props, presenceContext);
     ve.updateFeatures();
