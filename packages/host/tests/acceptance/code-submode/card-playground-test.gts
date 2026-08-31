@@ -1102,15 +1102,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test<TestContextWithSave>('creating an instance from the playground reveals it in the file tree without navigating away', async function (assert) {
+      // The left panel toggles between the inspector (which hosts the in-file
+      // declaration selector) and the file browser, so select the declaration
+      // and open the playground in the inspector view first, then switch to the
+      // browser to observe the reveal.
       await visitOperatorMode({
         submode: 'code',
-        fileView: 'browser',
         codePath: `${testRealmURL}blog-post.gts`,
       });
 
       await click('[data-boxel-selector-item-text="BlogPost"]');
       await togglePlaygroundPanel();
-      await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
       let id: string | undefined;
       this.onSave((url) => {
@@ -1125,6 +1127,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         newFilePath.startsWith('BlogPost/'),
         'the new card lands in its type folder',
       );
+
+      // Switch to the file browser: the created card should already be revealed
+      // (folder expanded) without a manual recent-files round-trip.
+      await click('[data-test-file-browser-toggle]');
+      await waitFor('[data-test-file-tree-mask]', { count: 0 });
 
       await waitFor(`[data-test-file="${newFilePath}"]`);
       assert

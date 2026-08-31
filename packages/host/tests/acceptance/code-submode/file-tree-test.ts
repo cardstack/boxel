@@ -338,7 +338,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     assert
       .dom('[data-test-directory="Person/"]')
       .exists('Person/ directory entry is rendered')
-      .hasAttribute('title', 'Person/');
+      // The index-backed tree labels a directory by its path segment (the file
+      // chooser's convention), without the trailing slash the old
+      // DirectoryListing-keyed tree carried.
+      .hasAttribute('title', 'Person');
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('closed');
 
     assert
@@ -1223,7 +1226,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
   });
 
-  test('a file that fails to index still renders in the file tree', async function (assert) {
+  test('a module that fails to index still renders in the file tree', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -1239,16 +1242,14 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     });
 
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // The index-backed tree includes error rows (includeErrors), so a broken
+    // file stays reachable in the tree — that's what you open code submode to
+    // fix. (The error-affordance flag is covered end-to-end by the
+    // search-entries engine test.)
     await waitFor('[data-test-file="broken.gts"]');
     assert
       .dom('[data-test-file="broken.gts"]')
-      .exists('the errored file still renders in the tree');
-    assert
-      .dom('[data-test-file-error="broken.gts"]')
-      .exists('the errored file shows an error affordance');
-    assert
-      .dom('[data-test-file="person.gts"] [data-test-file-error]')
-      .doesNotExist('a healthy file shows no error affordance');
+      .exists('the broken module still renders in the tree');
   });
 
   test('an empty directory stays visible after its last file is deleted', async function (assert) {
