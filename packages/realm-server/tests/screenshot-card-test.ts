@@ -689,6 +689,34 @@ module(basename(import.meta.filename), function () {
       await expectCaptureSpecRejected(assert, { fullpage: true }, 'fullpage');
     });
 
+    test('rejects target combined with clip', async function (assert) {
+      // A `target` is an element-handle screenshot; it honors no clip.
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          target: '[data-card-field="name"]',
+          clip: { x: 0, y: 0, width: 100, height: 100 },
+        },
+        'target and clip',
+      );
+    });
+
+    test('rejects target combined with fullPage', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: '[data-card-field="name"]', fullPage: true },
+        'target and fullPage',
+      );
+    });
+
+    test('rejects an over-long target selector', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: `[data-card-field="${'x'.repeat(1100)}"]` },
+        'target',
+      );
+    });
+
     test('rejects an unknown nested captureSpec field by name', async function (assert) {
       await expectCaptureSpecRejected(
         assert,

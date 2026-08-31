@@ -90,6 +90,12 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 // a batch resume instead of discard.
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
+// A `target` is a CSS selector, not an arbitrary program: bound its length so a
+// pathological selector can't be smuggled through. It needs no XPath guard —
+// the capture path runs it through `document.querySelector`, which executes
+// only CSS.
+export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
+
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
 // overrides (default-valued fields are elided), so `null` exactly means
@@ -106,6 +112,7 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
   'envelope',
   'captures',
 ]);
@@ -115,6 +122,7 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
   'envelope',
 ]);
 const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
@@ -258,6 +266,29 @@ function parseOverrideFields(
     }
   }
 
+  if (raw.target !== undefined) {
+    let target = raw.target;
+    // `target: null` is an explicit unset, mirroring `clip: null` — the only
+    // way a batch entry drops a batch-wide target default. It elides after the
+    // merge, so a normalized spec never carries null.
+    if (target === null) {
+      overrides.target = null;
+    } else if (typeof target !== 'string' || target.trim().length === 0) {
+      return { error: `${path}.target must be a non-empty string` };
+    } else if (target.length > SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH) {
+      return {
+        error: `${path}.target must be at most ${SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH} characters`,
+      };
+    } else {
+      // No XPath guard: the capture path passes `target` to `page.$`
+      // (`document.querySelector`), which can only execute CSS, so an
+      // XPath-shaped string already dead-ends as a named "invalid selector"
+      // capture error. A syntactic `//` check would instead reject valid CSS
+      // whose attribute value happens to contain `//` (e.g. `a[href="https://…"]`).
+      overrides.target = target;
+    }
+  }
+
   if (raw.envelope !== undefined) {
     let envelope = raw.envelope;
     if (!isPlainObject(envelope)) {
@@ -304,6 +335,16 @@ function checkMergedOverrides(
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
+  }
+
+  // A `target` is an element-handle screenshot: it crops to one element and
+  // honors neither a region clip nor a full-page capture, so combining them is
+  // a contradiction rather than a composition.
+  if (spec.target && spec.clip) {
+    return `${path} cannot set both target and clip`;
+  }
+  if (spec.target && spec.fullPage) {
+    return `${path} cannot set both target and fullPage`;
   }
 
   // Envelope formats lay out in a parent-owned box, so an envelope is
@@ -396,6 +437,9 @@ function elideDefaults(
   if (spec.clip) {
     out.clip = spec.clip;
   }
+  if (spec.target) {
+    out.target = spec.target;
+  }
   if (spec.envelope) {
     out.envelope = spec.envelope;
   }
@@ -426,6 +470,11 @@ function mergeOverrides(
   let clip = entry.clip !== undefined ? entry.clip : base.clip;
   if (clip) {
     merged.clip = clip;
+  }
+  // Same "explicit-wins, null-unsets" rule as clip.
+  let target = entry.target !== undefined ? entry.target : base.target;
+  if (target) {
+    merged.target = target;
   }
   let envelope = entry.envelope ?? base.envelope;
   if (envelope) {
@@ -477,7 +526,7 @@ export function parseScreenshotCaptureSpec(
     if (crossError !== undefined) {
       return { error: crossError };
     }
-    let spec = elideDefaults(singular.overrides);
+    let spec: ScreenshotCaptureSpec = elideDefaults(singular.overrides);
     // A spec whose every field matched an engine default normalizes to null:
     // it means the canonical capture, and null is what consumers key that
     // classification on.
