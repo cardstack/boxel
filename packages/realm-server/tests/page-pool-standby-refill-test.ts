@@ -223,6 +223,36 @@ module(basename(import.meta.filename), function (hooks) {
   // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
   // the zero `closeAll` resets, which under-reports pool occupancy for the
   // life of the process.
+  // The refill takes one generation snapshot and threads it downstream. It has
+  // to, because it yields between taking it and reaching the retry loop: a
+  // close landing in that window has already bumped the counter, so a second
+  // read there would compare the new value against itself, see no change, and
+  // work through every attempt — leaving the close waiting for exactly the
+  // retries it cancelled.
+  test('a close during standby preparation still cancels the retries', async function (assert) {
+    let attempts = 0;
+    let browserManager = makeBrowserStub({
+      gate: async () => {
+        attempts++;
+        throw new Error('standby creation failed');
+      },
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    // Not awaited: the refill runs to its first await — inside
+    // `#prepareSlotForStandby`, before any context is created — and the close
+    // below lands in that window.
+    let refill = pool.warmStandbys();
+    await pool.closeAll();
+    await refill;
+
+    assert.strictEqual(
+      attempts,
+      0,
+      'the refill gave up without attempting a creation the close had already ruled out',
+    );
+  });
+
   // The other side of that contract: waiting for the refill must not mean
   // waiting out its retries. A refill whose attempts keep failing runs
   // `STANDBY_CREATION_RETRIES` of them, each bounded only by the standby

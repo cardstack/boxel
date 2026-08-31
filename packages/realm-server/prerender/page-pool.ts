@@ -1409,6 +1409,9 @@ export class PagePool {
   }
 
   async #ensureStandbyPoolInternal(): Promise<void> {
+    // One snapshot for the whole refill, threaded into the retry loop below.
+    // Every await in here is a window for a `closeAll` to bump the counter, so
+    // a second read anywhere downstream would be a read of the new value.
     let generation = this.#closeGeneration;
     for (;;) {
       // A `closeAll` that began after this refill did has already decided the
@@ -1426,7 +1429,7 @@ export class PagePool {
       if (!prepared) {
         return;
       }
-      let standby = await this.#createStandbyWithRetries();
+      let standby = await this.#createStandbyWithRetries(generation);
       if (!standby) {
         return;
       }
@@ -1485,14 +1488,21 @@ export class PagePool {
     await this.disposeAffinity(lruAffinity);
   }
 
-  async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {
-    let generation = this.#closeGeneration;
+  // Takes the refill's generation rather than reading the counter itself. The
+  // caller yields at `#prepareSlotForStandby` between its own check and this
+  // call, so a `closeAll` landing in that window has already bumped the
+  // counter by the time this is entered: a fresh read here would compare the
+  // new value against itself, find no mismatch, and run every attempt — the
+  // exact wait the counter exists to cut short.
+  async #createStandbyWithRetries(
+    refillGeneration: number,
+  ): Promise<StandbyEntry | undefined> {
     let attempt = 0;
     let backoffMs = STANDBY_BACKOFF_MS;
     while (attempt < STANDBY_CREATION_RETRIES) {
       // Checked before every attempt, so a close that lands during a backoff
       // ends the retries rather than being made to wait for them.
-      if (this.#closeGeneration !== generation) {
+      if (this.#closeGeneration !== refillGeneration) {
         return undefined;
       }
       attempt++;
