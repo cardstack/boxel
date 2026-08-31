@@ -20,7 +20,10 @@ import {
   userInitiatedPriority,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { systemInitiatedIndexPriority } from '@cardstack/runtime-common/jobs/indexing';
+import {
+  prerenderSpawnedPriority,
+  systemInitiatedIndexPriority,
+} from '@cardstack/runtime-common/jobs/indexing';
 
 import { getFullReindexRealmUrls } from '../lib/full-reindex-realm-urls.ts';
 import {
@@ -273,9 +276,11 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('bootstrap realms sort ahead of every other realm', async function (assert) {
-      // Both user realms sort before the base realm's url — the shape that
-      // puts base last in a fleet-wide sweep under url ordering alone.
+    test('base sorts first, then the other bootstrap realms, then the rest', async function (assert) {
+      // Every other url here sorts before the base realm's, which is the
+      // shape url ordering alone gets wrong twice over: a bootstrap realm
+      // registered under the server's own host (catalog) precedes
+      // `cardstack.com/base/`, and so does every user realm.
       const userRealm = 'https://app.boxel.ai/alice/notes/';
       const publishedRealm = 'https://boxel.site/zeta/';
       const catalogRealm = 'https://app.boxel.ai/catalog/';
@@ -287,8 +292,55 @@ module(basename(import.meta.filename), function (hooks) {
 
       assert.deepEqual(
         await getFullReindexRealmUrls(dbAdapter),
-        [catalogRealm, baseRealm.url, userRealm, publishedRealm],
-        'bootstrap realms come first, then each group ordered by url',
+        [baseRealm.url, catalogRealm, userRealm, publishedRealm],
+        'base first, then bootstrap, then each group ordered by url',
+      );
+    });
+  });
+
+  module('prerenderSpawnedPriority', function () {
+    // The elevation buys the index a pool the system-tier backlog can't
+    // reach. Letting it reach the realm's HTML job too would put a second,
+    // long-running job (a from-scratch pass pre-warms every module in the
+    // realm) into that same pool on every deploy.
+    test('an elevated base index does not lift its HTML work with it', function (assert) {
+      assert.strictEqual(
+        prerenderSpawnedPriority({
+          realmURL: baseRealm.url,
+          indexPriority: userInitiatedPriority,
+        }),
+        systemInitiatedPriority,
+        'base HTML stays where the rest of the system-initiated work is',
+      );
+    });
+
+    test('every other realm spawns from the tier that indexed it', function (assert) {
+      assert.strictEqual(
+        prerenderSpawnedPriority({
+          realmURL: 'https://app.boxel.ai/alice/notes/',
+          indexPriority: userInitiatedPriority,
+        }),
+        userInitiatedPriority,
+        'a user realm indexed for a user keeps its HTML alongside it',
+      );
+      assert.strictEqual(
+        prerenderSpawnedPriority({
+          realmURL: baseRealm.url,
+          indexPriority: systemInitiatedPriority,
+        }),
+        systemInitiatedPriority,
+        'a base index that was never elevated has nothing to strip',
+      );
+    });
+
+    test('a publish keeps the tier, since it is waiting on the render', function (assert) {
+      assert.strictEqual(
+        prerenderSpawnedPriority({
+          realmURL: baseRealm.url,
+          indexPriority: userInitiatedPriority,
+          awaitedByPublish: true,
+        }),
+        userInitiatedPriority,
       );
     });
   });

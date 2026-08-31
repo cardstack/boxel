@@ -40,25 +40,28 @@ export function indexingConcurrencyGroup(realmURL: string): string {
 // At the user-initiated tier the high-priority pool can serve base while the
 // sweep occupies the all-priority pool.
 //
-// Base is the only realm elevated this way, and the concurrency group bounds
-// what that costs: every job that writes a realm's index shares
+// Base is the only realm elevated this way, and two things bound what that
+// costs. Every job that writes a realm's index shares
 // `indexingConcurrencyGroup(realmURL)`, and the claim query skips any group
-// that already holds a live reservation, so base occupies at most one worker
-// at a time whatever pool serves it. Each further realm elevated would add
-// another group, and so another worker held off user-initiated work. The other
+// already holding a live reservation — so base's index occupies one worker at
+// a time. And the elevation stops at the index: follow-on prerender-html work
+// derives its tier from `prerenderSpawnedPriority` below rather than from the
+// elevated value, so a realm-wide HTML sweep for base cannot take a second
+// worker out of the same pool. Each further realm elevated would add another
+// index group, and so another worker held off user-initiated work; the other
 // bootstrap realms (catalog, skills, ...) stay at the system tier and get FIFO
-// position instead — the sweep enqueues them first (see
-// `getFullReindexRealmUrls`).
+// position instead (see `getFullReindexRealmUrls`).
 //
-// Two pool shapes float above the system tier and can serve this: the
+// Two pool shapes float above the system tier and could serve this: the
 // high-priority pool (`--highPriorityCount`), flooring one tier below
 // indexing, and the dedicated index lane (`--userIndexCount` +
 // `--indexJobsOnly`), which floors at exactly this tier and registers only
-// indexing job types. The lane is the better home of the two — a
-// prerender-html sweep can neither hold it nor be held by it. A deployment
-// that runs neither has no pool above the lowest floor, so base's job waits
-// its turn in the all-priority pool's FIFO like anything else, and the sweep
-// ordering is what covers that case.
+// indexing job types. The lane would be the better home of the two — a
+// prerender-html sweep can neither hold it nor be held by it — but no
+// deployment configures it today, so in practice this reaches the
+// high-priority pool. A deployment that runs neither has no pool above the
+// lowest floor, so base's job waits its turn in the all-priority pool's FIFO
+// like anything else, and the sweep ordering is what covers that case.
 export function systemInitiatedIndexPriority(realmURL: string): number {
   return isBaseRealm(realmURL)
     ? userInitiatedPriority
@@ -73,6 +76,42 @@ export function systemInitiatedIndexPriority(realmURL: string): number {
 // the system tier.
 function isBaseRealm(realmURL: string): boolean {
   return realmURL === baseRealm.url || realmURL === baseRealmRRI;
+}
+
+// The tier that work spawned by an index pass — the realm's prerender-html
+// job — should derive from.
+//
+// Normally that is the index job's own priority, which is what makes an HTML
+// job track the pass that produced it. The exception is the base-realm
+// elevation above: it exists so a base *index* can reach a worker pool the
+// system-tier backlog cannot, and says nothing about base's HTML. Propagating
+// it would put base's prerender-html job one tier below the elevated index —
+// still inside the high-priority pool, in its own concurrency group — so every
+// deploy's bootstrap reindex would hand that pool a second, long-running job:
+// a from-scratch pass sets `preWarm`, whose module sweep is O(realm module
+// count). The lane exists to stay clear for latency-sensitive work, and base's
+// HTML is not on the path of anything waiting.
+//
+// A publish that awaits the HTML keeps the index tier, because there the
+// render genuinely is on the caller's critical path. A user-initiated base
+// reindex is demoted along with the system-initiated one: the two are
+// indistinguishable here, and HTML is not what such a caller waits on.
+export function prerenderSpawnedPriority({
+  realmURL,
+  indexPriority,
+  awaitedByPublish,
+}: {
+  realmURL: string;
+  indexPriority: number;
+  awaitedByPublish?: boolean;
+}): number {
+  if (awaitedByPublish) {
+    return indexPriority;
+  }
+  if (indexPriority === userInitiatedPriority && isBaseRealm(realmURL)) {
+    return systemInitiatedPriority;
+  }
+  return indexPriority;
 }
 
 // Await a realm's index lane holding no outstanding work. The in-process
