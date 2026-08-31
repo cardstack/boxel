@@ -865,7 +865,22 @@ export type PrerenderVisitArgs = {
   // |= "[job: J.R]"` a single reliable filter for "everything that
   // happened during this indexing job."
   jobId?: string;
+  // The realm view this visit renders against — one realm at one generation.
+  // An index pass and the `prerender_html` job it spawns are separate queue
+  // jobs that read the same files, so they carry the same scope, while the
+  // next pass over the realm carries a different one. A prerender tab keys
+  // what it may reuse across visits on this rather than on `jobId`: the two
+  // jobs interleave on a shared tab, and scoping on the job would tear that
+  // tab's state down on every alternation while still holding one view.
+  renderScope?: string;
 };
+
+// The scope string both halves of a pass compute independently. A realm's
+// generation advances once per index pass, which is exactly the boundary
+// beyond which a card the tab holds may have been rewritten.
+export function renderScopeFor(realmURL: string, generation: number): string {
+  return `${realmURL}@${generation}`;
+}
 
 // Arguments for releasing an indexing batch's ownership of an affinity,
 // called from `IndexRunner`'s `finally` blocks after a run completes.

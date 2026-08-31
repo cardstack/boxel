@@ -79,19 +79,29 @@ type StoreHooks = {
   ): StoreSearchResource<T>;
 };
 
-// The indexing job this render belongs to, or undefined when there isn't one —
-// the live app and any job-less render. Both halves matter: the render flag
-// alone is set by host-test renders that carry no job, and a job id alone
-// would let a stray global leak into the app's own store.
-function currentIndexingJobId(): string | undefined {
+// The realm view this render belongs to, or undefined when there isn't one —
+// the live app and any job-less render. Both halves of the gate matter: the
+// render flag alone is set by host-test renders that carry no job, and a job
+// id alone would let a stray global leak into the app's own store.
+//
+// The scope, not the job, is what state can be reused across. An index pass
+// and the prerender-html job it spawns are separate queue jobs reading one
+// immutable view of the realm, and they interleave on a shared tab — keying on
+// the job would drop everything on each alternation while the view never
+// moved. A driver that threads no scope falls back to the job id, which is the
+// narrower of the two and so never unsound.
+function currentRenderScope(): string | undefined {
   let g = globalThis as unknown as {
     __boxelRenderContext?: boolean;
     __boxelJobId?: string;
+    __boxelRenderScope?: string;
   };
   if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
     return undefined;
   }
-  return g.__boxelJobId;
+  return typeof g.__boxelRenderScope === 'string'
+    ? g.__boxelRenderScope
+    : g.__boxelJobId;
 }
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
@@ -293,7 +303,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     kind: 'card' | 'file',
     url: string,
   ): string | undefined {
-    if (currentIndexingJobId() === undefined) {
+    if (currentRenderScope() === undefined) {
       return undefined;
     }
     this.observeIndexingJob();
@@ -309,7 +319,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // boundary has to be observed before the root is hydrated, so that no owner
   // in this job can be handed a target from the last one.
   observeIndexingJob(): void {
-    let jobId = currentIndexingJobId();
+    let jobId = currentRenderScope();
     if (jobId === undefined) {
       return;
     }
@@ -317,6 +327,18 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return;
     }
     this.#jobScopedDocCache.clear();
+    // A fetch issued under the previous scope must not be adopted by this one.
+    // The in-flight map is consulted before a fetch is issued and hands back
+    // whatever promise it holds, so a load still pending across the boundary
+    // would answer a caller in the new scope with a document read from the
+    // realm before it — the same stale-target read this scoping exists to
+    // stop. Dropping the entries lets the new scope issue its own fetch; the
+    // pending one still settles, still counts toward `loaded()`, and its
+    // populate is already generation-checked.
+    this.#cardDocsInFlight.clear();
+    this.#fileMetaDocsInFlight.clear();
+    this.#cardDocStartedAt.clear();
+    this.#fileMetaStartedAt.clear();
     this.#dropResidentInstancesForNewJob();
     this.#jobScopedStateJobId = jobId;
     this.#jobScopedDocCacheGeneration++;
@@ -408,7 +430,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     // nor the model build. Without this the held id would still read "no job
     // observed" while the store holds that job's instances, and the next job
     // would be handed them.
-    this.#jobScopedStateJobId = currentIndexingJobId();
+    this.#jobScopedStateJobId = currentRenderScope();
   }
 
   resolveURL(reference: string, base?: string): URL | undefined {
@@ -521,8 +543,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return doc;
     } finally {
       let startedAt = this.#cardDocStartedAt.get(url);
-      this.#cardDocsInFlight.delete(url);
-      this.#cardDocStartedAt.delete(url);
+      // Only retract this load's own entry. A scope boundary clears the map
+      // mid-flight and the next scope may already have issued its own fetch
+      // for the same URL, which an unguarded delete would evict — leaving its
+      // callers to redundantly refetch.
+      if (this.#cardDocsInFlight.get(url) === promise) {
+        this.#cardDocsInFlight.delete(url);
+        this.#cardDocStartedAt.delete(url);
+      }
       if (typeof startedAt === 'number') {
         this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
           url,
@@ -578,8 +606,11 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return doc;
     } finally {
       let startedAt = this.#fileMetaStartedAt.get(url);
-      this.#fileMetaDocsInFlight.delete(url);
-      this.#fileMetaStartedAt.delete(url);
+      // Guarded for the same reason as the card-document load above.
+      if (this.#fileMetaDocsInFlight.get(url) === promise) {
+        this.#fileMetaDocsInFlight.delete(url);
+        this.#fileMetaStartedAt.delete(url);
+      }
       if (typeof startedAt === 'number') {
         this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
           url,

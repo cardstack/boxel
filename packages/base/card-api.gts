@@ -3709,19 +3709,26 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is job-scoped: the prerender tab is
-      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
-      // render of each indexing job, so every instance in it was deserialized
-      // during THIS job, from a realm source that is immutable for the job's
-      // life. So an instance already in the store is current — reuse it directly
+      // Inside an indexing render the store is scoped to the realm view being
+      // rendered: it drops every instance it holds when the render scope moves
+      // (`CardStore.observeIndexingJob`, called before a render hydrates its
+      // card and from the load path), so every instance in it was deserialized
+      // against THIS view of the realm's files. Note it is that drop which
+      // carries the guarantee, not the `clearCache` reset — that one is
+      // scheduled only when a pass invalidates an executable, and reaches only
+      // the single tab its visit lands on, so a pass that changed only
+      // instances schedules none at all.
+      // So an instance already in the store is current — reuse it directly
       // instead of re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
       // redundancy is what makes a densely cross-linked render quadratic (the
       // same target reached through many parents is rebuilt once per parent).
       // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
-      // render (the live app) a link may be stale after invalidation and must
-      // reload, and a render with no job id has no job-scoped-store guarantee.
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
+      // gate the store scopes itself on: outside a render (the live app) a link
+      // may be stale after invalidation and must reload, and a render carrying
+      // no job id is one whose store never scoped itself, so it offers no
+      // guarantee to reuse on.
       let inIndexingRender =
         typeof globalThis !== 'undefined' &&
         Boolean((globalThis as any).__boxelRenderContext) &&

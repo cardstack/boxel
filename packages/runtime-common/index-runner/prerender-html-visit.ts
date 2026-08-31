@@ -10,6 +10,7 @@ import {
   logger,
   modulesConsumedInMeta,
   RealmPaths,
+  renderScopeFor,
   type Batch,
   type DefinitionLookup,
   type IndexWriter,
@@ -465,6 +466,9 @@ async function visitForPrerenderedHtml({
     url: fileURL,
     auth,
     batchId,
+    // This batch was created with the generation the spawning index pass
+    // anticipated, so both halves of that pass present a tab with one scope.
+    renderScope: renderScopeFor(realmURL.href, batch.currentGeneration),
     visitType: 'prerender-html',
     renderOptions,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),

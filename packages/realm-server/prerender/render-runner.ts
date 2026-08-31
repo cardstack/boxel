@@ -869,6 +869,7 @@ export class RenderRunner {
     cardTypes,
     priority,
     jobId,
+    renderScope,
     signal,
     onTabAcquired,
   }: PrerenderVisitArgs & {
@@ -1011,6 +1012,7 @@ export class RenderRunner {
             sessionAuth: string,
             id: string | undefined,
             jobPriority: number | undefined,
+            scope: string | undefined,
           ) => {
             localStorage.setItem('boxel-session', sessionAuth);
             (globalThis as unknown as { __boxelJobId?: string }).__boxelJobId =
@@ -1018,6 +1020,13 @@ export class RenderRunner {
             (
               globalThis as unknown as { __boxelJobPriority?: number }
             ).__boxelJobPriority = jobPriority;
+            // The realm view this visit renders against. An index pass and the
+            // prerender-html job it spawned are separate jobs over one view, so
+            // this is what the page keys reusable state on — see the store's
+            // `observeIndexingJob`.
+            (
+              globalThis as unknown as { __boxelRenderScope?: string }
+            ).__boxelRenderScope = scope;
             return (
               (
                 globalThis as unknown as {
@@ -1029,6 +1038,7 @@ export class RenderRunner {
           auth,
           jobId,
           priority,
+          renderScope,
         ),
       );
       // A card-instance index visit fuses the file extract into the
