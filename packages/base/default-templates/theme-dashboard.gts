@@ -1275,8 +1275,6 @@ export class PreviewPills extends GlimmerComponent<{
 
 export class ThemeVisualizer extends GlimmerComponent<{
   Args: {
-    toggleDarkMode?: () => void;
-    isDarkMode?: boolean;
     fontStack?: { label: string; stack?: string }[];
     cssImports?: string[] | null;
     editMode?: boolean;
@@ -1296,12 +1294,6 @@ export class ThemeVisualizer extends GlimmerComponent<{
     <section class='dsr-theme-visualizer' ...attributes>
       <div class='dsr-theme-visualizer-header'>
         <h2>Theme Visualizer</h2>
-        {{#if @toggleDarkMode}}
-          <ModeToggle
-            @toggleDarkMode={{@toggleDarkMode}}
-            @isDarkMode={{bool @isDarkMode}}
-          />
-        {{/if}}
       </div>
       <div class='structured-theme-visualizer'>
         {{#if (has-block 'colorPalette')}}

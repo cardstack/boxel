@@ -212,7 +212,6 @@ class Isolated extends Component<typeof DetailedStyleReference> {
             {{#if this.showVisualizer}}
               <ThemeVisualizer
                 id='preview'
-                @isDarkMode={{this.isDarkMode}}
                 @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
                 @editMode={{this.editMode}}
