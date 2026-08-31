@@ -111,12 +111,12 @@ const SYNC_SLOP = 1 / 30;
 const FROZEN = {
   cam:
     'translateZ(1289.55px) matrix3d(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, ' +
-    '0, 32.0808, -2178.15, 1) translate(589px, 419px)',
+    '0, 32.0808, -2177.02, 1) translate(589px, 419px)',
   perspective: '1289.55px',
   plane:
-    'translate(-50%, -50%) matrix3d(1, 6.88338e-08, 0.000571805, 0, ' +
-    '8.24339e-06, -0.999898, -0.0142961, 0, -0.000571745, -0.0142961, ' +
-    '0.999898, 0, 0.507889, 24.78, -511.221, 1) scale(1.006)',
+    'translate(-50%, -50%) matrix3d(1, 0, 0, 0, 0, -0.999896, -0.0144164, ' +
+    '0, 0, -0.0144164, 0.999896, 0, 0.215572, 24.8416, -511.218, 1) ' +
+    'scale(1.006)',
 };
 
 /** how much of the box the laptop fills — closer than the mockup's, on purpose */
@@ -1052,10 +1052,32 @@ export class LongTake extends Component {
           dolly = 1;
           truck = 0;
           pedestal = 0;
+          /**
+           * THE SET IS NOT IN THE PLATE.
+           *
+           * `setPlane` is a backdrop the size of a car park sitting behind the
+           * laptop, and rendering it into the still baked a dark room into the
+           * file. That cost the flat state everything: the plate could not be
+           * composited over anything, so light mode could not have a light
+           * ground, and because the plate is narrower than the stage it left
+           * bands down both sides that no background colour could hide.
+           *
+           * The renderer already has `alpha: true`, so with the backdrop
+           * hidden every pixel the laptop does not cover comes out
+           * transparent, and the flat state becomes what the 3D state always
+           * was: a device standing on whatever set the page is wearing.
+           *
+           * It costs nothing else. The aluminium's reflections come from the
+           * PMREM environment, not from this plane, and there are no shadows
+           * being cast onto it — it is a picture of a wall and nothing more.
+           */
+          setPlane.visible = false;
           tick?.();
           // read in the same turn as the draw: without
           // preserveDrawingBuffer the buffer is not guaranteed past it
           const data = canvas.toDataURL('image/webp', 0.94);
+          setPlane.visible = true;
+          tick?.();
           const said = await fetch('/__capture-still', {
             body: data,
             method: 'POST',
@@ -1414,40 +1436,26 @@ export class LongTake extends Component {
             ),
             #5b626e;
         }
-        /* THE FLAT STATE FILLS THE PLATTER, AND IT IS DARK ON PURPOSE.
+        /* THE FLAT STATE STANDS ON THE PAGE'S SET, NOT ON ITS OWN.
 
-           The still is a photograph of the laptop on a dark set and the set is
-           baked into its pixels. The file carries an ALPH chunk, but at 830
-           bytes it is a uniformly opaque channel — there is no transparency to
-           composite against. The plate is 1178x838 and the stage is wider, so
-           it cannot fill the platter by itself.
+           The plate used to carry the set baked into its pixels, because the
+           capture rendered setPlane — a backdrop the size of a car park — into
+           the frame. That cost the flat state everything downstream: it could
+           not be composited over anything, so light mode could not have a light
+           ground, and since the plate is narrower than the stage it left bands
+           down both sides that no background colour could hide.
 
-           So the STAGE wears the plate's own set, in both themes. The bands
-           down either side disappear because there is no longer an edge: the
-           set in the photograph and the set behind it are the same set. Light
-           mode does not get the slate here, because a slate ground behind a
-           near-black plate is the letterbox again with better colours.
-
-           This is the workaround, not the answer. Two things want a re-exported
-           plate with a genuinely transparent background: light mode would then
-           get the mockup's slate like every other flat state, and the platter
-           would fill because the ground would show THROUGH the plate rather
-           than having to match it. Recovering it in CSS was tried — a screen
-           blend maps black to the ground exactly — and it cannot work here:
-           the world carries a transform, so it is its own stacking context and
-           the blend never reaches the stage; and screening the plate would
-           wash out the drawing showing through its screen, which is the one
-           thing on this stage that must stay crisp. */
-        .lt-page[data-mode="2d"] .lt-stage,
+           The capture now hides the backdrop, so the plate is a laptop on
+           transparency and nothing else. Its alpha channel went from 830 bytes
+           of uniform opacity to a real silhouette, and the whole file got
+           smaller. The flat state is now exactly what the 3D state always was:
+           a device standing on whatever set the page is wearing — which is the
+           slate the mockup has used all along, lifted for light mode, because
+           a photographic subject needs somewhere photographic to stand. */
         :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-stage {
           background:
-            radial-gradient(
-              120% 90% at 50% 8%,
-              #23262d 0%,
-              #14161b 46%,
-              #090a0d 100%
-            ),
-            #14161b;
+            radial-gradient(120% 90% at 50% 12%, #757c88 0%, #5b626e 100%),
+            #5b626e;
         }
 
         /* THE CANVAS SITS ABOVE THE DOM, and that is what makes the
