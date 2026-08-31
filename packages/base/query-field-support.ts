@@ -207,6 +207,44 @@ export function ensureQueryFieldSearchResource(
   return searchResource;
 }
 
+// Resolve a query-backed relationship as its owner deserializes, so the field's
+// membership — and every `computeVia` reducing over it — is current without a
+// template having to read the field first. The seed captured from the owner's
+// document answers immediately, and the resource arms its realm-event
+// subscription so later writes to matching cards refresh it.
+//
+// Two opt-outs. A store that must render as a pure function of the document it
+// was handed reports `resolvesQueryFieldsEagerly: false`, which keeps indexing
+// and prerender resolving lazily through the field getter exactly as they do
+// without this call. A field whose query is expensive or rarely read declares
+// `eager: false` and resolves on first access instead.
+//
+// Failure degrades to the lazy path rather than propagating: this runs for
+// every query field on every deserialized card, including cards nothing will
+// ever render, so a resource that can't be built must not take the owner's
+// deserialization down with it. The field getter builds the resource again on
+// first read, where the same failure surfaces to the render that depends on it.
+export function resolveQueryFieldEagerly(
+  store: CardStore,
+  instance: BaseDef,
+  field: Field,
+): void {
+  if (!field.queryDefinition || field.eager === false) {
+    return;
+  }
+  if (!store?.resolvesQueryFieldsEagerly) {
+    return;
+  }
+  try {
+    ensureQueryFieldSearchResource(store, instance, field);
+  } catch (err) {
+    log.warn(
+      `eager resolution of query field ${field.name} failed; deferring to first read`,
+      err,
+    );
+  }
+}
+
 // Peek at the search resource already created for a query field, without
 // triggering creation. Returns `undefined` when the resource hasn't been
 // instantiated yet (no consumer has read the field). Pure read — useful for
