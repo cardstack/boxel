@@ -13,6 +13,7 @@
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",
     "choreo-player": "workspace:*",
+    "dialkit": "^1.4.3",
     "glimmer-motion": "workspace:*",
     "motion": "^13.1.1",
     "motion-dom": "^13.1.1",

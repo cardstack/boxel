@@ -11,6 +11,7 @@ import { module, test } from 'qunit';
 import {
   callIt,
   COAST,
+  coastOf,
   PUCK,
   type Puck,
   RUNWAY,
@@ -36,7 +37,14 @@ module('Unit | hang', function () {
      * is hauled back, or it arrives early and creeps the last inch. This is
      * the assertion that stops someone retuning SLIDE and leaving COAST.
      */
-    assert.strictEqual(COAST, 28 / 100, 'COAST is SLIDE.damping / stiffness');
+    assert.strictEqual(COAST, 28 / 100, 'the shipped default');
+    /**
+     * The stage's spring is now live off a dial, so the constant is only the
+     * starting point — what has to hold for EVERY value the slider can reach
+     * is the relationship, which is what `coastOf` is.
+     */
+    assert.strictEqual(coastOf({ damping: 40, stiffness: 100 }), 0.4);
+    assert.strictEqual(coastOf({ damping: 10, stiffness: 200 }), 0.05);
   });
 
   test('a zone is the band a puck rests in, and short of the first is nothing', function (assert) {

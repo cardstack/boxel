@@ -1,6 +1,7 @@
 # dialkit, and whether Choreo can use it
 
-**Status:** an evaluation, not a build. Nothing below exists yet.
+**Status:** an evaluation, and a spike that is now built. See "The spike, as
+built" below for what it settled.
 
 [dialkit](https://github.com/joshpuckett/dialkit) is a real-time parameter
 panel — sliders, spring and easing visualisations, presets, persistence,
@@ -46,15 +47,15 @@ port runnable in Solid.
 dialkit is not one library with framework bindings. It is a framework-free core
 with **four independent full reimplementations** of the same twenty controls:
 
-| | lines | vendorable? |
-| --- | ---: | --- |
-| `dialkit/store` + `dialkit/timeline` + utils | ~3,560 | **no need** — published, framework-free, motion-free subpath exports |
-| `styles/theme.css` | 2,221 | **shared verbatim** — every port emits the same `dialkit-*` class names |
-| `icons.ts` | 54 | already a core entry |
-| React port | 4,215 | no — would be rewritten, not copied |
-| Solid port | 4,724 | " |
-| Svelte port | 4,332 | " |
-| Vue port | 4,520 | " |
+|                                              |  lines | vendorable?                                                             |
+| -------------------------------------------- | -----: | ----------------------------------------------------------------------- |
+| `dialkit/store` + `dialkit/timeline` + utils | ~3,560 | **no need** — published, framework-free, motion-free subpath exports    |
+| `styles/theme.css`                           |  2,221 | **shared verbatim** — every port emits the same `dialkit-*` class names |
+| `icons.ts`                                   |     54 | already a core entry                                                    |
+| React port                                   |  4,215 | no — would be rewritten, not copied                                     |
+| Solid port                                   |  4,724 | "                                                                       |
+| Svelte port                                  |  4,332 | "                                                                       |
+| Vue port                                     |  4,520 | "                                                                       |
 
 The half worth having does not need vendoring: `dialkit/store` and
 `dialkit/timeline` are separate tsup bundles that do not list `motion` in their
@@ -84,7 +85,7 @@ entire visual design for free, and inherits future upstream refinements to it.
 **Not the timeline.** `DialTimeline.tsx` is 1,654 lines — 37% of the React
 port on its own — and `transition-math.ts` exists to support it: a closed-form
 damped-harmonic-oscillator solution with Motion's own `visualDuration`/`bounce`
-→ stiffness/damping mapping, so that a scrubbed position *approximates* what
+→ stiffness/damping mapping, so that a scrubbed position _approximates_ what
 Motion would have played.
 
 It re-derives the maths because it has no way to seek a real animation. Choreo
@@ -121,15 +122,15 @@ paste the instruction, and the constants land in the source.
 The React port is 4,506 lines, but it is top-heavy and most of the weight is in
 the parts to skip:
 
-| | lines |
-| --- | ---: |
-| `DialTimeline` | 1,654 |
-| `Slider` | 432 |
-| `DialRoot` | 259 |
-| `ShortcutListener` | 250 |
-| `TransitionControl` | 210 |
-| the other 15 controls | median ~137 |
-| `Toggle` / `ButtonGroup` | 34 / 22 |
+|                          |       lines |
+| ------------------------ | ----------: |
+| `DialTimeline`           |       1,654 |
+| `Slider`                 |         432 |
+| `DialRoot`               |         259 |
+| `ShortcutListener`       |         250 |
+| `TransitionControl`      |         210 |
+| the other 15 controls    | median ~137 |
+| `Toggle` / `ButtonGroup` |     34 / 22 |
 
 A minimum-useful panel — `DialRoot`, `Panel`, `Folder`, `ControlRenderer`,
 `Slider`, `SpringControl`, `SpringVisualization`, and one tracked bridge in
@@ -140,6 +141,61 @@ Ember, where `useDialKit` and `useDialStorePanel` collapse into a single
 `Slider` is the one genuinely large control and the one where this repo has an
 unfair advantage: it is 432 lines of hand-rolled pointer maths in React, and we
 own a drag library. `{{motion drag="x"}}` should take most of it out.
+
+## The spike, as built
+
+Built and landed. 379 lines: 150 for the bridge (`test-app/app/lib/dial.ts`),
+229 for a sliders-only panel (`app/components/dial-panel.gts`), wired to the
+`Hang` stage's slide spring.
+
+Four things it settled:
+
+**The bridge works, and it is small.** `DialStore.subscribe(id, listener)` maps
+onto one `@tracked revision` counter, with `@cached` on the derived getters so
+a render sees ONE snapshot. That cache is load-bearing rather than an
+optimisation: without it `resolveDialValues` rebuilds a fresh tree per read and
+a template touching `values` twice hands Choreo two structurally-identical
+springs with different identities.
+
+**Choreo tolerates it exactly as hoped.** `treePrint` is `JSON.stringify`, so a
+rebuilt-but-unchanged spring prints the same and the pass is declined as noise;
+a spring whose numbers moved prints differently and replays. Idle re-renders
+cost nothing, and dragging a slider mid-flight re-runs the score against the
+new value.
+
+**The stylesheet claim is true.** 287 dialkit selectors applied to markup
+written in Ember, with the spike writing 8 lines of CSS of its own. The two
+things that must be right are `data-mode="inline"` (dialkit's own embedded
+mode; the panel is `position: fixed` otherwise) and `.dialkit-panel-inner`,
+which is the element carrying the glass surface.
+
+**The slider is much cheaper here than in React.** `Slider.tsx` is 432 lines,
+most of it hand-rolled pointer maths. Ours is a `{{motion drag="x"}}` with
+`dragConstraints={left: 0, right: 0}` — zero-width constraints give the gesture
+without the movement, since `PanInfo.offset` is measured from the POINTER and
+not from where the element ended up. React's version has to drive a MotionValue
+into the track and rubber-band it back instead.
+
+Verified end to end against the arithmetic: at damping 57 (coast 0.57) an
+831 px/s throw rests at 91.0%, and at damping 4 (coast 0.04) a 705 px/s throw
+rests at 29.9% — both matching `at + v·coast/width` to four significant
+figures.
+
+### Two traps worth recording
+
+**Embroider claims every `@import` in app.css.** A bare `dialkit/styles.css`
+throws "unexpected @embroider/virtual specifier"; a sibling relative path is
+captured too and answered with a 300-byte stub. The stylesheet is copied into
+`public/` at config time and linked from index.html, exactly as the Draco
+decoder is (`vendorDialkit` in vite.config.mjs).
+
+**`event.target` in a drag callback is not the element.** The pan session hands
+its callbacks the last POINTERMOVE, whose target is whatever the move was
+dispatched on — the window, once the gesture leaves the element. So
+`event.target.closest(...)` throws, and it throws INSIDE a frame callback,
+taking the rest of that frame's queue with it. The visible symptom is not an
+error near the mistake: it is `onDragStart` firing, `onDrag` never firing, and
+a control that will not move. Hold the element; do not re-derive it.
 
 ## The recommendation
 

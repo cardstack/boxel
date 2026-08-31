@@ -3,9 +3,12 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import type { DialConfig } from 'dialkit/store';
 import { modifier } from 'ember-modifier';
 import type { DeriveContext } from 'glimmer-motion';
 import { beacon, Choreo, motion } from 'glimmer-motion';
+import { DialPanel } from 'test-app/components/dial-panel';
+import { Dial } from 'test-app/lib/dial';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -51,8 +54,24 @@ import { preventSelect } from 'test-app/lib/pointer';
  * that predicts a landing and then animates to it owes itself this check.
  */
 
+/**
+ * The two numbers this stage rests on, and the reason the dial spike exists.
+ *
+ * These shipped hand-tuned: edit a constant, rebuild, throw a puck, decide it
+ * was wrong, edit it again. The whole stage's honesty depends on them and on
+ * COAST being derived from them, and there was no instrument for the job.
+ *
+ * `[value, min, max, step]` is dialkit's slider tuple. The panel is drawn by
+ * `DialPanel`; the store→tracked bridge is `lib/dial.ts`, and docs/dialkit.md
+ * is the evaluation that led here.
+ */
+const TUNING = {
+  damping: [28, 4, 60, 1],
+  stiffness: [100, 20, 400, 5],
+} satisfies DialConfig;
+
 /** the long glide: overdamped, so it reads as friction rather than a bounce */
-const SLIDE = { damping: 28, stiffness: 100 } as const;
+const SLIDE = { damping: 28, stiffness: 100 };
 /** the shove a puck passes to the puck it hits — short, and all at once */
 const KNOCK = { damping: 19, stiffness: 340 } as const;
 /** a throw too soft to leave the shooting area, handed back */
@@ -69,7 +88,10 @@ const OFF = { damping: 28, stiffness: 200 } as const;
  * τ, or the projection and the flight are two different physics arguing over
  * one puck. Retune SLIDE and this follows it.
  */
-export const COAST = SLIDE.damping / SLIDE.stiffness;
+export const coastOf = (spring: { damping: number; stiffness: number }) =>
+  spring.damping / spring.stiffness;
+
+export const COAST = coastOf(SLIDE);
 
 /** the shooting area, as a fraction of the lane. A wall, not a rule. */
 export const RUNWAY = 0.28;
@@ -233,6 +255,34 @@ export class Hang extends Component {
   throws = THROWS;
   runwayStyle = htmlSafe(`width:${RUNWAY * 100}%`);
 
+  /**
+   * The slide spring, live off the dial rather than off a constant.
+   *
+   * `resolveDialValues` returns `{ damping, stiffness }` — which is already
+   * exactly the spring spec `@spring` wants, so the dial's output is handed
+   * straight to the score with nothing in between. Move a slider and the
+   * region's `treePrint` changes, so the pass replays: you watch the spring
+   * you are editing, while you edit it.
+   */
+  dial = new Dial('hang-slide', 'Hang · the slide', TUNING);
+
+  get slide() {
+    return this.dial.values as unknown as {
+      damping: number;
+      stiffness: number;
+    };
+  }
+
+  /** still derived, still the spring's own time constant — see coastOf */
+  get coast() {
+    return coastOf(this.slide);
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.dial.teardown();
+  }
+
   private laneEl: HTMLElement | null = null;
   private ghostEl: HTMLElement | null = null;
   private powerEl: HTMLElement | null = null;
@@ -311,7 +361,7 @@ export class Hang extends Component {
   /** the read that both the preview and the throw are decided by */
   private project(clientX: number, vx: number, rect: DOMRect) {
     const at = Math.min(RUNWAY, (clientX - rect.left) / rect.width);
-    return at + (vx * COAST) / rect.width;
+    return at + (vx * this.coast) / rect.width;
   }
 
   /**
@@ -520,7 +570,7 @@ export class Hang extends Component {
           <c.Move
             @of={{c.received "puck"}}
             @from={{c.gesture}}
-            @spring={{SLIDE}}
+            @spring={{this.slide}}
             @size={{false}}
             @swap="none"
           />
@@ -576,6 +626,8 @@ export class Hang extends Component {
           />
         </c.Parallel>
       </Choreo>
+
+      <DialPanel @dial={{this.dial}} />
     </div>
   </template>
 }

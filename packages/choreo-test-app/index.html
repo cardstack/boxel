@@ -51,6 +51,11 @@
 
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/vendor.css" />
     <link integrity="" rel="stylesheet" href="/@embroider/virtual/app.css" />
+    <!-- dialkit's theme, copied from the package into public/ at config time
+         (vite.config.mjs, vendorDialkit). Linked here rather than @import-ed
+         from app.css because Embroider claims every import in app.css for its
+         virtual-module scheme and answers this one with an empty stub. -->
+    <link rel="stylesheet" href="/dialkit-theme.css" />
 
     {{content-for "head-footer"}}
   </head>

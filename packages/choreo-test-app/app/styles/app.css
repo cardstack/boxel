@@ -12424,3 +12424,45 @@ html[data-gm-dragging] * {
     margin-left: 0;
   }
 }
+
+/* ---- the dial spike ----
+   Almost nothing, which is the point: `data-mode="inline"` and
+   `.dialkit-panel-inner` are dialkit's own, so the panel's surface, borders,
+   sliders and type all come from the package's stylesheet. What is left here
+   is the spike's own header, which dialkit has no equivalent of — its real
+   toolbar is `PresetManager` and friends. See docs/dialkit.md. */
+.dial-spike {
+  align-self: flex-start;
+  width: 260px;
+}
+
+.dial-spike-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 6px;
+}
+
+.dial-spike-name {
+  color: var(--ink-dim);
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.dial-spike-btn {
+  background: rgba(var(--ink-rgb), 0.08);
+  border: 0;
+  border-radius: 6px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+}
+
+.dial-spike-btn:hover {
+  color: var(--ink);
+}
