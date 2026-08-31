@@ -21,9 +21,12 @@ export function createSendEvent({
   dbAdapter,
 }: SendEventDeps): SendEvent {
   return async function sendEvent(user, eventType, data) {
-    if (!matrixClient.isLoggedIn()) {
-      await matrixClient.login();
-    }
+    // The room lookup comes first because it is the step that can make this a
+    // no-op, and it is a local database read that cannot fail the way logging
+    // in can. Reaching Matrix first meant a user with no session room could
+    // still surface an unreachable homeserver or a bad credential as a failed
+    // notify — the same noise the skip below exists to remove, arrived at by
+    // another route.
     let roomId = await fetchSessionRoom(dbAdapter, user);
     if (!roomId) {
       // No session room means nobody is listening: the user has never
@@ -36,6 +39,10 @@ export function createSendEvent({
         `skipping ${eventType} for ${user}: no session room, nothing is listening`,
       );
       return;
+    }
+
+    if (!matrixClient.isLoggedIn()) {
+      await matrixClient.login();
     }
 
     await matrixClient.sendEvent(roomId, 'm.room.message', {

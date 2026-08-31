@@ -9,21 +9,34 @@ import { createSendEvent } from '../handlers/send-event.ts';
 // notify as best-effort and catch its failures, so what matters here is that
 // an ordinary condition — a user with no session room — doesn't produce one.
 module(basename(import.meta.filename), function () {
-  function fakeDeps(sessionRoomId: string | null) {
+  function fakeDeps(
+    sessionRoomId: string | null,
+    opts: { loggedIn?: boolean; loginFails?: boolean } = {},
+  ) {
     let sent: { roomId: string; body: unknown }[] = [];
+    let logins = 0;
     let dbAdapter = {
       kind: 'pg',
       execute: async () =>
         sessionRoomId === null ? [] : [{ session_room_id: sessionRoomId }],
     } as unknown as DBAdapter;
     let matrixClient = {
-      isLoggedIn: () => true,
-      login: async () => {},
+      isLoggedIn: () => opts.loggedIn ?? true,
+      login: async () => {
+        logins++;
+        if (opts.loginFails) {
+          throw new Error('homeserver unreachable');
+        }
+      },
       sendEvent: async (roomId: string, _type: string, body: unknown) => {
         sent.push({ roomId, body });
       },
     } as unknown as MatrixClient;
-    return { sendEvent: createSendEvent({ matrixClient, dbAdapter }), sent };
+    return {
+      sendEvent: createSendEvent({ matrixClient, dbAdapter }),
+      sent,
+      loginCount: () => logins,
+    };
   }
 
   test('an event for a user with no session room is skipped, not attempted', async function (assert) {
@@ -34,6 +47,32 @@ module(basename(import.meta.filename), function () {
     await sendEvent('@mango:localhost', 'realms-list-updated');
 
     assert.deepEqual(sent, [], 'no room event was addressed to a null room');
+  });
+
+  // The room lookup has to come before the login, or a user with no session
+  // room can still turn an unreachable homeserver into a failed notify — the
+  // noise this skip exists to remove, reached the other way round.
+  test('a skipped event does not reach Matrix at all', async function (assert) {
+    let { sendEvent, sent, loginCount } = fakeDeps(null, {
+      loggedIn: false,
+      loginFails: true,
+    });
+
+    await sendEvent('@mango:localhost', 'realms-list-updated');
+
+    assert.strictEqual(loginCount(), 0, 'no login was attempted');
+    assert.deepEqual(sent, [], 'nothing was sent');
+  });
+
+  test('a deliverable event still logs in when the client is cold', async function (assert) {
+    let { sendEvent, sent, loginCount } = fakeDeps('!room-abc:localhost', {
+      loggedIn: false,
+    });
+
+    await sendEvent('@mango:localhost', 'realms-list-updated');
+
+    assert.strictEqual(loginCount(), 1, 'logged in before sending');
+    assert.strictEqual(sent.length, 1, 'and delivered the event');
   });
 
   test('an event for a user with a session room is delivered to it', async function (assert) {
