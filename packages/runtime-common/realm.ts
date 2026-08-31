@@ -4388,6 +4388,21 @@ export class Realm {
         serveMs: Date.now() - serveStart,
       });
       return response;
+    } catch (e: any) {
+      // A job that throws (the queue rejected it: a prerender that exhausted
+      // its retries, a reservation-lease timeout) rejects `job.done` and
+      // lands here — without this emit, the pipeline's hard-failure class
+      // would read on the telemetry board as missing request volume instead
+      // of a rise in `error`.
+      this.emitScreenshotServePerf(entryKey, perf, 'error', {
+        ...stagePerf,
+        jobWaitMs: Date.now() - jobWaitStart,
+      });
+      return systemError({
+        requestContext,
+        message: `screenshot capture failed for ${entryKey.sourceURL}`,
+        additionalError: e instanceof Error ? e : new Error(String(e)),
+      });
     } finally {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);

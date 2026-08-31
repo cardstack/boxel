@@ -21,7 +21,10 @@
 //     `media_cache_ledger.diagnostics` row, so a completed capture's
 //     breakdown is readable by SQL as well as by Loki.
 //
-// Correlation: the two event types join on `jobId`/`reservationId`;
+// Correlation: the two event types join on `jobId` — `reservationId` is
+// capture-side detail (only the worker knows the reservation, so `request`
+// events carry null; it reaches the prerender server as
+// `jobId.reservationId`);
 // `correlationId` (the surface request's `x-boxel-logging-correlation-id`)
 // joins both back to the realm-server's `realm:requests` lines; and
 // `prerenderRequestId` joins the capture to the prerender server's and
@@ -44,7 +47,8 @@ export type ScreenshotRequestOutcome =
   | 'timeout'
   // 403: the realm's `allowArbitraryScreenshots` gate is closed.
   | 'gated'
-  // The job resolved within the wait but no capture could be served.
+  // No capture could be served within the wait: the job resolved without a
+  // usable capture, or the job (or the serve work after it) threw.
   | 'error';
 
 export type ScreenshotPersistOutcome =

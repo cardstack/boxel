@@ -100,10 +100,11 @@ export interface MediaCacheEntry extends MediaCacheEntryKey {
   height: number | null;
   createdAt: number;
   lastAccessedAt: number;
-  // Per-capture stage telemetry recorded by the capture that wrote this row
-  // (a `ScreenshotCapturePerfEvent`-shaped breakdown: queue wait, prerender
-  // stages, persist). Null for rows whose writer recorded none.
-  diagnostics: Record<string, unknown> | null;
+  // The row's `diagnostics` column (the capture's
+  // `ScreenshotCapturePerfEvent`-shaped stage breakdown, written by
+  // `updateMediaCacheDiagnostics`) is deliberately NOT part of this shape:
+  // `findMediaCacheEntry` answers every `<img>` serve, and no serving path
+  // reads the breakdown — read that column with its own query instead.
 }
 
 // The content address for a blob of output bytes. sha256 rather than the
@@ -297,8 +298,15 @@ export async function findMediaCacheEntry(
     sourceGeneration?: number;
   },
 ): Promise<MediaCacheEntry | undefined> {
+  // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
+  // `SELECT *`: this read answers every ledger-served `<img>` request, and
+  // `*` would also drag the row's `diagnostics` breakdown (~30 keys nothing
+  // on the serve path reads) across the wire on each of them.
   let rows = (await query(dbAdapter, [
-    `SELECT * FROM media_cache_ledger WHERE realm_url =`,
+    `SELECT realm_url, source_url, capture_spec_hash, source_generation,
+            object_key, source_content_hash, lane, content_type, size_bytes,
+            width, height, created_at, last_accessed_at
+     FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
     `AND source_url =`,
     param(sourceURL),
@@ -322,7 +330,6 @@ export async function findMediaCacheEntry(
     height: number | null;
     created_at: number | string;
     last_accessed_at: number | string;
-    diagnostics: Record<string, unknown> | null;
   }[];
   let row = rows[0];
   if (!row) {
@@ -342,7 +349,6 @@ export async function findMediaCacheEntry(
     height: row.height == null ? null : Number(row.height),
     createdAt: Number(row.created_at),
     lastAccessedAt: Number(row.last_accessed_at),
-    diagnostics: row.diagnostics ?? null,
   };
 }
 

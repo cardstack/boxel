@@ -123,6 +123,9 @@ module(basename(import.meta.filename), function () {
     // When set, in-flight captures park on it — the lever for the sync-wait
     // timeout test.
     let captureGate: Deferred<void> | undefined;
+    // When set, captures throw it — the lever for the job-rejection error
+    // test.
+    let captureFailure: Error | undefined;
     // Telemetry captured through the perf sink instead of the log channel,
     // so tests assert on records, not stdout.
     let perfEvents: ScreenshotPerfEvent[];
@@ -147,6 +150,7 @@ module(basename(import.meta.filename), function () {
         adapter = new FakeMediaCacheAdapter();
         captureCalls = 0;
         captureGate = undefined;
+        captureFailure = undefined;
         virtualNetwork = new VirtualNetwork();
         ({ realm } = await createRealm({
           dir: await mkdtemp(join(tmpdir(), 'media-cache-dsl-test-')),
@@ -179,6 +183,9 @@ module(basename(import.meta.filename), function () {
           captureCalls++;
           if (captureGate) {
             await captureGate.promise;
+          }
+          if (captureFailure) {
+            throw captureFailure;
           }
           return {
             status: 'ready',
@@ -670,16 +677,13 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(typeof capture?.decodeMs, 'number');
         assert.strictEqual(typeof capture?.persistMs, 'number');
 
-        let entry = await findMediaCacheEntry(dbAdapter, {
-          realmURL: REALM_URL,
-          sourceURL: `${REALM_URL}card-1`,
-          captureSpecHash: await captureSpecHash({ format: 'embedded' }),
-          sourceGeneration: 1,
-        });
-        let diagnostics = entry?.diagnostics as
-          | Record<string, unknown>
-          | null
-          | undefined;
+        // `MediaCacheEntry` deliberately omits the diagnostics column (the
+        // serve path never reads it), so the ledger copy is asserted with
+        // its own query.
+        let rows = (await query(dbAdapter, [
+          `SELECT diagnostics FROM media_cache_ledger WHERE source_url = '${REALM_URL}card-1'`,
+        ])) as { diagnostics: Record<string, unknown> | null }[];
+        let diagnostics = rows[0]?.diagnostics;
         assert.strictEqual(
           diagnostics?.eventType,
           'capture',
@@ -795,6 +799,40 @@ module(basename(import.meta.filename), function () {
           'the late capture record still joins the timed-out request',
         );
         assert.strictEqual(capture?.persistOutcome, 'uploaded');
+      });
+
+      test('a job that throws still emits: an error capture record and an error request record', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        captureFailure = new Error('prerender exhausted its retries');
+        await startWorker();
+
+        let response = await get('_screenshot/card-1');
+        assert.strictEqual(response.status, 500);
+
+        let request = requestEvent();
+        assert.strictEqual(
+          request?.outcome,
+          'error',
+          'a rejected job reads as a rise in error, not a drop in request volume',
+        );
+        assert.strictEqual(typeof request?.jobId, 'number');
+        assert.strictEqual(typeof request?.jobWaitMs, 'number');
+
+        let capture = captureEvent();
+        assert.strictEqual(capture?.status, 'error');
+        assert.strictEqual(capture?.persistOutcome, 'skipped');
+        assert.strictEqual(
+          capture?.jobId,
+          request?.jobId,
+          'the failed capture record still joins its request',
+        );
+        assert.strictEqual(typeof capture?.permissionsMs, 'number');
+        assert.strictEqual(
+          typeof capture?.prerenderMs,
+          'number',
+          'the throw is attributed to the prerender stage',
+        );
       });
 
       test('re-capturing identical bytes records a dedupe-on-write hit', async function (assert) {

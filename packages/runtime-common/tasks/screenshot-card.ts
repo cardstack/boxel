@@ -146,57 +146,80 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     }
 
     let permissionsStart = Date.now();
-    let realmPermissions = await fetchRealmPermissions(
-      dbAdapter,
-      new URL(normalizedRealmURL),
-    );
-    let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
-    let userPermissions = realmPermissions[runAsUserId];
-    if (!userPermissions || userPermissions.length === 0) {
-      let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
-      log.error(message);
-      reportStatus(jobInfo, 'finish');
+    let permissionsMs: number | undefined;
+    let prerenderStart: number | undefined;
+    let prerenderMs: number | undefined;
+    let response!: ScreenshotPrerenderResponse;
+    try {
+      let realmPermissions = await fetchRealmPermissions(
+        dbAdapter,
+        new URL(normalizedRealmURL),
+      );
+      let runAsUserId = ensureFullMatrixUserId(runAs, matrixURL);
+      let userPermissions = realmPermissions[runAsUserId];
+      if (!userPermissions || userPermissions.length === 0) {
+        let message = `${jobIdentity(jobInfo)} ${runAs} does not have permissions in ${normalizedRealmURL}`;
+        log.error(message);
+        reportStatus(jobInfo, 'finish');
+        emitScreenshotPerf(
+          perfEvent({
+            status: 'error',
+            persistOutcome: 'skipped',
+            permissionsMs: Date.now() - permissionsStart,
+          }),
+        );
+        return {
+          status: 'error',
+          error: message,
+        };
+      }
+
+      // Include JWTs for all realms the user has access to so cross-realm
+      // card references render correctly during the screenshot.
+      let allUserPermissions = await fetchUserPermissions(dbAdapter, {
+        userId: runAsUserId,
+      });
+      allUserPermissions[normalizedRealmURL] = userPermissions;
+      let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
+      permissionsMs = Date.now() - permissionsStart;
+
+      prerenderStart = Date.now();
+      let result = await prerenderer.prerenderScreenshot({
+        realm: normalizedRealmURL,
+        url: cardId,
+        auth,
+        format,
+        ...(captureSpec ? { captureSpec } : {}),
+        priority: jobInfo?.priority,
+        // Joins the prerender server's and manager's logs for this render
+        // back to the worker job (forwarded as the x-boxel-job-id header by
+        // the remote prerenderer; in-process prerenderers ignore it).
+        jobId: jobInfo
+          ? `${jobInfo.jobId}.${jobInfo.reservationId}`
+          : undefined,
+      });
+      prerenderMs = Date.now() - prerenderStart;
+      // The local (in-process) prerenderer resolves to `{response, timings,
+      // pool}` while the remote one resolves to the bare response; unwrap so
+      // the job result is one shape either way.
+      response = (result as any)?.response ?? result;
+    } catch (e: any) {
+      // A throw here (a permission fetch that failed, a prerender request
+      // that exhausted its retries or lost its lease) rejects the job — emit
+      // the capture record first, with the stages accumulated so far, or the
+      // pipeline's hard-failure class leaves no `capture` event at all.
       emitScreenshotPerf(
         perfEvent({
           status: 'error',
           persistOutcome: 'skipped',
-          permissionsMs: Date.now() - permissionsStart,
+          permissionsMs: permissionsMs ?? Date.now() - permissionsStart,
+          ...(prerenderStart != null
+            ? { prerenderMs: Date.now() - prerenderStart }
+            : {}),
         }),
       );
-      return {
-        status: 'error',
-        error: message,
-      };
+      throw e;
     }
-
-    // Include JWTs for all realms the user has access to so cross-realm card
-    // references render correctly during the screenshot.
-    let allUserPermissions = await fetchUserPermissions(dbAdapter, {
-      userId: runAsUserId,
-    });
-    allUserPermissions[normalizedRealmURL] = userPermissions;
-    let auth = createPrerenderAuth(runAsUserId, allUserPermissions);
-    let permissionsMs = Date.now() - permissionsStart;
-
-    let prerenderStart = Date.now();
-    let result = await prerenderer.prerenderScreenshot({
-      realm: normalizedRealmURL,
-      url: cardId,
-      auth,
-      format,
-      ...(captureSpec ? { captureSpec } : {}),
-      priority: jobInfo?.priority,
-      // Joins the prerender server's and manager's logs for this render back
-      // to the worker job (forwarded as the x-boxel-job-id header by the
-      // remote prerenderer; in-process prerenderers ignore it).
-      jobId: jobInfo ? `${jobInfo.jobId}.${jobInfo.reservationId}` : undefined,
-    });
-    let prerenderMs = Date.now() - prerenderStart;
-    // The local (in-process) prerenderer resolves to `{response, timings,
-    // pool}` while the remote one resolves to the bare response; unwrap so
-    // the job result is one shape either way.
-    let response: ScreenshotPrerenderResponse =
-      (result as any)?.response ?? result;
 
     let persistOutcome: ScreenshotPersistOutcome = 'skipped';
     let decodeMs: number | undefined;
