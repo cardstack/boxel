@@ -1,4 +1,3 @@
-import { getOwner } from '@ember/owner';
 import { settled, type RenderingTestContext } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -8,34 +7,32 @@ import { baseRealm, PermissionsContextName } from '@cardstack/runtime-common';
 import type { Permissions } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
-import RealmService from '@cardstack/host/services/realm';
-
 import {
   provideConsumeContext,
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  testRRI,
 } from '../../helpers';
-import { setupBaseRealm } from '../../helpers/base-realm';
+import {
+  CardDef,
+  contains,
+  field,
+  linksTo,
+  linksToMany,
+  setupBaseRealm,
+  StringField,
+} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
-// Resolves to the in-process test realm so the runtime treats the cards built
-// below as belonging to it, which is what lets `$this.cardTitle` interpolate.
-class StubRealmService extends RealmService {
-  realmOf(_input: URL | string) {
-    return testRealmURL;
-  }
-}
+const HOST_URL = `${testRealmURL}Host/anchor`;
 
 module('Integration | query-field relationship status', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('@cardstack/base/card-api');
-  let string: typeof import('@cardstack/base/string');
 
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
@@ -50,45 +47,26 @@ module('Integration | query-field relationship status', function (hooks) {
   hooks.beforeEach(async function () {
     let permissions: Permissions = { canWrite: true, canRead: true };
     provideConsumeContext(PermissionsContextName, permissions);
-    getOwner(this)!.register('service:realm', StubRealmService);
-
     loader = getService('loader-service').loader;
     cardApi = await loader.import('@cardstack/base/card-api');
-    string = await loader.import('@cardstack/base/string');
-  });
-
-  setupCardLogs(
-    hooks,
-    async () => await loader.import('@cardstack/base/card-api'),
-  );
-
-  // Two people share the name the host queries for, so a singular
-  // query-backed field has a result set larger than the one slot it surfaces.
-  async function setupRealm() {
-    let { contains, field, CardDef, linksTo, linksToMany } = cardApi;
-    let { default: StringField } = string;
 
     class Person extends CardDef {
       static displayName = 'Person';
       @field name = contains(StringField);
     }
+    // Two people share the name the host queries for, so a singular
+    // query-backed field has a result set larger than the one slot it surfaces.
     class Host extends CardDef {
       static displayName = 'Host';
       @field cardTitle = contains(StringField);
       @field favorite = linksTo(() => Person, {
-        query: {
-          filter: { eq: { name: '$this.cardTitle' } },
-        },
+        query: { filter: { eq: { name: '$this.cardTitle' } } },
       });
       @field matches = linksToMany(() => Person, {
-        query: {
-          filter: { eq: { name: '$this.cardTitle' } },
-        },
+        query: { filter: { eq: { name: '$this.cardTitle' } } },
       });
       @field deferred = linksToMany(() => Person, {
-        query: {
-          filter: { eq: { name: '$this.cardTitle' } },
-        },
+        query: { filter: { eq: { name: '$this.cardTitle' } } },
         eager: false,
       });
     }
@@ -99,35 +77,29 @@ module('Integration | query-field relationship status', function (hooks) {
         'test-cards.gts': { Person, Host },
         'Person/one.json': new Person({ name: 'Anchor' }),
         'Person/two.json': new Person({ name: 'Anchor' }),
+        // Deliberately outside the query. A live search can never return this
+        // card, so its presence in the field is proof a seed put it there.
+        'Person/three.json': new Person({ name: 'Different' }),
+        'Host/anchor.json': new Host({ cardTitle: 'Anchor' }),
       },
     });
+    await getService('realm').login(testRealmURL);
+  });
 
-    return { Host, Person };
-  }
+  setupCardLogs(
+    hooks,
+    async () => await loader.import('@cardstack/base/card-api'),
+  );
 
-  async function makeHost(cardTitle: string): Promise<CardDefType> {
-    let { createFromSerialized } = cardApi;
-    let resource = {
-      attributes: { cardTitle },
-      meta: {
-        adoptsFrom: { module: testRRI('test-cards'), name: 'Host' },
-      },
-    };
-    return (await createFromSerialized(
-      resource as any,
-      { data: resource } as any,
-      new URL(testRealmURL),
-    )) as CardDefType;
+  async function loadHost(): Promise<CardDefType> {
+    let host = (await getService('store').get(HOST_URL)) as CardDefType;
+    await settled();
+    return host;
   }
 
   test('a singular query-backed field reports the one slot it surfaces, not the whole result set', async function (this: RenderingTestContext, assert) {
-    await setupRealm();
     let { getRelationshipMembershipState } = cardApi;
-    let host = (await makeHost('Anchor')) as CardDefType & {
-      favorite: unknown;
-      matches: unknown[];
-    };
-    await settled();
+    let host = (await loadHost()) as CardDefType & { favorite: unknown };
 
     let plural = getRelationshipMembershipState(host, 'matches');
     assert.strictEqual(
@@ -155,13 +127,12 @@ module('Integration | query-field relationship status', function (hooks) {
   });
 
   test('isLoaded separates an unresolved field from a settled one', async function (this: RenderingTestContext, assert) {
-    await setupRealm();
     let { getRelationshipMembershipState } = cardApi;
-    let host = (await makeHost('Anchor')) as CardDefType;
+    let host = await loadHost();
 
-    // `deferred` opts out of resolving with its owner, so nothing has
-    // resolved it and it reports neither loading nor loaded — the state
-    // `isLoading` alone cannot tell from a settled empty result.
+    // `deferred` opts out of resolving with its owner, so nothing has resolved
+    // it: it reports neither loading nor loaded, the state `isLoading` alone
+    // cannot tell apart from a settled empty result.
     let deferred = getRelationshipMembershipState(host, 'deferred');
     assert.false(deferred.isLoading, 'an unresolved field is not loading');
     assert.false(deferred.isLoaded, 'and it is not loaded either');
@@ -170,8 +141,6 @@ module('Integration | query-field relationship status', function (hooks) {
       undefined,
       'an unresolved field has no membership',
     );
-
-    await settled();
 
     let matches = getRelationshipMembershipState(host, 'matches');
     assert.false(matches.isLoading, 'a settled field is not loading');
@@ -184,16 +153,12 @@ module('Integration | query-field relationship status', function (hooks) {
   });
 
   test('a field that opts out of eager resolution resolves on first read', async function (this: RenderingTestContext, assert) {
-    await setupRealm();
     let { getRelationshipMembershipState } = cardApi;
-    let host = (await makeHost('Anchor')) as CardDefType & {
-      deferred: unknown[];
-    };
-    await settled();
+    let host = (await loadHost()) as CardDefType & { deferred: unknown[] };
 
     assert.false(
       getRelationshipMembershipState(host, 'deferred').isLoaded,
-      'settling the owner does not resolve a field that opted out',
+      'loading the owner does not resolve a field that opted out',
     );
 
     // Reading the field is what starts its search.
@@ -206,6 +171,65 @@ module('Integration | query-field relationship status', function (hooks) {
       deferred.membership?.length,
       2,
       'and it carries the same membership as its eager twin',
+    );
+  });
+
+  test('a document fetched after the field resolved hands it the fresher result set', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState, updateFromSerialized } = cardApi;
+    let network = getService('network');
+    let host = await loadHost();
+
+    assert.strictEqual(
+      getRelationshipMembershipState(host, 'matches').membership?.length,
+      2,
+      'the field resolves to the two cards the query matches',
+    );
+
+    // Start from the document the realm actually serves — the server resolves
+    // query fields at read time, so this carries `matches` already resolved —
+    // and splice in a third member. The spliced card claims a name the query
+    // matches, while the copy the realm indexed does not, so a search can never
+    // return it: the field can only hold it if this document put it there.
+    // (It has to claim a matching name because the resource reconciles its
+    // result set against the filter and drops rows that fail it.)
+    let asJSON = async (url: string) =>
+      await (
+        await network.authedFetch(url, {
+          headers: { Accept: 'application/vnd.card+json' },
+        })
+      ).json();
+    let hostDoc = await asJSON(HOST_URL);
+
+    // Clone a member the document already carries and repoint it at the third
+    // card, so the spliced entry and its relationship reference are spelled the
+    // way this document spells every other one.
+    let template = hostDoc.included.find((resource: { id: string }) =>
+      resource.id.endsWith('Person/one'),
+    );
+    let spliced = JSON.parse(JSON.stringify(template));
+    spliced.id = template.id.replace('Person/one', 'Person/three');
+    hostDoc.included.push(spliced);
+    hostDoc.data.relationships.matches.data.push({
+      type: 'card',
+      id: spliced.id,
+    });
+
+    await updateFromSerialized(host as any, hostDoc);
+    await settled();
+
+    let matches = getRelationshipMembershipState(host, 'matches');
+    assert.strictEqual(
+      matches.membership?.length,
+      3,
+      'the newer document supersedes the result set the resource was holding',
+    );
+    assert.true(
+      matches.membership?.some(
+        (member) =>
+          member.kind === 'present' &&
+          member.reference.endsWith('Person/three'),
+      ),
+      'including the card no live search for this query could return',
     );
   });
 });

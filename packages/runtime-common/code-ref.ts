@@ -340,7 +340,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, queryDefinition } = result;
+        let { computeVia, name, queryDefinition, eager } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -354,6 +354,11 @@ export function getField<T extends BaseDef>(
           name,
           isPolymorphic: true,
           queryDefinition,
+          // The override narrows which card the link resolves to; it does not
+          // restate how the field behaves. Options that travel with the
+          // declaration have to be carried across or the rebuilt field silently
+          // loses them.
+          eager,
         }) as Field;
       }
       localIdentities.set(result.card, {

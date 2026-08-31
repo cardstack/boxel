@@ -34,10 +34,12 @@ const DASHBOARD_URL = `${testRealmURL}dashboard`;
 const PARENT_URL = `${testRealmURL}Parent/p1`;
 
 // A rollup over a query-backed relationship is the one number the index cannot
-// keep current: a card the query merely matched is not a dependency of the card
-// holding the query, so writing that card never invalidates the rollup's owner.
-// The owner's prerendered rendering therefore keeps serving the count it was
-// built with.
+// serve. A card the query merely matched is not a dependency of the card
+// holding the query, so writing that card never invalidates the rollup's owner;
+// and the render that produces the owner's HTML resolves its fields from the
+// document it was handed, which carries no query-backed relationship at all. So
+// the prerendered rollup reduces over nothing and renders as empty — the shape
+// that is hardest to spot, because an empty rollup is also a real answer.
 //
 // What holds the surface together is hydration. A prerendered row is inert
 // markup until the live instance resolves — on a gesture, or as soon as the
@@ -102,21 +104,14 @@ module(
             <@context.searchResultsComponent
               @query={{this.query}}
               @mode='hover'
-              as |results|
-            >
-              {{#each results.entries key='id' as |entry|}}
-                <entry.component />
-              {{/each}}
-            </@context.searchResultsComponent>
+            />
           </template>
         };
       }
       LeafClass = Leaf as unknown as typeof CardDef;
 
-      // Exactly one leaf is in the group when the realm indexes, so the
-      // parent's prerendered rendering is built with a count of one. Nothing
-      // here loads the parent, so it stays absent from the store and its row
-      // starts inert.
+      // Nothing here loads the parent, so it stays absent from the store and
+      // its row renders as the inert markup the index produced.
       await setupAcceptanceTestRealm({
         mockMatrixUtils,
         contents: {
@@ -176,8 +171,8 @@ module(
         .exists('the parent row starts as inert prerendered markup');
       assert.deepEqual(
         renderedCounts(),
-        ['1'],
-        'the prerendered rollup still reports the count it was built with',
+        ['0'],
+        'the prerendered rollup reports the field as empty',
       );
 
       await triggerEvent(
