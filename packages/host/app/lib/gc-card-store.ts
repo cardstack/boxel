@@ -41,6 +41,10 @@ import type { FileDef } from '@cardstack/base/file-api';
 export type ReferenceCount = Map<string, number>;
 
 const loadTrackingLogger = logger('store-load-tracking');
+// Every scope boundary a prerender tab crosses, and what it cost. A tab that
+// crosses more often than it renders is paying for reloads it doesn't need,
+// and this line is the only place that shows up.
+const jobScopeLogger = logger('store-job-scope');
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
@@ -319,13 +323,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // boundary has to be observed before the root is hydrated, so that no owner
   // in this job can be handed a target from the last one.
   observeIndexingJob(): void {
-    let jobId = currentRenderScope();
-    if (jobId === undefined) {
+    let scope = currentRenderScope();
+    if (scope === undefined) {
       return;
     }
-    if (jobId === this.#jobScopedStateJobId) {
+    if (scope === this.#jobScopedStateJobId) {
       return;
     }
+    let held = this.#jobScopedStateJobId;
+    let droppedInstances =
+      this.#cardInstances.size + this.#fileMetaInstances.size;
+    let droppedDocs = this.#jobScopedDocCache.size;
     this.#jobScopedDocCache.clear();
     // A fetch issued under the previous scope must not be adopted by this one.
     // The in-flight map is consulted before a fetch is issued and hands back
@@ -340,8 +348,13 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#cardDocStartedAt.clear();
     this.#fileMetaStartedAt.clear();
     this.#dropResidentInstancesForNewJob();
-    this.#jobScopedStateJobId = jobId;
+    this.#jobScopedStateJobId = scope;
     this.#jobScopedDocCacheGeneration++;
+    if (held !== undefined) {
+      jobScopeLogger.debug(
+        `render scope moved from ${held} to ${scope}; dropped ${droppedInstances} instance(s) and ${droppedDocs} cached document(s)`,
+      );
+    }
   }
 
   // Instance residency is job-scoped for the same reason the document cache
