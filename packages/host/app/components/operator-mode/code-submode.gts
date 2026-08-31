@@ -73,7 +73,7 @@ import {
   CodeModePanelHeights,
 } from '../../utils/local-storage-keys';
 import { runWhileActive } from '../../utils/run-while-active';
-import FileTree from '../editor/file-tree';
+import IndexedFileTree from '../editor/indexed-file-tree';
 
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -822,7 +822,7 @@ export default class CodeSubmode extends Component<Signature> {
                         {{/if}}
                       </:inspector>
                       <:browser>
-                        <FileTree
+                        <IndexedFileTree
                           @realmURL={{this.realmURL}}
                           @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
                           @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
@@ -833,6 +833,9 @@ export default class CodeSubmode extends Component<Signature> {
                             this.deleteFileInTree
                           }}
                           @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                          @revealFile={{this.operatorModeStateService.fileToReveal}}
+                          @includeErrors={{true}}
+                          @discoverEmptyDirs={{true}}
                         />
                       </:browser>
                     </CodeSubmodeLeftPanelToggle>

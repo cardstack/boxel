@@ -850,6 +850,63 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("scope: 'files' with includeErrors surfaces error file rows flagged on the entry", async function (assert) {
+      let helloUrl = `${realmHref}hello.md`;
+      // Flag the plain file's row as an error row (a file that failed to index).
+      await dbAdapter.execute(
+        `UPDATE boxel_index SET has_error = TRUE WHERE url = '${helloUrl}'`,
+      );
+
+      // Without includeErrors the error row is excluded — the healthy-only
+      // behavior the file chooser depends on.
+      let healthyOnly = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          scope: 'files',
+          fields: { entry: ['item.name'] },
+        }),
+      );
+      assert.notOk(
+        entryFor(healthyOnly, helloUrl),
+        'the error file row is excluded without includeErrors',
+      );
+
+      // With includeErrors the error row surfaces, flagged via entry.meta.hasError.
+      let withErrors = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          scope: 'files',
+          includeErrors: true,
+          fields: { entry: ['item.name'] },
+        }),
+      );
+      let hello = entryFor(withErrors, helloUrl);
+      assert.ok(hello, 'the error file row surfaces with includeErrors');
+      assert.true(
+        hello?.meta?.hasError,
+        'the error file row is flagged via entry.meta.hasError',
+      );
+      // A healthy file row carries no hasError flag.
+      let john = entryFor(withErrors, `${johnId}.json`);
+      assert.ok(john, 'a healthy file row is still present');
+      assert.notOk(
+        john?.meta?.hasError,
+        'a healthy file row carries no hasError flag',
+      );
+
+      // The mixed 'all' scope still forces its file branch healthy, even with
+      // includeErrors — so an error file row never leaks into a mixed query.
+      let mixed = await testRealm.realmIndexQueryEngine.searchEntries(
+        parseSearchEntryQueryFromPayload({
+          scope: 'all',
+          includeErrors: true,
+          fields: { entry: ['item.name'] },
+        }),
+      );
+      assert.notOk(
+        entryFor(mixed, helloUrl),
+        "the mixed 'all' scope forces its file branch healthy regardless of includeErrors",
+      );
+    });
+
     test('eq item._isCardInstanceFile true selects only the dual-indexed card .json file rows', async function (assert) {
       let doc = await testRealm.realmIndexQueryEngine.searchEntries(
         parseSearchEntryQueryFromPayload({

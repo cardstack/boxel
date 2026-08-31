@@ -292,10 +292,14 @@ export class RealmIndexQueryEngine {
       fieldset,
       cardUrls,
       scope,
+      includeErrors,
     } = searchEntryQuery;
     let engineOpts: Options = {
       ...opts,
       ...(cardUrls && cardUrls.length > 0 ? { cardUrls } : {}),
+      // The wire query is the includeErrors carrier (the realm-server handler
+      // builds `opts` without it); fold it in so the SQL branch below honors it.
+      ...(includeErrors ? { includeErrors: true } : {}),
     };
 
     // `scope` pins `boxel_index.type` directly. 'all' searches both kinds in one
@@ -313,15 +317,19 @@ export class RealmIndexQueryEngine {
       ? { kind: 'renderSet' }
       : { kind: 'dataOnly' };
     // Error rows surface only through the `html` branch (their renderings
-    // carry `isError`); the item-only projection matches the live search
-    // path, which excludes them. The 'files' scope never includes errors —
-    // files are only ever surfaced healthy (the mixed 'all' scope forces the
-    // same for its file branch in `_search`) — so it strips includeErrors even
-    // when an html fieldset would otherwise set it.
+    // carry `isError`) or when a data-only `file`-scope caller explicitly opts
+    // in via `includeErrors` (the code-submode file tree — broken files must
+    // stay visible to be fixed). Absent that opt-in, the item-only projection
+    // matches the live search path, which excludes them; the mixed 'all' scope
+    // still forces its file branch healthy regardless (see `search`'s SQL).
     let sqlOpts: QueryOptions;
     if (entryTypeScope === 'file') {
-      let { includeErrors: _drop, ...rest } = engineOpts;
-      sqlOpts = rest;
+      if (engineOpts.includeErrors) {
+        sqlOpts = engineOpts;
+      } else {
+        let { includeErrors: _drop, ...rest } = engineOpts;
+        sqlOpts = rest;
+      }
     } else if (fieldset.html) {
       sqlOpts = { ...engineOpts, includeErrors: true };
     } else {
@@ -426,6 +434,7 @@ export class RealmIndexQueryEngine {
             itemType: fileItemEmitted ? FileMetaResourceType : undefined,
             iconId: fileIconId,
             generation: file.generation,
+            hasError: file.hasError,
           }),
         );
         continue;

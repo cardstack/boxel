@@ -254,6 +254,11 @@ export interface EntryResource {
   // resource's own generation (the two channels advance independently).
   meta?: {
     generation: number;
+    // True when the row failed to index (`boxel_index.has_error`). Only ever
+    // set on rows surfaced by an `includeErrors` search — a healthy-only
+    // search never emits it. Rides on the entry (not the `item`) because an
+    // error row's serialization/search doc may be missing.
+    hasError?: boolean;
   };
 }
 

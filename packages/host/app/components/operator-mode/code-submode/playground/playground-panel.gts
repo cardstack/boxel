@@ -879,6 +879,19 @@ export default class PlaygroundPanel extends Component<Signature> {
       this.newCardNonce++;
       let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+      // Reveal the new card in the code-submode file tree: expand its ancestor
+      // folders and scroll it into view, without navigating the editor away
+      // from the module hosting this playground (no `codePath` change) or
+      // selecting it. Create is post-index, so the card is already in the tree
+      // query result.
+      let realmURL = this.currentRealm;
+      let base = realmURL.endsWith('/') ? realmURL : `${realmURL}/`;
+      let cardFileURL = `${cardId}.json`;
+      if (cardFileURL.startsWith(base)) {
+        this.operatorModeStateService.revealFileInTree(
+          cardFileURL.slice(base.length),
+        );
+      }
     }
     this.closeInstanceChooser();
     return maybeId;

@@ -105,6 +105,7 @@ const SEARCH_ENTRY_QUERY_MEMBERS = [
   'fields',
   'cardUrls',
   'scope',
+  'includeErrors',
 ];
 
 // Which row kinds a search spans. Pins `boxel_index.type` directly, so it works
@@ -147,6 +148,7 @@ export interface SearchEntryQuery {
   realms?: string[];
   cardUrls?: string[];
   scope?: SearchEntryScope;
+  includeErrors?: boolean;
 }
 
 function invalidQuery(message: string): SearchRequestError {
@@ -628,6 +630,14 @@ export function parseSearchEntryQueryFromPayload(
     scope = record.scope as SearchEntryScope;
   }
 
+  let includeErrors: boolean | undefined;
+  if (record.includeErrors !== undefined) {
+    if (typeof record.includeErrors !== 'boolean') {
+      throw invalidQuery(`includeErrors must be a boolean`);
+    }
+    includeErrors = record.includeErrors;
+  }
+
   let capture: HtmlQueryCapture = {};
   let filter: Record<string, unknown> | undefined;
   if (record.filter !== undefined) {
@@ -680,6 +690,7 @@ export function parseSearchEntryQueryFromPayload(
     realms,
     cardUrls,
     scope,
+    includeErrors,
   };
 }
 
@@ -877,6 +888,11 @@ export interface SearchEntryWireQuery {
   cardUrls?: string[];
   realms?: string[];
   scope?: SearchEntryScope;
+  // Opt in to error rows. Only honored for a single-kind scope (`files` /
+  // `cards`); the mixed `all` scope always forces its file branch healthy. A
+  // healthy-only search omits it (the default). The code-submode file tree
+  // sets it (`scope: 'files'`) so broken files stay visible to be fixed.
+  includeErrors?: boolean;
 }
 
 function wireFilterFromFilter(filter: Filter): SearchEntryWireFilter {
@@ -1058,8 +1074,12 @@ export function buildEntryResource(args: {
   // Omitted only by callers with no generation to surface (unit tests); the
   // engine always supplies it.
   generation?: number;
+  // True when the row is an error row — set only by an `includeErrors` search
+  // (see `EntryResource.meta.hasError`). Rides in `meta` alongside
+  // `generation`.
+  hasError?: boolean;
 }): EntryResource {
-  let { url, htmlIds, itemType, iconId, generation } = args;
+  let { url, htmlIds, itemType, iconId, generation, hasError } = args;
   let resource: EntryResource = {
     type: EntryResourceType,
     id: url,
@@ -1080,6 +1100,9 @@ export function buildEntryResource(args: {
   }
   if (generation !== undefined) {
     resource.meta = { generation };
+  }
+  if (hasError) {
+    resource.meta = { ...(resource.meta ?? { generation: 0 }), hasError: true };
   }
   return resource;
 }

@@ -6,13 +6,23 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
 
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
+import { velcro } from 'ember-velcro';
 import { TrackedSet } from 'tracked-built-ins';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
+import {
+  ContextButton,
+  LoadingIndicator,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import {
+  DropdownArrowDown,
+  IconTrash,
+  WarningTriangleFilled,
+} from '@cardstack/boxel-ui/icons';
 
 import type { CodeRef } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
@@ -39,6 +49,31 @@ class AutoFocusModifier extends Modifier<{
   }
 }
 
+// Scroll `path`'s row into view within the nearest overflow:auto ancestor (the
+// file list container), rather than scrolling the whole viewport. Module-level
+// so both keyboard navigation and reveal-on-create share it.
+function scrollPathIntoView(path: string, nav: HTMLElement) {
+  const el = Array.from(nav.querySelectorAll<HTMLElement>('[data-path]')).find(
+    (candidate) => candidate.dataset.path === path,
+  );
+  if (!el) return;
+
+  const scrollContainer = nav.parentElement;
+  if (!scrollContainer) {
+    el.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+
+  const containerRect = scrollContainer.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+
+  if (elRect.top < containerRect.top) {
+    scrollContainer.scrollTop -= containerRect.top - elRect.top;
+  } else if (elRect.bottom > containerRect.bottom) {
+    scrollContainer.scrollTop += elRect.bottom - containerRect.bottom;
+  }
+}
+
 interface Signature {
   Args: {
     realmURL: string;
@@ -49,8 +84,16 @@ interface Signature {
     onFileSelected?: (entryPath: LocalPath) => void;
     onFileConfirmed?: (entryPath: LocalPath) => void;
     onDirectorySelected?: (entryPath: LocalPath) => void;
+    onDeleteFile?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
     autoFocus?: boolean;
+    // Surface files that failed to index (code submode). Off by default.
+    includeErrors?: boolean;
+    // Discover empty directories the index can't see (code submode). Off by
+    // default (the file chooser skips the realm-wide crawl).
+    discoverEmptyDirs?: boolean;
+    // Scroll this file into view (without selecting it) — reveal-on-create.
+    revealFile?: LocalPath;
   };
 }
 
@@ -72,7 +115,9 @@ export default class IndexedFileTree extends Component<Signature> {
         @openDirs={{this.effectiveOpenDirs}}
         @onFileSelected={{this.selectFile}}
         @onDirectorySelected={{this.toggleDirectory}}
+        @onDeleteFile={{@onDeleteFile}}
         @scrollPositionKey={{@scrollPositionKey}}
+        @revealFile={{@revealFile}}
         @relativePath=''
         @cursorPath={{this.cursorPath}}
       />
@@ -112,6 +157,8 @@ export default class IndexedFileTree extends Component<Signature> {
     () => this.args.realmURL,
     () => this.args.fileTypeFilter,
     () => this.args.fileFieldFilter,
+    () => this.args.includeErrors,
+    () => this.args.discoverEmptyDirs,
   );
   private localOpenDirs = new TrackedSet<string>();
   @tracked private selectedFile?: LocalPath;
@@ -180,30 +227,6 @@ export default class IndexedFileTree extends Component<Signature> {
     return p.substring(0, lastSlash) + '/';
   }
 
-  private scrollPathIntoView(path: string, nav: HTMLElement) {
-    const el = Array.from(
-      nav.querySelectorAll<HTMLElement>('[data-path]'),
-    ).find((candidate) => candidate.dataset.path === path);
-    if (!el) return;
-
-    // Scroll within the nearest overflow:auto ancestor (the file list container),
-    // rather than calling scrollIntoView which can scroll the whole viewport.
-    const scrollContainer = nav.parentElement;
-    if (!scrollContainer) {
-      el.scrollIntoView({ block: 'nearest' });
-      return;
-    }
-
-    const containerRect = scrollContainer.getBoundingClientRect();
-    const elRect = el.getBoundingClientRect();
-
-    if (elRect.top < containerRect.top) {
-      scrollContainer.scrollTop -= containerRect.top - elRect.top;
-    } else if (elRect.bottom > containerRect.bottom) {
-      scrollContainer.scrollTop += elRect.bottom - containerRect.bottom;
-    }
-  }
-
   @action
   private selectFile(entryPath: LocalPath) {
     this.selectedFile = entryPath;
@@ -249,7 +272,7 @@ export default class IndexedFileTree extends Component<Signature> {
         } else {
           this.cursorPath = nextItem.path;
         }
-        this.scrollPathIntoView(nextItem.path, nav);
+        scrollPathIntoView(nextItem.path, nav);
         break;
       }
 
@@ -270,7 +293,7 @@ export default class IndexedFileTree extends Component<Signature> {
         } else {
           this.cursorPath = prevItem.path;
         }
-        this.scrollPathIntoView(prevItem.path, nav);
+        scrollPathIntoView(prevItem.path, nav);
         break;
       }
 
@@ -290,7 +313,7 @@ export default class IndexedFileTree extends Component<Signature> {
           const idx = items.findIndex((i) => i.path === this.cursorPath);
           if (idx !== -1 && idx < items.length - 1) {
             this.cursorPath = items[idx + 1]!.path;
-            this.scrollPathIntoView(this.cursorPath, nav);
+            scrollPathIntoView(this.cursorPath, nav);
           }
         }
         break;
@@ -314,7 +337,7 @@ export default class IndexedFileTree extends Component<Signature> {
         const parent = this.getParentPath(this.cursorPath);
         if (parent) {
           this.cursorPath = parent;
-          this.scrollPathIntoView(parent, nav);
+          scrollPathIntoView(parent, nav);
         }
         break;
       }
@@ -378,7 +401,7 @@ export default class IndexedFileTree extends Component<Signature> {
               // Directory: just move cursor, don't expand
               this.cursorPath = path;
             }
-            this.scrollPathIntoView(path, nav);
+            scrollPathIntoView(path, nav);
           }
         }
         break;
@@ -395,7 +418,9 @@ interface TreeLevelSignature {
     openDirs: Set<string>;
     onFileSelected: (entryPath: LocalPath) => void;
     onDirectorySelected: (entryPath: LocalPath) => void;
+    onDeleteFile?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
+    revealFile?: LocalPath;
     relativePath: string;
     cursorPath?: string;
   };
@@ -406,24 +431,53 @@ class TreeLevel extends Component<TreeLevelSignature> {
     {{#each @entries as |entry|}}
       <div class='level' data-test-directory-level>
         {{#if (eq entry.kind 'file')}}
-          <button
-            data-test-file={{entry.path}}
-            data-path={{entry.path}}
-            data-kind='file'
-            title={{entry.name}}
-            tabindex='-1'
-            {{on 'click' (fn @onFileSelected entry.path)}}
-            {{scrollIntoViewModifier
-              (this.isSelectedFile entry.path)
-              container='file-tree'
-              key=@scrollPositionKey
-            }}
-            class='file
+          <div
+            class='file-row
               {{if (this.isSelectedFile entry.path) "selected"}}
               {{if (this.isCursorItem entry.path) "cursor"}}'
+            data-test-file-row={{entry.path}}
+            {{on 'contextmenu' (fn this.onFileRowContextMenu entry.path)}}
           >
-            {{entry.name}}
-          </button>
+            <button
+              data-test-file={{entry.path}}
+              data-path={{entry.path}}
+              data-kind='file'
+              title={{entry.name}}
+              tabindex='-1'
+              {{on 'click' (fn @onFileSelected entry.path)}}
+              {{scrollIntoViewModifier
+                (this.isSelectedFile entry.path)
+                container='file-tree'
+                key=@scrollPositionKey
+              }}
+              {{scrollIntoViewModifier
+                (this.isRevealTarget entry.path)
+                container='file-tree-reveal'
+                key=@revealFile
+              }}
+              class='file
+                {{if (this.isSelectedFile entry.path) "selected"}}
+                {{if (this.isCursorItem entry.path) "cursor"}}
+                {{if entry.hasError "has-error"}}'
+            >
+              {{#if entry.hasError}}
+                <WarningTriangleFilled
+                  class='error-icon'
+                  data-test-file-error={{entry.path}}
+                />
+              {{/if}}{{entry.name}}
+            </button>
+            {{#if @onDeleteFile}}
+              <ContextButton
+                class='file-menu-trigger'
+                @icon='context-menu'
+                @size='extra-small'
+                @label='File options'
+                @variant='ghost'
+                {{on 'click' (fn this.openFileMenu entry.path)}}
+              />
+            {{/if}}
+          </div>
         {{else}}
           <button
             data-test-directory={{entry.path}}
@@ -447,7 +501,9 @@ class TreeLevel extends Component<TreeLevelSignature> {
               @openDirs={{@openDirs}}
               @onFileSelected={{@onFileSelected}}
               @onDirectorySelected={{@onDirectorySelected}}
+              @onDeleteFile={{@onDeleteFile}}
               @scrollPositionKey={{@scrollPositionKey}}
+              @revealFile={{@revealFile}}
               @relativePath={{entry.path}}
               @cursorPath={{@cursorPath}}
             />
@@ -455,6 +511,19 @@ class TreeLevel extends Component<TreeLevelSignature> {
         {{/if}}
       </div>
     {{/each}}
+    {{#if this.menuTriggerEl}}
+      <div
+        class='file-tree-context-menu'
+        {{velcro this.menuTriggerEl placement='bottom-start' strategy='fixed'}}
+        {{onClickOutside this.closeMenu exceptSelector='.file-menu-trigger'}}
+      >
+        <Menu
+          class='file-tree-context-menu-list'
+          @items={{this.menuItems}}
+          @closeMenu={{this.closeMenu}}
+        />
+      </div>
+    {{/if}}
 
     <style scoped>
       .level {
@@ -468,8 +537,33 @@ class TreeLevel extends Component<TreeLevelSignature> {
         padding-left: 1em;
       }
 
-      .directory,
-      .file {
+      .file-row {
+        display: flex;
+        align-items: center;
+        border-radius: var(--boxel-border-radius-xs);
+        transition:
+          background-color var(--boxel-transition),
+          box-shadow var(--boxel-transition);
+      }
+
+      .file-row:hover:not(.cursor):not(.selected),
+      .file-row:focus-within:not(.cursor):not(.selected) {
+        background-color: var(--boxel-200);
+      }
+
+      /* Selected file: green inverse state */
+      .file-row.selected {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
+      }
+
+      /* Keyboard cursor on files: same green inverse state */
+      .file-row.cursor {
+        color: var(--boxel-dark);
+        background-color: var(--boxel-highlight);
+      }
+
+      .directory {
         border-radius: var(--boxel-border-radius-xs);
         background: transparent;
         border: 0;
@@ -484,23 +578,11 @@ class TreeLevel extends Component<TreeLevelSignature> {
           background-color var(--boxel-transition),
           outline-color var(--boxel-transition),
           box-shadow var(--boxel-transition);
+        padding-left: 0;
       }
 
-      .directory:hover:not(.cursor),
-      .file:hover:not(.cursor):not(.selected) {
+      .directory:hover:not(.cursor) {
         background-color: var(--boxel-200);
-      }
-
-      /* Selected file: green inverse state */
-      .file.selected {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
-      }
-
-      /* Keyboard cursor on files: same green inverse state */
-      .file.cursor {
-        color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
       }
 
       /* Keyboard cursor on directories: lighter active state */
@@ -512,15 +594,6 @@ class TreeLevel extends Component<TreeLevelSignature> {
           var(--boxel-light)
         );
         box-shadow: inset 0 0 0 1px var(--boxel-highlight);
-      }
-
-      /* Ensure stacked states stay visually identical */
-      .file.selected.cursor {
-        box-shadow: none;
-      }
-
-      .directory {
-        padding-left: 0;
       }
 
       .directory :deep(.icon) {
@@ -535,14 +608,118 @@ class TreeLevel extends Component<TreeLevelSignature> {
       }
 
       .file {
+        flex: 1;
+        min-width: 0;
+        background: transparent;
+        border: 0;
+        padding: var(--boxel-sp-xxxs);
         padding-left: calc(var(--icon-length) + var(--icon-margin));
+        text-align: start;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: inherit;
+        cursor: default;
+        border-radius: var(--boxel-border-radius-xs);
+      }
+
+      .file .error-icon {
+        --icon-color: var(--boxel-error-100, #ff4136);
+        width: var(--icon-length);
+        height: var(--icon-length);
+        margin-right: var(--icon-margin);
+        margin-bottom: -2px;
+        vertical-align: baseline;
+      }
+
+      /* Broken-file affordance: red name when not selected/cursored. */
+      .file-row:not(.selected):not(.cursor) .file.has-error {
+        color: var(--boxel-error-100, #ff4136);
+      }
+
+      .file-menu-trigger {
+        flex-shrink: 0;
+        visibility: hidden;
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .file-row:hover .file-menu-trigger,
+      .file-row:focus-within .file-menu-trigger {
+        visibility: visible;
+      }
+
+      .file-tree-context-menu {
+        z-index: var(--boxel-layer-floating-button);
       }
     </style>
   </template>
 
+  @tracked private menuTriggerEl?: HTMLElement;
+  private menuEntryPath?: LocalPath;
+
+  constructor(owner: Owner, args: TreeLevelSignature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      this.menuEntryPath = undefined;
+      this.menuTriggerEl = undefined;
+    });
+  }
+
+  private get menuItems() {
+    if (!this.menuEntryPath) {
+      return [];
+    }
+    return [
+      new MenuItem({
+        label: 'Delete',
+        action: () => this.args.onDeleteFile?.(this.menuEntryPath!),
+        icon: IconTrash,
+        dangerous: true,
+      }),
+    ];
+  }
+
+  @action
+  private closeMenu() {
+    this.menuEntryPath = undefined;
+    this.menuTriggerEl = undefined;
+  }
+
+  @action
+  private openFileMenu(entryPath: LocalPath, e: MouseEvent) {
+    if (!this.args.onDeleteFile) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (this.menuTriggerEl === e.currentTarget) {
+      this.closeMenu();
+      return;
+    }
+    this.menuEntryPath = entryPath;
+    this.menuTriggerEl = e.currentTarget as HTMLElement;
+  }
+
+  @action
+  private onFileRowContextMenu(entryPath: LocalPath, e: MouseEvent) {
+    if (!this.args.onDeleteFile) {
+      return;
+    }
+    this.openFileMenu(entryPath, e);
+  }
+
   @action
   isSelectedFile(path: string): boolean {
     return this.args.selectedFile === path;
+  }
+
+  // Reveal-on-create: scroll this file into view (without selecting it) when it
+  // is the reveal target. Render-driven via `scrollIntoViewModifier`, so it
+  // fires the moment the just-created row renders — including after the index
+  // event re-runs the search.
+  @action
+  isRevealTarget(path: string): boolean {
+    return this.args.revealFile != null && this.args.revealFile === path;
   }
 
   @action

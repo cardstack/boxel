@@ -193,6 +193,10 @@ export interface IndexedFile {
   htmlGeneration?: number;
   realmURL: string;
   indexedAt: number | null;
+  // Whether the file row is an error row (`boxel_index.has_error`). Populated
+  // on the search-entry read path; carried onto the wire only by an
+  // `includeErrors` search (a healthy-only search never surfaces error rows).
+  hasError: boolean;
 }
 
 export interface IndexedInstance {
@@ -674,6 +678,7 @@ export class IndexQueryEngine {
       generation,
       realmURL,
       indexedAt: indexedAt != null ? parseInt(indexedAt) : null,
+      hasError: Boolean(maybeResult.has_error),
     };
   }
 
@@ -2244,6 +2249,7 @@ export function fileEntryFromResult(
       0,
     realmURL: result.realm_url ?? '',
     indexedAt,
+    hasError: Boolean(result.has_error),
   };
 }
 

@@ -280,6 +280,18 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             },
           },
           'not-json.json': 'I am not JSON.',
+          // A module that fails to index — its file row is stored as an error
+          // row. The code-submode tree surfaces it (includeErrors) so it can be
+          // fixed; the file chooser (healthy-only) does not.
+          'broken.gts': `import { CardDef, contains, field } from "@cardstack/base/card-api";
+            export class Broken extends CardDef {
+              @field oops = contains(`,
+          // A folder holding a single file — deleting that file leaves the
+          // folder empty on disk; the tree must keep showing it (D2).
+          'solo/only.json': '{}',
+          // A deeply-nested single file — deleting it empties a multi-level
+          // subtree, exercising the empty-tail recursion (D2).
+          'deep/aa/bb/lonely.json': '{}',
           'Person/1.json': {
             data: {
               type: 'card',
@@ -1209,6 +1221,119 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       undefined,
       'friend.gts still exists in the realm',
     );
+  });
+
+  test('a file that fails to index still renders in the file tree', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    await waitFor('[data-test-file="broken.gts"]');
+    assert
+      .dom('[data-test-file="broken.gts"]')
+      .exists('the errored file still renders in the tree');
+    assert
+      .dom('[data-test-file-error="broken.gts"]')
+      .exists('the errored file shows an error affordance');
+    assert
+      .dom('[data-test-file="person.gts"] [data-test-file-error]')
+      .doesNotExist('a healthy file shows no error affordance');
+  });
+
+  test('an empty directory stays visible after its last file is deleted', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}friend.gts`,
+      openDirs: { [testRealmURL]: ['solo/'] },
+    });
+
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    await waitFor('[data-test-directory="solo/"]');
+    assert.dom('[data-test-directory="solo/"]').exists('solo/ dir is present');
+    await waitFor('[data-test-file="solo/only.json"]');
+
+    // Delete the only file in solo/ via the context menu.
+    await triggerEvent('[data-test-file-row="solo/only.json"]', 'contextmenu');
+    await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}solo/only.json"]`);
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () => !document.querySelector('[data-test-file="solo/only.json"]'),
+    );
+    assert
+      .dom('[data-test-file="solo/only.json"]')
+      .doesNotExist('the deleted file is gone');
+    assert
+      .dom('[data-test-directory="solo/"]')
+      .exists('the now-empty solo/ directory stays visible');
+  });
+
+  test('a nested empty directory chain stays visible after its last file is deleted', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}friend.gts`,
+      openDirs: { [testRealmURL]: ['deep/', 'deep/aa/', 'deep/aa/bb/'] },
+    });
+
+    await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    await waitFor('[data-test-directory="deep/"]');
+    await waitFor('[data-test-file="deep/aa/bb/lonely.json"]');
+
+    await triggerEvent(
+      '[data-test-file-row="deep/aa/bb/lonely.json"]',
+      'contextmenu',
+    );
+    await waitFor('[data-test-boxel-menu-item-text="Delete"]');
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(
+      `[data-test-delete-modal="${testRealmURL}deep/aa/bb/lonely.json"]`,
+    );
+    await click('[data-test-confirm-delete-button]');
+
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-file="deep/aa/bb/lonely.json"]'),
+    );
+    assert
+      .dom('[data-test-directory="deep/"]')
+      .exists('the top of the emptied chain stays visible');
+    assert
+      .dom('[data-test-directory="deep/aa/"]')
+      .exists('the middle of the emptied chain stays visible');
+    assert
+      .dom('[data-test-directory="deep/aa/bb/"]')
+      .exists('the deepest emptied directory stays visible');
   });
 
   test('can delete a file via right-click in file tree', async function (assert) {

@@ -1101,6 +1101,58 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').containsText('Blog Post');
     });
 
+    test<TestContextWithSave>('creating an instance from the playground reveals it in the file tree without navigating away', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+
+      await click('[data-boxel-selector-item-text="BlogPost"]');
+      await togglePlaygroundPanel();
+      await waitFor('[data-test-file-tree-mask]', { count: 0 });
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+      await createNewInstance();
+      await waitUntil(() => id);
+      await settled();
+
+      let newFilePath = `${id!.slice(testRealmURL.length)}.json`;
+      assert.ok(
+        newFilePath.startsWith('BlogPost/'),
+        'the new card lands in its type folder',
+      );
+
+      await waitFor(`[data-test-file="${newFilePath}"]`);
+      assert
+        .dom(`[data-test-file="${newFilePath}"]`)
+        .exists('the created card appears in the file tree automatically');
+      assert
+        .dom('[data-test-directory="BlogPost/"] .icon')
+        .hasClass('open', 'the card’s ancestor folder is expanded');
+      assert
+        .dom(`[data-test-file="${newFilePath}"]`)
+        .doesNotHaveClass(
+          'selected',
+          'the created card is revealed but not selected',
+        );
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      assert.strictEqual(
+        operatorModeStateService.codePathRelativeToRealm,
+        'blog-post.gts',
+        'the editor stays on the current module (no codePath navigation)',
+      );
+      assert
+        .dom(
+          '[data-test-playground-panel] [data-test-card][data-test-card-format="isolated"]',
+        )
+        .exists('the playground still shows the just-created instance');
+    });
+
     test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
       await openFileInPlayground('code-ref-driver.gts', testRealmURL, {
         declaration: 'CodeRefDriver',
