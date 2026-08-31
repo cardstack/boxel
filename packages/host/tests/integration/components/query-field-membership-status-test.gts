@@ -170,4 +170,24 @@ module('Integration | query-field relationship status', function (hooks) {
       'and it carries the same membership as its eager twin',
     );
   });
+  test('isLoaded never claims a result set the seed has not applied yet', async function (this: RenderingTestContext, assert) {
+    let { getRelationshipMembershipState } = cardApi;
+    // Deliberately unsettled: the owner's document has arrived and its seed is
+    // being applied, which is the window where the resource holds an empty
+    // result set it is about to replace.
+    let host = (await getService('store').get(HOST_URL)) as CardDefType;
+
+    let status = getRelationshipMembershipState(host, 'matches');
+    let claimsAnIncompleteSet =
+      status.isLoaded && status.membership?.length !== 2;
+    assert.false(
+      claimsAnIncompleteSet,
+      'isLoaded is claimed only once the membership is the real one',
+    );
+
+    await settled();
+    let settledStatus = getRelationshipMembershipState(host, 'matches');
+    assert.true(settledStatus.isLoaded, 'and it is claimed once settled');
+    assert.strictEqual(settledStatus.membership?.length, 2);
+  });
 });

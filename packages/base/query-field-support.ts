@@ -196,7 +196,13 @@ export function ensureQueryFieldSearchResource(
         : undefined,
     },
   );
-  fieldState.searchResource = searchResource;
+  // A resource built while the query was unresolvable holds a thunk that read
+  // no tracked state, so nothing will ever invalidate it into rebuilding. Hand
+  // it back for this read but keep it out of the cache, so the next read builds
+  // one against whatever context has since arrived.
+  if (args()) {
+    fieldState.searchResource = searchResource;
+  }
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
@@ -233,6 +239,23 @@ export function resolveQueryFieldEagerly(
     return;
   }
   if (!store?.resolvesQueryFieldsEagerly) {
+    return;
+  }
+  // The owner's realm is what a query interpolates against, and it is not
+  // always assigned by the time its own deserialization finishes — a contained
+  // FieldDef receives it from its parent afterwards, and a card created without
+  // an id has no `meta` to carry it. Resolving now would build a resource
+  // around an unresolvable query, and because that path reads no tracked state
+  // the resource would never re-derive one. Leave the field to the getter,
+  // which runs once the realm is known.
+  if (!(instance as any)[realmURLSymbol]) {
+    return;
+  }
+  // A render context decides `isLive` for the resource's whole lifetime, and
+  // index renders interleave with an interactive app's own loads. Creating the
+  // resource here could hand a live card a non-live resource that never
+  // subscribes, so let the getter create it in the context that reads it.
+  if ((globalThis as any).__boxelRenderContext) {
     return;
   }
   try {

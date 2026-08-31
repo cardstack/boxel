@@ -409,6 +409,27 @@ type CardChangeSubscriber = (
   fieldValue: any,
 ) => void;
 
+// Whether a card or field class declares any query-backed relationship. Keyed
+// by class because the answer comes from the field declarations, which an
+// instance-level link override never changes — it narrows a link's target type,
+// not whether the link is query-backed.
+const classHasQueryFields = initSharedState(
+  'classHasQueryFields',
+  () => new WeakMap<typeof BaseDef, boolean>(),
+);
+
+function hasQueryFields(instance: BaseDef): boolean {
+  let klass = instance.constructor as typeof BaseDef;
+  let cached = classHasQueryFields.get(klass);
+  if (cached === undefined) {
+    cached = Object.values(getFields(klass, { includeComputeds: true })).some(
+      (field) => Boolean(field?.queryDefinition),
+    );
+    classHasQueryFields.set(klass, cached);
+  }
+  return cached;
+}
+
 const stores = initSharedState(
   'stores',
   () => new WeakMap<BaseDef, CardStore>(),
@@ -4720,11 +4741,20 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     // the one that most needs its search started. Runs once the instance is
     // fully assembled, because a query interpolates against the owner's own
     // fields and realm context.
-    for (let field of Object.values(
-      getFields(instance, { includeComputeds: true }),
-    )) {
-      if (field?.queryDefinition) {
-        resolveQueryFieldEagerly(getStore(instance), instance, field);
+    //
+    // Gated on a per-class answer first: `getFields` memoizes only inside a
+    // render context, and this runs outside one, so enumerating a card's fields
+    // here costs a full prototype walk on every deserialize. Whether a class
+    // declares any query-backed field is a property of the definition, so it is
+    // computed once and every card without one skips the walk entirely.
+    if (hasQueryFields(instance)) {
+      let store = getStore(instance);
+      for (let field of Object.values(
+        getFields(instance, { includeComputeds: true }),
+      )) {
+        if (field?.queryDefinition) {
+          resolveQueryFieldEagerly(store, instance, field);
+        }
       }
     }
   }
