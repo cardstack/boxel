@@ -35,6 +35,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -517,20 +518,31 @@ export default class RealmServerService extends Service {
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      // A realm identifier may be a registered prefix, which has no origin to
-      // compare — resolve it before asking. Anything resolving to the test
-      // realm's origin is served by the test realm server and skipped.
-      if (testRealmOrigin) {
-        let resolved = this.network.virtualNetwork.isRegisteredPrefix(
-          normalizedRealmURL,
-        )
-          ? this.network.virtualNetwork.toURL(normalizedRealmURL).href
-          : normalizedRealmURL;
-        if (new URL(resolved).origin === testRealmOrigin) {
-          continue;
-        }
+      // A realm identifier may be a registered prefix, which neither carries an
+      // origin to compare nor matches the URL a session token is filed under.
+      // Resolve once and let both questions below ask in URL form, so the
+      // function is form-agnostic end to end rather than only at the skip.
+      let resolvedRealmURL = resolvedRealmURLHref(
+        this.network.virtualNetwork,
+        normalizedRealmURL,
+      );
+      // Anything resolving to the test realm's origin is served by the test
+      // realm server and skipped.
+      if (
+        testRealmOrigin &&
+        new URL(resolvedRealmURL).origin === testRealmOrigin
+      ) {
+        continue;
       }
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      // A token is filed under the realm resource's own url, which is whatever
+      // spelling created the resource — so try the identifier as given and its
+      // resolved form. Missing the token does not fail loudly: the loop would
+      // `continue`, and a realm that is the only entry would leave the set
+      // empty and answer with this realm server instead of the realm's.
+      let token =
+        sessionTokens[normalizedRealmURL] ??
+        sessionTokens[realmURL] ??
+        sessionTokens[resolvedRealmURL];
       if (!token) {
         continue;
       }
