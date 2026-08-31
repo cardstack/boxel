@@ -277,10 +277,46 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     }
     if (g.__boxelJobId !== this.#jobScopedDocCacheJobId) {
       this.#jobScopedDocCache.clear();
+      this.#dropResidentInstancesForNewJob();
       this.#jobScopedDocCacheJobId = g.__boxelJobId;
       this.#jobScopedDocCacheGeneration++;
     }
     return `${kind}:${url}`;
+  }
+
+  // Instance residency is job-scoped for the same reason the document cache
+  // is. A resident instance is handed to `linksTo` / `linksToMany`
+  // deserialization — and to the lazy link loader's reuse — with no freshness
+  // check, and a prerender tab is never told that a card it holds has since
+  // been rewritten: the write lands in the realm server, and the tab carries
+  // no realm-event subscription. A target rewritten between jobs would
+  // otherwise reduce into an owner's `computeVia` at its pre-write value, and
+  // that number is committed as though it were current — the write invalidated
+  // the owner, so its row is rebuilt from the stale copy and nothing later
+  // disagrees with it.
+  //
+  // Safe by construction at this point: the clear runs on the first document
+  // load of a job, before any of that job's own instances exist. Within a job
+  // residency is untouched, so a target shared by many owners still loads once.
+  // Errors are dropped alongside instances — an error row is a claim about a
+  // URL from the previous job's view of the realm, and the fix for it lands in
+  // exactly the same way a value change does.
+  #dropResidentInstancesForNewJob() {
+    if (this.#jobScopedDocCacheJobId === undefined) {
+      // This store has not served a job yet, so nothing resident can belong to
+      // an earlier one. Keeping the first job's own loads is the whole point.
+      return;
+    }
+    this.#cardInstances.clear();
+    this.#cardInstanceErrors.clear();
+    this.#nonTrackedCardInstances.clear();
+    this.#nonTrackedCardInstanceErrors.clear();
+    this.#fileMetaInstances.clear();
+    this.#fileMetaInstanceErrors.clear();
+    this.#nonTrackedFileMetaInstances.clear();
+    this.#nonTrackedFileMetaInstanceErrors.clear();
+    this.#gcCandidates.clear();
+    this.#idResolver.reset();
   }
 
   #readJobScopedDoc(
