@@ -541,6 +541,14 @@ summary,
   transition: none;
 }
 
+/* A card nobody can see holds its animations where they stand. `paused` rather
+   than `none`, so coming back does not restart every loop from frame zero —
+   which would be a worse artefact than the cost it saves. */
+.card-stage.is-resting,
+.card-stage.is-resting * {
+  animation-play-state: paused !important;
+}
+
 .card-stage {
   position: relative;
   height: 400px;

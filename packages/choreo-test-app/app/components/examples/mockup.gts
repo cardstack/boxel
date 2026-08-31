@@ -473,6 +473,16 @@ export class Mockup extends Component {
     this.setMode('2d');
   };
 
+  /**
+   * While flat, EITHER chip starts the scene. Pressing 2D when you are already
+   * looking at 2D did nothing, which is correct for a segmented control and
+   * useless here — the flat state is a still, and the only thing anyone wants
+   * from it is to see the thing move. See the same note in long-take.gts.
+   */
+  pick = (mode: '2d' | '3d') => {
+    this.setMode(this.mode === '2d' ? '3d' : mode);
+  };
+
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
       return;
@@ -2086,12 +2096,12 @@ export class Mockup extends Component {
           <button
             type="button"
             aria-pressed="{{this.isMode '2d'}}"
-            {{on "click" (fn this.setMode "2d")}}
+            {{on "click" (fn this.pick "2d")}}
           >2D</button>
           <button
             type="button"
             aria-pressed="{{this.isMode '3d'}}"
-            {{on "click" (fn this.setMode "3d")}}
+            {{on "click" (fn this.pick "3d")}}
           >{{if this.arming "3D…" "3D"}}</button>
         </div>
 
@@ -2569,8 +2579,6 @@ export class Mockup extends Component {
         /* 2D is the default because 3D is a megabyte and a half; this is
            the nudge that says the other one is worth the wait */
         .mg-stage[data-mode="2d"] .mg-seg button:last-child {
-          border-color: var(--ember-hot, #ff6a3a);
-          color: var(--ember-hot, #ff6a3a);
           animation: mg-beckon 2.6s ease-in-out infinite;
         }
         @keyframes mg-beckon {
@@ -2771,22 +2779,17 @@ export class Mockup extends Component {
           border-color: #ffffff5c;
           background: transparent;
         }
-        .mg-seg button:last-child[aria-pressed="true"] {
+        /* 3D IS ALWAYS THE FILLED PILL — see the same note in long-take.gts.
+           An ember outline at 11px on a slate set is an invitation you have to
+           go looking for, and filling it only once you are already in 3D spends
+           the emphasis on the one press nobody needs to make. 2D never gets a
+           white fill: a selected state that outranks the primary action is a
+           selected state arguing with it. */
+        .mg-seg button:last-child {
           background: var(--ember-hot, #ff6a3a);
           border-color: var(--ember-hot, #ff6a3a);
           color: #ffffff;
           font-weight: 700;
-        }
-        .mg-seg button:first-child[aria-pressed="true"] {
-          background: #ffffff;
-          border-color: #ffffff;
-          color: #16181d;
-          font-weight: 700;
-        }
-        /* while flat, the other half is tinted to say it is worth a press */
-        .mg-page[data-mode="2d"] .mg-seg button:last-child {
-          color: var(--ember-hot, #ff6a3a);
-          border-color: var(--ember-hot, #ff6a3a);
         }
         .mg-transport button[data-on="yes"] {
           border-color: #ffffff8f;

@@ -184,6 +184,22 @@ export class LongTake extends Component {
     this.setMode('2d');
   };
 
+  /**
+   * While flat, EITHER chip starts the film.
+   *
+   * Pressing 2D when you are already looking at 2D did nothing, which is
+   * correct for a segmented control and useless here: the flat state is a still
+   * of a laptop, and the only thing anyone can want from it is to see the
+   * thing move. A press on a control that answers with nothing reads as a
+   * broken control, and the one at hand was the wrong half of a toggle.
+   *
+   * In 3D the pair behaves as an ordinary toggle again — 2D is the way back,
+   * and 3D is where you already are.
+   */
+  choose = (mode: '2d' | '3d') => {
+    this.setMode(this.mode === '2d' ? '3d' : mode);
+  };
+
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
       return;
@@ -1349,12 +1365,12 @@ export class LongTake extends Component {
           <button
             type="button"
             aria-pressed="{{this.isMode '2d'}}"
-            {{on "click" (fn this.setMode "2d")}}
+            {{on "click" (fn this.choose "2d")}}
           >2D</button>
           <button
             type="button"
             aria-pressed="{{this.isMode '3d'}}"
-            {{on "click" (fn this.setMode "3d")}}
+            {{on "click" (fn this.choose "3d")}}
           >{{if this.arming "3D…" "3D"}}</button>
         </div>
 
@@ -1595,23 +1611,30 @@ export class LongTake extends Component {
           line-height: 1;
           white-space: nowrap;
         }
-        /* 3D is the ember pill because it is the thing worth pressing; 2D
-           is the white one, which is a state rather than an invitation. */
-        .lt-seg button:last-child[aria-pressed="true"] {
+        /* 3D IS ALWAYS THE FILLED PILL, and it is the only saturated thing on
+           the stage.
+
+           It used to be an ember OUTLINE while flat and a filled pill only once
+           you were already in 3D — which is backwards twice over. An outline in
+           the accent colour, at 11px, on a slate set, is an invitation you have
+           to go looking for; and filling it at the moment it becomes the
+           current state spends the emphasis on the one press nobody needs to
+           make. The filled pill marks the thing worth pressing, so it belongs
+           on 3D always: flat, it is the way in; in 3D, it is where you are, and
+           it is the same shape either way rather than a control that changes
+           under the hand.
+
+           2D never gets the white fill it used to have while flat. A selected
+           state that outranks the primary action is a selected state arguing
+           with it — and the mode is legible from the picture anyway, which is
+           either a still or a room. */
+        .lt-seg button:last-child {
           background: var(--ember-hot, #ff6a3a);
           border-color: var(--ember-hot, #ff6a3a);
           color: #ffffff;
           font-weight: 700;
         }
-        .lt-seg button:first-child[aria-pressed="true"] {
-          background: #ffffff;
-          border-color: #ffffff;
-          color: #16181d;
-          font-weight: 700;
-        }
         .lt-page[data-mode="2d"] .lt-seg button:last-child {
-          color: var(--ember-hot, #ff6a3a);
-          border-color: var(--ember-hot, #ff6a3a);
           animation: lt-beckon 2.6s ease-in-out infinite;
         }
         @keyframes lt-beckon {

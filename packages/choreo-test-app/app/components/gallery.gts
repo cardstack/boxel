@@ -11,6 +11,7 @@ import {
   crossingSettled,
 } from 'test-app/lib/crossing';
 import { highlightSample } from 'test-app/lib/highlight';
+import { restWhenOff } from 'test-app/lib/onstage';
 import { isCrossing } from 'test-app/lib/tempo';
 
 const DEEP_DIVE = 'Deep Dive';
@@ -356,8 +357,12 @@ export class Gallery extends Component {
               transition=this.cardTransition
             }}
           >
+            {{! Scrolled away, a card stops animating. See `restWhenOff`: an
+                idle gallery was running twenty-five CSS animations at once and
+                the crossing has to share a thread with every one of them. }}
             <div
               class="card-stage"
+              {{restWhenOff}}
               {{motion id=(concat "stage-" demo.id) role="stage"}}
             >
               {{#if (this.stageLive demo.id)}}
