@@ -84,18 +84,22 @@ export async function retrieveScopedCSS({
   return scopedCSS;
 }
 
-function decodeScopedCSSFromDeps(deps: string[]): string | null {
+export function decodeScopedCSSFromDeps(deps: string[]): string | null {
   let cssBlocks = new Set<string>();
 
   for (let dep of deps) {
     if (typeof dep !== 'string') {
       continue;
     }
+    // Deps come in two forms: absolute URLs (realm-local modules) and
+    // prefix-form RRIs like `@cardstack/base/...` (registered realms). A
+    // prefix-form dep is not a parseable URL — decode it as-is; the encoded
+    // CSS is baked into the string the same way either way.
     let pathname: string;
     try {
       pathname = new URL(dep).pathname;
     } catch (_error) {
-      continue;
+      pathname = dep;
     }
     if (!isScopedCSSRequest(pathname)) {
       continue;
