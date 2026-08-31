@@ -76,6 +76,16 @@ const STILL = `${config.rootURL}still/macbook.webp`;
 const SCREEN = { h: BOARD.h, w: BOARD.w };
 
 /**
+ * How much of the room the cover glass gives back — the reflectance of the
+ * sheet, as a plain 0-to-1 grey. It scales the WHOLE specular response, the
+ * softboxes as well as the painted room, which is what makes it a single
+ * honest number: 0 is a matte screen, 1 is a mirror you cannot read the
+ * drawing through. A real display is nearer the bottom of that range than
+ * feels right until you see it.
+ */
+const GLOSS = 0.12;
+
+/**
  * THE FLAT LAPTOP IS A PHOTOGRAPH OF THE ROUND ONE.
  *
  * 2D used to be a laptop drawn in CSS, which meant the switch changed what
@@ -744,6 +754,29 @@ export class LongTake extends Component {
       top.lookAt(0, 0, 0);
       scene.add(top);
 
+      /**
+       * ONE HARD SOURCE, for the glint along the lid's top edge and the
+       * hinge. Everything else here is big and soft, which models form
+       * beautifully and leaves nothing to catch the eye; a product shot
+       * needs one small source somewhere making one small bright thing.
+       *
+       * three counts point lights in candela and this one has decay 2, so
+       * reaching a laptop's distance is a large number by construction
+       * rather than by taste — the inverse square is doing the work, not
+       * the intensity.
+       *
+       * FLAGGED OFF THE SCREEN, with the key. A point source is the one
+       * thing a mirror cannot hold still: its specular on the cover glass
+       * is a couple of pixels across and hundreds of times brighter than
+       * the drawing under it, so as the shot turns it does not slide
+       * across the panel, it blinks on and off between frames. Everything
+       * the glass is allowed to see is wide and soft for that reason.
+       */
+      const glint = new T.PointLight(0xffffff, 1_600_000, 0, 2);
+      glint.position.set(-520, 1450, 1050);
+      glint.layers.set(EYE_LEVEL);
+      scene.add(glint);
+
       /** the table: a wide dim source coming back up off the desk */
       const bounce = new T.RectAreaLight(0xc6cedb, 0.8, 2600, 900);
       bounce.position.set(0, -1250, 900);
@@ -833,6 +866,8 @@ export class LongTake extends Component {
       /** the display's own frame: what the DOM plane is pinned to */
       const anchor = new T.Object3D();
       pivot.add(anchor);
+      /** the cover glass's material, for `window.__take.gloss(n)` */
+      let glassMat: THREE.MeshPhysicalMaterial | undefined;
 
       const draco = new DRACOLoader().setDecoderPath(DRACO);
       const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -982,6 +1017,79 @@ export class LongTake extends Component {
             transparent: true,
           });
 
+          /**
+           * THE COVER GLASS — the sheet the drawing is behind, rather than
+           * a surface the drawing is printed on.
+           *
+           * The panel above cannot do this itself. Its whole job is to
+           * punch a hole: `NoBlending` writes its alpha straight into the
+           * framebuffer, so everything it draws is a replacement for the
+           * DOM rather than something laid over it, and a highlight strong
+           * enough to read would be a highlight you look at the slides
+           * THROUGH. So the reflection is a second sheet, a hair in front,
+           * drawn after it and adding to what is already there.
+           *
+           * Custom blending, because the two channels want opposite
+           * things. RGB is additive — a reflection is light arriving, and
+           * light only ever brightens what it lands on. Alpha is left
+           * exactly as the panel wrote it: the framebuffer's alpha is the
+           * hole the DOM shows through, and an ordinary transparent
+           * material would raise it right across the display and quietly
+           * seal the screen over.
+           *
+           * It reflects the flagged room and not the bright one for the
+           * same reason the panel does — a mirror pointed at a white cyc
+           * comes back a white sheet. What it catches is the overhead
+           * strip, and the point of it is that it MOVES: the sheen slides
+           * across the drawing as the shot turns, which a painted-on
+           * gradient cannot do and which is most of why glass reads as
+           * glass.
+           */
+          const glass = new T.Mesh(
+            new T.PlaneGeometry(
+              SCREEN.w,
+              Math.round(SCREEN.w * (hLocal / wLocal))
+            ),
+            new T.MeshPhysicalMaterial({
+              blendDst: T.OneFactor,
+              // leave the hole alone — see above
+              blendDstAlpha: T.OneFactor,
+              blendEquation: T.AddEquation,
+              blendEquationAlpha: T.AddEquation,
+              blendSrc: T.OneFactor,
+              blendSrcAlpha: T.ZeroFactor,
+              blending: T.CustomBlending,
+              // A MIRROR, not glass — which is the opposite of what it is
+              // standing in for, and the only way to get the look. A
+              // dielectric reflects about four percent of what it faces;
+              // four percent of a room painted almost black is nothing at
+              // all, and no gain rescues it because the gain multiplies
+              // the same nothing. `metalness: 1` reflects the whole room
+              // instead, and the room's own darkness becomes the control:
+              // its walls are #05060a, so they add no haze over the
+              // drawing, and what survives is the strip and the two side
+              // lamps. The Fresnel edge a real cover glass has is the one
+              // thing given up, and at these angles it was never visible.
+              color: new T.Color().setScalar(GLOSS),
+              depthWrite: false,
+              envMap: flagged,
+              envMapIntensity: 1,
+              metalness: 1,
+              // a touch soft: a mirror-sharp strip reads as a seam in the
+              // model rather than as light in the room, and a softened
+              // lobe is also what stops a moving highlight from sparkling
+              roughness: 0.18,
+              transparent: true,
+            })
+          );
+          // a hair proud of the panel, and drawn last: far too little to
+          // read as parallax when the lid turns, far enough to sort in
+          // front of the surface it is the cover for
+          glass.position.z = 0.5;
+          glass.renderOrder = 2;
+          anchor.add(glass);
+          glassMat = glass.material as THREE.MeshPhysicalMaterial;
+
           model.traverse((child) => {
             const mesh = child as THREE.Mesh;
             if (mesh.isMesh && mesh !== panel) {
@@ -1048,6 +1156,16 @@ export class LongTake extends Component {
       built = true;
       building = false;
       (window as LongTakeWindow).__take = {
+        /**
+         * Dial the cover glass from the console while the shot runs, which
+         * is the only way to judge it: a reflection is a thing you tune by
+         * watching it move across the screen, not by reading a number.
+         * `GLOSS` above is where the answer goes.
+         */
+        gloss: (n: number) => {
+          glassMat?.color.setScalar(n);
+          return glassMat?.color.r;
+        },
         /**
          * REMAKE THE 2D STILL. See `captureStill()` in vite.config.mjs.
          *

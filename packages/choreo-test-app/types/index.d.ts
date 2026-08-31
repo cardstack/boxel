@@ -25,6 +25,9 @@ declare module 'three' {
   export class Color {
     constructor(hex?: number);
     setHex(hex: number): this;
+    /** r, g and b to the same value — a plain grey, used as a reflectance */
+    setScalar(v: number): this;
+    r: number;
   }
 
   export class Float32BufferAttribute {
@@ -80,6 +83,7 @@ declare module 'three' {
   export const OneFactor: number;
   export const ZeroFactor: number;
   export const NoBlending: number;
+  export const AddEquation: number;
 
   export class Vector3 {
     toArray(): number[];
@@ -173,16 +177,21 @@ declare module 'three' {
   }
 
   export class MeshPhysicalMaterial extends Material {
+    /** the reflectance the cover glass is dialled with — see long-take's GLOSS */
+    color: Color;
+    envMapIntensity: number;
     constructor(params?: {
       alphaTest?: number;
       blendDst?: number;
       blendDstAlpha?: number;
+      blendEquation?: number;
+      blendEquationAlpha?: number;
       blendSrc?: number;
       blendSrcAlpha?: number;
       blending?: number;
       clearcoat?: number;
       clearcoatRoughness?: number;
-      color?: number;
+      color?: Color | number;
       depthWrite?: boolean;
       envMap?: unknown;
       envMapIntensity?: number;
@@ -197,6 +206,8 @@ declare module 'three' {
     isMesh: boolean;
     geometry: BufferGeometry;
     material: Material | Material[];
+    /** draw order within a pass — the cover glass has to land after the panel */
+    renderOrder: number;
     constructor(geometry?: unknown, material?: Material);
   }
 
