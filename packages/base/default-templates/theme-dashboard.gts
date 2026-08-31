@@ -1503,7 +1503,7 @@ export class ThemeDashboard extends GlimmerComponent<{
     // affixes a dark-mode toggle to the right end of the nav bar
     toggleDarkMode?: () => void;
   };
-  Blocks: { default: []; header: []; navBar: [] };
+  Blocks: { default: []; header: [] };
   Element: HTMLElement;
 }> {
   // Content-derived rather than guidFor: this markup can be persisted as
@@ -1548,9 +1548,7 @@ export class ThemeDashboard extends GlimmerComponent<{
           {{yield to='header'}}
         {{/if}}
 
-        {{#if (has-block 'navBar')}}
-          {{yield to='navBar'}}
-        {{else if @sections.length}}
+        {{#if @sections.length}}
           <NavBar
             @sections={{@sections}}
             @toggleDarkMode={{@toggleDarkMode}}
