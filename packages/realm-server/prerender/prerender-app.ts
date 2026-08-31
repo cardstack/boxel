@@ -108,6 +108,22 @@ export function decideHostShellRecycle(
   return { recycle: true, nextWarmed: reported };
 }
 
+// The answer a visit gives when shutdown wins the race: the manager reads this
+// status, marks the server draining and routes the visit elsewhere. Shared by
+// both render attempts so a caller can't tell which one was interrupted.
+function respondDraining(ctxt: Koa.Context): void {
+  ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+  ctxt.set(PRERENDER_SERVER_STATUS_HEADER, PRERENDER_SERVER_STATUS_DRAINING);
+  ctxt.body = {
+    errors: [
+      {
+        status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        message: 'Prerender server draining',
+      },
+    ],
+  };
+}
+
 // Whether a visit's result should be re-rendered rather than believed.
 //
 // The two tokens are what this server had adopted when the render started and
@@ -146,7 +162,17 @@ export function shouldRerenderForShellChange({
 }
 
 function hasMissingExportError(response: RenderVisitResponse): boolean {
-  for (let candidate of [response.card?.error, response.pageUnusableError]) {
+  // Every sub-response that can carry a render failure, because every one of
+  // them is persisted the same way: `prerender-html-visit` writes
+  // `fileRender.error` as a cached `file-error` row exactly as the card path
+  // writes `instance-error`, so a FileDef render (Markdown and friends) stays
+  // poisoned on the same terms if it is left out.
+  for (let candidate of [
+    response.card?.error,
+    response.fileExtract?.error,
+    response.fileRender?.error,
+    response.pageUnusableError,
+  ]) {
     let message = candidate?.error?.message;
     if (typeof message === 'string' && isMissingExportMessage(message)) {
       return true;
@@ -1078,19 +1104,7 @@ export function buildPrerenderApp(options: {
             e,
           ),
         );
-        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
-        ctxt.set(
-          PRERENDER_SERVER_STATUS_HEADER,
-          PRERENDER_SERVER_STATUS_DRAINING,
-        );
-        ctxt.body = {
-          errors: [
-            {
-              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
-              message: 'Prerender server draining',
-            },
-          ],
-        };
+        respondDraining(ctxt);
         return;
       }
       let { response, timings, pool } = raceResult.result;
@@ -1113,10 +1127,38 @@ export function buildPrerenderApp(options: {
         // browser is being recycled around now and this visit lands on a page
         // warmed against the current shell. One attempt only: if it fails
         // again the failure is the card's, and the caller is owed an answer.
-        shellAtStart = shellAtCompletion;
+        //
+        // Raced against the drain like the first attempt, not merely guarded
+        // by the `isDraining` check above: a signal arriving after that check
+        // would otherwise let this render hold `server.close()` open for its
+        // full timeout. Draining winning is reported as such rather than
+        // answered with the stale-shell failure — the manager routes the visit
+        // to another server, which is a better outcome than persisting a
+        // result this server has already decided it doesn't trust.
+        let retryPromise = prerenderer
+          .prerenderVisit(visitArgs)
+          .then((result) => ({ result }));
+        let retryResult = await raceAgainstDrain(
+          retryPromise,
+          subscribeToDrain,
+        );
+        if ('draining' in retryResult) {
+          retryPromise.catch((e) =>
+            log.debug(
+              'visit re-render settled after drain (ignored):',
+              e as any,
+            ),
+          );
+          respondDraining(ctxt);
+          return;
+        }
         try {
-          ({ response, timings, pool } =
-            await prerenderer.prerenderVisit(visitArgs));
+          ({ response, timings, pool } = retryResult.result);
+          // Moved only once the replacement has landed. Advancing it earlier
+          // would make a retained stale-shell failure claim it started under
+          // the replacement shell — usually stamping the same token twice,
+          // erasing the one piece of evidence that it straddled a deploy.
+          shellAtStart = shellAtCompletion;
           shellAtCompletion = options.getHostShellHash?.();
         } catch (e) {
           log.warn(

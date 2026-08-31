@@ -134,6 +134,35 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    // A FileDef render's failure is persisted on the same terms as a card's —
+    // `prerender-html-visit` writes `fileRender.error` as a cached
+    // `file-error` row — so leaving these sub-responses out would let Markdown
+    // and friends stay poisoned by exactly the failure this recovers from.
+    test('the error counts from any sub-response that gets persisted', function (assert) {
+      for (let key of ['fileRender', 'fileExtract'] as const) {
+        assert.true(
+          shouldRerenderForShellChange({
+            response: {
+              [key]: { error: { error: { message: MISSING_EXPORT } } },
+            } as unknown as RenderVisitResponse,
+            shellAtStart: 'babf3612',
+            shellAtCompletion: 'b778fe76',
+          }),
+          `${key}.error is checked`,
+        );
+        assert.false(
+          shouldRerenderForShellChange({
+            response: {
+              [key]: { error: { error: { message: 'Card is not found' } } },
+            } as unknown as RenderVisitResponse,
+            shellAtStart: 'babf3612',
+            shellAtCompletion: 'b778fe76',
+          }),
+          `${key} is still only suspect for module resolution`,
+        );
+      }
+    });
+
     test('the error also counts when it made the page unusable', function (assert) {
       assert.true(
         shouldRerenderForShellChange({
