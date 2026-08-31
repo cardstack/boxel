@@ -35,7 +35,7 @@
  *
  *   node scripts/execution-runtime-render-baseline.mts \
  *     --host https://localhost:4200 \
- *     --card 'skill=/base/Skill/boxel-development' \
+ *     --card 'skill=/skills/Skill/boxel-development' \
  *     --samples 3 --warm 3 --out baseline.json
  *
  * `--chromium <path>` selects the browser binary when the environment's
