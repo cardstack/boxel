@@ -2,6 +2,7 @@ import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
 import { Crossing } from 'test-app/components/examples/crossing';
 import { DragWell } from 'test-app/components/examples/drag-well';
+import { Drift } from 'test-app/components/examples/drift';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
 import { FarMatch } from 'test-app/components/examples/far-match';
@@ -27,7 +28,6 @@ import { Playhead } from 'test-app/components/examples/playhead';
 import { PresenceModes } from 'test-app/components/examples/presence-modes';
 import { Presentation } from 'test-app/components/examples/presentation';
 import { Rack } from 'test-app/components/examples/rack';
-import { Release } from 'test-app/components/examples/release';
 import { ReorderGrid } from 'test-app/components/examples/reorder-grid';
 import { ReorderList } from 'test-app/components/examples/reorder-list';
 import { Reveal } from 'test-app/components/examples/reveal';
@@ -1380,29 +1380,6 @@ word = {
     title: 'Enter',
   },
   {
-    Example: Release,
-    apis: ['c.gesture', 'c.counterpart', 'c.still', 'c.received', 'Move @from'],
-    group: 'Choreo',
-    id: 'release',
-    lede: 'Throw it. It arrives at the speed you threw it.',
-    sample: `// The chip is REMOVED from the tray and INSERTED in a bay: two elements,
-// one id, so the arrival claims the leaver and the pass has both boxes.
-// Measurement can supply both — and still not the one thing a throw has.
-<c.Parallel>
-  <c.Move @of={{c.received 'chip'}}
-    @from={{c.gesture}}          {{! centred on the finger, AT THE FINGER'S SPEED }}
-    @spring={{TOSS}} @size={{false}} @swap='none' />
-
-  {{! the half it claimed, parked in the orphan layer and still measurable }}
-  <c.Tween @of={{c.counterpart}} @opacity={{0}} @duration={{0.12}} />
-
-  {{! and the bays nobody threw at: not moved, not removed — STILL }}
-  <c.Hold @of={{c.still 'bay'}} @opacity={{0.4}} @duration={{0.42}} />
-</c.Parallel>`,
-    slowmo: true,
-    title: 'Release',
-  },
-  {
     Example: Reveal,
     apis: ['whileInView', 'viewport.once', 'viewport.root', 'onViewportEnter'],
     group: 'Scroll',
@@ -1462,6 +1439,50 @@ count = (pour) => {
 };`,
     slowmo: false,
     title: 'Reveal',
+  },
+  {
+    Example: Drift,
+    apis: ['c.inserted', 'c.moved', 'c.removed', 'c.beacon', 'c.still'],
+    group: 'Choreo',
+    id: 'drift',
+    lede: 'A car you tune while you are driving it.',
+    sample: `// Two halves, and the point of the stage is which is which.
+//
+// The DRIVING is not a score. Motion's springs are scalar interpolators
+// toward a target — right for the wheel returning to centre, the chassis
+// lagging the nose and the camera settling, and wrong for the part that
+// makes it a drift game. Lateral slide is a velocity decomposition with a
+// friction coefficient on the sideways half, so lib/drift.ts integrates it
+// by hand. The order of these three lines IS the model: recompose in the
+// frame the car was pointing in, and turn the heading only afterwards.
+// Turn first and the velocity rotates with the nose every frame, for free,
+// and the car can never slide at all.
+vf += throttle * power * dt;              // the engine, along the nose
+vr *= Math.exp(-(sliding ? bite * 0.16 : bite) * dt);   // grip, not a spring
+car.vx = fx * vf + rx * vr;               // recompose in the OLD frame...
+car.vy = fy * vf + ry * vr;
+car.heading += car.steer * TURN * bite * dt;            // ...then turn
+
+// The LAP BOARD is a score, and this is the whole of it. One tracked write
+// per lap; nothing below is told where to go. The region reads the change
+// out of the DOM — an entry appeared, the rows under it moved because it
+// pushed them, and the slowest lap left because the board holds five.
+<c.Parallel>
+  <c.Move @of={{c.inserted 'lap'}} @from={{c.beacon 'clock'}}
+    @spring={{ARRIVE}} @size={{false}} />
+
+  {{! a different spring, because being shoved down is not arriving }}
+  <c.Move @of={{c.moved 'lap'}} @spring={{SHUFFLE}} @size={{false}} />
+
+  {{! pushed off the bottom: claimed by nobody, so it needs a place }}
+  <c.Move @of={{c.removed 'lap'}} @to={{c.beacon 'bin'}} @spring={{DROP}} />
+
+  {{! and a lap that beat nothing moves one row. Dimming the rest is what
+      makes that legible — frozen, you cannot tell the list reordered. }}
+  <c.Hold @of={{c.still 'lap'}} @opacity={{0.42}} @duration={{0.5}} />
+</c.Parallel>`,
+    slowmo: false,
+    title: 'Drift',
   },
   {
     Example: Hang,

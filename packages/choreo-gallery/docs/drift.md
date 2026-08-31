@@ -1,6 +1,9 @@
 # Drift — a car you tune while you are driving it
 
-**Status:** a note, not a build. This is the next demo.
+**Status:** built. The stage is `test-app/app/components/examples/drift.gts`,
+the model is `test-app/app/lib/drift.ts`, and the panel grew the folders and
+presets this note said it needed. What follows is the note as written, with a
+section at the end recording the four places the build proved it wrong.
 
 Hang got a dial over it because it had two hand-tuned numbers and nowhere
 honest to put them. Two numbers is enough to prove the seam works and not
@@ -80,8 +83,8 @@ The driving loop is not a Choreo score. What sits around it is:
 
 The handling characters from the design — as `stiffness / damping`:
 
-| Name   | Pair   | What it feels like                          |
-| ------ | ------ | ------------------------------------------- |
+| Name   | Pair   | What it feels like                           |
+| ------ | ------ | -------------------------------------------- |
 | Floaty | 70 / 8 | slow to respond, slow to settle; a boat      |
 | Drifty | 120/12 | breaks away early and stays out              |
 | Snappy | 220/16 | immediate, twitchy, punishes over-correction |
@@ -91,7 +94,7 @@ These are not four sets of numbers to paste into the source. `dialkit/store`
 carries presets itself — `savePreset(panelId, name)`, `loadPreset`,
 `getPresets`, `getActivePresetId`, and a `persist: { presets: true }` option —
 all on `DialStoreClass`, none of it in the React layer. So the personalities are
-seeded presets, the player picks one, and then *edits it*, which is the whole
+seeded presets, the player picks one, and then _edits it_, which is the whole
 arc: start from a character, discover what one number does, end up with yours.
 
 Semantic controls sit over the raw pairs by lerp — a single "Looseness" slider
@@ -142,3 +145,49 @@ follow-ups, and they are the reason to do this next rather than to do it
 eventually. The integrator is independent of both and can be written first
 against hardcoded numbers, which is also the fastest way to find out whether
 the car is fun before any of the tuning surface exists.
+
+## What the build changed
+
+Four corrections, kept because each one was an argument this note made
+confidently and got wrong.
+
+**`c.Tether` is not a camera.** This note proposed the chase camera as
+"`c.Camera` with `c.Tether` / `c.Aim`". `c.Tether` draws a wire between two
+sprites (`steps.gts`: `@path` receives both endpoints' boxes and returns path
+data) and has nothing to do with the shot. `c.Aim` and `c.Frame` are the camera
+steps.
+
+**The chase camera is not a Choreo camera at all.** `c.Camera` is a seekable
+CUE — a shot change with a duration, compiled into a score, reconstructible
+under random access. A chase camera is a target that moves every frame and a
+lens that never arrives. Compiling a region sixty times a second to say that
+would be a misuse of the score. The shot is a spring in the same loop as the
+car, and the split — a score for the scene change, a loop for the simulation —
+turned out to be the most useful thing the stage teaches.
+
+**`type: 'spring'` is not cheap, and it is not called that.** dialkit's store
+emits `type: 'transition'` for a `SpringConfig` (store `index.js:552`), whose
+value is the whole spring object plus a companion `path.__mode` switching
+between an easing curve, a two-number "simple" form and a five-number
+"advanced" one. Drawing it means drawing three modes and a mode switch. Folders
+of ordinary sliders get the same nesting for none of that.
+
+**The skid marks are a canvas.** The note wanted them as `c.inserted` /
+`c.removed` over a list nobody clicked to build. A mark is laid every thirteen
+world pixels of slide, which at speed is twenty a second — and a changeset
+twenty times a second is a render loop wearing a changeset's clothes. Choreo's
+business here is the lap board: one tracked write per lap, an entry inserted,
+the rows under it moved because it pushed them, and the slowest lap gone.
+
+## And one thing the note did not anticipate
+
+The demo needs a driver. Tuning a car you are also driving is not a
+measurement: a worse car and a better driver arrive together, you adapt inside
+one lap, and you conclude the slider did nothing. `autopilot` in `lib/drift.ts`
+is a path-following controller with a swept set of gains, and the button that
+hands it the wheel is the stage's most useful control. Its gains are ranked on
+the WORST character's lap count and then on speed carried and time spent
+sideways — ranking on total laps picks a driver that is brilliant in a planted
+car and cannot hold a loose one, and ranking on laps alone picks one that
+brakes to a crawl at every corner and never slides, which for this stage is the
+same as failing.

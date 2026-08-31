@@ -11951,106 +11951,6 @@ html[data-gm-dragging] * {
   }
 }
 
-/* ---- Release: where the drag ended, and how fast ---- */
-
-.rel-ex {
-  align-items: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: min(720px, 100%);
-}
-
-.rel-controls {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.rel-hint {
-  color: var(--ink-dim);
-  flex: 1 1 260px;
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.rel-board {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.rel-tray {
-  align-items: center;
-  background: var(--bg);
-  border: 2px dashed var(--line-strong);
-  border-radius: 12px;
-  display: flex;
-  gap: 14px;
-  min-height: 92px;
-  padding: 14px 16px;
-}
-
-.rel-bays {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.rel-bay {
-  align-items: center;
-  background: var(--bg-elev);
-  border: 2px solid var(--line-strong);
-  border-radius: 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  justify-content: flex-start;
-  min-height: 104px;
-  padding: 12px;
-}
-
-.rel-label {
-  color: var(--ink-faint);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.rel-chip {
-  background: var(--ember);
-  border-radius: 9px;
-  box-shadow: 0 6px 16px -8px rgba(var(--shadow-rgb), var(--shadow-a));
-  color: #fff;
-  cursor: grab;
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  padding: 9px 14px;
-  text-transform: uppercase;
-  touch-action: none;
-  white-space: nowrap;
-}
-
-.rel-chip:active {
-  cursor: grabbing;
-}
-
-.rel-chip.is-home {
-  background: var(--iris);
-}
-
-@media (max-width: 640px) {
-  .rel-bays {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 /* ---- Jump: scroll, raise and mark, on one clock ---- */
 
 .jump-ex {
@@ -12497,4 +12397,601 @@ html[data-gm-dragging] * {
 
 .dial-spike-btn:hover {
   color: var(--ink);
+}
+
+/* ---- the panel's second tier: folders and saved tunes ---- */
+
+/* dialkit rotates a chevron rather than swapping the glyph, so open and shut
+   are one element and the turn is animatable: 0deg is shut, 90deg is open.
+   Drawn as a border triangle rather than set as `▸`, because at the size this
+   wants the glyph renders as a dot in most of the faces on the stack. */
+.dial-spike-chevron {
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--ink-faint);
+  border-top: 4px solid transparent;
+  display: inline-block;
+  flex: none;
+  font-size: 0;
+  height: 0;
+  transition: transform 180ms var(--ease);
+  width: 0;
+}
+
+.dial-spike .dialkit-folder-header {
+  border-radius: 5px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.dial-spike .dialkit-folder-header:hover {
+  background: rgba(var(--ink-rgb), 0.05);
+}
+
+/* a nested folder's rows are already inside one .dialkit-folder-inner, whose
+   bottom padding this panel zeroes out at the top level. Put it back for the
+   inner ones only, or every folder's last slider sits on the divider. */
+.dial-spike .dialkit-folder .dialkit-folder-inner {
+  padding-bottom: 8px;
+}
+
+.dial-tunes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.dial-tune {
+  align-items: center;
+  background: rgba(var(--ink-rgb), 0.07);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  gap: 4px;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  transition:
+    background 160ms var(--ease),
+    border-color 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
+.dial-tune:hover {
+  background: rgba(var(--ink-rgb), 0.13);
+  color: var(--ink);
+}
+
+/* the ACTIVE preset, which is the one the store is writing your edits into.
+   Marked rather than merely selected, because the difference matters: move a
+   slider now and this chip is what changed. */
+.dial-tune.is-on {
+  background: rgba(230, 163, 90, 0.16);
+  border-color: rgba(230, 163, 90, 0.42);
+  color: var(--copper-ink);
+}
+
+.dial-tune.is-save {
+  border-style: dashed;
+  border-color: rgba(var(--ink-rgb), 0.22);
+  background: transparent;
+}
+
+.dial-tune-x {
+  color: var(--ink-faint);
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.5;
+}
+
+.dial-tune-x:hover {
+  color: var(--ember);
+  opacity: 1;
+}
+
+.dial-tune-form {
+  display: inline-flex;
+}
+
+.dial-tune-input {
+  background: rgba(var(--ink-rgb), 0.1);
+  border: 1px solid rgba(230, 163, 90, 0.42);
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  outline: none;
+  padding: 3px 9px;
+  width: 92px;
+}
+
+/* ---- Drift: a car you tune while you are driving it ---- */
+
+.drift-ex {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+/* the positioned context the rail hangs off */
+.drift-area {
+  position: relative;
+  width: 100%;
+}
+
+/* The viewport. `touch-action: none` is the line that makes this playable on a
+   phone at all — without it the first drag is a page scroll and the car never
+   gets the gesture. `overscroll-behavior` stops the pull-to-refresh that a
+   downward drive would otherwise trigger at the top of the page. */
+.drift-view {
+  aspect-ratio: 16 / 10;
+  /* darker than the track, because whatever shows here is OUTSIDE the world —
+     the camera clamps to the walls, so this is the void beyond them and should
+     not read as more asphalt */
+  background: #2b2622;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  cursor: crosshair;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  position: relative;
+  touch-action: none;
+  width: 100%;
+}
+
+/* The world: a positioned box of world size, and nothing drawn on it. The
+   apron and the track are both children, because a positioned child paints
+   over its parent's own background — so a parent that carried the track
+   surface would have had it covered by the apron laid over the top. */
+.drift-world {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* The track is not themed. It is asphalt in a photograph of a track, and the
+   skid ink is near-black over it in both modes — flipping the ground with the
+   page would mean flipping the ink, and grey marks on cream do not read as
+   rubber. The one surface in this stylesheet that is deliberately fixed. */
+.drift-track {
+  background:
+    radial-gradient(120% 90% at 30% 20%, #5d534a 0%, #4a423b 70%), #4a423b;
+  /* the barrier, and a shadow OUTWARD onto the apron so the track reads as
+     sitting on the ground rather than being a hole cut in it */
+  box-shadow:
+    inset 0 0 0 5px #2b2622,
+    inset 0 0 0 7px rgba(243, 236, 227, 0.14),
+    0 0 60px 18px rgba(0, 0, 0, 0.45);
+  inset: 0;
+  position: absolute;
+}
+
+.drift-bleed {
+  background:
+    radial-gradient(60% 60% at 50% 50%, #2f2925 0%, #241f1c 100%), #241f1c;
+  inset: -1200px;
+  position: absolute;
+}
+
+.drift-ink {
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
+.drift-gate {
+  align-items: center;
+  border: 2px dashed rgba(243, 236, 227, 0.16);
+  border-radius: 50%;
+  color: rgba(243, 236, 227, 0.3);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  justify-content: center;
+  margin-left: -62px;
+  margin-top: -62px;
+  position: absolute;
+  transition:
+    border-color 220ms var(--ease),
+    color 220ms var(--ease);
+}
+
+/* the one you are actually going for. A circuit with four identical rings is a
+   maze; a circuit with one lit ring is a direction. */
+.drift-gate.is-next {
+  border-color: rgba(230, 163, 90, 0.72);
+  color: rgba(230, 163, 90, 0.85);
+}
+
+/* positioned at the world origin and moved entirely by transform: the loop
+   writes `translate(x, y) rotate(yaw)` and nothing else, so the car never
+   costs a layout. The negative margins put its centre on that translate. */
+.drift-car {
+  background: var(--ember);
+  border-radius: 5px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.42);
+  height: 22px;
+  left: 0;
+  margin-left: -21px;
+  margin-top: -11px;
+  position: absolute;
+  top: 0;
+  width: 42px;
+  will-change: transform;
+}
+
+.drift-car[data-slide='yes'] {
+  background: var(--ember-hot);
+}
+
+/* the windscreen, forward of centre — the only thing that says which way the
+   car is pointing when it is going sideways, which is most of the time */
+.drift-roof {
+  background: rgba(0, 0, 0, 0.42);
+  border-radius: 2px;
+  height: 12px;
+  left: 20px;
+  position: absolute;
+  top: 5px;
+  width: 13px;
+}
+
+/* Brake lights, thrown BACKWARDS off the tail.
+   The car nose points along +x, so the rear is its left edge and `right: 100%`
+   puts this immediately behind it — rotating with the car, so the glow always
+   trails whichever way it is pointing. Drawn as a glow rather than as two lamps
+   because at this scale the car is 42px on a track 1400 wide: a lamp is three
+   pixels and reads as nothing. What you can actually see from across the stage
+   is the light it throws on the road. */
+.drift-lights {
+  background: linear-gradient(
+    to left,
+    rgba(255, 60, 30, 0.85) 0%,
+    rgba(255, 60, 30, 0) 100%
+  );
+  bottom: -9px;
+  filter: blur(4px);
+  opacity: 0;
+  position: absolute;
+  right: 100%;
+  top: -9px;
+  transition: opacity 80ms linear;
+  width: 46px;
+}
+
+/* and the lamps themselves, crisp, at the very back of the car */
+.drift-lights::after {
+  background: #ff2d16;
+  border-radius: 2px;
+  bottom: 11px;
+  box-shadow: 0 0 10px 3px rgba(255, 45, 22, 0.9);
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 11px;
+  width: 4px;
+}
+
+.drift-car[data-brake='yes'] .drift-lights {
+  opacity: 1;
+}
+
+.drift-hud {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  left: 12px;
+  pointer-events: none;
+  position: absolute;
+  /* clear of the rail, so a narrow card wraps the readouts instead of running
+     them underneath the panel */
+  right: 266px;
+  top: 10px;
+  z-index: 1;
+}
+
+.drift-read {
+  align-items: baseline;
+  background: rgba(0, 0, 0, 0.32);
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px 8px;
+}
+
+.drift-read b {
+  color: #f3ece3;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.drift-read small {
+  color: rgba(243, 236, 227, 0.55);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+.drift-flag {
+  background: rgba(230, 163, 90, 0.2);
+  border-radius: 7px;
+  color: #f0c48a;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+}
+
+.drift-note {
+  bottom: 10px;
+  color: var(--ink-dim);
+  font-size: 11px;
+  left: 12px;
+  margin: 0;
+  overflow: hidden;
+  position: absolute;
+  right: 266px;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  z-index: 1;
+}
+
+/* The tuning rail, laid over the right of the track.
+   A gallery card is around 550px wide and 350 tall. A panel BESIDE the track
+   there leaves half a track, and the stage's subject is what the car is doing —
+   so the panel goes on top, translucent, and scrolls inside itself. The track
+   it covers is the outside of the right-hand corners, which is the part of the
+   world you least need to see.
+   `overscroll-behavior: contain` matters more than it looks: without it,
+   flicking to the bottom of the controls carries on into the page, which on a
+   phone means the stage scrolls away under your thumb mid-tune. */
+.drift-rail {
+  --fit: 1;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: absolute;
+  right: 8px;
+  scrollbar-width: thin;
+  top: 40px;
+  transition:
+    opacity 240ms var(--ease),
+    transform 280ms var(--ease);
+  width: 246px;
+  z-index: 2;
+}
+
+/* Scaled to whatever room the card gave it.
+   The width is divided by the same factor because a transform does not change
+   layout: at 0.86 the element is laid out 286px wide and drawn 246px wide, so
+   it fills the rail exactly.
+   The origin is top LEFT, and that is the whole trick. With `top right` the
+   over-wide element overflows the rail before it is scaled, so its own right
+   edge — the fixed point — sits 40px outside the rail, and the scaled result
+   is still 40px outside it. Anchoring at the left, where the element and the
+   rail already agree, lands the scaled right edge exactly on the rail's. */
+.drift-rail-fit {
+  display: flex;
+  flex-direction: column;
+  transform: scale(var(--fit));
+  transform-origin: top left;
+  width: calc(100% / var(--fit));
+}
+
+/* Out of the way while a finger is on the track — it is covering the corner
+   you are about to drive into. Not hidden: it stays legible enough to see that
+   the panel is still there, so letting go is obviously how you get it back. */
+.drift-rail.is-away {
+  opacity: 0.12;
+  pointer-events: none;
+  transform: translateX(24px);
+}
+
+/* Put away by hand. Fully gone, unlike `is-away`, because this one was asked
+   for on purpose and the tab is right there to bring it back. */
+.drift-rail.is-shut {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(120%);
+}
+
+/* the tab that does it, which has to outlive the panel it hides — so it is a
+   sibling of the rail, not a header inside it */
+.drift-tab {
+  backdrop-filter: blur(8px);
+  background: rgba(20, 17, 15, 0.72);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  transition: color 160ms var(--ease);
+  z-index: 4;
+}
+
+.drift-tab:hover {
+  color: var(--ink);
+}
+
+/* ONE surface, not two. The controls and the lap board are two components and
+   one object: stacking two bordered cards in a 246px rail reads as clutter and
+   spends twelve pixels of a very short column on a gap and two borders. So the
+   surface lives on the wrapper, and the two things inside it are separated by a
+   hairline instead.
+   It is over a moving picture, so it has to hold its own contrast without going
+   opaque — blur does that where a flat tint cannot. */
+.drift-rail-fit {
+  backdrop-filter: blur(14px);
+  background: rgba(20, 17, 15, 0.76);
+  border: 1px solid rgba(243, 236, 227, 0.1);
+  border-radius: 12px;
+}
+
+.drift-rail .dialkit-panel-inner,
+.drift-rail .drift-board {
+  backdrop-filter: none;
+  background: transparent;
+  border: 0;
+}
+
+.drift-rail .drift-board {
+  border-top: 1px solid rgba(243, 236, 227, 0.09);
+}
+
+.drift-rail .dial-spike {
+  width: 100%;
+}
+
+.drift-board {
+  background: rgba(var(--ink-rgb), 0.04);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  /* room at the bottom for the bin, which is positioned rather than laid out
+     and would otherwise sit on top of the last row */
+  padding: 10px 12px 22px;
+  position: relative;
+}
+
+.drift-board-head {
+  align-items: center;
+  color: var(--ink-faint);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  gap: 6px;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
+}
+
+.drift-board-head span {
+  flex: 1;
+}
+
+.drift-laps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.drift-lap {
+  align-items: center;
+  background: rgba(var(--ink-rgb), 0.06);
+  border-radius: 6px;
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  gap: 8px;
+  padding: 5px 9px;
+}
+
+.drift-lap b {
+  color: var(--ink-faint);
+  font-size: 10px;
+  width: 10px;
+}
+
+.drift-lap.is-best {
+  background: rgba(230, 163, 90, 0.14);
+  color: var(--copper-ink);
+}
+
+.drift-lap.is-best b {
+  color: var(--copper-ink);
+}
+
+.drift-empty {
+  color: var(--ink-faint);
+  font-size: 11px;
+  margin: 0;
+}
+
+/* off the board: a place for the slowest lap to fly to, parked out of the way
+   rather than laid out. It is a beacon and never a row. */
+.drift-bin {
+  bottom: 4px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  opacity: 0.35;
+  pointer-events: none;
+  position: absolute;
+  right: 10px;
+}
+
+/* On a phone the rail would cover most of the track, so it stops being an
+   overlay and goes back to being a block underneath. Same markup, same
+   component; only the position changes. */
+@media (max-width: 620px) {
+  .drift-rail {
+    bottom: auto;
+    max-height: none;
+    position: static;
+    top: auto;
+    width: 100%;
+  }
+
+  .drift-area {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.drift-race {
+  backdrop-filter: blur(8px);
+  background: rgba(20, 17, 15, 0.72);
+  border: 1px solid var(--line-strong);
+  bottom: 34px;
+  left: 12px;
+  position: absolute;
+  z-index: 3;
+  border-radius: 999px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 6px 14px;
+  transition:
+    background 180ms var(--ease),
+    border-color 180ms var(--ease),
+    color 180ms var(--ease);
+}
+
+.drift-race:hover {
+  color: var(--ink);
+}
+
+.drift-race.is-on {
+  background: rgba(230, 163, 90, 0.18);
+  border-color: rgba(230, 163, 90, 0.5);
+  color: var(--copper-ink);
 }

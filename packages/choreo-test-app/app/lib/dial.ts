@@ -43,15 +43,39 @@
  * watch the spring you are editing, while you edit it.
  */
 import { cached, tracked } from '@glimmer/tracking';
-import type { DialConfig, DialValue, ResolvedValues } from 'dialkit/store';
+import type {
+  DialConfig,
+  DialKitPersistOptions,
+  DialValue,
+  Preset,
+  ResolvedValues,
+} from 'dialkit/store';
 import { DialStore, resolveDialValues } from 'dialkit/store';
 
 /** what a panel accepts without caring which config produced it */
 export type AnyDial = Dial<DialConfig>;
 
+/**
+ * A tune the stage ships, as opposed to one the store saved.
+ *
+ * The distinction matters to the panel: a shipped tune is always available and
+ * cannot be edited in place, a saved one is the player's and can be deleted.
+ * They are drawn in one row because to a person they are one question.
+ */
+export interface DialTune {
+  name: string;
+  note?: string;
+  values: Record<string, DialValue>;
+}
+
 export interface DialOptions {
-  /** localStorage by default; `false` to keep it in memory only */
-  persist?: boolean;
+  /**
+   * localStorage by default; `false` to keep it in memory only, or the store's
+   * own options object — `{ presets: true }` is the one worth knowing about,
+   * because presets are persisted SEPARATELY from values and are dropped on
+   * reload without it.
+   */
+  persist?: DialKitPersistOptions;
   /** keep values across an unmount, so a stage remembers its tuning */
   retain?: boolean;
 }
@@ -120,6 +144,40 @@ export class Dial<T extends DialConfig> {
   set = (path: string, value: DialValue) => {
     DialStore.updateValue(this.id, path, value);
   };
+
+  /** a whole tune at once — one notification, so one replay rather than ten */
+  setAll = (values: Record<string, DialValue>) => {
+    DialStore.updateValues(this.id, values);
+  };
+
+  /* ---- presets: entirely the store's, and none of it in any UI port ---- */
+
+  /**
+   * What you saved, in the order you saved it.
+   *
+   * Worth knowing before building a preset row: while a preset is ACTIVE, the
+   * store writes every slider edit straight into it (`updateValues`, dialkit
+   * store index.js:220). That is not a bug to work around — it is the arc a
+   * tuning panel wants. You load a character, you move one number, and the
+   * thing you go back to is the car you ended up with rather than the one you
+   * started from. Nothing has to be pressed to keep it.
+   */
+  @cached
+  get presets(): Preset[] {
+    void this.revision;
+    return DialStore.getPresets(this.id);
+  }
+
+  @cached
+  get activePresetId(): string | null {
+    void this.revision;
+    return DialStore.getActivePresetId(this.id);
+  }
+
+  savePreset = (name: string) => DialStore.savePreset(this.id, name);
+  loadPreset = (presetId: string) => DialStore.loadPreset(this.id, presetId);
+  deletePreset = (presetId: string) =>
+    DialStore.deletePreset(this.id, presetId);
 
   reset = () => {
     DialStore.resetValues(this.id);

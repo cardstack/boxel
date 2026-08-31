@@ -201,8 +201,23 @@ export class LongTake extends Component {
    * be the honest thing: the film should not be three seconds in by the
    * time there is a laptop to look at.
    */
+  /**
+   * `roomy` is deliberately NOT in here.
+   *
+   * It was, and it made the film unplayable in a gallery card: `roomy` is
+   * set once at mount from `closest('.stage-wrap')`, which only the demo
+   * page has, and nothing ever sets it back. So the 3D button armed the
+   * camera, bumped the take, and the score still never rendered — the
+   * transport was furniture. The mockup stage on the same page has always
+   * left `roomy` out of its own play gate, which is why the phone moved in
+   * a card and the laptop did not.
+   *
+   * The two gates that remain are the ones that mean something: the film
+   * only exists in 3D, and only once there is a mapped frame to look at.
+   * `roomy` keeps its real job, which is the thumbstick pads.
+   */
   get playing() {
-    return this.mode === '3d' && this.cameraOn && this.drawn && this.roomy;
+    return this.mode === '3d' && this.cameraOn && this.drawn;
   }
 
   /** the outer camera's leg for a shot is exactly the shot's own length */
