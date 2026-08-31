@@ -1,3 +1,4 @@
+import { htmlSafe } from '@ember/template';
 import {
   click,
   waitFor,
@@ -22,6 +23,17 @@ import type * as StyleReferenceModule from '@cardstack/base/style-reference';
 module('Integration | theme-dashboard | nav', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
+
+  // scrolling to a section replaceState's its hash onto the test page's URL
+  hooks.afterEach(function () {
+    if (window.location.hash) {
+      history.replaceState(
+        null,
+        '',
+        window.location.pathname + window.location.search,
+      );
+    }
+  });
 
   let loader: Loader;
   let NavBar: typeof ThemeDashboardModule.NavBar;
@@ -57,6 +69,49 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     return [...element.querySelectorAll('[data-test-theme-nav-item]')].map(
       (el) => el.getAttribute('data-test-theme-nav-item'),
     );
+  }
+
+  // scrollToSectionFrom needs a scrollable ancestor inside the dashboard, so
+  // the harness mirrors the card: a short scroll port with tall sections
+  function navHarness(
+    sections: { id: string; navTitle: string }[],
+    width: string,
+  ) {
+    let noop = () => {};
+    let style = htmlSafe(
+      `width: ${width}; height: 12rem; overflow-y: auto; container-type: inline-size`,
+    );
+    return renderComponent(
+      <template>
+        <div style={{style}} data-theme-dashboard data-test-nav-test-wrapper>
+          <NavBar @sections={{sections}} @toggleDarkMode={{noop}} />
+          {{#each sections as |section|}}
+            {{! template-lint-disable no-inline-styles }}
+            <div id={{section.id}} style='height: 20rem'>
+              {{section.navTitle}}
+            </div>
+          {{/each}}
+        </div>
+      </template>,
+    );
+  }
+
+  // the smooth scroll is the observable effect of a menu action; capturing the
+  // call keeps the assertion off the animation's timing
+  function captureScrollBy(element: HTMLElement) {
+    let calls: ScrollToOptions[] = [];
+    let original = element.scrollBy;
+    element.scrollBy = ((options?: ScrollToOptions | number) => {
+      if (typeof options === 'object') {
+        calls.push(options);
+      }
+    }) as HTMLElement['scrollBy'];
+    return {
+      calls,
+      restore: () => {
+        element.scrollBy = original;
+      },
+    };
   }
 
   test('a themed card lists the visualizer as Preview in the nav', async function (this: RenderingTestContext, assert) {
@@ -109,6 +164,107 @@ module('Integration | theme-dashboard | nav', function (hooks) {
       navItemIds(element).slice(0, 2),
       ['import-css', 'view-code'],
       'the nav leads with the import workflow',
+    );
+  });
+
+  // the edit view maps each nav id onto a section through a hardcoded
+  // conditional chain, so an id the chain doesn't know renders no section and
+  // the nav link scrolls nowhere
+  test('every style reference nav item targets a rendered section', async function (this: RenderingTestContext, assert) {
+    let card = new StyleReference({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+    });
+    let element = await renderCard(loader, card, 'edit');
+
+    let ids = navItemIds(element);
+    assert.deepEqual(
+      ids,
+      [
+        'preview',
+        'visual-dna',
+        'inspirations',
+        'wallpapers',
+        'import-css',
+        'view-code',
+      ],
+      'the nav lists the preview, the content sections and the theme tools',
+    );
+    for (let id of ids) {
+      assert
+        .dom(`[id="${id}"]`, element)
+        .exists(`the "${id}" nav item has a section to scroll to`);
+    }
+  });
+
+  test('choosing an overflowed section from the menu scrolls to it', async function (this: RenderingTestContext, assert) {
+    let sections = Array.from({ length: 12 }, (_, i) => ({
+      id: `section-${i}`,
+      navTitle: `Section ${i}`,
+    }));
+    // above the compact threshold, so the strip keeps its "more" dropdown
+    await navHarness(sections, '30rem');
+    await waitFor('[data-test-theme-nav-more]');
+
+    let scroller: HTMLElement = document.querySelector(
+      '[data-test-nav-test-wrapper]',
+    )!;
+    let scrollBy = captureScrollBy(scroller);
+    try {
+      await click('[data-test-theme-nav-more]');
+      await click('[data-test-boxel-menu-item-text="Section 11"]');
+    } finally {
+      scrollBy.restore();
+    }
+
+    assert.strictEqual(
+      scrollBy.calls.length,
+      1,
+      'the menu item scrolls the dashboard once',
+    );
+    assert.true(
+      (scrollBy.calls[0]?.top ?? 0) > 0,
+      'it scrolls down toward the chosen section',
+    );
+    assert.strictEqual(
+      window.location.hash,
+      '#section-11',
+      'the chosen section becomes the current hash',
+    );
+  });
+
+  test('choosing a section from the compact menu scrolls to it', async function (this: RenderingTestContext, assert) {
+    let sections = Array.from({ length: 12 }, (_, i) => ({
+      id: `section-${i}`,
+      navTitle: `Section ${i}`,
+    }));
+    // below the compact threshold, where the strip becomes a hamburger menu
+    await navHarness(sections, '20rem');
+    await waitFor('[data-test-theme-nav-menu]');
+
+    let scroller: HTMLElement = document.querySelector(
+      '[data-test-nav-test-wrapper]',
+    )!;
+    let scrollBy = captureScrollBy(scroller);
+    try {
+      await click('[data-test-theme-nav-menu]');
+      await click('[data-test-boxel-menu-item-text="Section 3"]');
+    } finally {
+      scrollBy.restore();
+    }
+
+    assert.strictEqual(
+      scrollBy.calls.length,
+      1,
+      'the menu item scrolls the dashboard once',
+    );
+    assert.true(
+      (scrollBy.calls[0]?.top ?? 0) > 0,
+      'it scrolls down toward the chosen section',
+    );
+    assert.strictEqual(
+      window.location.hash,
+      '#section-3',
+      'the chosen section becomes the current hash',
     );
   });
 
