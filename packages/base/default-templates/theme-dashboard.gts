@@ -800,7 +800,10 @@ export class NavBar extends GlimmerComponent<{
   );
 
   // the container's observer has already fired by the time the strip
-  // re-renders out of compact mode; observing the list re-measures it
+  // re-renders out of compact mode; observing the list re-measures it. the
+  // list tracks its items' widths because overflowed items leave the flow and
+  // at least one always stays in it, so a late-loading webfont or a per-mode
+  // font swap resizes the list and re-measures
   private trackListFit = modifier((el: HTMLElement) => {
     this.navList = el;
     let update = () => this.updateVisibleCount(el.parentElement as HTMLElement);
@@ -820,8 +823,9 @@ export class NavBar extends GlimmerComponent<{
   });
 
   // measures against the container, whose width is set from outside, so the
-  // "more" button appearing cannot re-trigger the measurement. hidden items
-  // keep their layout size (visibility, not display), so widths stay readable
+  // "more" button appearing cannot re-trigger the measurement. overflowed
+  // items stay rendered (out of flow, not display:none) so widths stay
+  // readable while contributing nothing to the list's own width
   private updateVisibleCount(container: HTMLElement) {
     this.isCompact = container.clientWidth <= this.compactMaxWidth;
     let list = this.navList;
@@ -846,7 +850,6 @@ export class NavBar extends GlimmerComponent<{
     let total =
       widths.reduce((sum, width) => sum + width, 0) + gap * (items.length - 1);
     if (total <= available) {
-      list.style.width = '';
       this.visibleCount = null;
       return;
     }
@@ -861,9 +864,11 @@ export class NavBar extends GlimmerComponent<{
       used = next;
       count++;
     }
-    // pin the list width so the "more" button sits after the last visible item
-    list.style.width = `${used}px`;
-    this.visibleCount = count;
+    // the first item stays in the bar even when it has to ellipsize: it keeps
+    // one item in flow, so the list's own box goes on tracking item widths,
+    // and an empty strip beside a "more" button reads as broken. it is still
+    // listed in the menu, so no section becomes unreachable
+    this.visibleCount = Math.max(count, 1);
   }
 
   <template>
@@ -985,14 +990,21 @@ export class NavBar extends GlimmerComponent<{
         .nav-grid > li {
           flex-shrink: 0;
         }
-        /* hidden trailing items would distort space-between distribution; the
-           fit measurement sets the width instead */
+        /* the list shrinks to its in-flow items, so the "more" button sits
+           right after the last visible one */
         .nav-grid--clipped {
           justify-content: flex-start;
           flex: none;
         }
-        /* visibility, not display: keeps the item measurable */
+        /* out of flow rather than display:none, so the item keeps a real box
+           the fit measurement and its ResizeObserver can read, while adding
+           nothing to the list's width. max-content because shrink-to-fit
+           would otherwise be clamped by the now-narrow list */
         .nav-item-hidden {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: max-content;
           visibility: hidden;
         }
         .nav-item {

@@ -96,6 +96,14 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     );
   }
 
+  // overflowing items are hidden with visibility, so they still report a
+  // layout size; computed visibility is what distinguishes them
+  function visibleNavItemIds() {
+    return [...document.querySelectorAll('[data-test-theme-nav-item]')]
+      .filter((el) => getComputedStyle(el).visibility === 'visible')
+      .map((el) => el.getAttribute('data-test-theme-nav-item'));
+  }
+
   // the smooth scroll is the observable effect of a menu action; capturing the
   // call keeps the assertion off the animation's timing
   function captureScrollBy(element: HTMLElement) {
@@ -268,6 +276,37 @@ module('Integration | theme-dashboard | nav', function (hooks) {
     );
   });
 
+  test('items are re-measured when their widths change while the bar is clipped', async function (this: RenderingTestContext, assert) {
+    let sections = Array.from({ length: 12 }, (_, i) => ({
+      id: `section-${i}`,
+      navTitle: `Section ${i}`,
+    }));
+    await navHarness(sections, '30rem');
+    await waitFor('[data-test-theme-nav-more]');
+
+    let before = visibleNavItemIds();
+    assert.true(before.length > 1, 'several items fit at the starting size');
+
+    // an overflowing list has its width pinned, so growing the items resizes
+    // neither the list nor the container — the same shape as a webfont
+    // arriving after the first measurement. padding rather than a font token
+    // so the widening cannot depend on which token sizes the label
+    for (let item of document.querySelectorAll('[data-test-theme-nav-item]')) {
+      (item as HTMLElement).style.paddingInline = '3rem';
+    }
+    await waitUntil(() => visibleNavItemIds().length < before.length);
+
+    let dropped = before[before.length - 1]!;
+    await click('[data-test-theme-nav-more]');
+    assert
+      .dom(
+        `[data-test-boxel-menu-item-text="Section ${dropped.split('-')[1]}"]`,
+      )
+      .exists(
+        'the item that stopped fitting moved into the overflow menu rather than staying clipped',
+      );
+  });
+
   test('extra nav items collapse into a dropdown menu when the bar overflows', async function (this: RenderingTestContext, assert) {
     let sections = Array.from({ length: 12 }, (_, i) => ({
       id: `section-${i}`,
@@ -311,10 +350,10 @@ module('Integration | theme-dashboard | nav', function (hooks) {
       'overflowing items are hidden from the bar',
     );
 
-    let visibleItems = [
-      ...document.querySelectorAll('[data-test-theme-nav-item]'),
-    ].filter((el) => getComputedStyle(el).visibility === 'visible');
-    let lastVisible = visibleItems[visibleItems.length - 1]!;
+    let visibleIds = visibleNavItemIds();
+    let lastVisible = document.querySelector(
+      `[data-test-theme-nav-item="${visibleIds[visibleIds.length - 1]}"]`,
+    )!;
     let moreButton = document.querySelector('[data-test-theme-nav-more]')!;
     let distance =
       moreButton.getBoundingClientRect().left -
