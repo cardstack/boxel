@@ -140,6 +140,15 @@ export class Grip extends Component {
   @tracked guests: Guest[] = START.map((g) => ({ ...g, diets: [...g.diets] }));
   /** a hand is on somebody: every table with room says so */
   @tracked armed = false;
+  /**
+   * The zone the pointer is actually over, updated per drag frame.
+   *
+   * `armed` says where a guest COULD go; this says where they WOULD go. A
+   * board that only shows the first makes you drop and find out — which is
+   * fine once and tiresome twelve times, and it is the difference between a
+   * drop target and a drop target you can aim at.
+   */
+  @tracked over: string | null = null;
   /** whose details are open, from a tap that landed */
   @tracked open: string | null = null;
   @tracked note =
@@ -164,6 +173,14 @@ export class Grip extends Component {
   };
 
   private tableEls = new Map<string, HTMLElement>();
+  private railEl: HTMLElement | null = null;
+
+  bindRail = modifier((el: HTMLElement) => {
+    this.railEl = el;
+    return () => {
+      this.railEl = null;
+    };
+  });
 
   bindTable = modifier((el: HTMLElement, [id]: [string]) => {
     this.tableEls.set(id, el);
@@ -205,14 +222,27 @@ export class Grip extends Component {
     return this.left === 0 ? 'everyone seated, but…' : `${this.left} to seat`;
   }
 
+  /**
+   * Three things at once, in a fixed order of importance: where you ARE, where
+   * you COULD go, and what is already wrong.
+   *
+   * The hover state comes first because it answers the question being asked
+   * right now. A table that is both a legal target and the one under the
+   * pointer should look like the one under the pointer — otherwise every table
+   * looks the same at the moment the difference matters.
+   */
   tableClass = (table: string) => {
     const classes = ['tp-table'];
+    if (this.over === table) {
+      classes.push(this.roomAt(table) ? 'is-over' : 'is-no');
+    } else if (this.armed && this.roomAt(table)) {
+      classes.push('is-live');
+    }
+    if (!this.roomAt(table)) {
+      classes.push('is-full');
+    }
     if (this.feudAt(table)) {
       classes.push('is-wrong');
-    } else if (this.armed && this.roomAt(table)) {
-      classes.push('is-open');
-    } else if (!this.roomAt(table)) {
-      classes.push('is-full');
     }
     return classes.join(' ');
   };
@@ -229,10 +259,31 @@ export class Grip extends Component {
    */
   liftClass = (id: string) => (this.carrying === id ? 'tp-lift' : '');
 
+  /** the chair a guest is sitting in, and whether it is the one in flight */
+  seatClass = (id: string) =>
+    this.carrying === id ? 'tp-seat tp-lift' : 'tp-seat';
+
+  /**
+   * A getter, not a method. `class={{this.railClass}}` on a zero-argument
+   * method renders the FUNCTION — Glimmer only invokes a value that is a
+   * helper — and the attribute comes out as junk rather than as nothing, so the
+   * element quietly stops matching its own selector. It cost a test that could
+   * not find `.tp-rail` on a page that plainly had one.
+   */
+  get railClass() {
+    if (this.over === 'rail') {
+      return 'tp-rail is-over';
+    }
+    return this.armed && this.carrying ? 'tp-rail is-live' : 'tp-rail';
+  }
+
   @tracked private carrying: string | null = null;
 
   hoist = (id: string) => {
     this.carrying = id;
+    // stale from the last drag; re-measured on the first frame of this one,
+    // by which point the card has already shrunk
+    this.zones = null;
   };
 
   /**
@@ -275,30 +326,79 @@ export class Grip extends Component {
    */
   private lastAt: { x: number; y: number } | null = null;
 
+  /**
+   * The zones' boxes, measured ONCE per drag.
+   *
+   * Both halves of this matter and the stage was doing neither. Measuring four
+   * elements on every drag frame interleaves layout reads with the drag's own
+   * transform writes, which is the classic thrash: each read forces the style
+   * the previous write invalidated. And assigning `over` unconditionally made
+   * it a tracked write per frame, so the whole board — twelve cards, six pills
+   * each, three tables — re-rendered sixty times a second to answer a question
+   * whose answer changes perhaps four times in a drag.
+   *
+   * Together they cost about a frame a second. The design was right and the
+   * implementation was a loop; this is the same design with the loop taken out.
+   *
+   * Once is enough because the board does not move while a card is being
+   * carried: the columns are fixed proportions of the grid, so shrinking a card
+   * in the rail cannot shift a table.
+   */
+  private zones: Array<{ id: string; rect: DOMRect }> | null = null;
+
+  private measureZones() {
+    const out: Array<{ id: string; rect: DOMRect }> = [];
+    for (const t of TABLES) {
+      const el = this.tableEls.get(t.id);
+      if (el) {
+        out.push({ id: t.id, rect: el.getBoundingClientRect() });
+      }
+    }
+    if (this.railEl) {
+      out.push({ id: 'rail', rect: this.railEl.getBoundingClientRect() });
+    }
+    this.zones = out;
+  }
+
   track = (event: MouseEvent | PointerEvent | TouchEvent) => {
     const at = event as { clientX?: number; clientY?: number };
-    if (typeof at.clientX === 'number' && typeof at.clientY === 'number') {
-      this.lastAt = { x: at.clientX, y: at.clientY };
+    if (typeof at.clientX !== 'number' || typeof at.clientY !== 'number') {
+      return;
+    }
+    this.lastAt = { x: at.clientX, y: at.clientY };
+    const next = this.zoneUnder(this.lastAt);
+    // the guard is the whole fix: a tracked write per frame is a render per
+    // frame, and this answer changes a handful of times in an entire drag
+    if (next !== this.over) {
+      this.over = next;
     }
   };
 
-  private tableUnder(at: { x: number; y: number } | null) {
+  /**
+   * Which zone the pointer is over: a table, the list, or nothing.
+   *
+   * The list is a drop target too, and that is the interaction the first cut
+   * was missing. Without it the only way to change your mind about a seated
+   * guest is a small × on their chair, which is a different gesture for the
+   * same idea — put this person somewhere else. Everything you can do by
+   * dragging should be undoable by dragging.
+   */
+  private zoneUnder(at: { x: number; y: number } | null): string | null {
     if (!at) {
       return null;
     }
-    for (const t of TABLES) {
-      const el = this.tableEls.get(t.id);
-      if (!el) {
-        continue;
-      }
-      const r = el.getBoundingClientRect();
+    if (!this.zones) {
+      this.measureZones();
+    }
+    for (const z of this.zones ?? []) {
+      const r = z.rect;
       if (
         at.x >= r.left &&
         at.x <= r.right &&
         at.y >= r.top &&
         at.y <= r.bottom
       ) {
-        return t;
+        return z.id;
       }
     }
     return null;
@@ -312,23 +412,46 @@ export class Grip extends Component {
       typeof end?.clientX === 'number' && typeof end.clientY === 'number'
         ? { x: end.clientX, y: end.clientY }
         : this.lastAt;
-    const table = this.tableUnder(at);
+    const zone = this.zoneUnder(at);
     this.lastAt = null;
-    if (!table) {
+    this.over = null;
+    this.zones = null;
+
+    if (!zone) {
       this.note = `${guest.name} came back — that was not a table`;
+      return;
+    }
+
+    if (zone === 'rail') {
+      if (guest.table === null) {
+        this.note = `${guest.name} is still on the list`;
+        return;
+      }
+      this.seat(guest, null);
+      this.note = `${guest.name} is back on the list`;
+      return;
+    }
+
+    const table = TABLES.find((t) => t.id === zone)!;
+    if (guest.table === table.id) {
+      this.note = `${guest.name} is already at ${table.name.toLowerCase()}`;
       return;
     }
     if (!this.roomAt(table.id)) {
       this.note = `${table.name} is full — ${guest.name} came back`;
       return;
     }
-    this.guests = this.guests.map((g) =>
-      g.id === guest.id ? { ...g, table: table.id } : g
-    );
+    this.seat(guest, table.id);
     this.note = this.feudAt(table.id)
       ? `${table.name}: those two do not speak`
       : `${guest.name} is at ${table.name.toLowerCase()}`;
   };
+
+  private seat(guest: Guest, table: string | null) {
+    this.guests = this.guests.map((g) =>
+      g.id === guest.id ? { ...g, table } : g
+    );
+  }
 
   /**
    * Released ON the card: open their details. It only ever OPENS.
@@ -353,6 +476,26 @@ export class Grip extends Component {
   /** the explicit affordance for the same thing, because a tap is invisible */
   toggleEdit = (guest: Guest) => {
     this.open = this.open === guest.id ? null : guest.id;
+  };
+
+  /**
+   * Keep a control's pointer away from the card's press gesture.
+   *
+   * `done` did not work, and the reason is the whole hazard of putting
+   * interactive things inside a pressable thing. The button's click closed the
+   * flap; the card's `onTap` then fired a frame later — taps resolve on the
+   * frameloop, not in the handler — saw a closed card, and opened it again.
+   * Every press of `done` was a close followed instantly by an open, which
+   * looks exactly like a dead button.
+   *
+   * Stopping the gesture at pointerDOWN rather than at click is what matters:
+   * by the time a click exists the press has already been registered. This is
+   * on the button rather than solved in `press`, because the honest statement
+   * is that a control is not part of the card's press surface — not that the
+   * card should try to guess which of its own taps were meant for it.
+   */
+  swallow = (event: Event) => {
+    event.stopPropagation();
   };
 
   toggleDiet = (guest: Guest, diet: string) => {
@@ -391,13 +534,6 @@ export class Grip extends Component {
     );
   };
 
-  unseat = (guest: Guest) => {
-    this.guests = this.guests.map((g) =>
-      g.id === guest.id ? { ...g, table: null } : g
-    );
-    this.note = `${guest.name} is back on the list`;
-  };
-
   isOpen = (id: string) => this.open === id;
 
   freeAt = (table: string) => {
@@ -421,7 +557,14 @@ export class Grip extends Component {
       </header>
 
       <div class="tp-board">
-        <ol class="tp-rail" aria-label="Guests to seat">
+        {{! The list is a drop target too. Everything you can do by dragging is
+            undone by dragging: a seated guest carried back here goes on the
+            list again, which is why there is no × on a chair. }}
+        <ol
+          class={{this.railClass}}
+          aria-label="Guests to seat"
+          {{this.bindRail}}
+        >
           {{#each this.unseated key="id" as |guest|}}
             <li>
               {{! The card's OWN pointerdown is off. Everything inside it — the
@@ -466,6 +609,7 @@ export class Grip extends Component {
                     <button
                       type="button"
                       class="tp-edit"
+                      {{on "pointerdown" this.swallow}}
                       {{on "click" (fn this.toggleEdit guest)}}
                     >{{this.editLabel guest.id}}</button>
                   </div>
@@ -489,6 +633,7 @@ export class Grip extends Component {
                               "true"
                               "false"
                             }}
+                            {{on "pointerdown" this.swallow}}
                             {{on "click" (fn this.toggleDiet guest diet.id)}}
                           >{{diet.label}}</button>
                         {{/each}}
@@ -500,6 +645,7 @@ export class Grip extends Component {
                           placeholder="anything else"
                           value={{guest.note}}
                           aria-label="Other notes for {{guest.name}}"
+                          {{on "pointerdown" this.swallow}}
                           {{on "input" (fn this.setNote guest)}}
                         />
                         <span class="tp-phone">{{guest.phone}}</span>
@@ -527,21 +673,28 @@ export class Grip extends Component {
 
               <ul class="tp-seats">
                 {{#each (this.seatedAt table.id) key="id" as |guest|}}
+                  {{! A chair is draggable too, and it is the whole pill rather
+                      than a tab on it — there is no form in here to protect, so
+                      there is nothing to take the pointer back from. The same
+                      element being a drag handle when it has no content of its
+                      own, and needing a separate one when it does, is the
+                      clearest way to say what `dragListener` is for. }}
                   <li
-                    class="tp-seat"
+                    class={{this.seatClass guest.id}}
                     {{motion
+                      drag=true
+                      dragSnapToOrigin=true
+                      dragTransition=RETURN
                       initial=SEAT_IN
                       animate=SEAT_HERE
                       transition=SEAT_SPRING
+                      onPanSessionStart=this.session
+                      onDragStart=(fn this.hoist guest.id)
+                      onDrag=this.track
+                      onDragEnd=(fn this.drop guest)
                     }}
                   >
                     <span>{{guest.name}}</span>
-                    <button
-                      type="button"
-                      class="tp-out"
-                      aria-label="Take {{guest.name}} off this table"
-                      {{on "click" (fn this.unseat guest)}}
-                    >×</button>
                   </li>
                 {{/each}}
               </ul>

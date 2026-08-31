@@ -27,10 +27,17 @@ import { Choreo, motion } from 'glimmer-motion';
  *   geography. It also yields to the wheel, which here is a requirement rather
  *   than a nicety: you are already scrolling to read an assertion when the next
  *   jump lands, and a jump that fights your hand is worse than no jump.
- * - **`c.Raise`** is the only way the row can sit above the sticky header and
- *   outside the pane's `overflow` clip at the same time. `z-index` cannot buy
- *   that — a stacking context does not escape an ancestor's clip. Frozen
- *   mid-flight without it, the row is sliced by the pane's edge.
+ * - **`c.Raise`** is the only way the row can sit outside the pane's `overflow`
+ *   clip. `z-index` cannot buy that — a stacking context does not escape an
+ *   ancestor's clip. Frozen mid-flight without it, the row is sliced by the
+ *   pane's edge.
+ *
+ *   The toolbar used to overlap the list so that the raise had a header to pass
+ *   over as well, which was a better demonstration and a worse interface: with
+ *   `land it → at the top`, a row scrolls under the bar, and raising it — the
+ *   step doing exactly its job — then covered the count. The bar has its own
+ *   row now. The clip is the half of the claim that matters, and it is the half
+ *   nothing else can do.
  * - **`c.Hold`** marks it, and `@fill` is the difference between a flash and a
  *   record. Keeping the marks is how you find your place after scrolling away
  *   to read a stack trace; flashing is right when you are only stepping
@@ -226,17 +233,24 @@ const SPECS: Spec[] = (() => {
 })();
 
 const ALIGNS = [
-  { label: 'centre it', value: 'center' },
-  { label: 'top of the pane', value: 'start' },
+  { label: 'centred', value: 'center' },
+  { label: 'at the top', value: 'start' },
 ] as const;
 
 const MARKS = [
-  { keep: true, label: 'keep' },
-  { keep: false, label: 'flash' },
+  { keep: true, label: 'kept' },
+  { keep: false, label: 'a flash' },
 ] as const;
+
+/** the run, grouped the way it was written — which is how it reads */
+const GROUPS = SUITES.map(([suite]) => ({
+  specs: SPECS.filter((s) => s.suite === suite),
+  suite,
+}));
 
 export class Jump extends Component {
   specs = SPECS;
+  groups = GROUPS;
   aligns = ALIGNS;
   marks = MARKS;
 
@@ -254,6 +268,66 @@ export class Jump extends Component {
   get failures() {
     return SPECS.filter((s) => !s.ok);
   }
+
+  /**
+   * The whole run as sixty ticks, beside the list.
+   *
+   * This is the thing the stage was missing, and it was missing the point with
+   * it. `c.Scroll` is here because a jump should tell you HOW FAR DOWN the run
+   * a failure is and whether it sits with the others — and a pane showing eight
+   * rows out of sixty gives that travel nothing to mean anything against. You
+   * watched a list move and learned nothing from the movement.
+   *
+   * With the strip, the same scroll is legible: you can see the two failures
+   * near the top, the long clean stretch, the three in a row in the middle. The
+   * scroll is the answer and the strip is the question it is answering.
+   *
+   * It is also the fastest way to get anywhere, which is why the ticks are
+   * buttons. A minimap you cannot click is a decoration.
+   */
+  get strip() {
+    return SPECS.map((spec) => ({
+      cls: this.tickClass(spec),
+      id: spec.id,
+      label: spec.ok ? spec.name : `${spec.name} — failing`,
+    }));
+  }
+
+  tickClass = (spec: Spec) => {
+    const classes = ['jump-tick'];
+    if (!spec.ok) {
+      classes.push('is-red');
+    }
+    if (this.seen.includes(spec.id)) {
+      classes.push('is-seen');
+    }
+    if (this.target === spec.id) {
+      classes.push('is-at');
+    }
+    return classes.join(' ');
+  };
+
+  /** the strip is navigation as well as a picture: go straight to that spec */
+  goTo = (id: string) => {
+    const at = this.failures.findIndex((f) => f.id === id);
+    if (at >= 0) {
+      this.cursor = at;
+    }
+    this.target = id;
+    this.pass += 1;
+    if (this.keep && !this.seen.includes(id)) {
+      this.seen = [...this.seen, id];
+    }
+  };
+
+  failuresIn = (suite: string) =>
+    SPECS.filter((s) => s.suite === suite && !s.ok).length;
+
+  groupNote = (suite: string) => {
+    const n = this.failuresIn(suite);
+    const all = SPECS.filter((s) => s.suite === suite).length;
+    return n === 0 ? `${all} passing` : `${all} · ${n} failing`;
+  };
 
   get triagedCount() {
     return this.seen.length;
@@ -273,8 +347,17 @@ export class Jump extends Component {
       : `${n} failing · ${this.triagedCount} triaged`;
   }
 
-  get cta() {
-    return this.cursor < 0 ? 'first failure' : 'next failure';
+  /**
+   * One label, always. It used to read "first failure" until you had pressed it
+   * once and "next failure" thereafter, which is churn in the one place on the
+   * stage that should be a fixed point: the control you press over and over
+   * changing its name under your hand reads as something having gone wrong.
+   */
+  readonly cta = 'next failure';
+
+  /** disabled on the first failure, because there is nothing behind it */
+  get backOff() {
+    return this.cursor <= 0;
   }
 
   /**
@@ -296,6 +379,22 @@ export class Jump extends Component {
     if (this.keep && !this.seen.includes(spec.id)) {
       this.seen = [...this.seen, spec.id];
     }
+  };
+
+  /**
+   * The other half of the transport. A "next" with no "back" is not a
+   * transport, it is a slideshow — and going back to the last failure is what
+   * you do the moment you have read the one after it and want to compare.
+   */
+  back = () => {
+    const fails = this.failures;
+    if (this.cursor <= 0 || !fails.length) {
+      return;
+    }
+    const at = this.cursor - 1;
+    this.cursor = at;
+    this.target = fails[at]!.id;
+    this.pass += 1;
   };
 
   setAlign = (align: 'center' | 'start') => {
@@ -331,10 +430,11 @@ export class Jump extends Component {
    * the attribute comes out empty rather than wrong, so the control simply
    * stops showing its state and nothing anywhere reports a problem.
    */
-  keepClass = (keep: boolean) => (keep === this.keep ? 'chip is-on' : 'chip');
+  keepClass = (keep: boolean) =>
+    keep === this.keep ? 'jump-opt is-on' : 'jump-opt';
 
   get debugClass() {
-    return this.debug ? 'chip is-on' : 'chip';
+    return this.debug ? 'jump-opt is-on' : 'jump-opt';
   }
 
   rowClass = (spec: Spec) => {
@@ -349,29 +449,68 @@ export class Jump extends Component {
             has to clear. A row scrolled to the top of the pane would sit
             under this bar; raised, it is out of the pane's clip entirely and
             passes over it. }}
+        {{! A transport, not a button. The count is the readout, the two
+            controls beside it are prev and next, and they are one object
+            because they are one idea — move through the failures. }}
         <header class="jump-bar">
           <span class="jump-tally {{if this.done 'is-done' ''}}">
             {{this.tally}}
           </span>
-          <button
-            type="button"
-            class="jump-go"
-            {{on "click" this.next}}
-          >{{this.cta}}</button>
+          <div class="jump-transport">
+            <button
+              type="button"
+              class="jump-back"
+              aria-label="Previous failure"
+              disabled={{this.backOff}}
+              {{on "click" this.back}}
+            >◂</button>
+            <button
+              type="button"
+              class="jump-go"
+              {{on "click" this.next}}
+            >{{this.cta}}</button>
+          </div>
         </header>
 
+        {{! Sixty ticks, one per spec: the run at a glance, and the reference
+            the scroll's travel is measured against. }}
+        <ol class="jump-strip" aria-label="The run">
+          {{#each this.strip key="id" as |tick|}}
+            <li>
+              <button
+                type="button"
+                class={{tick.cls}}
+                title={{tick.label}}
+                aria-label={{tick.label}}
+                {{on "click" (fn this.goTo tick.id)}}
+              ></button>
+            </li>
+          {{/each}}
+        </ol>
+
         <Choreo class="jump-region" @debug={{this.debug}} as |c|>
+          {{! The run, grouped the way it was written. The suite was on every
+              row before, which said "layout" eight times in a column and gave
+              the run no shape at all. }}
           <ol class="jump-list">
-            {{#each this.specs key="id" as |spec|}}
-              <li class={{this.rowClass spec}} {{motion id=spec.id role="row"}}>
-                <span class="jump-dot"></span>
-                <span class="jump-suite">{{spec.suite}}</span>
-                <span class="jump-name">{{spec.name}}</span>
-                <span class="jump-ms">{{spec.ms}}ms</span>
-                {{#if spec.because}}
-                  <span class="jump-why">{{spec.because}}</span>
-                {{/if}}
+            {{#each this.groups key="suite" as |group|}}
+              <li class="jump-group">
+                <span class="jump-suite">{{group.suite}}</span>
+                <span class="jump-count">{{this.groupNote group.suite}}</span>
               </li>
+              {{#each group.specs key="id" as |spec|}}
+                <li
+                  class={{this.rowClass spec}}
+                  {{motion id=spec.id role="row"}}
+                >
+                  <span class="jump-dot"></span>
+                  <span class="jump-name">{{spec.name}}</span>
+                  <span class="jump-ms">{{spec.ms}}ms</span>
+                  {{#if spec.because}}
+                    <span class="jump-why">{{spec.because}}</span>
+                  {{/if}}
+                </li>
+              {{/each}}
             {{/each}}
           </ol>
 
@@ -412,9 +551,16 @@ export class Jump extends Component {
                     render that commits the row's own class — without it the
                     highlight drops on the last frame and the class arrives on
                     the next one, and the row blinks in between. }}
+                {{! An OPAQUE surface, not a tint. The row is out of the
+                    list's clip and above everything at this moment, and a
+                    translucent mark lets the rows it is passing over show
+                    through it — which reads as a rendering fault rather than
+                    as a lift. Everything else on the list is deliberately a
+                    little transparent, so the one solid thing is the one
+                    being pointed at. }}
                 <c.Hold
                   @of={{c.id this.target}}
-                  @backgroundColor="rgba(255, 59, 31, 0.26)"
+                  @backgroundColor="var(--bg-elev)"
                   @duration={{0.7}}
                   @fill={{this.keep}}
                 />
@@ -424,8 +570,13 @@ export class Jump extends Component {
         </Choreo>
       </div>
 
-      <div class="jump-prefs">
-        <span class="jump-legend">land it</span>
+      {{! Settings for an instrument, said as a sentence. These were four
+          uppercase chips in a row, which is what a control panel looks like
+          when it has been bolted under an app rather than built into one — and
+          three of them were preferences, not verbs. Verbs get buttons;
+          preferences get words you can click. }}
+      <div class="jump-set">
+        <span class="jump-key">land it</span>
         {{#each this.aligns key="value" as |option|}}
           <button
             type="button"
@@ -434,9 +585,7 @@ export class Jump extends Component {
           >{{option.label}}</button>
         {{/each}}
 
-        <span class="jump-sep"></span>
-
-        <span class="jump-legend">marks</span>
+        <span class="jump-key">marks</span>
         {{#each this.marks key="label" as |option|}}
           <button
             type="button"
@@ -445,14 +594,12 @@ export class Jump extends Component {
           >{{option.label}}</button>
         {{/each}}
 
-        <span class="jump-sep"></span>
-
         <button
           type="button"
-          class={{this.debugClass}}
+          class="{{this.debugClass}} jump-dev"
           title="outline every participant and print the pass"
           {{on "click" this.toggleDebug}}
-        >@debug</button>
+        >debug</button>
       </div>
     </div>
   </template>

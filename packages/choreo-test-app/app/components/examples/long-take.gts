@@ -1414,47 +1414,42 @@ export class LongTake extends Component {
             ),
             #5b626e;
         }
-        /* ...but only in 3D, where the slate is the SET the laptop was shot
-           on and the whole point is a photographic ground.
+        /* THE FLAT STATE FILLS THE PLATTER, AND IT IS DARK ON PURPOSE.
 
-           Flat is a different problem, and it took two wrong answers to get to
-           the right one. The flat state is a PHOTOGRAPH — a laptop on a dark
-           set — stretched edge to edge. Lightening the ground under it did
-           nothing, because the plate covers the ground entirely. Masking the
-           plate's surround to let the page through looked like a smudge: the
-           set is most of the frame, not a border.
+           The still is a photograph of the laptop on a dark set and the set is
+           baked into its pixels. The file carries an ALPH chunk, but at 830
+           bytes it is a uniformly opaque channel — there is no transparency to
+           composite against. The plate is 1178x838 and the stage is wider, so
+           it cannot fill the platter by itself.
 
-           So it stops pretending the ground can be lightened and presents the
-           plate as what it is: a dark photograph placed on a light page. Inset,
-           cornered and shadowed, it reads as an image somebody put there. Edge
-           to edge with no frame it reads as a hole cut in the paper, which is
-           the thing that was actually wrong.
+           So the STAGE wears the plate's own set, in both themes. The bands
+           down either side disappear because there is no longer an edge: the
+           set in the photograph and the set behind it are the same set. Light
+           mode does not get the slate here, because a slate ground behind a
+           near-black plate is the letterbox again with better colours.
 
-           And no backticks in here. A .gts template is compiled by wrapping its
-           contents in a template LITERAL, so one backtick anywhere inside
-           closes the literal early and the file dies with "Parsing error:
-           Invalid count value: -1" — which names neither the line nor the
-           cause. It is the same unhelpful message the multi-line class
-           attribute and the angle bracket in a handlebars comment produce; see
-           dial-panel.gts for those two. */
+           This is the workaround, not the answer. Two things want a re-exported
+           plate with a genuinely transparent background: light mode would then
+           get the mockup's slate like every other flat state, and the platter
+           would fill because the ground would show THROUGH the plate rather
+           than having to match it. Recovering it in CSS was tried — a screen
+           blend maps black to the ground exactly — and it cannot work here:
+           the world carries a transform, so it is its own stacking context and
+           the blend never reaches the stage; and screening the plate would
+           wash out the drawing showing through its screen, which is the one
+           thing on this stage that must stay crisp. */
+        .lt-page[data-mode="2d"] .lt-stage,
         :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-stage {
           background:
             radial-gradient(
               120% 90% at 50% 8%,
-              #f7f3ec 0%,
-              #efe9df 46%,
-              #e4dccf 100%
+              #23262d 0%,
+              #14161b 46%,
+              #090a0d 100%
             ),
-            #efe9df;
+            #14161b;
         }
-        :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-world {
-          border-radius: 14px;
-          box-shadow:
-            0 18px 40px rgba(33, 29, 24, 0.22),
-            0 2px 6px rgba(33, 29, 24, 0.12);
-          overflow: hidden;
-          transform: translate(-50%, -50%) scale(calc(var(--k, 1) * 0.88));
-        }
+
         /* THE CANVAS SITS ABOVE THE DOM, and that is what makes the
            laptop's own body occlude the drawing.
 

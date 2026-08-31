@@ -11853,7 +11853,18 @@ html[data-gm-dragging] * {
   min-height: 0;
 }
 
+.tp-rail.is-live {
+  background: rgba(230, 163, 90, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(230, 163, 90, 0.3);
+}
+
+.tp-rail.is-over {
+  background: rgba(230, 163, 90, 0.12);
+  box-shadow: inset 0 0 0 1px var(--copper);
+}
+
 .tp-rail {
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -11862,6 +11873,7 @@ html[data-gm-dragging] * {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
@@ -11894,12 +11906,33 @@ html[data-gm-dragging] * {
    siblings in a grid, so a card with no z-index of its own slides beneath the
    thing it is being carried toward and vanishes at the moment the drop matters
    most. The shadow is the rest of the sentence — it says the card has left the
-   list rather than merely moved along it. */
+   list rather than merely moved along it.
+
+   And it SHRINKS. A full-width card in flight covers the tables it is being
+   aimed at, so the one thing you need to see while dragging is the thing the
+   drag is hiding. Only the width is animated, deliberately: the row keeps its
+   height, so nothing below it reflows and the list you are dragging out of
+   stays still. */
 .tp-card.tp-lift {
   border-color: var(--line-strong);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
   cursor: grabbing;
+  max-width: 190px;
+  /* NOT transitioned. `max-width` is a layout property, so animating it makes
+     the browser reflow the card — and the rail it sits in — on every frame of
+     the transition, while the drag is already writing a transform to the same
+     element each frame. The shrink is instant instead: at the moment you pick
+     something up, an instant change reads as the thing becoming portable, and
+     an animated one reads as lag. */
   z-index: 5;
+}
+
+/* the summary and the button go with it: a pill in flight is a name and a grip
+   and nothing else */
+.tp-card.tp-lift .tp-diet,
+.tp-card.tp-lift .tp-edit,
+.tp-card.tp-lift .tp-flap {
+  display: none;
 }
 
 /* and the rail itself has to stop clipping, or the card is cut off at its edge
@@ -12082,12 +12115,17 @@ html[data-gm-dragging] * {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
-/* A table is a drop target, and it says which of the three it is: lit means
-   there is a chair going, dimmed means full, and marked means the plan is
-   finished and wrong. */
+/* A table is a drop target and it has four things to say, in order of how
+   urgently they are wanted: this is where it would land (`is-over`), this is
+   somewhere it COULD land (`is-live`), this one would refuse you (`is-no`),
+   and this one is already wrong (`is-wrong`).
+   The hover state wins over the merely-available one because it answers the
+   question actually being asked. Three identical lit boxes tell you nothing at
+   the moment you are choosing between them. */
 .tp-table {
   background: rgba(var(--ink-rgb), 0.03);
   border: 1px dashed var(--line-strong);
@@ -12098,9 +12136,25 @@ html[data-gm-dragging] * {
     border-color 160ms var(--ease);
 }
 
-.tp-table.is-open {
-  background: rgba(230, 163, 90, 0.1);
-  border-color: rgba(230, 163, 90, 0.55);
+.tp-table.is-live {
+  background: rgba(230, 163, 90, 0.08);
+  border-color: rgba(230, 163, 90, 0.4);
+}
+
+.tp-table.is-over {
+  background: rgba(230, 163, 90, 0.2);
+  border-color: var(--copper);
+  border-style: solid;
+}
+
+/* Refusing in advance. A full table under the pointer says no BEFORE you let
+   go, which is the difference between a rule and a punishment: the snap-back
+   still happens, but nobody was surprised by it. */
+.tp-table.is-no {
+  background: rgba(255, 59, 31, 0.1);
+  border-color: rgba(255, 59, 31, 0.5);
+  border-style: solid;
+  opacity: 1;
 }
 
 .tp-table.is-full {
@@ -12140,25 +12194,24 @@ html[data-gm-dragging] * {
 .tp-seat {
   align-items: center;
   background: var(--bg-elev);
+  border: 1px solid var(--line);
   border-radius: 999px;
+  cursor: grab;
   display: inline-flex;
   font-size: 11.5px;
-  gap: 5px;
-  padding: 3px 5px 3px 10px;
+  padding: 3px 10px;
+  touch-action: none;
 }
 
-.tp-out {
-  background: transparent;
-  border: 0;
-  color: var(--ink-faint);
-  cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
-  padding: 0 3px;
+.tp-seat:active {
+  cursor: grabbing;
 }
 
-.tp-out:hover {
-  color: var(--ember);
+.tp-seat.tp-lift {
+  border-color: var(--line-strong);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 5;
 }
 
 .tp-wrong {
@@ -12193,28 +12246,92 @@ html[data-gm-dragging] * {
   background: rgba(var(--ink-rgb), 0.03);
   border: 1px solid var(--line);
   border-radius: 10px;
+  display: grid;
   flex: 1;
+  /* the strip, then the run */
+  grid-template-columns: 16px minmax(0, 1fr);
+  /* and ONE row that cannot grow. Without this the row is sized by its content
+     — sixty rows, about 2200px — and the pane stops being a viewport at all:
+     the strip stretches to the full height of the run it is supposed to be a
+     miniature of. `minmax(0, 1fr)` is the grid spelling of "take the height you
+     were given and no more". */
+  /* the bar, then the run. The bar used to be absolutely positioned OVER the
+     list, which is how it managed to be covered by its own content: with
+     `land it → at the top` a row scrolls under it, and raising that row —
+     which is `c.Raise` doing exactly its job — put it over the count. A bar in
+     its own row cannot be covered, and the raise still has the thing that
+     matters to escape: the pane's clip. */
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   position: relative;
 }
 
+/* The run as sixty ticks. Sixteen pixels of gutter that turn the scroll from
+   a movement into a measurement: you can see the two failures near the top, the
+   long clean stretch, the three together in the middle — and then watch the
+   list travel exactly that far. Without it the pane shows eight rows out of
+   sixty and the travel has nothing to mean anything against. */
+.jump-strip {
+  background: rgba(var(--ink-rgb), 0.04);
+  border-right: 1px solid var(--line);
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px 4px;
+}
+
+.jump-strip li {
+  display: flex;
+  flex: 1;
+  max-height: 7px;
+}
+
+.jump-tick {
+  background: rgba(var(--ink-rgb), 0.16);
+  border: 0;
+  border-radius: 1px;
+  cursor: pointer;
+  display: block;
+  flex: 1;
+  padding: 0;
+  transition:
+    background 140ms var(--ease),
+    transform 140ms var(--ease);
+}
+
+.jump-tick:hover {
+  transform: scaleX(1.6);
+}
+
+.jump-tick.is-red {
+  background: var(--ember);
+}
+
+/* a failure that has been looked at: still there, no longer shouting */
+.jump-tick.is-red.is-seen {
+  background: rgba(255, 59, 31, 0.4);
+}
+
+.jump-tick.is-at {
+  background: var(--copper);
+  transform: scaleX(1.8);
+}
+
 .jump-bar {
   align-items: center;
-  backdrop-filter: blur(10px);
-  background: rgba(var(--bg-rgb), 0.86);
+  background: rgba(var(--bg-rgb), 0.7);
   border-bottom: 1px solid var(--line);
   display: flex;
   gap: 10px;
-  left: 0;
+  grid-column: 2;
   padding: 8px 10px;
-  position: absolute;
-  right: 0;
-  top: 0;
-  /* below the raise layer on purpose: a raised row passes OVER this bar, which
-     is the demonstration. If the bar won, the row would be hidden exactly when
-     it had been scrolled to the top. */
-  z-index: 1;
 }
 
 .jump-tally {
@@ -12229,21 +12346,65 @@ html[data-gm-dragging] * {
   color: var(--copper-ink);
 }
 
+/* The transport: one object, because prev and next are one idea. Joined rather
+   than spaced, with the primary carrying the colour — a pair of equal buttons
+   would make going back look like half the point of the stage. */
+.jump-transport {
+  display: flex;
+  flex: none;
+  gap: 1px;
+}
+
+.jump-back,
 .jump-go {
-  background: var(--ember);
   border: 0;
-  border-radius: 999px;
-  color: #fff;
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.04em;
   padding: 5px 12px;
-  transition: filter 160ms var(--ease);
+  transition:
+    background 160ms var(--ease),
+    color 160ms var(--ease);
+}
+
+.jump-back {
+  background: rgba(var(--ink-rgb), 0.08);
+  border-radius: 999px 0 0 999px;
+  color: var(--ink-dim);
+  padding: 5px 10px;
+}
+
+.jump-back:hover:not(:disabled) {
+  background: rgba(var(--ink-rgb), 0.14);
+  color: var(--ink);
+}
+
+.jump-back:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* Not red. Red on this stage means FAILING — it is on nine rows, nine ticks in
+   the strip and every assertion — and a red button is then the loudest thing on
+   screen while meaning nothing of the sort. A semantic colour has to keep its
+   one job or it stops being semantic. The transport is ink, and the copper
+   underline in the settings row is the only other accent. */
+.jump-go {
+  background: rgba(var(--ink-rgb), 0.14);
+  border-radius: 0 999px 999px 0;
+  color: var(--ink);
 }
 
 .jump-go:hover {
-  filter: brightness(1.12);
+  background: rgba(var(--ink-rgb), 0.22);
+}
+
+/* The region sits in the second column, under the bar. */
+.jump-region {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
 }
 
 /* The region is the positioned wrapper and NOT the scroller.
@@ -12265,21 +12426,72 @@ html[data-gm-dragging] * {
   margin: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* clear of the sticky bar, so the first rows are not under it */
-  padding: 37px 0 12px;
+  padding: 6px 0 12px;
+  /* Reserve the scrollbar's channel whether or not there is a scrollbar. Without
+     it the box is one width when the list overflows and another when a filter
+     leaves it short, and everything inside shifts sideways as you use it. */
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
 }
 
+/* A suite header, so the run has a shape. The suite used to be a column on
+   every row, which said "layout" eight times and told you nothing. */
+.jump-group {
+  align-items: baseline;
+  color: var(--ink-faint);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  gap: 8px;
+  letter-spacing: 0.1em;
+  margin: 10px 6px 2px;
+  padding: 0 8px 3px;
+  text-transform: uppercase;
+}
+
+.jump-group:first-child {
+  margin-top: 0;
+}
+
+.jump-suite {
+  color: var(--ink-dim);
+}
+
+.jump-count {
+  border-top: 1px solid var(--line);
+  flex: 1;
+  padding-top: 3px;
+  text-align: right;
+}
+
+/* At rest a row is a little transparent, so that the one the transport has
+   raised — opaque, on its own surface — is unmistakably the one being pointed
+   at. A list where everything is solid has to shout to mark one row; a list
+   that is quiet only has to stop being quiet. */
 .jump-row {
   align-items: baseline;
   border-radius: 5px;
   color: var(--ink-dim);
+  opacity: 0.72;
   display: grid;
   font-size: 11.5px;
   gap: 0 8px;
-  grid-template-columns: 8px 96px minmax(0, 1fr) auto;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
   margin: 0 6px;
   padding: 5px 8px;
+}
+
+/* A failure reads as a block rather than as a line with a red dot on it: it is
+   the thing you are hunting, and it should be findable while the list is
+   moving past.
+   A tint and a full hairline ring, NOT an inset left bar. A straight band
+   fights the corner radius it sits inside — it either stops short and leaves a
+   notch or runs into the curve and is clipped into a wedge, and no radius makes
+   that look deliberate. A ring follows the shape. */
+.jump-row.is-red {
+  background: rgba(255, 59, 31, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.22);
+  opacity: 0.92;
 }
 
 /* the pass/fail mark, which is the only colour on a green row */
@@ -12328,43 +12540,83 @@ html[data-gm-dragging] * {
   color: var(--ember);
   font-family: var(--font-mono);
   font-size: 10px;
-  grid-column: 3 / -1;
+  grid-column: 2 / -1;
   opacity: 0.85;
   padding-top: 2px;
 }
 
 /* The record. This is app state — a row you have been to — and it is what
    `@fill` bridges to: the hold keeps the mark alive until the render that adds
-   this class has landed, so the row does not blink between the two. */
+   this class has landed, so the row does not blink between the two.
+   Handled reads as HANDLED: it steps back rather than lighting up. A triaged
+   failure is one you no longer need to find. */
 .jump-row.is-seen {
-  background: rgba(var(--ink-rgb), 0.06);
-  box-shadow: inset 2px 0 0 var(--copper);
+  opacity: 0.45;
 }
 
-.jump-prefs {
-  align-items: center;
+.jump-row.is-seen .jump-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--ember);
+}
+
+/* Preferences, as a line of words rather than a row of chips.
+   Four uppercase pills under an app is what a control panel looks like when it
+   has been bolted on; and three of these are not verbs at all, they are
+   choices. A verb earns a button. A choice earns a word you can click, marked
+   by weight and colour rather than by a box. */
+.jump-set {
+  align-items: baseline;
+  color: var(--ink-faint);
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  font-size: 11px;
+  gap: 4px 8px;
 }
 
-.jump-sep {
-  background: var(--line-strong);
-  height: 14px;
-  width: 1px;
+.jump-key {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-@container (max-width: 460px) {
-  .jump-row {
-    grid-template-columns: 8px minmax(0, 1fr) auto;
-  }
+.jump-key:not(:first-child) {
+  margin-left: 8px;
+}
 
-  .jump-suite {
+.jump-opt {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 0 1px;
+  transition:
+    color 140ms var(--ease),
+    border-color 140ms var(--ease);
+}
+
+.jump-opt:hover {
+  color: var(--ink-dim);
+}
+
+.jump-opt.is-on {
+  border-bottom-color: var(--copper);
+  color: var(--ink);
+}
+
+/* honestly a developer control, so it sits apart and stays quiet */
+.jump-dev {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin-left: auto;
+}
+
+@container platter (max-width: 430px) {
+  .jump-ms {
     display: none;
-  }
-
-  .jump-why {
-    grid-column: 2 / -1;
   }
 }
 
@@ -13189,6 +13441,7 @@ html[data-gm-dragging] * {
   overscroll-behavior: contain;
   position: absolute;
   right: 8px;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   top: 40px;
   transition:

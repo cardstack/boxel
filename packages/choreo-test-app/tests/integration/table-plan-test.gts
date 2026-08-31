@@ -119,14 +119,15 @@ module('Integration | table plan', function (hooks) {
   });
 
   /**
-   * The refusal. Released over nothing, the guest is unchanged — which is the
-   * behaviour `dragSnapToOrigin` is there to make legible, and the one case
-   * where "nothing happened" is the correct outcome rather than a bug.
+   * The refusal. Released over nothing at all — above the board, clear of both
+   * the list and the tables — the guest is unchanged, which is what
+   * `dragSnapToOrigin` is there to make legible and the one case where
+   * "nothing happened" is the right outcome rather than a bug.
    */
   test('a guest dropped on nothing comes back', async function (assert) {
     await render(<template><Grip /></template>);
 
-    await carry(null);
+    await carry({ x: 500, y: 2 });
 
     assert.strictEqual(seats(), 0, 'nobody was seated');
     assert.strictEqual(cards(), 12, 'and nobody left the list');
@@ -134,6 +135,42 @@ module('Integration | table plan', function (hooks) {
       $('.tp-note').textContent!.includes('that was not a table'),
       'and the stage says why'
     );
+  });
+
+  /**
+   * The list is a drop target too, so a seated guest can be carried back to it.
+   * Everything done by dragging is undone by dragging — there is no × on a
+   * chair, because a second gesture for the same idea is a second thing to
+   * learn.
+   */
+  test('a seated guest can be carried back to the list', async function (assert) {
+    await render(<template><Grip /></template>);
+
+    await carry(centreOf(0));
+    assert.strictEqual(seats(), 1, 'seated');
+    assert.strictEqual(cards(), 11, 'and off the list');
+
+    const chair = $('.tp-seat');
+    const c = chair.getBoundingClientRect();
+    const rail = $('.tp-rail');
+    const r = rail.getBoundingClientRect();
+    const anchor = $('.tp-tables').getBoundingClientRect();
+
+    trigger(chair, 'pointerdown', c.width / 2, c.height / 2);
+    await wait(20);
+    const x0 = c.left + c.width / 2 - anchor.left;
+    const y0 = c.top + c.height / 2 - anchor.top;
+    const dx = r.left + r.width / 2 - (c.left + c.width / 2);
+    const dy = r.top + 20 - (c.top + c.height / 2);
+    for (let i = 1; i <= 10; i++) {
+      trigger(rest(), 'pointermove', x0 + (dx * i) / 10, y0 + (dy * i) / 10);
+      await frames(2);
+    }
+    trigger(rest(), 'pointerup', x0 + dx, y0 + dy);
+    await frames(4);
+
+    assert.strictEqual(seats(), 0, 'the chair is empty again');
+    assert.strictEqual(cards(), 12, 'and they are back on the list');
   });
 
   test('a full table refuses the fifth guest', async function (assert) {
@@ -164,7 +201,7 @@ module('Integration | table plan', function (hooks) {
     await render(<template><Grip /></template>);
 
     assert.strictEqual(
-      document.querySelectorAll(`${TABLE}.is-open`).length,
+      document.querySelectorAll(`${TABLE}.is-live`).length,
       0,
       'nothing is lit before a hand is on anybody'
     );
@@ -175,7 +212,7 @@ module('Integration | table plan', function (hooks) {
     await wait(30);
 
     assert.strictEqual(
-      document.querySelectorAll(`${TABLE}.is-open`).length,
+      document.querySelectorAll(`${TABLE}.is-live`).length,
       3,
       'all three light at pointerdown, before any movement at all'
     );
