@@ -196,45 +196,47 @@ export class ThemeImporter extends GlimmerComponent<{
       </div>
     </div>
     <style scoped>
-      .css-field-editor-panel {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-      }
-      .css-field-editor-hint {
-        margin: 0;
-        max-width: 45rem;
-        color: var(--muted-foreground);
-      }
-      .css-field-editor-hint-link {
-        color: inherit;
-        text-decoration: underline;
-      }
-      .css-field-editor-hint-link:hover,
-      .css-field-editor-hint-link:focus-visible {
-        color: var(--primary);
-      }
-      .css-field-editor {
-        gap: var(--boxel-sp);
-      }
-      .css-textarea {
-        min-height: 15rem;
-        font-size: var(--boxel-font-size-xs);
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-      }
-      .css-textarea::placeholder {
-        opacity: 0.5;
-      }
-      .css-field-editor-error {
-        margin: 0;
-        color: var(--destructive, var(--boxel-error-200));
-      }
-      .css-field-editor-actions {
-        display: flex;
-        justify-content: flex-end;
+      @layer baseComponent {
+        .css-field-editor-panel {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .css-field-editor-hint {
+          margin: 0;
+          max-width: 45rem;
+          color: var(--muted-foreground);
+        }
+        .css-field-editor-hint-link {
+          color: inherit;
+          text-decoration: underline;
+        }
+        .css-field-editor-hint-link:hover,
+        .css-field-editor-hint-link:focus-visible {
+          color: var(--primary);
+        }
+        .css-field-editor {
+          gap: var(--boxel-sp);
+        }
+        .css-textarea {
+          min-height: 15rem;
+          font-size: var(--boxel-font-size-xs);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+        }
+        .css-textarea::placeholder {
+          opacity: 0.5;
+        }
+        .css-field-editor-error {
+          margin: 0;
+          color: var(--destructive, var(--boxel-error-200));
+        }
+        .css-field-editor-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
       }
     </style>
   </template>
@@ -483,116 +485,121 @@ export class CardContainerCss extends GlimmerComponent<{
       </div>
     </div>
     <style scoped>
-      .card-container-description {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--muted-foreground);
-        margin-block: 0 var(--boxel-sp-lg);
-      }
-      .card-container-description code,
-      .card-container-mappings code {
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: 0.9em;
-      }
-      .card-container-mappings {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-        gap: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-lg);
-      }
-      .card-container-mapping-group {
-        background-color: var(--card);
-        color: var(--card-foreground);
-        border: 1px solid var(--border);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-      }
-      .card-container-mapping-group h4 {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted-foreground);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .card-container-mapping-group dl {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--boxel-sp-4xs) var(--boxel-sp-sm);
-        margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        align-items: baseline;
-      }
-      .card-container-mapping-note {
-        font-size: var(--boxel-font-size-xs);
-        color: var(--muted-foreground);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .card-container-mapping-group dt {
-        font-weight: 500;
-      }
-      .card-container-mapping-group dd {
-        margin: 0;
-        color: var(--muted-foreground);
-      }
-      .computed-vars-heading {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted-foreground);
-        margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
-        padding-top: var(--boxel-sp-lg);
-        border-top: 1px solid var(--border);
-      }
-      .computed-vars-section {
-        display: grid;
-        /* min() lets the column shrink instead of overflowing a narrow card */
-        grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
-        gap: var(--boxel-sp-lg);
-      }
-      .computed-vars-group {
-        background-color: var(--card);
-        color: var(--card-foreground);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: var(--boxel-sp);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .computed-vars-group h4 {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--muted-foreground);
-        margin: 0;
-      }
-      .computed-vars-description {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        color: var(--muted-foreground);
-      }
-      .computed-vars-description code {
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: 0.9em;
-      }
-      .computed-vars-pre {
-        margin: 0;
-        padding: var(--boxel-sp-xs) 0 0;
-        overflow-x: auto;
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: var(--boxel-font-size-xs);
-        flex: 1;
+      @layer baseComponent {
+        .card-container-description {
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground);
+          margin-block: 0 var(--boxel-sp-lg);
+        }
+        .card-container-description code,
+        .card-container-mappings code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+        .card-container-mappings {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+          gap: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-lg);
+        }
+        .card-container-mapping-group {
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp);
+        }
+        .card-container-mapping-group h4 {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .card-container-mapping-group dl {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: var(--boxel-sp-4xs) var(--boxel-sp-sm);
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          align-items: baseline;
+        }
+        .card-container-mapping-note {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .card-container-mapping-group dt {
+          font-weight: 500;
+        }
+        .card-container-mapping-group dd {
+          margin: 0;
+          color: var(--muted-foreground);
+        }
+        .computed-vars-heading {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
+          padding-top: var(--boxel-sp-lg);
+          border-top: 1px solid var(--border);
+        }
+        .computed-vars-section {
+          display: grid;
+          /* min() lets the column shrink instead of overflowing a narrow card */
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(18rem, 100%), 1fr)
+          );
+          gap: var(--boxel-sp-lg);
+        }
+        .computed-vars-group {
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: var(--boxel-sp);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+        .computed-vars-group h4 {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin: 0;
+        }
+        .computed-vars-description {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground);
+        }
+        .computed-vars-description code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+        .computed-vars-pre {
+          margin: 0;
+          padding: var(--boxel-sp-xs) 0 0;
+          overflow-x: auto;
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: var(--boxel-font-size-xs);
+          flex: 1;
+        }
       }
     </style>
   </template>
@@ -944,110 +951,112 @@ export class NavBar extends GlimmerComponent<{
       </div>
     </nav>
     <style scoped>
-      /* Navigation */
-      .dsr-nav {
-        --dsr-nav-item-max-width: 12rem;
-        position: sticky;
-        top: 0;
-        /* also read by content pinned below the bar, so it stays in sync */
-        height: var(--dsr-nav-height);
-        width: 100%;
-        border-bottom: 1px solid var(--border);
-        z-index: 10;
-        background: color-mix(in oklch, var(--background) 80%, transparent);
-        backdrop-filter: blur(8px);
-        display: flex;
-        align-items: stretch;
-        justify-content: space-between;
-      }
-      .nav-grid {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-        min-width: 0;
-        overflow: hidden;
-        position: relative;
-        align-items: center;
-      }
-      /* an item that doesn't fit moves into the overflow menu rather than
-         being truncated in place */
-      .nav-grid > li {
-        flex-shrink: 0;
-      }
-      /* hidden trailing items would distort space-between distribution; the
-         fit measurement sets the width instead */
-      .nav-grid--clipped {
-        justify-content: flex-start;
-        flex: none;
-      }
-      /* visibility, not display: keeps the item measurable */
-      .nav-item-hidden {
-        visibility: hidden;
-      }
-      .nav-item {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        white-space: nowrap;
-        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
-        /* text-overflow needs a block box; the Button is inline-flex */
-        display: block;
-        max-width: var(--dsr-nav-item-max-width);
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .nav-mode-toggle {
-        align-self: center;
-        justify-content: flex-end;
-        margin-left: auto;
-      }
-      .nav-more-button-container,
-      .nav-menu-button {
-        align-self: center;
-        flex-shrink: 0;
-      }
-      .nav-more-button,
-      .nav-menu-button {
-        color: var(--muted-foreground);
-      }
-      .nav-more-button :deep(svg),
-      .nav-menu-button :deep(svg) {
-        stroke-width: 1px;
-      }
-      .nav-more-button:hover,
-      .nav-more-button:focus-visible,
-      .nav-menu-button:hover,
-      .nav-menu-button:focus-visible {
-        color: var(--foreground);
-        background: color-mix(in oklch, var(--foreground) 10%, transparent);
-      }
-      .nav-more-button:focus-visible,
-      .nav-menu-button:focus-visible {
-        outline: 2px solid var(--ring, var(--boxel-highlight));
-      }
-      /* portaled next to the app root, so it needs its own viewport cap */
-      .nav-dropdown-menu {
-        max-height: 50vh;
-        overflow-y: auto;
-      }
-      .nav-container {
-        position: relative;
-        flex-grow: 1;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        overflow: hidden;
-        padding-inline: var(--boxel-sp-xl);
-      }
-
-      @container (width <= 768px) {
-        .nav-grid {
-          gap: var(--boxel-sp);
+      @layer baseComponent {
+        /* Navigation */
+        .dsr-nav {
+          --dsr-nav-height: 3.25rem;
+          --dsr-nav-item-max-width: 12rem;
+          position: sticky;
+          top: 0;
+          height: var(--dsr-nav-height);
+          width: 100%;
+          border-bottom: 1px solid var(--border);
+          z-index: 10;
+          background: color-mix(in oklch, var(--background) 80%, transparent);
+          backdrop-filter: blur(8px);
+          display: flex;
+          align-items: stretch;
+          justify-content: space-between;
         }
-        /* matches .dsr-content's compact padding so items stay aligned */
+        .nav-grid {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+          min-width: 0;
+          overflow: hidden;
+          position: relative;
+          align-items: center;
+        }
+        /* an item that doesn't fit moves into the overflow menu rather than
+           being truncated in place */
+        .nav-grid > li {
+          flex-shrink: 0;
+        }
+        /* hidden trailing items would distort space-between distribution; the
+           fit measurement sets the width instead */
+        .nav-grid--clipped {
+          justify-content: flex-start;
+          flex: none;
+        }
+        /* visibility, not display: keeps the item measurable */
+        .nav-item-hidden {
+          visibility: hidden;
+        }
+        .nav-item {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          white-space: nowrap;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          /* text-overflow needs a block box; the Button is inline-flex */
+          display: block;
+          max-width: var(--dsr-nav-item-max-width);
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .nav-mode-toggle {
+          align-self: center;
+          justify-content: flex-end;
+          margin-left: auto;
+        }
+        .nav-more-button-container,
+        .nav-menu-button {
+          align-self: center;
+          flex-shrink: 0;
+        }
+        .nav-more-button,
+        .nav-menu-button {
+          color: var(--muted-foreground);
+        }
+        .nav-more-button :deep(svg),
+        .nav-menu-button :deep(svg) {
+          stroke-width: 1px;
+        }
+        .nav-more-button:hover,
+        .nav-more-button:focus-visible,
+        .nav-menu-button:hover,
+        .nav-menu-button:focus-visible {
+          color: var(--foreground);
+          background: color-mix(in oklch, var(--foreground) 10%, transparent);
+        }
+        .nav-more-button:focus-visible,
+        .nav-menu-button:focus-visible {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+        }
+        /* portaled next to the app root, so it needs its own viewport cap */
+        .nav-dropdown-menu {
+          max-height: 50vh;
+          overflow-y: auto;
+        }
         .nav-container {
-          padding-inline: var(--boxel-sp);
+          position: relative;
+          flex-grow: 1;
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          overflow: hidden;
+          padding-inline: var(--boxel-sp-xl);
+        }
+
+        @container (width <= 768px) {
+          .nav-grid {
+            gap: var(--boxel-sp);
+          }
+          /* matches .dsr-content's compact padding so items stay aligned */
+          .nav-container {
+            padding-inline: var(--boxel-sp);
+          }
         }
       }
     </style>
@@ -1577,7 +1586,6 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
-          --dsr-nav-height: 3.25rem;
           display: flex;
           flex-direction: column;
           height: 100%;
