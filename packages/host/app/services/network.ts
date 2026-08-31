@@ -5,9 +5,9 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import {
+  PREFIX_REALMS,
   VirtualNetwork,
   authorizationMiddleware,
-  baseRealm,
   fetcher,
 } from '@cardstack/runtime-common';
 
@@ -72,38 +72,28 @@ export default class NetworkService extends Service {
       // prerender this is the global setTimeout, so behavior is unchanged.
       scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
     });
-    let resolvedBaseRealmURL = new URL(
-      withTrailingSlash(config.resolvedBaseRealmURL),
-    );
-    // URL mapping kept for the fake https://cardstack.com/base/ → real URL.
-    // addRealmMapping registers the @cardstack/base/ scoped prefix.
-    virtualNetwork.addURLMapping(new URL(baseRealm.url), resolvedBaseRealmURL);
-    virtualNetwork.addRealmMapping(
-      '@cardstack/base/',
-      resolvedBaseRealmURL.href,
-    );
+    // Registered from the shared declaration rather than one block per realm,
+    // so this set cannot drift from the one the realm-server registers. A realm
+    // whose config property is absent or empty is not part of this build and is
+    // skipped, which is how a build configured without the catalog or
+    // openrouter realm leaves those prefixes unregistered. An `alias`
+    // additionally maps a `https://` spelling onto the same realm; only the
+    // base realm has one.
+    for (let { prefix, alias, hostConfigKey } of PREFIX_REALMS) {
+      let configured = (config as Record<string, unknown>)[hostConfigKey];
+      if (typeof configured !== 'string' || configured === '') {
+        continue;
+      }
+      let resolvedRealmURL = new URL(withTrailingSlash(configured));
+      if (alias) {
+        virtualNetwork.addURLMapping(new URL(alias), resolvedRealmURL);
+      }
+      virtualNetwork.addRealmMapping(prefix, resolvedRealmURL.href);
+    }
     shimExternals(virtualNetwork);
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${config.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;
     });
-    if (config.resolvedCatalogRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/catalog/',
-        config.resolvedCatalogRealmURL,
-      );
-    }
-    if (config.resolvedSkillsRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/skills/',
-        config.resolvedSkillsRealmURL,
-      );
-    }
-    if (config.resolvedOpenRouterRealmURL) {
-      virtualNetwork.addRealmMapping(
-        '@cardstack/openrouter/',
-        config.resolvedOpenRouterRealmURL,
-      );
-    }
     // Some test fixture content (JSON card files under tests/cards/, embedded
     // card ids in test data) refers to the live test realm by its standard-
     // mode URL `https://localhost:4202/test/`. In environment mode the live

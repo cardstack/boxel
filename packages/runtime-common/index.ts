@@ -1126,6 +1126,7 @@ export * from './searchable-routes.ts';
 export * from './catalog.ts';
 export * from './commands.ts';
 export * from './realm-identifiers.ts';
+export * from './realm-prefixes.ts';
 export * from './bfm-card-references.ts';
 export * from './bfm-math-render.ts';
 export * from './bfm-mermaid-render.ts';
