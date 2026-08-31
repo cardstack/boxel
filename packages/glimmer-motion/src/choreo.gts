@@ -889,7 +889,12 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       onPerformReset: this.args.onPerformReset,
       onSpriteDone: (s) => this.finish(s),
       removed: removed.filter((s) => named.has(s)),
+      // nothing in this region is staying: no participant kept, none
+      // arriving, and every one it can see on its way out. A region in that
+      // state is not watching a departure, it is inside one — see `park`.
+      doomed: !kept.length && !inserted.length && removed.length > 0,
     });
+
     if (this.args.quiet) {
       const run = this.run;
       void run.finished.then(() => {
