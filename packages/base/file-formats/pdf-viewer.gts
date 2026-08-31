@@ -40,7 +40,7 @@ export class PdfViewer extends GlimmerComponent<FilePreviewSignature> {
   }
 
   <template>
-    {{#if (eq @mode 'fitted')}}
+    {{#if (eq @format 'fitted')}}
       <div class='pdf-fitted' data-test-pdf-fitted>
         <div class='page-mock'>
           <span class='page-badge'>PDF</span>

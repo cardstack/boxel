@@ -196,7 +196,7 @@ class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get isFitted(): boolean {
-    return this.args.mode === 'fitted';
+    return this.args.format === 'fitted';
   }
 
   get rowCount(): number {
@@ -218,7 +218,7 @@ class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
   // our own generated HTML during prerender/indexing.
   get tableHtml() {
     let maxRows =
-      this.args.mode === 'embedded' ? EMBEDDED_MAX_ROWS : undefined;
+      this.args.format === 'embedded' ? EMBEDDED_MAX_ROWS : undefined;
     return htmlSafe(csvToHtml(this.content, maxRows));
   }
 
@@ -243,7 +243,7 @@ class CsvPreview extends GlimmerComponent<FilePreviewSignature> {
     {{else}}
       <div
         class='data-preview data-preview--table'
-        data-mode={{@mode}}
+        data-mode={{@format}}
         data-test-csv-preview
       >
         {{#if this.hasContent}}

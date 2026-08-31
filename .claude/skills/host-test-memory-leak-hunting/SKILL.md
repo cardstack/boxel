@@ -126,6 +126,10 @@ A clean fix is one that:
 
 1. Makes the per-test slope flat in steady state (compare t=50→t=90, not t=10→t=50 — the early region warms up caches).
 2. Drops the leaked constructor count delta to zero (or single digits — V8 caching introduces a small floor).
-3. Still passes the full host-test shard 3 (the historical canary for memory pressure) under the original `shardTotal: 20` config.
+3. Still passes whichever host-test shard currently carries the most memory pressure, at the shard count `ci-host.yaml` ships.
 
-If you bumped CI shard count as a temporary mitigation, revert that bump in the same PR as the fix.
+Do not assume a fixed shard number for that last one. Peak heap tracks which modules a shard is dealt, not how long the shard runs: on a 16-shard run the worst shard peaked at 463 MB used heap, against 664 MB on a 20-shard main run of the same era. Identify the canary for the run you are working against — download that run's `memory-report-*` artifacts and take the highest peak.
+
+Nothing in CI gates per-shard peak heap: `check-memory-baseline.mjs` compares per-module deltas merged across shards, so the per-shard figure only exists in those artifacts.
+
+If you bumped the CI shard count as a temporary mitigation, revert that bump in the same PR as the fix.

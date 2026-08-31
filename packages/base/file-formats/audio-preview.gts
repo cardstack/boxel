@@ -46,12 +46,12 @@ interface WaveBar {
 }
 
 export class AudioPreview extends GlimmerComponent<ContentPreviewSignature> {
-  get mode(): FileFormat {
-    return this.args.mode ?? 'embedded';
+  get format(): FileFormat {
+    return this.args.format ?? 'embedded';
   }
 
   get isFitted(): boolean {
-    return this.mode === 'fitted';
+    return this.format === 'fitted';
   }
 
   // `@model` is the FileDef instance in the content-only case and a prebuilt
@@ -59,7 +59,7 @@ export class AudioPreview extends GlimmerComponent<ContentPreviewSignature> {
   // shared projection.
   @cached
   get model(): FileViewModel {
-    return ensureFileViewModel(this.args.model, this.mode);
+    return ensureFileViewModel(this.args.model, this.format);
   }
 
   // The resampled envelope, already normalized to 0–100 and capped to the
@@ -180,7 +180,7 @@ export class AudioPreview extends GlimmerComponent<ContentPreviewSignature> {
         {{/if}}
       </div>
     {{else}}
-      <div class='audio' data-mode={{this.mode}} data-test-audio-preview>
+      <div class='audio' data-mode={{this.format}} data-test-audio-preview>
         <div class='audio-visual'>
           {{#if this.hasWaveform}}
             <svg
