@@ -2317,6 +2317,20 @@ export default class StoreService extends Service implements StoreInterface {
       this.loadInstanceTask.perform(id);
       reloaded++;
     }
+    // A read still in flight has recorded nothing for the sweep above to find,
+    // and the placeholder it is about to install would be stale the moment it
+    // lands — this pass is the very thing it would then be waiting for, and
+    // no later event is coming to say so. Same treatment the incremental
+    // branch gives an invalidation that names a card mid-read.
+    for (let id of this.inflightGetCards.keys()) {
+      if (this.realm.realmOf(rri(id)) !== realmURL) {
+        continue;
+      }
+      realmEventsLogger.debug(
+        `deferring reload of ${id} until its in-flight load settles, because a full index of ${realmURL} landed while it was reading`,
+      );
+      this.reloadAfterInflightLoad.perform(id);
+    }
     return reloaded;
   }
 

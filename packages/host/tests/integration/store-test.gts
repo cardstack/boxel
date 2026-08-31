@@ -3230,6 +3230,94 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('a full reindex resolves a placeholder whose read was still in flight when it landed', async function (assert) {
+    // The sweep a bare `full` event triggers can only find placeholders the
+    // store has already recorded. A read still in flight has recorded nothing
+    // yet, and the placeholder it goes on to install is stale the moment it
+    // lands — this pass is what it would be waiting for.
+    storeService.addReference(`${testRealmURL}Person/hassan`);
+    await storeService.flush();
+
+    await testRealmAdapter.write(
+      'Person/swept-inflight.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Swept In Flight' },
+          meta: {
+            adoptsFrom: { module: testRRI('person'), name: 'Person' },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    let url = `${testRealmURL}Person/swept-inflight`;
+    let cardService = getService('card-service') as any;
+    let originalFetchJSON = cardService.fetchJSON.bind(cardService);
+    let reached404 = new Deferred<void>();
+    let release404 = new Deferred<void>();
+    cardService.fetchJSON = async (fetchUrl: string | URL, args?: any) => {
+      if (!String(fetchUrl).includes('Person/swept-inflight')) {
+        return originalFetchJSON(fetchUrl, args);
+      }
+      try {
+        return await originalFetchJSON(fetchUrl, args);
+      } catch (err) {
+        reached404.fulfill();
+        await release404.promise;
+        throw err;
+      }
+    };
+
+    let messageService = getService('message-service');
+    let deliverRealmEvents =
+      messageService.relayRealmEvent.bind(messageService);
+    messageService.relayRealmEvent = () => {};
+
+    try {
+      let reading = storeService.get(url);
+      await reached404.promise;
+
+      // Indexing lands while the read is parked, and announces itself the way
+      // a from-scratch pass at realm startup does: a bare `full` event naming
+      // no cards at all.
+      await testRealm.write(
+        'Person/swept-inflight.json',
+        JSON.stringify({
+          data: {
+            attributes: { name: 'Swept In Flight Person' },
+            meta: {
+              adoptsFrom: { module: testRRI('person'), name: 'Person' },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+      deliverRealmEvents({
+        eventName: 'index',
+        indexType: 'full',
+        realmURL: testRealmURL,
+      });
+
+      release404.fulfill();
+      await reading;
+      await settled();
+    } finally {
+      release404.fulfill();
+      delete cardService.fetchJSON;
+      messageService.relayRealmEvent = deliverRealmEvents;
+    }
+
+    let instance = storeService.peek(url);
+    assert.true(
+      isCardInstance(instance),
+      'the card takes over rather than the placeholder being stranded',
+    );
+    assert.strictEqual(
+      (instance as any).name,
+      'Swept In Flight Person',
+      'and it is the indexed state',
+    );
+  });
+
   test('an instance can be restored after a loader reset', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
     await renderComponent(
