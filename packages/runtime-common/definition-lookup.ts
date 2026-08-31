@@ -44,7 +44,7 @@ import {
   hasExecutableExtension,
   trimExecutableExtension,
 } from './index.ts';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import { rri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
 const MODULES_TABLE = 'modules';
@@ -457,11 +457,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
         resolvedRealmURL,
       );
       if (cached) {
-        let entry = this.definitionEntryFor(
-          cached.definitions,
-          codeRef,
-          canonicalModuleURL,
-        );
+        let entry = this.definitionEntryFor(cached.definitions, codeRef);
         if (entry && 'definition' in entry) {
           return entry.definition;
         }
@@ -872,19 +868,16 @@ export class CachingDefinitionLookup implements DefinitionLookup {
   private definitionEntryFor(
     definitions: Record<string, ModuleDefinitionResult | ErrorEntry>,
     codeRef: ResolvedCodeRef,
-    canonicalModuleURL: string,
   ): ModuleDefinitionResult | ErrorEntry | undefined {
-    let entry =
-      definitions[internalKeyFor(codeRef, undefined, this.#virtualNetwork)];
-    if (!entry && canonicalModuleURL !== codeRef.module) {
-      let canonicalModuleId = internalKeyFor(
-        { ...codeRef, module: canonicalModuleURL as RealmResourceIdentifier },
-        undefined,
-        this.#virtualNetwork,
-      );
-      entry = definitions[canonicalModuleId];
-    }
-    return entry;
+    // One key, because `internalKeyFor` is already a canonicalization: it
+    // resolves the module reference to a real URL and then unresolves that back
+    // through the registered realm mappings, so a prefix identifier, a
+    // url-mapped alias and the served URL all reduce to the same string. A
+    // second lookup under the fetchable spelling would recompute the identical
+    // key.
+    return definitions[
+      internalKeyFor(codeRef, undefined, this.#virtualNetwork)
+    ];
   }
 
   private async lookupDefinitionWithContext(
@@ -935,11 +928,7 @@ export class CachingDefinitionLookup implements DefinitionLookup {
       });
     }
 
-    let defOrError = this.definitionEntryFor(
-      moduleEntry.definitions,
-      codeRef,
-      canonicalModuleURL,
-    );
+    let defOrError = this.definitionEntryFor(moduleEntry.definitions, codeRef);
     if (!defOrError) {
       throw new FilterRefersToNonexistentTypeError(codeRef, {
         cause: `Definition for ${codeRef.name} in module ${codeRef.module} not found`,
