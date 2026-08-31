@@ -252,7 +252,15 @@ module.exports = function (environment) {
     ENV.logLevels = '*=warn';
   }
 
-  if (ENV.resolvedCatalogRealmURL) {
+  // The catalog supplies these defaults everywhere except tests, which set
+  // their own test-realm ids above and must keep them: a test that resolved
+  // `defaultSystemCardId` into a running catalog would fetch definitions from
+  // outside its own realm, so its result would depend on what that catalog
+  // happens to hold. The test environment previously reached this block with
+  // `resolvedCatalogRealmURL` always undefined, so the guard was implicit;
+  // now that the catalog prefix is registered whenever the realm is running,
+  // it has to be stated.
+  if (ENV.resolvedCatalogRealmURL && environment !== 'test') {
     ENV.defaultSystemCardId = new URL(
       'SystemCard/default',
       withTrailingSlash(ENV.resolvedCatalogRealmURL),
