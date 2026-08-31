@@ -14,6 +14,7 @@ import { Board } from 'test-app/components/long-take/board';
 import { BOARD, GLIDE, SHOTS } from 'test-app/components/long-take/shots';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
+import { onStage } from 'test-app/lib/onstage';
 import type * as THREE from 'three';
 
 /**
@@ -100,15 +101,22 @@ const SCREEN = { h: BOARD.h, w: BOARD.w };
  */
 const REF = { h: 838, w: 1178 };
 
+/**
+ * How far the two cameras may come apart before one is seeked to the other,
+ * in seconds. About a frame: tighter and it seeks on every tick for no visible
+ * gain, looser and the error is one you can see.
+ */
+const SYNC_SLOP = 1 / 30;
+
 const FROZEN = {
   cam:
     'translateZ(1289.55px) matrix3d(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, ' +
-    '0, 32.0808, -2178.15, 1) translate(589px, 419px)',
+    '0, 32.0808, -2177.02, 1) translate(589px, 419px)',
   perspective: '1289.55px',
   plane:
-    'translate(-50%, -50%) matrix3d(1, 6.88338e-08, 0.000571805, 0, ' +
-    '8.24339e-06, -0.999898, -0.0142961, 0, -0.000571745, -0.0142961, ' +
-    '0.999898, 0, 0.507889, 24.78, -511.221, 1) scale(1.006)',
+    'translate(-50%, -50%) matrix3d(1, 0, 0, 0, 0, -0.999896, -0.0144164, ' +
+    '0, 0, -0.0144164, 0.999896, 0, 0.215572, 24.8416, -511.218, 1) ' +
+    'scale(1.006)',
 };
 
 /** how much of the box the laptop fills — closer than the mockup's, on purpose */
@@ -152,6 +160,45 @@ export class LongTake extends Component {
   private halt?: () => void;
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
+
+  /**
+   * Scrolled out of sight: drop to 2D and stop the cameras.
+   *
+   * This stage is one of the two most expensive things in the gallery — a WebGL
+   * context, a model, a render loop and two choreography regions — and the
+   * gallery keeps forty-two demos mounted at once. Off screen it should cost
+   * nothing, and 2D is genuinely nothing: `setMode('2d')` halts the render loop
+   * and the whole 3D path stops being rendered.
+   *
+   * It does NOT come back on its own. Pressing 3D is a choice someone made, and
+   * a stage that re-boots a WebGL context every time it crosses the fold is
+   * worse than one that waits to be asked again — the still is what this looks
+   * like unasked, and that is the state it returns to.
+   */
+  offstage = (visible: boolean) => {
+    if (visible) {
+      return;
+    }
+    this.cameraOn = false;
+    this.region?.run?.pause();
+    this.setMode('2d');
+  };
+
+  /**
+   * While flat, EITHER chip starts the film.
+   *
+   * Pressing 2D when you are already looking at 2D did nothing, which is
+   * correct for a segmented control and useless here: the flat state is a still
+   * of a laptop, and the only thing anyone can want from it is to see the
+   * thing move. A press on a control that answers with nothing reads as a
+   * broken control, and the one at hand was the wrong half of a toggle.
+   *
+   * In 3D the pair behaves as an ordinary toggle again — 2D is the way back,
+   * and 3D is where you already are.
+   */
+  choose = (mode: '2d' | '3d') => {
+    this.setMode(this.mode === '2d' ? '3d' : mode);
+  };
 
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
@@ -201,8 +248,23 @@ export class LongTake extends Component {
    * be the honest thing: the film should not be three seconds in by the
    * time there is a laptop to look at.
    */
+  /**
+   * `roomy` is deliberately NOT in here.
+   *
+   * It was, and it made the film unplayable in a gallery card: `roomy` is
+   * set once at mount from `closest('.stage-wrap')`, which only the demo
+   * page has, and nothing ever sets it back. So the 3D button armed the
+   * camera, bumped the take, and the score still never rendered — the
+   * transport was furniture. The mockup stage on the same page has always
+   * left `roomy` out of its own play gate, which is why the phone moved in
+   * a card and the laptop did not.
+   *
+   * The two gates that remain are the ones that mean something: the film
+   * only exists in 3D, and only once there is a mapped frame to look at.
+   * `roomy` keeps its real job, which is the thumbstick pads.
+   */
   get playing() {
-    return this.mode === '3d' && this.cameraOn && this.drawn && this.roomy;
+    return this.mode === '3d' && this.cameraOn && this.drawn;
   }
 
   /** the outer camera's leg for a shot is exactly the shot's own length */
@@ -280,6 +342,57 @@ export class LongTake extends Component {
     this.ended = false;
     this.take += 1;
   };
+
+  /**
+   * The board's run, handed up by the Board so this stage can drive it.
+   * Not tracked: it is read inside a frame loop and never rendered from.
+   */
+  private boardRun: ChoreoRun | null = null;
+
+  takeBoardRun = (run: ChoreoRun | null) => {
+    this.boardRun = run;
+  };
+
+  /**
+   * ONE CLOCK, TWO SCORES.
+   *
+   * The two cameras are given identical durations — each `c.Camera3D` out here
+   * lasts exactly the `move + hold` of the shot the board's own camera is
+   * running — and for a while that was taken to be enough: "neither region owns
+   * it, which is the only reason they cannot drift". It is not enough. Equal
+   * durations only means equal LENGTHS; the two regions still compile on
+   * different passes, start on different frames, and run on separate clocks,
+   * and a few milliseconds at the top of a thirty-second film is a few
+   * milliseconds all the way down it. On a stage with no interactivity at all —
+   * nothing on this drawing can be clicked, dragged or changed — every frame is
+   * determined by the script, so any divergence between the two is error and
+   * nothing else.
+   *
+   * So the outer run is the clock and the board's is seeked to it. The tolerance
+   * is about a frame: correcting a drift smaller than that would seek on every
+   * tick for no visible gain, and correcting nothing lets it accumulate.
+   *
+   * This is only sound because camera cues are seekable by construction —
+   * absolute shots are computed from measured geometry and relative ones are
+   * reconstructed against the pose in force. A score with a changeset in it
+   * could not be driven this way, and this one deliberately has none.
+   */
+  sync = modifier(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const outer = this.region?.run;
+      const board = this.boardRun;
+      if (!outer || !board) {
+        return;
+      }
+      if (Math.abs(board.time - outer.time) > SYNC_SLOP) {
+        board.time = outer.time;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  });
 
   /** hold the region so the film can loop when its score finishes */
   wire = modifier((_el: HTMLElement, [c]: [ChoreoContext, number]) => {
@@ -955,10 +1068,32 @@ export class LongTake extends Component {
           dolly = 1;
           truck = 0;
           pedestal = 0;
+          /**
+           * THE SET IS NOT IN THE PLATE.
+           *
+           * `setPlane` is a backdrop the size of a car park sitting behind the
+           * laptop, and rendering it into the still baked a dark room into the
+           * file. That cost the flat state everything: the plate could not be
+           * composited over anything, so light mode could not have a light
+           * ground, and because the plate is narrower than the stage it left
+           * bands down both sides that no background colour could hide.
+           *
+           * The renderer already has `alpha: true`, so with the backdrop
+           * hidden every pixel the laptop does not cover comes out
+           * transparent, and the flat state becomes what the 3D state always
+           * was: a device standing on whatever set the page is wearing.
+           *
+           * It costs nothing else. The aluminium's reflections come from the
+           * PMREM environment, not from this plane, and there are no shadows
+           * being cast onto it — it is a picture of a wall and nothing more.
+           */
+          setPlane.visible = false;
           tick?.();
           // read in the same turn as the draw: without
           // preserveDrawingBuffer the buffer is not guaranteed past it
           const data = canvas.toDataURL('image/webp', 0.94);
+          setPlane.visible = true;
+          tick?.();
           const said = await fetch('/__capture-still', {
             body: data,
             method: 'POST',
@@ -1137,7 +1272,7 @@ export class LongTake extends Component {
   });
 
   <template>
-    <div class="lt-page" data-mode={{this.mode}}>
+    <div class="lt-page" data-mode={{this.mode}} {{onStage this.offstage}}>
       <Choreo
         class="lt-stage"
         data-ready={{if this.drawn "yes" ""}}
@@ -1179,7 +1314,11 @@ export class LongTake extends Component {
                     own frame, its own score — and the outer stage tells
                     it only two things: whether to play, and which take
                     this is. }}
-                  <Board @playing={{this.playing}} @take={{this.take}} />
+                  <Board
+                    @playing={{this.playing}}
+                    @take={{this.take}}
+                    @onRun={{this.takeBoardRun}}
+                  />
                 </div>
               </div>
             </div>
@@ -1202,6 +1341,7 @@ export class LongTake extends Component {
             aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}
+            {{this.sync}}
           >{{this.take}}</div>
 
           <c.Sequence>
@@ -1225,12 +1365,12 @@ export class LongTake extends Component {
           <button
             type="button"
             aria-pressed="{{this.isMode '2d'}}"
-            {{on "click" (fn this.setMode "2d")}}
+            {{on "click" (fn this.choose "2d")}}
           >2D</button>
           <button
             type="button"
             aria-pressed="{{this.isMode '3d'}}"
-            {{on "click" (fn this.setMode "3d")}}
+            {{on "click" (fn this.choose "3d")}}
           >{{if this.arming "3D…" "3D"}}</button>
         </div>
 
@@ -1312,6 +1452,28 @@ export class LongTake extends Component {
             ),
             #5b626e;
         }
+        /* THE FLAT STATE STANDS ON THE PAGE'S SET, NOT ON ITS OWN.
+
+           The plate used to carry the set baked into its pixels, because the
+           capture rendered setPlane — a backdrop the size of a car park — into
+           the frame. That cost the flat state everything downstream: it could
+           not be composited over anything, so light mode could not have a light
+           ground, and since the plate is narrower than the stage it left bands
+           down both sides that no background colour could hide.
+
+           The capture now hides the backdrop, so the plate is a laptop on
+           transparency and nothing else. Its alpha channel went from 830 bytes
+           of uniform opacity to a real silhouette, and the whole file got
+           smaller. The flat state is now exactly what the 3D state always was:
+           a device standing on whatever set the page is wearing — which is the
+           slate the mockup has used all along, lifted for light mode, because
+           a photographic subject needs somewhere photographic to stand. */
+        :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-stage {
+          background:
+            radial-gradient(120% 90% at 50% 12%, #757c88 0%, #5b626e 100%),
+            #5b626e;
+        }
+
         /* THE CANVAS SITS ABOVE THE DOM, and that is what makes the
            laptop's own body occlude the drawing.
 
@@ -1449,23 +1611,30 @@ export class LongTake extends Component {
           line-height: 1;
           white-space: nowrap;
         }
-        /* 3D is the ember pill because it is the thing worth pressing; 2D
-           is the white one, which is a state rather than an invitation. */
-        .lt-seg button:last-child[aria-pressed="true"] {
+        /* 3D IS ALWAYS THE FILLED PILL, and it is the only saturated thing on
+           the stage.
+
+           It used to be an ember OUTLINE while flat and a filled pill only once
+           you were already in 3D — which is backwards twice over. An outline in
+           the accent colour, at 11px, on a slate set, is an invitation you have
+           to go looking for; and filling it at the moment it becomes the
+           current state spends the emphasis on the one press nobody needs to
+           make. The filled pill marks the thing worth pressing, so it belongs
+           on 3D always: flat, it is the way in; in 3D, it is where you are, and
+           it is the same shape either way rather than a control that changes
+           under the hand.
+
+           2D never gets the white fill it used to have while flat. A selected
+           state that outranks the primary action is a selected state arguing
+           with it — and the mode is legible from the picture anyway, which is
+           either a still or a room. */
+        .lt-seg button:last-child {
           background: var(--ember-hot, #ff6a3a);
           border-color: var(--ember-hot, #ff6a3a);
           color: #ffffff;
           font-weight: 700;
         }
-        .lt-seg button:first-child[aria-pressed="true"] {
-          background: #ffffff;
-          border-color: #ffffff;
-          color: #16181d;
-          font-weight: 700;
-        }
         .lt-page[data-mode="2d"] .lt-seg button:last-child {
-          color: var(--ember-hot, #ff6a3a);
-          border-color: var(--ember-hot, #ff6a3a);
           animation: lt-beckon 2.6s ease-in-out infinite;
         }
         @keyframes lt-beckon {

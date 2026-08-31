@@ -5,7 +5,7 @@
 **Motion, Choreo-graphed.**
 The [Motion](https://motion.dev) engine for Ember — and a timeline for the scene. `<Choreo>` watches a render pass, measures its **changeset** — what was inserted, removed, kept, and where everything stood before and after — and plays a score you declare over it. Magic-Move crossings, gates you click through, wires drawn every frame, values derived from other elements' measurements — all interruptible mid-flight, by design.
 
-**Live gallery:** [**cardstack.github.io/choreo**](https://cardstack.github.io/choreo/) &nbsp; · &nbsp; 32 stages, every one a test fixture
+**Live gallery:** [**cardstack.github.io/choreo**](https://cardstack.github.io/choreo/) &nbsp; · &nbsp; 38 stages, every one a test fixture
 
 </div>
 
@@ -49,7 +49,7 @@ A third piece, **`choreo-player`**, is a dependency-free headless transport for 
 
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`. The repo is **Choreo**; the published package is still **`glimmer-motion`** — one npm name, unchanged, and every import in these docs is the real one.
 
-**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. The choreography design docs: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [demo-recording.md](docs/demo-recording.md) (external clocks), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
+**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. The choreography design docs: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [demo-recording.md](docs/demo-recording.md) (external clocks), [dom-in-3d.md](docs/dom-in-3d.md) (a `<Choreo>` region as a plane in a three.js scene), [dialkit.md](docs/dialkit.md) (an evaluation: what a parameter-tuning panel would cost and what of it is worth taking), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
 
 - [Why choreography?](#why-choreography)
 - [Install](#install)
@@ -58,6 +58,7 @@ A third piece, **`choreo-player`**, is a dependency-free headless transport for 
 - [Where it earns its keep](#where-it-earns-its-keep)
 - [Interruption, tested](#interruption-tested)
 - [External clocks: choreo-player](#external-clocks-choreo-player)
+- [DOM in 3D: c.Camera3D](#dom-in-3d-ccamera3d)
 - [The binding underneath](#the-binding-underneath) · [Why the engine is untouched](#why-the-engine-is-untouched) · [How it was made](#how-it-was-made) · [Fidelity](#fidelity)
 - [API](#api) · [React → Glimmer](#react--glimmer) · [Three rules React does not need](#three-rules-react-does-not-need)
 - [Testing](#testing) · [Architecture](#architecture) · [Development](#development) · [Roadmap](#roadmap) · [Credits](#credits)
@@ -234,18 +235,21 @@ crossing.active(); // tracked — render the timeline only while true
 
 These are not hypotheticals — each row is a shipped pattern, from the gallery or from the product-workspace port that drove the vocabulary:
 
-| The scene                                                | The score                                                                                                         |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Card ⇄ page navigation (gallery ⇄ demo, tile ⇄ document) | `<Choreo @route>` + `c.Crossing` — real elements, no snapshots, live content never freezes                        |
-| Master–detail: a row grows into a panel                  | `c.Move @from={{c.beacon row}}` `@size='scale'` — the real panel flies, the solver's re-layout is simply measured |
-| Drag-to-shelve: release point → slot                     | counterpart pairing — the painted box at release _is_ the start                                                   |
-| A card transmutes into its schema node                   | beacon flight out of a closing sheet, still measurable mid-exit                                                   |
-| Slide decks with builds                                  | `c.Gate` / `@delay` / `advance()` / `retreat()` — the Keynote rules                                               |
-| Annotations wired to their anchors                       | standing `c.Tether`s, redrawn through every reflow and every flight                                               |
-| "Jump to it and flash it"                                | `c.Scroll` + `c.Hold` — one clock instead of a scroll racing a classList write racing a timer                     |
-| A badge riding a flying card; a shadow reading lift      | `c.Follow` — right on the frames a tween would have had to predict                                                |
-| Timed highlight/z states (`justDropped`, pulse flags)    | `c.Hold` windows — the timer-and-flag genre, retired                                                              |
-| Scrubbing, replays, video export                         | `run.time` + gates + `choreo-player`                                                                              |
+| The scene                                                | The score                                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Card ⇄ page navigation (gallery ⇄ demo, tile ⇄ document) | `<Choreo @route>` + `c.Crossing` — real elements, no snapshots, live content never freezes                            |
+| Master–detail: a row grows into a panel                  | `c.Move @from={{c.beacon row}}` `@size='scale'` — the real panel flies, the solver's re-layout is simply measured     |
+| Drag-to-shelve: release point → slot                     | counterpart pairing — the painted box at release _is_ the start                                                       |
+| A card transmutes into its schema node                   | beacon flight out of a closing sheet, still measurable mid-exit                                                       |
+| Slide decks with builds                                  | `c.Gate` / `@delay` / `advance()` / `retreat()` — the Keynote rules                                                   |
+| Annotations wired to their anchors                       | standing `c.Tether`s, redrawn through every reflow and every flight                                                   |
+| "Jump to it and flash it"                                | `c.Scroll` + `c.Hold` — one clock instead of a scroll racing a classList write racing a timer                         |
+| A badge riding a flying card; a shadow reading lift      | `c.Follow` — right on the frames a tween would have had to predict                                                    |
+| Timed highlight/z states (`justDropped`, pulse flags)    | `c.Hold` windows — the timer-and-flag genre, retired                                                                  |
+| Scrubbing, replays, video export                         | `run.time` + gates + `choreo-player`                                                                                  |
+| A live UI inside a device, on camera                     | `c.Camera3D` — the DOM is a plane in the scene; the shot seeks like any other score                                   |
+| A leaderboard that reorders when a result lands          | `c.inserted` / `c.moved` / `c.removed` over ONE tracked write — no row is told where to go                            |
+| A simulation running beside a score                      | the loop owns the physics and the chase camera; the region owns the scene change. Knowing which is which is the skill |
 
 ## Interruption, tested
 
@@ -301,6 +305,27 @@ await player.play();
 ```
 
 Because a Choreo still is a computed frame, `renderAt(t)` is deterministic across workers on separate pages — no wall clock, no accumulation, no frame counting.
+
+## DOM in 3D: c.Camera3D
+
+A `<Choreo>` region can be a plane in a three.js scene — live DOM, still clickable, still animating, with WebGL glass composited over it. Two stages ship on this: **Mockup** (a phone) and **Long Take** (a laptop whose screen is running a second camera of its own).
+
+```gts
+<Choreo @onCamera3D={{this.pose}} as |c|>
+  <c.Sequence>
+    <c.Camera3D @dolly={{0.6}} @yaw={{-18}} @pitch={{12}} @duration={{2.4}} @ease={{GLIDE}} />
+    <c.Camera3D @by={{true}} @x={{0.08}} @duration={{2.1}} @ease='linear' />
+  </c.Sequence>
+</Choreo>
+```
+
+`c.Camera3D` carries an **orbit pose in the terms a shoot uses** — `dolly` (distance as a multiple of the host's own framing), `pitch` and `yaw` in degrees, `x` / `y` as truck and pedestal in fractions of the framed height, because dolly alone pushes a tall subject's head out of the picture. `@by` adds to the pose in force instead of replacing it: Pan's rule, in 3D.
+
+**Choreo does not own a renderer and does not pretend to.** The step is a pure function of the run's clock and hands the host a five-number pose through `@onCamera3D`; the host applies them to three.js, a CSS 3D stage, or anything else that can take a pose. So a 3D shot seeks like every other score — `run.time`, gates, `choreo-player` — with no rAF and no accumulation of its own.
+
+The mapping from three.js to CSS is **85 lines** (`test-app/app/lib/css3d.ts`): three pure functions over a 4×4 matrix, against 454 for three's own `CSS3DRenderer`, because Glimmer already owns the elements and the change tracking and Choreo already owns the clock. The screen is a hole punched in the canvas with `NoBlending` — and because that hole is depth-tested, the laptop's own keyboard occludes the live DOM behind it for free.
+
+[docs/dom-in-3d.md](docs/dom-in-3d.md) is the write-up: what the two shipped cases cost, what floating cards, anchored pop-ups and effects over DOM would add, and the two things that stay hard regardless of line count.
 
 ---
 
@@ -484,7 +509,7 @@ Only the last two lines know about Ember. Re-hosting means re-doing the modifier
 
 ## Examples
 
-`test-app` serves a gallery of **32 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
+`test-app` serves a gallery of **42 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **3D**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
 
 Every demo is also a test fixture: the interruption soak hammers them, which is why they are the first place a regression shows up.
 

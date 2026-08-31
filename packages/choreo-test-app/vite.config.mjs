@@ -43,6 +43,31 @@ function vendorDraco() {
 }
 vendorDraco();
 
+/**
+ * DIALKIT'S STYLESHEET COMES FROM THE PACKAGE, not from the repository.
+ *
+ * The dial spike (docs/dialkit.md) leans on the fact that all four of
+ * dialkit's UI ports render the same `dialkit-*` class names against one
+ * shared `theme.css` — so an Ember port that emits the same markup inherits
+ * the whole visual design. That only pays off if the stylesheet stays the
+ * package's, and is not a copy in the tree drifting from the version we
+ * resolve.
+ *
+ * It cannot be reached by `@import` at all. Embroider rewrites EVERY import
+ * in app.css into its own virtual-module scheme — a bare `dialkit/styles.css`
+ * throws "unexpected @embroider/virtual specifier", and even a sibling
+ * relative path is captured and answered with a 300-byte stub. So it goes to
+ * `public/` and is linked from index.html, exactly as the Draco decoder is
+ * served. The copy is gitignored.
+ */
+function vendorDialkit() {
+  const from = join(dirname(require.resolve('dialkit/store')), '../styles.css');
+  const dir = join(dirname(new URL(import.meta.url).pathname), 'public');
+  mkdirSync(dir, { recursive: true });
+  copyFileSync(from, join(dir, 'dialkit-theme.css'));
+}
+vendorDialkit();
+
 // Like cardstack/boxel: the test suite is built in development mode (engine warnings and dev
 // assertions stay live) into dist-tests, with tests/index.html as an explicit entry.
 // Vite 6 does not derive process.env.NODE_ENV from --mode for builds (Vite 8 does), so it is

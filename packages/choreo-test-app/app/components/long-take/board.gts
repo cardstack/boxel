@@ -1,5 +1,7 @@
 import { array } from '@ember/helper';
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
+import type { ChoreoContext, ChoreoRun } from 'glimmer-motion';
 import { Choreo, motion } from 'glimmer-motion';
 import { GLIDE, SHOTS } from 'test-app/components/long-take/shots';
 
@@ -18,6 +20,13 @@ const WIRES = [
 
 interface BoardSignature {
   Args: {
+    /**
+     * Hands this region's run up to the stage, which drives it.
+     *
+     * Two regions with two clocks is two clocks, and two clocks drift. See the
+     * stage's `sync` for what it does with this.
+     */
+    onRun: (run: ChoreoRun | null) => void;
     /**
      * Whether the film is running. The outer stage owns this: stopping
      * the camera has to stop BOTH of them, or taking hold of the laptop
@@ -44,6 +53,43 @@ interface BoardSignature {
  * the camera.
  */
 export class Board extends Component<BoardSignature> {
+  /**
+   * Stop this region's run the moment the film stops, rather than waiting for
+   * the cue in flight to finish.
+   *
+   * `@playing` already gates whether the score is RENDERED, and that is not the
+   * same thing: unrendering a score does not cancel a run that is part way
+   * through a four-second `c.Aim`. So switching the laptop back to 2D, or
+   * taking hold of the camera, left this camera crawling across the drawing on
+   * its own for the rest of the cue — visible in 2D, where the drawing is the
+   * whole picture and nothing should be moving at all.
+   *
+   * The outer stage has always paused its own run in `toggleCamera`. This is
+   * the other half of "stopping the camera stops BOTH of them".
+   */
+  hold = modifier(
+    (
+      _el: HTMLElement,
+      [c, playing, onRun]: [
+        ChoreoContext,
+        boolean,
+        (run: ChoreoRun | null) => void,
+      ]
+    ) => {
+      const run = (c as unknown as { run: ChoreoRun | null }).run;
+      onRun(run ?? null);
+      if (!run) {
+        return;
+      }
+      if (playing) {
+        run.play();
+      } else {
+        run.pause();
+      }
+      return () => onRun(null);
+    }
+  );
+
   readonly shots = SHOTS;
   readonly wires = WIRES;
   readonly glide = GLIDE;
@@ -52,7 +98,11 @@ export class Board extends Component<BoardSignature> {
 
   <template>
     <Choreo class="lt-region" ...attributes as |c|>
-      <div class="lt-board" {{motion id="board"}}>
+      <div
+        class="lt-board"
+        {{motion id="board"}}
+        {{this.hold c @playing @onRun}}
+      >
         <svg class="lt-grid" aria-hidden="true">
           <defs>
             <pattern

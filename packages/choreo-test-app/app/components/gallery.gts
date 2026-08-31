@@ -11,6 +11,7 @@ import {
   crossingSettled,
 } from 'test-app/lib/crossing';
 import { highlightSample } from 'test-app/lib/highlight';
+import { restWhenOff } from 'test-app/lib/onstage';
 import { isCrossing } from 'test-app/lib/tempo';
 
 const DEEP_DIVE = 'Deep Dive';
@@ -18,6 +19,11 @@ const filters = ['All', ...groups, DEEP_DIVE] as const;
 type Filter = (typeof filters)[number];
 
 const NO_PANEL: { id: string }[] = [];
+
+/** somebody who has asked not to be moved is not asked twice */
+const reducedMotion = () =>
+  typeof matchMedia === 'function' &&
+  matchMedia('(prefers-reduced-motion: reduce)').matches;
 const demoKey = (demo: { id: string }) => demo.id;
 
 /** a card that was not in the old list arrives; one that survives just moves */
@@ -29,6 +35,19 @@ const cardSpring = {
   type: 'spring',
   visualDuration: 0.42,
 } as const;
+
+/**
+ * The same three poses with the scale taken out, and a tween instead of a
+ * spring — what a filter looks like once the grid has stopped moving cards.
+ *
+ * A pure opacity change is the one thing that stays cheap when the page is
+ * already saturated: it composites, it needs no layout read, and it does not
+ * care how many demos are running underneath it.
+ */
+const flatIn = { opacity: 0 };
+const flatHere = { opacity: 1 };
+const flatOut = { opacity: 0 };
+const flatFade = { duration: 0.18, ease: 'easeOut' } as const;
 const panelKey = (item: { id: string }) => item.id;
 const panelIn = { opacity: 0, y: -10 };
 const panelHere = { opacity: 1, y: 0 };
@@ -83,6 +102,26 @@ select = (filter) => {
 
 export class Gallery extends Component {
   @tracked filter: Filter = 'All';
+
+  /**
+   * Whether the grid still moves cards to their new seats on a filter.
+   *
+   * `layout=true` measures every surviving card before and after and animates
+   * the difference, which is the right answer and the honest one: the demos
+   * keep running while their cards fly. It is also the expensive one, and this
+   * page is forty-two live demos on one thread. On a machine that cannot afford
+   * it the flight is not a flight — it is a series of stills, which is a worse
+   * advertisement for a motion library than no flight at all.
+   *
+   * So the first filter of a session is measured, and if it could not hold a
+   * frame rate the grid stops trying: cards fade instead. The decision is made
+   * once and kept, because a grid that moves cards on one press and not the
+   * next is more unsettling than either behaviour on its own.
+   */
+  @tracked private heavy = reducedMotion();
+
+  /** frames slower than this are the ones a person sees as a stutter */
+  private static readonly SLOW_MS = 34;
   @tracked code = false;
 
   /**
@@ -137,10 +176,12 @@ export class Gallery extends Component {
    * animation frames while it is telling its story.
    */
   cardInitial = (id: string) =>
-    isCrossing() && id === counterpartId() ? cardHere : cardIn;
+    isCrossing() && id === counterpartId() ? this.herePose : this.enterPose;
 
   cardAnimate = (id: string) =>
-    this.stagesReleased || id === counterpartId() ? cardHere : cardIn;
+    this.stagesReleased || id === counterpartId()
+      ? this.herePose
+      : this.enterPose;
 
   /** the counterpart's shell hides while its contents are the flight —
    *  empty space where the card would be, exactly as long as needed */
@@ -154,9 +195,67 @@ export class Gallery extends Component {
     return highlightSample(SAMPLE);
   }
 
+  /**
+   * Watch the frames a filter pass actually got.
+   *
+   * Sampled rather than predicted. Counting cards, or reading `hardwareConcurrency`,
+   * or asking how many demos are live all guess at the answer; the frame clock
+   * during a real pass IS the answer, and it costs one rAF loop lasting about
+   * half a second.
+   */
+  private measure() {
+    let last = performance.now();
+    let frames = 0;
+    let slow = 0;
+    const tick = () => {
+      const now = performance.now();
+      const dt = now - last;
+      last = now;
+      frames += 1;
+      // the first frame after a render is long for reasons that are not the
+      // animation's fault, so it is not counted against it
+      if (frames > 1 && dt > Gallery.SLOW_MS) {
+        slow += 1;
+      }
+      if (frames < 34) {
+        requestAnimationFrame(tick);
+      } else if (slow >= 8) {
+        this.heavy = true;
+      }
+    };
+    requestAnimationFrame(tick);
+  }
+
   select = (filter: Filter) => {
+    if (filter === this.filter) {
+      return;
+    }
     this.filter = filter;
+    if (!this.heavy) {
+      this.measure();
+    }
   };
+
+  /** what a card does on a filter: fly to its new seat, or simply appear */
+  get cardMoves() {
+    return !this.heavy;
+  }
+
+  get enterPose() {
+    return this.heavy ? flatIn : cardIn;
+  }
+
+  get herePose() {
+    return this.heavy ? flatHere : cardHere;
+  }
+
+  get exitPose() {
+    return this.heavy ? flatOut : cardOut;
+  }
+
+  get cardTransition() {
+    return this.heavy ? flatFade : cardSpring;
+  }
 
   toggleCode = () => {
     this.code = !this.code;
@@ -251,15 +350,19 @@ export class Gallery extends Component {
             {{motion
               role="card"
               presence=h
-              layout=true
+              layout=this.cardMoves
               initial=(this.cardInitial demo.id)
               animate=(this.cardAnimate demo.id)
-              exit=cardOut
-              transition=cardSpring
+              exit=this.exitPose
+              transition=this.cardTransition
             }}
           >
+            {{! Scrolled away, a card stops animating. See `restWhenOff`: an
+                idle gallery was running twenty-five CSS animations at once and
+                the crossing has to share a thread with every one of them. }}
             <div
               class="card-stage"
+              {{restWhenOff}}
               {{motion id=(concat "stage-" demo.id) role="stage"}}
             >
               {{#if (this.stageLive demo.id)}}

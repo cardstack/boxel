@@ -2,16 +2,20 @@ import { BuildOrder } from 'test-app/components/examples/build-order';
 import { Camera } from 'test-app/components/examples/camera';
 import { Crossing } from 'test-app/components/examples/crossing';
 import { DragWell } from 'test-app/components/examples/drag-well';
+import { Drift } from 'test-app/components/examples/drift';
 import { Enter } from 'test-app/components/examples/enter';
 import { Escort } from 'test-app/components/examples/escort';
 import { FarMatch } from 'test-app/components/examples/far-match';
 import { Fold } from 'test-app/components/examples/fold';
 import { FollowPointer } from 'test-app/components/examples/follow-pointer';
 import { Gestures } from 'test-app/components/examples/gestures';
+import { Grip } from 'test-app/components/examples/grip';
+import { Hang } from 'test-app/components/examples/hang';
 import { HideHeader } from 'test-app/components/examples/hide-header';
 import { Inbox } from 'test-app/components/examples/inbox';
 import { InlineEdit } from 'test-app/components/examples/inline-edit';
 import { Interrupt } from 'test-app/components/examples/interrupt';
+import { Jump } from 'test-app/components/examples/jump';
 import { Keyframes } from 'test-app/components/examples/keyframes';
 import { LayoutToggle } from 'test-app/components/examples/layout-toggle';
 import { Lightbox } from 'test-app/components/examples/lightbox';
@@ -1126,6 +1130,49 @@ const tile = {
     title: 'Trail',
   },
   {
+    Example: Jump,
+    apis: ['c.Scroll', '@align', 'c.Raise', 'c.Hold @fill', '@debug'],
+    group: 'Choreo',
+    id: 'jump',
+    lede: 'Nine tests are red in a run of sixty. Find each one without losing your place.',
+    sample: `// A jump is only information when you did not already know where you were
+// going. This stage used to hand you four buttons reading "take 11" over a
+// list of numbered rows — you named the row, and the scroll then told you
+// where the row you had just named was. Nothing was learned.
+//
+// A failing test is the case where you genuinely do not know: not where it
+// is, not how far apart they are, not whether they cluster. Each of the
+// three steps then has a job that survives being frozen.
+<c.Sequence @name={{concat 'ask-' this.pass}}>
+  {{! how far down the run it is, and whether it sits with the others.
+      Teleport instead and you get the row with none of the geography.
+      It yields to the wheel, which here is a requirement and not a
+      nicety: you are already scrolling to read an assertion. }}
+  <c.Scroll @of={{c.id this.target}} @align={{this.align}} @duration={{0.5}} />
+
+  <c.Parallel>
+    {{! the only way the row can be above the sticky header AND outside
+        the pane's overflow clip at once — z-index cannot buy that, since
+        a stacking context does not escape an ancestor's clip. Raising
+        DURING the scroll would pin it where the lift began. }}
+    <c.Raise @of={{c.id this.target}} @shadow={{true}} @duration={{0.9}} />
+
+    {{! @fill is a flash versus a record. Keeping the marks is how you
+        find your place after scrolling off to read a stack trace — and
+        the fill bridges the flight to the render that commits the row's
+        own class, so it does not blink between the two. }}
+    <c.Hold @of={{c.id this.target}} @backgroundColor='var(--ember)'
+      @duration={{0.7}} @fill={{this.keep}} />
+  </c.Parallel>
+</c.Sequence>
+
+// The ask number is in @name because a region declines a pass whose tree
+// fingerprints identical to the one standing — and pressing "next failure"
+// twice on the same row is a thing people do.`,
+    slowmo: true,
+    title: 'Triage',
+  },
+  {
     Example: Keyframes,
     apis: ['animate', 'keyframes'],
     group: 'Animate',
@@ -1185,6 +1232,52 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
   @duration={{legFor shot}} />`,
     slowmo: false,
     title: 'Long Take',
+  },
+  {
+    Example: Grip,
+    apis: [
+      'createDragControls',
+      'dragControls',
+      'dragListener',
+      'onPanSessionStart',
+      'dragSnapToOrigin',
+    ],
+    group: 'Drag',
+    id: 'grip',
+    lede: 'Seat twelve people. Drag them by the corner, because the card is also a form.',
+    sample: `// drag=true swallows the element's pointer whole, and a guest card has a
+// note field in it and a phone number under that. dragListener=false hands the
+// pointer back — a caret goes in the field, the number selects — and the corner
+// tab is then the ONLY thing that can lift the card. That is not a nicety; it
+// is the only arrangement in which a draggable thing can also be a form.
+const controls = createDragControls();
+
+<button {{on 'pointerdown' (fn this.lift guest.id)}}>⠿</button>
+
+<article {{motion
+  drag=true
+  dragControls=(this.controlsFor guest.id)
+  dragListener=false          {{! the card's own listener, off }}
+  dragSnapToOrigin=true       {{! and this is the REFUSAL — see below }}
+  dragTransition=RETURN
+  onPanSessionStart=this.session
+  onDragEnd=(fn this.drop guest)
+  onTap=(fn this.press guest)
+  onTapCancel=this.pressCancel
+}}>…</article>
+
+// onPanSessionStart fires at pointerdown, BEFORE the threshold that decides
+// this is a drag — so every table with a chair free lights the instant you take
+// hold of somebody, while you are still deciding whether to move them. Nothing
+// else in the drag surface fires that early.
+session = () => { this.armed = true; };
+
+// And dragSnapToOrigin is the only "no" this interface gives. Land on a full
+// table, or on nothing, and the guest flies back to the list; land on a free
+// one and they take a chair. Freeze the frames and a refused drop and an
+// untouched card are the same picture — the flight IS the answer.`,
+    slowmo: false,
+    title: 'Table Plan',
   },
   {
     Example: Gestures,
@@ -1380,6 +1473,108 @@ count = (pour) => {
 };`,
     slowmo: false,
     title: 'Reveal',
+  },
+  {
+    Example: Drift,
+    apis: ['c.inserted', 'c.moved', 'c.removed', 'c.beacon', 'c.still'],
+    group: 'Choreo',
+    id: 'drift',
+    lede: 'A car you tune while you are driving it.',
+    sample: `// Two halves, and the point of the stage is which is which.
+//
+// The DRIVING is not a score. Motion's springs are scalar interpolators
+// toward a target — right for the wheel returning to centre, the chassis
+// lagging the nose and the camera settling, and wrong for the part that
+// makes it a drift game. Lateral slide is a velocity decomposition with a
+// friction coefficient on the sideways half, so lib/drift.ts integrates it
+// by hand. The order of these three lines IS the model: recompose in the
+// frame the car was pointing in, and turn the heading only afterwards.
+// Turn first and the velocity rotates with the nose every frame, for free,
+// and the car can never slide at all.
+vf += throttle * power * dt;              // the engine, along the nose
+vr *= Math.exp(-(sliding ? bite * 0.16 : bite) * dt);   // grip, not a spring
+car.vx = fx * vf + rx * vr;               // recompose in the OLD frame...
+car.vy = fy * vf + ry * vr;
+car.heading += car.steer * TURN * bite * dt;            // ...then turn
+
+// The LAP BOARD is a score, and this is the whole of it. One tracked write
+// per lap; nothing below is told where to go. The region reads the change
+// out of the DOM — an entry appeared, the rows under it moved because it
+// pushed them, and the slowest lap left because the board holds five.
+<c.Parallel>
+  <c.Move @of={{c.inserted 'lap'}} @from={{c.beacon 'clock'}}
+    @spring={{ARRIVE}} @size={{false}} />
+
+  {{! a different spring, because being shoved down is not arriving }}
+  <c.Move @of={{c.moved 'lap'}} @spring={{SHUFFLE}} @size={{false}} />
+
+  {{! pushed off the bottom: claimed by nobody, so it needs a place }}
+  <c.Move @of={{c.removed 'lap'}} @to={{c.beacon 'bin'}} @spring={{DROP}} />
+
+  {{! and a lap that beat nothing moves one row. Dimming the rest is what
+      makes that legible — frozen, you cannot tell the list reordered. }}
+  <c.Hold @of={{c.still 'lap'}} @opacity={{0.42}} @duration={{0.5}} />
+</c.Parallel>`,
+    slowmo: false,
+    title: 'Drift',
+  },
+  {
+    Example: Hang,
+    apis: ['c.gesture', 'c.beacon', 'c.Follow', 'c.moved', 'c.still'],
+    group: 'Choreo',
+    id: 'hang',
+    lede: 'Shuffleboard. The puck goes as far as you flick it, and no further.',
+    sample: `// The shooting area is walled — dragConstraints, not a foul line — so the
+// puck cannot be carried to where you want it and the distance has to come
+// out of the THROW. A wall teaches the same lesson as a rule and never tells
+// anyone off for crossing it.
+//
+// dragMomentum=false on purpose. Motion's inertia would slide the puck for
+// free and prove nothing: inertia has no destination and no rules. Here the
+// throw is READ, a resting place is RESOLVED from it, and only then is the
+// flight AUTHORED to that place with the throw's own speed borrowed as its
+// opening velocity. And COAST is not a free parameter — an overdamped spring
+// decays over damping/stiffness, so the projection has to use the spring's
+// own time constant or the puck visibly lies about how hard you threw it.
+const SLIDE = { damping: 28, stiffness: 100 };
+const COAST = SLIDE.damping / SLIDE.stiffness;
+
+<c.Parallel>
+  <c.Move @of={{c.received 'puck'}} @from={{c.gesture}} @spring={{SLIDE}}
+    @size={{false}} @swap='none' />
+
+  {{! the knock. Nothing told these to move — the collision sweep changed
+      their seats and the changeset noticed. A different spring, because a
+      transferred shove is not a throw. }}
+  <c.Move @of={{c.moved 'puck'}} @spring={{KNOCK}} @size={{false}} />
+
+  {{! what the throw did NOT disturb, so a chain reaction reads as one }}
+  <c.Hold @of={{c.still 'puck'}} @opacity={{0.38}} @duration={{0.55}} />
+
+  {{! shoved off the end: claimed by nobody, so it has nowhere to land }}
+  <c.Move @of={{c.removed 'puck'}} @to={{c.beacon 'gutter'}} @spring={{OFF}} />
+
+  {{! the lead line. Which puck is furthest can change PART WAY THROUGH the
+      flight — the thrown one, one it knocked forward, or the old leader —
+      at a moment no keyframe can name. @read takes the max every frame, so
+      the line changes allegiance exactly when the lead changes hands. }}
+  <c.Follow @of={{c.id 'lead'}} @to={{c.kept 'puck'}}
+    @read={{lead}} @rest={{LEAD_REST}} @duration={{1.6}} />
+</c.Parallel>
+
+// And the aim preview is deliberately NOT in the score. It runs on every
+// pointer move while nothing is animating, so putting it through the
+// renderer would re-measure every sprite in the region sixty times a second
+// to move one dashed ring. It previews info.velocity.x through the same
+// projection onDragEnd will use, so the ghost is not an approximation of the
+// throw — it is the throw, asked early.
+aim = (event, info) => {
+  const x = this.project(event.clientX, info.velocity.x, rect);
+  ghost.style.setProperty('--at', String(clamp01(x)));
+  ghost.textContent = callIt(x);
+};`,
+    slowmo: true,
+    title: 'Hang',
   },
   {
     Example: HideHeader,
