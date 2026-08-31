@@ -50,6 +50,14 @@ on:
       boxel-cli-version:
         type: string
         default: latest
+      publish-timeout-ms:
+        description: |
+          Readiness-poll budget for `boxel realm publish`. Covers indexing
+          *and* prerendering every instance in every format, so it scales
+          with realm render cost rather than file count. The CLI's own
+          default is 300000, which a render-heavy realm outgrows.
+        type: number
+        default: 900000
     secrets:
       matrix-username:
         description: |
@@ -143,6 +151,7 @@ jobs:
           MATRIX_USERNAME: ${{ secrets.matrix-username }}
           REALM_ENDPOINT: ${{ inputs.realm-endpoint-prefix }}${{ github.event.pull_request.number }}
           PUBLISHED_BASE: ${{ inputs.published-realm-base }}
+          PUBLISH_TIMEOUT_MS: ${{ inputs.publish-timeout-ms }}
         run: |
           # `boxel realm publish` defaults to retrying on 400/409 by
           # auto-unpublishing the previous publication first, so PR
@@ -151,7 +160,8 @@ jobs:
           SOURCE_REALM_URL="${REALM_SERVER%/}/${MATRIX_USERNAME}/${REALM_ENDPOINT}/"
           PUBLISHED_REALM_URL="${PUBLISHED_BASE%/}/${REALM_ENDPOINT}/"
           echo "Publishing ${SOURCE_REALM_URL} to ${PUBLISHED_REALM_URL}"
-          boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}"
+          boxel realm publish "${SOURCE_REALM_URL}" "${PUBLISHED_REALM_URL}" \
+            --timeout "${PUBLISH_TIMEOUT_MS}"
 
       - name: Compute comment fields
         if: ${{ !cancelled() }}

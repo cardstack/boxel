@@ -12,6 +12,9 @@ module.exports = [
       'dist/**',
       'tmp/**',
       'compiled/**',
+      // Type-aware rule fixtures: these are inputs to a TypeScript program the
+      // rule tester builds, not sources this package compiles or ships.
+      'tests/lib/rules/fixtures/**',
     ],
   },
 

@@ -227,6 +227,7 @@ module('timeline handler', () => {
           realmURL: 'http://localhost:4201/test/',
           realmUsername: '@alice:localhost',
           runAs: '@alice:localhost',
+          dedupeKey: null,
           command: '@cardstack/boxel-host/commands/show-card/default',
           commandInput: {},
         },

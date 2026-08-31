@@ -6,6 +6,22 @@ import type {
   ScreenshotCaptureSpec,
 } from './index.ts';
 
+// Card formats a screenshot can be captured in. `isolated`/`embedded` fill
+// the viewport; `fitted` renders into a parent-owned box and so requires an
+// `envelope`. Distinct from CAPTURE_FORMATS below, which is the canonical
+// (ledger/GET-DSL) serving contract and stays viewport-filling only.
+export const SCREENSHOT_FORMATS = ['isolated', 'embedded', 'fitted'] as const;
+export type ScreenshotFormat = (typeof SCREENSHOT_FORMATS)[number];
+
+export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
+  return (SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+}
+
+// Formats whose card fills a parent-owned box rather than the viewport, and
+// so require an `envelope` to lay out. `isolated`/`embedded` fill the
+// viewport and must NOT be given an envelope.
+const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted'];
+
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
@@ -60,16 +76,18 @@ export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
 // parse time, so the capture path checks it against this cap itself.
 export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 
-// Cap on batch size. Every entry captures on the same settled render, so this
-// bounds only the number of screenshots taken after one settle, not renders.
-// Sized so a full batch finishes within the handler's sync-wait budget
-// (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s): a batch is capture-only (persist:
-// null), so a batch that misses the sync wait is discarded on the 503 and the
-// retry re-renders from scratch — nothing resumes. Budget: one shared settle +
-// the initial paint wait, then per entry a bounded viewport-switch paint wait
-// (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) + screenshot. Deliberately conservative;
-// the ceiling can rise once incremental persistence lets a batch resume instead
-// of discard.
+// Cap on batch size. A batch is capture-only (persist: null), so it must finish
+// within the handler's sync-wait budget (`SCREENSHOT_SYNC_WAIT_BUDGET_MS`, 25s)
+// or it's discarded on the 503 and the retry re-renders from scratch — nothing
+// resumes. Viewport-filling entries share one settled render, so each costs only
+// a bounded viewport-switch paint wait (`VIEWPORT_SWITCH_PAINT_WAIT_MS`, 2s) +
+// screenshot. A fitted batch is costlier: each DISTINCT envelope re-lays-out the
+// hydrated card (route re-transition, settle, envelope-box and image-paint waits
+// — each individually bounded), so it eats the budget faster. 12 keeps the
+// viewport-filling case well inside the window and leaves headroom for fitted
+// re-layout; callers batching many image-heavy envelopes should split the batch
+// rather than raise this. The ceiling can rise once incremental persistence lets
+// a batch resume instead of discard.
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
 // A `target` is a CSS selector, not an arbitrary program: bound its length so a
@@ -95,6 +113,7 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'fullPage',
   'clip',
   'target',
+  'envelope',
   'captures',
 ]);
 const CAPTURE_ENTRY_FIELDS = new Set([
@@ -104,8 +123,10 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'fullPage',
   'clip',
   'target',
+  'envelope',
 ]);
 const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
+const CAPTURE_SPEC_ENVELOPE_FIELDS = new Set(['width', 'height']);
 const CAPTURE_SPEC_CLIP_FIELDS = new Set(['x', 'y', 'width', 'height']);
 
 function isPositiveInteger(value: unknown): value is number {
@@ -268,6 +289,41 @@ function parseOverrideFields(
     }
   }
 
+  if (raw.envelope !== undefined) {
+    let envelope = raw.envelope;
+    if (!isPlainObject(envelope)) {
+      return {
+        error: `${path}.envelope must have positive integer width and height`,
+      };
+    }
+    for (let key of Object.keys(envelope)) {
+      if (!CAPTURE_SPEC_ENVELOPE_FIELDS.has(key)) {
+        return {
+          error: `${path}.envelope.${key} is not a supported field`,
+        };
+      }
+    }
+    if (
+      !isPositiveInteger(envelope.width) ||
+      !isPositiveInteger(envelope.height)
+    ) {
+      return {
+        error: `${path}.envelope must have positive integer width and height`,
+      };
+    }
+    if (envelope.width > SCREENSHOT_MAX_VIEWPORT_WIDTH) {
+      return {
+        error: `${path}.envelope.width must be <= ${SCREENSHOT_MAX_VIEWPORT_WIDTH}`,
+      };
+    }
+    if (envelope.height > SCREENSHOT_MAX_VIEWPORT_HEIGHT) {
+      return {
+        error: `${path}.envelope.height must be <= ${SCREENSHOT_MAX_VIEWPORT_HEIGHT}`,
+      };
+    }
+    overrides.envelope = { width: envelope.width, height: envelope.height };
+  }
+
   return { overrides };
 }
 
@@ -275,6 +331,7 @@ function parseOverrideFields(
 function checkMergedOverrides(
   spec: ScreenshotCaptureOverrides,
   path: string,
+  format: ScreenshotFormat,
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
@@ -288,6 +345,18 @@ function checkMergedOverrides(
   }
   if (spec.target && spec.fullPage) {
     return `${path} cannot set both target and fullPage`;
+  }
+
+  // Envelope formats lay out in a parent-owned box, so an envelope is
+  // required;
+  // isolated/embedded fill the viewport, where an envelope would be a
+  // silent no-op — refused rather than ignored, per the module contract.
+  let requiresEnvelope = ENVELOPE_FORMATS.includes(format);
+  if (requiresEnvelope && !spec.envelope) {
+    return `${path}.envelope is required for ${format} format`;
+  }
+  if (!requiresEnvelope && spec.envelope) {
+    return `${path}.envelope is only valid for ${ENVELOPE_FORMATS.join('/')} format`;
   }
 
   // Tighter containment when a viewport was declared: the layout was
@@ -329,6 +398,22 @@ function checkMergedOverrides(
       return `${path}.clip.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
     }
   }
+  // The capture viewport IS the envelope for envelope formats, so the same
+  // physical-pixel composition applies to it.
+  if (spec.envelope) {
+    if (
+      spec.envelope.width * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return `${path}.envelope.width × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+    if (
+      spec.envelope.height * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      return `${path}.envelope.height × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels`;
+    }
+  }
   return undefined;
 }
 
@@ -354,6 +439,9 @@ function elideDefaults(
   }
   if (spec.target) {
     out.target = spec.target;
+  }
+  if (spec.envelope) {
+    out.envelope = spec.envelope;
   }
   return out;
 }
@@ -388,13 +476,26 @@ function mergeOverrides(
   if (target) {
     merged.target = target;
   }
+  let envelope = entry.envelope ?? base.envelope;
+  if (envelope) {
+    merged.envelope = envelope;
+  }
   return merged;
 }
 
 export function parseScreenshotCaptureSpec(
   raw: unknown,
+  format: ScreenshotFormat,
 ): ScreenshotCaptureSpecParse {
   if (raw === undefined || raw === null) {
+    // An envelope-format capture needs an envelope, which can only arrive
+    // via the
+    // captureSpec — an absent spec is therefore refused for those formats.
+    if (ENVELOPE_FORMATS.includes(format)) {
+      return {
+        error: `captureSpec.envelope is required for ${format} format`,
+      };
+    }
     return { captureSpec: null };
   }
   if (!isPlainObject(raw)) {
@@ -417,7 +518,11 @@ export function parseScreenshotCaptureSpec(
   }
 
   if (raw.captures === undefined) {
-    let crossError = checkMergedOverrides(singular.overrides, 'captureSpec');
+    let crossError = checkMergedOverrides(
+      singular.overrides,
+      'captureSpec',
+      format,
+    );
     if (crossError !== undefined) {
       return { error: crossError };
     }
@@ -475,7 +580,7 @@ export function parseScreenshotCaptureSpec(
       return { error: parsed.error };
     }
     let merged = mergeOverrides(singular.overrides, parsed.overrides);
-    let crossError = checkMergedOverrides(merged, path);
+    let crossError = checkMergedOverrides(merged, path, format);
     if (crossError !== undefined) {
       return { error: crossError };
     }
@@ -526,7 +631,10 @@ export function parseCaptureSpecParams(
   }
   let format = searchParams.get('format') ?? DEFAULT_CAPTURE_FORMAT;
   if (!isCaptureFormat(format)) {
-    // Same wording as the POST /_screenshot-card validation.
+    // Deliberately narrower than the POST /_screenshot-card roster
+    // (SCREENSHOT_FORMATS): CAPTURE_FORMATS is the canonical ledger/GET-DSL
+    // serving contract and stays viewport-filling only, so this message
+    // speaks its own roster.
     return {
       error: {
         field: 'format',

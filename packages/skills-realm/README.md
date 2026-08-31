@@ -46,11 +46,25 @@ If you have started from scratch these should have been automatically run for yo
 
 The skills realm package includes helper scripts for managing the skills repository:
 
-| Script               | Description                                                             |
-| -------------------- | ----------------------------------------------------------------------- |
-| `pnpm skills:setup`  | Clones the boxel-skills repository into `contents/` if it doesn't exist |
-| `pnpm skills:update` | Pulls latest changes from the boxel-skills repository                   |
-| `pnpm skills:reset`  | Removes the `contents/` directory and re-clones the repository          |
+| Script               | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `pnpm skills:setup`  | Clones `contents/` if it isn't there, and otherwise brings it up to date |
+| `pnpm skills:update` | The same thing — the two names both run `setup.sh`                    |
+| `pnpm skills:reset`  | Removes `contents/` and clones it again                               |
+
+The content is not pinned to a revision. `cardstack/boxel-skills` is iterated
+on daily, so a pin would mean somebody moving a revision every week to stay
+current. The trade-off is that realm content can change with no commit in this
+repository behind it — so if a test or Percy snapshot that renders skills
+content moves on its own, that is why, and the fix belongs in the test rather
+than here.
+
+An existing `contents/` is brought up to date rather than left alone, so a
+machine that cloned it months ago doesn't quietly keep serving old skills while
+CI — which clones fresh every run — serves current ones. Two cases are left
+untouched: uncommitted changes in `contents/`, so trying something out in place
+isn't overwritten, and a detached HEAD. Being offline costs you the update, not
+the ability to start the stack.
 
 ## Development Workflows
 

@@ -31,8 +31,12 @@
 //                            at least n seconds (default 0: always write).
 //                            CI passes a threshold here so main runs don't
 //                            commit churn for balance-equivalent jitter.
-//   --shard-count <n>        Shard count used for the drift prediction
-//                            (default 20, matching ci-host.yaml).
+//   --shard-count <n>        Shard count the drift prediction packs into.
+//                            Required with --min-drift-seconds, and with no
+//                            default: the prediction is a slowest-shard time,
+//                            so a stale default would quietly answer for a
+//                            shard count nobody runs. ci-host.yaml passes both
+//                            and is the only place naming the number.
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
@@ -43,7 +47,7 @@ const MIN_COVERAGE = 0.95;
 const args = process.argv.slice(2);
 let junitPath;
 let minDriftSeconds = 0;
-let shardCount = 20;
+let shardCount;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--min-drift-seconds') {
     minDriftSeconds = Number(args[++i]);
@@ -54,9 +58,24 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-if (!junitPath || isNaN(minDriftSeconds) || isNaN(shardCount)) {
+if (
+  !junitPath ||
+  isNaN(minDriftSeconds) ||
+  (shardCount !== undefined && isNaN(shardCount))
+) {
   console.error(
     'Usage: node scripts/generate-test-module-timings.mjs <merged-junit-xml> [--min-drift-seconds n] [--shard-count n]',
+  );
+  process.exit(1);
+}
+
+// Only the drift gate packs shards, so a plain regeneration needs no count.
+// A gate run without one, though, would compare slowest-shard times for an
+// invented shard count and decide whether to rewrite the file on that. Fail
+// rather than guess.
+if (minDriftSeconds > 0 && shardCount === undefined) {
+  console.error(
+    '--min-drift-seconds requires --shard-count: the drift prediction is a slowest-shard time, which depends on how many shards there are.',
   );
   process.exit(1);
 }

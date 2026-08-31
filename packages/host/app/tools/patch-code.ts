@@ -147,6 +147,11 @@ export default class PatchCodeTool extends HostBaseTool<
       if (!isReady(openFileResource)) {
         return false;
       }
+      // Both sides are parsed only to compare two spellings of the same
+      // file. A prefix form throws, and the catch below returns false — the
+      // caller then saves through the realm instead of the open file, which
+      // is the correct outcome rather than a lost edit.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       let normalizedOpenUrl = new URL(openFileResource.url).href;
       let normalizedTarget = new URL(targetFileUrl).href;
       if (normalizedOpenUrl !== normalizedTarget) {

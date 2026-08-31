@@ -386,7 +386,7 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
           <div class='iso-stage' style={{this.previewFrameStyle}}>
             <FilePreviewStage
               @model={{@model}}
-              @mode='isolated'
+              @format='isolated'
               @fields={{@fields}}
               @preview={{@preview}}
             />
@@ -442,7 +442,16 @@ export class FileIsolatedShell extends GlimmerComponent<FileIsolatedShellSignatu
             {{#if this.created}}
               <div class='insp-row'>
                 <dt>Created</dt>
-                <dd>{{this.created}}</dd>
+                {{! Unlike Modified, which reads an mtime CI normalises to a
+                function of file content, this reads realm_file_meta.created_at
+                — written as `Date.now()` the first time a path is indexed, and
+                pinned by nothing. Two runs on different days therefore disagree
+                and Percy reports a diff. Hidden from Percy rather than
+                normalised: it is a database column rather than a file
+                attribute, and a screenshot is the wrong place to verify a
+                timestamp. The label stays visible, so the row and the layout
+                around it are still compared. }}
+                <dd data-test-percy-hide>{{this.created}}</dd>
               </div>
             {{/if}}
             {{#if this.modified}}

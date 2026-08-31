@@ -34,6 +34,7 @@ import InputGroupUsage from './components/input-group/usage.gts';
 import InputUsage from './components/input/usage.gts';
 import KanbanUsage from './components/kanban/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
+import MarkdownContentShellUsage from './components/markdown-content-shell/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
@@ -92,6 +93,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Input', InputUsage],
   ['Kanban', KanbanUsage],
   ['LoadingIndicator', LoadingIndicatorUsage],
+  ['MarkdownContentShell', MarkdownContentShellUsage],
   ['Menu', MenuUsage],
   ['Message', MessageUsage],
   ['Modal', ModalUsage],

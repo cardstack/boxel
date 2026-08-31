@@ -358,6 +358,19 @@ export function getBoxComponent(
                 }}
                   {{#if (isCard model.value)}}
                     {{#let model.value as |card|}}
+                      {{! A rendered field boundary carries
+                          data-card-field=<fieldName> so selector-based
+                          screenshot capture and region discovery can address
+                          fields in templates that never opted in. That is: this
+                          card-as-field container and the compound-field wrapper
+                          below, plus the plural wrappers in
+                          contains-many-component and links-to-many-component —
+                          both their view (`plural-field`) and edit
+                          (`*-editor`) forms. Stamped unconditionally; inert for
+                          CSS. Omitted where no boundary element is rendered — a
+                          card at the root (no field context), and a primitive
+                          leaf field, which renders bare with no wrapper to
+                          carry it. }}
                       <DefaultFormatsProvider
                         @value={{defaultFieldFormats effectiveFormats.cardDef}}
                       >
@@ -380,6 +393,7 @@ export function getBoxComponent(
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
+                          data-card-field={{field.name}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card
@@ -420,6 +434,7 @@ export function getBoxComponent(
                       <div
                         class='compound-field
                           {{effectiveFormats.fieldDef}}-format'
+                        data-card-field={{field.name}}
                         data-test-compound-field-format={{effectiveFormats.fieldDef}}
                         data-test-compound-field-component
                         ...attributes

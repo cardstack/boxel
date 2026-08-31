@@ -7,12 +7,16 @@ import {
   Deferred,
   type AffinityType,
   logger,
+  isScreenshotFormat,
   parseScreenshotCaptureSpec,
+  SCREENSHOT_FORMATS,
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
   type RunCommandResponse,
   type ScreenshotCaptureSpec,
+  type ScreenshotCaptureSpecParse,
+  type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
@@ -70,11 +74,23 @@ export function decorateRenderErrorDiagnostics(
 // manager last reported (`reported`, null when it doesn't know one yet) and
 // the token this server warmed against (`warmed`, undefined before the first
 // report), decide whether to recycle and what the baseline token becomes:
-//   - no report          → keep the current baseline, don't recycle
-//   - first report seen   → adopt it as the baseline, don't recycle (we just
-//                           warmed against whatever shell is current)
-//   - same as baseline    → no-op
-//   - differs from baseline → recycle and advance the baseline
+//   - no report            → keep the current baseline, don't recycle
+//   - matches the baseline → no-op
+//   - anything else        → recycle and adopt the reported token
+//
+// "Anything else" covers the first token a fresh process sees, and that case
+// is the whole point rather than an edge: a prerender server has no way to
+// know which host shell its pages loaded, and the shell it warmed against is
+// most likely stale precisely when it boots. The deploy train restarts
+// prerender BEFORE the realm server, and a page loads its shell FROM the
+// realm server, so a server coming up mid-train warms against the outgoing
+// bundle. Adopting the first reported token as a silent baseline would take
+// that warm to be current and never reload it — the pages then render
+// post-deploy realm source against the pre-deploy bundle, which surfaces as
+// `has no exported member` module errors and persists as error docs served
+// from cache. Recycling once per prerender restart is the cheaper side of
+// that trade: the standbys are re-warmed either way.
+//
 // Exported for unit testing; the live caller layers the draining / in-flight
 // guards and the async recycle on top.
 export function decideHostShellRecycle(
@@ -84,7 +100,7 @@ export function decideHostShellRecycle(
   if (!reported) {
     return { recycle: false, nextWarmed: warmed };
   }
-  if (warmed === undefined || warmed === reported) {
+  if (warmed === reported) {
     return { recycle: false, nextWarmed: reported };
   }
   return { recycle: true, nextWarmed: reported };
@@ -304,7 +320,7 @@ export function buildPrerenderApp(options: {
     affinityValue: string;
     realm: string;
     url: string;
-    format: 'isolated' | 'embedded';
+    format: ScreenshotFormat;
     // Pass-through of the caller's per-capture overrides. Already validated by
     // the realm-server handler; the capture path guards the one hard invariant
     // (fullPage + clip) defensively.
@@ -459,14 +475,17 @@ export function buildPrerenderApp(options: {
     let rawFormat = attrs.format;
     let renderOptions = parseRenderOptions(attrs);
     let priority = parsePriority(attrs);
-    let formatIsValid = rawFormat === 'isolated' || rawFormat === 'embedded';
+    let formatIsValid = isScreenshotFormat(rawFormat);
     // Same strict parse + bounds as the realm-server's POST /_screenshot-card
     // body: this route is its own HTTP surface, and an unvalidated spec here
     // would reach `page.setViewport` on a pooled page with none of the cost
     // caps applied. The parse also normalizes (defaults elided, empty spec
     // -> null), so the capture path sees one canonical shape from every
-    // caller.
-    let captureSpecParse = parseScreenshotCaptureSpec(attrs.captureSpec);
+    // caller. It is format-aware (fitted requires an envelope), so it
+    // runs only once the format itself is valid.
+    let captureSpecParse: ScreenshotCaptureSpecParse = formatIsValid
+      ? parseScreenshotCaptureSpec(attrs.captureSpec, rawFormat)
+      : { captureSpec: null };
     let missing = missingAttrs([
       { value: rawUrl, name: 'url' },
       { value: rawRealm, name: 'realm' },
@@ -494,7 +513,7 @@ export function buildPrerenderApp(options: {
               realm: rawRealm as string,
               url: rawUrl as string,
               auth: rawAuth as string,
-              format: rawFormat as 'isolated' | 'embedded',
+              format: rawFormat as ScreenshotFormat,
               renderOptions,
               ...(captureSpecParse.captureSpec
                 ? { captureSpec: captureSpecParse.captureSpec }
@@ -505,7 +524,7 @@ export function buildPrerenderApp(options: {
       missingMessage:
         captureSpecParse.error !== undefined
           ? captureSpecParse.error
-          : 'Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (isolated|embedded)',
+          : `Missing or invalid required attributes: url, auth, realm, affinityType, affinityValue, format (${SCREENSHOT_FORMATS.join('|')})`,
       logTarget: (rawUrl as string | undefined) ?? '<missing>',
       responseId: (rawUrl as string | undefined) ?? 'unknown',
       rejectionLogDetails: `affinityType=${
@@ -1315,6 +1334,13 @@ export function createPrerenderHttpServer(options?: {
   // Compare the manager's current host-shell token against the one we warmed
   // against. A change means the host was redeployed, so recycle the browser
   // (fire-and-forget; the heartbeat itself must not block on the restart).
+  //
+  // This can fire on the very first heartbeat, while the pool's initial
+  // standby warm is still running: the heartbeat loop starts as soon as the
+  // server is listening, and that warm is deliberately not awaited. The
+  // restart serializes behind the warm rather than racing it — `closeAll`
+  // awaits any in-flight standby refill before closing — so pages the warm is
+  // mid-way through creating can't outlive the browser the restart replaces.
   function reconcileHostShell(hash: string | null) {
     if (draining || recyclingForHostChange) {
       return;
@@ -1324,14 +1350,16 @@ export function createPrerenderHttpServer(options?: {
       warmedHostShellHash,
     );
     if (!recycle) {
-      // Either nothing reported, or we adopted a baseline / matched — record
-      // the (possibly newly-adopted) token and we're done.
+      // Either nothing was reported or the token matches the baseline —
+      // record it and we're done.
       warmedHostShellHash = nextWarmed;
       return;
     }
     recyclingForHostChange = true;
     log.info(
-      `host shell changed (${warmedHostShellHash} -> ${hash}); recycling prerender browser`,
+      warmedHostShellHash === undefined
+        ? `host shell token first seen (${hash}); recycling prerender browser, which may have warmed against an earlier shell`
+        : `host shell changed (${warmedHostShellHash} -> ${hash}); recycling prerender browser`,
     );
     void prerenderer
       .recycle()

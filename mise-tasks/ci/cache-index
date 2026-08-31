@@ -50,6 +50,22 @@ node "$REPO_ROOT/scripts/normalize-realm-mtimes.mjs" \
   ../base ../skills-realm/contents ../openrouter-realm
 
 echo "Starting services..."
+# This job's cost is almost entirely the boot index of every realm it serves,
+# and the workers are what walk it — one of them takes the whole set serially.
+# The readiness line below reports this count alongside the time taken, so a
+# change here is measurable against the previous run rather than guessed at.
+# Raising it trades against the runner's four vCPUs and the prerender page
+# pool the index drives, so it does not scale indefinitely.
+#
+# The override is its own variable, and it is assigned unconditionally.
+# `WORKER_ALL_PRIORITY_COUNT="${WORKER_ALL_PRIORITY_COUNT:-2}"` looks
+# equivalent and silently is not: .mise.toml sources mise-tasks/lib/env-vars.sh
+# into `[env]`, so every task starts with that variable already exported as 1
+# and the `:-` default can never fire. The failure is quiet — the job runs at
+# the old count and only the reported worker count gives it away.
+CACHE_INDEX_WORKER_COUNT="${CACHE_INDEX_WORKER_COUNT:-2}"
+export WORKER_ALL_PRIORITY_COUNT="$CACHE_INDEX_WORKER_COUNT"
+
 SKIP_BOXEL_HOMEPAGE=true \
   NODE_NO_WARNINGS=1 \
   run-p -ln start:icons start:host-dist start:pg start:prerender-dev start:prerender-manager-dev start:matrix start:smtp start:worker-development start:development &
@@ -84,21 +100,49 @@ pnpm --dir=../matrix register-realm-users
 ensure_services_running
 
 echo "Waiting for realm readiness..."
+# The budget is the whole boot index of every realm this job serves, and one
+# all-priority worker walks them serially — the experiments realm alone is
+# ~1500 files. That total sits close enough to the ceiling that a slightly
+# slow runner pushes past it, so the ceiling is reported alongside the time
+# actually taken (below): "the job timed out" is not actionable, "readiness
+# took 28m against a 40m budget" is. This budget and the test-realm one below
+# have to sum to less than the enclosing step's `timeout-minutes` in
+# .github/workflows/ci.yaml, which spells the arithmetic out: both can expire
+# in one run, and a step killed by GitHub first reports neither number.
+READINESS_TIMEOUT_MS="${READINESS_TIMEOUT_MS:-2400000}"
+READINESS_START=$(date +%s)
+
 # Probe-only TLS relaxation: the realm-server / host now serve the
 # self-signed mkcert leaf on https://localhost:42XX and wait-on's
 # in-process axios doesn't pick up NODE_EXTRA_CA_CERTS reliably on CI
 # runners. The actual services under test still validate normally.
 NODE_TLS_REJECT_UNAUTHORIZED=0 \
-  wait-on -t 1800000 $(echo "$READINESS_URLS" | tr '|' ' ') &
+  wait-on -t "$READINESS_TIMEOUT_MS" $(echo "$READINESS_URLS" | tr '|' ' ') &
 WAIT_ON_PID=$!
 
 while kill -0 "$WAIT_ON_PID" 2>/dev/null; do
   ensure_services_running
   sleep 1
 done
-wait "$WAIT_ON_PID"
 
-echo "All realms ready."
+# The status is captured rather than left to `set -e` so the duration below
+# gets printed on a timeout too — "gave up after 40m" next to the budget is
+# what says whether the budget is wrong or the indexing is, and exiting here
+# would take the one number worth having with it.
+if wait "$WAIT_ON_PID"; then
+  READINESS_STATUS=0
+else
+  READINESS_STATUS=$?
+fi
+READINESS_ELAPSED=$(( $(date +%s) - READINESS_START ))
+READINESS_TOOK="$((READINESS_ELAPSED / 60))m$((READINESS_ELAPSED % 60))s (budget $((READINESS_TIMEOUT_MS / 60000))m, workers=${WORKER_ALL_PRIORITY_COUNT:-1})"
+
+if [ "$READINESS_STATUS" -ne 0 ]; then
+  echo "::error title=Realm readiness timed out::Gave up after ${READINESS_TOOK}. The boot index is serial behind the all-priority workers; raise READINESS_TIMEOUT_MS or CACHE_INDEX_WORKER_COUNT. Not WORKER_ALL_PRIORITY_COUNT — this task overwrites it."
+  exit "$READINESS_STATUS"
+fi
+
+echo "All realms ready in ${READINESS_TOOK}."
 
 # Bring up the live test realms (`/test/`, `/node-test/`) once the dev stack is
 # serving. They run in their own realm-server process against their own
@@ -138,8 +182,17 @@ for realm in test node-test; do
 done
 
 echo "Waiting for test realm readiness..."
+# Two realms of a few dozen files each, indexing against a base realm that is
+# already served by the time this runs — it settles in about a minute. The
+# budget is deliberately far tighter than the one above, because it and that
+# one have to *sum* to less than the enclosing step's `timeout-minutes`: a
+# step killed by GitHub reports neither which wait was outstanding nor for how
+# long, which is the diagnosis this task exists to provide. See the arithmetic
+# in .github/workflows/ci.yaml.
+TEST_READINESS_TIMEOUT_MS="${TEST_READINESS_TIMEOUT_MS:-600000}"
+
 NODE_TLS_REJECT_UNAUTHORIZED=0 \
-  wait-on -t 1800000 $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
+  wait-on -t "$TEST_READINESS_TIMEOUT_MS" $(echo "$TEST_READINESS_URLS" | tr '|' ' ') &
 TEST_WAIT_ON_PID=$!
 
 while kill -0 "$TEST_WAIT_ON_PID" 2>/dev/null; do

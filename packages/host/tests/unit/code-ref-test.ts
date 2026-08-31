@@ -6,6 +6,7 @@ import { module, test } from 'qunit';
 
 import type { Loader, LooseCardResource } from '@cardstack/runtime-common';
 import { loadCardDef, rri, visitModuleDeps } from '@cardstack/runtime-common';
+import { isRelativePath } from '@cardstack/runtime-common/code-ref';
 import * as CodeRefSerializer from '@cardstack/runtime-common/serializers/code-ref';
 
 import {
@@ -224,5 +225,37 @@ module('code-ref', function (hooks) {
       '@cardstack/catalog/Listing/person',
       'deserializeAbsolute resolves the relative module against the prefix base',
     );
+  });
+
+  test('classifies module references by form, not by whether they parse', function (assert) {
+    // `URL.canParse` answers false for a prefix-form RRI, so asking only
+    // whether a value parses reads the canonical spelling of every base-realm
+    // module as a relative path. `resolveAdoptsFrom` then sends it down
+    // relative resolution.
+    //
+    // Nothing breaks today because that path passes a prefix form through
+    // unchanged — which is why this is asserted directly rather than through
+    // behaviour: both routes agree, so a regression would be invisible.
+    for (let absolute of [
+      '@cardstack/base/card-api',
+      '@cardstack/catalog/Listing/author',
+      'https://cardstack.com/base/card-api',
+      'http://test-realm/test/person',
+      'data:text/javascript,export default 1',
+    ]) {
+      assert.false(
+        isRelativePath(absolute),
+        `${absolute} is an absolute reference`,
+      );
+    }
+
+    for (let relative of ['./person', '../person', 'person', '/person']) {
+      assert.true(
+        isRelativePath(relative),
+        `${relative} is a relative reference`,
+      );
+    }
+
+    assert.false(isRelativePath(undefined), 'a non-string is not a path');
   });
 });

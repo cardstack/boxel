@@ -35,6 +35,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
 import CodeBlock from '../ai-assistant/code-block';
@@ -63,6 +64,7 @@ export default class RoomMessageTool extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
 
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageTool;
@@ -106,11 +108,31 @@ export default class RoomMessageTool extends Component<Signature> {
     );
   }
 
-  @use private toolResultCard = resource(() => {
+  // The result card is the live store instance when the result doc names a
+  // saved card. Holding a store reference for as long as this component
+  // renders it keeps the instance out of the store's GC sweep and subscribed
+  // to realm invalidation; otherwise a sweep could evict it mid-render and the
+  // next `store.get` would mint a second instance for the same id.
+  @use private toolResultCard = resource(({ on }) => {
     let initialState = { card: undefined } as { card: CardDef | undefined };
     let state = new TrackedObject(initialState);
+    let referencedId: string | undefined;
+    let isTornDown = false;
+    on.cleanup(() => {
+      isTornDown = true;
+      if (referencedId) {
+        this.store.dropReference(referencedId);
+      }
+    });
     if (this.args.messageTool.toolResultFileDef) {
       this.args.messageTool.getCommandResultCard().then((card) => {
+        if (isTornDown) {
+          return;
+        }
+        if (card?.id) {
+          referencedId = card.id;
+          this.store.addReference(card.id);
+        }
         state.card = card;
       });
     }

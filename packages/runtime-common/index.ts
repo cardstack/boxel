@@ -9,6 +9,7 @@ import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 import type { RenderRouteOptions } from './render-route-options.ts';
 import type { Definition } from './definitions.ts';
+import type { ScreenshotFormat } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
 import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
 
@@ -945,6 +946,14 @@ export type ScreenshotCaptureOverrides = {
   // `target: null` to drop a batch-wide target default, the same "back to no
   // target" spelling `clip` has; it elides away after the merge.
   target?: string | null;
+  // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
+  // parent-owned box rather than the viewport, so it needs this to lay out
+  // and fire its `@container fitted-card` queries. Required for fitted
+  // captures and refused for isolated/embedded (enforced by the shared
+  // capture-spec parse on both request surfaces). The capture is sized to the
+  // envelope, so a batch of differing envelopes yields differently-sized PNGs
+  // off one render.
+  envelope?: { width: number; height: number };
 };
 
 // One entry in a batch capture: a name plus the same per-capture overrides. An
@@ -970,11 +979,15 @@ export type ScreenshotCaptureSpec = ScreenshotCaptureOverrides & {
   captures?: ScreenshotCaptureEntry[];
 };
 
+// ScreenshotFormat is defined (with its runtime const + guard) in
+// `capture-spec.ts`, re-exported from this module, and imported at the top of
+// this file for the types below.
+
 export type ScreenshotPrerenderArgs = {
   realm: string;
   url: string;
   auth: string;
-  format: 'isolated' | 'embedded';
+  format: ScreenshotFormat;
   // Optional per-capture overrides (viewport, scale, fullPage, clip).
   captureSpec?: ScreenshotCaptureSpec;
   // Worker-job priority threaded through from the producer side. See
@@ -1616,15 +1629,17 @@ export function hasCardExtension(path: string): boolean {
   return false;
 }
 
+// Trimming preserves the form of what it is given: an identifier stays an
+// identifier, and a plain string — a URL href, say — stays a plain string
+// rather than acquiring a brand it does not warrant.
 export function trimExecutableExtension(
   input: RealmResourceIdentifier,
-): RealmResourceIdentifier {
+): RealmResourceIdentifier;
+export function trimExecutableExtension(input: string): string;
+export function trimExecutableExtension(input: string): string {
   for (let extension of executableExtensions) {
     if (input.endsWith(extension)) {
-      return input.replace(
-        new RegExp(`\\${extension}$`),
-        '',
-      ) as RealmResourceIdentifier;
+      return input.replace(new RegExp(`\\${extension}$`), '');
     }
   }
   return input;
@@ -1648,36 +1663,6 @@ export function internalKeyFor(
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/ancestor`;
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/fields/${ref.field}`;
-  }
-}
-
-// Like `internalKeyFor`, but returns every equivalent spelling of the key —
-// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
-// a single stored `types` value against a key; index rows written before
-// references were canonicalized to RRI may hold the alias or real-URL form,
-// so matching all spellings keeps base-typed cards/files findable until the
-// persisted data is migrated or reindexed.
-export function internalKeysFor(
-  ref: CodeRef,
-  relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
-): string[] {
-  if (!('type' in ref)) {
-    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
-    let module: string = trimExecutableExtension(rri(resolved));
-    return virtualNetwork
-      .equivalentURLForms(module)
-      .map((form) => `${form}/${ref.name}`);
-  }
-  switch (ref.type) {
-    case 'ancestorOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/ancestor`,
-      );
-    case 'fieldOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/fields/${ref.field}`,
-      );
   }
 }
 

@@ -379,9 +379,12 @@ export default class CodeEditor extends Component<Signature> {
     if (!adoptsFrom) {
       return false;
     }
+    // `codeRefWithAbsoluteIdentifier` takes an identifier or a URL, so the
+    // file's own identifier goes through as it is. Parsing it first would
+    // throw for a file in a realm reached through a registered prefix.
     adoptsFrom = codeRefWithAbsoluteIdentifier(
       adoptsFrom,
-      new URL(this.args.file.url),
+      this.args.file.url,
       undefined,
       this.network.virtualNetwork,
     );
@@ -390,7 +393,7 @@ export default class CodeEditor extends Component<Signature> {
         adoptsFrom,
         codeRefWithAbsoluteIdentifier(
           json.data.meta.adoptsFrom,
-          new URL(this.args.file.url),
+          this.args.file.url,
           undefined,
           this.network.virtualNetwork,
         ),
