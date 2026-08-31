@@ -41,6 +41,7 @@ import Router from '@koa/router';
 import supertest from 'supertest';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 
+import { enqueueScreenshotCardJob } from '@cardstack/runtime-common/jobs/screenshot-card';
 import handleScreenshotCard from '../handlers/handle-screenshot-card.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { jwtMiddleware } from '../middleware/index.ts';
@@ -190,6 +191,25 @@ module(basename(import.meta.filename), function () {
           );
         }
       }
+    });
+
+    test('the served query spells the documented grammar, commas unescaped', function (assert) {
+      // The emitted URL must read as the same grammar the params document
+      // and the 400 messages teach — `URLSearchParams` would percent-encode
+      // the clip commas into `clip=0%2C0%2C400x300`.
+      assert.strictEqual(
+        canonicalCaptureSpecQuery({
+          format: 'embedded',
+          viewport: { width: 1280, height: 800 },
+          deviceScaleFactor: 2,
+          clip: { x: 0, y: 10, width: 400, height: 300 },
+        }),
+        '?format=embedded&viewport=1280x800&dsf=2&clip=0,10,400x300',
+      );
+      assert.strictEqual(
+        canonicalCaptureSpecQuery({ format: 'isolated', fullPage: true }),
+        '?fullPage=true',
+      );
     });
 
     test('errors name the offending field', function (assert) {
@@ -691,6 +711,56 @@ module(basename(import.meta.filename), function () {
       let different = await get('_screenshot/card-1?viewport=640x480');
       assert.strictEqual(different.status, 200);
       assert.strictEqual(captureCalls, 2, 'a new spec renders fresh');
+    });
+
+    test('the task refuses to persist a render whose spec contradicts the persist identity', async function (assert) {
+      // A producer bug no parse layer can catch: the persist identity names
+      // the canonical capture while the job renders a custom viewport.
+      // Persisting would serve the 1280×800 render on the canonical URL for
+      // as long as the source generation holds, so the task re-hashes the
+      // rendered spec and refuses the mismatch — while the capture itself
+      // still resolves with its bytes.
+      await seedInstanceRow('card-1');
+      await startWorker();
+
+      let job = await enqueueScreenshotCardJob(
+        {
+          realmURL: REALM_URL,
+          realmUsername: OWNER,
+          runAs: OWNER,
+          cardId: `${REALM_URL}card-1`,
+          format: 'isolated',
+          captureSpec: { viewport: { width: 1280, height: 800 } },
+          persist: {
+            realmURL: REALM_URL,
+            sourceURL: `${REALM_URL}card-1`,
+            captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+            sourceGeneration: 1,
+            lane: 'on-demand',
+          },
+          surface: 'get-dsl',
+          loggingCorrelationId: null,
+        },
+        publisher,
+        dbAdapter,
+        0,
+      );
+      let result = await job.done;
+      assert.strictEqual(
+        result.status,
+        'ready',
+        'the capture itself still succeeds',
+      );
+      assert.strictEqual(
+        await findMediaCacheEntry(dbAdapter, {
+          realmURL: REALM_URL,
+          sourceURL: `${REALM_URL}card-1`,
+          captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+          sourceGeneration: 1,
+        }),
+        undefined,
+        'nothing lands under the mismatched identity',
+      );
     });
 
     test('concurrent misses for one spec coalesce onto one capture', async function (assert) {

@@ -3,8 +3,10 @@ import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 
 import {
+  captureSpecHash,
   fetchRealmPermissions,
   fetchUserPermissions,
+  isCaptureFormat,
   jobIdentity,
   putMedia,
   updateMediaCacheDiagnostics,
@@ -47,10 +49,11 @@ export interface ScreenshotCardArgs extends JSONTypes.Object {
   // give up on: the capture still lands durably, and the caller's retry is
   // a pure ledger hit instead of a second render. The identity's
   // `captureSpecHash` covers the full spec — format and captureSpec
-  // overrides alike — so it is the producer's job to hash the same spec it
-  // threads into `captureSpec`. Non-optional `| null` rather than `?:`
-  // because the args are a `JSONTypes.Object`, whose index signature rejects
-  // `undefined`.
+  // overrides alike — so the producer must hash the same spec it threads
+  // into `captureSpec`; the task re-derives the hash from the rendered spec
+  // before persisting and refuses a mismatch. Non-optional `| null` rather
+  // than `?:` because the args are a `JSONTypes.Object`, whose index
+  // signature rejects `undefined`.
   persist: ScreenshotPersistArgs | null;
   // Which serving surface enqueued this job, carried onto the capture's
   // telemetry record so captures slice by surface.
@@ -202,7 +205,24 @@ const screenshotCard: Task<ScreenshotCardArgs, ScreenshotPrerenderResponse> = ({
     let decodeMs: number | undefined;
     let persistMs: number | undefined;
     if (persist && response.status === 'ready' && response.base64) {
-      if (!mediaCacheAdapter) {
+      // The persist identity is the producer's claim about which spec this
+      // render satisfies; re-derive the hash from the spec the job actually
+      // rendered and refuse a mismatch — a wrong-identity persist would
+      // serve this render on some other spec's durable URL until the source
+      // generation bumps. One sha256 against a Chrome render. A batch or
+      // fitted render has no canonical identity, so no persist target can
+      // legitimately name one; those hash to null and always refuse.
+      let renderedSpecHash =
+        isCaptureFormat(format) &&
+        !captureSpec?.captures &&
+        !captureSpec?.envelope
+          ? await captureSpecHash({ format, ...(captureSpec ?? {}) })
+          : null;
+      if (renderedSpecHash !== persist.captureSpecHash) {
+        log.error(
+          `${jobIdentity(jobInfo)} screenshot-card persist identity hash ${persist.captureSpecHash} does not match the rendered captureSpec's hash ${renderedSpecHash}; refusing to persist this render under another spec's identity`,
+        );
+      } else if (!mediaCacheAdapter) {
         log.warn(
           `${jobIdentity(jobInfo)} screenshot-card asked to persist but this worker has no media cache adapter configured; skipping`,
         );

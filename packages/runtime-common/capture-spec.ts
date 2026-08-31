@@ -53,7 +53,17 @@ export const DEFAULT_CAPTURE_VIEWPORT = {
 // The full capture identity: the render format plus the per-capture geometry
 // overrides. This is what canonicalizes into the MediaCache ledger key, so a
 // custom-geometry capture persists and serves exactly like a format-only one.
-export interface CaptureSpec extends ScreenshotCaptureSpec {
+// Built by inclusion (`Pick`), not by extending `ScreenshotCaptureSpec`
+// wholesale: the canonical form serializes exactly these fields, so a field
+// outside the pick (`envelope`, `captures`, or anything the capture engine
+// grows later) cannot ride into the identity and silently hash two distinct
+// captures onto one ledger key. Widening the identity means changing this
+// pick, `canonicalCaptureSpecString` / `canonicalCaptureSpecQuery` below,
+// and `sameCaptureSpec` (jobs/screenshot-card.ts) together.
+export interface CaptureSpec extends Pick<
+  ScreenshotCaptureSpec,
+  'viewport' | 'deviceScaleFactor' | 'fullPage' | 'clip'
+> {
   format: CaptureFormat;
 }
 
@@ -825,33 +835,35 @@ export async function captureSpecHash(spec: CaptureSpec): Promise<string> {
 // served URL round-trips through `parseCaptureSpecParams` back to the same
 // canonical form. Numbers serialize through `String`, which is already the
 // shortest round-trip form (`2`, not `2.0`), matching how `Number` reparses
-// them.
+// them. Assembled by hand rather than through `URLSearchParams`, which would
+// percent-encode the clip commas (`clip=0%2C0%2C400x300`) — `,` is a valid
+// query sub-delim, and the emitted URL should read as the same grammar the
+// params document and the 400 messages teach. Safe without encoding because
+// every value comes from the closed grammar above: format is an enum, the
+// rest are digits, `x`, `,`, and a decimal point.
 export function canonicalCaptureSpecQuery(spec: CaptureSpec): string {
-  let searchParams = new URLSearchParams();
+  let params: string[] = [];
   if (spec.format !== DEFAULT_CAPTURE_FORMAT) {
-    searchParams.set('format', spec.format);
+    params.push(`format=${spec.format}`);
   }
   let overrides = canonicalOverrides(spec);
   if (overrides.viewport) {
-    searchParams.set(
-      'viewport',
-      `${overrides.viewport.width}x${overrides.viewport.height}`,
+    params.push(
+      `viewport=${overrides.viewport.width}x${overrides.viewport.height}`,
     );
   }
   if (overrides.deviceScaleFactor != null) {
-    searchParams.set('dsf', String(overrides.deviceScaleFactor));
+    params.push(`dsf=${overrides.deviceScaleFactor}`);
   }
   if (overrides.fullPage) {
-    searchParams.set('fullPage', 'true');
+    params.push('fullPage=true');
   }
   if (overrides.clip) {
-    searchParams.set(
-      'clip',
-      `${overrides.clip.x},${overrides.clip.y},${overrides.clip.width}x${overrides.clip.height}`,
+    params.push(
+      `clip=${overrides.clip.x},${overrides.clip.y},${overrides.clip.width}x${overrides.clip.height}`,
     );
   }
-  let qs = searchParams.toString();
-  return qs.length > 0 ? `?${qs}` : '';
+  return params.length > 0 ? `?${params.join('&')}` : '';
 }
 
 // The durable served URL for one capture of one instance: the platform's

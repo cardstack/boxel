@@ -108,7 +108,14 @@ function parseScreenshotCardArgs(
 // Field-by-field rather than JSON.stringify: one side round-trips through
 // jsonb, which does not preserve key order. Producers normalize specs via
 // `parseScreenshotCaptureSpec` (defaults elided), so a default-valued field
-// never appears on one side only.
+// never appears on one side only. Total over `ScreenshotCaptureSpec`, not
+// just the fields the ledger identity covers: joining hands the incoming
+// caller the twin's render verbatim, so any spec field two jobs disagree on
+// disqualifies the join. `envelope` and `captures` never reach here today (a
+// job carrying either is capture-only, persist: null, and only
+// persist-carrying jobs coalesce), but they are compared anyway — envelope
+// by value, captures by refusing to call any batch a twin (inserting is
+// always safe; joining wrongly serves the wrong render).
 function sameCaptureSpec(
   a: ScreenshotCaptureSpec | null | undefined,
   b: ScreenshotCaptureSpec | null | undefined,
@@ -124,7 +131,11 @@ function sameCaptureSpec(
     (a.clip?.x ?? null) === (b.clip?.x ?? null) &&
     (a.clip?.y ?? null) === (b.clip?.y ?? null) &&
     (a.clip?.width ?? null) === (b.clip?.width ?? null) &&
-    (a.clip?.height ?? null) === (b.clip?.height ?? null)
+    (a.clip?.height ?? null) === (b.clip?.height ?? null) &&
+    (a.envelope?.width ?? null) === (b.envelope?.width ?? null) &&
+    (a.envelope?.height ?? null) === (b.envelope?.height ?? null) &&
+    a.captures === undefined &&
+    b.captures === undefined
   );
 }
 
