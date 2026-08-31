@@ -1176,7 +1176,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      # Naming any permission sets every unnamed one to none, so the reads the
+      # shard-timing source lookup performs have to appear here. Without them
+      # each `gh` call 404s, and since that lookup is best-effort it would
+      # leave the timings quietly unrefreshed on every main run rather than
+      # failing visibly.
       contents: write
+      # Resolving the merge commit to its PR, and that PR to its head.
+      pull-requests: read
+      # Listing that head's workflow runs, inspecting one run's jobs, and
+      # downloading its merged junit artifact.
+      actions: read
+      # Reading the head's commit statuses, which is how a Percy run is told
+      # from a Percy-free one.
+      statuses: read
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1218,12 +1231,22 @@ jobs:
         run: |
           set -uo pipefail
 
+          # Two ways to end up not refreshing, and they deserve different
+          # volume. `leave` is the ordinary one: this merge has no run worth
+          # measuring, which is most merges. `broke` is a call that failed
+          # outright — a missing permission, a transport error — which would
+          # otherwise be indistinguishable from "nothing qualifying" and would
+          # disable this for as long as it took someone to notice the file had
+          # stopped moving.
           leave() { echo "$1 — leaving shard timings unchanged"; exit 0; }
+          broke() { echo "::warning title=Shard timings not refreshed::$1"; exit 0; }
 
-          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" --jq '.[0].number // empty')
+          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" --jq '.[0].number // empty') ||
+            broke "could not list the pull requests for $MERGE_SHA"
           [ -n "$pr" ] || leave "no PR is associated with $MERGE_SHA"
 
-          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty')
+          head_sha=$(gh api "repos/$REPO/pulls/$pr" --jq '.head.sha // empty') ||
+            broke "could not read PR #$pr"
           [ -n "$head_sha" ] || leave "could not resolve the head commit of PR #$pr"
 
           # Newest successful CI Host run for that head. A run with failed
@@ -1232,13 +1255,19 @@ jobs:
           # eras end up mixed in one file.
           run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
             --jq '[.workflow_runs[] | select(.name == "CI Host" and .conclusion == "success")]
-                  | sort_by(.created_at) | last | .id // empty')
+                  | sort_by(.created_at) | last | .id // empty') ||
+            broke "could not list workflow runs for $head_sha"
           [ -n "$run_id" ] || leave "PR #$pr has no fully successful CI Host run"
 
           # Percy roughly doubles some tests and leaves others alone, so a
           # Percy-enabled PR run is no better a model of the median PR run
           # than this push run is.
-          if gh api "repos/$REPO/commits/$head_sha/status" --jq '.statuses[].context' | grep -q '^percy/'; then
+          # Read the statuses first rather than piping straight into grep:
+          # a pipeline takes grep's exit status, so a failed call would look
+          # like "no percy context found" and take the permissive branch.
+          statuses=$(gh api "repos/$REPO/commits/$head_sha/status" --jq '.statuses[].context') ||
+            broke "could not read the commit statuses for $head_sha"
+          if printf '%s\n' "$statuses" | grep -q '^percy/'; then
             leave "PR #$pr ran Percy"
           fi
 
@@ -1247,7 +1276,8 @@ jobs:
           # distinguishes the two shapes.
           imported=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
             --jq '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
-                   | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
+                   | select(.name == "Import cached realm index" and .conclusion == "success")] | length') ||
+            broke "could not inspect the jobs of run $run_id"
           [ "${imported:-0}" -gt 0 ] || leave "run $run_id indexed from scratch"
 
           gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
