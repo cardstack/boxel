@@ -16,7 +16,10 @@ import {
   registerQueueJobDefinition,
 } from '../queue.ts';
 import { IndexRunner } from '../index-runner.ts';
-import { INCREMENTAL_INDEX_JOB_TIMEOUT_SEC } from '../jobs/indexing.ts';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  prerenderSpawnedPriority,
+} from '../jobs/indexing.ts';
 import { enqueuePrerenderHtmlJob } from '../jobs/prerender-html.ts';
 import type { Stats, IndexPhaseTimings } from '../worker.ts';
 
@@ -389,7 +392,11 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           generation,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
-          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          spawningPriority: prerenderSpawnedPriority({
+            realmURL,
+            indexPriority: jobInfo?.priority ?? systemInitiatedPriority,
+            awaitedByPublish: argsAwaitedByPublish(args),
+          }),
           timeoutSec: FROM_SCRATCH_JOB_TIMEOUT_SEC,
           // A publish awaits this HTML, so its render is on the publish's
           // critical path and runs co-equal with indexing (see
@@ -508,7 +515,10 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           generation,
           loaderEpoch,
           spawningJobId: jobInfo?.jobId ?? null,
-          spawningPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          spawningPriority: prerenderSpawnedPriority({
+            realmURL,
+            indexPriority: jobInfo?.priority ?? systemInitiatedPriority,
+          }),
           timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
           // Incremental: no realm-wide sweep — its cost is O(realm module
           // count), deliberately not paid on incrementals.

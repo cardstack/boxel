@@ -1,11 +1,8 @@
 import type * as JSONTypes from 'json-typescript';
 import type { Task } from './index.ts';
 
-import {
-  jobIdentity,
-  fetchAllRealmsWithOwners,
-  systemInitiatedPriority,
-} from '../index.ts';
+import { jobIdentity, fetchAllRealmsWithOwners } from '../index.ts';
+import { systemInitiatedIndexPriority } from '../jobs/indexing.ts';
 import {
   type QueueCoalesceContext,
   type QueueCoalesceDecision,
@@ -136,6 +133,11 @@ const fullReindex: Task<FullReindexArgs, void> = ({
       return;
     }
 
+    // Enqueued in the order the urls arrived: workers claim jobs within a
+    // priority pool in strict arrival order, so this loop's order is the
+    // queue's order. `getFullReindexRealmUrls` sorts the dependency-root
+    // realms to the front for that reason, and the `full-reindex` coalesce
+    // merges two sweeps' urls first-occurrence-wins, which preserves it.
     for (let target of realmsWithUsernames) {
       let { realmUrl, realmUsername } = target;
       try {
@@ -144,7 +146,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
           realmUsername,
           queuePublisher,
           dbAdapter,
-          systemInitiatedPriority,
+          systemInitiatedIndexPriority(realmUrl),
           {
             clearLastModified: true,
           },
