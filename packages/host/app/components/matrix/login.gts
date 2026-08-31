@@ -353,11 +353,16 @@ export default class Login extends Component<Signature> {
         refreshRoutes: true,
       });
     } catch (e: any) {
-      if (isMatrixError(e) && e.httpStatus === 403) {
-        // Login tokens are single-use and short-lived, so a 403 here means the
-        // link is spent or expired — not that the user mistyped a credential
-        // they never entered. Name the recovery instead of the password-form
-        // "check your credentials" advice extractMatrixErrorMessage returns.
+      if (
+        isMatrixError(e) &&
+        e.httpStatus === 403 &&
+        e.errcode === 'M_FORBIDDEN'
+      ) {
+        // A single-use, short-lived login token that's spent or expired comes
+        // back as 403 M_FORBIDDEN, so name the recovery instead of the
+        // password-form "check your credentials" advice extractMatrixErrorMessage
+        // returns. Other 403s (e.g. M_USER_DEACTIVATED) fall through — telling a
+        // deactivated user to mint a fresh link would just loop them.
         this.error = `This sign-in link has expired or was already used. Get a new one and try again.`;
       } else if (isMatrixError(e)) {
         this.error = `Sign-in failed. ${extractMatrixErrorMessage(e)}`;

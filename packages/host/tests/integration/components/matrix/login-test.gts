@@ -206,6 +206,28 @@ module('Integration | Component | matrix/login', function (hooks) {
       .doesNotIncludeText('check your credentials');
   });
 
+  test('?loginToken= exchange failing with a non-M_FORBIDDEN 403 does not claim the link expired', async function (assert) {
+    window.location.href = '/?loginToken=deactivated';
+
+    setLoginWithTokenInterceptor(() =>
+      Promise.reject({
+        httpStatus: 403,
+        errcode: 'M_USER_DEACTIVATED',
+        data: {
+          errcode: 'M_USER_DEACTIVATED',
+          error: 'This account has been deactivated',
+        },
+      }),
+    );
+
+    await render(<template><Login @setMode={{noop}} /></template>);
+
+    assert.dom('[data-test-login-error]').includesText('Sign-in failed');
+    assert
+      .dom('[data-test-login-error]')
+      .doesNotIncludeText('This sign-in link has expired or was already used');
+  });
+
   test('?loginToken= falls back to the password form when start() fails after a successful token exchange', async function (assert) {
     window.location.href = '/?loginToken=abc123';
 
