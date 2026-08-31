@@ -77,6 +77,7 @@ import {
 import {
   systemError,
   notFound,
+  notIndexedYet,
   notAcceptable,
   methodNotAllowed,
   badRequest,
@@ -132,6 +133,7 @@ import {
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isSingleCardDocument,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
   fileMetaTimestamps,
@@ -5057,6 +5059,47 @@ export class Realm {
     return await this.#adapter.exists(localPath);
   }
 
+  // The index has no row for `localPath`, so there is no card document to
+  // serve. Which 404 that is depends on the source file: a write lands on the
+  // realm's file system first and is indexed after, so a card whose `.json` is
+  // already on disk is one this realm has not caught up with rather than one
+  // that does not exist. `notIndexedYet` says so, letting a caller hold a
+  // placeholder until the realm broadcasts the index event for it. A read
+  // served by the replica that took the write rarely gets here — that path
+  // drains its own in-flight indexing first — but a read served by any other
+  // replica has no such handle on the write.
+  private async missingInstanceResponse(
+    request: Request,
+    requestContext: RequestContext,
+    localPath: LocalPath,
+  ): Promise<Response> {
+    let sourcePath = `${localPath}.json` as LocalPath;
+    if (await this.isIgnored(this.paths.fileURL(sourcePath))) {
+      // An ignored path is never visited, so no amount of waiting produces an
+      // index row for it.
+      return notFound(request, requestContext);
+    }
+    let source = await this.readFileAsText(sourcePath);
+    if (!source) {
+      return notFound(request, requestContext);
+    }
+    // The marker promises an index row is coming, so it has to match what the
+    // indexer will actually make one for: a `.json` whose `data` is a single
+    // card resource. A collection document (which `isCardDocumentString` also
+    // accepts) never becomes an instance row, and neither does anything else
+    // — those are genuinely not cards, not cards in waiting.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.content);
+    } catch {
+      return notFound(request, requestContext);
+    }
+    if (!isSingleCardDocument(parsed)) {
+      return notFound(request, requestContext);
+    }
+    return notIndexedYet(request, requestContext);
+  }
+
   private async fileMetaDocument(
     requestContext: RequestContext,
     localPath: LocalPath,
@@ -5902,7 +5945,11 @@ export class Realm {
             );
             return fileMeta ?? notFound(request, requestContext);
           } else {
-            return notFound(request, requestContext);
+            return await this.missingInstanceResponse(
+              request,
+              requestContext,
+              localPath,
+            );
           }
         }
         if (
@@ -5952,7 +5999,11 @@ export class Realm {
           );
           return fileMeta ?? notFound(request, requestContext);
         } else {
-          return notFound(request, requestContext);
+          return await this.missingInstanceResponse(
+            request,
+            requestContext,
+            localPath,
+          );
         }
       }
       if (maybeError.type === 'error') {
