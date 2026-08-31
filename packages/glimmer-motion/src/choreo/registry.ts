@@ -9,17 +9,6 @@ import type { ChoreoNode } from './types.ts';
 export interface ChoreoHost {
   /** a destroyed participant asks whether the region still needs its element; true → the region unmounts it later */
   claim(node: ChoreoNode): boolean;
-  /**
-   * Is this region going to run a row for `node` as a leaver — i.e. will it be
-   * the one to say when the element may go?
-   *
-   * `claim` above answers the same question for a participant that is already
-   * being destroyed, and takes the node ON as a side effect. This one only
-   * reads, because it is asked of a node that is still very much mounted: a
-   * leaving <Presence> child waiting to find out whether anybody owes it a
-   * timeline. Nothing about the region changes by asking.
-   */
-  handling(node: ChoreoNode): boolean;
   register(node: ChoreoNode): () => void;
 }
 

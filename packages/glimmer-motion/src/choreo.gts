@@ -423,29 +423,6 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     };
   }
 
-  /**
-   * ChoreoHost: does this region still owe `node` a row?
-   *
-   * A participant registers with the nearest <Presence> when it joins a region,
-   * so that a timeline can outlive a plain exit — the element has to survive
-   * long enough for its removal row to play. The registration is only ever
-   * discharged by `finish`, which runs when a row for a REMOVED sprite ends.
-   *
-   * That leaves one shape uncovered, and it is the common one: a region nested
-   * INSIDE the leaving presence child. The card goes, the whole region goes
-   * with it, and the region never sees a removal of its own — so it never runs
-   * a row, never calls `finish`, and every participant it ever registered sits
-   * on the <Presence> unreported. See the note in node.ts where this is asked.
-   */
-  handling(node: ChoreoNode) {
-    return (
-      this.passPending ||
-      this.orphans.has(node) ||
-      this.claimed.has(node) ||
-      this.leaving.has(node)
-    );
-  }
-
   claim(node: ChoreoNode) {
     if (this.orphans.has(node)) {
       return true;
