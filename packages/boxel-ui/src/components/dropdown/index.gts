@@ -169,10 +169,25 @@ class BoxelDropdown extends Component<Signature> {
 
   // BasicDropdown's plain close() refocuses the trigger with a bare focus(),
   // whose scroll-into-view cancels a smooth scroll a menu action just started;
-  // the focus trap already returns focus on deactivate, with preventScroll
+  // the focus trap returns focus to the trigger instead, with preventScroll
   @action closeSkippingFocus(dropdown: Dropdown) {
     dropdown.actions.close(undefined, true);
   }
+
+  // The trap's default return target is whatever had focus when it activated,
+  // which is the trigger only when the user clicked it to open — an
+  // @initiallyOpened or registerAPI-driven open activates with focus on
+  // <body>. Name the trigger explicitly, falling back to the default because
+  // focus-trap throws when an option resolves to nothing and some triggers
+  // (the operator-mode overlay's) unmount while open.
+  private triggerReturnFocus = (dropdown: Dropdown) => {
+    return (
+      previouslyFocused: HTMLElement | SVGElement,
+    ): HTMLElement | SVGElement =>
+      document.querySelector<HTMLElement>(
+        `[aria-controls='ember-basic-dropdown-content-${dropdown.uniqueId}']`,
+      ) ?? previouslyFocused;
+  };
 
   <template>
     {{!--
@@ -203,8 +218,8 @@ class BoxelDropdown extends Component<Signature> {
       {{/let}}
 
       {{! preventScroll keeps the trap's focus moves (including the return
-          focus on close) from scrolling the trigger into view — that scroll
-          step cancels any smooth scroll a menu action just started }}
+          focus to the trigger on close) from scrolling it into view — that
+          scroll step cancels any smooth scroll a menu action just started }}
       <dd.Content
         @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
@@ -216,6 +231,7 @@ class BoxelDropdown extends Component<Signature> {
               "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
             )
             onDeactivate=(fn this.closeSkippingFocus dd)
+            setReturnFocus=(this.triggerReturnFocus dd)
             allowOutsideClick=true
             fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
             preventScroll=true
