@@ -242,39 +242,74 @@ jobs:
         env:
           CLUSTER: ${{ inputs.environment }}
           SERVICE: boxel-realm-server-${{ inputs.environment }}
+          CONTAINER: boxel-realm-server
+          EXPECTED_IMAGE: ${{ inputs.realm-server-image }}
         run: |
           set -uo pipefail
           # Observed convergence runs 5.5-9.5 minutes, so the ten minutes the
           # action was given left no headroom on a slow day. Twenty gives room
           # without letting a genuinely stuck rollout hold the pipeline.
-          # FAILED is reported immediately rather than waited out: that is the
-          # deployment circuit breaker having given up, and no amount of
-          # further waiting changes it.
+          #
+          # "PRIMARY is COMPLETED" on its own is not enough to open this gate.
+          # ECS is eventually consistent, so a poll landing just after
+          # update-service can still describe the *previous* deployment, which
+          # is COMPLETED by definition; and a circuit-breaker rollback promotes
+          # that previous revision back to PRIMARY, where it reaches COMPLETED
+          # again. Either would let the removal migrations run while the old
+          # tasks are still serving, which is the one thing this gate exists to
+          # prevent. So match on identity too: the primary deployment has to be
+          # running the image this deploy asked for. The render step writes
+          # that input into the task definition verbatim, so it is an exact
+          # comparison.
+          resolved_taskdef=""
+          resolved_image=""
+          taskdef=""
           state=unknown
-          reason=""
           deadline=$(( $(date +%s) + 1200 ))
           while [ "$(date +%s)" -lt "$deadline" ]; do
-            # The backticks below are JMESPath's literal syntax, not command
-            # substitution, so the single quotes around the query are correct.
+            # A rollback marks the attempted deployment FAILED before restoring
+            # the old one, so look for that before trusting whatever is PRIMARY.
+            # The backticks in these queries are JMESPath literals, not command
+            # substitution, so single quotes are correct throughout.
             # shellcheck disable=SC2016
-            read -r state reason <<<"$(aws ecs describe-services \
+            failed_reason=$(aws ecs describe-services \
               --cluster "$CLUSTER" --services "$SERVICE" \
-              --query 'services[0].deployments[?status==`PRIMARY`].[rolloutState,rolloutStateReason]' \
-              --output text)"
-            case "$state" in
-              COMPLETED)
-                echo "rollout completed: $reason"
-                exit 0
-                ;;
-              FAILED)
-                echo "::error title=Realm server rollout failed::$reason"
+              --query 'services[0].deployments[?rolloutState==`FAILED`].rolloutStateReason | [0]' \
+              --output text)
+            if [ -n "$failed_reason" ] ; then
+              if [ "$failed_reason" != "None" ] ; then
+                echo "::error title=Realm server rollout failed::$failed_reason"
                 exit 1
-                ;;
-            esac
-            echo "rollout ${state:-pending} — ${reason:-no reason reported yet}"
+              fi
+            fi
+
+            # shellcheck disable=SC2016
+            read -r taskdef state <<<"$(aws ecs describe-services \
+              --cluster "$CLUSTER" --services "$SERVICE" \
+              --query 'services[0].deployments[?status==`PRIMARY`].[taskDefinition,rolloutState]' \
+              --output text)"
+
+            # Resolve the image only when the revision changes; this loop runs
+            # every 15s for up to twenty minutes.
+            if [ "$taskdef" != "$resolved_taskdef" ] ; then
+              resolved_taskdef="$taskdef"
+              # shellcheck disable=SC2016
+              resolved_image=$(aws ecs describe-task-definition \
+                --task-definition "$taskdef" \
+                --query "taskDefinition.containerDefinitions[?name=='$CONTAINER'].image | [0]" \
+                --output text)
+            fi
+
+            if [ "$resolved_image" = "$EXPECTED_IMAGE" ] ; then
+              if [ "$state" = "COMPLETED" ] ; then
+                echo "rollout completed for ${taskdef##*/} running $resolved_image"
+                exit 0
+              fi
+            fi
+            echo "primary=${taskdef##*/} state=${state:-pending} image=${resolved_image:-unknown}"
             sleep 15
           done
-          echo "::error title=Realm server rollout did not complete::still ${state} after 20 minutes"
+          echo "::error title=Realm server rollout did not complete::after 20 minutes the primary deployment is ${taskdef##*/} (${state}) running ${resolved_image:-unknown}, expected ${EXPECTED_IMAGE}"
           exit 1
 
   post-deploy-realm-server:
