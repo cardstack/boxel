@@ -1239,30 +1239,45 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
       'createDragControls',
       'dragControls',
       'dragListener',
-      'onTap',
       'onPanSessionStart',
+      'dragSnapToOrigin',
     ],
     group: 'Drag',
     id: 'grip',
-    lede: 'Only the handle drags. Everything else the pointer says, said out loud.',
-    sample: `// drag=true normally swallows the element's pointer whole. dragListener=false
-// hands it back — the body is selectable, clickable, still reports a tap — and
-// a DragControls object is the only thing that can lift the card.
+    lede: 'Seat twelve people. Drag them by the corner, because the card is also a form.',
+    sample: `// drag=true swallows the element's pointer whole, and a guest card has a
+// note field in it and a phone number under that. dragListener=false hands the
+// pointer back — a caret goes in the field, the number selects — and the corner
+// tab is then the ONLY thing that can lift the card. That is not a nicety; it
+// is the only arrangement in which a draggable thing can also be a form.
 const controls = createDragControls();
 
-<button {{on 'pointerdown' (fn controls.start)}}>grip</button>
+<button {{on 'pointerdown' (fn this.lift guest.id)}}>⠿</button>
 
-<div {{motion
+<article {{motion
   drag=true
-  dragControls=controls
-  dragListener=false     {{! the card's own listener, off }}
-  dragSnapToOrigin=true
-  onPanSessionStart=this.session   {{! pointerdown, BEFORE the drag threshold }}
-  onTap=this.press                 {{! released ON it }}
-  onTapCancel=this.pressCancel     {{! released off it — the two ways a press ends }}
-}}>…</div>`,
+  dragControls=(this.controlsFor guest.id)
+  dragListener=false          {{! the card's own listener, off }}
+  dragSnapToOrigin=true       {{! and this is the REFUSAL — see below }}
+  dragTransition=RETURN
+  onPanSessionStart=this.session
+  onDragEnd=(fn this.drop guest)
+  onTap=(fn this.press guest)
+  onTapCancel=this.pressCancel
+}}>…</article>
+
+// onPanSessionStart fires at pointerdown, BEFORE the threshold that decides
+// this is a drag — so every table with a chair free lights the instant you take
+// hold of somebody, while you are still deciding whether to move them. Nothing
+// else in the drag surface fires that early.
+session = () => { this.armed = true; };
+
+// And dragSnapToOrigin is the only "no" this interface gives. Land on a full
+// table, or on nothing, and the guest flies back to the list; land on a free
+// one and they take a chair. Freeze the frames and a refused drop and an
+// untouched card are the same picture — the flight IS the answer.`,
     slowmo: false,
-    title: 'Grip',
+    title: 'Table Plan',
   },
   {
     Example: Gestures,

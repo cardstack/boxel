@@ -1415,20 +1415,23 @@ export class LongTake extends Component {
             #5b626e;
         }
         /* ...but only in 3D, where the slate is the SET the laptop was shot
-           on and the whole point is a photographic ground. Flat, there is no
-           set, and a dark slab in a light document reads as a hole cut in the
-           page.
+           on and the whole point is a photographic ground.
 
-           KNOWN LIMIT: this is currently invisible. The flat state is a
-           photograph of a laptop on a dark set, stretched edge to edge, so it
-           covers this ground entirely. Masking the plate's surround to let the
-           page through was tried and looks like a smudge — the set is most of
-           the frame, not a border. A genuinely light flat state needs a second
-           plate shot on a light set; this rule is left here so that the day one
-           exists, the stage is already correct.
+           Flat is a different problem, and it took two wrong answers to get to
+           the right one. The flat state is a PHOTOGRAPH — a laptop on a dark
+           set — stretched edge to edge. Lightening the ground under it did
+           nothing, because the plate covers the ground entirely. Masking the
+           plate's surround to let the page through looked like a smudge: the
+           set is most of the frame, not a border.
 
-           And no backticks in here. A .gts template is compiled by wrapping
-           its contents in a template LITERAL, so one backtick anywhere inside
+           So it stops pretending the ground can be lightened and presents the
+           plate as what it is: a dark photograph placed on a light page. Inset,
+           cornered and shadowed, it reads as an image somebody put there. Edge
+           to edge with no frame it reads as a hole cut in the paper, which is
+           the thing that was actually wrong.
+
+           And no backticks in here. A .gts template is compiled by wrapping its
+           contents in a template LITERAL, so one backtick anywhere inside
            closes the literal early and the file dies with "Parsing error:
            Invalid count value: -1" — which names neither the line nor the
            cause. It is the same unhelpful message the multi-line class
@@ -1443,6 +1446,14 @@ export class LongTake extends Component {
               #e4dccf 100%
             ),
             #efe9df;
+        }
+        :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-world {
+          border-radius: 14px;
+          box-shadow:
+            0 18px 40px rgba(33, 29, 24, 0.22),
+            0 2px 6px rgba(33, 29, 24, 0.12);
+          overflow: hidden;
+          transform: translate(-50%, -50%) scale(calc(var(--k, 1) * 0.88));
         }
         /* THE CANVAS SITS ABOVE THE DOM, and that is what makes the
            laptop's own body occlude the drawing.

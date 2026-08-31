@@ -552,7 +552,13 @@ summary,
      the rules written against them applied to nothing at all, silently. Making
      the platter a container gives them one to resolve against.
      Safe here because this box's size does not depend on its contents: the
-     height is fixed and the width comes from the grid. */
+     height is fixed and the width comes from the grid.
+     NAMED, so a stage can ask about the platter specifically. An unnamed
+     `@container` binds to the nearest ancestor container, which for anything
+     inside a two-column stage is whichever box happens to be nearest — and a
+     rule meant to reshape a layout when the PLATTER is narrow would instead
+     fire whenever a column inside it was. */
+  container-name: platter;
   container-type: size;
   /* Recessed to --bg, a notch below the page and well below the card's
      --bg-elev, so the demo UI lifts off the tile and the metadata chin
@@ -845,6 +851,12 @@ summary,
 
 .stage-wrap {
   position: relative;
+  /* the demo page's platter, so a stage's platter-scoped rules answer here too
+     — `inline-size` rather than `size` because this box's HEIGHT does depend on
+     its contents (`min-height` plus whatever the stage needs) and size
+     containment would flatten it to nothing */
+  container-name: platter;
+  container-type: inline-size;
   min-height: min(72vh, 680px);
   border: 1px solid var(--line);
   border-radius: 22px;
@@ -5792,6 +5804,17 @@ html[data-gm-dragging] * {
   .pres-restart:hover {
     color: var(--ink);
     border-color: var(--copper);
+  }
+}
+
+/* The footer is a nowrap row of five: a label, a crossfade control, a restart
+   and two arrows. Together with its gaps that is about 306px, which does not
+   fit a phone-width platter — the arrows ran 6px past the stage's padding and
+   the card scrolled sideways. It wraps down there instead. */
+@container (max-width: 420px) {
+  .pres-foot {
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 }
 
@@ -11786,197 +11809,370 @@ html[data-gm-dragging] * {
   width: var(--pt-year);
 }
 
-/* ---- Grip: the pointer surface, one card at a time ---- */
+/* ---- Table Plan: seat twelve, by the corner tab ---- */
 
-.grip-ex {
-  align-items: stretch;
-  display: grid;
-  gap: 22px;
-  grid-template-columns: minmax(0, 1.1fr) minmax(230px, 0.9fr);
-  width: min(760px, 100%);
-}
-
-/* In a gallery card there is not room for the right column's 230px floor plus
-   a 22px gap — the left column ends up narrower than its own contents and the
-   grid pushes past the stage's padding.
-   Stacking was the first fix and it was worse: one column over another is
-   taller than the platter, so it traded a clip at the side for a clip at the
-   chin. Dropping the floor keeps both columns on one row and lets them share
-   whatever there is. The tape gets cramped; it is a secondary readout and it
-   can be. */
-@container (max-width: 620px) {
-  .grip-ex {
-    gap: 12px;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  }
-}
-
-.grip-stage {
-  align-items: center;
-  background:
-    linear-gradient(var(--line) 2px, transparent 2px) 0 0 / 100% 34px,
-    linear-gradient(90deg, var(--line) 2px, transparent 2px) 0 0 / 34px 100%,
-    var(--bg);
-  border: 2px solid var(--line-strong);
-  border-radius: 14px;
-  display: flex;
-  justify-content: center;
-  min-height: 264px;
-  padding: 28px;
-}
-
-.grip-card {
-  align-items: stretch;
-  background: var(--bg-elev);
-  border: 2px solid var(--line-strong);
-  border-radius: 12px;
-  cursor: default;
-  display: flex;
-  max-width: 330px;
-  overflow: hidden;
-  transition: box-shadow 0.22s var(--ease);
-}
-
-.grip-card.is-lifted {
-  box-shadow: 0 18px 34px -18px
-    rgba(var(--shadow-rgb), calc(0.5 * var(--shadow-a)));
-}
-
-.grip-handle {
-  align-items: center;
-  background: var(--bg-well);
-  border: 0;
-  border-right: 2px solid var(--line-strong);
-  cursor: grab;
-  display: flex;
-  justify-content: center;
-  padding: 0 13px;
-  touch-action: none;
-}
-
-.grip-handle:active {
-  cursor: grabbing;
-}
-
-.grip-dots {
-  display: grid;
-  gap: 4px;
-  grid-template-columns: repeat(2, 4px);
-}
-
-.grip-dots i {
-  background: var(--ink-faint);
-  border-radius: 50%;
-  height: 4px;
-  width: 4px;
-}
-
-.grip-body {
-  padding: 15px 17px 17px;
-}
-
-.grip-kicker {
-  color: var(--copper-ink);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  margin: 0 0 7px;
-  text-transform: uppercase;
-}
-
-.grip-line {
-  font-size: 13px;
-  line-height: 1.55;
-  margin: 0;
-  user-select: text;
-}
-
-.grip-pin {
-  background: var(--ember);
-  border-radius: 999px;
-  color: #fff;
-  cursor: grab;
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  margin-top: 13px;
-  padding: 4px 12px;
-  text-transform: uppercase;
-  touch-action: none;
-}
-
-.grip-pin.is-open {
-  background: var(--iris);
-}
-
-.grip-side {
+.tp-ex {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: min(760px, 100%);
 }
 
-.grip-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.grip-hint {
-  color: var(--ink-dim);
-  font-size: 12px;
-  line-height: 1.5;
-  margin: 0;
-  min-height: 36px;
-}
-
-.grip-tape {
-  background: var(--bg-well);
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  list-style: none;
-  margin: 0;
-  min-height: 172px;
-  padding: 11px;
-}
-
-.grip-note {
+.tp-head {
   align-items: baseline;
   display: flex;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  gap: 8px;
-  line-height: 1.4;
+  gap: 10px;
 }
 
-.grip-at {
-  color: var(--ink-faint);
-  flex: none;
-  width: 46px;
-}
-
-.grip-note.is-press .grip-text {
-  color: var(--ember-hot);
-}
-
-.grip-note.is-drag .grip-text {
+.tp-tally {
   color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
-.grip-note.is-session .grip-text {
+.tp-tally.is-done {
   color: var(--copper-ink);
 }
 
-.grip-note.is-empty .grip-text,
-.grip-note.is-hover .grip-text {
+.tp-note {
+  color: var(--ink-faint);
+  flex: 1;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-board {
+  display: grid;
+  flex: 1;
+  gap: 12px;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  min-height: 0;
+}
+
+.tp-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+  scrollbar-width: thin;
+}
+
+.tp-empty {
+  color: var(--ink-faint);
+  font-size: 11px;
+  padding: 6px 2px;
+}
+
+/* The card: a grip column on the left, everything that keeps its own pointer on
+   the right, and a rule between them. `touch-action: none` so a phone does not
+   read the lift as a scroll. */
+.tp-card {
+  align-items: stretch;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  overflow: hidden;
+  position: relative;
+  touch-action: none;
+}
+
+.tp-card.is-open {
+  border-color: var(--line-strong);
+}
+
+/* Carried: over the tables, not under them. The rail and the tables are
+   siblings in a grid, so a card with no z-index of its own slides beneath the
+   thing it is being carried toward and vanishes at the moment the drop matters
+   most. The shadow is the rest of the sentence — it says the card has left the
+   list rather than merely moved along it. */
+.tp-card.tp-lift {
+  border-color: var(--line-strong);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.32);
+  cursor: grabbing;
+  z-index: 5;
+}
+
+/* and the rail itself has to stop clipping, or the card is cut off at its edge
+   the moment it leaves */
+.tp-rail:has(.tp-lift) {
+  overflow: visible;
+}
+
+/* The grip, and the rule down its right-hand side.
+   This is the only press on the card that means "carry me" rather than "use
+   me", and six dots pressed against a name do not say that. The line is doing
+   real work: it marks where the draggable part stops and the form starts, which
+   is precisely the boundary `dragListener=false` draws in the code. */
+.tp-grip {
+  align-items: center;
+  background: rgba(var(--ink-rgb), 0.04);
+  border: 0;
+  border-right: 1px solid var(--line);
+  cursor: grab;
+  display: grid;
+  padding: 0;
+  place-items: center;
+  width: 26px;
+}
+
+.tp-grip:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+}
+
+.tp-grip:active {
+  cursor: grabbing;
+}
+
+.tp-dots {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(2, 3px);
+}
+
+.tp-dots i {
+  background: var(--ink-faint);
+  border-radius: 50%;
+  height: 3px;
+  opacity: 0.75;
+  width: 3px;
+}
+
+.tp-grip:hover .tp-dots i {
+  opacity: 1;
+}
+
+.tp-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 8px;
+}
+
+.tp-who {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tp-who b {
+  flex: none;
+  font-size: 12.5px;
+}
+
+.tp-diet {
+  color: var(--copper-ink);
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The visible way in. A tap on the card opens it too, but a tap is something
+   you have to already know about. */
+.tp-edit {
+  background: rgba(var(--ink-rgb), 0.07);
+  border: 0;
+  border-radius: 5px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+}
+
+.tp-edit:hover {
+  color: var(--ink);
+}
+
+/* The half of the card that could not exist under `drag=true`: six checkboxes
+   and a field, all of them wanting the pointer the drag would have taken. */
+.tp-flap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tp-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Fixed size, at every stage width. These are checkboxes: a checkbox that grows
+   and shrinks with the column it happens to be in reads as a different control
+   each time, and the eye stops trusting the tick. */
+.tp-pill {
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 2px 8px;
+  transition:
+    background 140ms var(--ease),
+    border-color 140ms var(--ease),
+    color 140ms var(--ease);
+  white-space: nowrap;
+}
+
+.tp-pill:hover {
+  color: var(--ink);
+}
+
+.tp-pill.is-on {
+  background: rgba(230, 163, 90, 0.16);
+  border-color: rgba(230, 163, 90, 0.45);
+  color: var(--copper-ink);
+}
+
+.tp-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tp-field {
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink);
+  flex: 1;
+  font-size: 11px;
+  min-width: 120px;
+  padding: 3px 7px;
+}
+
+.tp-field:focus {
+  border-color: var(--line-strong);
+  outline: none;
+}
+
+.tp-phone {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  user-select: text;
+}
+
+.tp-tables {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* A table is a drop target, and it says which of the three it is: lit means
+   there is a chair going, dimmed means full, and marked means the plan is
+   finished and wrong. */
+.tp-table {
+  background: rgba(var(--ink-rgb), 0.03);
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 7px 9px;
+  transition:
+    background 160ms var(--ease),
+    border-color 160ms var(--ease);
+}
+
+.tp-table.is-open {
+  background: rgba(230, 163, 90, 0.1);
+  border-color: rgba(230, 163, 90, 0.55);
+}
+
+.tp-table.is-full {
+  opacity: 0.55;
+}
+
+.tp-table.is-wrong {
+  background: rgba(255, 59, 31, 0.08);
+  border-color: rgba(255, 59, 31, 0.45);
+  border-style: solid;
+}
+
+.tp-table-head {
+  color: var(--ink-dim);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  justify-content: space-between;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+
+.tp-table-head small {
   color: var(--ink-faint);
 }
 
-@media (max-width: 700px) {
-  .grip-ex {
+.tp-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  min-height: 22px;
+  padding: 0;
+}
+
+.tp-seat {
+  align-items: center;
+  background: var(--bg-elev);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 11.5px;
+  gap: 5px;
+  padding: 3px 5px 3px 10px;
+}
+
+.tp-out {
+  background: transparent;
+  border: 0;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.tp-out:hover {
+  color: var(--ember);
+}
+
+.tp-wrong {
+  color: var(--ember);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  margin: 5px 0 0;
+}
+
+/* Asked of the PLATTER by name. The board is two columns of one stage; a rule
+   about how much room the stage has must not be answered by how much room one
+   of its own columns has. */
+@container platter (max-width: 520px) {
+  .tp-board {
     grid-template-columns: minmax(0, 1fr);
   }
 }
