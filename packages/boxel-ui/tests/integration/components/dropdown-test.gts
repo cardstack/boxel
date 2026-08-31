@@ -100,10 +100,10 @@ module('Integration | Component | dropdown', function (hooks) {
       <template>
         <BoxelDropdown @initiallyOpened={{true}}>
           <:trigger as |dd|>
-            <button data-test-dropdown-trigger {{dd}}>Open</button>
+            <button {{dd}} data-test-dropdown-trigger>Open</button>
           </:trigger>
           <:content as |dd|>
-            <button data-test-dropdown-close {{on 'click' dd.close}}>
+            <button {{on 'click' dd.close}} data-test-dropdown-close>
               Close
             </button>
           </:content>
@@ -137,10 +137,10 @@ module('Integration | Component | dropdown', function (hooks) {
         <div style='height: 8rem; overflow-y: auto' data-test-scroller>
           <BoxelDropdown @initiallyOpened={{true}}>
             <:trigger as |dd|>
-              <button data-test-dropdown-trigger {{dd}}>Open</button>
+              <button {{dd}} data-test-dropdown-trigger>Open</button>
             </:trigger>
             <:content as |dd|>
-              <button data-test-dropdown-close {{on 'click' dd.close}}>
+              <button {{on 'click' dd.close}} data-test-dropdown-close>
                 Close
               </button>
             </:content>
@@ -189,11 +189,11 @@ module('Integration | Component | dropdown', function (hooks) {
         <BoxelDropdown @registerAPI={{registerAPI}}>
           <:trigger as |dd|>
             {{#if state.mounted}}
-              <button data-test-dropdown-trigger {{dd}}>Open</button>
+              <button {{dd}} data-test-dropdown-trigger>Open</button>
             {{/if}}
           </:trigger>
           <:content as |dd|>
-            <button data-test-dropdown-close {{on 'click' dd.close}}>
+            <button {{on 'click' dd.close}} data-test-dropdown-close>
               Close
             </button>
           </:content>

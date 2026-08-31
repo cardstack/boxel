@@ -18,6 +18,7 @@ type DropdownTriggerNamedArgs = {
   dropdown: Dropdown;
   eventType?: 'click' | 'mousedown';
   id: string;
+  onTriggerElement?: (element: DropdownTriggerElement | null) => void;
   stopPropagation?: boolean;
 };
 
@@ -174,19 +175,25 @@ class BoxelDropdown extends Component<Signature> {
     dropdown.actions.close(undefined, true);
   }
 
+  // the trigger modifier hands its element over, so the return-focus target
+  // needs no lookup — and a lookup would be wrong anyway with the same
+  // dropdown rendered in more than one stack
+  private triggerElement: DropdownTriggerElement | null = null;
+
+  @action setTriggerElement(element: DropdownTriggerElement | null) {
+    this.triggerElement = element;
+  }
+
   // The trap's default return target is whatever had focus when it activated,
   // which is the trigger only when the user clicked it to open — an
   // @initiallyOpened or registerAPI-driven open activates with focus on
   // <body>. Name the trigger explicitly, falling back to the default because
   // focus-trap throws when an option resolves to nothing and some triggers
   // (the operator-mode overlay's) unmount while open.
-  private triggerReturnFocus = (dropdown: Dropdown) => {
+  private triggerReturnFocus = () => {
     return (
       previouslyFocused: HTMLElement | SVGElement,
-    ): HTMLElement | SVGElement =>
-      document.querySelector<HTMLElement>(
-        `[aria-controls='ember-basic-dropdown-content-${dropdown.uniqueId}']`,
-      ) ?? previouslyFocused;
+    ): HTMLElement | SVGElement => this.triggerElement ?? previouslyFocused;
   };
 
   <template>
@@ -209,6 +216,7 @@ class BoxelDropdown extends Component<Signature> {
           dropdown=dd
           id=this.dropdownId
           eventType='click'
+          onTriggerElement=this.setTriggerElement
           stopPropagation=false
         )
         as |ddModifier|
@@ -231,7 +239,7 @@ class BoxelDropdown extends Component<Signature> {
               "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
             )
             onDeactivate=(fn this.closeSkippingFocus dd)
-            setReturnFocus=(this.triggerReturnFocus dd)
+            setReturnFocus=(this.triggerReturnFocus)
             allowOutsideClick=true
             fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
             preventScroll=true
@@ -349,6 +357,7 @@ class BoxelDropdown extends Component<Signature> {
       dropdown,
       id,
       eventType: desiredEventType,
+      onTriggerElement,
       stopPropagation,
     } = named;
 
@@ -417,7 +426,10 @@ class BoxelDropdown extends Component<Signature> {
     );
     updateAria();
 
+    onTriggerElement?.(element);
+
     return function cleanup() {
+      onTriggerElement?.(null);
       element.removeEventListener(
         'click',
         handleMouseEvent as EventListenerOrEventListenerObject,
