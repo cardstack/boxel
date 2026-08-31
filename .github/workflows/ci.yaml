@@ -480,6 +480,13 @@ jobs:
         if: matrix.shardIndex == 1
         run: pnpm test:oidc-mapping-provider
         working-directory: packages/matrix
+      - name: Run shard-assignment unit tests
+        # Guards the property the split below rests on: the shards partition
+        # the spec files, so every spec runs on exactly one of them. Needs
+        # nothing running, so once on shard 1 is enough.
+        if: matrix.shardIndex == 1
+        run: pnpm test:shard-assignment
+        working-directory: packages/matrix
       - name: Start test services (icons + host dist + base realm)
         run: |
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
@@ -645,6 +652,98 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/$REPOSITORY/statuses/$HEAD_SHA \
             -d '{"context":"Matrix Playwright tests report","description":"'"$description"'","target_url":"'"$PLAYWRIGHT_REPORT_URL"'","state":"'"$state"'"}'
+
+  matrix-shard-timings-update:
+    name: Update Matrix Shard Timings
+    # Intentionally scoped to push-to-main only, so it only runs where the
+    # workflow file cannot be modified by an untrusted branch — this is the
+    # one job in this workflow holding `contents: write`.
+    #
+    # Maintains packages/matrix/tests/spec-timings.json, the per-spec-file
+    # durations that decide which shard each spec file runs on (see
+    # packages/matrix/support/shard-spec-files.ts). Refreshed whenever the
+    # shards finish, success OR failure: spec files missing from a failed
+    # shard's report keep their committed values, and skipping every red run
+    # would leave the timings to rot on a flaky week.
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && (needs.matrix-client-test.result == 'success' || needs.matrix-client-test.result == 'failure') }}
+    needs: [matrix-client-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: matrix-shard-timings-update-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need history past the triggering SHA so the staleness check below
+          # can inspect commits between the workflow's SHA and origin/main.
+          fetch-depth: 0
+      - uses: ./.github/actions/init
+
+      - name: Download blob reports from GitHub Actions Artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      # The JSON reporter is the only merged form that carries per-test
+      # durations; the HTML report the sibling job publishes does not.
+      - name: Merge blob reports into a JSON report
+        run: pnpm exec playwright merge-reports --reporter json ../../all-blob-reports > /tmp/matrix-report.json
+        working-directory: packages/matrix
+
+      - name: Update shard timings
+        # Retry from the latest main: another PR may merge while this workflow
+        # is running, causing `git push` to be rejected. Each retry fetches and
+        # hard-resets to the freshest tip-of-main, then regenerates against it.
+        #
+        # Staleness guard: if a commit other than an automated measurement
+        # update landed on main since this workflow was triggered, skip — that
+        # newer push triggered its own run, which will publish timings derived
+        # from its own code.
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          WORKFLOW_SHA="${{ github.sha }}"
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+
+            if [ "$(git rev-parse origin/main)" != "$WORKFLOW_SHA" ] && \
+               git log --format="%s" "$WORKFLOW_SHA..origin/main" \
+                 | grep -qvE "Update (host test (memory )?baselines?|matrix shard timings)"; then
+              echo "main has advanced past $WORKFLOW_SHA — skipping (a newer CI run will publish the timings)."
+              exit 0
+            fi
+
+            git reset --hard origin/main
+
+            # Gated on drift: the file is only rewritten when regenerating it
+            # improves the predicted slowest-shard time by over a minute, so
+            # run-to-run jitter doesn't produce a commit per main push. The
+            # shard count must match `shardTotal` on matrix-client-test above.
+            node packages/matrix/scripts/generate-spec-timings.ts /tmp/matrix-report.json \
+              --min-drift-seconds 60 --shard-count 3
+
+            if git diff --quiet packages/matrix/tests/spec-timings.json; then
+              echo "Shard timings unchanged — nothing to commit."
+              exit 0
+            fi
+            git add packages/matrix/tests/spec-timings.json
+            git commit -m "Update matrix shard timings [skip ci]"
+
+            if git push; then
+              exit 0
+            fi
+            echo "Push rejected on attempt $attempt — retrying after $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "Failed to push shard timings after 5 attempts"
+          exit 1
 
   realm-server-test:
     name: Realm Server Tests
