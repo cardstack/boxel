@@ -77,6 +77,39 @@ module(basename(import.meta.filename), function () {
     );
   });
 
+  test('a request that arrives while the follow-up listing is running queues another one', async function (assert) {
+    let resolvers: Array<() => void> = [];
+    let refresher = new DirectoryViewRefresher(
+      (_dir) =>
+        new Promise<void>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    let started = () => resolvers.length;
+    let untilStarted = async (n: number) => {
+      while (started() < n) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    };
+
+    let first = refresher.refresh('a.json'); // starts listing 1
+    let second = refresher.refresh('b.json'); // queues listing 2
+    assert.strictEqual(started(), 1, 'only listing 1 has started');
+
+    resolvers[0]();
+    await untilStarted(2); // listing 2 is now running
+
+    // This request arrives while listing 2 runs; listing 2 started before the
+    // write behind this request, so it must get listing 3, not share 2.
+    let third = refresher.refresh('c.json');
+    resolvers[1]();
+    await untilStarted(3);
+    resolvers[2]();
+
+    await Promise.all([first, second, third]);
+    assert.strictEqual(started(), 3, 'the late request got its own listing');
+  });
+
   test('a failed listing rejects that refresh and does not poison later ones', async function (assert) {
     let attempt = 0;
     let refresher = new DirectoryViewRefresher(async () => {

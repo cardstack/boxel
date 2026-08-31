@@ -17,16 +17,20 @@ import type { LocalPath } from './paths.ts';
 //
 // Notifications arrive one per written path, so a batch write into one
 // directory would list that directory once per file. Listings are coalesced
-// per directory: while one is in flight, later requests share it, and at most
-// one follow-up listing is queued behind it (a request that arrives after a
-// listing started cannot know whether that listing already saw its write).
-interface InFlightListing {
-  current: Promise<void>;
-  queued?: Promise<void>;
+// per directory: while one is running, later requests wait for one pending
+// follow-up listing instead of starting their own (a request that arrives
+// after a listing started cannot know whether that listing already saw its
+// write, so it needs one that starts later). When the pending listing starts
+// it becomes the running one, so a request arriving during it can queue a
+// fresh follow-up in turn.
+interface DirectoryListing {
+  running: Promise<void>;
+  // Requested but not yet started; becomes `running` when it starts.
+  pending?: Promise<void>;
 }
 
 export class DirectoryViewRefresher {
-  #listings = new Map<LocalPath, InFlightListing>();
+  #listings = new Map<LocalPath, DirectoryListing>();
 
   #listDirectory: (directory: LocalPath) => Promise<void>;
 
@@ -41,37 +45,37 @@ export class DirectoryViewRefresher {
   }
 
   #list(directory: LocalPath): Promise<void> {
-    let entry = this.#listings.get(directory);
-    if (!entry) {
-      let current = this.#listDirectory(directory);
-      let created: InFlightListing = { current };
-      this.#listings.set(directory, created);
-      let cleanup = () => {
-        if (this.#listings.get(directory) === created && !created.queued) {
-          this.#listings.delete(directory);
-        }
-      };
-      current.then(cleanup, cleanup);
-      return current;
+    let listing = this.#listings.get(directory);
+    if (!listing) {
+      return this.#startListing(directory);
     }
-    if (entry.queued) {
-      return entry.queued;
+    if (!listing.pending) {
+      listing.pending = listing.running
+        .then(
+          () => undefined,
+          () => undefined,
+        )
+        .then(() => this.#startListing(directory));
     }
-    let settled = entry;
-    let queued = entry.current
-      .then(
-        () => undefined,
-        () => undefined,
-      )
-      .then(() => this.#listDirectory(directory));
-    settled.queued = queued;
+    // The pending listing has not started yet, so it is guaranteed to observe
+    // the write behind this request.
+    return listing.pending;
+  }
+
+  #startListing(directory: LocalPath): Promise<void> {
+    let running = this.#listDirectory(directory);
+    let listing: DirectoryListing = { running };
+    // Replaces any predecessor (whose `pending` was this very listing), so a
+    // request arriving from here on queues behind this listing instead of
+    // sharing it.
+    this.#listings.set(directory, listing);
     let cleanup = () => {
-      if (this.#listings.get(directory) === settled) {
+      if (this.#listings.get(directory) === listing && !listing.pending) {
         this.#listings.delete(directory);
       }
     };
-    queued.then(cleanup, cleanup);
-    return queued;
+    running.then(cleanup, cleanup);
+    return running;
   }
 }
 
