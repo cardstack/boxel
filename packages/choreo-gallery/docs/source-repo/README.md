@@ -235,19 +235,21 @@ crossing.active(); // tracked — render the timeline only while true
 
 These are not hypotheticals — each row is a shipped pattern, from the gallery or from the product-workspace port that drove the vocabulary:
 
-| The scene                                                | The score                                                                                                         |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Card ⇄ page navigation (gallery ⇄ demo, tile ⇄ document) | `<Choreo @route>` + `c.Crossing` — real elements, no snapshots, live content never freezes                        |
-| Master–detail: a row grows into a panel                  | `c.Move @from={{c.beacon row}}` `@size='scale'` — the real panel flies, the solver's re-layout is simply measured |
-| Drag-to-shelve: release point → slot                     | counterpart pairing — the painted box at release _is_ the start                                                   |
-| A card transmutes into its schema node                   | beacon flight out of a closing sheet, still measurable mid-exit                                                   |
-| Slide decks with builds                                  | `c.Gate` / `@delay` / `advance()` / `retreat()` — the Keynote rules                                               |
-| Annotations wired to their anchors                       | standing `c.Tether`s, redrawn through every reflow and every flight                                               |
-| "Jump to it and flash it"                                | `c.Scroll` + `c.Hold` — one clock instead of a scroll racing a classList write racing a timer                     |
-| A badge riding a flying card; a shadow reading lift      | `c.Follow` — right on the frames a tween would have had to predict                                                |
-| Timed highlight/z states (`justDropped`, pulse flags)    | `c.Hold` windows — the timer-and-flag genre, retired                                                              |
-| Scrubbing, replays, video export                         | `run.time` + gates + `choreo-player`                                                                              |
-| A live UI inside a device, on camera                     | `c.Camera3D` — the DOM is a plane in the scene; the shot seeks like any other score                               |
+| The scene                                                | The score                                                                                                             |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Card ⇄ page navigation (gallery ⇄ demo, tile ⇄ document) | `<Choreo @route>` + `c.Crossing` — real elements, no snapshots, live content never freezes                            |
+| Master–detail: a row grows into a panel                  | `c.Move @from={{c.beacon row}}` `@size='scale'` — the real panel flies, the solver's re-layout is simply measured     |
+| Drag-to-shelve: release point → slot                     | counterpart pairing — the painted box at release _is_ the start                                                       |
+| A card transmutes into its schema node                   | beacon flight out of a closing sheet, still measurable mid-exit                                                       |
+| Slide decks with builds                                  | `c.Gate` / `@delay` / `advance()` / `retreat()` — the Keynote rules                                                   |
+| Annotations wired to their anchors                       | standing `c.Tether`s, redrawn through every reflow and every flight                                                   |
+| "Jump to it and flash it"                                | `c.Scroll` + `c.Hold` — one clock instead of a scroll racing a classList write racing a timer                         |
+| A badge riding a flying card; a shadow reading lift      | `c.Follow` — right on the frames a tween would have had to predict                                                    |
+| Timed highlight/z states (`justDropped`, pulse flags)    | `c.Hold` windows — the timer-and-flag genre, retired                                                                  |
+| Scrubbing, replays, video export                         | `run.time` + gates + `choreo-player`                                                                                  |
+| A live UI inside a device, on camera                     | `c.Camera3D` — the DOM is a plane in the scene; the shot seeks like any other score                                   |
+| A leaderboard that reorders when a result lands          | `c.inserted` / `c.moved` / `c.removed` over ONE tracked write — no row is told where to go                            |
+| A simulation running beside a score                      | the loop owns the physics and the chase camera; the region owns the scene change. Knowing which is which is the skill |
 
 ## Interruption, tested
 
@@ -507,7 +509,7 @@ Only the last two lines know about Ember. Re-hosting means re-doing the modifier
 
 ## Examples
 
-`test-app` serves a gallery of **38 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **3D**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
+`test-app` serves a gallery of **42 stages** at `/` — filter by **Animate**, **Layout**, **Drag**, **Scroll**, **Choreo**, **3D**, **Timeline**, or **Deep Dive**, and open any one for its annotated source. Most stages carry a speed control (**Full · ÷2 · ÷5 · ÷10**); a transition you cannot see is a transition you cannot judge, and the divisor scales the transition on its way to the engine rather than slowing a running animation, so what you watch at ÷10 is the same motion, born slower. The gallery ⇄ demo navigation is itself the crossing, eating its own cooking on every click.
 
 Every demo is also a test fixture: the interruption soak hammers them, which is why they are the first place a regression shows up.
 

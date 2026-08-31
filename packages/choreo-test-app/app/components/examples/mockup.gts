@@ -20,6 +20,7 @@ import { NotesApp } from 'test-app/components/mockup/notes';
 import { PhotosApp } from 'test-app/components/mockup/photos';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
+import { onStage } from 'test-app/lib/onstage';
 import type * as THREE from 'three';
 
 /**
@@ -448,6 +449,29 @@ export class Mockup extends Component {
    * stylesheet keys off belongs to the template.
    */
   @tracked drawn = false;
+
+  /**
+   * Scrolled out of sight: drop to 2D and stop the cameras.
+   *
+   * This stage is one of the two most expensive things in the gallery — a WebGL
+   * context, a model, a render loop and two choreography regions — and the
+   * gallery keeps forty-two demos mounted at once. Off screen it should cost
+   * nothing, and 2D is genuinely nothing: `setMode('2d')` halts the render loop
+   * and the whole 3D path stops being rendered.
+   *
+   * It does NOT come back on its own. Pressing 3D is a choice someone made, and
+   * a stage that re-boots a WebGL context every time it crosses the fold is
+   * worse than one that waits to be asked again — the still is what this looks
+   * like unasked, and that is the state it returns to.
+   */
+  offstage = (visible: boolean) => {
+    if (visible) {
+      return;
+    }
+    this.cameraOn = false;
+    this.region?.run?.pause();
+    this.setMode('2d');
+  };
 
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
@@ -1862,7 +1886,7 @@ export class Mockup extends Component {
   });
 
   <template>
-    <div class="mg-page" data-mode={{this.mode}}>
+    <div class="mg-page" data-mode={{this.mode}} {{onStage this.offstage}}>
       <Choreo
         class="mg-stage"
         data-mode={{this.mode}}

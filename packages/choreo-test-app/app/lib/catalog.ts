@@ -1134,24 +1134,43 @@ const tile = {
     apis: ['c.Scroll', '@align', 'c.Raise', 'c.Hold @fill', '@debug'],
     group: 'Choreo',
     id: 'jump',
-    lede: 'Jump to it and flash it — without a scroll racing a timer.',
-    sample: `// The genre this replaces is a scrollIntoView racing a classList write
-// racing a setTimeout. Here it is three steps on one clock, and a wheel
-// mid-jump simply takes the scroll back.
-<c.Sequence>
+    lede: 'Nine tests are red in a run of sixty. Find each one without losing your place.',
+    sample: `// A jump is only information when you did not already know where you were
+// going. This stage used to hand you four buttons reading "take 11" over a
+// list of numbered rows — you named the row, and the scroll then told you
+// where the row you had just named was. Nothing was learned.
+//
+// A failing test is the case where you genuinely do not know: not where it
+// is, not how far apart they are, not whether they cluster. Each of the
+// three steps then has a job that survives being frozen.
+<c.Sequence @name={{concat 'ask-' this.pass}}>
+  {{! how far down the run it is, and whether it sits with the others.
+      Teleport instead and you get the row with none of the geography.
+      It yields to the wheel, which here is a requirement and not a
+      nicety: you are already scrolling to read an assertion. }}
+  <c.Scroll @of={{c.id this.target}} @align={{this.align}} @duration={{0.5}} />
+
   <c.Parallel>
-    <c.Scroll @of={{c.id this.target}} @align='center' @duration={{0.5}} />
-    {{! above every stacking context AND outside the list's clip —
-        the part z-index cannot buy }}
-    <c.Raise @of={{c.id this.target}} @shadow={{true}} @duration={{1.2}} />
+    {{! the only way the row can be above the sticky header AND outside
+        the pane's overflow clip at once — z-index cannot buy that, since
+        a stacking context does not escape an ancestor's clip. Raising
+        DURING the scroll would pin it where the lift began. }}
+    <c.Raise @of={{c.id this.target}} @shadow={{true}} @duration={{0.9}} />
+
+    {{! @fill is a flash versus a record. Keeping the marks is how you
+        find your place after scrolling off to read a stack trace — and
+        the fill bridges the flight to the render that commits the row's
+        own class, so it does not blink between the two. }}
+    <c.Hold @of={{c.id this.target}} @backgroundColor='var(--ember)'
+      @duration={{0.7}} @fill={{this.keep}} />
   </c.Parallel>
-  {{! @fill is the difference between a flash and a selection:
-      released with the window, or kept after it }}
-  <c.Hold @of={{c.id this.target}} @backgroundColor='var(--ember)'
-    @duration={{0.7}} @fill={{this.keep}} />
-</c.Sequence>`,
+</c.Sequence>
+
+// The ask number is in @name because a region declines a pass whose tree
+// fingerprints identical to the one standing — and pressing "next failure"
+// twice on the same row is a thing people do.`,
     slowmo: true,
-    title: 'Jump',
+    title: 'Triage',
   },
   {
     Example: Keyframes,

@@ -14,6 +14,7 @@ import { Board } from 'test-app/components/long-take/board';
 import { BOARD, GLIDE, SHOTS } from 'test-app/components/long-take/shots';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
+import { onStage } from 'test-app/lib/onstage';
 import type * as THREE from 'three';
 
 /**
@@ -100,6 +101,13 @@ const SCREEN = { h: BOARD.h, w: BOARD.w };
  */
 const REF = { h: 838, w: 1178 };
 
+/**
+ * How far the two cameras may come apart before one is seeked to the other,
+ * in seconds. About a frame: tighter and it seeks on every tick for no visible
+ * gain, looser and the error is one you can see.
+ */
+const SYNC_SLOP = 1 / 30;
+
 const FROZEN = {
   cam:
     'translateZ(1289.55px) matrix3d(1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, ' +
@@ -152,6 +160,29 @@ export class LongTake extends Component {
   private halt?: () => void;
 
   isMode = (mode: '2d' | '3d') => this.mode === mode;
+
+  /**
+   * Scrolled out of sight: drop to 2D and stop the cameras.
+   *
+   * This stage is one of the two most expensive things in the gallery — a WebGL
+   * context, a model, a render loop and two choreography regions — and the
+   * gallery keeps forty-two demos mounted at once. Off screen it should cost
+   * nothing, and 2D is genuinely nothing: `setMode('2d')` halts the render loop
+   * and the whole 3D path stops being rendered.
+   *
+   * It does NOT come back on its own. Pressing 3D is a choice someone made, and
+   * a stage that re-boots a WebGL context every time it crosses the fold is
+   * worse than one that waits to be asked again — the still is what this looks
+   * like unasked, and that is the state it returns to.
+   */
+  offstage = (visible: boolean) => {
+    if (visible) {
+      return;
+    }
+    this.cameraOn = false;
+    this.region?.run?.pause();
+    this.setMode('2d');
+  };
 
   setMode = (mode: '2d' | '3d') => {
     if (mode === this.mode || this.arming) {
@@ -295,6 +326,57 @@ export class LongTake extends Component {
     this.ended = false;
     this.take += 1;
   };
+
+  /**
+   * The board's run, handed up by the Board so this stage can drive it.
+   * Not tracked: it is read inside a frame loop and never rendered from.
+   */
+  private boardRun: ChoreoRun | null = null;
+
+  takeBoardRun = (run: ChoreoRun | null) => {
+    this.boardRun = run;
+  };
+
+  /**
+   * ONE CLOCK, TWO SCORES.
+   *
+   * The two cameras are given identical durations — each `c.Camera3D` out here
+   * lasts exactly the `move + hold` of the shot the board's own camera is
+   * running — and for a while that was taken to be enough: "neither region owns
+   * it, which is the only reason they cannot drift". It is not enough. Equal
+   * durations only means equal LENGTHS; the two regions still compile on
+   * different passes, start on different frames, and run on separate clocks,
+   * and a few milliseconds at the top of a thirty-second film is a few
+   * milliseconds all the way down it. On a stage with no interactivity at all —
+   * nothing on this drawing can be clicked, dragged or changed — every frame is
+   * determined by the script, so any divergence between the two is error and
+   * nothing else.
+   *
+   * So the outer run is the clock and the board's is seeked to it. The tolerance
+   * is about a frame: correcting a drift smaller than that would seek on every
+   * tick for no visible gain, and correcting nothing lets it accumulate.
+   *
+   * This is only sound because camera cues are seekable by construction —
+   * absolute shots are computed from measured geometry and relative ones are
+   * reconstructed against the pose in force. A score with a changeset in it
+   * could not be driven this way, and this one deliberately has none.
+   */
+  sync = modifier(() => {
+    let raf = 0;
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const outer = this.region?.run;
+      const board = this.boardRun;
+      if (!outer || !board) {
+        return;
+      }
+      if (Math.abs(board.time - outer.time) > SYNC_SLOP) {
+        board.time = outer.time;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  });
 
   /** hold the region so the film can loop when its score finishes */
   wire = modifier((_el: HTMLElement, [c]: [ChoreoContext, number]) => {
@@ -1152,7 +1234,7 @@ export class LongTake extends Component {
   });
 
   <template>
-    <div class="lt-page" data-mode={{this.mode}}>
+    <div class="lt-page" data-mode={{this.mode}} {{onStage this.offstage}}>
       <Choreo
         class="lt-stage"
         data-ready={{if this.drawn "yes" ""}}
@@ -1194,7 +1276,11 @@ export class LongTake extends Component {
                     own frame, its own score — and the outer stage tells
                     it only two things: whether to play, and which take
                     this is. }}
-                  <Board @playing={{this.playing}} @take={{this.take}} />
+                  <Board
+                    @playing={{this.playing}}
+                    @take={{this.take}}
+                    @onRun={{this.takeBoardRun}}
+                  />
                 </div>
               </div>
             </div>
@@ -1217,6 +1303,7 @@ export class LongTake extends Component {
             aria-hidden="true"
             {{motion id="clock"}}
             {{this.wire c this.take}}
+            {{this.sync}}
           >{{this.take}}</div>
 
           <c.Sequence>
@@ -1326,6 +1413,36 @@ export class LongTake extends Component {
               #3f444e 100%
             ),
             #5b626e;
+        }
+        /* ...but only in 3D, where the slate is the SET the laptop was shot
+           on and the whole point is a photographic ground. Flat, there is no
+           set, and a dark slab in a light document reads as a hole cut in the
+           page.
+
+           KNOWN LIMIT: this is currently invisible. The flat state is a
+           photograph of a laptop on a dark set, stretched edge to edge, so it
+           covers this ground entirely. Masking the plate's surround to let the
+           page through was tried and looks like a smudge — the set is most of
+           the frame, not a border. A genuinely light flat state needs a second
+           plate shot on a light set; this rule is left here so that the day one
+           exists, the stage is already correct.
+
+           And no backticks in here. A .gts template is compiled by wrapping
+           its contents in a template LITERAL, so one backtick anywhere inside
+           closes the literal early and the file dies with "Parsing error:
+           Invalid count value: -1" — which names neither the line nor the
+           cause. It is the same unhelpful message the multi-line class
+           attribute and the angle bracket in a handlebars comment produce; see
+           dial-panel.gts for those two. */
+        :root[data-theme="light"] .lt-page[data-mode="2d"] .lt-stage {
+          background:
+            radial-gradient(
+              120% 90% at 50% 8%,
+              #f7f3ec 0%,
+              #efe9df 46%,
+              #e4dccf 100%
+            ),
+            #efe9df;
         }
         /* THE CANVAS SITS ABOVE THE DOM, and that is what makes the
            laptop's own body occlude the drawing.

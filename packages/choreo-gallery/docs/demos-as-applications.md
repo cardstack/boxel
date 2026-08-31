@@ -2,8 +2,8 @@
 
 **Status:** a plan, not a build. Nothing below exists yet.
 
-The gallery has 41 stages and every one of them is named after the thing it
-teaches. `Camera`, `Crossing`, `Release`, `Jump`. A stranger opening `Jump`
+The gallery has 42 stages and every one of them is named after the thing it
+teaches. `Camera`, `Crossing`, `Jump`. A stranger opening `Jump`
 sees a list, four buttons, and no reason to press any of them. They press one,
 something scrolls, and they leave — having watched a feature rather than used
 one.
@@ -81,7 +81,10 @@ tiles home.
 - `c.still` — every square nobody played dims for the length of the flight.
 - The second click: you are already reaching for the next tile.
 
-Absorbs and retires the `Release` stage.
+**Superseded.** `Release` was deleted rather than absorbed — it duplicated
+`Hang`, which was built later and makes the same argument about a throw's
+velocity with a game attached. Bingo would still be worth building; it no longer
+has a stage to retire.
 
 ### Cone — a kiln firing, scheduled and watched
 
@@ -141,6 +144,24 @@ seconds, then scroll and find out why it was hard.**
 Nor does the naming rule apply to the API chips on each stage — those stay
 literal (`c.gesture`, `@fill`), because once someone wants to know how, they
 want the real names immediately.
+
+## What has happened since
+
+`Drift` was built (see `drift.md`), and it is the first stage that passes all
+five of these tests. It also adds a sixth that this doc did not have:
+
+6. **Does anything about it change when the person changes something?** A demo
+   with a control panel over it is only worth the panel if moving a number
+   changes what the demo IS. Drift's panel changes what it is like to be
+   driving; every other control panel in the gallery moves a box around, and you
+   take its word for it that the number mattered.
+
+`Release` was deleted, being duplicative of `Hang`. `Grip` and `Jump` still fail
+these tests as written, and there is a worked revision for both in the session
+that built Drift: `Grip` fails "the receipt" hardest — `dragSnapToOrigin` means
+the drag has no consequence, so freezing every frame loses nothing — and wants a
+scenario where the card's body genuinely needs the pointer for something else.
+`Jump` is the cheaper of the two and survives as an in-place revision.
 
 ## The order to do it in
 

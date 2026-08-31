@@ -148,7 +148,7 @@ the car is fun before any of the tuning surface exists.
 
 ## What the build changed
 
-Four corrections, kept because each one was an argument this note made
+Six corrections, kept because each one was an argument this note made
 confidently and got wrong.
 
 **`c.Tether` is not a camera.** This note proposed the chase camera as
@@ -169,25 +169,85 @@ turned out to be the most useful thing the stage teaches.
 emits `type: 'transition'` for a `SpringConfig` (store `index.js:552`), whose
 value is the whole spring object plus a companion `path.__mode` switching
 between an easing curve, a two-number "simple" form and a five-number
-"advanced" one. Drawing it means drawing three modes and a mode switch. Folders
-of ordinary sliders get the same nesting for none of that.
+"advanced" one. Folders of ordinary sliders get the same nesting for none of
+that. See `docs/dialkit.md` for the full account of the second pass.
 
 **The skid marks are a canvas.** The note wanted them as `c.inserted` /
-`c.removed` over a list nobody clicked to build. A mark is laid every thirteen
-world pixels of slide, which at speed is twenty a second — and a changeset
-twenty times a second is a render loop wearing a changeset's clothes. Choreo's
+`c.removed` over a list nobody clicked to build. A mark is laid every few world
+pixels of slide, which at speed is twenty a second — and a changeset twenty
+times a second is a render loop wearing a changeset's clothes. Choreo's
 business here is the lap board: one tracked write per lap, an entry inserted,
 the rows under it moved because it pushed them, and the slowest lap gone.
 
-## And one thing the note did not anticipate
+**The four personalities are not four spring pairs.** The table above gives
+each character a `stiffness / damping`, as though the springs were what
+distinguishes them. They are not, or not mostly. What decides whether a car
+drifts is a pair in the GRIP model, and the two pull in opposite directions:
+`release` is the slip fraction at which the tyres let go — LOW breaks traction
+easily — and `bite` is how hard the sideways component is bled off while they
+still have hold — HIGH catches the car once it comes back under the threshold.
+Low release with high bite is the drift-car recipe: it steps out at the smallest
+provocation and hooks up hard the moment the angle comes off. The first cut had
+it backwards and produced a car that would not slide and, when it finally did,
+would not stop.
 
-The demo needs a driver. Tuning a car you are also driving is not a
+**The springs still matter, for a reason the table does not give.** They are
+what lets a car hold POWER. Drifty went from lapping cleanly to managing one lap
+in ninety seconds when its engine went up by 15%, and the fix was damping 12 →
+20 on both springs rather than any change to grip. More engine needs more
+damping; dropping the power back would have been the easy answer and the wrong
+one, since a drift car with no power cannot get the tail out in the first place.
+
+## The thing the note did not anticipate at all
+
+**The demo needs a driver.** Tuning a car you are also driving is not a
 measurement: a worse car and a better driver arrive together, you adapt inside
 one lap, and you conclude the slider did nothing. `autopilot` in `lib/drift.ts`
-is a path-following controller with a swept set of gains, and the button that
-hands it the wheel is the stage's most useful control. Its gains are ranked on
-the WORST character's lap count and then on speed carried and time spent
-sideways — ranking on total laps picks a driver that is brilliant in a planted
-car and cannot hold a loose one, and ranking on laps alone picks one that
-brakes to a crawl at every corner and never slides, which for this stage is the
-same as failing.
+hands the wheel to something that never adapts, and it is the stage's most
+useful control.
+
+Getting it to drive well took four structural fixes, and the order they arrived
+in is the useful part:
+
+1. **Brake on signed forward speed, not on `speedOf`.** Braking was negative
+   throttle, which pushes the forward component through zero — and a car
+   reversing at 300 has a `speedOf` of 300, so the controller saw a car still
+   too fast and braked harder. It accelerated backwards at full lock for ninety
+   seconds. The brake is now its own pedal and cannot do that.
+2. **Catch the slide before aiming at the gate.** Past a drift angle the car is
+   spinning, and a controller that keeps aiming asks for lock in the direction
+   it is already rotating. Blended, not switched — a hard threshold makes the
+   bot twitch on the boundary.
+3. **Let the model say when the car is stuck.** `car.pinned` is set where the
+   wall clamps the position, because the geometry is already in hand there. The
+   autopilot had been inferring it from a heading-error threshold and missing
+   every car wedged at an angle rather than square on.
+4. **Give it a racing line.** This was the big one. Aiming at the next gate is
+   not a line — it is a sequence of points, some of them behind the car — and
+   every symptom of the bot driving badly came from not having one. It follows a
+   spline through the gates now, pure-pursued with a speed-scaled lookahead, and
+   brakes on the line's curvature against the model's own turn rate rather than
+   on a hand-rolled guess at how square the corner is.
+
+Its gains were swept rather than chosen, and the ranking took three attempts:
+on total laps it picks a driver that is brilliant in a planted car and cannot
+hold a loose one; on laps alone it picks one that brakes to a crawl and never
+slides, which on this stage is the same as failing. Ranked on the worst
+character's lap count first, then on speed carried and time spent sideways, it
+gets every character round without touching a wall.
+
+## What is worth stealing from this
+
+- **`car.walled` exists to be counted.** "Does this tune put the car in the
+  barriers" is the cheapest useful proxy for "is this drivable", and it is not
+  something a lap time can tell you — a car can reach a good lap time by
+  bouncing off things.
+- **A boolean cannot report a difference of degree.** The claim that looseness
+  makes the car slide more was measured as the fraction of the lap over the
+  traction threshold, and it saturated the moment the defaults got loose enough
+  to be worth shipping: 74% against 71%, while the two cars plainly looked
+  nothing alike. Mean drift angle says it properly.
+- **Measure a property of the car with a fixed input.** The same claim measured
+  through the autopilot came out backwards, because the bot catches slides and
+  therefore saves a looser car sooner. Both numbers were true; neither was about
+  the car.

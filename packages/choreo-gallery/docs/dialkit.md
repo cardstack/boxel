@@ -197,7 +197,90 @@ taking the rest of that frame's queue with it. The visible symptom is not an
 error near the mistake: it is `onDragStart` firing, `onDrag` never firing, and
 a control that will not move. Hold the element; do not re-derive it.
 
-## The recommendation
+## What Drift needed on top, and what it cost
+
+The spike answered its question and stopped there: sliders, one flat list,
+pointed at two numbers. `Drift` is the demo that made the rest of it necessary,
+and it is worth recording what the second pass actually cost — the estimate
+above said "filling in controls against a stylesheet we already have", and that
+was right about the stylesheet and wrong about one control.
+
+**Folders were an afternoon, and they were already in the data.** `ControlMeta`
+carries `children?: ControlMeta[]`, and a nested object in a `DialConfig`
+becomes `type: 'folder'` with `defaultOpen` (store `index.js:569`). The spike's
+`get sliders()` filtered the tree to `type === 'slider'` and threw every branch
+away — which cost nothing when the config was two flat numbers and cost the
+whole shape once it was a macro over four groups. `dial-controls.gts` walks the
+tree and recurses; the collapse state is a `Map<string, boolean>` rather than a
+`Set` because there are three states and not two — open, shut, and never
+touched, the last of which has to fall through to the config's own
+`defaultOpen` so that `_collapsed: true` in the source decides what a folder
+looks like the first time anyone sees it.
+
+**Presets were smaller than folders, because they are entirely the store's.**
+`savePreset` / `loadPreset` / `deletePreset` / `getPresets` /
+`getActivePresetId` are all on `DialStoreClass` and none of it is in any UI
+port. What was missing was a row of chips and a text field. Two things about
+the store's design are worth knowing before building that row:
+
+- **Persistence of presets is a separate switch.** `persist: true` keeps
+  values; presets need `persist: { presets: true }`. A panel whose saved tunes
+  vanish on reload is worse than one that never offered to save them.
+- **While a preset is active, every slider edit is written into it**
+  (`updateValues`, store `index.js:220`). That is not a quirk to work around —
+  it is the arc a tuning panel wants. You load a character, you move one
+  number, and the thing you come back to is the car you ended up with rather
+  than the one you started from. Nothing has to be pressed to keep it.
+
+`Drift` still ships four hand-written characters as source constants rather
+than as seeded presets, and that is deliberate. A character is a thing the
+stage ships and can always be got back to; a preset is a thing you made. Seeding
+the store with the four would put four editable copies of the source in
+localStorage with no way home. They sit in one row because to a player they are
+one question — what am I driving — but only one of them can be deleted.
+
+**`type: 'spring'` is NOT cheap, and the plan that said it was got the name
+wrong.** `docs/drift.md` proposed one spring control per pair instead of two
+sliders, "cheap once folders exist". The store does not emit `'spring'` for a
+`SpringConfig` at all: it emits `type: 'transition'` (store `index.js:552`),
+whose value is the whole spring object plus a companion `path.__mode` that
+switches between an easing curve, a two-number "simple" form and a five-number
+"advanced" one. Drawing it means drawing three modes and the switch between
+them, and there are `updateSpringMode` / `getSpringMode` / `updateTransitionMode`
+/ `getTransitionMode` on the store to drive from. Folders of ordinary sliders
+get the same nesting for none of that, so that is what Drift uses. The real
+control is still worth having; it is a separate afternoon, not a free one.
+
+**The stylesheet claim, revised once.** It still holds — the second pass added
+folders, a chevron, a preset row and a scaled overlay rail, and the folder
+markup came straight from dialkit's own classes (`.dialkit-folder`,
+`-header`, `-header-top`, `-title-row`, `-title`, `-content`, `-inner`). Two
+corrections to the earlier claim, both of the same kind:
+
+- **Some of dialkit's design is not in `theme.css`.** `.dialkit-slider-handle`
+  gets `top: 50%` from the stylesheet and nothing else; its centring translate
+  and its resting scale live in the React component's inline `style` and
+  `animate` props (`y: '-50%'`, `scaleX: isActive ? 1 : 0.25`). A port that
+  emits the class and nothing else gets a fat handle hanging below the track.
+- **The chevron has to be drawn.** dialkit rotates one glyph rather than
+  swapping two, which is right, but at the size the row wants, `▸` renders as a
+  dot in most of the faces on this stack. It is a border triangle here.
+
+**Where the panel goes is a design problem the package does not solve.** A
+gallery card is about 550 by 350. dialkit's `data-mode="inline"` puts the panel
+in flow, which is correct on a demo page and ruinous in a card — a 280px panel
+beside the stage leaves half a stage. Drift lays it over the track instead,
+translucent, scaled to whatever room the card gave it, scrolling inside itself,
+withdrawing while a finger is on the track and with a tab to put it away. All of
+that is ours; none of it is dialkit's fault. Worth saying because it is the part
+that took the longest, and a future port should budget for placement rather than
+assuming `inline` is the answer.
+
+## The recommendation, as it was made
+
+Kept as written, because it was the call that led here and it was roughly
+right — the seam held, and the second pass was indeed filling in controls
+against a stylesheet we already had, with the one exception noted above.
 
 Not a port. A **spike**, ~250 lines: `{{dial}}` over `dialkit/store`, sliders
 only, no timeline and no visualisations, pointed at `Hang`'s two springs.

@@ -29,6 +29,7 @@ import {
   through,
   wrap,
 } from 'test-app/lib/drift';
+import { onStage } from 'test-app/lib/onstage';
 import { preventSelect } from 'test-app/lib/pointer';
 
 /**
@@ -268,6 +269,19 @@ export class Drift extends Component {
    */
   @tracked showPanel = true;
 
+  /**
+   * Whether anyone can see this. The loop does not run when nobody can.
+   *
+   * A fixed-step integrator at 120Hz with a canvas under it is the most
+   * expensive thing in the gallery, and forty-two stages share one main thread.
+   * Scrolled away it stops entirely rather than ticking quietly — the car stays
+   * exactly where it was, which is the right answer for a stage whose whole
+   * point is the state you built up in it.
+   */
+  @tracked private seen = true;
+
+  /** the scale currently written, so an unchanged answer writes nothing */
+  private fitted = 1;
   private railEl: HTMLElement | null = null;
   private fitEl: HTMLElement | null = null;
   private viewEl: HTMLElement | null = null;
@@ -342,7 +356,37 @@ export class Drift extends Component {
     // there is a floor, and below it the rail scrolls instead. A panel that has
     // scaled itself illegible to avoid a scrollbar has made the wrong trade
     const k = natural > 0 ? Math.min(1, Math.max(0.72, room / natural)) : 1;
+    // and a deadband on top of the fixed-width arrangement in the stylesheet:
+    // two guards against the same feedback, because a resize loop does not
+    // announce itself as a loop — it announces itself as a dropped frame here
+    // and a failed assertion three files away
+    if (Math.abs(k - this.fitted) < 0.01) {
+      return;
+    }
+    this.fitted = k;
     rail.style.setProperty('--fit', String(k));
+  };
+
+  /**
+   * The loop is started and stopped from here rather than by the modifier that
+   * owns it, so that coming back on screen resumes rather than restarts: `last`
+   * is reset to now, so the first frame after a long absence is one frame long
+   * and not one minute long. Without that the accumulator would try to catch up
+   * on every step it missed and the car would teleport.
+   */
+  private watch = (visible: boolean) => {
+    if (visible === this.seen) {
+      return;
+    }
+    this.seen = visible;
+    if (visible) {
+      this.last = performance.now();
+      this.acc = 0;
+      this.raf = requestAnimationFrame(this.loop);
+    } else {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    }
   };
 
   bindRail = modifier((el: HTMLElement) => {
@@ -433,29 +477,30 @@ export class Drift extends Component {
    * tracked state here is the lap board and the gate counter: things that
    * change a few times a minute, which is what tracked state is for.
    */
+  private loop = (now: number) => {
+    this.raf = requestAnimationFrame(this.loop);
+    // a tab that was in the background does not get to teleport the car
+    const dt = Math.min((now - this.last) / 1000, 0.25);
+    this.last = now;
+    this.acc += dt;
+
+    const t = applied(this.tuning);
+    // measured once a frame, not once a step: `clientWidth` is a layout read
+    // and there are up to forty steps behind one frame
+    const view = this.viewSize();
+    let steps = 0;
+    while (this.acc >= STEP && steps < 40) {
+      this.advance(t, STEP, view);
+      this.acc -= STEP;
+      steps += 1;
+    }
+    this.paint(now, view);
+  };
+
   start = modifier(() => {
     this.last = performance.now();
     this.lapStart = this.last;
-    const loop = (now: number) => {
-      this.raf = requestAnimationFrame(loop);
-      // a tab that was in the background does not get to teleport the car
-      const dt = Math.min((now - this.last) / 1000, 0.25);
-      this.last = now;
-      this.acc += dt;
-
-      const t = applied(this.tuning);
-      // measured once a frame, not once a step: `clientWidth` is a layout read
-      // and there are up to forty steps behind one frame
-      const view = this.viewSize();
-      let steps = 0;
-      while (this.acc >= STEP && steps < 40) {
-        this.advance(t, STEP, view);
-        this.acc -= STEP;
-        steps += 1;
-      }
-      this.paint(now, view);
-    };
-    this.raf = requestAnimationFrame(loop);
+    this.raf = requestAnimationFrame(this.loop);
     return () => cancelAnimationFrame(this.raf);
   });
 
@@ -811,6 +856,7 @@ export class Drift extends Component {
           class="drift-view"
           {{this.bindView}}
           {{this.start}}
+          {{onStage this.watch}}
           {{on "pointerdown" this.press}}
           {{on "pointermove" this.steer}}
           {{on "pointerup" this.release}}

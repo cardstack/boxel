@@ -544,6 +544,16 @@ summary,
 .card-stage {
   position: relative;
   height: 400px;
+  /* A size container, so that `.ex` ITSELF can be queried.
+     `.ex` is a container too, but a container query resolves against the
+     nearest ANCESTOR container — an element cannot be styled by its own. Every
+     stage whose root is `.ex` (`.hang-ex`, `.grip-ex`, `.jump-ex` — the class
+     goes on the same element) was therefore unreachable from `@container`, and
+     the rules written against them applied to nothing at all, silently. Making
+     the platter a container gives them one to resolve against.
+     Safe here because this box's size does not depend on its contents: the
+     height is fixed and the width comes from the grid. */
+  container-type: size;
   /* Recessed to --bg, a notch below the page and well below the card's
      --bg-elev, so the demo UI lifts off the tile and the metadata chin
      (.card-meta, still on the card's own surface) reads as a distinct bar
@@ -1026,9 +1036,14 @@ html[data-gm-dragging] * {
   place-items: center;
   width: 100%;
   max-width: 100%;
-  /* every stage keeps air on both sides. A demo that runs edge to edge reads
-     as a layout bug rather than as a stage, and the ones sized `min(Npx, 100%)`
-     hit the frame exactly when the card is narrow. */
+  /* every stage keeps air on all four sides. A demo that runs edge to edge
+     reads as a layout bug rather than as a stage, and the ones sized
+     `min(Npx, 100%)` hit the frame exactly when the card is narrow.
+     The block padding was missing for a long time and it showed on any stage
+     tall enough to fill the platter: the content sat flush against the top and
+     bottom of the recess while keeping its 16px at the sides, which reads as
+     content that has overflowed rather than content that has been placed. */
+  padding-block: 10px;
   padding-inline: 16px;
   overflow: hidden;
   container-type: size;
@@ -11781,6 +11796,21 @@ html[data-gm-dragging] * {
   width: min(760px, 100%);
 }
 
+/* In a gallery card there is not room for the right column's 230px floor plus
+   a 22px gap — the left column ends up narrower than its own contents and the
+   grid pushes past the stage's padding.
+   Stacking was the first fix and it was worse: one column over another is
+   taller than the platter, so it traded a clip at the side for a clip at the
+   chin. Dropping the floor keeps both columns on one row and lets them share
+   whatever there is. The tape gets cramped; it is a secondary readout and it
+   can be. */
+@container (max-width: 620px) {
+  .grip-ex {
+    gap: 12px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  }
+}
+
 .grip-stage {
   align-items: center;
   background:
@@ -11951,89 +11981,195 @@ html[data-gm-dragging] * {
   }
 }
 
-/* ---- Jump: scroll, raise and mark, on one clock ---- */
+/* ---- Triage: nine red in sixty, and not losing your place ---- */
 
 .jump-ex {
-  align-items: stretch;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: min(680px, 100%);
+  gap: 10px;
+  width: min(720px, 100%);
 }
 
-.jump-controls,
-.jump-asks {
+/* The pane is the scroll container `c.Scroll` drives and the clip `c.Raise`
+   has to escape. Both of those are the point of the stage, so it is a real
+   overflow box rather than the page's own scroll. */
+.jump-pane {
+  background: rgba(var(--ink-rgb), 0.03);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.jump-bar {
   align-items: center;
+  backdrop-filter: blur(10px);
+  background: rgba(var(--bg-rgb), 0.86);
+  border-bottom: 1px solid var(--line);
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  left: 0;
+  padding: 8px 10px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  /* below the raise layer on purpose: a raised row passes OVER this bar, which
+     is the demonstration. If the bar won, the row would be hidden exactly when
+     it had been scrolled to the top. */
+  z-index: 1;
 }
 
-.jump-legend {
-  color: var(--ink-faint);
+.jump-tally {
+  color: var(--ink-dim);
+  flex: 1;
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
-.jump-sep {
-  background: var(--line-strong);
-  height: 18px;
-  width: 2px;
+.jump-tally.is-done {
+  color: var(--copper-ink);
 }
 
+.jump-go {
+  background: var(--ember);
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  transition: filter 160ms var(--ease);
+}
+
+.jump-go:hover {
+  filter: brightness(1.12);
+}
+
+/* The region is the positioned wrapper and NOT the scroller.
+   The scroll container has to be a descendant, for two reasons that point the
+   same way. `c.Scroll` drives the sprite's own scroll container, and the region
+   element is not it. And the raise layer lives inside the region — so a region
+   that scrolled would carry the raised row along with the list, which is
+   exactly what the raise exists to prevent. */
 .jump-region {
+  height: 100%;
   position: relative;
 }
 
 .jump-list {
-  background: var(--bg);
-  border: 2px solid var(--line-strong);
-  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  height: 268px;
+  height: 100%;
   list-style: none;
   margin: 0;
   overflow-y: auto;
-  padding: 8px;
+  overscroll-behavior: contain;
+  /* clear of the sticky bar, so the first rows are not under it */
+  padding: 37px 0 12px;
   scrollbar-width: thin;
 }
 
 .jump-row {
-  align-items: center;
-  background: var(--bg-elev);
-  border-radius: 8px;
+  align-items: baseline;
+  border-radius: 5px;
+  color: var(--ink-dim);
   display: grid;
-  gap: 12px;
-  grid-template-columns: 34px 84px minmax(0, 1fr);
-  padding: 10px 12px;
+  font-size: 11.5px;
+  gap: 0 8px;
+  grid-template-columns: 8px 96px minmax(0, 1fr) auto;
+  margin: 0 6px;
+  padding: 5px 8px;
 }
 
-.jump-n {
+/* the pass/fail mark, which is the only colour on a green row */
+.jump-dot {
+  background: var(--steel);
+  border-radius: 50%;
+  height: 6px;
+  opacity: 0.5;
+  width: 6px;
+}
+
+.jump-row.is-red .jump-dot {
+  background: var(--ember);
+  opacity: 1;
+}
+
+.jump-suite {
   color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
-  text-align: right;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.jump-slate {
+.jump-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jump-row.is-red .jump-name {
+  color: var(--ink);
+}
+
+.jump-ms {
+  color: var(--ink-faint);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
-.jump-bar {
+/* the assertion, under the name and indented to it */
+.jump-why {
+  color: var(--ember);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  grid-column: 3 / -1;
+  opacity: 0.85;
+  padding-top: 2px;
+}
+
+/* The record. This is app state — a row you have been to — and it is what
+   `@fill` bridges to: the hold keeps the mark alive until the render that adds
+   this class has landed, so the row does not blink between the two. */
+.jump-row.is-seen {
+  background: rgba(var(--ink-rgb), 0.06);
+  box-shadow: inset 2px 0 0 var(--copper);
+}
+
+.jump-prefs {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jump-sep {
   background: var(--line-strong);
-  border-radius: 2px;
-  height: 4px;
+  height: 14px;
+  width: 1px;
 }
 
-.chip.is-ask {
-  font-family: var(--font-mono);
+@container (max-width: 460px) {
+  .jump-row {
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+  }
+
+  .jump-suite {
+    display: none;
+  }
+
+  .jump-why {
+    grid-column: 2 / -1;
+  }
 }
 
 /* ---- Hang: a throw is a number no layout pass contains ---- */
@@ -12044,6 +12180,41 @@ html[data-gm-dragging] * {
   flex-direction: column;
   gap: 14px;
   width: min(760px, 100%);
+}
+
+/* Two stages stand a little taller than a gallery platter and were losing their
+   bottom edge to the clip. In a short container they scale to fit instead:
+   `.ex` centres its child and hides the overflow, so a scaled child is the
+   whole stage seen slightly smaller rather than the whole stage with its feet
+   cut off. Scale rather than a stack of compressed gaps because both of these
+   are compositions — Hang's lane and its tuner read as one instrument, and
+   squeezing the parts unevenly says something about them that is not true. */
+@container (max-height: 430px) {
+  .hang-ex {
+    transform: scale(0.88);
+    transform-origin: center;
+  }
+
+  .rk-fit-box {
+    transform: scale(0.95);
+    transform-origin: center;
+  }
+}
+
+/* A phone-width platter is 341x380, and the two densest stages want half again
+   that height. They scale further rather than being cut off — a whole
+   instrument at 70% still shows you what it is, where the top 80% of one does
+   not. Below this the stage is a thumbnail and the deep dive is where the
+   detail lives anyway. */
+@container (max-width: 400px) {
+  .hang-ex {
+    transform: scale(0.72);
+  }
+
+  .jump-ex {
+    transform: scale(0.78);
+    transform-origin: center;
+  }
 }
 
 .hang-head {
@@ -12399,6 +12570,51 @@ html[data-gm-dragging] * {
   color: var(--ink);
 }
 
+/* ---- dialkit in light mode ---- */
+
+/* dialkit's theme is dark-only: every token in it is a white-on-black
+   translucency (`rgba(255,255,255,0.05)` surfaces, `#212121` glass). Dropped
+   into a light page that is not a style — it is a black slab with the page
+   showing round it.
+
+   Overriding the TOKENS rather than the rules is the whole point of the
+   package shipping tokens: the 287 selectors underneath are untouched, so the
+   panel keeps dialkit's design and only changes what it is made of. Inverting
+   the translucencies (dark-on-light instead of light-on-dark) keeps the
+   layering intact — a hovered row is still a step above its surface, a groove
+   is still a step below it. */
+:root[data-theme='light'] .dialkit-root {
+  --dial-surface: rgba(33, 29, 24, 0.06);
+  --dial-surface-hover: rgba(33, 29, 24, 0.1);
+  --dial-surface-active: rgba(33, 29, 24, 0.13);
+  --dial-surface-subtle: rgba(33, 29, 24, 0.08);
+  --dial-text-root: #211d18;
+  --dial-text-section: rgba(33, 29, 24, 0.72);
+  --dial-text-label: rgba(33, 29, 24, 0.72);
+  --dial-text-focus: #211d18;
+  --dial-text-primary: rgba(33, 29, 24, 0.95);
+  --dial-text-secondary: rgba(33, 29, 24, 0.62);
+  --dial-text-tertiary: rgba(33, 29, 24, 0.42);
+  --dial-border: rgba(33, 29, 24, 0.12);
+  --dial-border-hover: rgba(33, 29, 24, 0.2);
+  --dial-glass-bg: #f7f3ec;
+  --dial-dropdown-bg: #efe9df;
+  --dial-shadow: 0 8px 28px rgba(33, 29, 24, 0.14);
+  --dial-shadow-collapsed: 0 4px 14px rgba(33, 29, 24, 0.1);
+  --dial-shadow-dropdown: 0 8px 22px rgba(33, 29, 24, 0.14);
+}
+
+/* Drift's rail carries its own surface (it sits over a moving picture), so it
+   needs the same treatment a second time. */
+:root[data-theme='light'] .drift-rail-fit {
+  background: rgba(247, 243, 236, 0.82);
+  border-color: rgba(33, 29, 24, 0.12);
+}
+
+:root[data-theme='light'] .drift-rail .drift-board {
+  border-top-color: rgba(33, 29, 24, 0.1);
+}
+
 /* ---- the panel's second tier: folders and saved tunes ---- */
 
 /* dialkit rotates a chevron rather than swapping the glyph, so open and shut
@@ -12517,8 +12733,15 @@ html[data-gm-dragging] * {
   width: 100%;
 }
 
-/* the positioned context the rail hangs off */
+/* The positioned context the rail hangs off.
+   `flex: 1` with `min-height: 0` so it takes the room the stage has and no
+   more: a gallery platter is 400px tall and the view's 16:10 ratio at card
+   width wants 403, which overflowed the padding and put the track's bottom
+   edge under the chin. The camera measures the element it is given, so a view
+   that is shorter than its ratio is simply a wider shot. */
 .drift-area {
+  flex: 1;
+  min-height: 0;
   position: relative;
   width: 100%;
 }
@@ -12529,6 +12752,8 @@ html[data-gm-dragging] * {
    downward drive would otherwise trigger at the top of the page. */
 .drift-view {
   aspect-ratio: 16 / 10;
+  /* the ratio is a preference, not a promise — the platter's height wins */
+  max-height: 100%;
   /* darker than the track, because whatever shows here is OUTSIDE the world —
      the camera clamps to the walls, so this is the void beyond them and should
      not read as more asphalt */
@@ -12773,25 +12998,29 @@ html[data-gm-dragging] * {
   transition:
     opacity 240ms var(--ease),
     transform 280ms var(--ease);
-  width: 246px;
+  /* the rail narrows with the scale; the panel inside it does NOT — see below */
+  width: calc(246px * var(--fit));
   z-index: 2;
 }
 
-/* Scaled to whatever room the card gave it.
-   The width is divided by the same factor because a transform does not change
-   layout: at 0.86 the element is laid out 286px wide and drawn 246px wide, so
-   it fills the rail exactly.
-   The origin is top LEFT, and that is the whole trick. With `top right` the
-   over-wide element overflows the rail before it is scaled, so its own right
-   edge — the fixed point — sits 40px outside the rail, and the scaled result
-   is still 40px outside it. Anchoring at the left, where the element and the
-   rail already agree, lands the scaled right edge exactly on the rail's. */
+/* Scaled to whatever room the card gave it, from the top LEFT so the scaled
+   right edge lands on the rail's.
+
+   The panel's own width is a CONSTANT, and the rail's is what varies. The
+   obvious arrangement is the other way round — rail fixed, panel
+   `calc(100% / var(--fit))` so the scaled result fills it — and it feeds back:
+   `--fit` is computed from the panel's measured height, the panel's width
+   depends on `--fit`, its height depends on its width, and the ResizeObserver
+   watching it fires again. That is a "ResizeObserver loop completed with
+   undelivered notifications" error, and it failed the test suite rather than
+   merely wasting frames. With the panel's layout width fixed, nothing it is
+   measured on can change as a result of measuring it. */
 .drift-rail-fit {
   display: flex;
   flex-direction: column;
   transform: scale(var(--fit));
   transform-origin: top left;
-  width: calc(100% / var(--fit));
+  width: 246px;
 }
 
 /* Out of the way while a finger is on the track — it is covering the corner
