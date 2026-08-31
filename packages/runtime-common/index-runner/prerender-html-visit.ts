@@ -394,7 +394,7 @@ export async function runPrerenderHtmlPass({
 // failure is a per-slot error, never a visit failure — the manifest omits
 // the name and diagnostics.screenshotErrors records why, mirroring
 // brokenLinks.
-async function persistDeclaredScreenshots({
+export async function persistDeclaredScreenshots({
   result,
   priorManifest,
   dbAdapter,

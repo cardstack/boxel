@@ -1821,9 +1821,12 @@ async function waitForScreenshotPendingClear(
   name: string,
 ): Promise<RenderError | undefined> {
   try {
+    // Interval polling, not 'raf': pooled tabs can be backgrounded, where
+    // Chromium throttles animation frames (the settle hook avoids RAF for
+    // the same reason).
     await page.waitForFunction(
       () => document.querySelector('[data-screenshot-pending]') == null,
-      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 'raf' },
+      { timeout: SCREENSHOT_PENDING_WAIT_MS, polling: 100 },
     );
     return undefined;
   } catch {

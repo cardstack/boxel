@@ -397,6 +397,48 @@ module('Unit | declared screenshots', function (hooks) {
     assert.true(merged.banner.useAsThumbnail);
   });
 
+  test('serializeDeclaredScreenshots crosses the page boundary without the component', function (assert) {
+    class HeroShot extends cardApi.Component<typeof cardApi.CardDef> {}
+    class Product extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        card: {
+          format: 'fitted',
+          width: 400,
+          height: 300,
+          useAsThumbnail: true,
+        },
+        hero: {
+          render: HeroShot,
+          width: 320,
+          height: 180,
+          deviceScaleFactor: 1,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    let roster = cardApi.serializeDeclaredScreenshots(Product);
+    assert.deepEqual(roster.card, {
+      width: 400,
+      height: 300,
+      useAsThumbnail: true,
+      format: 'fitted',
+    });
+    assert.deepEqual(roster.hero, {
+      width: 320,
+      height: 180,
+      deviceScaleFactor: 1,
+      background: 'transparent',
+      type: 'webp',
+      render: true,
+    });
+    assert.deepEqual(
+      cardApi.serializeDeclaredScreenshots(cardApi.CardDef),
+      {},
+      'no declarations serialize to an empty roster',
+    );
+  });
+
   test('a non-object declarations value is refused', function (assert) {
     class Bad extends cardApi.CardDef {
       static screenshots: any = ['nope'];

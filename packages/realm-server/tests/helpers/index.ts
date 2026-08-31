@@ -1315,6 +1315,7 @@ export async function createRealm({
       realmServerMatrixUsername: testRealmServerMatrixUsername,
       prerenderer,
       createPrerenderAuth: testCreatePrerenderAuth,
+      mediaCacheAdapter,
     });
   }
   let matrixClient = new MatrixClient({
@@ -1451,6 +1452,9 @@ export async function runTestRealmServer({
     realmServerMatrixUsername: testRealmServerMatrixUsername,
     prerenderer,
     createPrerenderAuth: testCreatePrerenderAuth,
+    // The indexing worker persists declared screenshots when a store is
+    // configured — same wiring as the production worker child.
+    mediaCacheAdapter,
   });
   await worker.run();
   let { realm: testRealm, adapter: testRealmAdapter } = await createRealm({
