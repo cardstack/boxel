@@ -59,7 +59,9 @@ export const DEFAULT_CAPTURE_VIEWPORT = {
 // grows later) cannot ride into the identity and silently hash two distinct
 // captures onto one ledger key. Widening the identity means changing this
 // pick, `canonicalCaptureSpecString` / `canonicalCaptureSpecQuery` below,
-// and `sameCaptureSpec` (jobs/screenshot-card.ts) together.
+// and `sameCaptureSpec` (jobs/screenshot-card.ts) together — and the
+// exhaustive destructure in `canonicalOverrides` refuses to compile until
+// the widened pick is actually handled there.
 export interface CaptureSpec extends Pick<
   ScreenshotCaptureSpec,
   'viewport' | 'deviceScaleFactor' | 'fullPage' | 'clip'
@@ -575,41 +577,19 @@ export function parseScreenshotCaptureSpec(
   return { captureSpec: { captures: entries } };
 }
 
-// The default-elision rule, applied everywhere a spec is normalized: a field
-// spelling out an engine default (the 800×600 viewport, scale 1, fullPage
-// false) is dropped, so equal capture intents canonicalize — and hash —
-// identically however they were spelled.
+// The identity's geometry fields, default-elided via the one shared rule
+// (`elideDefaults`), so the parse and the hash canonicalize identically. The
+// parameter is the identity type itself and the destructure is exhaustive
+// over it: widening the `CaptureSpec` pick fails to compile here — the one
+// function that has to learn a new identity field — instead of silently
+// dropping the field from the ledger key and hashing two distinct captures
+// onto one entry.
 function canonicalOverrides(
-  spec: ScreenshotCaptureSpec,
+  spec: Omit<CaptureSpec, 'format'>,
 ): ScreenshotCaptureSpec {
-  let out: ScreenshotCaptureSpec = {};
-  if (
-    spec.viewport &&
-    !(
-      spec.viewport.width === DEFAULT_CAPTURE_VIEWPORT.width &&
-      spec.viewport.height === DEFAULT_CAPTURE_VIEWPORT.height
-    )
-  ) {
-    out.viewport = { width: spec.viewport.width, height: spec.viewport.height };
-  }
-  if (
-    spec.deviceScaleFactor != null &&
-    spec.deviceScaleFactor !== DEFAULT_CAPTURE_VIEWPORT.deviceScaleFactor
-  ) {
-    out.deviceScaleFactor = spec.deviceScaleFactor;
-  }
-  if (spec.fullPage) {
-    out.fullPage = true;
-  }
-  if (spec.clip) {
-    out.clip = {
-      x: spec.clip.x,
-      y: spec.clip.y,
-      width: spec.clip.width,
-      height: spec.clip.height,
-    };
-  }
-  return out;
+  let { viewport, deviceScaleFactor, fullPage, clip, ...rest } = spec;
+  rest satisfies Record<string, never>;
+  return elideDefaults({ viewport, deviceScaleFactor, fullPage, clip });
 }
 
 // The DSL's parameter surface grows with the capture engine; these names are

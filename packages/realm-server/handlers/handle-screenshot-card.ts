@@ -49,8 +49,9 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // by default until callers migrate to URLs (`includeBase64: false` opts out).
 // `name` is null on the persisted capture (the ledger identity carries no
 // caller name) and the caller's entry name (or "default") on a capture-only
-// response. `deviceScaleFactor` is the effective scale the capture engine
-// reports, or null when serving from the ledger, which does not record it.
+// response. `deviceScaleFactor` is the effective scale: the engine-reported
+// factor when the capture just ran, else the spec's declared override on a
+// ledger serve (which has no engine report), else null at the default scale.
 interface CaptureResult {
   name: string | null;
   url: string | null;
@@ -86,8 +87,10 @@ interface CaptureResult {
  * byte-compatibility with current-shape callers, plus `captures:
  * [{name, url, width, height, deviceScaleFactor, base64?}]` on every ready
  * response. `url` is the durable served URL when the capture persisted under
- * its ledger identity, and null otherwise (a capture-only custom spec / batch,
- * or a card the index doesn't know / a server without a MediaCache store) —
+ * its ledger identity — any singular spec on a capture format, custom
+ * geometry included — and null when nothing persists (a batch, a
+ * non-capture format such as fitted, a card the index doesn't know, a
+ * server without a MediaCache store, or a caller without realm read) —
  * embed the `base64` in that case.
  *
  * Request body (JSON:API):
@@ -440,7 +443,9 @@ export default function handleScreenshotCard({
         Array.isArray(result.captures) &&
         !(entryKey && result.status === 'ready')
       ) {
-        // Capture-only response (any custom spec, so every batch): the engine's
+        // Capture-only response — reached when nothing persists: a batch, a
+        // non-capture format such as fitted, an unindexed instance, a
+        // store-less server, or a caller without realm read. The engine's
         // byte-only entries have no durable served URL. Normalize them into the
         // one captures[] shape callers build on — url: null marks "no durable
         // reference, embed the base64" — so captures[i].url is never a

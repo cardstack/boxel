@@ -20,6 +20,7 @@ import type {
 } from '@cardstack/runtime-common';
 import {
   Deferred,
+  MEDIA_CACHE_MAX_AGE_SECONDS,
   VirtualNetwork,
   asExpressions,
   canonicalCaptureSpecQuery,
@@ -371,8 +372,11 @@ module(basename(import.meta.filename), function () {
     // Registers the real screenshot-card task on the test runner, with a
     // stub prerenderer standing in for the Chrome pool. Only tests that
     // want a capture to complete start the worker; the rest leave enqueued
-    // jobs unclaimed on purpose.
-    async function startWorker() {
+    // jobs unclaimed on purpose. `prerenderResult` swaps in a non-ready
+    // outcome so a test can exercise the render-failure path.
+    async function startWorker(
+      prerenderResult?: () => ScreenshotPrerenderResponse,
+    ) {
       let prerenderer = {
         prerenderScreenshot: async (args: {
           captureSpec?: unknown;
@@ -381,6 +385,9 @@ module(basename(import.meta.filename), function () {
           capturedSpecs.push(args.captureSpec ?? null);
           if (captureGate) {
             await captureGate.promise;
+          }
+          if (prerenderResult) {
+            return prerenderResult();
           }
           return {
             status: 'ready',
@@ -597,6 +604,29 @@ module(basename(import.meta.filename), function () {
       let second = await get('_screenshot/card-1?format=embedded');
       assert.strictEqual(second.status, 200);
       assert.strictEqual(captureCalls, 1, 'the second request is a pure hit');
+    });
+
+    test('a failed capture answers 500 with the short cache window', async function (assert) {
+      await seedInstanceRow('card-1');
+      await seedRealmConfigRow(true);
+      await startWorker(() => ({
+        status: 'error',
+        error: 'capture failed in the engine',
+      }));
+
+      let response = await get('_screenshot/card-1');
+      assert.strictEqual(response.status, 500);
+      // A failure persists nothing, so no ledger entry short-circuits the
+      // repeat; the explicit freshness window is the only thing bounding a
+      // capture that fails every time (a fullPage document past the
+      // physical-pixel cap) to one render per window instead of one per
+      // image load.
+      assert.strictEqual(
+        response.headers.get('cache-control'),
+        `public, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        'the failure carries the same short window the miss and gate use',
+      );
+      assert.strictEqual(captureCalls, 1);
     });
 
     test('an edited instance never serves a stale capture', async function (assert) {

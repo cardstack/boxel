@@ -1573,19 +1573,36 @@ export async function captureScreenshot(
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
   // at a caller-specified size (or 2× scale) would silently change subsequent
   // index prerenders. Snapshot the current viewport before overriding and
-  // restore it in `finally`. A viewport override is any explicit viewport /
-  // deviceScaleFactor OR an envelope (whose box is sized to the viewport).
-  let anyViewportOverride = entries.some(
-    (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
-  );
+  // restore it in `finally`.
+  //
+  // The base geometry is the engine default, never the page's current
+  // viewport: the ledger identity elides a default-valued viewport, so an
+  // entry that specifies none *asserts* the default — a capture taken at
+  // whatever geometry a pooled page was left in would persist and serve under
+  // a hash claiming DEFAULT_CAPTURE_VIEWPORT until the source generation
+  // bumps. A viewport override is therefore any explicit viewport /
+  // deviceScaleFactor, an envelope (whose box is sized to the viewport), OR a
+  // page not currently at the default — so every capture starts from the
+  // geometry its identity claims.
   let originalViewport = page.viewport();
-  let baseViewport: ResolvedViewport = {
-    width: originalViewport?.width ?? DEFAULT_SCREENSHOT_VIEWPORT.width,
-    height: originalViewport?.height ?? DEFAULT_SCREENSHOT_VIEWPORT.height,
-    deviceScaleFactor:
-      originalViewport?.deviceScaleFactor ??
-      DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
-  };
+  let baseViewport: ResolvedViewport = { ...DEFAULT_SCREENSHOT_VIEWPORT };
+  let pageAtBase =
+    originalViewport != null &&
+    sameViewport(
+      {
+        width: originalViewport.width,
+        height: originalViewport.height,
+        deviceScaleFactor:
+          originalViewport.deviceScaleFactor ??
+          DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
+      },
+      baseViewport,
+    );
+  let anyViewportOverride =
+    !pageAtBase ||
+    entries.some(
+      (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
+    );
   let viewportOverridden = false;
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;

@@ -4374,13 +4374,27 @@ export class Realm {
           ...stagePerf,
           jobWaitMs,
         });
-        return systemError({
+        let response = systemError({
           requestContext,
           message: `screenshot capture failed for ${entryKey.sourceURL}`,
           additionalError: outcome.error
             ? new Error(String(outcome.error))
             : undefined,
         });
+        // A failed capture persists nothing, so no ledger entry will
+        // short-circuit the repeat: without explicit freshness every `<img>`
+        // load of this URL is a fresh Chrome render. Some failures are
+        // durable properties of the request — a fullPage capture whose
+        // document extent exceeds the physical-pixel cap fails every time,
+        // and only the capture engine can discover that. Carry the same
+        // short window the miss and gate responses use, so a capture that
+        // keeps failing costs one render per window rather than one per
+        // image load.
+        response.headers.set(
+          'cache-control',
+          `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        );
+        return response;
       }
       let serveStart = Date.now();
       let response = await serveMediaCacheEntry({
