@@ -960,7 +960,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 219 },
     ch: 4,
     gloss: 'China · the pagoda',
+    cut: true,
     id: 'c-cn',
+    join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
     kicker: 'CHINA',
@@ -974,7 +976,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 226 },
     ch: 4,
     gloss: 'Vietnam · the tower',
+    cut: true,
     id: 'c-vn',
+    join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
     kicker: 'VIETNAM',
@@ -988,7 +992,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 233 },
     ch: 4,
     gloss: 'Thailand · the prang',
+    cut: true,
     id: 'c-th',
+    join: 'blend',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
     kicker: 'THAILAND',
@@ -1002,7 +1008,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 240 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
+    cut: true,
     id: 'c-kh',
+    join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
     kicker: 'CAMBODIA',
@@ -1016,7 +1024,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 247 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
+    cut: true,
     id: 'c-tr',
+    join: 'blend',
     says: [
       'Mass in compression',
       'A dome on an octagon',
@@ -1195,6 +1205,8 @@ export default class TowerFilm extends Component<{
   @tracked private irisAt = '';
   @tracked private irisStamp = 0;
   @tracked private blurStamp = 0;
+  /** dev beacon: the first uncaught error, worn on the sleeve */
+  @tracked private fault = '';
   @tracked private lumaStamp = 0;
   @tracked private flashStamp = 0;
   /**
@@ -1562,6 +1574,8 @@ export default class TowerFilm extends Component<{
     this.frameEl = el;
     this.pageEl = el.closest('.tf-page') as HTMLElement;
     window.addEventListener('keydown', this.key);
+    window.addEventListener('error', this.trip);
+    window.addEventListener('unhandledrejection', this.trip);
     const frame = el.querySelector('iframe');
     if (!frame) {
       return;
@@ -1661,6 +1675,8 @@ export default class TowerFilm extends Component<{
       cancelAnimationFrame(this.raf);
       window.clearTimeout(bootTimer);
       window.removeEventListener('keydown', this.key);
+      window.removeEventListener('error', this.trip);
+      window.removeEventListener('unhandledrejection', this.trip);
       frame.removeEventListener('load', onLoad);
       document.body.classList.remove('tf-film', 'tf-embedded');
       this.film = undefined;
@@ -2392,6 +2408,18 @@ export default class TowerFilm extends Component<{
     this.snap(BEATS[index]!.cam);
   }
 
+  /** an uncaught error anywhere becomes a visible line — a film that
+   *  dies silently mid-reel cannot be debugged from a chair */
+  private trip = (e: Event) => {
+    if (this.fault) {
+      return;
+    }
+    const err = e as ErrorEvent & PromiseRejectionEvent;
+    this.fault = String(
+      err.message ?? err.reason ?? 'unknown fault'
+    ).slice(0, 200);
+  };
+
   private prev = () => this.goChapter(-1);
   private next = () => this.goChapter(1);
 
@@ -3107,7 +3135,11 @@ export default class TowerFilm extends Component<{
             <p class="tf-subs">{{this.beat.vo}}</p>
           {{/if}}
 
-          {{! the transport: one segment per chapter, filled by the whole
+          {{#if this.fault}}
+          <p class="tf-fault">⚠ {{this.fault}}</p>
+        {{/if}}
+
+        {{! the transport: one segment per chapter, filled by the whole
           film's progress, and each segment is a door into its chapter }}
           <div class="tf-rail">
             <span class="tf-rail-n">{{this.chapter.n}}</span>
@@ -4359,6 +4391,20 @@ export default class TowerFilm extends Component<{
 
       .tf-rail-seg:hover::after {
         background: var(--tf-ink2);
+      }
+
+      .tf-fault {
+        position: absolute;
+        left: 5.5%;
+        bottom: 4%;
+        z-index: 9;
+        margin: 0;
+        padding: 8px 12px;
+        background: #2a0a06;
+        color: #ffb4a0;
+        font: 12px/1.4 ui-monospace, monospace;
+        border-radius: 8px;
+        max-width: 80%;
       }
 
       .tf-rig {
