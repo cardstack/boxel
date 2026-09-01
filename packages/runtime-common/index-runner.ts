@@ -174,7 +174,12 @@ export class IndexRunner {
     this.#realmURL = realmURL;
     this.#virtualNetwork = virtualNetwork;
     this.#ignoreData = ignoreData;
-    this.#jobInfo = jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 };
+    this.#jobInfo = jobInfo ?? {
+      jobId: -1,
+      reservationId: -1,
+      priority: 0,
+      queueWaitMs: null,
+    };
     this.#jobPriority = jobPriority ?? jobInfo?.priority ?? 0;
     this.#batchId = `${this.#jobInfo.jobId}-${uuidv4().slice(0, 8)}`;
     this.#reportStatus = reportStatus;

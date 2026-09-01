@@ -10,6 +10,7 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 import type * as BrandGuideModule from '@cardstack/base/brand-guide';
+import type * as StructuredThemeVarsModule from '@cardstack/base/structured-theme-variables';
 
 module('Integration | brand-guide | custom-css section', function (hooks) {
   setupRenderingTest(hooks);
@@ -19,6 +20,7 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
   let BrandGuide: typeof BrandGuideModule.default;
   let CompoundColorField: typeof BrandGuideModule.CompoundColorField;
   let CustomCssVariable: typeof BrandGuideModule.CustomCssVariable;
+  let ThemeVarField: typeof StructuredThemeVarsModule.default;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
@@ -28,6 +30,11 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     BrandGuide = brandGuideModule.default;
     CompoundColorField = brandGuideModule.CompoundColorField;
     CustomCssVariable = brandGuideModule.CustomCssVariable;
+    ThemeVarField = (
+      await loader.import<typeof StructuredThemeVarsModule>(
+        '@cardstack/base/structured-theme-variables',
+      )
+    ).default;
   });
 
   test('custom-css section is visible when customCssVariables or brandColorPalette has entries', async function (this: RenderingTestContext, assert) {
@@ -103,6 +110,26 @@ module('Integration | brand-guide | custom-css section', function (hooks) {
     assert
       .dom('[data-test-brand-guide-section="custom-css"]')
       .doesNotExist('section hidden when no entry has both name and value');
+  });
+
+  test('custom-css section is hidden on a themed card when palette entries are missing name or value', async function (this: RenderingTestContext, assert) {
+    let card = new BrandGuide({
+      rootVariables: new ThemeVarField({ background: '#f6e6ee' }),
+      brandColorPalette: [
+        new CompoundColorField({ name: '', value: '#ff0000' }),
+        new CompoundColorField({ name: 'noColor', value: '' }),
+      ],
+    });
+    await renderCard(loader, card, 'isolated');
+
+    assert
+      .dom('[data-test-dashboard-empty-state]')
+      .doesNotExist('the root variable gives the card a theme');
+    assert
+      .dom('[data-test-brand-guide-section="custom-css"]')
+      .doesNotExist(
+        'palette entries that emit no variables do not count as section content',
+      );
   });
 
   test('trailing semicolons in custom CSS variable values are stripped in display and copy block', async function (this: RenderingTestContext, assert) {

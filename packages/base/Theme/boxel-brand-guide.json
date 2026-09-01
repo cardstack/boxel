@@ -8,7 +8,6 @@
     },
     "type": "card",
     "attributes": {
-      "spacing": "0.25rem",
       "version": "7.0",
       "cardInfo": {
         "notes": "v7.0 - Dense Modularity (UI Optimized)",
@@ -32,8 +31,8 @@
         "secondaryMarkClearanceRatio": "1.25"
       },
       "styleName": "Box Element System",
-      "visualDNA": "# The Box Element\n\n**Every interface is a conversation between containers.**\n\nAt the heart of Boxel lives a singular unit: the **Box Element**\u2014a composable rectangle that snaps to an 8px grid and carries meaning through structure. Not ornament. Not decoration. Structure.\n\nWhile the broader design ecosystem swings toward borderless fluidity, Boxel embraces the opposite truth: **borders create clarity**. Each Box Element is a bounded context, a data payload, a functional unit. Stack them. Nest them. Connect them. The system emerges from their composition.\n\n## Three Qualities Define the Box\n\n**1. Density as Signal**  \nTight spacing communicates capability. A Box Element wastes no pixel on performance theater\u2014every 8px increment serves information architecture. Yet density without breathing room becomes noise. Hence the `0.625rem` corner radius: soft enough to invite interaction, sharp enough to respect the grid.\n\n**2. Borders as Vocabulary**  \nA 1px hairline isn't merely separation\u2014it's syntax. In light mode, borders whisper (#E0E0E0). In dark mode, they glow subtly brighter than their container (#333333). This inversion ensures the Box Element remains legible across contexts while maintaining its fundamental promise: **you always know where one thing ends and another begins.**\n\n**3. Modularity as Philosophy**  \nBox Elements compose like functions. A Panel contains Cards. A Card contains Badges. Each nesting level maintains its structural identity. No element floats ambiguously. The hierarchy is always visible, always parseable\u2014by humans and machines alike.",
-      "cssImports": [],
+      "visualDNA": "# The Box Element\n\n**Every interface is a conversation between containers.**\n\nAt the heart of Boxel lives a singular unit: the **Box Element**\u2014a composable rectangle that snaps to a 4px grid and carries meaning through structure. Not ornament. Not decoration. Structure.\n\nWhile the broader design ecosystem swings toward borderless fluidity, Boxel embraces the opposite truth: **borders create clarity**. Each Box Element is a bounded context, a data payload, a functional unit. Stack them. Nest them. Connect them. The system emerges from their composition.\n\n## Three Qualities Define the Box\n\n**1. Density as Signal**  \nTight spacing communicates capability. A Box Element wastes no pixel on performance theater\u2014every increment of the unit serves information architecture. Yet density without breathing room becomes noise. Hence the `0.625rem` corner radius: soft enough to invite interaction, sharp enough to respect the grid.\n\n**2. Borders as Vocabulary**  \nA 1px hairline isn't merely separation\u2014it's syntax. In light mode, borders whisper (#E2E8F0). In dark mode, they glow subtly brighter than their container (#333333). This inversion ensures the Box Element remains legible across contexts while maintaining its fundamental promise: **you always know where one thing ends and another begins.**\n\n**3. Modularity as Philosophy**  \nBox Elements compose like functions. A Panel contains Cards. A Card contains Badges. Each nesting level maintains its structural identity. No element floats ambiguously. The hierarchy is always visible, always parseable\u2014by humans and machines alike.",
+      "customCssImports": [],
       "typography": {
         "body": {
           "fontSize": "0.9375rem",
@@ -73,7 +72,6 @@
       },
       "colorPalette": "# Functional Color Architecture\n\n**Color as status, not decoration.**\n\nOur palette rejects the arbitrary. Each hue maps to a system state or interaction primitive.\n\n## Canvas Strategy\n\n**Light Mode Foundation**  \n- **Surface:** `#F7F8FA` \u2014 Boxel Paper. A cool, high-luminosity neutral that reduces eye strain while letting white Box Elements pop with crisp contrast.\n- **Box Element:** `#FFFFFF` \u2014 Pure white. The atomic unit. Unmistakable.\n- **Border:** `#E2E8F0` \u2014 Detail Grey. Visible at a glance, invisible to distraction.\n\n**Dark Mode Inversion**  \n- **Surface:** `#0F0F0F` \u2014 Near-void black. The negative space that makes light elements sing.\n- **Box Element:** `#1E1E1E` \u2014 Elevated slate. Slightly brighter than the void.\n- **Border:** `#333333` \u2014 Reflective edge. Lighter than the box, maintaining readability through luminance contrast.\n\n## Interaction Accents\n\n**Boxel Teal** (`#00ffba`)  \nThe cursor of intent. Deployed for selection states and primary actions. When something is Teal, it's either chosen or choosable. (Fun fact: this wavelength sits at the precise intersection of attention-grabbing and easy-on-retinas.)\n\n**Cardstack Lime** (`#C3FC33`)  \nSuccess echo. Used for positive confirmation states and data visualization peaks. Think \"transaction complete\" or \"metric exceeded threshold.\" Lime doesn't appear unless something good just happened.\n\n**Cardstack Purple** (`#6638FF`)  \nSecondary depth. Provides visual hierarchy when Teal would be too dominant. Often used for supporting actions or complementary data series in charts.",
       "contentVoice": "# Writing for Box Elements\n\n**Precision. Clarity. Zero fluff.**\n\nBoxel's content voice mirrors its visual language: **high signal-to-noise ratio**. We write like system architects who respect the reader's intelligence and time.\n\n## Vocabulary Choices\n\nWe use the language of builders:  \n\u2713 **Deploy** (not \"publish\")  \n\u2713 **Stack** (not \"combine\")  \n\u2713 **Nest** (not \"organize\")  \n\u2713 **Render** (not \"display\")  \n\u2713 **State** (not \"status\")  \n\u2713 **Compose** (not \"create\")\n\nThese terms come from programming and architecture. They communicate that Boxel users aren't just clicking buttons\u2014they're constructing systems.\n\n## Tone Spectrum\n\n**For Features (Technical):**  \n\"Composable unit. Scale infinite.\"  \nShort declarative phrases. No marketing hyperbole. The product speaks through capability, not adjectives.\n\n**For Value (Aspirational):**  \n\"Every workflow is a series of boxes waiting to be connected.\"  \nShift to metaphor and possibility. Still grounded, but now we're talking about *why*, not just *what*.\n\n**For Errors (Helpful):**  \n\"This box requires authentication. Connect your account to proceed.\"  \nNever blame the user. Explain state, suggest action, maintain calm.\n\n## The \"We\" Convention\n\nWe use **\"we\"** to imply a collective movement. Not \"our platform\" but \"we're building.\" Not \"you can\" but \"we enable.\" This positions Boxel as a tool for a community of makers, not a product being sold to consumers.\n\n**Voice truth:** If you wouldn't say it in a code comment, don't say it in marketing copy. Developers can smell BS from orbit.",
-      "cornerRadius": "0.625rem",
       "inspirations": [
         "Financial terminals \u2014 data density without cognitive overload",
         "Modular synthesizers \u2014 distinct units, infinite combinations",
@@ -111,7 +109,7 @@
         "secondary": "var(--cardstack-purple, #6638FF)",
         "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
         "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        "background": "var(--boxel-dove, #F7F8FA)",
+        "background": "var(--boxel-dove, #F8F7FA)",
         "foreground": "var(--boxel-slate, #272330)",
         "destructive": "var(--cardstack-red, #FF5050)",
         "success": "var(--boxel-success, #00AC3D)",
@@ -209,15 +207,15 @@
         "shadowXl": "0 20px 25px -5px rgb(0 0 0 / 0.5)",
         "shadowXs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
         "fontSerif": "'IBM Plex Serif', 'Georgia', Times, serif",
-        "secondary": "var(--boxel-light, #FFFFFF)",
+        "secondary": "var(--cardstack-purple, #6638FF)",
         "shadow2xl": "0 25px 50px -12px rgb(0 0 0 / 0.5)",
         "shadow2xs": "0 1px 2px 0 rgb(0 0 0 / 0.5)",
-        "background": "var(--brand-dark, #272330)",
-        "foreground": "var(--brand-light, #F7F8FA)",
+        "background": "#0F0F0F",
+        "foreground": "var(--brand-light, #F8F7FA)",
         "destructive": "var(--cardstack-red, #FF5050)",
         "success": "var(--boxel-success, #00AC3D)",
         "sidebarRing": "var(--boxel-teal, #00FFBA)",
-        "sidebarAccent": "oklch(0.9338 0.1913 122.52)",
+        "sidebarAccent": "var(--cardstack-lime, #C3FC33)",
         "sidebarBorder": "#333333",
         "cardForeground": "var(--boxel-light, #FFFFFF)",
         "sidebarPrimary": "var(--boxel-teal, #00FFBA)",
@@ -227,23 +225,57 @@
         "popoverForeground": "var(--boxel-light, #FFFFFF)",
         "primaryForeground": "#0F172A",
         "sidebarForeground": "var(--boxel-light, #FFFFFF)",
-        "secondaryForeground": "var(--cardstack-purple, #6638FF)",
+        "secondaryForeground": "var(--boxel-light, #FFFFFF)",
         "destructiveForeground": "var(--boxel-light, #FFFFFF)",
         "sidebarAccentForeground": "#0F172A",
         "sidebarPrimaryForeground": "#0F172A"
       },
       "functionalPalette": {
         "dark": "var(--boxel-slate, #272330)",
-        "light": "var(--boxel-dove, #F7F8FA)",
+        "light": "var(--boxel-dove, #F8F7FA)",
         "accent": "var(--cardstack-lime)",
         "primary": "var(--boxel-teal)",
         "secondary": "var(--cardstack-purple)"
       },
       "geometricLanguage": "# Grid, Radius, and the 8px Law\n\n**Everything snaps. Nothing floats.**\n\n## The Quantum Grid\n\nBoxel's spatial logic operates in 8px increments (our base `--spacing: 0.25rem` \u00d7 4). This isn't aesthetic dogma\u2014it's **cognitive load reduction**. When every measurement is a multiple of 8, designers make decisions faster, developers write cleaner code, and the compiled interface has mathematical harmony that users *feel* but don't consciously notice.\n\n**Spacing Scale:**  \n`0.25rem` (4px) \u00b7 `0.5rem` (8px) \u00b7 `1rem` (16px) \u00b7 `2rem` (32px) \u00b7 `4rem` (64px)\n\nNo `0.375rem`. No `1.3rem`. If it's not on the scale, it's not in the system.\n\n## The 0.625rem Corner Radius\n\nThis specific measurement\u2014**10px rounded corners**\u2014exists at the Goldilocks intersection of contradictory goals:\n\n- **Not too soft:** Maintains the Box Element's structural identity. These are containers, not pills.\n- **Not too hard:** Removes the hostile edge of pure 90\u00b0 angles. Software should feel built, not sharp.\n- **Touch-friendly:** Gives tap targets visual breathing room without sacrificing information density.\n\nIt's the difference between \"precision tool\" and \"kid's toy.\" We're building for adults who respect clean geometry.\n\n## Nested Hierarchy Through Borders\n\nWhile contemporary design often uses shadow and elevation to show depth, Box Elements rely on **border logic**. A Panel (with border) contains a Card (with border) contains a Badge (with border). Each level maintains its frame. The nesting is structural, not implied.\n\nThink of it like JSON: you can always trace the bracket pairs back to the root. That's how our boxes work too.",
       "historicalContext": null,
-      "materialVocabulary": "# Materiality Without Skeuomorphism\n\n**Digital materials that feel real\u2014not realistic.**\n\nBoxel's material language draws from high-end productivity tools: the textured matte of a Leica camera, the precision of a Muji notebook, the honest surfaces of a ThinkPad keyboard.\n\n## Light Mode: Precision Paper\n\nIn light mode, Box Elements exist on a subtle grey surface (`#F7F8FA`) that mimics premium bond paper under soft office lighting. Shadows are minimal\u2014just enough to separate the white box from the neutral canvas. We're not simulating physical paper; we're capturing the *feeling* of working with quality materials.\n\n**Shadow strategy:** `0 1px 2px 0 rgb(0 0 0 / 0.05)`  \nBarely there. A whisper of separation.\n\n## Dark Mode: Matte Carbon\n\nIn dark mode, we embrace the flat dashboard aesthetic. No heavy shadows\u2014instead, we use **luminance contrast** to define layers. A `#1E1E1E` box on a `#0F0F0F` surface creates separation through brightness, not through simulated lighting.\n\nBorders become slightly *brighter* than their containers (`#333333` on `#1E1E1E`), creating a subtle glow effect that maintains the Box Element's structural legibility in low-light conditions.\n\n**The whimsy:** Dark mode isn't just inverted light mode. It's a different material state\u2014like switching from paper to carbon fiber. Same structural logic, different tactile presence.",
-      "componentVocabulary": "# Standard Box Element Patterns\n\n**Reusable primitives for interface composition.**\n\n## The Mini-Card\n\nA compact Box Element (typically 240\u00d7120px) that displays a single data entity: a file, a transaction, a user, a metric. Contains:\n\n- **Corner label** (Mono, uppercase): Entity type or ID\n- **Primary content** (Sans, medium): The key value or name\n- **Metadata strip** (Mono, muted): Timestamp, status, or secondary info\n\nUse case: Dashboard tiles, file browsers, transaction logs.\n\n## The Toolbar\n\nA horizontal strip of square interaction boxes (32\u00d732px minimum). Each button is its own Box Element with a 1px border. No background fill on default state\u2014fill with Teal on hover, Lime on active.\n\nButtons sit edge-to-edge with no gap, creating a continuous bar. Think: the ribbon interface from Office, but with personality.\n\n## The Data Pill\n\nA tiny rounded tag (height: 20px, padding: 4px 8px) using Mono font. Border radius matches the base `0.5rem` but at smaller scale looks more pill-like. Used for status indicators (`ACTIVE`, `PENDING`), categories, or filter chips.\n\nKey distinction: Pills are *inline* elements. They live within other boxes, not as standalone containers.\n\n## The Splitter\n\nA draggable 1px border between two Box Elements that lets users resize their workspace. On hover, expands to 3px and shifts to Teal. Cursor becomes `col-resize` or `row-resize`.\n\nThis component makes the Box Element's promise literal: users can reshape the boundaries of their interface.\n\n**Component truth:** Every UI element should be composable. If you can't nest it or arrange it in a grid, it's not a Box Element\u2014it's an exception. Minimize exceptions.",
-      "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to 8px grid)\n- Mono font for all metadata\u2014creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = success, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system\u2014it's a collection of one-off solutions. Box Elements scale because their rules scale."
+      "materialVocabulary": "# Materiality Without Skeuomorphism\n\n**Digital materials that feel real\u2014not realistic.**\n\nBoxel's material language draws from high-end productivity tools: the textured matte of a Leica camera, the precision of a Muji notebook, the honest surfaces of a ThinkPad keyboard.\n\n## Light Mode: Precision Paper\n\nIn light mode, Box Elements exist on a subtle grey surface (`#F8F7FA`) that mimics premium bond paper under soft office lighting. Shadows are minimal\u2014just enough to separate the white box from the neutral canvas. We're not simulating physical paper; we're capturing the *feeling* of working with quality materials.\n\n**Shadow strategy:** `0 1px 2px 0 rgb(0 0 0 / 0.05)`  \nBarely there. A whisper of separation.\n\n## Dark Mode: Matte Carbon\n\nIn dark mode, we embrace the flat dashboard aesthetic. No heavy shadows\u2014instead, we use **luminance contrast** to define layers. A `#1E1E1E` box on a `#0F0F0F` surface creates separation through brightness, not through simulated lighting.\n\nBorders become slightly *brighter* than their containers (`#333333` on `#1E1E1E`), creating a subtle glow effect that maintains the Box Element's structural legibility in low-light conditions.\n\n**The whimsy:** Dark mode isn't just inverted light mode. It's a different material state\u2014like switching from paper to carbon fiber. Same structural logic, different tactile presence.",
+      "componentVocabulary": "# Standard Box Element Patterns\n\n**Reusable primitives for interface composition.**\n\n## The Mini-Card\n\nA compact Box Element (typically 240\u00d7120px) that displays a single data entity: a file, a transaction, a user, a metric. Contains:\n\n- **Corner label** (Mono, uppercase): Entity type or ID\n- **Primary content** (Sans, medium): The key value or name\n- **Metadata strip** (Mono, muted): Timestamp, status, or secondary info\n\nUse case: Dashboard tiles, file browsers, transaction logs.\n\n## The Toolbar\n\nA horizontal strip of square interaction boxes (32\u00d732px minimum). Each button is its own Box Element with a 1px border. No background fill on default state\u2014fill with Teal on hover, Lime on active.\n\nButtons sit edge-to-edge with no gap, creating a continuous bar. Think: the ribbon interface from Office, but with personality.\n\n## The Data Pill\n\nA tiny rounded tag (height: 20px, padding: 4px 8px) using Mono font. Border radius matches the base `0.625rem` but at smaller scale looks more pill-like. Used for status indicators (`ACTIVE`, `PENDING`), categories, or filter chips.\n\nKey distinction: Pills are *inline* elements. They live within other boxes, not as standalone containers.\n\n## The Splitter\n\nA draggable 1px border between two Box Elements that lets users resize their workspace. On hover, expands to 3px and shifts to Teal. Cursor becomes `col-resize` or `row-resize`.\n\nThis component makes the Box Element's promise literal: users can reshape the boundaries of their interface.\n\n**Component truth:** Every UI element should be composable. If you can't nest it or arrange it in a grid, it's not a Box Element\u2014it's an exception. Minimize exceptions.",
+      "applicationScenarios": "# Context-Specific Box Element Usage\n\n**Same primitives, different densities.**\n\n## Complex Dashboards\n\n**Goal:** Display hundreds of data points without overwhelming cognition.\n\n**Strategy:**  \n- Use Mini-Cards in masonry grids (irregular heights OK, but snap to the 4px grid)\n- Mono font for all metadata\u2014creates scannable rhythm\n- Compact spacing (`0.5rem` gaps between boxes)\n- Corner labels for quick entity identification\n- Color only for status (Teal = selected, Lime = accent/highlight, Red = error)\n\n**Result:** Information density that feels organized, not chaotic. Think Bloomberg Terminal meets Apple Notes.\n\n## Code/Logic Editors\n\n**Goal:** Make complex logic visually parseable.\n\n**Strategy:**  \n- Dark mode default (reduces eye strain during long sessions)\n- Syntax highlighting using brand colors: Teal for functions, Lime for strings, Purple for keywords\n- Visible 1px borders between code blocks\n- Line numbers in Mono font along left gutter\n- Box Elements for each function/class definition\n\n**Result:** Code becomes modular and visual. New developers can understand structure at a glance.\n\n## Mobile Interfaces\n\n**Goal:** Maintain Box Element logic on small screens.\n\n**Strategy:**  \n- Collapse multi-column grids to single column\n- Maintain 1px borders and `0.625rem` radius (looks great even at phone scale)\n- Full-width Box Elements (edge-to-edge within safe area)\n- Increase tap target size to 44px minimum while keeping visual element compact inside\n- Stackable panels with Splitters for user-controlled density\n\n**Result:** Mobile doesn't feel like a compromised desktop. It feels like a *touch-optimized Box Element system*.\n\n**Scenario truth:** If your design system breaks when you change screen size or use case, it's not a system\u2014it's a collection of one-off solutions. Box Elements scale because their rules scale.",
+      "customCssVariables": [
+        {
+          "name": "sp-1",
+          "value": "var(--spacing)"
+        },
+        {
+          "name": "sp-2",
+          "value": "calc(var(--spacing) * 2)"
+        },
+        {
+          "name": "sp-3",
+          "value": "calc(var(--spacing) * 3)"
+        },
+        {
+          "name": "sp-4",
+          "value": "calc(var(--spacing) * 4)"
+        },
+        {
+          "name": "sp-6",
+          "value": "calc(var(--spacing) * 6)"
+        },
+        {
+          "name": "sp-8",
+          "value": "calc(var(--spacing) * 8)"
+        },
+        {
+          "name": "sp-12",
+          "value": "calc(var(--spacing) * 12)"
+        },
+        {
+          "name": "sp-16",
+          "value": "calc(var(--spacing) * 16)"
+        }
+      ]
     }
   }
 }

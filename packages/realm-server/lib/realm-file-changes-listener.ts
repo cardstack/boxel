@@ -13,14 +13,21 @@ const log = logger('realm-server:file-changes-listener');
 // runtime-common/realm.ts), every listener subscribed on this channel looks
 // up the URL in its lookup function. If the realm is mounted locally,
 // `realm.invalidateCache(path)` clears the matching #sourceCache /
-// #transpiledModuleCache entries. If it's not mounted, the notification is dropped —
-// this instance has no stale state to clear.
+// #transpiledModuleCache entries, and `realm.refreshDirectoryView(path)`
+// re-lists the path's parent directory so the kernel's cached view of the
+// shared filesystem (which can still say the file is absent) is refreshed
+// too. If it's not mounted, the notification is dropped — this instance has
+// no stale state to clear.
 //
 // Bulk variant: when the path is the wildcard sentinel `*` (CS-11156),
 // `realm.clearLocalSourceCaches()` drops every cached path for that realm. Emitted
 // by the publish-realm / unpublish-realm / delete-realm handlers after the
 // FS swap or removal so peers (whose file-watcher events do NOT cross
-// replicas) bypass their pre-swap cached bytes on the next read.
+// replicas) bypass their pre-swap cached bytes on the next read. Note the
+// wildcard branch clears only the in-memory byte caches: the kernel's view of
+// the swapped directory tree is NOT refreshed here (that would take a
+// recursive walk of the realm), so a peer can still serve stale
+// file-not-found for files a republish added, until the kernel cache expires.
 //
 // The LISTEN is backed by `PgAdapter.subscribe` (shared multiplexed
 // notification client). There is no periodic work to run between
@@ -102,6 +109,13 @@ export class RealmFileChangesListener {
         realm.clearLocalSourceCaches();
       } else {
         realm.invalidateCache(parsed.path);
+        // Fire-and-forget: the NOTIFY handler stays synchronous, and a failed
+        // directory listing only means the kernel cache expires on its own.
+        realm.refreshDirectoryView(parsed.path).catch((err: unknown) => {
+          log.warn(
+            `refreshDirectoryView failed for ${parsed.url} ${parsed.path}: ${String(err)}`,
+          );
+        });
       }
     } catch (err: unknown) {
       const op = isWildcard ? 'clearLocalSourceCaches' : 'invalidateCache';

@@ -134,6 +134,9 @@ module('Integration | Component | matrix/login', function (hooks) {
       assert
         .dom('[data-test-sso-exchanging]')
         .exists('Signing-in placeholder visible during SSO exchange');
+      // The exchange placeholder is shared by every ?loginToken= flow (Google
+      // and CLI hand-off alike), so its title must not name a provider.
+      assert.dom('[data-test-sso-exchanging]').doesNotContainText('Google');
       assert
         .dom('[data-test-login-form]')
         .doesNotExist('Password form hidden during SSO exchange');
@@ -176,7 +179,53 @@ module('Integration | Component | matrix/login', function (hooks) {
     assert
       .dom('[data-test-login-form]')
       .exists('Password form is restored after the failed SSO exchange');
-    assert.dom('[data-test-login-error]').includesText('Google sign-in failed');
+    assert.dom('[data-test-login-error]').includesText('Sign-in failed');
+  });
+
+  test('?loginToken= exchange failing with a 403 explains the link is spent rather than blaming credentials', async function (assert) {
+    window.location.href = '/?loginToken=stale';
+
+    setLoginWithTokenInterceptor(() =>
+      Promise.reject({
+        httpStatus: 403,
+        errcode: 'M_FORBIDDEN',
+        data: { errcode: 'M_FORBIDDEN', error: 'Invalid login token' },
+      }),
+    );
+
+    await render(<template><Login @setMode={{noop}} /></template>);
+
+    assert
+      .dom('[data-test-login-form]')
+      .exists('Password form is restored after the failed SSO exchange');
+    assert
+      .dom('[data-test-login-error]')
+      .includesText('This sign-in link has expired or was already used');
+    assert
+      .dom('[data-test-login-error]')
+      .doesNotIncludeText('check your credentials');
+  });
+
+  test('?loginToken= exchange failing with a non-M_FORBIDDEN 403 does not claim the link expired', async function (assert) {
+    window.location.href = '/?loginToken=deactivated';
+
+    setLoginWithTokenInterceptor(() =>
+      Promise.reject({
+        httpStatus: 403,
+        errcode: 'M_USER_DEACTIVATED',
+        data: {
+          errcode: 'M_USER_DEACTIVATED',
+          error: 'This account has been deactivated',
+        },
+      }),
+    );
+
+    await render(<template><Login @setMode={{noop}} /></template>);
+
+    assert.dom('[data-test-login-error]').includesText('Sign-in failed');
+    assert
+      .dom('[data-test-login-error]')
+      .doesNotIncludeText('This sign-in link has expired or was already used');
   });
 
   test('?loginToken= falls back to the password form when start() fails after a successful token exchange', async function (assert) {
@@ -207,9 +256,7 @@ module('Integration | Component | matrix/login', function (hooks) {
       assert
         .dom('[data-test-login-form]')
         .exists('Password form is restored after the failed start()');
-      assert
-        .dom('[data-test-login-error]')
-        .includesText('Google sign-in failed');
+      assert.dom('[data-test-login-error]').includesText('Sign-in failed');
     } finally {
       matrixService.start = originalStart;
     }

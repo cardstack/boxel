@@ -1995,10 +1995,29 @@ export default class StoreService extends Service implements StoreInterface {
       this.network.authedFetch,
       this.network.virtualNetwork,
       {
+        resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
     );
+  }
+
+  // A query-backed relationship resolves when its owner deserializes here, so a
+  // card's membership — and every `computeVia` reducing over it — is current
+  // without a template having to read the field first.
+  //
+  // Two stores are excluded, because both must render as a pure function of the
+  // document they were handed: the render store, and every store inside the
+  // dedicated prerender app (where the deserializing store is the regular one,
+  // which an `isRenderStore` term alone would miss). `__boxelRenderContext` is
+  // deliberately not part of the test — card-prerender sets it around index
+  // renders that run alongside an interactive app, whose own query fields must
+  // keep resolving through those windows.
+  protected resolvesQueryFieldsEagerly(): boolean {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return false;
+    }
+    return !this.isRenderStore;
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -2019,15 +2038,21 @@ export default class StoreService extends Service implements StoreInterface {
     };
 
     if (event.indexType === 'full') {
-      // A full reindex carries no per-file invalidation list; report it as a
-      // thin realm-event so the dashboard still sees the pass happened.
+      // A full reindex carries no per-file invalidation list, so there is
+      // nothing to reload by name. A realm that reindexes on request does
+      // broadcast the URLs it visited as an incremental event first, but one
+      // reindexing at startup announces itself with this event alone — so this
+      // can be the only word a card being held as awaiting-index ever gets
+      // that the row it is waiting for now exists.
+      let reloadsTriggered = this.reloadAwaitingIndexInstances(event.realmURL);
+      // Report the pass as a thin realm-event so the dashboard still sees it.
       telemetry?.recordEvent({
         event_type: 'realm-event',
         realm: event.realmURL,
         index_type: 'full',
         invalidations_count: 0,
         invalidated_ids: [],
-        reloads_triggered: 0,
+        reloads_triggered: reloadsTriggered,
         own_write: false,
         processing_ms: 0,
         event_args: eventArgs(),
@@ -2203,6 +2228,20 @@ export default class StoreService extends Service implements StoreInterface {
           this.loadInstanceTask.perform(invalidation);
           reloadsTriggered++;
         }
+      } else if (this.hasInflightCardLoad(invalidation)) {
+        // The invalidation landed while this id's first read was still in
+        // flight, so there is nothing in the store to reload yet. That read
+        // may well be the one that 404s — the index row this event announces
+        // did not exist when it was issued — and its awaiting-index
+        // placeholder would then be stale the moment it is installed, with no
+        // further event coming for it. Reload once the read settles.
+        // Deliberately not counted as a reload: whether one happens depends on
+        // what the read settles into, and the counter is read synchronously
+        // here for the realm-event telemetry.
+        realmEventsLogger.debug(
+          `deferring reload of ${invalidation} until its in-flight load settles`,
+        );
+        this.reloadAfterInflightLoad.perform(invalidation);
       } else {
         realmEventsLogger.debug(
           `ignoring invalidation ${invalidation} because we did not previously try to load it`,
@@ -2255,6 +2294,64 @@ export default class StoreService extends Service implements StoreInterface {
       }
     },
   );
+
+  // Is a first read of `id` still in flight? `inflightGetCards` is keyed by the
+  // normalized URL, which is the form an invalidation carries.
+  private hasInflightCardLoad(id: string): boolean {
+    let url = asURL(id, this.network.virtualNetwork);
+    return url ? this.inflightGetCards.has(url) : false;
+  }
+
+  // Wait out the in-flight read of `id`, then reload it if what it produced was
+  // an awaiting-index placeholder. That placeholder is the store's promise that
+  // the card will appear on its own, and the event that would have kept the
+  // promise is the one already being handled — it arrived too early to find
+  // anything to reload.
+  private reloadAfterInflightLoad = task(async (id: string) => {
+    let url = asURL(id, this.network.virtualNetwork);
+    let inflight = url ? this.inflightGetCards.get(url) : undefined;
+    if (inflight) {
+      await inflight;
+    }
+    if (this.peekError(id)?.awaitingIndex) {
+      this.loadInstanceTask.perform(id);
+    }
+  });
+
+  // Re-read every card being held as awaiting-index in `realmURL`. Their whole
+  // state is "a row for me is coming", and a from-scratch pass is one way it
+  // arrives without any event naming the card.
+  private reloadAwaitingIndexInstances(realmURL: string): number {
+    let reloaded = 0;
+    for (let [id, error] of this.store.cardErrorEntries()) {
+      if (!error.awaitingIndex) {
+        continue;
+      }
+      if (this.realm.realmOf(rri(id)) !== realmURL) {
+        continue;
+      }
+      realmEventsLogger.debug(
+        `reloading ${id} because a full index of ${realmURL} may have landed the row it is waiting for`,
+      );
+      this.loadInstanceTask.perform(id);
+      reloaded++;
+    }
+    // A read still in flight has recorded nothing for the sweep above to find,
+    // and the placeholder it is about to install would be stale the moment it
+    // lands — this pass is the very thing it would then be waiting for, and
+    // no later event is coming to say so. Same treatment the incremental
+    // branch gives an invalidation that names a card mid-read.
+    for (let id of this.inflightGetCards.keys()) {
+      if (this.realm.realmOf(rri(id)) !== realmURL) {
+        continue;
+      }
+      realmEventsLogger.debug(
+        `deferring reload of ${id} until its in-flight load settles, because a full index of ${realmURL} landed while it was reading`,
+      );
+      this.reloadAfterInflightLoad.perform(id);
+    }
+    return reloaded;
+  }
 
   private reestablishReferences = task(async () => {
     let remoteIds = new Set<string>();
@@ -2381,13 +2478,22 @@ export default class StoreService extends Service implements StoreInterface {
       try {
         maybeReloadedInstance = await this.reloadInstance(instance);
       } catch (err: any) {
-        if (err.status === 404) {
+        let cardError = processCardError(instance.id, err).errors[0];
+        if (cardError?.awaitingIndex) {
+          // The realm holds this card's source and has not indexed it yet.
+          // That is a statement about the index, not about the instance this
+          // tab is already running — so keep it exactly as it is, autosave and
+          // all, and let the index event that follows bring the fresh state.
+          // Treating it as a deletion would evict a card that still exists;
+          // recording it as an error would stand a placeholder in front of one
+          // the user is working in.
+          maybeReloadedInstance = instance;
+        } else if (err.status === 404) {
           // in this case the document was invalidated in the index because the
           // file was deleted
           isDelete = true;
         } else {
-          let errorResponse = processCardError(instance.id, err);
-          maybeReloadedInstance = errorResponse.errors[0];
+          maybeReloadedInstance = cardError;
         }
       }
       // Detach the original instance's autosave subscription when it's been
@@ -2478,6 +2584,22 @@ export default class StoreService extends Service implements StoreInterface {
       ? instanceOrError
       : undefined;
     if (!instance && !instanceOrError.id) {
+      return;
+    }
+    // An awaiting-index error says the realm has not caught up with a card it
+    // holds. It is never a statement about a card this tab is already running:
+    // a newly created instance is live in the store under its local id, and
+    // editable there, long before the realm has indexed it. Recording the error
+    // would make `peekError` report it, and every render site reads that to
+    // decide whether to stand a placeholder in front of the card — so a card
+    // the user is working in would be replaced by one. `getCard` correlates a
+    // remote URL back to a locally-created instance, so this holds from the
+    // moment the server assigns an id.
+    if (
+      !instance &&
+      (instanceOrError as CardErrorJSONAPI).awaitingIndex &&
+      this.store.getCard(instanceOrError.id!)
+    ) {
       return;
     }
     this.store.addCardInstanceOrError(
@@ -2764,6 +2886,15 @@ export default class StoreService extends Service implements StoreInterface {
     } catch (error: any) {
       let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
+      // A card this tab is already running outranks the realm's report that it
+      // has not indexed it yet — see `setIdentityContext`. A cache-bypassing
+      // read is the one that gets here with an instance already in hand.
+      let running =
+        cardError?.awaitingIndex && id ? this.store.getCard(id) : undefined;
+      if (running) {
+        deferred?.fulfill(running as T);
+        return running as T;
+      }
       deferred?.fulfill(cardError);
       this.setIdentityContext(cardError);
       let status = cardError?.status ?? error?.status;
