@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Offer",
+      "cardDescription": "A price proposed below asking, and the negotiation chain that follows.",
+      "specType": "card",
+      "ref": {
+        "module": "../sole-vault-offer",
+        "name": "Offer"
+      },
+      "readMe": "## Offer\n\nThe spec's v1.1 Offer System — offer, counter, negotiate.\n\n### One card per offer, not one per negotiation\n\nA counter-offer is a **new** Offer linked back through `counterTo`, never an edit to the original. Two reasons, and the first is the one that matters:\n\n1. An offer is a commitment someone made at a moment. Overwriting `amount` when the seller counters destroys the record of what the buyer actually offered — which is precisely what both parties argue about later.\n2. It makes the thread queryable. \"Every offer on this listing\" and \"the chain that produced this deal\" are both plain queries over links, with no array of embedded revisions to walk.\n\n`counterTo` is the negotiation's spine: null means an opening offer, and following the chain backwards reconstructs the whole exchange in order.\n\n### `open` is the only non-terminal state\n\nThat is the whole design. Every other value closes the card permanently:\n\n- A counter does not reopen this offer — it terminates it and starts a new one, so `countered` leads nowhere.\n- `accepted` leads nowhere because the next step is an **Order**, a different card with its own graph. Letting an accepted offer be un-accepted would orphan that order.\n- `declined` / `withdrawn` / `expired` are terminal for the same reason: re-offering is a new offer, and the history of the refused one is evidence.\n\n### The discount is computed at render time, never stored\n\n`listingPrice` is denormalized onto the card so a prerendered tile can show offer-vs-asking without resolving the listing — but the **difference** is a render-time getter. A stored discount goes stale the moment the seller re-prices, and a confident \"16% below asking\" that is no longer true is worse than no badge at all. The embedded row also drops that ratio a step in size and weight, so the money figure stays the thing read first.\n\n### Roles swap down the chain\n\nThe field is `offeredBy`, not `buyer`: on a counter it is the seller who is offering.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Offer/yeezy-350-zebra-185"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

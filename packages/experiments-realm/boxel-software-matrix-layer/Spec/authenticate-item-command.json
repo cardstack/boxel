@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Authenticate Item",
+      "cardDescription": "Record an authentication verdict for a collection item, and sync the outcome onto the item itself.",
+      "specType": "command",
+      "ref": {
+        "module": "../authenticate-item-command",
+        "name": "default"
+      },
+      "readMe": "## Authenticate Item\n\nThe spec's `AuthenticateItem` tool. Creates a full `AuthenticationRecord` (service, authenticator, certificate, notes) and \u2014 when the verdict is `passed` \u2014 syncs `verifiedOn`/`verifiedBy`/`verificationReference` onto the linked `CollectionItem`, so a prerendered fitted tile can show a verified badge without resolving a link.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `CollectionItem/aj1-lost-and-found-105`.\n\n### A failed verdict does not auto-refund\n\n`authentication-record.gts`'s own header says failure \"in an escrow flow this refunds the buyer\" \u2014 that is a fact about what should happen next, not something this command does unasked. Refund is money moving, and `RefundOrderCommand` is its own explicit call.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Authenticate Item",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CollectionItem/aj1-lost-and-found-105"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

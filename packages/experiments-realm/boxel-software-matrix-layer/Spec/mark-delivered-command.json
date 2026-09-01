@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Mark Delivered",
+      "cardDescription": "Record a shipment leg as delivered and advance the order status appropriately for that leg.",
+      "specType": "command",
+      "ref": {
+        "module": "../mark-delivered-command",
+        "name": "default"
+      },
+      "readMe": "## Mark Delivered\n\nThe spec's `MarkDelivered` tool. Leg-aware: a `seller-to-auth` delivery advances `Order.orderStatus` to `authenticating` (item arrived at the auth centre, not yet with the buyer); an `auth-to-buyer` delivery advances it to `delivered`.\n\n### A NEW, DOMAIN-NEUTRAL COMMAND \u2014 NOT A PULL, AND CHECKED FIRST\n\nThe matrix already has `l05-5-tc-fulfil-order` (tracker: Done, Spec present), whose actual code (`fulfil-order-command.ts`) was fetched and read before writing this file. It patches `./fulfilment-order` and `./shipment` types from the warehouse-fulfilment domain \u2014 `customerName`/`customerEmail` as plain strings, no buyer/seller, no escrow, no authentication step. Not a match by kind, so this is a build, not a consume, and needs its own tracker row cross-referencing `l05-5-tc-fulfil-order` as a documented divergence.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `Shipment/sv-2026-1041-inbound`.\n\n### Honest gap, stated in the command's own header comment\n\n`delivered \u2192 completed` (the buyer's own confirmation that releases funds to the seller) has no command \u2014 the spec's ten-tool list names none. Left as an explicit, undone edge rather than silently folded into a carrier-scan event.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Mark Delivered",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Shipment/sv-2026-1041-inbound"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

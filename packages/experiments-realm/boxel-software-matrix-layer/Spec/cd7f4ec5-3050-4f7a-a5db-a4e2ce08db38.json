@@ -9,7 +9,14 @@
         "module": "../rejection-reason-field",
         "name": "RejectionReasonField"
       },
-      "readMe": "# Rejection Reason Field\n\n## Summary\nA StringField enum (not-a-fit | experience-gap | compensation-mismatch | withdrew | position-cancelled | culture-fit | other) built with `enumField`, capturing why a candidate left the pipeline as a fixed, countable value instead of free text.\n\n## Import\n```ts\nimport { RejectionReasonField, REJECTION_REASON_OPTIONS } from './rejection-reason-field';\n```\n\n## Usage — three or more ways this is used\n\nIt is a **primitive** FieldDef (extends `StringField`), so it serializes as a\nbare string and cannot hold `containedExamples` — the linked example is a\ncard that actually carries the field.\n\n**1. `Candidate.rejectionReason`** — set by `RejectCandidateCommand` when a\ncandidate is rejected; shown as a labeled pill on the Candidate isolated view\nalongside the free-text `rejectionNote` companion field.\n\n**2. `RejectCandidateInput.reason`** (in `commands/reject-candidate-command.gts`)\n— the command's input type, so a caller (the tracker's dialog, an AI\nassistant) can only pass one of the fixed values, not arbitrary prose.\n\n**3. `RejectCandidateDialog`** (in `components/reject-candidate-dialog.gts`)\n— re-exports `REJECTION_REASON_OPTIONS` to build its radio-button list, so the\ndialog's choices and the field's allowed values can never drift apart.\n\n**4. The Offers dashboard's `topRejectionReasonLabel`** groups rejected\ncandidates by this exact value to report the most common reason and its\nshare of total rejections.\n\n## Template Usage\n```hbs\n<@fields.rejectionReason @format='atom' @displayContainer={{false}} />\n```\n\n**Non-goals:** free-text detail (see `Candidate.rejectionNote` for that);\nreasons for withdrawing an *offer* rather than rejecting a *candidate*\n(`Offer.status = 'declined'` already covers that surface).\n\n**Example in use:** `Candidate/rejected-quinn` carries `rejectionReason:\nexperience-gap` with the original free-text detail moved into the new\n`rejectionNote` field.\n"
+      "readMe": "# Rejection Reason Field\n\n## Summary\nA StringField enum (not-a-fit | experience-gap | compensation-mismatch | withdrew | position-cancelled | culture-fit | other) built with `enumField`, capturing why a candidate left the pipeline as a fixed, countable value instead of free text.\n\n## Import\n```ts\nimport { RejectionReasonField, REJECTION_REASON_OPTIONS } from './rejection-reason-field';\n```\n\n## Usage — three or more ways this is used\n\nIt is a **primitive** FieldDef (extends `StringField`), so it serializes as a\nbare string and cannot hold `containedExamples` — the linked example is a\ncard that actually carries the field.\n\n**1. `Candidate.rejectionReason`** — set by `RejectCandidateCommand` when a\ncandidate is rejected; shown as a labeled pill on the Candidate isolated view\nalongside the free-text `rejectionNote` companion field.\n\n**2. `RejectCandidateInput.reason`** (in `commands/reject-candidate-command.gts`)\n— the command's input type, so a caller (the tracker's dialog, an AI\nassistant) can only pass one of the fixed values, not arbitrary prose.\n\n**3. `RejectCandidateDialog`** (in `components/reject-candidate-dialog.gts`)\n— re-exports `REJECTION_REASON_OPTIONS` to build its radio-button list, so the\ndialog's choices and the field's allowed values can never drift apart.\n\n**4. The Offers dashboard's `topRejectionReasonLabel`** groups rejected\ncandidates by this exact value to report the most common reason and its\nshare of total rejections.\n\n## Template Usage\n```hbs\n<@fields.rejectionReason @format='atom' @displayContainer={{false}} />\n```\n\n**Non-goals:** free-text detail (see `Candidate.rejectionNote` for that);\nreasons for withdrawing an *offer* rather than rejecting a *candidate*\n(`Offer.status = 'declined'` already covers that surface).\n\n**Example in use:** `Candidate/rejected-quinn` carries `rejectionReason:\nexperience-gap` with the original free-text detail moved into the new\n`rejectionNote` field.\n",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
     },
     "relationships": {
       "linkedExamples.0": {
@@ -20,7 +27,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/spec",
+        "module": "@cardstack/base/spec",
         "name": "Spec"
       }
     }

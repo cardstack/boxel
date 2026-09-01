@@ -11,8 +11,13 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
-import enumField from 'https://cardstack.com/base/enum';
 import { eq } from '@cardstack/boxel-ui/helpers';
+// EXTRACTED to its own module (Revenue Ops Console build) so Payment Status
+// is a standalone, Spec-able block instead of private to this file. No other
+// file imports the old `InvoiceStatusField` name, so this is a pure rename
+// at the usage site below, not a re-export shim like Pipeline Stage needed.
+import { PaymentStatusField as InvoiceStatusField } from './payment-status-field';
+import { TaxBreakdownField } from './tax-breakdown-field';
 import FileInvoiceIcon from '@cardstack/boxel-icons/file-invoice';
 import { Account } from './account';
 import { User } from './user';
@@ -40,11 +45,9 @@ function isTerminal(status: string | null | undefined): boolean {
 
 // Overdue is not a state anyone sets — it is what being unpaid past the due
 // date looks like, so it is derived rather than stored and cannot drift from
-// the balance and the calendar.
-const InvoiceStatusField = enumField(StringField, {
-  options: ['draft', 'sent', 'viewed', 'partial', 'paid', 'void'],
-  displayName: 'Invoice Status',
-});
+// the balance and the calendar. The status vocabulary itself now lives in
+// `payment-status-field.gts` (imported above as `InvoiceStatusField` for a
+// zero-diff usage site).
 
 export class Invoice extends CardDef {
   static displayName = 'Invoice';
@@ -61,6 +64,10 @@ export class Invoice extends CardDef {
   @field order = linksTo(() => Order);
   @field subscription = linksTo(() => Subscription);
   @field payments = linksToMany(() => Payment);
+  // ADDED (Revenue Ops Console build) — written by calculate-tax-command.ts
+  // via convert-quote-to-invoice-command.ts, optional (not every invoice is
+  // taxed).
+  @field taxBreakdown = contains(TaxBreakdownField);
 
   @field daysOverdue = contains(NumberField, {
     computeVia: function (this: Invoice) {

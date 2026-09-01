@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "goal": "The pairs that anchor the vault \u2014 storied retros with provenance. A pair only counts once it has passed authentication.",
+      "completionRule": "own-any",
+      "isPublic": false,
+      "coverImage": {
+        "url": "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
+      },
+      "cardInfo": {
+        "name": "Holy Grails",
+        "summary": "The private grail list \u2014 currently anchored by the Lost & Found AJ1.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "products.0": {
+        "links": {
+          "self": "../CollectibleProduct/aj1-lost-and-found"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../completion-set",
+        "name": "CompletionSet"
+      }
+    }
+  }
+}

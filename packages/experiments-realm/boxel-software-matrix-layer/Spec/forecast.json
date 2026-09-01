@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Forecast\n\n`territory` (linksTo Territory), `period`, `projectedAmount` (AmountWithCurrency), `calculatedAt` (DateField). DEVIATION from initial plan: NOT a `computeVia` field \u2014 a computeVia can only derive from this card's own data, not run a live cross-realm query over open Opportunities. `projectedAmount` is a stored snapshot, written by a future recalculation command reusing `revenue-os.gts`'s own existing forecast-window math (effectiveProbability-weighted sum, filtered by close-date window), and stamped with `calculatedAt` so a stale forecast is visibly stale rather than silently wrong.\n\n### Non-goals\nDoes not itself run the live query \u2014 that's the (not-yet-built) recalculation command's job. Does not replace `revenue-os.gts`'s own inline forecast-window UI, which stays as the live, ad-hoc view; this card is the persisted, point-in-time snapshot.\n\n### Example\n`linkedExamples` points at `Forecast/west-coast-q3-2026`, linked to the real `Territory/west-coast-enterprise` instance.",
+      "ref": {
+        "module": "../forecast",
+        "name": "Forecast"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Forecast",
+      "cardDescription": "A rolled-up projection of expected revenue for a territory over a period, stored as a snapshot rather than a live computation.",
+      "cardInfo": {
+        "name": "Forecast",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Forecast/west-coast-q3-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

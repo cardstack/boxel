@@ -10,53 +10,23 @@ import NumberField from 'https://cardstack.com/base/number';
 import DateField from 'https://cardstack.com/base/date';
 import PercentageField from 'https://cardstack.com/base/percentage';
 import AmountWithCurrency from 'https://cardstack.com/base/amount-with-currency';
-import enumField from 'https://cardstack.com/base/enum';
 import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import { Account } from './account';
 import { User } from './user';
 import { formatMoney } from './money';
+// EXTRACTED to its own module (Revenue Ops Console build) so Pipeline Stage
+// is a standalone, Spec-able block instead of private to this file. Kept as
+// a re-export below so every existing consumer of `./opportunity`
+// (`deal.gts`, `revenue-os.gts`, `board-demo.gts`) needs zero edits.
+import {
+  PipelineStageField as StageField,
+  PIPELINE_STAGES,
+  STAGE_DEFAULT_PROBABILITY,
+  STAGE_COLORS,
+  stageSlug,
+} from './pipeline-stage-field';
 
-export const PIPELINE_STAGES = [
-  'new lead',
-  'contacted',
-  'qualified',
-  'discovery',
-  'proposal',
-  'negotiation',
-  'closed won',
-  'closed lost',
-] as const;
-
-export const STAGE_DEFAULT_PROBABILITY: Record<string, number> = {
-  'new lead': 10,
-  contacted: 20,
-  qualified: 30,
-  discovery: 50,
-  proposal: 70,
-  negotiation: 85,
-  'closed won': 100,
-  'closed lost': 0,
-};
-
-const StageField = enumField(StringField, {
-  options: [...PIPELINE_STAGES],
-  displayName: 'Pipeline Stage',
-});
-
-export function stageSlug(stage: string | undefined): string {
-  return (stage ?? '').replace(/\s+/g, '-');
-}
-
-export const STAGE_COLORS: Record<string, string> = {
-  'new lead': '#94a3b8',
-  contacted: '#60a5fa',
-  qualified: '#34d399',
-  discovery: '#2dd4bf',
-  proposal: '#fbbf24',
-  negotiation: '#f59e0b',
-  'closed won': '#16a34a',
-  'closed lost': '#dc2626',
-};
+export { PIPELINE_STAGES, STAGE_DEFAULT_PROBABILITY, STAGE_COLORS, stageSlug };
 
 export class Opportunity extends CardDef {
   static displayName = 'Opportunity';

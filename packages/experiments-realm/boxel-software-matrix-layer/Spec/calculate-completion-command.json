@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Calculate Completion",
+      "cardDescription": "Compute a completion set's owned/target counts and percentage from the current collection, without storing the result.",
+      "specType": "command",
+      "ref": {
+        "module": "../calculate-completion-command",
+        "name": "default"
+      },
+      "readMe": "## Calculate Completion\n\nThe spec's `CalculateCompletion` tool. Wraps `completion-set.gts`'s exported pure function `computeCompletion` \u2014 the app, this command, and any future consumer all call the same implementation, so there is exactly one definition of \"80% complete\" in the realm.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `CompletionSet/travis-scott-nike`.\n\n### Read-only by design\n\n`CompletionSet` deliberately stores no `progress` field (see its own header note: the numerator is a rollup over `CollectionItem`s and storing it guarantees drift the moment a pair is bought or sold). This command computes and returns the number; it never patches the set.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Calculate Completion",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CompletionSet/travis-scott-nike"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

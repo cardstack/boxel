@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Tax Jurisdiction\n\n`country`, `region`, `rate` (PercentageField). Lives at Layer 04 \"Standards\" in the tracker (generic, not Domain-Kit-specific) but is only ever consumed by this app's Invoice \u2014 nothing else on the realm needs tax.\n\n### Non-goals\nDoes not integrate with a real tax authority or filing system \u2014 this is a lookup table for the simulation `calculate-tax-command.ts` reads from.\n\n### Example\n`linkedExamples` points at `TaxJurisdiction/california-us` (7.25%), a real instance.",
+      "ref": {
+        "module": "../tax-jurisdiction",
+        "name": "TaxJurisdiction"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Tax Jurisdiction",
+      "cardDescription": "A region with its own tax rate \u2014 a lookup table reused across every invoice for that region.",
+      "cardInfo": {
+        "name": "Tax Jurisdiction",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TaxJurisdiction/california-us"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Payment Status\n\nExtracted from `invoice.gts`'s private `InvoiceStatusField` (plain enumField). Built on the shared `statusField` utility with a transition graph. `overdue` is deliberately NOT a stored option \u2014 it stays a derived field on Invoice (`isOverdue`/`displayStatus`), because overdue is what \"unpaid past the due date\" looks like, not a state anyone sets. Storing it would reintroduce the exact stored-vs-computed drift this realm has already hit once.\n\n### Non-goals\nDoes not implement dunning/reminder automation (a Could-Have, deferred). Does not calculate the amount owed (that's `Invoice`'s own line items).\n\n### Example\n`linkedExamples` points at the real, already-existing `Invoice/inv-2026-052` instance (`status: 'paid'`) \u2014 an in-use example, since Payment Status is a field, not a standalone card.",
+      "ref": {
+        "module": "../payment-status-field",
+        "name": "PaymentStatusField"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "cardTitle": "Payment Status",
+      "cardDescription": "Where an Invoice's money stands: draft/sent/viewed/partial/paid/void, with overdue kept as a derived field rather than a stored state.",
+      "cardInfo": {
+        "name": "Payment Status",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Invoice/inv-2026-052"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

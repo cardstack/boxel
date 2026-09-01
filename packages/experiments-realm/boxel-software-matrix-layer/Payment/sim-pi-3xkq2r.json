@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": {
+        "amount": 251.6,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "paymentState": "authorized",
+      "direction": "charge",
+      "processorReference": "sim_pi_3XkQ2r",
+      "processor": "simulated",
+      "initiatedAt": "2026-08-18",
+      "settledAt": null,
+      "reason": null,
+      "cardInfo": {
+        "name": "Charge $251.60 \u2014 SV-2026-1041",
+        "summary": "The escrow hold: authorized, not captured. Funds are reserved with the processor and only settle once the buyer confirms delivery. Processor is 'simulated' \u2014 this realm records payments, it never moves money.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-payment",
+        "name": "Payment"
+      }
+    }
+  }
+}

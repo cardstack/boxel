@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Process Payment",
+      "cardDescription": "Charge the order total and move the order from pending-payment to paid, recording a Payment.",
+      "specType": "command",
+      "ref": {
+        "module": "../process-payment-command",
+        "name": "default"
+      },
+      "readMe": "## Process Payment\n\nThe spec's `ProcessPayment` tool. Charges `Order.total` (an escrow simulation \u2014 see `order.gts`'s own header note that a realm cannot hold real funds), records a `captured` `Payment`, and advances `Order.orderStatus` to `paid`.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `Order/sv-2026-1041`.\n\n### State-machine guarded\n\nChecks `canOrderTransition(order.orderStatus, 'paid')` before writing anything \u2014 an order not in `pending-payment` is refused, not silently re-charged.\n\n### Non-goals\n\nDoes not model a real processor's `pending \u2192 authorized \u2192 captured` round trip; the effect (order moves to `paid`, funds now held) is what matters here, not a faithful gateway simulation.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Process Payment",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

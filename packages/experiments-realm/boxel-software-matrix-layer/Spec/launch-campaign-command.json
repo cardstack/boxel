@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Launch Campaign\n\nTransitions an existing `Campaign` (already built on this realm, not rebuilt here) from `planned` to `running`. `campaign.gts`'s own `CampaignStatusField` is a plain enum with no transition graph (unlike Order/Payment/Pipeline Stage/Payment Status), so this command carries its own guard rather than reaching for `canTransition` \u2014 extracting a full statusField for Campaign was judged out of scope (Campaign itself isn't one of the 18 concepts this app fills; only this command is).\n\n### Non-goals\nDoes not build or send campaign creative/content \u2014 purely the lifecycle transition.\n\n### Example\n`linkedExamples` points at the real, already-existing `Campaign/logistics-expo-2026` instance (`status: 'planned'`) \u2014 exactly the precondition this command requires.",
+      "ref": {
+        "module": "../launch-campaign-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "containedExamples": [],
+      "cardTitle": "Launch Campaign",
+      "cardDescription": "Transitions an existing Campaign from 'planned' to 'running'.",
+      "cardInfo": {
+        "name": "Launch Campaign",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Campaign/logistics-expo-2026"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

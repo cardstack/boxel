@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "price": {
+        "amount": 105,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 12,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "listingStatus": "active",
+      "shipsFrom": "Los Angeles, CA",
+      "listingNotes": "DS with original box, authenticated by Check Check (cert on the item). Priced to move.",
+      "listedAt": "2026-08-20",
+      "soldAt": null,
+      "expiresAt": null,
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2385477/pexels-photo-2385477.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Dunk Low Panda US 9.5 \u2014 DS",
+        "summary": "Authenticated deadstock pair at market price.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "collectionItem": {
+        "links": {
+          "self": "../CollectionItem/dunk-low-panda-95"
+        }
+      },
+      "product": {
+        "links": {
+          "self": "../CollectibleProduct/dunk-low-panda"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../listing",
+        "name": "Listing"
+      }
+    }
+  }
+}

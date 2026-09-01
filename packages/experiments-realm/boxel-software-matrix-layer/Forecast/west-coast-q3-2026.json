@@ -1,0 +1,34 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "period": "2026-Q3",
+      "projectedAmount": {
+        "amount": 58000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "calculatedAt": "2026-08-31",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "territory": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Territory/west-coast-enterprise"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../forecast",
+        "name": "Forecast"
+      }
+    }
+  }
+}

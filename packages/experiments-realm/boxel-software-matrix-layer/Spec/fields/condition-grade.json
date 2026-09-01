@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Condition Grade",
+      "cardDescription": "A graded assessment of a physical item's condition, plus what that grade implies for its value.",
+      "specType": "field",
+      "ref": {
+        "module": "../../condition-grade",
+        "name": "ConditionGrade"
+      },
+      "readMe": "## Condition Grade\n\nA graded assessment of a physical item's condition, and what that grade implies for its value. `code` carries the grade in the consumer's own vocabulary, `valueRetention` is the percentage of market value the grade retains, and `notes` records the specific flaw.\n\n### Consuming it\n\nThis field names no grading scale, because only the consumer knows it — sneakers grade DS / VNDS / 9-10, watches grade Mint / Excellent / Good, records grade VG+ / NM. Give `code` a select by overriding it with enum options at the point of consumption, the way `pets.gts` (`PetOwner.preferredSpecies`) does:\n\n```gts\nimport enumField, { enumConfig } from '@cardstack/base/enum';\n\nconst SneakerGrade = enumField(StringField, {\n  options: [\n    { value: 'DS', label: 'Deadstock' },\n    { value: 'VNDS', label: 'Very Near Deadstock' },\n    { value: '9/10', label: '9/10 — light wear' },\n  ],\n  displayName: 'Sneaker Grade',\n});\n```\n\n### Why `valueRetention` is stored, not looked up\n\nA grade's retention could live on a linked `GradingScale` card and be resolved per instance. It deliberately does not: **prerendered fitted views do not resolve `linksTo`**, and a collection grid of fitted tiles is exactly where a grade and its value are shown. Storing the number keeps every tier of the fitted spectrum renderable.\n\n### Non-goals\n\nThis field does not own the grading *scale* — the set of legal codes and their meanings is the consumer's, supplied as enum options. It does not own market value either: `valueRetention` is a multiplier, and the price it applies to belongs to the consuming card (`CollectionItem.lastKnownValue`). It does not own authentication — whether an item is genuine is a different question from what condition it is in, and lives on `CollectionItem` as `verifiedOn`/`verifiedBy`.\n\n### Open question for the team\n\n`valueRetention` is authored per instance today, which means the same grade can carry different retentions on two items. If a shared scale card lands later, the migration is to keep this field as the denormalized cache and write it from the scale — not to replace it with a link.",
+      "containedExamples": [
+        {
+          "code": "DS",
+          "valueRetention": 100,
+          "notes": null
+        },
+        {
+          "code": "VNDS",
+          "valueRetention": 92,
+          "notes": "Tried on indoors once, no creasing."
+        },
+        {
+          "code": "8/10",
+          "valueRetention": 70,
+          "notes": "Moderate toebox creasing, midsole slightly yellowed."
+        }
+      ]
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../../condition-grade",
+              "name": "ConditionGrade"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../../condition-grade",
+              "name": "ConditionGrade"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../../condition-grade",
+              "name": "ConditionGrade"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

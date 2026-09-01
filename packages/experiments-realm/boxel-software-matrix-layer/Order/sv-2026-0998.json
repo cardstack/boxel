@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "SV-2026-0998",
+      "price": {
+        "amount": 105,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 12,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "authFee": {
+        "amount": 10,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "platformFee": {
+        "amount": 3.15,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "orderStatus": "completed",
+      "placedAt": "2026-07-02",
+      "paidAt": "2026-07-02",
+      "shippedAt": "2026-07-03",
+      "authenticatedAt": "2026-07-08",
+      "deliveredAt": "2026-07-11",
+      "completedAt": "2026-07-12",
+      "trackingNumber": "1Z999AA10198766201",
+      "paymentReference": "sim_pi_9QwE4t",
+      "cardInfo": {
+        "name": "SV-2026-0998 \u2014 Dunk Low Panda",
+        "summary": "A finished escrow round-trip: paid, authenticated, delivered, funds released.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../Listing/dunk-low-panda-95"
+        }
+      },
+      "buyer": {
+        "links": {
+          "self": "../SoleVaultPerson/vaultkeeper"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-order",
+        "name": "Order"
+      }
+    }
+  }
+}

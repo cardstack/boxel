@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Enterprise Onboarding Package",
+      "description": "One-time implementation and training engagement for new Enterprise accounts.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../service",
+        "name": "Service"
+      }
+    }
+  }
+}

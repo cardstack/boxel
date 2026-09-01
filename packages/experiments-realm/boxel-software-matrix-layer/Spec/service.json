@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Service\n\n`name`, `description`. Kept separate from `Plan` per the domain-neutral rule: Plan is the recurring tier, Service is one-time/ad-hoc. Same Price-lookup pattern as Plan \u2014 no stored back-link.\n\n### Non-goals\nDoes not carry billing interval or amount \u2014 that's `Price`.\n\n### Example\n`linkedExamples` points at `Service/onboarding-package`, a real one-time onboarding engagement instance.",
+      "ref": {
+        "module": "../service",
+        "name": "Service"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Service",
+      "cardDescription": "A billable, non-recurring unit (implementation, support hours, onboarding), kept separate from Plan.",
+      "cardInfo": {
+        "name": "Service",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Service/onboarding-package"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

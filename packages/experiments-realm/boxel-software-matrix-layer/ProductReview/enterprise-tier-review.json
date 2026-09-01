@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "rating": 5,
+      "body": "The dedicated account manager alone was worth the upgrade \u2014 response times went from days to hours.",
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "plan": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Plan/enterprise-tier"
+        }
+      },
+      "service": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../product-review",
+        "name": "ProductReview"
+      }
+    }
+  }
+}

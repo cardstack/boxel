@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Product Review\n\n`rating` (1-5), `body`, links to `plan` or `service`. Deliberately NOT rendered inside RevenueOs (an internal sales-ops console, not a public review surface) \u2014 instead self-hosted by `plan.gts`/`service.gts`'s own isolated views, which is a real consumer without forcing the wrong UI into the wrong app. This is the least load-bearing of the 18 concepts \u2014 nothing else depends on it.\n\n### Non-goals\nDoes not verify purchase authenticity in this pass (an optional `verifiedPurchase` linksTo Order is a Should-Have, not built here). Does not aggregate ratings into a Plan-level average \u2014 that would be a live-query rollup, deferred.\n\n### Example\n`linkedExamples` points at `ProductReview/enterprise-tier-review`, linked to the real `Plan/enterprise-tier` instance.",
+      "ref": {
+        "module": "../product-review",
+        "name": "ProductReview"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Product Review",
+      "cardDescription": "Customer feedback tied to a Plan or Service, not to a specific purchase \u2014 public-facing, like a review site.",
+      "cardInfo": {
+        "name": "Product Review",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ProductReview/enterprise-tier-review"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

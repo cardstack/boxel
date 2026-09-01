@@ -1,0 +1,46 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "service": "Check Check",
+      "outcome": "passed",
+      "submittedAt": "2022-12-01",
+      "completedAt": "2022-12-04",
+      "certificateId": "CC-2022-88431",
+      "authenticator": "AuthTeam-Mike",
+      "authenticatorNotes": "Stitching density on the Swoosh matches the retail run. Box label font and factory code consistent with the November 2022 production. Cracked-leather finish is factory, not wear.",
+      "submittedPhotos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Check Check \u2014 AJ1 Lost & Found US 10.5",
+        "summary": "A passed legit check, with the certificate reference the collection item denormalizes.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../CollectionItem/aj1-lost-and-found-105"
+        }
+      },
+      "order": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../authentication-record",
+        "name": "AuthenticationRecord"
+      }
+    }
+  }
+}

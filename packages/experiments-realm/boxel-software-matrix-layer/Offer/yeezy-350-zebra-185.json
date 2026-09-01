@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": {
+        "amount": 185,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "offerStatus": "open",
+      "message": "Would you take 185 shipped? Ready to pay today.",
+      "offeredAt": "2026-08-24",
+      "respondedAt": null,
+      "expiresAt": "2026-08-31",
+      "cardInfo": {
+        "name": "Offer $185 \u2014 Yeezy 350 V2 Zebra",
+        "summary": "An open opening offer, 16% below the $220 asking price. `counterTo` is empty, which is what marks it as the head of a negotiation rather than a reply.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../Listing/yeezy-350-zebra-11"
+        }
+      },
+      "offeredBy": {
+        "links": {
+          "self": "../SoleVaultPerson/vaultkeeper"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-offer",
+        "name": "Offer"
+      }
+    }
+  }
+}

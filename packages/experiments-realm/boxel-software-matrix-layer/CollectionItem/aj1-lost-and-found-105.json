@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "variant": "10.5",
+      "variantScale": "US",
+      "packaging": "OG All",
+      "condition": {
+        "code": "DS",
+        "valueRetention": 100,
+        "notes": null
+      },
+      "acquisition": {
+        "price": {
+          "amount": 185,
+          "currency": {
+            "code": "USD"
+          }
+        },
+        "acquiredOn": "2022-11-19",
+        "source": "Retail \u2014 SNKRS",
+        "reference": "C01234567890"
+      },
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "verifiedOn": "2022-12-04",
+      "verifiedBy": "Check Check",
+      "verificationReference": "CC-2022-88431",
+      "listedAt": "2026-08-25",
+      "lastKnownValue": {
+        "amount": 310,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "valuedOn": "2026-08-01",
+      "notes": "Hit on SNKRS release day. Keeping this one \u2014 the cracked-leather upper is the whole point of the release.",
+      "cardInfo": {
+        "name": "Air Jordan 1 Retro High OG \"Chicago Lost & Found\" \u2014 US 10.5",
+        "summary": "Deadstock, OG All, authenticated by Check Check. Acquired at retail on release day.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../CollectibleProduct/aj1-lost-and-found"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collection-item",
+        "name": "CollectionItem"
+      }
+    }
+  }
+}

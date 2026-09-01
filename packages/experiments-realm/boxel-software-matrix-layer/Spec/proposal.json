@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Proposal\n\n`title`, `narrative` (MarkdownField), `deal` (linksTo the realm's existing `Deal`). Kept deliberately separate from `Quote`: a Proposal sells the WHY, a Quote states the HOW MUCH. Conflating them forces every early-stage one-pager into a pricing document before the deal is even qualified for one.\n\n### Non-goals\nDoes not carry pricing \u2014 that's `Quote`, which can optionally link back to the Proposal it formalizes. Does not track approval/e-signature (Could-Have, could reuse the realm's existing `ApprovalChainField`).\n\n### Example\n`linkedExamples` points at `Proposal/acme-enterprise-renewal-proposal`, linked to the real `Deal/acme-enterprise-renewal` instance already on this realm (a live, in-negotiation deal \u2014 not a fabricated one).",
+      "ref": {
+        "module": "../proposal",
+        "name": "Proposal"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Proposal",
+      "cardDescription": "A narrative sales document (goals, scope, value proposition) sent before pricing is finalized, distinct from a Quote.",
+      "cardInfo": {
+        "name": "Proposal",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Proposal/acme-enterprise-renewal-proposal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

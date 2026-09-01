@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Add To Collection",
+      "cardDescription": "Catalogue a new owned copy of a product, with its condition and acquisition details.",
+      "specType": "command",
+      "ref": {
+        "module": "../add-to-collection-command",
+        "name": "default"
+      },
+      "readMe": "## Add To Collection\n\nThe spec's `AddToCollection` tool. Creates a new `CollectionItem` linking to a catalogued product, with a `ConditionGrade` and an `Acquisition` compound field populated from the call's inputs.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\n`linkedExamples` points at the command's natural target product: `CollectibleProduct/aj1-lost-and-found`.\n\n### The condition scale is the caller's vocabulary\n\n`condition-grade.gts`'s own header note is explicit that the field names no grading scale (DS/VNDS/9-10 is a sneaker convention, not the block's) \u2014 this command passes `conditionCode` straight through rather than hardcoding one.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Add To Collection",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CollectibleProduct/aj1-lost-and-found"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

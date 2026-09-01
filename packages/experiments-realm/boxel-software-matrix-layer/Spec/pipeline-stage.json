@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Pipeline Stage\n\nExtracted from `opportunity.gts`'s private `StageField` (plain enumField, no transition graph). Built on this realm's shared `statusField` utility, matching the Order/Payment convention: eight stages (new lead \u2192 contacted \u2192 qualified \u2192 discovery \u2192 proposal \u2192 negotiation \u2192 closed won/closed lost), each open stage may only advance or lose, never skip or regress. `PIPELINE_STAGES`, `STAGE_DEFAULT_PROBABILITY`, `STAGE_COLORS`, and `stageSlug` are re-exported from `opportunity.gts` for backward compatibility with `deal.gts`, `revenue-os.gts`, and `board-demo.gts` \u2014 none of them needed edits.\n\n### Non-goals\nDoes not decide what happens when a stage changes (that's `advance-deal-command.ts`). Does not compute a rollup across stages (that's `forecast.gts`).\n\n### Example\n`linkedExamples` points at the real, already-existing `Deal/acme-enterprise-renewal` instance (`stage: 'negotiation'`) \u2014 an in-use example, since Pipeline Stage is a field, not a standalone card.",
+      "ref": {
+        "module": "../pipeline-stage-field",
+        "name": "PipelineStageField"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "cardTitle": "Pipeline Stage",
+      "cardDescription": "Where a Deal sits in the sales funnel, with a real transition graph (canTransition/nextStatuses) governing which stage moves are legal.",
+      "cardInfo": {
+        "name": "Pipeline Stage",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

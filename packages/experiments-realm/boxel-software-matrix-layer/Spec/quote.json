@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Quote\n\n`version`, `status` (draft/sent/under-review/won/lost/expired), `supersedes` (linksTo a previous Quote, immutable-history pattern already proven by this realm's Payment/Sole Vault's Payment), `deal` (linksTo Deal), optional `proposal` link, `lineItems` (containsMany the realm's existing `LineItem` FieldDef \u2014 reused, not rebuilt). `total` is `computeVia` from the line items.\n\n### Non-goals\nDoes not itself become an Invoice \u2014 that's `convert-quote-to-invoice-command.ts`. Line items are a snapshot of description/qty/price at negotiation time; `Price` cards are the separate catalog entities used to populate them when authoring a quote, not what the line item stores.\n\n### Example\n`linkedExamples` points at `Quote/acme-enterprise-renewal-q1`, version 1, status `won`, linked to the real `Deal/acme-enterprise-renewal` and `Proposal/acme-enterprise-renewal-proposal` instances, with a real line item matching the deal's $58,000 value.",
+      "ref": {
+        "module": "../quote",
+        "name": "Quote"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Quote",
+      "cardDescription": "A versioned, priced proposal \u2014 each negotiation round is a new immutable version, the latest one binding.",
+      "cardInfo": {
+        "name": "Quote",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quote/acme-enterprise-renewal-q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Convert Quote to Invoice\n\nMirrors `close-won.gts`'s pattern: re-fetch the subject before reading its links, save through `SaveCardCommand`, patch compound fields (line items) via `PatchCardInstanceCommand` rather than constructing them as field-class instances directly. Not itself one of the 18 tracked matrix concepts, but Spec'd anyway per this realm's convention of specing every reusable command (Sole Vault did the same for `process-payment-command.ts`).\n\n### Non-goals\nDoes not itself calculate tax \u2014 delegates to `calculate-tax-command.ts` when a jurisdiction is supplied.\n\n### Example\n`linkedExamples` points at `Quote/acme-enterprise-renewal-q1` (`status: 'won'`) \u2014 exactly the precondition this command requires. `Invoice/acme-enterprise-renewal-inv` shows the hand-authored result of running it (a real invoice with matching line items and tax breakdown).",
+      "ref": {
+        "module": "../convert-quote-to-invoice-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "containedExamples": [],
+      "cardTitle": "Convert Quote to Invoice",
+      "cardDescription": "Approves a Quote, stamps an Invoice Number, copies its line items onto a new Invoice, and calculates tax when a jurisdiction is supplied.",
+      "cardInfo": {
+        "name": "Convert Quote to Invoice",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quote/acme-enterprise-renewal-q1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

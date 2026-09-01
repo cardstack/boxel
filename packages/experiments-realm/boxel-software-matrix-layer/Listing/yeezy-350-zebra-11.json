@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "price": {
+        "amount": 220,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 15,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "listingStatus": "active",
+      "shipsFrom": "Los Angeles, CA",
+      "listingNotes": "VNDS, tried on indoors once. Replacement box \u2014 the original was damaged in storage, disclosed up front. Ships double-boxed.",
+      "listedAt": "2026-08-14",
+      "soldAt": null,
+      "expiresAt": null,
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/4398341/pexels-photo-4398341.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.pexels.com/photos/7193625/pexels-photo-7193625.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Yeezy 350 V2 Zebra \u2014 US 11 \u2014 $220",
+        "summary": "An active listing whose CollectionItem carries the matching listedAt date.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "collectionItem": {
+        "links": {
+          "self": "../CollectionItem/yeezy-350-zebra-11"
+        }
+      },
+      "product": {
+        "links": {
+          "self": "../CollectibleProduct/yeezy-350-zebra"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../listing",
+        "name": "Listing"
+      }
+    }
+  }
+}

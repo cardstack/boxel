@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "DZ5485-612",
+      "colorway": "Chicago Lost & Found",
+      "releaseDate": "2022-11-19",
+      "retailPrice": {
+        "amount": 180,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "productDescription": "The Air Jordan 1 \"Lost & Found\" reimagines the 1985 Chicago colorway as though a deadstock pair had been found in a forgotten stockroom \u2014 cracked leather, aged midsoles, and a shoebox printed to look water-damaged and taped shut.",
+      "availableVariants": [
+        "7",
+        "7.5",
+        "8",
+        "8.5",
+        "9",
+        "9.5",
+        "10",
+        "10.5",
+        "11",
+        "11.5",
+        "12",
+        "13"
+      ],
+      "tags": ["retro", "chicago", "vintage"],
+      "images": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.pexels.com/photos/2529147/pexels-photo-2529147.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Air Jordan 1 Retro High OG",
+        "summary": "The 2022 reissue of the original Chicago colourway, finished to look aged.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "silhouette": {
+        "links": {
+          "self": null
+        }
+      },
+      "brand": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collectible-product",
+        "name": "CollectibleProduct"
+      }
+    }
+  }
+}

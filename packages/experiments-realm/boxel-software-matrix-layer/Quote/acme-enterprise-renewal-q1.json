@@ -1,0 +1,50 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "version": 1,
+      "status": "won",
+      "lineItems": [
+        {
+          "description": "Enterprise plan \u2014 annual",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 58000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "supersedes": {
+        "links": {
+          "self": null
+        }
+      },
+      "deal": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal"
+        }
+      },
+      "proposal": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Proposal/acme-enterprise-renewal-proposal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../quote",
+        "name": "Quote"
+      }
+    }
+  }
+}

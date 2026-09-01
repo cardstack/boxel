@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Collection Item",
+      "cardDescription": "One physical thing someone owns, catalogued — with its condition, how it was acquired, its photos, and whether it has been authenticated.",
+      "specType": "card",
+      "ref": {
+        "module": "../collection-item",
+        "name": "CollectionItem"
+      },
+      "readMe": "## Collection Item\n\nOne physical thing someone owns, catalogued. `item` links to the catalogued thing, `condition` grades it, `acquisition` records how it arrived, `photos` holds the owner's own photographs, and two event dates carry its authentication and for-sale state.\n\nThe block is **not about sneakers**. `item` is `linksTo(CardDef)`, so the same block catalogues a sneaker, a watch, a first edition or a record; a consumer narrows the link (`linksTo(() => Product)`) and supplies the grading vocabulary and the variant scale. Nothing in the module names a domain.\n\n### Two schema decisions, and why they are not preferences\n\n**Threshold flags are event facts.** `verified` and `forSale` are computed from `verifiedOn` and `listedAt`. Storing either boolean lets it drift from the thing that caused it — the classic failure is a card reading \"not for sale\" while an active listing points straight at it. Dates are also plain attributes, so they survive prerendered fitted views where a `linksTo` would not resolve.\n\n**There is no current-market-value field.** \"What is this worth right now\" is a reporting rollup over active listings: unbounded, and a live realm query belongs in a metrics component a consumer composes, never link-arrayed onto the hot card. `lastKnownValue` + `valuedOn` is the fitted-safe snapshot — an attribute a tile can render without running a query, and dated so a stale figure is visibly stale.\n\n### Reused, not rebuilt\n\n`photos` is the catalog's `multi-image-source` (a pasted URL **or** a file uploaded into the realm, resolving to `resolvedUrls`/`primaryUrl`), not a `containsMany(StringField)` of URLs. `acquisition.price` and `lastKnownValue` are base `amount-with-currency`. `condition.valueRetention` is base `percentage`. `photos.primaryUrl` is the fitted visual anchor.\n\n### `itemTitle` is denormalized on purpose\n\nA collection view draws its grid and list from **prerendered fitted HTML, which cannot resolve `linksTo`**. A tile that read `item.title` directly would render blank — and that is the tile's headline, so it would be blank on every tile in the grid. `itemTitle` is a computed field, so it resolves at index time, lands in the search document, and is a plain attribute by the time fitted renders. Do not \"simplify\" it back to a template-level link traversal. `item` also carries `searchable: true`, which is what lets a collection view filter and sort by the thing owned rather than only by this card's own attributes.\n\n### Non-goals\n\nThis card does not own the marketplace: a listing's price, its shipping terms and its status belong to the `Listing` block, and this card records only the date it was listed. It does not own the authentication *record* — the certificate, the authenticator's notes and the submitted photos belong to an `Authentication` block; this card keeps the outcome (`verifiedOn`, `verifiedBy`, `verificationReference`) so a fitted tile can show a badge without resolving a link. It does not own set completion: which items belong to which goal, and the progress arithmetic, belong to the `Set` block. And it does not own the catalogue — what the thing *is* (SKU, colourway, release date, silhouette) belongs to whatever card `item` points at.\n\n### Open questions for the team\n\n1. `variant` + `variantScale` is two strings where a compound field may be right. It exists because nothing reusable fit: catalog `quantity` is a bounded count, catalog `discrete-range-field` is a range (`startValue`/`endValue`/`interval`), and a single graded value on a named scale is neither. Whoever needs the second consumer should decide whether this graduates into its own field block.\n2. `item` is `linksTo(CardDef)`. That is what keeps the block domain-neutral, and it is also the weakest typing in the module. A consumer narrowing it is the intended path; if two consumers narrow it the same way, that shared supertype is the real answer.\n\n### Example status — read before trusting the Examples section\n\nThe linked example is fully populated across every attribute, but two parts of it are deliberately incomplete and are **named blocked follow-ups, not oversights**:\n\n- `item` is unlinked. The chain lands when the `Product` block is built (next in this lane); wiring the showcase example to `experiments-realm/product.gts` was rejected because that demo card's own `images: containsMany(StringField)` is the hand-rolled-URL antipattern this block exists to avoid.\n- `photos.url` is empty. Photo URLs were not written because they could not be verified in this session (no network access), and writing stock-photo IDs from memory is confabulation — a documented earlier pass produced eight plausible IDs of which seven showed the wrong subject. The field is wired; populating it needs a search, a contact sheet read as an image, and a `curl` check per URL.\n\nUntil the photo lands, every fitted tier falls back to its glyph, and the reuse of `multi-image-source` has not yet landed in the data.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CollectionItem/aj1-lost-and-found-105"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

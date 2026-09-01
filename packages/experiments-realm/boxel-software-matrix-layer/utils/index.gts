@@ -37,9 +37,14 @@ export type Hue = keyof typeof HUE;
 // is the card foreground in the mix that supplies the darkness.
 export function stateColor(hue: Hue): StateColor {
   let h = HUE[hue];
+  // `in oklab`, NOT `in oklch`: oklch interpolates the HUE ANGLE, and Chrome
+  // resolves an achromatic endpoint's hue as 0 (red) — so on a light theme
+  // where --card is pure white, `green 14% + white 86%` lands at hue ~21 and
+  // every "green" chip renders PINK (measured live, 2026-08-31). oklab is
+  // rectangular, has no hue coordinate to rotate, and mixes these correctly.
   return {
-    bg: `color-mix(in oklch, ${h} 14%, var(--card, var(--boxel-light)))`,
-    fg: `color-mix(in oklch, ${h} 38%, var(--card-foreground, var(--boxel-dark)))`,
+    bg: `color-mix(in oklab, ${h} 14%, var(--card, var(--boxel-light)))`,
+    fg: `color-mix(in oklab, ${h} 38%, var(--card-foreground, var(--boxel-dark)))`,
     ring: h,
   };
 }

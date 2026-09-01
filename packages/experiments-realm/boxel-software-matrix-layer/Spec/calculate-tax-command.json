@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Calculate Tax\n\nA SIMULATION only, the same honesty boundary as Payment: this realm has no real tax-authority integration, so the rate comes from whatever Tax Jurisdiction record the caller supplies, not a live filing lookup.\n\n### FIXED (matrix-layer-skills audit)\nOriginally took an `Invoice` link and read `invoice.lineItems` directly \u2014 an upward dependency from this Layer 04 \"Standards\" block onto a Layer 05.5 Commerce Domain Kit type, violating block-factory's \"no upward dependencies\" rule and its \"domain-neutral block, consumer supplies specifics\" rule. Now takes a plain `taxableAmount` number; the caller (`convert-quote-to-invoice-command.ts`, which IS Layer 05.5 and correctly allowed to know about Invoice) computes that amount and passes it in. This also makes the command genuinely reusable by any future domain, not just Commerce.\n\n### Non-goals\nDoes not itself write to the Invoice \u2014 that's the caller's decision. Does not know what is being taxed.\n\n### Example\n`linkedExamples` points at `TaxJurisdiction/california-us`, a real instance.",
+      "ref": {
+        "module": "../calculate-tax-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "containedExamples": [],
+      "cardTitle": "Calculate Tax",
+      "cardDescription": "Looks up a customer's Tax Jurisdiction and computes a Tax Breakdown for an Invoice's current line-item total.",
+      "cardInfo": {
+        "name": "Calculate Tax",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TaxJurisdiction/california-us"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

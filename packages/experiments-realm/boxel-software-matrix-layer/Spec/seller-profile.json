@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Seller Profile",
+      "cardDescription": "A genuinely reusable marketplace-seller building block \u2014 identity plus a numeric rating \u2014 not a Sole Vault\u2013specific concept. Extends the app's own SoleVaultPerson (itself a subclass of the pulled matrix Person block) so it inherits the dark-luxury views for free.",
+      "specType": "card",
+      "ref": {
+        "module": "../seller-profile",
+        "name": "SellerProfile"
+      },
+      "readMe": "## Seller Profile\n\nA marketplace seller's public profile: identity (inherited from `SoleVaultPerson`/`PersonBase`) plus a `rating` (the matrix's `score-field.gts`, `l03-ft-score`, tracker `workState: Done`, already pulled into this realm and previously unused).\n\n### No matching matrix concept \u2014 checked, not assumed\n\nThe matrix's `Vendor` / `Vendor Profile` (`l05-5-cm-vendor`, `l05-5-cm-vendor-profile`) looked like a candidate and was checked first. `l05-5-cm-vendor`'s own `whereImplemented` reads `vendor.gts \u2014 contractStart / contractEnd`, and its `reference` field points at `institutional-meerkat/legal + audited kit realms` \u2014 a B2B contract-vendor concept (a supplier under a legal agreement), not a P2P marketplace seller. Not a match by *kind*, so this is a build, not a consume. This concept should be filed as its own new matrix row \u2014 a generic \"Seller Profile\" (identity + rating + review count), reusable by any marketplace app \u2014 not named after Sole Vault.\n\n### Why a subclass of SoleVaultPerson, not of PersonBase directly\n\nThe reusable *essence* of this block is the schema (person identity + rating), not these specific views. Extending `SoleVaultPerson` inherits the dark-luxury isolated/edit/fitted templates for free rather than duplicating ~400 lines of near-identical markup; a consuming app in a different visual world would override the formats the same way any card override works \u2014 same as `SoleVaultPerson` itself overrides `PersonBase`'s plain `embedded`.\n\n### Split from SoleVaultPerson on purpose\n\n`rating` has no meaning on a buyer. `Order.buyer`, `Offer.offeredBy` and `CollectionItem.owner` narrow to plain `SoleVaultPerson`; only `Order.seller` and `Listing.seller` narrow to `SellerProfile`. One real-world person can still be linked from both kinds of field on different cards \u2014 a `SellerProfile` instance satisfies a `SoleVaultPerson`-typed link too, since it is one via inheritance.\n\n### Non-goals\n\nThis card does not carry review text, only the aggregate numeric rating (the spec's \"Review\" need is a separate, unbuilt concept). It does not distinguish a permanent seller identity from a one-off listing \u2014 a person becomes \"a seller\" simply by being the target of a `seller` link, not by any flag on this card itself.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Seller Profile",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

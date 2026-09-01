@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Sole Vault Person",
+      "cardDescription": "The Sole Vault app's own generic person profile \u2014 a subclass of the pulled matrix Person block (PersonBase), extended with the app's isolated/edit/fitted views. Used for a buyer, or anyone not specifically a seller.",
+      "specType": "card",
+      "ref": {
+        "module": "../sole-vault-person",
+        "name": "SoleVaultPerson"
+      },
+      "readMe": "## Sole Vault Person\n\nThis is a **subclass** of `person-base.gts`'s `PersonBase`, not a modification of it. `person-base.gts` is a matrix-layer building block cloned from realm-staging and is kept byte-identical to the pull (fields + a plain `embedded` format only). Everything Sole-Vault-specific \u2014 the isolated landing page, the edit and fitted views, the dark-luxury visual language \u2014 lives here instead.\n\n### Why a subclass, not an edit\n\nA pulled building block is meant to stay swappable and re-pullable: if `person-base.gts` gets a fix or a new field upstream, re-pulling it should be a clean file replace, not a merge against app-specific additions. Every format override (`isolated`, `edit`, `fitted`, a recoloured `embedded`) is declared here. `person-base.gts` itself carries zero Sole-Vault-specific code.\n\n### Not the seller profile\n\nThis card has no `rating` field \u2014 that lives on the sibling `SellerProfile` (`seller-profile.gts`), a separate, genuinely reusable marketplace building block, not a subclass of this file. `Order.buyer`, `Offer.offeredBy` and `CollectionItem.owner` narrow to plain `SoleVaultPerson`; only `Order.seller` and `Listing.seller` narrow to `SellerProfile`. Splitting them keeps a buyer from carrying a meaningless, always-unset rating field.\n\n### Reused, not rebuilt\n\n`photo` is the catalog's `image-source` field (inherited from `PersonBase`).\n\n### Non-goals\n\nThis card does not carry a seller rating, review count, or any trust signal \u2014 see `SellerProfile` for that. It does not distinguish roles by its own type; a buyer is simply whichever `SoleVaultPerson` instance a link field points at.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Sole Vault Person",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SoleVaultPerson/vaultkeeper"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

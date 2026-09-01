@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Refund Order",
+      "cardDescription": "Record a refund payment for the order total and move the order to refunded.",
+      "specType": "command",
+      "ref": {
+        "module": "../refund-order-command",
+        "name": "default"
+      },
+      "readMe": "## Refund Order\n\nThe spec's `RefundOrder` tool. Records a new `Payment` with `direction: 'refund'` for the order's total, and moves `Order.orderStatus` to `refunded`.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `Order/sv-2026-1041`.\n\n### A refund is a new ledger row, never an edit\n\nMatches `PaymentStateField`'s own transition graph (`captured` only ever leads to `refunded`, one-way) and `payment.gts`'s `signedAmount`, which renders a refund with a minus sign rather than mutating the original charge's amount. Two rows, not one row that changed its mind.\n\n### Non-goals\n\nDoes not decide WHEN a refund is warranted (a failed authentication, a dispute resolution) \u2014 that judgment belongs to the caller (e.g. `AuthenticateItem`'s own header note says a failed verdict does not auto-refund).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Refund Order",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "service": "Sole Vault Authentication",
+      "outcome": "pending",
+      "submittedAt": "2026-08-21",
+      "completedAt": null,
+      "certificateId": null,
+      "authenticator": null,
+      "authenticatorNotes": null,
+      "submittedPhotos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/4398341/pexels-photo-4398341.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "In-flight check \u2014 Yeezy 350 Zebra US 11",
+        "summary": "The escrow order's own inspection, still awaiting a verdict \u2014 this record is why SV-2026-1041 sits at authenticating.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../CollectionItem/yeezy-350-zebra-11"
+        }
+      },
+      "order": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../authentication-record",
+        "name": "AuthenticationRecord"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Sole Vault",
+      "cardDescription": "Stage-2 app: composes the collector blocks into one product and proves they compose.",
+      "specType": "app",
+      "ref": {
+        "module": "../sole-vault-app",
+        "name": "SoleVaultApp"
+      },
+      "readMe": "## Sole Vault (app)\n\nFour tabs — Collection, Sets, Market, Authentication — over five blocks, all as live realm queries. The app is both a product and **evidence**: its job is to demonstrate that the blocks are reusable, so every feature is phrased as *consume a block* rather than *write a card face*.\n\n### COMPOSABLE tally\n\n**Consumed unchanged:** `CollectionItem`, `CollectibleProduct`, `CompletionSet`, `Listing`, `AuthenticationRecord` (five live queries), `computeCompletion()` for set progress, `formatMoney()` for every amount, and boxel-ui's `BoxelInput` / `Pill` / `Button`. No block was modified to make the app work — every value the app renders is a plain attribute or one of the blocks' own denormalized computed fields.\n\n**Bespoke, and legitimately so:** the tab shell, the toolbar, and the aggregate stat strip. That is app chrome and cross-block arithmetic, which is the app's own job.\n\n**Bespoke and NOT legitimate — the recorded gap:** the row and cell faces. The panes read fields off each instance (the pattern this realm uses for live-query results), so the blocks' own fitted templates are not what the grid shows. The upstream fix is `@context.searchResultsComponent` fed a wire query, which renders prerendered fitted — the block's real face — and brings the operator-mode overlay and click-to-open for free. Written down rather than hidden, because a hand-drawn row is precisely the block-shaped code stage 2 exists to stop accumulating.\n\n### Deliberately absent: checkout\n\nThere is no Buy, no checkout and no escrow flow, and that is not an oversight. `Order` and `Payment` are **Done with Specs** in the matrix tracker (`l05-5-cm-order`, `l05-5-cm-payment`); rebuilding them here would be the exact violation this stage exists to prevent. Checkout lands when those blocks are pulled in, along with `table.gts` for the table view.\n\n### No lying affordances\n\nEvery control either navigates to a real card or changes a real filter. The stat tiles are static text, not links — a metric is clickable only if its destination shows the records the number was computed from, pre-filtered, and an unfiltered landing would be worse than no link. There are no buttons for `PlaceOrder`, `AuthenticateItem`, `MarkDelivered` or `RefundOrder` because those commands do not exist yet; a control that looks live and no-ops teaches the user to distrust every other control on the page.\n\n### Prerender gets a static shell\n\nThe interactive panes are gated on a CRUD function actually being present (`viewCard`). This keeps indexing light and avoids the known Glimmer backtracking assertion when an app card mounts themed fitted cards during prerender — which stores an error_doc and surfaces to the user as \"Card Error\".\n\n### What to try in the demo\n\nThe two shipped collection items are deliberately opposites: the AJ1 is authenticated, kept, and worth more than it cost; the Yeezy is unauthenticated, listed, and worth less than it cost. Switching the All / For sale / Kept badges shows both states, and the Sets tab computes Travis Scott completion live from whichever of them is owned.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../SoleVaultApp/sole-vault"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

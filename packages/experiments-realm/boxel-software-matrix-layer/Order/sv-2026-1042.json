@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "SV-2026-1042",
+      "price": {
+        "amount": 390,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 18,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "authFee": {
+        "amount": 10,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "platformFee": {
+        "amount": 11.7,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "orderStatus": "refunded",
+      "placedAt": "2026-08-30",
+      "paidAt": "2026-08-31",
+      "shippedAt": null,
+      "authenticatedAt": null,
+      "deliveredAt": null,
+      "completedAt": null,
+      "trackingNumber": null,
+      "paymentReference": "sim-pi-cyyzs2lg",
+      "cardInfo": {
+        "name": "SV-2026-1042 — AJ1 Lost & Found",
+        "summary": "Placed seconds ago: nothing is held yet, the buyer still owes payment.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../Listing/aj1-lost-and-found-105"
+        }
+      },
+      "buyer": {
+        "links": {
+          "self": "../SoleVaultPerson/vaultkeeper"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-order",
+        "name": "Order"
+      }
+    }
+  }
+}

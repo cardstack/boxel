@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "DD1391-100",
+      "colorway": "Panda",
+      "releaseDate": "2021-01-14",
+      "retailPrice": {
+        "amount": 110,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "productDescription": "White leather base with black overlays \u2014 the era's default sneaker. Restocked so often it became the benchmark for a GR that holds no premium.",
+      "availableVariants": [
+        "7",
+        "8",
+        "8.5",
+        "9",
+        "9.5",
+        "10",
+        "10.5",
+        "11",
+        "12"
+      ],
+      "tags": ["dunk", "nike", "general-release"],
+      "images": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2385477/pexels-photo-2385477.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Nike Dunk Low Retro",
+        "summary": "The most restocked Dunk of its era \u2014 a liquidity benchmark, not a grail.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "silhouette": {
+        "links": {
+          "self": null
+        }
+      },
+      "brand": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collectible-product",
+        "name": "CollectibleProduct"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Invoice Editor\n\nThe one Commerce concept that's a UI, not a data model. `invoice.gts` already models line items via the realm's existing `LineItem` FieldDef; this component gives a consumer a pre-send EDITING surface for them (add/remove/adjust rows, live running total via `sumLineItems`) rather than only the read-only rendering `invoice.gts`'s own isolated view provides.\n\n### Non-goals\nDoes not itself save the Invoice \u2014 takes `@lineItems`/`@onChange`, the consumer decides when/how to persist.\n\n### Example\nNo linked example yet \u2014 pending a real Invoice instance to edit.",
+      "ref": {
+        "module": "../invoice-editor",
+        "name": "default"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "Invoice Editor",
+      "cardDescription": "Line-item editing UI for an Invoice before it's sent \u2014 add/remove/adjust line items, see the running total.",
+      "cardInfo": {
+        "name": "Invoice Editor",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

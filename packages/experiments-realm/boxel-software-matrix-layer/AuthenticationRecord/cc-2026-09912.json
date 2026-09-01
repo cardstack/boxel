@@ -1,0 +1,51 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "service": "Check Check",
+      "outcome": "passed",
+      "submittedAt": "2026-07-30",
+      "completedAt": "2026-08-02",
+      "certificateId": "CC-2026-09912",
+      "authenticator": "AuthTeam-Priya",
+      "authenticatorNotes": "Leather grain and tongue-label stitching consistent with the DD1391-100 production run. Box label and size sticker check out.",
+      "submittedPhotos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2385477/pexels-photo-2385477.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "Check Check \u2014 Dunk Low Panda US 9.5",
+        "summary": "A passed legit check on the Panda pair, certificate CC-2026-09912.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../CollectionItem/dunk-low-panda-95"
+        }
+      },
+      "order": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../authentication-record",
+        "name": "AuthenticationRecord"
+      }
+    }
+  }
+}

@@ -44,6 +44,11 @@ import { Subscription } from './subscription';
 import { Lead } from './lead';
 import { Contact } from './contact';
 import { Deal } from './deal';
+// ADDED (Revenue Ops Console build) — pure additions below (new tabs), no
+// existing tab/state touched. See Territory/Proposal/Quote tab sections.
+import { Territory } from './territory';
+import { Proposal } from './proposal';
+import { Quote } from './quote';
 import { Activity } from './activity';
 import ConvertLeadCommand from './convert-lead';
 import RecordPaymentCommand from './record-payment';
@@ -99,6 +104,10 @@ const TABS = [
   { key: 'accounts', label: 'Accounts' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'leads', label: 'Leads' },
+  // ADDED (Revenue Ops Console build)
+  { key: 'territories', label: 'Territories' },
+  { key: 'proposals', label: 'Proposals' },
+  { key: 'quotes', label: 'Quotes' },
 ];
 const INVOICE_FILTERS = [
   { key: 'open', label: 'Unpaid' },
@@ -143,6 +152,10 @@ export class RevenueOs extends CardDef {
     private leadList: ReturnType<getCards> | undefined;
     private contactList: ReturnType<getCards> | undefined;
     private activityList: ReturnType<getCards> | undefined;
+    // ADDED (Revenue Ops Console build)
+    private territoryList: ReturnType<getCards> | undefined;
+    private proposalList: ReturnType<getCards> | undefined;
+    private quoteList: ReturnType<getCards> | undefined;
 
     constructor(owner: Owner, args: any) {
       super(owner, args);
@@ -170,6 +183,10 @@ export class RevenueOs extends CardDef {
       this.leadList = ctx?.getCards(this, queryFor(Lead), realms, live);
       this.contactList = ctx?.getCards(this, queryFor(Contact), realms, live);
       this.activityList = ctx?.getCards(this, queryFor(Activity), realms, live);
+      // ADDED (Revenue Ops Console build)
+      this.territoryList = ctx?.getCards(this, queryFor(Territory), realms, live);
+      this.proposalList = ctx?.getCards(this, queryFor(Proposal), realms, live);
+      this.quoteList = ctx?.getCards(this, queryFor(Quote), realms, live);
     }
 
     private get realms(): string[] | undefined {
@@ -196,6 +213,20 @@ export class RevenueOs extends CardDef {
       return ((this.opportunityList?.instances ?? []) as Opportunity[]).filter(
         Boolean,
       );
+    }
+    // ADDED (Revenue Ops Console build)
+    get territories(): Territory[] {
+      return ((this.territoryList?.instances ?? []) as Territory[]).filter(
+        Boolean,
+      );
+    }
+    get proposals(): Proposal[] {
+      return ((this.proposalList?.instances ?? []) as Proposal[]).filter(
+        Boolean,
+      );
+    }
+    get quotes(): Quote[] {
+      return ((this.quoteList?.instances ?? []) as Quote[]).filter(Boolean);
     }
     get accounts(): Account[] {
       return ((this.accountList?.instances ?? []) as Account[]).filter(Boolean);
@@ -1648,6 +1679,86 @@ export class RevenueOs extends CardDef {
                 </div>
               {{else}}
                 <p class='empty'>No leads</p>
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+
+        {{! ADDED (Revenue Ops Console build) — mirrors the leads tab's
+            row-rendering shape, including click-to-open via the same
+            `.row-open`/`.lead-embed` button pattern (fixed: the first pass
+            rendered these read-only, which was an interaction regression
+            versus every other tab). }}
+        {{#if (eq this.activeTab 'territories')}}
+          <section class='pane'>
+            <div class='pane-head'>
+              <h2>Territories</h2>
+            </div>
+            <div class='lead-list'>
+              {{#each this.territories as |territory|}}
+                <div class='lead-row'>
+                  <button
+                    type='button'
+                    class='row-open lead-embed'
+                    {{on 'click' (fn this.openCard territory)}}
+                  >
+                    {{#let (this.cardComponent territory) as |C|}}
+                      <C @format='embedded' />
+                    {{/let}}
+                  </button>
+                </div>
+              {{else}}
+                <p class='empty'>No territories</p>
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (eq this.activeTab 'proposals')}}
+          <section class='pane'>
+            <div class='pane-head'>
+              <h2>Proposals</h2>
+            </div>
+            <div class='lead-list'>
+              {{#each this.proposals as |proposal|}}
+                <div class='lead-row'>
+                  <button
+                    type='button'
+                    class='row-open lead-embed'
+                    {{on 'click' (fn this.openCard proposal)}}
+                  >
+                    {{#let (this.cardComponent proposal) as |C|}}
+                      <C @format='embedded' />
+                    {{/let}}
+                  </button>
+                </div>
+              {{else}}
+                <p class='empty'>No proposals</p>
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+
+        {{#if (eq this.activeTab 'quotes')}}
+          <section class='pane'>
+            <div class='pane-head'>
+              <h2>Quotes</h2>
+            </div>
+            <div class='lead-list'>
+              {{#each this.quotes as |quote|}}
+                <div class='lead-row'>
+                  <button
+                    type='button'
+                    class='row-open lead-embed'
+                    {{on 'click' (fn this.openCard quote)}}
+                  >
+                    {{#let (this.cardComponent quote) as |C|}}
+                      <C @format='embedded' />
+                    {{/let}}
+                  </button>
+                </div>
+              {{else}}
+                <p class='empty'>No quotes</p>
               {{/each}}
             </div>
           </section>

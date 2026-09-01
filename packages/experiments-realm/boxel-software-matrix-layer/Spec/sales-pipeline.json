@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Sales Pipeline\n\nDEVIATION: built as a NEW standalone component (`@items` argument) rather than extracted live from `revenue-os.gts`'s isolated view. That file's board logic is deeply tied to its own tracked filter state, and its full dependency closure reaches into unrelated Legal/Contract files not vendored for this build \u2014 it could not be render-verified locally before push, so editing it blind was judged too risky. Same capability as the inline version: stage columns (from `pipeline-stage-field.gts`), sort by value/probability/staleness, forecast-window filter (all/week/month/quarter). Wraps the realm's existing generic `Board` component rather than reimplementing Kanban rendering.\n\n### Non-goals\nDoes not run its own query \u2014 takes `@items` from the consumer, so it works identically whether items come from a live realm search or a fixed list. Switching `revenue-os.gts` to actually consume this component (instead of its current inline duplicate) is an explicit, separate follow-up, not done in this pass.\n\n### Example\nNo linked example yet \u2014 `board-demo.gts`'s `PipelineBoardDemo` is a natural second consumer if it's ever switched over.",
+      "ref": {
+        "module": "../sales-pipeline",
+        "name": "default"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "cardTitle": "Sales Pipeline",
+      "cardDescription": "A Kanban board of Opportunities/Deals grouped by Pipeline Stage, with sort and close-window filtering \u2014 the daily-use view for a sales team.",
+      "cardInfo": {
+        "name": "Sales Pipeline",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

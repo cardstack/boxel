@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Plan\n\n`name`, `description`, `features` (containsMany StringField). Deliberately has no Price field of its own \u2014 a Plan's prices are looked up by querying Price cards that link to it (one-directional, per this realm's rollup-split rule: an unbounded/reporting relationship gets a live query, not a stored back-link on the parent). Self-hosts Product Review via its own isolated view.\n\n### Non-goals\nDoes not carry billing interval or amount \u2014 that's `Price`. Does not render a public review page by itself; reviews are shown within this card's own isolated view, not as a separate storefront.\n\n### Example\n`linkedExamples` points at `Plan/enterprise-tier`, a real Enterprise-tier plan instance with features and a linked Price and Product Review.",
+      "ref": {
+        "module": "../plan",
+        "name": "Plan"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Plan",
+      "cardDescription": "A named, recurring tier of the product (e.g. \"Pro\", \"Enterprise\").",
+      "cardInfo": {
+        "name": "Plan",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Plan/enterprise-tier"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

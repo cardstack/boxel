@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "country": "United States",
+      "region": "California",
+      "rate": 7.25,
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../tax-jurisdiction",
+        "name": "TaxJurisdiction"
+      }
+    }
+  }
+}

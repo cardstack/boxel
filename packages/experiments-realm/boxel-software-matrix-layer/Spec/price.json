@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Price\n\n`amount` (AmountWithCurrency), `billingInterval` (one-time/monthly/annual), links to exactly one of `plan`/`service`. Kept separate from both so a Plan can carry monthly AND annual price points without duplicating the Plan. The one-of-two-links invariant is enforced at the command layer, not the schema, matching this realm's existing convention of guarding invariants in commands rather than field validators.\n\n### Non-goals\nDoes not itself appear on a Quote's line items \u2014 Price is the catalog/lookup entity used to populate a line item at authoring time, not the line item's own storage shape.\n\n### Example\n`linkedExamples` points at `Price/enterprise-tier-annual`, linked to the real `Plan/enterprise-tier` instance, priced to match `Deal/acme-enterprise-renewal`'s actual $58,000 value.",
+      "ref": {
+        "module": "../price",
+        "name": "Price"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Price",
+      "cardDescription": "A specific amount + currency + billing interval for a Plan or a Service.",
+      "cardInfo": {
+        "name": "Price",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Price/enterprise-tier-annual"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

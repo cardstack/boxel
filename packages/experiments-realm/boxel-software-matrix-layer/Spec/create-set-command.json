@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Create Set",
+      "cardDescription": "Create a completion goal from a curated list of products, with a name and a completion rule.",
+      "specType": "command",
+      "ref": {
+        "module": "../create-set-command",
+        "name": "default"
+      },
+      "readMe": "## Create Set\n\nThe spec's `CreateSet` tool. Resolves a caller-supplied list of product ids into real `linksToMany` entries on a new `CompletionSet`.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 a pure new command.\n\n### Example\n\nThis command has no single natural input card \u2014 it takes a list of product ids, not one target instance. `linkedExamples` links `CompletionSet/travis-scott-nike` illustratively, as the SHAPE of what this command produces, not as a literal input it was run against; noted here rather than left for the next reader to assume otherwise.\n\n### Membership is curated, not a query\n\nMatches `completion-set.gts`'s own header note: sneaker sets are emergent and personal, so `products` is a hand-confirmed `linksToMany`, never a saved filter. `targetCount` is a computed field on the card itself \u2014 this command never writes it directly.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Create Set",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CompletionSet/travis-scott-nike"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

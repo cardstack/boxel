@@ -1,0 +1,61 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Acquisition",
+      "cardDescription": "How an item entered someone's possession: what was paid, when, from where, and against which reference.",
+      "specType": "field",
+      "ref": {
+        "module": "../../acquisition",
+        "name": "Acquisition"
+      },
+      "readMe": "## Acquisition\n\nHow an item entered someone's possession. `price` is base `amount-with-currency` — an amount and a currency code together, not a `NumberField` beside a separate string. `acquiredOn` is the calendar day it happened, `source` is where it came from, and `reference` is whatever proves the purchase (order number, receipt id, lot number).\n\n### `toCalendarDay` — read this before touching dates\n\nThe module exports `toCalendarDay(date)` and `acquiredOnDay` computes through it. An acquisition happened on a **calendar day, not an instant**: `new Date('9/30/2026').toISOString()` yields the 29th anywhere east of UTC, so a date round-tripped through ISO silently moves back a day. Any consumer that exports, filters, or groups by this date should read `acquiredOnDay`, not re-derive it from `acquiredOn`.\n\nThat rule generalises: when a field is stored but displayed derived, **every** consumer must read the derived one. The known failure is an aging report that bucketed by a computed value while the pill beside it read the stored one.\n\n### Non-goals\n\nThis field does not model disposal — what an item sold for, and when, belongs to the listing and order blocks, not here. It does not model current value: what was paid is a historical fact that never changes, whereas market value is a live rollup and belongs in a metrics component a consumer composes. It does not own the `source` vocabulary; a consumer that wants a select supplies enum options on its own override.",
+      "containedExamples": [
+        {
+          "price": {
+            "amount": 185,
+            "currency": {
+              "code": "USD"
+            }
+          },
+          "acquiredOn": "2022-11-19",
+          "source": "Retail — SNKRS",
+          "reference": "C01234567890"
+        },
+        {
+          "price": {
+            "amount": 240,
+            "currency": {
+              "code": "USD"
+            }
+          },
+          "acquiredOn": "2024-03-02",
+          "source": "Local meetup",
+          "reference": null
+        }
+      ]
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../../acquisition",
+              "name": "Acquisition"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../../acquisition",
+              "name": "Acquisition"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Create Listing",
+      "cardDescription": "List an owned collection item for sale at a given price, denormalizing the seller and product from it.",
+      "specType": "command",
+      "ref": {
+        "module": "../create-listing-command",
+        "name": "default"
+      },
+      "readMe": "## Create Listing\n\nThe spec's `CreateListing` tool. Marks an owned `CollectionItem` for sale by writing `listedAt` (the event-fact `forSale` derives from), and creates the `Listing` itself with price/shipping and the seller/product denormalized from the item.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows \u2014 the matrix has no neutral Listing concept at all (`l05-5-cm-property-listing` is property-specific), so this is a pure new command against a pure new card.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `CollectionItem/aj1-lost-and-found-105`.\n\n### `forSale` is an event fact, not a boolean this command sets directly\n\nWrites `listedAt`, never a stored flag \u2014 matching `collection-item.gts`'s own rule for `verified`: a threshold flag is a computed read of the date something happened, so it cannot drift from the listing that caused it.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Create Listing",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CollectionItem/aj1-lost-and-found-105"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

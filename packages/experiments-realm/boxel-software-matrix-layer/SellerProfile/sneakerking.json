@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Marcus Idowu",
+      "email": "marcus@solevault.example",
+      "phone": null,
+      "photo": {
+        "url": "https://images.pexels.com/photos/29811340/pexels-photo-29811340.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
+      },
+      "rating": 4,
+      "cardInfo": {
+        "name": "Marcus Idowu",
+        "summary": "The collector who owns both shipped example pairs, and the seller on the active listing.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../seller-profile",
+        "name": "SellerProfile"
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "price": {
+        "amount": 390,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 18,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "listingStatus": "active",
+      "shipsFrom": "Los Angeles, CA",
+      "listingNotes": "Passed Check Check in 2022 \u2014 certificate linked from the item. OG all: box, wrapping paper, receipt insert.",
+      "listedAt": "2026-08-25",
+      "soldAt": null,
+      "expiresAt": null,
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2529148/pexels-photo-2529148.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "AJ1 Lost & Found US 10.5 \u2014 authenticated",
+        "summary": "The graded grail of the collection, offered with its legit-check certificate.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "collectionItem": {
+        "links": {
+          "self": "../CollectionItem/aj1-lost-and-found-105"
+        }
+      },
+      "product": {
+        "links": {
+          "self": "../CollectibleProduct/aj1-lost-and-found"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../listing",
+        "name": "Listing"
+      }
+    }
+  }
+}

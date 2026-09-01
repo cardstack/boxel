@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Mika Tan",
+      "email": "mika.tan@example.com",
+      "phone": "+1 415 555 0142",
+      "photo": {
+        "url": null,
+        "sourceMode": "url"
+      },
+      "rating": null,
+      "cardInfo": {
+        "name": "Mika Tan",
+        "summary": "The buyer on order SV-2026-1041. Photo deliberately empty so the fitted initials fallback is exercised by real data.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-person",
+        "name": "SoleVaultPerson"
+      }
+    }
+  }
+}

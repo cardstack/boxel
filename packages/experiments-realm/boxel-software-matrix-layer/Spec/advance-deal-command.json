@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Advance Deal\n\nMoves an Opportunity/Deal's `stage` field forward, guarded by `canTransition` from `pipeline-stage-field.gts`. Re-fetches the subject via `GetCardCommand` before reading its stage, per this realm's established convention (a caller may pass a card whose fields were never loaded).\n\n### Non-goals\nDoes not decide business rules beyond the stage graph itself (e.g. required fields per stage) \u2014 that belongs to a consumer app's own workflow, not this command.\n\n### Example\n`linkedExamples` points at the real, already-existing `Deal/acme-enterprise-renewal` instance (currently in `negotiation`, one legal move away from `closed won`/`closed lost`).",
+      "ref": {
+        "module": "../advance-deal-command",
+        "name": "default"
+      },
+      "specType": "command",
+      "containedExamples": [],
+      "cardTitle": "Advance Deal",
+      "cardDescription": "Moves an Opportunity/Deal's Pipeline Stage forward, guarded by the stage transition graph.",
+      "cardInfo": {
+        "name": "Advance Deal",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Deal/acme-enterprise-renewal"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

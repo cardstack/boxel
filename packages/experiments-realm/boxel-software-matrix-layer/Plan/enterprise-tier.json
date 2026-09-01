@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Enterprise",
+      "description": "Full-featured tier for large accounts: priority support, unlimited seats, custom onboarding.",
+      "features": [
+        "Unlimited seats",
+        "Priority support (4h SLA)",
+        "Custom onboarding",
+        "Dedicated account manager"
+      ],
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../plan",
+        "name": "Plan"
+      }
+    }
+  }
+}

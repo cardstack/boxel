@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "variant": "9.5",
+      "variantScale": "US",
+      "packaging": "Original Box",
+      "condition": {
+        "code": "DS",
+        "valueRetention": 100,
+        "notes": "Deadstock, laces still bagged."
+      },
+      "acquisition": {
+        "price": {
+          "amount": 115,
+          "currency": {
+            "code": "USD"
+          }
+        },
+        "acquiredOn": "2025-11-20",
+        "source": "SNKRS",
+        "reference": "SNKRS-88213"
+      },
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/2385477/pexels-photo-2385477.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "verifiedOn": "2026-08-02",
+      "verifiedBy": "Check Check",
+      "verificationReference": "CC-2026-09912",
+      "listedAt": "2026-08-20",
+      "lastKnownValue": {
+        "amount": 105,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "valuedOn": "2026-08-20",
+      "notes": "Hit on SNKRS at retail. Listing it \u2014 Pandas move fast even below retail.",
+      "cardInfo": {
+        "name": "Nike Dunk Low \"Panda\" \u2014 US 9.5",
+        "summary": "DS, original box, authenticated, listed at market.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "item": {
+        "links": {
+          "self": "../CollectibleProduct/dunk-low-panda"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collection-item",
+        "name": "CollectionItem"
+      }
+    }
+  }
+}

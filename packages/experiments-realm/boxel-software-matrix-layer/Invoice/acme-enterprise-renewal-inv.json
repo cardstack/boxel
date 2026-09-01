@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "invoiceNumber": "INV-2026-201",
+      "issueDate": "2026-08-31",
+      "dueDate": "2026-09-30",
+      "status": "sent",
+      "lineItems": [
+        {
+          "description": "Enterprise plan \u2014 annual",
+          "quantity": 1,
+          "unitPrice": {
+            "amount": 58000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "taxBreakdown": {
+        "taxableAmount": 58000,
+        "taxAmount": 4205.0,
+        "rateApplied": 7.25
+      },
+      "cardInfo": {
+        "name": null,
+        "notes": null,
+        "summary": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "account": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Account/acme-industries"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/User/priya-shah"
+        }
+      },
+      "order": {
+        "links": {
+          "self": null
+        }
+      },
+      "subscription": {
+        "links": {
+          "self": null
+        }
+      },
+      "taxBreakdown.jurisdiction": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TaxJurisdiction/california-us"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "invoice",
+        "name": "Invoice"
+      }
+    }
+  }
+}

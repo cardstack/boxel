@@ -1,0 +1,43 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "goal": "The three general releases every collection gets measured against \u2014 the pairs whose market price is the honest baseline for everything hyped.",
+      "completionRule": "own-any",
+      "isPublic": true,
+      "coverImage": {
+        "url": "https://images.pexels.com/photos/2385477/pexels-photo-2385477.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
+      },
+      "cardInfo": {
+        "name": "GR Benchmarks",
+        "summary": "The liquidity-baseline set: Pandas and Zebras, owned in any size.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "products.0": {
+        "links": {
+          "self": "../CollectibleProduct/dunk-low-panda"
+        }
+      },
+      "products.1": {
+        "links": {
+          "self": "../CollectibleProduct/yeezy-350-zebra"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../completion-set",
+        "name": "CompletionSet"
+      }
+    }
+  }
+}

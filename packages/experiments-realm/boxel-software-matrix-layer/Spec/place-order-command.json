@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Place Order",
+      "cardDescription": "Create an order from an active listing, snapshotting price and fees, and mark the listing sold.",
+      "specType": "command",
+      "ref": {
+        "module": "../place-order-command",
+        "name": "default"
+      },
+      "readMe": "## Place Order\n\nThe spec's `PlaceOrder` tool \u2014 a buyer commits to a listing. Snapshots price, shipping price, a flat authentication fee, and a percentage platform fee onto a new `Order`, then flips the source `Listing`'s status to `sold`.\n\n### No matrix concept existed\n\nConfirmed absent from all 590 tracker rows (per the Round 2 gate audit) \u2014 this is a pure new command, not a consume.\n\n### Example, per block-factory's command-example rule\n\nA command has no `containedExamples` slot of its own \u2014 `linkedExamples` points at the command's natural TARGET instance instead: the active `Listing` this command would act on (`Listing/yeezy-350-zebra-11`).\n\n### Fee snapshot, not a re-derived rate\n\n`authFee` ($10 flat) and `platformFee` (3% of price) are computed once at order-creation time and stored \u2014 never re-derived from a rate later, so a fee-schedule change never rewrites the receipt of a past order.\n\n### Non-goals\n\nDoes not charge anything (that is `ProcessPayment`'s job) and does not create a `Shipment` (that is `DispatchShipment`'s job).",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Place Order",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Listing/yeezy-350-zebra-11"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

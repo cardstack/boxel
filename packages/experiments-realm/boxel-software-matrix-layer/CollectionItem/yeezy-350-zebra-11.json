@@ -1,0 +1,75 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "variant": "11",
+      "variantScale": "US",
+      "packaging": "Replacement Box",
+      "condition": {
+        "code": "VNDS",
+        "valueRetention": 92,
+        "notes": "Tried on indoors once. No creasing, Boost still bright white."
+      },
+      "acquisition": {
+        "price": {
+          "amount": 240,
+          "currency": {
+            "code": "USD"
+          }
+        },
+        "acquiredOn": "2024-03-02",
+        "source": "Local meetup",
+        "reference": null
+      },
+      "photos": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/4398341/pexels-photo-4398341.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "verifiedOn": null,
+      "verifiedBy": null,
+      "verificationReference": null,
+      "listedAt": "2026-08-14",
+      "lastKnownValue": {
+        "amount": 215,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "valuedOn": "2026-08-14",
+      "notes": "Bought above market at a meetup and it has drifted down since — the pair that taught me to check comps first. Listing it to clear space.",
+      "cardInfo": {
+        "name": "adidas Yeezy Boost 350 V2 \"Zebra\" — US 11",
+        "summary": "VNDS, replacement box, not authenticated, currently listed below what was paid.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "item": {
+        "links": {
+          "self": "../CollectibleProduct/yeezy-350-zebra"
+        }
+      },
+      "owner": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collection-item",
+        "name": "CollectionItem"
+      }
+    }
+  }
+}

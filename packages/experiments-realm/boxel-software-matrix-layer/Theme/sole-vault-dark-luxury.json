@@ -1,0 +1,116 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "notes": null,
+        "name": "Sole Vault — Dark Luxury",
+        "summary": "Collector-vault theme: warm stone near-black ground, gold accents, Playfair Display + Inter. Source: sole-vault-design-system.md (colors.csv row 33 inverted).",
+        "cardThumbnailURL": null
+      },
+      "styleName": "Dark Luxury Vault",
+      "cssImports": [
+        "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap"
+      ],
+      "typography": {
+        "body": {
+          "fontSize": "0.875rem",
+          "fontFamily": "Inter",
+          "fontWeight": "400",
+          "lineHeight": "1.5",
+          "sampleText": null
+        },
+        "caption": {
+          "fontSize": "0.75rem",
+          "fontFamily": "Inter",
+          "fontWeight": "500",
+          "lineHeight": "1.4",
+          "sampleText": null
+        },
+        "heading": {
+          "fontSize": "1.75rem",
+          "fontFamily": "Playfair Display",
+          "fontWeight": "700",
+          "lineHeight": "1.15",
+          "sampleText": null
+        },
+        "subheading": {
+          "fontSize": "1.25rem",
+          "fontFamily": "Playfair Display",
+          "fontWeight": "600",
+          "lineHeight": "1.2",
+          "sampleText": null
+        },
+        "sectionHeading": {
+          "fontSize": "0.6875rem",
+          "fontFamily": "Inter",
+          "fontWeight": "700",
+          "lineHeight": "1.25",
+          "sampleText": null
+        }
+      },
+      "cornerRadius": "0.375rem",
+      "spacing": "0.25rem",
+      "rootVariables": {
+        "background": "oklch(0.147 0.004 49.25)",
+        "foreground": "oklch(0.985 0.001 106.42)",
+        "card": "oklch(0.216 0.006 56.04)",
+        "cardForeground": "oklch(0.985 0.001 106.42)",
+        "popover": "oklch(0.268 0.007 34.3)",
+        "popoverForeground": "oklch(0.985 0.001 106.42)",
+        "primary": "oklch(0.769 0.188 70.08)",
+        "primaryForeground": "oklch(0.216 0.006 56.04)",
+        "secondary": "oklch(0.374 0.01 67.56)",
+        "secondaryForeground": "oklch(0.985 0.001 106.42)",
+        "accent": "oklch(0.828 0.189 84.43)",
+        "accentForeground": "oklch(0.147 0.004 49.25)",
+        "muted": "oklch(0.268 0.007 34.3)",
+        "mutedForeground": "oklch(0.709 0.01 56.26)",
+        "border": "oklch(0.268 0.007 34.3)",
+        "input": "oklch(0.216 0.006 56.04)",
+        "ring": "oklch(0.769 0.188 70.08)",
+        "destructive": "oklch(0.577 0.245 27.32)",
+        "destructiveForeground": "oklch(0.985 0.001 106.42)",
+        "sidebar": "oklch(0.216 0.006 56.04)",
+        "sidebarForeground": "oklch(0.985 0.001 106.42)",
+        "sidebarPrimary": "oklch(0.769 0.188 70.08)",
+        "sidebarPrimaryForeground": "oklch(0.216 0.006 56.04)",
+        "sidebarAccent": "oklch(0.268 0.007 34.3)",
+        "sidebarAccentForeground": "oklch(0.985 0.001 106.42)",
+        "sidebarBorder": "oklch(0.268 0.007 34.3)",
+        "sidebarRing": "oklch(0.769 0.188 70.08)",
+        "chart1": "oklch(0.769 0.188 70.08)",
+        "chart2": "oklch(0.709 0.01 56.26)",
+        "chart3": "oklch(0.553 0.013 58.07)",
+        "chart4": "oklch(0.828 0.189 84.43)",
+        "chart5": "oklch(0.444 0.011 73.64)",
+        "radius": "0.375rem",
+        "spacing": "0.25rem",
+        "fontSans": "'Inter', 'Helvetica Neue', Arial, ui-sans-serif, system-ui, sans-serif",
+        "fontSerif": "'Playfair Display', Georgia, Times, serif",
+        "fontMono": "ui-monospace, 'Menlo', 'Courier New', Courier, monospace",
+        "trackingNormal": "0em",
+        "shadow2xs": "0 1px 2px 0px hsl(20 14% 4% / 0.4)",
+        "shadowXs": "0 1px 2px 0px hsl(20 14% 4% / 0.4)",
+        "shadowSm": "0 1px 3px 0px hsl(20 14% 4% / 0.5), 0 1px 2px -1px hsl(20 14% 4% / 0.5)",
+        "shadow": "0 1px 3px 0px hsl(20 14% 4% / 0.5), 0 1px 2px -1px hsl(20 14% 4% / 0.5)",
+        "shadowMd": "0 1px 3px 0px hsl(20 14% 4% / 0.5), 0 2px 4px -1px hsl(20 14% 4% / 0.5)",
+        "shadowLg": "0 1px 3px 0px hsl(20 14% 4% / 0.5), 0 4px 6px -1px hsl(20 14% 4% / 0.5)",
+        "shadowXl": "0 1px 3px 0px hsl(20 14% 4% / 0.5), 0 8px 10px -1px hsl(20 14% 4% / 0.5)",
+        "shadow2xl": "0 1px 3px 0px hsl(20 14% 4% / 0.6)"
+      },
+      "colorPalette": "Warm stone near-black layers (stone-950 ground, stone-900 card, stone-800 muted/border) with a single gold/amber accent family (amber-500 primary with dark ink on it, amber-400 as gold text). Status hues stay data and render diluted: verified green-400, pending amber-400, failed red-400 — never a solid block on the dark ground. Gold coverage stays near 5% of any screen.",
+      "typographySystem": "Playfair Display (600/700) at display sizes only — hero titles, money figures, KPI values, never uppercase and never below 1.25rem. Inter for everything interactive and dense: toolbars, labels (0.75rem, 500, uppercase, 0.08em tracking), tables, forms. tabular-nums on every column of digits. Body text is stone-50 at 7:1+ on the ground; no ultra-light weights below 16px.",
+      "geometricLanguage": "Sharp-ish 6px radius — technical/secure, not friendly. Depth from surface steps (background → card → popover), not shadows. Hairline 1px rules; the family signature is the vault plaque: a gold hairline top-rule over a serif gold value, echoed as a 2px gold inset edge on fitted tiles.",
+      "materialVocabulary": "Matte stone surfaces; no gradients, no glassmorphism, no blur, no glow. Gold is spent sparingly on values, active states, and the plaque mark. Diluted chips are 18% color-mix of their own hue toward transparent, mixed in oklch.",
+      "motionLanguage": "150–200ms ease-out on hover/focus color and border shifts only; 2px chevron nudges on rows; nothing loops; prefers-reduced-motion keeps color changes and drops transforms.",
+      "applicationScenarios": "The Sole Vault collector app family: SoleVaultApp shell, CollectionItem, Listing, CollectibleProduct, CompletionSet, AuthenticationRecord, PersonBase instances in the experiments realm."
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/detailed-style-reference",
+        "name": "default"
+      }
+    }
+  }
+}

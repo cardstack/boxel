@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "goal": "Every Travis Scott collaboration with Nike and Jordan Brand. Retros count; sample pairs and friends-and-family do not \u2014 the line has to be a public release or the set never closes.",
+      "completionRule": "own-any",
+      "isPublic": true,
+      "coverImage": {
+        "url": "https://images.pexels.com/photos/3651824/pexels-photo-3651824.jpeg?auto=compress&cs=tinysrgb&w=800",
+        "sourceMode": "url"
+      },
+      "cardInfo": {
+        "name": "All Travis Scott x Nike",
+        "summary": "A finite-but-growing collab set \u2014 the classic reason a completion goal exists.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "products.0": {
+        "links": {
+          "self": "../CollectibleProduct/aj1-lost-and-found"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../completion-set",
+        "name": "CompletionSet"
+      }
+    }
+  }
+}

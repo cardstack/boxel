@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "## Territory\n\nA named sales region/segment (`name`, `region`, `owner` \u2014 linksTo the realm's existing `User`). Deals and Forecasts are scoped to a Territory rather than to an individual rep directly, so quota reporting survives a rep being reassigned.\n\n### Non-goals\nDoes not carve territory boundaries itself \u2014 `region` is free text because geography vs. industry-vertical vs. account-tier carving is the consumer's call, not this block's. Does not compute quota attainment (that's `Forecast`'s job).\n\n### Example\n`linkedExamples` points at `Territory/west-coast-enterprise`, owned by the real `User/priya-shah` instance already on this realm.",
+      "ref": {
+        "module": "../territory",
+        "name": "Territory"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "cardTitle": "Territory",
+      "cardDescription": "A named sales region or account segment with an owning rep, used to scope Deals and Forecasts.",
+      "cardInfo": {
+        "name": "Territory",
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "cardInfo.cardThumbnail": {
+        "links": {
+          "self": null
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "linkedExamples.0": {
+        "links": {
+          "self": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Territory/west-coast-enterprise"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

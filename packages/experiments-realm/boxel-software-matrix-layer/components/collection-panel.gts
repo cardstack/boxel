@@ -75,6 +75,21 @@ interface Signature {
      * screen. Omitting it keeps every row.
      */
     rowFilter?: (card: CardDef) => boolean;
+    /**
+     * Optional filter composed into the panel's ONE query — so unlike
+     * `rowFilter` (client-side, table rows only) it narrows the grid, the
+     * strip AND the table identically, by construction.
+     *
+     * API ADDITION (Sole Vault, 2026-08-31), not upstream yet. Exists because
+     * a consumer scoping by a field value (`{ eq: { listingStatus: 'active' } }`)
+     * had no way to express it that both views would honor: `rowFilter` runs
+     * on resolved instances, and the grid renders prerendered search entries
+     * that never pass through it — the two views would disagree on which rows
+     * exist, which is the exact mirroring bug decision 3 below exists to
+     * prevent. Composed under the same `every` as the type filter. Should be
+     * offered upstream with the next pull.
+     */
+    extraFilter?: Filter;
   };
   /**
    * Optional custom cell renderer, forwarded to `Table`.
@@ -196,12 +211,16 @@ export class CollectionPanel extends GlimmerComponent<Signature> {
       return undefined;
     }
     let text = this.search.trim();
+    // `extraFilter` joins the same `every` as the type filter, so every view
+    // reads an identically-scoped query — see the arg's own doc note.
+    let scope: Filter[] = this.args.extraFilter ? [this.args.extraFilter] : [];
     if (!text) {
-      return { type: ref };
+      return scope.length ? { every: [{ type: ref }, ...scope] } : { type: ref };
     }
     return {
       every: [
         { type: ref },
+        ...scope,
         { any: [{ matches: text }, { contains: { cardTitle: text } }] },
       ],
     };

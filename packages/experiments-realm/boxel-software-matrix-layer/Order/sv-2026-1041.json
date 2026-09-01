@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "reference": "SV-2026-1041",
+      "price": {
+        "amount": 220,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "shippingPrice": {
+        "amount": 15,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "authFee": {
+        "amount": 10,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "platformFee": {
+        "amount": 6.6,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "orderStatus": "authenticating",
+      "placedAt": "2026-08-18",
+      "paidAt": "2026-08-18",
+      "shippedAt": "2026-08-19",
+      "authenticatedAt": null,
+      "deliveredAt": null,
+      "completedAt": null,
+      "trackingNumber": "1Z999AA10123456784",
+      "paymentReference": "sim_pi_3XkQ2r",
+      "cardInfo": {
+        "name": "SV-2026-1041 \u2014 Yeezy 350 V2 Zebra",
+        "summary": "An escrow order mid-flight: paid, shipped, now under authentication. Funds are held and the verdict decides whether it completes or refunds.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "listing": {
+        "links": {
+          "self": "../Listing/yeezy-350-zebra-11"
+        }
+      },
+      "seller": {
+        "links": {
+          "self": "../SellerProfile/sneakerking"
+        }
+      },
+      "buyer": {
+        "links": {
+          "self": "../SoleVaultPerson/vaultkeeper"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-order",
+        "name": "Order"
+      }
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "leg": "to-authenticator",
+      "shipmentStatus": "delivered",
+      "carrier": "UPS",
+      "trackingNumber": "1Z999AA10123456784",
+      "trackingUrl": "https://www.ups.com/track?tracknum=1Z999AA10123456784",
+      "shippedFrom": "Los Angeles, CA",
+      "shippedTo": "Sole Vault Authentication \u2014 Carlstadt, NJ",
+      "labelCreatedAt": "2026-08-18",
+      "shippedAt": "2026-08-19",
+      "deliveredAt": "2026-08-21",
+      "estimatedDelivery": "2026-08-21",
+      "cardInfo": {
+        "name": "To authenticator \u2014 SV-2026-1041",
+        "summary": "The inbound leg: seller to authentication centre, delivered. The outbound leg to the buyer does not exist yet, which is exactly why legs are separate cards rather than two tracking fields on one.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-shipment",
+        "name": "Shipment"
+      }
+    }
+  }
+}

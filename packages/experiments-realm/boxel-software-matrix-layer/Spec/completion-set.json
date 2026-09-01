@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Completion Set",
+      "cardDescription": "A curated collecting goal, plus the arithmetic for how far along it is.",
+      "specType": "card",
+      "ref": {
+        "module": "../completion-set",
+        "name": "CompletionSet"
+      },
+      "readMe": "## Completion Set\n\n\"All Travis Scott x Nike\", \"every Chicago colourway\", \"my top 10 grails\". A goal, the products that would complete it, and the rule for what counts.\n\n### Membership is DATA, progress is DERIVED\n\nThese are opposite answers to a question that looks the same, so both are spelled out.\n\n`products` is a **curated `linksToMany`, not a query**. A collecting set is not \"everything matching a rule\" — the spec is explicit that sneaker sets are emergent and personal, and the user hand-confirms the list. Ordering is meaningful. That is curated membership, which is what links are for.\n\n`progress` / `ownedCount` / `missingProducts` are **not fields and are not stored**. They are a rollup over the viewer's `CollectionItem`s intersected with this list — unbounded, owner-dependent, and *different for every viewer of a public set*. Storing them guarantees drift the moment a pair is bought or sold, and would make a public set show the author's progress to a stranger.\n\n### One implementation of the arithmetic\n\nThe module exports `computeCompletion(setProductIds, ownedProductIds)`, pure and store-free, so the app, a future command and a test all call the same function instead of three subtly different ones. It guards the two cases that produce a wrong number rather than an error: an empty set (percent must be 0, not NaN) and dead link slots (a deleted product leaves `undefined` in the array while `.length` still counts it, which would inflate the denominator).\n\n`targetCount` **is** a stored computed field, and the asymmetry is the point: the denominator depends only on this card's own link array, while the numerator depends on someone's collection. Only one of the two is safe to cache here.\n\n### Why the embedded view has no progress bar\n\nAn embedded `CompletionSet` has no owner context — whose collection would it measure? A bar drawn there would be asserting a number this card cannot know. The app draws progress, because the app knows who is looking.\n\n### Non-goals\n\nThis card does not own the catalogue (`CollectibleProduct`), does not know what anyone owns (`CollectionItem`), and does not source the missing pairs — \"find missing\" is a query the app runs against `Listing` using `missingProductIds`.",
+      "containedExamples": []
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../CompletionSet/travis-scott-nike"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

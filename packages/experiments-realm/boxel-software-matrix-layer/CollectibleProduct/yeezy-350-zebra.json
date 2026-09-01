@@ -1,0 +1,55 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "sku": "CP9654",
+      "colorway": "Zebra",
+      "releaseDate": "2017-02-25",
+      "retailPrice": {
+        "amount": 220,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "productDescription": "Primeknit upper in white and core black with a red \"SPLY-350\" stripe, on a translucent Boost sole. Restocked repeatedly, which is why it trades close to retail despite the hype.",
+      "availableVariants": ["7", "8", "9", "10", "10.5", "11", "12", "13"],
+      "tags": ["yeezy", "boost", "general-release"],
+      "images": {
+        "images": [
+          {
+            "url": "https://images.pexels.com/photos/4398341/pexels-photo-4398341.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          },
+          {
+            "url": "https://images.pexels.com/photos/7193625/pexels-photo-7193625.jpeg?auto=compress&cs=tinysrgb&w=800",
+            "sourceMode": "url"
+          }
+        ]
+      },
+      "cardInfo": {
+        "name": "adidas Yeezy Boost 350 V2",
+        "summary": "A repeatedly-restocked GR \u2014 the counterexample to hype pricing.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "silhouette": {
+        "links": {
+          "self": null
+        }
+      },
+      "brand": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../collectible-product",
+        "name": "CollectibleProduct"
+      }
+    }
+  }
+}

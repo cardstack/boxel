@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "tagline": "Your collection is your storefront",
+      "cardInfo": {
+        "name": "Sole Vault",
+        "summary": "Collection tracking, completion goals and P2P resale in one place \u2014 the app that proves the collector blocks compose.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-app",
+        "name": "SoleVaultApp"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardTitle": "Sole Vault Dispatch Shipment",
+      "cardDescription": "Create a shipment leg for a paid order, and move the order from paid to shipped.",
+      "specType": "command",
+      "ref": {
+        "module": "../sole-vault-dispatch-shipment-command",
+        "name": "default"
+      },
+      "readMe": "## Dispatch Shipment\n\nThe spec's `ConfirmShipment`/`DispatchShipment` tool. Creates a `Shipment` (`label-created`) linked to the order and moves `Order.orderStatus` to `shipped`.\n\n### A NEW, DOMAIN-NEUTRAL COMMAND \u2014 NOT A PULL, AND CHECKED FIRST\n\nThe matrix already has `l05-5-tc-dispatch-shipment` (tracker: Done, Spec present) \u2014 its actual code was fetched and read before writing this file. Its `run()` patches `./fulfilment-order` and imports `./carrier` (a quoting service), both fulfilment-domain types this realm does not have and that do not fit a P2P marketplace (no buyer/seller, no escrow, no authentication step exist in that shape at all). This command is Sole Vault's own, against its own domain-neutral `Order`/`Shipment`, and needs its own tracker row cross-referencing `l05-5-tc-dispatch-shipment` as a documented, deliberate divergence \u2014 not a duplicate filed against it.\n\n### Example\n\n`linkedExamples` points at the command's natural target: `Order/sv-2026-1041`.\n\n### Leg-aware\n\n`leg` defaults to `seller-to-auth` \u2014 the spec's first of two shipment legs (seller \u2192 authentication centre \u2192 buyer). See `mark-delivered-command.ts` for how the second leg (`auth-to-buyer`) is distinguished when it lands.",
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Sole Vault Dispatch Shipment",
+        "summary": null,
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Order/sv-2026-1041"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

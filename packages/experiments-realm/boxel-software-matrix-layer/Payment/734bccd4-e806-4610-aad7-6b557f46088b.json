@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "amount": {
+        "amount": 429.7,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "paymentState": "refunded",
+      "direction": "refund",
+      "processorReference": "sim-re-lgk6mhqc",
+      "processor": "Simulated Processor",
+      "initiatedAt": "2026-08-31",
+      "settledAt": "2026-08-31",
+      "reason": "",
+      "cardInfo": {
+        "name": null,
+        "summary": null,
+        "cardThumbnailURL": null,
+        "notes": null
+      }
+    },
+    "relationships": {
+      "order": {
+        "links": {
+          "self": "../Order/sv-2026-1042"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sole-vault-payment",
+        "name": "Payment"
+      }
+    }
+  }
+}
