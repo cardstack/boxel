@@ -76,9 +76,17 @@ correctly, as the beat's first word. Each fits its existing window — the term
 costs between 0.5 and 1.1 seconds, and every one of these beats has that much
 air in it.
 
-Recorded as `<id>-named.mp3` alongside the canonical `<id>.mp3`. Adopting one
-means changing that beat's `vo` in the component and regenerating
-`docs/towers-vo.md`; the two files must not disagree.
+**ADOPTED, 2026-09-01.** All ten alternates were recorded and are now the
+canonical `<id>.mp3`; the takes that do not name the term are kept beside
+them as `<id>-plain.mp3`. Each beat's `vo` in the component was updated to
+match what is spoken, and `docs/towers-vo.md` regenerated from it.
+
+One correction to the estimate above: the named takes did NOT all fit their
+existing windows. Four ran over — ishigaki by 1.5s, timber by 0.8s, shachi
+by 0.6s, hafu by 0.2s — because a re-record varies by more than the cost of
+the added word. Those four beats were widened by a tick each rather than the
+reads being rushed, and the film went from 4:00 to 4:14. Measure, do not
+estimate: the headroom column in `towers-vo.md` is now ffprobe output.
 
 | Beat | Window | Alternate line (as spoken) |
 |---|---|---|

@@ -339,7 +339,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '天守',
     kicker: 'A CONSTRUCTION STUDY',
-    vo: 'You know the shape. Almost nobody knows what is holding it up. So let us take one apart.',
+    vo: "Tenshu. You know the shape. Almost nobody knows what is holding it up. So let us take one apart.",
     mode: 'title',
     romaji: 'TENSHU',
     /* 普請 fushin, the old word for a building works — the scene's own
@@ -476,7 +476,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '石垣',
     kicker: 'STAGE ONE',
-    vo: 'Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.',
+    vo: "Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.",
     mark: {
       bearing: 104,
       lines: ['石垣'],
@@ -493,7 +493,7 @@ const BEATS: Beat[] = [
     romaji: 'ISHIGAKI',
     sun: { az: -70, el: 12 },
     theme: 0,
-    ticks: 5,
+    ticks: 7,
     to: [2.8, 1.6, 0.6],
     toCam: { dolly: 1.12, lookY: -3.2, ox: -0.12, pitch: 1, yaw: 84 },
   },
@@ -507,7 +507,7 @@ const BEATS: Beat[] = [
     says: ['A timber cage', 'Posts stand ON stone', 'The joints do the work'],
     kanji: '柱梁',
     kicker: 'STAGE TWO',
-    vo: 'Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.',
+    vo: "Chūryō. Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.",
     mark: {
       bearing: 122,
       lines: ['柱梁'],
@@ -518,7 +518,7 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'CHŪRYŌ',
     sun: { az: -30, el: 62 },
-    ticks: 6,
+    ticks: 7,
     toCam: { dolly: 1.0, lookY: -0.9, ox: -0.12, pitch: 4, yaw: 102 },
   },
   {
@@ -534,7 +534,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '白壁',
     kicker: 'STAGE THREE',
-    vo: 'Then it gets wrapped. Lime plaster, thick enough to be armour. White, because white does not burn.',
+    vo: "Shirakabe. Lime plaster, thick enough to be armour. White, because white does not burn.",
     mark: {
       bearing: 139,
       lines: ['白壁'],
@@ -557,7 +557,7 @@ const BEATS: Beat[] = [
     says: ['A room to see from', 'The reason for all the rest'],
     kanji: '望楼',
     kicker: 'STAGE FOUR',
-    vo: 'At the top, one room you can see out of. Everything below it is how you get that room into the air.',
+    vo: "Bōrō. At the top, one room you can see out of. Everything below it is how you get that room into the air.",
     mark: {
       bearing: 154,
       lines: ['望楼'],
@@ -583,7 +583,7 @@ const BEATS: Beat[] = [
     ],
     kicker: 'STAGE FIVE',
     kanji: '瓦',
-    vo: 'Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.',
+    vo: "Kawara. Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.",
     mark: {
       bearing: 169,
       lines: ['瓦'],
@@ -643,7 +643,7 @@ const BEATS: Beat[] = [
     kanji: '鯱',
     kicker: 'ON THE RIDGE',
     toCam: { dolly: 4.35, lookY: 6.85, ox: -0.18, pitch: 7, yaw: 164 },
-    vo: "Tiger's head, fish's body, cast in bronze. It swallows water and spits it on the roof. That was the fire plan.",
+    vo: "Shachihoko. Tiger's head, fish's body, cast in bronze. It swallows water and spits it on the roof. That was the fire plan.",
     mode: 'point',
     photo: {
       caption: 'Shachihoko, Nagoya Castle',
@@ -652,7 +652,7 @@ const BEATS: Beat[] = [
     },
     romaji: 'SHACHIHOKO',
     sun: { az: 120, el: 26 },
-    ticks: 5,
+    ticks: 6,
     to: [-0.51, 13.85, -0.51],
     trace: [{ pts: RIDGE, wide: true }],
   },
@@ -671,10 +671,10 @@ const BEATS: Beat[] = [
     kanji: '千鳥破風',
     kicker: 'IN THE ROOF SLOPE',
     toCam: { dolly: 3.7, lookY: -1.2, ox: -0.18, pitch: 4, yaw: 174 },
-    vo: 'Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.',
+    vo: "Chidori-hafu. Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.",
     mode: 'point',
     romaji: 'CHIDORI-HAFU',
-    ticks: 5,
+    ticks: 6,
     to: [1.59, 5.5, -1.59],
     trace: [{ pts: RING_EAVE1, wide: true }],
   },
@@ -693,7 +693,7 @@ const BEATS: Beat[] = [
     kanji: '高欄',
     kicker: 'AROUND THE TOP',
     toCam: { dolly: 4.0, lookY: 4.3, ox: -0.18, pitch: 8, yaw: 184 },
-    vo: 'A rail on a ledge too narrow to walk. Built to be seen, not used.',
+    vo: "Kōran. A rail on a ledge too narrow to walk. Built to be seen, not used.",
     mode: 'point',
     romaji: 'KŌRAN',
     ticks: 4,
@@ -741,7 +741,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '軒',
     kicker: 'AND THE REASON FOR ALL OF IT',
-    vo: 'A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.',
+    vo: "Noki. A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.",
     mode: 'lower',
     romaji: 'NOKI',
     ticks: 6,
@@ -1902,6 +1902,14 @@ export default class TowerFilm extends Component<{
   private hear = () => {
     this.sound = !this.sound;
     this.film?.sound(this.sound);
+    /* turning sound on mid-beat should speak the line you are LOOKING at,
+       not wait for the next one — otherwise the first thing anybody hears
+       is a chapter they have already read */
+    if (this.sound) {
+      this.speak(this.beat);
+    } else {
+      this.hush();
+    }
   };
 
   private restart = () => {
