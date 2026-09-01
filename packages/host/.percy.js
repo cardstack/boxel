@@ -47,6 +47,37 @@ module.exports = {
      * response cache still prevents refetching from the test server.
      */
     'disable-cache': true,
+    /*
+     * Percy opens this many asset-discovery browsers at once. Its default is
+     * 10, which on a 4-core runner already shared with the test browser, the
+     * realm server, its workers, the prerenderer and postgres is a 2.5x
+     * oversubscription — and Percy notices only after the fact.
+     *
+     * Its adjustment loop halves concurrency whenever CPU or memory passes
+     * 80%, and adds 2 whenever both drop under 50%, bounded by the value set
+     * here. Starting at 10 that produces a cycle rather than a settling
+     * point: one run logged 62 downscales stepping 10 -> 5 -> 2 -> 1, then
+     * climbing back to repeat it, with CPU pinned at 100%. Each pass churns
+     * browser pages, which costs the CPU the loop is reacting to.
+     *
+     * The cost lands on snapshots. Discovery starved of CPU queues, and the
+     * upload budget in tests/helpers/percy-snapshot.ts expires, so the
+     * snapshot is abandoned and never reaches the CLI. That is silent — the
+     * shard stays green — and the tally in ci-host.yaml is what surfaces it.
+     * Seven builds lost 22 snapshots between them over three days, including
+     * two consecutive `main` builds that the loss gate then rejected rather
+     * than let become baselines.
+     *
+     * A ceiling of 2 leaves the loop room to drop to 1 under pressure and
+     * come back, without the climb to 10 that starts the cycle again.
+     *
+     * This is a hypothesis about a bottleneck, not a proven fix: the claim is
+     * that steady low concurrency beats oversubscription plus thrash when CPU
+     * is the constraint. The measurement is the same tally — `lost` in the
+     * finalize job's totals should stay at 0. If loss continues, the next
+     * things to try are the shard count and the 25s budget itself.
+     */
+    concurrency: 2,
   },
   snapshot: {
     widths: [1280],

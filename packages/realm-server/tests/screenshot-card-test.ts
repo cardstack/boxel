@@ -13,6 +13,7 @@ import {
   param,
   putMedia,
   query,
+  setScreenshotPerfSink,
 } from '@cardstack/runtime-common';
 import {
   chooseScreenshotCardCoalesceDecision,
@@ -25,7 +26,9 @@ import type {
   QueuePublishArgs,
   Job,
   PgPrimitive,
+  ScreenshotPerfEvent,
   ScreenshotPrerenderResponse,
+  ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -172,6 +175,11 @@ module(basename(import.meta.filename), function () {
         // The POST surface returns the capture in its response body rather
         // than recording it in the MediaCache ledger.
         persist: null,
+        surface: 'post',
+        // No x-boxel-logging-correlation-id on this request; the surface
+        // still records the field so the capture's telemetry is explicit
+        // about the absence.
+        loggingCorrelationId: null,
       });
     });
 
@@ -689,6 +697,34 @@ module(basename(import.meta.filename), function () {
       await expectCaptureSpecRejected(assert, { fullpage: true }, 'fullpage');
     });
 
+    test('rejects target combined with clip', async function (assert) {
+      // A `target` is an element-handle screenshot; it honors no clip.
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          target: '[data-card-field="name"]',
+          clip: { x: 0, y: 0, width: 100, height: 100 },
+        },
+        'target and clip',
+      );
+    });
+
+    test('rejects target combined with fullPage', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: '[data-card-field="name"]', fullPage: true },
+        'target and fullPage',
+      );
+    });
+
+    test('rejects an over-long target selector', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: `[data-card-field="${'x'.repeat(1100)}"]` },
+        'target',
+      );
+    });
+
     test('rejects an unknown nested captureSpec field by name', async function (assert) {
       await expectCaptureSpecRejected(
         assert,
@@ -1056,7 +1092,7 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    function makePersistQueue(behavior: 'ready' | 'never'): {
+    function makePersistQueue(behavior: 'ready' | 'never' | 'reject'): {
       queue: QueuePublisher;
       published: Array<QueuePublishArgs<unknown>>;
     } {
@@ -1070,6 +1106,8 @@ module(basename(import.meta.filename), function () {
           let notifier = new Deferred<TResult>();
           if (behavior === 'ready') {
             notifier.fulfill(READY as unknown as TResult);
+          } else if (behavior === 'reject') {
+            notifier.reject(new Error('job rejected'));
           }
           return {
             id: nextId++,
@@ -1181,6 +1219,110 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
+    test('the POST surface emits a request telemetry record whose correlation id rides the job args', async function (assert) {
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        })
+          .set('x-boxel-logging-correlation-id', 'corr-post-1')
+          .expect(201);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(request?.surface, 'post');
+      assert.strictEqual(request?.outcome, 'rendered');
+      assert.strictEqual(request?.correlationId, 'corr-post-1');
+      assert.strictEqual(request?.lane, 'on-demand');
+      assert.strictEqual(typeof request?.generationLookupMs, 'number');
+      assert.strictEqual(typeof request?.ledgerLookupMs, 'number');
+      assert.strictEqual(typeof request?.enqueueMs, 'number');
+      assert.strictEqual(typeof request?.jobWaitMs, 'number');
+      assert.strictEqual(typeof request?.jobId, 'number');
+
+      let args = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(args?.surface, 'post');
+      assert.strictEqual(args?.loggingCorrelationId, 'corr-post-1');
+    });
+
+    test('a rejected job still emits an error request record', async function (assert) {
+      await seedInstanceRow();
+      let { queue } = makePersistQueue('reject');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        }).expect(500);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(
+        request?.outcome,
+        'error',
+        'a rejected job reads as a rise in error, not a drop in request volume',
+      );
+      assert.strictEqual(typeof request?.jobId, 'number');
+      assert.strictEqual(typeof request?.enqueueMs, 'number');
+      assert.strictEqual(typeof request?.jobWaitMs, 'number');
+    });
+
+    test('a ledger hit reports the ledger row’s own lane', async function (assert) {
+      await seedInstanceRow();
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        }).expect(201);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(request?.outcome, 'hit');
+      assert.strictEqual(
+        request?.lane,
+        'declared',
+        'the hit carries the row lane, matching the GET surface',
+      );
+    });
+
     test('a non-default format shows up in the served URL', async function (assert) {
       await seedInstanceRow();
       let { queue } = makePersistQueue('ready');
@@ -1280,13 +1422,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a custom captureSpec bypasses the ledger and never persists', async function (assert) {
+    test('a custom captureSpec persists under its own capture identity and returns its served URL', async function (assert) {
       await seedInstanceRow();
       // A canonical (format-only) capture exists; the custom-spec request
-      // must not serve it — the ledger identity cannot represent viewport /
-      // scale / clip overrides, so a canonical entry is the wrong image for
-      // this request, and persisting the custom render under that identity
-      // would poison the canonical `_screenshot/` URL.
+      // must not serve it — the two specs are distinct capture identities,
+      // so a canonical entry is the wrong image for this request.
       await putMedia(dbAdapter, adapter, {
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
@@ -1318,14 +1458,66 @@ module(basename(import.meta.filename), function () {
         captureSpec,
         'the custom spec reaches the job',
       );
-      assert.strictEqual(
+      assert.deepEqual(
         (published[0]?.args as any)?.persist,
-        null,
-        'the custom capture is never persisted',
+        {
+          realmURL: REALM_URL,
+          sourceURL: CARD_ID,
+          captureSpecHash: await captureSpecHash({
+            format: 'isolated',
+            ...captureSpec,
+          }),
+          sourceGeneration: 1,
+          lane: 'on-demand',
+        },
+        'the persist identity hashes the full spec, overrides included',
       );
-      assert.false(
-        'captures' in response.body.data.attributes,
-        'no served URL for a capture the ledger cannot key',
+      assert.strictEqual(
+        response.body.data.attributes.captures[0].url,
+        `${REALM_URL}_screenshot/Person/fadhlan?viewport=1280x800`,
+        'the served URL carries the spec so it round-trips through the GET DSL',
+      );
+    });
+
+    test('a custom captureSpec answers from its own ledger entry with zero render work', async function (assert) {
+      await seedInstanceRow();
+      let captureSpec = {
+        viewport: { width: 1280, height: 800 },
+        deviceScaleFactor: 2,
+      };
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({
+          format: 'isolated',
+          ...captureSpec,
+        }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 2560,
+        height: 1600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec,
+      }).expect(201);
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      let capture = response.body.data.attributes.captures[0];
+      assert.strictEqual(
+        capture.url,
+        `${REALM_URL}_screenshot/Person/fadhlan?viewport=1280x800&dsf=2`,
+      );
+      assert.strictEqual(
+        capture.deviceScaleFactor,
+        2,
+        'the spec-declared scale factor is reported',
       );
     });
 
@@ -1602,32 +1794,49 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'join', jobId: 7 });
     });
 
-    test('an incoming job with captureSpec overrides always inserts', function (assert) {
-      // The persist identity cannot represent the overrides, so joining a
-      // canonical twin would hand this caller the wrong image.
+    function customSpecArgs(): Record<string, unknown> {
+      return {
+        ...canonicalArgs(),
+        captureSpec: { viewport: { width: 1280, height: 800 } },
+        // A producer hashes the full spec into the persist identity, so a
+        // custom-spec job's persist differs from the canonical one's.
+        persist: { ...PERSIST, captureSpecHash: 'custom456' },
+      };
+    }
+
+    test('same-spec custom captures join like canonical ones', function (assert) {
       let decision = chooseScreenshotCardCoalesceDecision({
-        incoming: jobSpec({
-          ...canonicalArgs(),
-          captureSpec: { viewport: { width: 1280, height: 800 } },
-        }),
-        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [{ ...jobSpec(customSpecArgs()), id: 7 }],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'join', jobId: 7 });
+    });
+
+    test('a captureSpec mismatch is never a twin, even under one persist identity', function (assert) {
+      // Belt-and-braces against a producer whose spec and hash disagree:
+      // joining hands the caller the twin's render verbatim, so the specs
+      // themselves must match, not just their claimed hash.
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [
+          {
+            ...jobSpec({
+              ...customSpecArgs(),
+              captureSpec: { viewport: { width: 640, height: 480 } },
+            }),
+            id: 7,
+          },
+        ],
         inFlightCandidates: [],
       });
       assert.deepEqual(decision, { type: 'insert' });
     });
 
-    test('a candidate with captureSpec overrides is never a twin', function (assert) {
+    test('a custom capture never joins a canonical twin', function (assert) {
       let decision = chooseScreenshotCardCoalesceDecision({
-        incoming: jobSpec(canonicalArgs()),
-        candidates: [
-          {
-            ...jobSpec({
-              ...canonicalArgs(),
-              captureSpec: { deviceScaleFactor: 2 },
-            }),
-            id: 7,
-          },
-        ],
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
         inFlightCandidates: [],
       });
       assert.deepEqual(decision, { type: 'insert' });

@@ -2,6 +2,7 @@ import type Koa from 'koa';
 
 import {
   captureSpecHash,
+  emitScreenshotPerf,
   ensureTrailingSlash,
   fetchRealmPermissions,
   findLiveInstanceGeneration,
@@ -9,14 +10,17 @@ import {
   isCaptureFormat,
   isScreenshotFormat,
   parseScreenshotCaptureSpec,
+  sanitizeLoggingCorrelationId,
   SCREENSHOT_FORMATS,
   screenshotURLFor,
   touchMediaCacheEntryOnHit,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
   type CaptureSpec,
   type DBAdapter,
   type MediaCacheEntry,
   type MediaCacheEntryKey,
   type ScreenshotPrerenderResponse,
+  type ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import RealmPermissionChecker from '@cardstack/runtime-common/realm-permission-checker';
 import {
@@ -38,14 +42,16 @@ import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 // One entry of the response's `captures` array — one shape across both paths so
 // a caller can read a field without first knowing how the capture was produced.
 // `url` is the durable served URL to embed when the capture persisted under its
-// ledger identity (a re-capture rotates its bytes, never the URL); it is null on
-// a capture-only response (any custom spec, so every batch), whose bytes have no
-// durable reference — embed the `base64` instead. `base64` rides along by
-// default until callers migrate to URLs (`includeBase64: false` opts out).
-// `name` is null on the persisted canonical capture (the ledger identity carries
-// no caller name) and the caller's entry name (or "default") on a capture-only
-// response. `deviceScaleFactor` is the effective scale the capture engine
-// reports, or null when serving from the ledger, which does not record it.
+// ledger identity — which covers custom singular geometry, since the identity's
+// captureSpecHash spans the full spec (a re-capture rotates its bytes, never
+// the URL); it is null on a capture-only response (every batch), whose bytes
+// have no durable reference — embed the `base64` instead. `base64` rides along
+// by default until callers migrate to URLs (`includeBase64: false` opts out).
+// `name` is null on the persisted capture (the ledger identity carries no
+// caller name) and the caller's entry name (or "default") on a capture-only
+// response. `deviceScaleFactor` is the effective scale: the engine-reported
+// factor when the capture just ran, else the spec's declared override on a
+// ledger serve (which has no engine report), else null at the default scale.
 interface CaptureResult {
   name: string | null;
   url: string | null;
@@ -81,8 +87,10 @@ interface CaptureResult {
  * byte-compatibility with current-shape callers, plus `captures:
  * [{name, url, width, height, deviceScaleFactor, base64?}]` on every ready
  * response. `url` is the durable served URL when the capture persisted under
- * its ledger identity, and null otherwise (a capture-only custom spec / batch,
- * or a card the index doesn't know / a server without a MediaCache store) —
+ * its ledger identity — any singular spec on a capture format, custom
+ * geometry included — and null when nothing persists (a batch, a
+ * non-capture format such as fitted, a card the index doesn't know, a
+ * server without a MediaCache store, or a caller without realm read) —
  * embed the `base64` in that case.
  *
  * Request body (JSON:API):
@@ -111,21 +119,26 @@ interface CaptureResult {
  * 4096×16384, deviceScaleFactor ≤ 3, clip bounded by the same caps as the
  * viewport and within the viewport when one is given, physical pixels per
  * edge ≤ the Chromium texture cap, `fullPage` and `clip` mutually exclusive
- * — the prerender server's screenshot route runs the identical parse), so
- * the worker downstream can treat it as trusted. The parse is strict: a
- * field the engine cannot honor is refused by name — never ignored — and
- * default-valued fields (`fullPage: false`, `deviceScaleFactor: 1`) are
- * elided so equal capture intents classify identically. Invalid specs
- * return a 400 naming the offending field. The one bound no request-time
- * parse can enforce — a fullPage capture's document extent — is checked
- * against the same physical-pixel cap at capture time.
+ * — the prerender server's screenshot route and the GET `_screenshot/` URL
+ * DSL run the identical parse), so the worker downstream can treat it as
+ * trusted. The parse is strict: a field the engine cannot honor is refused
+ * by name — never ignored — and default-valued fields (`fullPage: false`,
+ * `deviceScaleFactor: 1`, the engine's 800×600 viewport) are elided so
+ * equal capture intents classify identically. Invalid specs return a 400
+ * naming the offending field. The one bound no request-time parse can
+ * enforce — a fullPage capture's document extent — is checked against the
+ * same physical-pixel cap at capture time.
+ * A singular spec is part of the canonical capture identity — its hash keys
+ * the MediaCache ledger — so a custom capture persists and serves on its own
+ * GET `_screenshot/` URL (`?viewport=…&dsf=…`) exactly like a format-only
+ * one: ledger fast path, coalescing, and `captures[].url` all apply.
  * `format` may be `isolated`, `embedded`, or `fitted`. The `fitted` format
  * renders into a parent-owned box, so it requires an `envelope`
  * (`{ width, height }` in CSS px) on the captureSpec — or on every batch
  * entry; requesting it without one returns a 400. Conversely
- * `isolated`/`embedded` fill the viewport and reject an envelope. An
- * envelope-carrying spec always has overrides, so fitted captures are always
- * capture-only.
+ * `isolated`/`embedded` fill the viewport and reject an envelope. `fitted`
+ * sits outside the canonical (ledger/GET-DSL) serving contract, so fitted
+ * captures are always capture-only.
  *
  * A batch of captures may be requested via `captureSpec.captures`, an array
  * of named `{ name, ...overrides }` entries (bounded by
@@ -140,10 +153,9 @@ interface CaptureResult {
  * since a batch is never persisted — and the top-level `base64`/`width`/`height`
  * mirror `captures[0]` for byte-compatibility with singular-shape callers.
  *
- * A spec with overrides — a batch always is one — is capture-only: the
- * ledger's canonical capture identity cannot represent it yet (the GET DSL
- * reserves those params), so it always renders fresh and returns raw bytes —
- * no ledger fast path, no MediaCache persist, and every `captures` entry's
+ * A batch is capture-only: the ledger's capture identity names one capture,
+ * not a set, so a batch always renders fresh and returns raw bytes — no
+ * ledger fast path, no MediaCache persist, and every `captures` entry's
  * `url` is null.
  *
  * The `runAs` user is derived from the authenticated JWT.
@@ -232,6 +244,17 @@ export default function handleScreenshotCard({
       return sendResponseForBadRequest(ctxt, captureSpecParse.error);
     }
     let captureSpec = captureSpecParse.captureSpec ?? null;
+    // The full capture identity: format plus the normalized singular
+    // geometry overrides. Its hash keys the ledger, so a custom singular
+    // capture persists and serves under its own durable URL exactly like a
+    // format-only one. A batch has no identity (the identity names one
+    // capture, not a set), and fitted sits outside the canonical
+    // (ledger/GET-DSL) serving contract — both leave it undefined and stay
+    // capture-only.
+    let spec: CaptureSpec | undefined =
+      isCaptureFormat(format) && !captureSpec?.captures
+        ? { format, ...(captureSpec ?? {}) }
+        : undefined;
 
     let token = ctxt.state.token as RealmServerTokenClaim;
     if (!token?.user) {
@@ -241,6 +264,10 @@ export default function handleScreenshotCard({
       );
     }
     let userId = token.user;
+    let requestStart = Date.now();
+    let correlationId = sanitizeLoggingCorrelationId(
+      request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+    );
 
     try {
       // The canonical capture identity — resolvable only when the instance
@@ -248,20 +275,8 @@ export default function handleScreenshotCard({
       // a store. Without either, the capture still runs; it just isn't
       // persisted and the response carries no served URL.
       let entryKey: MediaCacheEntryKey | undefined;
-      // A custom `captureSpec` has no representation in the ledger's
-      // canonical capture identity yet — the GET `_screenshot/` DSL reserves
-      // `viewport`/`dsf`/`fullPage`/`clip` — so persisting one under the
-      // format-only key would let a custom render serve on the canonical
-      // URL. Custom captures render fresh and return bytes only: no ledger
-      // fast path, no persist, no served URL. The parse normalizes an
-      // all-defaults spec to null, so null exactly means canonical.
-      let isCanonicalCapture = captureSpec === null;
-      // The canonical capture identity speaks the GET DSL's formats only.
-      // fitted can never reach here (it requires an envelope, so its
-      // spec is never null), but the guard keeps that invariant executable
-      // and narrows the type.
-      let spec: CaptureSpec | undefined =
-        isCanonicalCapture && isCaptureFormat(format) ? { format } : undefined;
+      let generationLookupMs: number | undefined;
+      let ledgerLookupMs: number | undefined;
       if (mediaCacheAdapter && spec) {
         // The ledger fast path and the generation probe feeding it answer
         // from the store before any job exists, so the worker task's
@@ -280,10 +295,12 @@ export default function handleScreenshotCard({
           matrixClient,
         ).can(userId, 'read');
         if (mayRead) {
+          let generationLookupStart = Date.now();
           let generation = await findLiveInstanceGeneration(dbAdapter, {
             realmURL: normalizedRealmURL,
             instanceURL: sourceURL,
           });
+          generationLookupMs = Date.now() - generationLookupStart;
           if (generation !== undefined) {
             entryKey = {
               realmURL: normalizedRealmURL,
@@ -294,10 +311,35 @@ export default function handleScreenshotCard({
           }
         }
       }
+      let emitRequestPerf = (
+        outcome: ScreenshotRequestPerfEvent['outcome'],
+        fields: Partial<ScreenshotRequestPerfEvent> = {},
+      ) =>
+        emitScreenshotPerf({
+          eventType: 'request',
+          surface: 'post',
+          outcome,
+          realmURL: normalizedRealmURL,
+          sourceURL,
+          captureSpecHash: entryKey?.captureSpecHash ?? null,
+          sourceGeneration: entryKey?.sourceGeneration ?? null,
+          lane: entryKey ? 'on-demand' : null,
+          correlationId,
+          jobId: null,
+          reservationId: null,
+          hasTwin: null,
+          ...(generationLookupMs != null ? { generationLookupMs } : {}),
+          ...(ledgerLookupMs != null ? { ledgerLookupMs } : {}),
+          totalMs: Date.now() - requestStart,
+          ...fields,
+        });
 
       if (entryKey && spec) {
+        let ledgerLookupStart = Date.now();
         let entry = await findMediaCacheEntry(dbAdapter, entryKey);
+        ledgerLookupMs = Date.now() - ledgerLookupStart;
         if (entry) {
+          let serveStart = Date.now();
           let response = await respondFromLedger({
             entry,
             withBase64,
@@ -308,6 +350,14 @@ export default function handleScreenshotCard({
             dbAdapter,
           });
           if (response) {
+            emitRequestPerf('hit', {
+              serveMs: Date.now() - serveStart,
+              // The row's own lane, not this surface's: the GET surface
+              // reports hits the same way, and `findMediaCacheEntry` doesn't
+              // filter on lane, so a `declared`-lane row must read as
+              // `declared` from both.
+              lane: entry.lane,
+            });
             return await setContextResponse(ctxt, response);
           }
           // The entry's object was reclaimed between the ledger read and
@@ -318,6 +368,7 @@ export default function handleScreenshotCard({
       // The canonical realm URL keys the per-realm serialization lane (the
       // job's default concurrency group) so this surface and the GET lane —
       // which keys off the realm's own URL — share one lane per realm.
+      let enqueueStart = Date.now();
       let job = await enqueueScreenshotCardJob(
         {
           realmURL: normalizedRealmURL,
@@ -327,11 +378,15 @@ export default function handleScreenshotCard({
           format,
           captureSpec,
           persist: entryKey ? { ...entryKey, lane: 'on-demand' } : null,
+          surface: 'post',
+          loggingCorrelationId: correlationId,
         },
         queue,
         dbAdapter,
         userInitiatedPriority,
       );
+      let enqueueMs = Date.now() - enqueueStart;
+      let jobWaitStart = Date.now();
 
       let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const timedOut = Symbol('sync-wait-timeout');
@@ -347,22 +402,32 @@ export default function handleScreenshotCard({
             timeoutHandle.unref?.();
           }),
         ]);
+      } catch (error) {
+        // A rejected job (`job.done` rejects when the task throws: a
+        // prerender that exhausted its retries, a reservation-lease timeout)
+        // must still emit — otherwise the hard-failure class reads as
+        // missing request volume instead of a rise in `error`. The outer
+        // catch still answers the 500.
+        emitRequestPerf('error', {
+          enqueueMs,
+          jobWaitMs: Date.now() - jobWaitStart,
+          jobId: job.id,
+        });
+        throw error;
       } finally {
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);
         }
       }
       if (result === timedOut) {
+        emitRequestPerf('timeout', {
+          enqueueMs,
+          jobWaitMs: Date.now() - jobWaitStart,
+          jobId: job.id,
+        });
         // The job keeps running and (when persisting) lands its capture in
         // the MediaCache, so the client's retry answers from the ledger
         // with no second render. The retry hint is one average capture.
-        //
-        // That resume applies only to canonical captures. A custom
-        // captureSpec's job is capture-only (persist: null, never
-        // coalesced), so its timed-out render is discarded and each retry
-        // is a full re-render — the Retry-After here is pacing, not a
-        // cheap-resume promise, until the ledger identity learns these
-        // specs.
         let estimate = await estimateScreenshotQueueWait(
           dbAdapter,
           `screenshot:${normalizedRealmURL}`,
@@ -383,6 +448,12 @@ export default function handleScreenshotCard({
         );
       }
 
+      emitRequestPerf(result.status === 'ready' ? 'rendered' : 'error', {
+        enqueueMs,
+        jobWaitMs: Date.now() - jobWaitStart,
+        jobId: job.id,
+      });
+
       let attributes: Record<string, unknown> = { ...result };
       if (!withBase64) {
         delete attributes.base64;
@@ -391,7 +462,9 @@ export default function handleScreenshotCard({
         Array.isArray(result.captures) &&
         !(entryKey && result.status === 'ready')
       ) {
-        // Capture-only response (any custom spec, so every batch): the engine's
+        // Capture-only response — reached when nothing persists: a batch, a
+        // non-capture format such as fitted, an unindexed instance, a
+        // store-less server, or a caller without realm read. The engine's
         // byte-only entries have no durable served URL. Normalize them into the
         // one captures[] shape callers build on — url: null marks "no durable
         // reference, embed the base64" — so captures[i].url is never a
@@ -473,7 +546,10 @@ function captureResult({
     }),
     width,
     height,
-    deviceScaleFactor,
+    // The effective scale: the engine-reported factor when the capture just
+    // ran, else the spec's declared override (a ledger serve has no engine
+    // report), else null at the default scale.
+    deviceScaleFactor: deviceScaleFactor ?? spec.deviceScaleFactor ?? null,
     ...(withBase64 && base64 !== undefined ? { base64 } : {}),
   };
 }

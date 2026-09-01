@@ -223,6 +223,74 @@ module(basename(import.meta.filename), function (hooks) {
   // later `getPage` can commandeer, and a `#creatingStandbys` decrement below
   // the zero `closeAll` resets, which under-reports pool occupancy for the
   // life of the process.
+  // The refill takes one generation snapshot and threads it downstream. It has
+  // to, because it yields between taking it and reaching the retry loop: a
+  // close landing in that window has already bumped the counter, so a second
+  // read there would compare the new value against itself, see no change, and
+  // work through every attempt — leaving the close waiting for exactly the
+  // retries it cancelled.
+  test('a close during standby preparation still cancels the retries', async function (assert) {
+    let attempts = 0;
+    let browserManager = makeBrowserStub({
+      gate: async () => {
+        attempts++;
+        throw new Error('standby creation failed');
+      },
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    // Not awaited: the refill runs to its first await — inside
+    // `#prepareSlotForStandby`, before any context is created — and the close
+    // below lands in that window.
+    let refill = pool.warmStandbys();
+    await pool.closeAll();
+    await refill;
+
+    assert.strictEqual(
+      attempts,
+      0,
+      'the refill gave up without attempting a creation the close had already ruled out',
+    );
+  });
+
+  // The other side of that contract: waiting for the refill must not mean
+  // waiting out its retries. A refill whose attempts keep failing runs
+  // `STANDBY_CREATION_RETRIES` of them, each bounded only by the standby
+  // navigation timeout, with backoff in between — so a caller that closes the
+  // pool in order to shut down (`Prerenderer.stop`, and the prerender server's
+  // teardown behind it) would sit behind attempts it has already decided it
+  // doesn't want, long enough to overrun its own shutdown budget and leave the
+  // process alive with its ports still bound.
+  test('closeAll ends a failing refill rather than waiting out its retries', async function (assert) {
+    let attempts = 0;
+    let browserManager = makeBrowserStub({
+      gate: async () => {
+        attempts++;
+        throw new Error('standby creation failed');
+      },
+    });
+    let pool = makePool({ maxPages: 2, browserManager });
+
+    let refill = pool.warmStandbys();
+    await waitUntil(
+      () => attempts >= 1,
+      'the first standby creation attempt to fail',
+    );
+
+    // Called during the backoff that follows the failed attempt. Attempt count
+    // rather than elapsed time is the assertion: it distinguishes "the close
+    // ended the retries" from "the close outlasted them" without depending on
+    // how long a retry takes.
+    await pool.closeAll();
+    await refill;
+
+    assert.strictEqual(
+      attempts,
+      1,
+      'no further creation attempt was made once closeAll began',
+    );
+  });
+
   test('closeAll waits for an in-flight standby refill and closes what it created', async function (assert) {
     let gate = makeManualGate();
     let created = 0;
