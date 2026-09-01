@@ -2800,7 +2800,12 @@ module(basename(import.meta.filename), function () {
           throw new Error('reader should not be consulted in this test');
         },
       };
-      let jobInfo: JobInfo = { jobId: 1, reservationId: 1, priority: 10 };
+      let jobInfo: JobInfo = {
+        jobId: 1,
+        reservationId: 1,
+        priority: 10,
+        queueWaitMs: null,
+      };
 
       let warmed = await preWarmModulesTable({
         realmURL: new URL(realmURL),

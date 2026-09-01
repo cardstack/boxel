@@ -292,7 +292,12 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       // the one construction that can put unrelated passes in one scope.
       // `visit-file.ts` omits the scope in the same situation; `null` here
       // routes to the same omission rather than to the sentinel.
-      jobInfo: jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 },
+      jobInfo: jobInfo ?? {
+        jobId: -1,
+        reservationId: -1,
+        priority: 0,
+        queueWaitMs: null,
+      },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,
     });

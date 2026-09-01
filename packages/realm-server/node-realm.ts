@@ -18,10 +18,9 @@ import type { LocalPath } from '@cardstack/runtime-common/paths';
 import type { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
 
-import type { ReadStream, Stats } from 'fs-extra';
+import type { Dirent, ReadStream, Stats } from 'fs-extra';
 import fsExtra from 'fs-extra';
 const {
-  readdirSync,
   existsSync,
   writeFileSync,
   statSync,
@@ -55,26 +54,6 @@ function statIfExists(absolutePath: string): Stats | undefined {
     return statSync(absolutePath);
   } catch (err: any) {
     if (err?.code === 'ENOENT' || err?.code === 'ENOTDIR') {
-      return undefined;
-    }
-    throw err;
-  }
-}
-
-// The same vanishing-path race applies to a directory listing: a concurrent
-// delete — e.g. a published realm being unpublished while a mtimes traversal is
-// descending its tree — can remove a directory between a parent listing that
-// yielded it and the recursive read that opens it, so treat a vanished
-// directory as empty rather than letting the raw ENOENT escape. Only ENOENT is
-// swallowed: unlike statIfExists (whose callers probe arbitrary paths), the
-// traversal only ever reads directories it just listed, and ENOTDIR — the
-// target is a regular file — is a genuine not-a-directory that callers such as
-// directoryEntries must still see.
-function readdirIfExists(absolutePath: string) {
-  try {
-    return readdirSync(absolutePath, { withFileTypes: true });
-  } catch (err: any) {
-    if (err?.code === 'ENOENT') {
       return undefined;
     }
     throw err;
@@ -140,11 +119,20 @@ export class NodeAdapter implements RealmAdapter {
       ensureDirSync(path);
     }
     let absolutePath = join(this.realmDir, path);
-    let entries = readdirIfExists(absolutePath);
-    if (!entries) {
-      return;
+    // Asynchronous on purpose: on a network filesystem a listing is a round
+    // trip, and this generator runs on the request path and in the
+    // cross-instance directory refresh, neither of which may block the event
+    // loop. A missing directory lists as empty.
+    let entries: Dirent[];
+    try {
+      entries = await fsExtra.readdir(absolutePath, { withFileTypes: true });
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') {
+        return;
+      }
+      throw err;
     }
-    for await (let entry of entries) {
+    for (let entry of entries) {
       let isDirectory = entry.isDirectory();
       let isFile = entry.isFile();
       if (!isDirectory && !isFile) {

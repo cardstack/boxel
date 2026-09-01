@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "packages/base/cards/skill*.json"
-      - "packages/base/Skill/**/*.json"
       - "packages/experiments-realm/**/Skill*/**/*.json"
       - "packages/test-realm-cards/contents/skill-*.json"
       - "packages/skills-realm/**/*.json"

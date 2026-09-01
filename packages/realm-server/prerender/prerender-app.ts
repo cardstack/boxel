@@ -13,6 +13,7 @@ import {
   type PrerenderVisitType,
   type RenderRouteOptions,
   type ModuleRenderResponse,
+  type RenderVisitResponse,
   type RunCommandResponse,
   type ScreenshotCaptureSpec,
   type ScreenshotCaptureSpecParse,
@@ -41,6 +42,7 @@ import {
   sanitizePrerenderRequestId,
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
+import { isMissingExportMessage } from '@cardstack/runtime-common/package-shim-handler';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -104,6 +106,127 @@ export function decideHostShellRecycle(
     return { recycle: false, nextWarmed: reported };
   }
   return { recycle: true, nextWarmed: reported };
+}
+
+// The answer a visit gives when shutdown wins the race: the manager reads this
+// status, marks the server draining and routes the visit elsewhere. Shared by
+// both render attempts so a caller can't tell which one was interrupted.
+function respondDraining(ctxt: Koa.Context): void {
+  ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
+  ctxt.set(PRERENDER_SERVER_STATUS_HEADER, PRERENDER_SERVER_STATUS_DRAINING);
+  ctxt.body = {
+    errors: [
+      {
+        status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
+        message: 'Prerender server draining',
+      },
+    ],
+  };
+}
+
+// Whether a visit's result should be re-rendered rather than believed.
+//
+// The two tokens are what this server had adopted when the render started and
+// when its response came back. A render that straddled a change between them
+// ran on a page whose bundle the realm server may already have stopped
+// serving. On its own that is unremarkable — most renders spanning a deploy
+// still produce correct output — and it matters for one class of failure:
+// `has no exported member`, which is exactly what a page resolving current
+// realm source against the previous bundle throws.
+//
+// That failure is worth one more render because of what happens to it
+// downstream. The indexer stores a failed render as the card's content, so a
+// transient bundle mismatch becomes an error document served from cache to
+// every anonymous reader until an unrelated reindex revisits the row.
+// Re-rendering on a page warmed against the current shell costs one render;
+// believing it costs an outage that lasts until something else repairs it.
+export function shouldRerenderForShellChange({
+  response,
+  shellAtStart,
+  shellAtCompletion,
+}: {
+  response: RenderVisitResponse;
+  shellAtStart: string | undefined;
+  shellAtCompletion: string | undefined;
+}): boolean {
+  // Nothing reported by the end of the render: this server has never been told
+  // which shell is current, so it has no grounds in either direction.
+  if (shellAtCompletion === undefined) {
+    return false;
+  }
+  // `undefined -> X` counts as a change, and it is the deploy shape this
+  // exists for. The train restarts prerender before the realm server, so a
+  // server booting mid-train warms against the outgoing bundle and the first
+  // token it ever hears is the new one — on such a server there is no
+  // `X -> Y` to observe until some later deploy. `decideHostShellRecycle`
+  // treats that first token as a definite change for the same reason.
+  if (shellAtStart === shellAtCompletion) {
+    return false;
+  }
+  return hasMissingExportError(response);
+}
+
+function hasMissingExportError(response: RenderVisitResponse): boolean {
+  // Every sub-response that can carry a render failure, because every one of
+  // them is persisted the same way: `prerender-html-visit` writes
+  // `fileRender.error` as a cached `file-error` row exactly as the card path
+  // writes `instance-error`, so a FileDef render (Markdown and friends) stays
+  // poisoned on the same terms if it is left out.
+  for (let candidate of [
+    response.card?.error,
+    response.fileExtract?.error,
+    response.fileRender?.error,
+    response.pageUnusableError,
+  ]) {
+    let error = candidate?.error;
+    if (!error) {
+      continue;
+    }
+    // The visit's own message, plus the console errors `RenderRunner` merges
+    // onto `additionalErrors`: a render whose own failure is a timeout or a
+    // wedge can carry the module error only in that array, and it is
+    // persisted with the row either way. Absent when `clampSerializedError`
+    // dropped the array from an oversized error, which is a coverage limit
+    // rather than a signal that the render was clean.
+    for (let message of [
+      error.message,
+      ...(error.additionalErrors ?? []).map((e) => e?.message),
+    ]) {
+      if (typeof message === 'string' && isMissingExportMessage(message)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Record which host shell produced this response. Kept whether or not the
+// render failed: on a failure it is the evidence for how the failure should be
+// read, and on a success it is what lets an operator attribute a render to a
+// bundle without matching timestamps against deploy logs.
+export function stampHostShellTokens(
+  response: RenderVisitResponse,
+  tokens: { atStart: string | undefined; atCompletion: string | undefined },
+): void {
+  if (tokens.atStart === undefined && tokens.atCompletion === undefined) {
+    return;
+  }
+  // Under `diagnostics` rather than beside it: `flattenPrerenderMeta` carries
+  // that key onto `boxel_index.diagnostics` (and its prerender-html twin onto
+  // `prerendered_html.diagnostics`) and drops every other meta key, so a
+  // token stamped anywhere else never reaches the row an operator inspects.
+  response.meta = {
+    ...(response.meta ?? {}),
+    diagnostics: {
+      ...(response.meta?.diagnostics ?? {}),
+      ...(tokens.atStart !== undefined
+        ? { hostShellHash: tokens.atStart }
+        : {}),
+      ...(tokens.atCompletion !== undefined
+        ? { hostShellHashAtCompletion: tokens.atCompletion }
+        : {}),
+    },
+  };
 }
 
 // A one-shot notification that shutdown has begun, which the holder releases
@@ -204,6 +327,20 @@ export function buildPrerenderApp(options: {
   maxPages?: number;
   isDraining?: () => boolean;
   drainingPromise?: Promise<void>;
+  // The host-shell token the manager last *reported*, read at render start and
+  // again at render end so a visit can tell whether the shell moved under it.
+  // Deliberately the reported token rather than the one the pool has adopted:
+  // the adopted value only advances once `recycle()` resolves, and a recycle
+  // cannot resolve until every in-flight visit has released its tab lease — so
+  // a render that was running when the shell changed would sample the same
+  // value twice and read as steady, which is precisely the case worth
+  // catching. Owned by the HTTP server, which learns it from the heartbeat.
+  getHostShellHash?: () => string | undefined;
+  // The recycle triggered by the last token change, if one is still running.
+  // A re-render awaits it so it lands on a page warmed against the current
+  // shell instead of racing the teardown. Always resolves — the caller
+  // handles recycle failure by leaving its own baseline alone.
+  awaitHostShellRecycle?: () => Promise<void> | undefined;
 }): {
   app: Koa<Koa.DefaultState, Koa.Context>;
   prerenderer: Prerenderer;
@@ -986,24 +1123,28 @@ export function buildPrerenderApp(options: {
           : undefined;
 
       let start = Date.now();
+      // Hoisted so a re-render after a host-shell change replays the same
+      // visit rather than an approximation of it.
+      let visitArgs: Parameters<typeof prerenderer.prerenderVisit>[0] = {
+        affinityType,
+        affinityValue,
+        realm,
+        url,
+        auth,
+        ...(visitType ? { visitType } : {}),
+        renderOptions,
+        ...(fileData ? { fileData } : {}),
+        ...(Array.isArray(types) ? { types } : {}),
+        ...(cardTypes?.length ? { cardTypes } : {}),
+        ...(batchId ? { batchId } : {}),
+        ...(priority !== undefined ? { priority } : {}),
+        ...(jobId ? { jobId } : {}),
+        ...(renderScope ? { renderScope } : {}),
+        signal: ac.signal,
+      };
+      let shellAtStart = options.getHostShellHash?.();
       let execPromise = prerenderer
-        .prerenderVisit({
-          affinityType,
-          affinityValue,
-          realm,
-          url,
-          auth,
-          ...(visitType ? { visitType } : {}),
-          renderOptions,
-          ...(fileData ? { fileData } : {}),
-          ...(Array.isArray(types) ? { types } : {}),
-          ...(cardTypes?.length ? { cardTypes } : {}),
-          ...(batchId ? { batchId } : {}),
-          ...(priority !== undefined ? { priority } : {}),
-          ...(jobId ? { jobId } : {}),
-          ...(renderScope ? { renderScope } : {}),
-          signal: ac.signal,
-        })
+        .prerenderVisit(visitArgs)
         .then((result) => ({ result }));
       let raceResult = await raceAgainstDrain(execPromise, subscribeToDrain);
       if ('draining' in raceResult) {
@@ -1013,22 +1154,85 @@ export function buildPrerenderApp(options: {
             e,
           ),
         );
-        ctxt.status = PRERENDER_SERVER_DRAINING_STATUS_CODE;
-        ctxt.set(
-          PRERENDER_SERVER_STATUS_HEADER,
-          PRERENDER_SERVER_STATUS_DRAINING,
-        );
-        ctxt.body = {
-          errors: [
-            {
-              status: PRERENDER_SERVER_DRAINING_STATUS_CODE,
-              message: 'Prerender server draining',
-            },
-          ],
-        };
+        respondDraining(ctxt);
         return;
       }
       let { response, timings, pool } = raceResult.result;
+      let shellAtCompletion = options.getHostShellHash?.();
+      if (
+        !options.isDraining?.() &&
+        shouldRerenderForShellChange({
+          response,
+          shellAtStart,
+          shellAtCompletion,
+        })
+      ) {
+        log.warn(
+          'visit of %s failed to resolve a module while the reported host shell moved from %s to %s; re-rendering before returning that failure',
+          url,
+          shellAtStart ?? 'none',
+          shellAtCompletion,
+        );
+        // The token moved because `reconcileHostShell` saw it move, so the
+        // browser is being recycled around now and this visit lands on a page
+        // warmed against the current shell. One attempt only: if it fails
+        // again the failure is the card's, and the caller is owed an answer.
+        //
+        // Waits for the recycle the token change triggered before rendering
+        // again. The reported token moves the moment the change is learned,
+        // while the pool is still tearing down, so rendering immediately would
+        // race `closeAll` and pay a browser restart inside `prerenderVisit`'s
+        // own recovery lane. Awaiting it is what makes "lands on a page warmed
+        // against the current shell" true rather than aspirational.
+        //
+        // Both waits sit inside the drain race, not merely behind the
+        // `isDraining` check above: a signal arriving after that check would
+        // otherwise let this hold `server.close()` open for a browser restart
+        // plus a full render. Draining winning is reported as such rather than
+        // answered with the stale-shell failure — the manager routes the visit
+        // to another server, which is a better outcome than persisting a
+        // result this server has already decided it doesn't trust.
+        //
+        // A rejection is deliberately not caught. It unwinds to the route's
+        // outer handler and answers 500, which `remote-prerenderer` maps to a
+        // retryable error, so the visit is retried elsewhere — the same
+        // disposition as draining, and better than returning a failure this
+        // server distrusts. A recycle is exactly when a visit is most likely
+        // to reject, so this is the expected path rather than a corner.
+        let discardedMs = Date.now() - start;
+        let retryPromise = (async () => {
+          await options.awaitHostShellRecycle?.();
+          return { result: await prerenderer.prerenderVisit(visitArgs) };
+        })();
+        let retryResult = await raceAgainstDrain(
+          retryPromise,
+          subscribeToDrain,
+        );
+        if ('draining' in retryResult) {
+          retryPromise.catch((e) =>
+            log.debug(
+              'visit re-render settled after drain (ignored):',
+              e as any,
+            ),
+          );
+          respondDraining(ctxt);
+          return;
+        }
+        ({ response, timings, pool } = retryResult.result);
+        // The clock restarts with the render the response actually came from,
+        // so `totalMs` and `timings` describe the same attempt. The discarded
+        // attempt's cost is logged rather than folded into either.
+        start = Date.now();
+        shellAtStart = shellAtCompletion;
+        shellAtCompletion = options.getHostShellHash?.();
+        log.info(
+          'visit of %s re-rendered on host shell %s after discarding a %dms attempt on %s',
+          url,
+          shellAtCompletion,
+          discardedMs,
+          shellAtStart,
+        );
+      }
       let totalMs = Date.now() - start;
       let poolFlags = Object.entries({
         reused: pool.reused,
@@ -1057,6 +1261,10 @@ export function buildPrerenderApp(options: {
         poolFlagSuffix,
       );
       decorateRenderErrorDiagnostics(response, requestId);
+      stampHostShellTokens(response, {
+        atStart: shellAtStart,
+        atCompletion: shellAtCompletion,
+      });
       // Timings are already inside `response.meta.diagnostics`. Here
       // we just populate the JSON:API envelope `meta.timing` that
       // existing telemetry consumers still read.
@@ -1262,11 +1470,22 @@ export function createPrerenderHttpServer(options?: {
   // server is now serving a new shell — the browser is recycled so pages
   // reload it. Undefined until the first heartbeat that carries a token.
   let warmedHostShellHash: string | undefined;
+  // The token the manager last reported, recorded the moment it arrives. Kept
+  // separate from `warmedHostShellHash`, which must keep meaning "the shell
+  // the pool has actually been re-warmed against" so a failed recycle still
+  // retries on the next heartbeat. A visit samples this one, because it moves
+  // when the change is learned rather than when the teardown finishes.
+  let reportedHostShellHash: string | undefined;
+  // The recycle in flight for the last token change, so a visit can wait for
+  // the pool to be replaced before rendering again. Never rejects.
+  let hostShellRecycle: Promise<void> | undefined;
   let recyclingForHostChange = false;
   let isClosing = false;
   let fatalExitOnUncaught = options?.fatalExitOnUncaught ?? true;
   let serverURL = resolvePrerenderServerURL(options?.port);
   let { app, prerenderer } = buildPrerenderApp({
+    getHostShellHash: () => reportedHostShellHash,
+    awaitHostShellRecycle: () => hostShellRecycle,
     maxPages: options?.maxPages,
     serverURL,
     isDraining: () => draining,
@@ -1354,6 +1573,11 @@ export function createPrerenderHttpServer(options?: {
   // awaits any in-flight standby refill before closing — so pages the warm is
   // mid-way through creating can't outlive the browser the restart replaces.
   function reconcileHostShell(hash: string | null) {
+    // Recorded before the guards below, because what the manager reported is
+    // true whether or not this server is in a position to act on it.
+    if (hash) {
+      reportedHostShellHash = hash;
+    }
     if (draining || recyclingForHostChange) {
       return;
     }
@@ -1373,7 +1597,7 @@ export function createPrerenderHttpServer(options?: {
         ? `host shell token first seen (${hash}); recycling prerender browser, which may have warmed against an earlier shell`
         : `host shell changed (${warmedHostShellHash} -> ${hash}); recycling prerender browser`,
     );
-    void prerenderer
+    hostShellRecycle = prerenderer
       .recycle()
       .then(() => {
         warmedHostShellHash = nextWarmed;
@@ -1385,6 +1609,7 @@ export function createPrerenderHttpServer(options?: {
       .finally(() => {
         recyclingForHostChange = false;
       });
+    void hostShellRecycle;
   }
 
   function startHeartbeatLoop() {

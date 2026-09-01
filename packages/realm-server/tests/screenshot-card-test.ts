@@ -13,6 +13,7 @@ import {
   param,
   putMedia,
   query,
+  setScreenshotPerfSink,
 } from '@cardstack/runtime-common';
 import {
   chooseScreenshotCardCoalesceDecision,
@@ -25,7 +26,9 @@ import type {
   QueuePublishArgs,
   Job,
   PgPrimitive,
+  ScreenshotPerfEvent,
   ScreenshotPrerenderResponse,
+  ScreenshotRequestPerfEvent,
 } from '@cardstack/runtime-common';
 import type { QueueJobSpec } from '@cardstack/runtime-common/queue';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -172,6 +175,11 @@ module(basename(import.meta.filename), function () {
         // The POST surface returns the capture in its response body rather
         // than recording it in the MediaCache ledger.
         persist: null,
+        surface: 'post',
+        // No x-boxel-logging-correlation-id on this request; the surface
+        // still records the field so the capture's telemetry is explicit
+        // about the absence.
+        loggingCorrelationId: null,
       });
     });
 
@@ -689,6 +697,34 @@ module(basename(import.meta.filename), function () {
       await expectCaptureSpecRejected(assert, { fullpage: true }, 'fullpage');
     });
 
+    test('rejects target combined with clip', async function (assert) {
+      // A `target` is an element-handle screenshot; it honors no clip.
+      await expectCaptureSpecRejected(
+        assert,
+        {
+          target: '[data-card-field="name"]',
+          clip: { x: 0, y: 0, width: 100, height: 100 },
+        },
+        'target and clip',
+      );
+    });
+
+    test('rejects target combined with fullPage', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: '[data-card-field="name"]', fullPage: true },
+        'target and fullPage',
+      );
+    });
+
+    test('rejects an over-long target selector', async function (assert) {
+      await expectCaptureSpecRejected(
+        assert,
+        { target: `[data-card-field="${'x'.repeat(1100)}"]` },
+        'target',
+      );
+    });
+
     test('rejects an unknown nested captureSpec field by name', async function (assert) {
       await expectCaptureSpecRejected(
         assert,
@@ -1056,7 +1092,7 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    function makePersistQueue(behavior: 'ready' | 'never'): {
+    function makePersistQueue(behavior: 'ready' | 'never' | 'reject'): {
       queue: QueuePublisher;
       published: Array<QueuePublishArgs<unknown>>;
     } {
@@ -1070,6 +1106,8 @@ module(basename(import.meta.filename), function () {
           let notifier = new Deferred<TResult>();
           if (behavior === 'ready') {
             notifier.fulfill(READY as unknown as TResult);
+          } else if (behavior === 'reject') {
+            notifier.reject(new Error('job rejected'));
           }
           return {
             id: nextId++,
@@ -1179,6 +1217,110 @@ module(basename(import.meta.filename), function () {
           base64: PNG_BASE64,
         },
       ]);
+    });
+
+    test('the POST surface emits a request telemetry record whose correlation id rides the job args', async function (assert) {
+      await seedInstanceRow();
+      let { queue, published } = makePersistQueue('ready');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        })
+          .set('x-boxel-logging-correlation-id', 'corr-post-1')
+          .expect(201);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(request?.surface, 'post');
+      assert.strictEqual(request?.outcome, 'rendered');
+      assert.strictEqual(request?.correlationId, 'corr-post-1');
+      assert.strictEqual(request?.lane, 'on-demand');
+      assert.strictEqual(typeof request?.generationLookupMs, 'number');
+      assert.strictEqual(typeof request?.ledgerLookupMs, 'number');
+      assert.strictEqual(typeof request?.enqueueMs, 'number');
+      assert.strictEqual(typeof request?.jobWaitMs, 'number');
+      assert.strictEqual(typeof request?.jobId, 'number');
+
+      let args = published[0]?.args as Record<string, unknown>;
+      assert.strictEqual(args?.surface, 'post');
+      assert.strictEqual(args?.loggingCorrelationId, 'corr-post-1');
+    });
+
+    test('a rejected job still emits an error request record', async function (assert) {
+      await seedInstanceRow();
+      let { queue } = makePersistQueue('reject');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        }).expect(500);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(
+        request?.outcome,
+        'error',
+        'a rejected job reads as a rise in error, not a drop in request volume',
+      );
+      assert.strictEqual(typeof request?.jobId, 'number');
+      assert.strictEqual(typeof request?.enqueueMs, 'number');
+      assert.strictEqual(typeof request?.jobWaitMs, 'number');
+    });
+
+    test('a ledger hit reports the ledger row’s own lane', async function (assert) {
+      await seedInstanceRow();
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'declared',
+        width: 800,
+        height: 600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+      let perfEvents: ScreenshotPerfEvent[] = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+      try {
+        await post(persistApp(queue), {
+          realmURL: REALM_URL,
+          cardId: CARD_ID,
+          format: 'isolated',
+        }).expect(201);
+      } finally {
+        setScreenshotPerfSink(undefined);
+      }
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      let request = perfEvents.find(
+        (event): event is ScreenshotRequestPerfEvent =>
+          event.eventType === 'request',
+      );
+      assert.strictEqual(request?.outcome, 'hit');
+      assert.strictEqual(
+        request?.lane,
+        'declared',
+        'the hit carries the row lane, matching the GET surface',
+      );
     });
 
     test('a non-default format shows up in the served URL', async function (assert) {

@@ -40,7 +40,6 @@ import {
   ThemeImporter,
   CardContainerCss,
   ResetButton,
-  SimpleNavBar,
   type SectionSignature,
 } from './default-templates/theme-dashboard';
 
@@ -48,7 +47,7 @@ export const GUIDE_SECTIONS = [
   {
     id: 'card-container-css',
     navTitle: 'Computed Styles',
-    title: 'Card Container Computed Styles',
+    title: 'Computed Styles',
     fieldName: null,
   },
   {
@@ -64,6 +63,38 @@ export const GUIDE_SECTIONS = [
     fieldName: 'cssVariables',
   },
 ];
+
+// A theme-less card in edit mode leads with the import workflow, in both the
+// nav and the body.
+export const orderEditSections = (
+  sections: SectionSignature[],
+  hasThemeCss: boolean,
+): SectionSignature[] => {
+  if (hasThemeCss) {
+    return sections;
+  }
+  let leading: SectionSignature[] = [];
+  let rest: SectionSignature[] = [];
+  for (let section of sections) {
+    (section.id === 'import-css' || section.id === 'view-code'
+      ? leading
+      : rest
+    ).push(section);
+  }
+  return [...leading, ...rest];
+};
+
+// the visualizer renders ahead of the numbered sections, so the nav lists it
+// as Preview — except on a theme-less card, which leads with import instead
+export const withPreviewNavSection = (
+  sections: SectionSignature[],
+  hasThemeCss: boolean,
+): SectionSignature[] => {
+  if (!hasThemeCss) {
+    return sections;
+  }
+  return [{ id: 'preview', navTitle: 'Preview' }, ...sections];
+};
 
 // Applies parsed CSS rules back onto the card fields for editing.
 export const applyCssRulesToField = (
@@ -172,7 +203,10 @@ class Isolated extends Component<typeof StructuredTheme> {
     // every field stays editable in edit mode; the Card Container CSS
     // reference is display-only and stays out of the editor
     if (this.editMode) {
-      return sections.filter((section) => section.id !== 'card-container-css');
+      return orderEditSections(
+        sections.filter((section) => section.id !== 'card-container-css'),
+        this.hasThemeCss,
+      );
     }
     if (this.hasThemeCss) {
       // the importer is an editing tool, so the isolated view leaves it out
@@ -181,12 +215,18 @@ class Isolated extends Component<typeof StructuredTheme> {
     return [];
   }
 
+  private get navSections() {
+    return withPreviewNavSection(this.visibleSections, this.hasThemeCss);
+  }
+
   <template>
     <ThemeDashboard
       class='structured-theme-card'
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
       @isDarkMode={{this.isDarkMode}}
+      @toggleDarkMode={{unless this.showEmptyState this.toggleDarkMode}}
+      @sections={{this.navSections}}
     >
       <:header>
         <ThemeDashboardHeader
@@ -199,11 +239,6 @@ class Isolated extends Component<typeof StructuredTheme> {
           @metaLabel='Theme Guide'
         />
       </:header>
-      <:navBar>
-        {{#if this.visibleSections.length}}
-          <SimpleNavBar @items={{this.visibleSections}} />
-        {{/if}}
-      </:navBar>
       <:default>
         {{#if this.showEmptyState}}
           <ThemeDashboardEmptyState />
@@ -211,8 +246,7 @@ class Isolated extends Component<typeof StructuredTheme> {
           <GridContainer class='structured-theme-grid'>
             {{#if this.showVisualizer}}
               <ThemeVisualizer
-                @toggleDarkMode={{this.toggleDarkMode}}
-                @isDarkMode={{this.isDarkMode}}
+                id='preview'
                 @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
                 @editMode={{this.editMode}}
@@ -298,7 +332,7 @@ class Edit extends Isolated {
 }
 
 export default class StructuredTheme extends Theme {
-  static displayName = 'Structured Theme';
+  static displayName = 'Theme';
 
   @field typography = contains(ThemeTypographyField, {
     description:
@@ -405,11 +439,16 @@ export default class StructuredTheme extends Theme {
     return true;
   };
 
+  // bound so templates can pass it around; subclasses override resetCssFields
   resetCss = () => {
+    this.resetCssFields();
+  };
+
+  protected resetCssFields() {
     resetCssVariables(this.rootVariables);
     resetCssVariables(this.darkModeVariables);
     resetTypographyVariables(this.typography);
-  };
+  }
 
   static isolated: BaseDefComponent = Isolated;
   static edit: BaseDefComponent = Edit;

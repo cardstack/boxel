@@ -554,7 +554,12 @@ module(basename(import.meta.filename), function () {
     });
 
     function jobInfo() {
-      return { jobId: jobCounter++, reservationId: 1, priority: 0 };
+      return {
+        jobId: jobCounter++,
+        reservationId: 1,
+        priority: 0,
+        queueWaitMs: null,
+      };
     }
 
     async function makeBatch(generation: number, info = jobInfo()) {
@@ -1583,7 +1588,12 @@ module(basename(import.meta.filename), function () {
         // and the page falls back to the job id — narrower, never unsound.
         let scopes = await scopesForPass({
           spawningJobId: null,
-          info: { jobId: -1, reservationId: -1, priority: 0 },
+          info: {
+            jobId: -1,
+            reservationId: -1,
+            priority: 0,
+            queueWaitMs: null,
+          },
         });
 
         assert.deepEqual(scopes, [undefined], 'no scope is sent');
