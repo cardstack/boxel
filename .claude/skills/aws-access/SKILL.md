@@ -151,11 +151,21 @@ The DB password is fetched from SSM and handed to `psql` on the invocation that 
 The only sanctioned shape is a single command that fetches and uses it in one breath:
 
 ```sh
-PGPASSWORD=$(aws --profile claude-<env> ssm get-parameter \
-  --name /<env>/boxel/CLAUDE_DB_PASSWORD --with-decryption \
+# staging
+PGPASSWORD=$(aws --profile claude-staging ssm get-parameter \
+  --name /staging/boxel/CLAUDE_DB_PASSWORD --with-decryption \
+  --query 'Parameter.Value' --output text) \
+  psql -h localhost -p $LOCAL_PORT -U claude_readonly_user -d boxel -A -t -c "<SQL>"
+
+# production — note the profile and the SSM prefix do NOT share a word:
+# the profile is `claude-prod`, the parameter prefix is `/production/boxel`
+PGPASSWORD=$(aws --profile claude-prod ssm get-parameter \
+  --name /production/boxel/CLAUDE_DB_PASSWORD --with-decryption \
   --query 'Parameter.Value' --output text) \
   psql -h localhost -p $LOCAL_PORT -U claude_readonly_user -d boxel -A -t -c "<SQL>"
 ```
+
+Both variants are written out because there is no single substitution that produces them: `claude-prod` + `/production/boxel` do not share a token, so a `<env>` placeholder would be wrong for prod either way round.
 
 That form is verified working against both staging and prod. If you find yourself assembling the credential across several commands — writing it to a file, reading it back with `cat`, building a `.pgpass` line — stop: that is the wrong path, and it is the specific mistake this rule exists to prevent. A credential written to disk outlives the task, and nothing in this flow needs it to.
 
@@ -228,29 +238,42 @@ export PGDATABASE=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/PGDATABASE --query 'Parameter.Value' --output text)
 export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/CLAUDE_DB_USER --query 'Parameter.Value' --output text)
-export CLAUDE_PASSWORD=$(aws --profile $PROFILE ssm get-parameter \
-  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption --query 'Parameter.Value' --output text)
+# NOTE: the password is deliberately NOT fetched here. It is read in step 4,
+# on the psql invocation that uses it. Exporting it at this point would put it
+# in the environment that `aws ssm start-session` — and the
+# `session-manager-plugin` child it forks — inherits, and that child can
+# outlive this shell (see teardown below), carrying the deployed credential in
+# its environment long after the final `unset`.
 
 # 3) Confirm the port is actually free, then open the tunnel. Wait for
 #    "Waiting for connections..." before connecting. Do NOT skip the check
-#    — see "a squatted port is a wrong-environment bug" below.
-ss -ltn | grep -q ":$LOCAL_PORT " && echo "port $LOCAL_PORT is in use — pick another" && return 1
-aws --profile $PROFILE ssm start-session \
-  --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters "{\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$RDS_HOST\"]}" &
-TUNNEL_PID=$!
+#    — see "a squatted port is a wrong-environment bug" below. The tunnel is
+#    opened inside the `else` so an occupied port genuinely stops here: at a
+#    top-level prompt `return` is not available and a bare `&&` chain would
+#    fall through to the next command.
+if ss -ltn | grep -q ":$LOCAL_PORT "; then
+  echo "port $LOCAL_PORT is already bound — pick another, and find out what is holding it"
+else
+  aws --profile $PROFILE ssm start-session \
+    --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$RDS_HOST\"]}" &
+  TUNNEL_PID=$!
+fi
 
-# 4) Run queries against localhost. Pass the claude_readonly creds via
-#    PGUSER / PGPASSWORD on the psql invocation — keeps them in this
-#    subshell only.
-PGUSER=$CLAUDE_USER PGPASSWORD=$CLAUDE_PASSWORD \
+# 4) Run queries against localhost. The password is fetched here, on the
+#    command that uses it, and exists only for the life of that command —
+#    no variable that outlives it, nothing on disk, nothing for another
+#    process to inherit.
+PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
+  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
+  --query 'Parameter.Value' --output text) \
   psql -h localhost -p $LOCAL_PORT -A -t -c "<SQL>"
 
 # 5) Tear down. `kill $TUNNEL_PID` alone is NOT enough — see below.
 kill $TUNNEL_PID
 pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
-unset CLAUDE_USER CLAUDE_PASSWORD PGDATABASE
+unset CLAUDE_USER PGDATABASE   # no CLAUDE_PASSWORD to unset — see step 4
 
 # 6) Verify the port is released. If it is still listening, the plugin
 #    survived and you have left an open forward into a deployed database.
