@@ -16,15 +16,22 @@ import { PREFIX_REALM_PREFIXES } from '@cardstack/runtime-common';
 // quietly.
 const REPO_ROOT = join(fileURLToPath(import.meta.url), '..', '..', '..', '..');
 
-// Every script that launches a realm-server or a worker, in any environment.
+// Every launcher that passes `--fromUrl`, in any environment: the deploy
+// scripts, the mise service tasks, and the two test harnesses that build their
+// own argument lists.
 const LAUNCH_SCRIPTS = [
   'packages/realm-server/scripts/start-production.sh',
   'packages/realm-server/scripts/start-staging.sh',
   'packages/realm-server/scripts/start-worker-production.sh',
   'packages/realm-server/scripts/start-worker-staging.sh',
   'mise-tasks/services/realm-server',
+  'mise-tasks/services/realm-server-base',
+  'mise-tasks/services/test-realms',
   'mise-tasks/services/worker',
+  'mise-tasks/services/worker-base',
   'mise-tasks/services/worker-test',
+  'packages/matrix/support/isolated-realm-server.ts',
+  'packages/realm-test-harness/src/isolated-realm-stack.ts',
 ];
 
 // Production is the environment whose set must be complete. The others are
@@ -41,10 +48,17 @@ const COMPLETE_SCRIPTS = [
 // other URL maps to itself and contributes no prefix.
 const CARDSTACK_ALIAS = /^https:\/\/cardstack\.com\/([^/]+)\/$/;
 
+// A `--fromUrl` value may be quoted on its own, or bare because the whole
+// argument is the quoted thing (`'--fromUrl=https://…'`, as the test harnesses
+// write it). The bare form stops at whatever delimiter follows it, so a value
+// interpolated from a variable is read as the literal `${…}` and contributes no
+// prefix — which is what the per-script floor below exists to catch.
+const FROM_URL = /--fromUrl=(?:'([^']*)'|"([^"]*)"|([^'"`,\s\\]+))/g;
+
 function declaredPrefixes(scriptPath: string): string[] {
   let contents = readFileSync(join(REPO_ROOT, scriptPath), 'utf8');
-  let values = [...contents.matchAll(/--fromUrl=(?:'([^']*)'|"([^"]*)")/g)].map(
-    (match) => match[1] ?? match[2],
+  let values = [...contents.matchAll(FROM_URL)].map(
+    (match) => match[1] ?? match[2] ?? match[3],
   );
   let prefixes = new Set<string>();
   for (let value of values) {
@@ -63,7 +77,17 @@ function declaredPrefixes(scriptPath: string): string[] {
 module(basename(import.meta.filename), function () {
   test('no launch script registers an undeclared realm prefix', function (assert) {
     for (let script of LAUNCH_SCRIPTS) {
-      for (let prefix of declaredPrefixes(script)) {
+      let prefixes = declaredPrefixes(script);
+      // A script the scan reads nothing out of would satisfy the loop below
+      // vacuously, so the guard would switch itself off — silently — the next
+      // time one of these files changes how it spells its arguments. Every
+      // launcher mounts at least the base realm, so a floor of one is a real
+      // property rather than a formality.
+      assert.true(
+        prefixes.length > 0,
+        `${script} yields at least one prefix (the scan can still read it)`,
+      );
+      for (let prefix of prefixes) {
         assert.true(
           PREFIX_REALM_PREFIXES.includes(prefix),
           `${script} passes ${prefix}, which PREFIX_REALMS declares`,
