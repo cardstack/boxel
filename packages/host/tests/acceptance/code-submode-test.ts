@@ -496,9 +496,8 @@ module('Acceptance | code submode tests', function (_hooks) {
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
               name: `Test User's Workspace`,
-              backgroundURL:
-                'https://i.postimg.cc/NjcjbyD3/4k-origami-flock.jpg',
-              iconURL: 'https://i.postimg.cc/Rq550Bwv/T.png',
+              backgroundURL: '/test-fixtures/realm-images/4k-origami-flock.jpg',
+              iconURL: '/test-fixtures/realm-images/letter-t.png',
             }),
           },
         });
@@ -513,8 +512,8 @@ module('Acceptance | code submode tests', function (_hooks) {
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
               name: `Additional Workspace`,
-              backgroundURL: 'https://i.postimg.cc/4ycXQZ94/4k-powder-puff.jpg',
-              iconURL: 'https://i.postimg.cc/BZwv0LyC/A.png',
+              backgroundURL: '/test-fixtures/realm-images/4k-powder-puff.jpg',
+              iconURL: '/test-fixtures/realm-images/letter-a.png',
             }),
           },
         });
@@ -529,9 +528,8 @@ module('Acceptance | code submode tests', function (_hooks) {
             'hello.txt': txtSource,
             'realm.json': realmConfigCardJSON({
               name: `Catalog Realm`,
-              backgroundURL: 'https://i.postimg.cc/zXsXLmqb/C.png',
-              iconURL:
-                'https://i.postimg.cc/qv4pyPM0/4k-watercolor-splashes.jpg',
+              backgroundURL: '/test-fixtures/realm-images/letter-c.png',
+              iconURL: '/test-fixtures/realm-images/4k-watercolor-splashes.jpg',
             }),
           },
         });
@@ -893,8 +891,8 @@ module('Acceptance | code submode tests', function (_hooks) {
             'realm.json': realmConfigCardJSON({
               name: 'Test Workspace B',
               backgroundURL:
-                'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-              iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+                '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+              iconURL: '/test-fixtures/realm-images/boxel-logo.png',
             }),
             'noop.gts': `export function noop() {};\nclass NoopClass {}`,
           },

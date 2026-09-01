@@ -250,8 +250,8 @@ module('Integration | card-copy', function (hooks) {
           'realm.json': realmConfigCardJSON({
             name: 'Test Workspace 1',
             backgroundURL:
-              'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+              '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+            iconURL: '/test-fixtures/realm-images/boxel-logo.png',
           }),
         },
         startMatrix: false,
@@ -290,7 +290,7 @@ module('Integration | card-copy', function (hooks) {
           'realm.json': realmConfigCardJSON({
             name: 'Test Workspace 2',
             backgroundURL:
-              'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+              '/test-fixtures/realm-images/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
             iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
           }),
         },
@@ -317,8 +317,8 @@ module('Integration | card-copy', function (hooks) {
           'realm.json': realmConfigCardJSON({
             name: 'Read Only Workspace',
             backgroundURL:
-              'https://i.postimg.cc/4xyCDpGq/pawel-czerwinski-5n-L-IMto-KEw-unsplash.jpg',
-            iconURL: 'https://i.postimg.cc/W4fZgT3j/icon.png',
+              '/test-fixtures/realm-images/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            iconURL: '/test-fixtures/realm-images/boxel-logo.png',
           }),
         },
         startMatrix: false,
@@ -681,7 +681,7 @@ module('Integration | card-copy', function (hooks) {
         'realm.json': realmConfigCardJSON({
           name: 'Read Only Workspace',
           backgroundURL:
-            'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+            '/test-fixtures/realm-images/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         }),
       },

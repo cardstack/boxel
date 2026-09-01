@@ -31,9 +31,22 @@ module.exports = {
      * argument the font hostnames above are blocked for — the difference is
      * that these images are load-bearing for what the snapshot looks like,
      * so they have to be captured rather than dropped.
+     *
+     * What this list does NOT do is decide what the page load waits for. The
+     * discovery browser waits for every image the page references, listed or
+     * not; the list only decides whether Percy keeps the bytes. So a slow
+     * remote host costs latency on every snapshot either way, and when it
+     * stalls the navigation never fires `load`, Percy retries it three times,
+     * and the snapshot is dropped. Removing a host from this list does not
+     * buy that back — measured on a branch that did exactly that and still
+     * lost a snapshot to the same host.
+     *
+     * Both hosts below are ours. A fixture that needs an image should not add
+     * a third-party host here; put the image in
+     * `public/test-fixtures/realm-images/` instead, where nothing has to be
+     * fetched at all.
      */
     'allowed-hostnames': [
-      'i.postimg.cc',
       'boxel-images.boxel.ai',
       'boxel-assets-store.s3.us-east-1.amazonaws.com',
     ],

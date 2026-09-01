@@ -45,7 +45,7 @@ import type { TestRealmAdapter } from '../../helpers/adapter';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
 const testRealmURL2 = 'http://test-realm/test2/';
-const testRealmAIconURL = 'https://i.postimg.cc/L8yXRvws/icon.png';
+const testRealmAIconURL = '/test-fixtures/realm-images/boxel-logo.png';
 
 const testPrefixRealmURL2 = `@test-realm/test2/`;
 
@@ -53,7 +53,7 @@ const files: Record<string, any> = {
   'realm.json': realmConfigCardJSON({
     name: 'Test Workspace A',
     backgroundURL:
-      'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+      '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
     iconURL: testRealmAIconURL,
   }),
   'index.json': {
@@ -220,8 +220,8 @@ const filesB: Record<string, any> = {
   'realm.json': realmConfigCardJSON({
     name: 'Test Workspace B',
     backgroundURL:
-      'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
-    iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      '/test-fixtures/realm-images/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+    iconURL: '/test-fixtures/realm-images/boxel-logo.png',
   }),
   'index.json': {
     data: {
