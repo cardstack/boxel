@@ -945,8 +945,12 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 212 },
     ch: 4,
+    /* the first of the six enters the way the other five do — and a
+       seam here lets the plate shot ahead of it carry a real drift */
+    cut: true,
     gloss: 'Japan · the keep',
     id: 'c-jp',
+    join: 'blend',
     says: ['Timber frame, stone skirt', 'Height by stacking roofs'],
     kanji: '天守',
     kicker: 'JAPAN',
@@ -1058,7 +1062,12 @@ const BEATS: Beat[] = [
       { kanji: '寶塔', style: 1 },
       { kanji: '天守', style: 0 },
     ],
+    /* the recap is a cut, not a continuation: the last country's shot
+       was travelling past this pose and used to arrive, back up three
+       degrees and go again */
+    cut: true,
     id: 'lineup',
+    join: 'blend',
     mode: 'clear',
     ticks: 3,
     toCam: { dolly: 0.66, lookY: 1.8, ox: 0, pitch: 10, yaw: 254 },
@@ -1478,30 +1487,51 @@ export default class TowerFilm extends Component<{
        * change moves every pixel and the aim keeps the subject centred —
        * and the orbit gives the background its parallax.
        *
-       * Only a shot that ENDS AT A SEAM may be stretched. Inside a
-       * continuous run the next beat's head is this same lens still
-       * travelling, and pushing this tail past it would make the camera
-       * arrive, back up and go again: the bounce the splices were cut to
-       * kill. A cut may overshoot because nothing crosses it — the far
-       * side is a different shot.
+       * A shot that ENDS AT A SEAM may be stretched freely: nothing
+       * crosses a cut, so the far side is a different shot and cannot be
+       * bounced into. Inside a continuous run the next beat's head is
+       * this same lens still travelling, so the stretch stops there —
+       * landing exactly on the next head is the smoothest tail there is
+       * (the spline crosses it without a corner), and passing it is what
+       * makes the camera arrive, back up and go again.
+       *
+       * Pitch carries a floor too, because orbit alone can fail to READ:
+       * the worm's-eye on the stone base moves two degrees a second and
+       * changes almost nothing on screen, since a flat wall aimed at
+       * from a fixed height looks the same from either side of it. A
+       * little tilt moves the whole frame.
        */
-      const seam = bi === beats.length - 1 || beats[bi + 1]!.cut === true;
+      const next = beats[bi + 1];
+      const seam = !next || next.cut === true;
       const secs = b.ticks * TICK;
       const sgn = (d: number) => (d < 0 ? -1 : 1);
-      const dYaw = drift.yaw - b.cam.yaw;
-      const floorYaw = seam ? Math.min(22, 2 * secs) : 0;
-      const dDolly = drift.dolly - b.cam.dolly;
-      const floorDolly = seam ? b.cam.dolly * Math.min(0.22, 0.022 * secs) : 0;
+      const stretch = (
+        key: 'dolly' | 'pitch' | 'yaw',
+        floor: number
+      ): number => {
+        const head = b.cam[key];
+        const tail = drift[key];
+        const d = tail - head;
+        const nose = next ? next.cam[key] - head : d;
+        /* the direction is the beat's own, or the next shot's if the
+           beat asked for nothing at all */
+        const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
+        let want = Math.max(Math.abs(d), floor);
+        if (!seam) {
+          /* what is left between this tail and the next head */
+          const reach = Math.abs(nose);
+          want = Math.min(want, Math.max(Math.abs(d), reach));
+        }
+        return head + way * want;
+      };
       const to = {
         ...drift,
-        dolly:
-          Math.abs(dDolly) < floorDolly
-            ? b.cam.dolly + sgn(dDolly) * floorDolly
-            : drift.dolly,
-        yaw:
-          Math.abs(dYaw) < floorYaw
-            ? b.cam.yaw + sgn(dYaw) * floorYaw
-            : drift.yaw,
+        dolly: stretch(
+          'dolly',
+          b.cam.dolly * Math.min(0.22, 0.022 * secs)
+        ),
+        pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
+        yaw: stretch('yaw', Math.min(22, 2 * secs)),
       };
       for (let k = 0; k < b.ticks; k++) {
         const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
