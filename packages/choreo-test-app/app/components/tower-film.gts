@@ -465,6 +465,7 @@ const BEATS: Beat[] = [
     mode: 'plate',
     romaji: 'TENSHUKAKU',
     ticks: 4,
+    toCam: { dolly: 0.79, lookY: 0.7, ox: 0.16, pitch: 9, yaw: 13 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -501,6 +502,7 @@ const BEATS: Beat[] = [
     },
     theme: 2,
     ticks: 5,
+    toCam: { dolly: 0.82, lookY: 1.9, ox: 0.14, pitch: 8, yaw: 31 },
   },
   {
     cam: { dolly: 1.15, lookY: -2.6, ox: -0.1, pitch: 1, yaw: 34 },
@@ -538,6 +540,7 @@ const BEATS: Beat[] = [
     romaji: 'IKKOKU-ICHIJŌ-REI',
     theme: 3,
     ticks: 5,
+    toCam: { dolly: 0.8, lookY: 1.4, ox: 0.16, pitch: 10, yaw: 65 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -909,6 +912,7 @@ const BEATS: Beat[] = [
     },
     sun: { az: -35, el: 58 },
     ticks: 4,
+    toCam: { dolly: 0.66, lookY: 1.8, ox: 0.02, pitch: 10, yaw: 211 },
     wx: 0,
   },
   {
@@ -1404,8 +1408,9 @@ export default class TowerFilm extends Component<{
        */
       const to = b.toCam ?? {
         ...b.cam,
-        dolly: b.cam.dolly * 1.035,
-        yaw: b.cam.yaw + 2.6,
+        dolly: b.cam.dolly * 1.05,
+        pitch: b.cam.pitch + 1.4,
+        yaw: b.cam.yaw + 6,
       };
       for (let k = 0; k < b.ticks; k++) {
         const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
@@ -2970,7 +2975,7 @@ export default class TowerFilm extends Component<{
                   @through={{this.path}}
                   @duration={{this.filmSeconds}}
                   @ease="linear"
-                  @tension={{0.26}}
+                  @tension={{0.34}}
                 />
                 {{#each this.cues as |cue|}}
                   <c.Perform
