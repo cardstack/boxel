@@ -1,3 +1,7 @@
+import {
+  claimsHostPackageName,
+  scopedPrefixName,
+} from './host-package-names.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
 import type {
@@ -166,7 +170,41 @@ export class VirtualNetwork {
    * map to a real URL.
    */
   addRealmMapping(realmIdentifier: string, targetURL: string): void {
-    let normalizedId = ensureTrailingSlash(realmIdentifier);
+    // A realm's content is authored, and `@cardstack/<name>/` is the npm scope
+    // as well as the realm-alias namespace. A realm registered under a Host
+    // package's name would therefore have its authored content classified as
+    // Host-provided and run uncaged — the caging boundary failing open, from
+    // configuration alone. `base` is the one name that is legitimately both.
+    if (claimsHostPackageName(realmIdentifier)) {
+      throw new Error(
+        `Refusing to map realm ${realmIdentifier}: ` +
+          `"${scopedPrefixName(realmIdentifier)}" is a Host package name, and a ` +
+          `realm registered under it would have its authored content trusted as ` +
+          `Host-provided. Use addPackageMapping for a shimmed package namespace.`,
+      );
+    }
+    this.addPrefixMapping(realmIdentifier, targetURL);
+  }
+
+  /**
+   * Map a `@scope/name/` prefix onto the origin serving a shimmed Host package,
+   * rather than onto a realm.
+   *
+   * Resolution is identical to a realm mapping — the prefix has to resolve for
+   * `CodeRef.moduleHref` to work on a specifier like
+   * `@cardstack/boxel-ui/components` — but the content behind it is Host-owned,
+   * so it is *supposed* to carry a Host package's name and running uncaged is
+   * correct. That is the whole difference from `addRealmMapping`, which refuses
+   * those names, and the reason the two are separate entry points rather than a
+   * flag: nothing downstream can tell a realm from a package namespace by
+   * looking at the mapping, so the caller has to say which it registered.
+   */
+  addPackageMapping(packageNamespace: string, targetURL: string): void {
+    this.addPrefixMapping(packageNamespace, targetURL);
+  }
+
+  private addPrefixMapping(prefix: string, targetURL: string): void {
+    let normalizedId = ensureTrailingSlash(prefix);
     let normalizedTarget = ensureTrailingSlash(targetURL);
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.toURLHrefCache.clear();

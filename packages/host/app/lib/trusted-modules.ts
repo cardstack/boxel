@@ -1,3 +1,4 @@
+import { HOST_PACKAGE_NAMES } from '@cardstack/runtime-common/host-package-names';
 import { PACKAGES_FAKE_ORIGIN } from '@cardstack/runtime-common/package-shim-handler';
 
 import config from '@cardstack/host/config/environment';
@@ -61,43 +62,20 @@ export function isTrustedImport(moduleIdentifier: string): boolean {
 }
 
 /**
- * The Host packages whose modules the Host itself provides — from its own
- * bundle, from a shim, or from the Base realm. The first path segment after
- * the scope is matched against this list rather than the scope being admitted
- * wholesale, because `@cardstack/<name>/` is NOT only an npm scope in this
- * codebase: it is also the realm-alias namespace. `addRealmMapping` registers
- * one such prefix per realm — `network.ts` for the catalog, skills and
- * OpenRouter realms, and `main.ts`/`worker.ts` generically for every
- * `https://cardstack.com/<name>/` mapping, so the namespace acquires new
- * members without this file being touched. Admitting the scope would hand
- * Direct execution to authored realm content under its alias spelling while
- * the same module's URL spelling classified as authored.
+ * See `HOST_PACKAGE_NAMES` in runtime-common for the list and why the
+ * `@cardstack/<name>/` namespace is shared between Host packages and realm
+ * aliases. The constraint in the other direction — that no realm may be mapped
+ * under one of these names, or its authored content would be admitted here as
+ * Host-owned — is asserted by `VirtualNetwork.addRealmMapping`, which is the
+ * wiring that registers them and the only place that can see it.
  *
- * `base` is on the list because the Base realm is trusted on its own account,
- * so its alias and its URL agree.
- *
- * A Host package missing from this list fails closed: its modules classify as
+ * A Host package missing from that list fails closed: its modules classify as
  * authored, which cages them and makes the walk try to read them. That is the
- * right direction for a stale list — visible, and never an escalation — and
- * it does not break the graph walk, which prunes on the runtime's own shim
+ * right direction for a stale list — visible, and never an escalation — and it
+ * does not break the graph walk, which prunes on the runtime's own shim
  * registry rather than on this list.
- *
- * The list carries one constraint in the other direction, which nothing here
- * can enforce: no realm may ever be mapped under a name on it. A realm named
- * for a Host package would have its authored content admitted by this test,
- * which is the hazard above running backwards. The wiring that registers realm
- * mappings is where that belongs as an assertion.
  */
-const hostPackages = new Set([
-  'base',
-  'boxel-host',
-  'host',
-  'boxel-icons',
-  'boxel-ui',
-  'bxl',
-  'runtime-common',
-  'view-transitions',
-]);
+const hostPackages = HOST_PACKAGE_NAMES;
 
 // Framework and Host-runtime modules a cage receives as a stand-in rather than
 // as authored source. Exact identifiers only: these are bare specifiers with
