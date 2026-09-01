@@ -64,7 +64,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
               JSON.stringify({
                 data: {
                   type: 'realm',
-                  attributes: { ...testRealmInfo, endpoint },
+                  // Only name + endpoint: spreading testRealmInfo would send
+                  // backgroundURL/iconURL as null, which the endpoint rejects
+                  // as non-strings (400).
+                  attributes: { name: testRealmInfo.name, endpoint },
                 },
               }),
             );
