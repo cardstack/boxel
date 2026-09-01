@@ -228,28 +228,6 @@ const SWING = { dolly: 0.05, x: 0.018, yaw: 7 } as const;
 const OPENING = { bounce: 0.18, type: 'spring', visualDuration: 0.42 } as const;
 const CONTENT = { bounce: 0, type: 'spring', visualDuration: 0.3 } as const;
 
-/**
- * The narration's own entrances: the eyebrow first, then the line — risen
- * and unblurred, the way a documentary lower-third arrives. Keyed on the
- * chapter, so every hand-off replays them.
- */
-const EYEBROW = {
-  delay: 0.12,
-  duration: 0.5,
-  ease: [0.22, 1, 0.36, 1],
-} as const;
-const LINE = { delay: 0.28, duration: 0.7, ease: [0.22, 1, 0.36, 1] } as const;
-const SUB = { delay: 0.48, duration: 0.7, ease: [0.22, 1, 0.36, 1] } as const;
-const CREDIT = {
-  delay: 0.68,
-  duration: 0.6,
-  ease: [0.22, 1, 0.36, 1],
-} as const;
-const EYE_FROM = { opacity: 0, y: 14 } as const;
-const EYE_TO = { opacity: 1, y: 0 } as const;
-const LINE_FROM = { filter: 'blur(8px)', opacity: 0, y: 22 } as const;
-const LINE_TO = { filter: 'blur(0px)', opacity: 1, y: 0 } as const;
-
 /** the card's own radius, shared with the hole so the corners agree */
 const CARD_R = 14;
 
@@ -527,6 +505,12 @@ export class SylvaStage extends Component<{
        bar, dark by construction, with Exit standing where GitHub does */
     if (this.isTheater) {
       document.body.classList.add('sy-theater');
+      /* inline in a page, the frame must not bring its own chrome: the
+         parent already wears the lockup, and two logos is a hall of
+         mirrors — inside an embed the app bar disappears outright */
+      if (this.embed) {
+        document.body.classList.add('sy-embedded');
+      }
     }
 
     let live = true;
@@ -601,22 +585,22 @@ export class SylvaStage extends Component<{
          */
         if (/[?&]poster\b/.test(location.search)) {
           (window as unknown as { __poster?: () => string }).__poster = () => {
-              /* a hidden tab has never run a frame, and pumping the loop
+            /* a hidden tab has never run a frame, and pumping the loop
                  back-to-back advances almost nothing — dt is real elapsed
                  time, capped not floored. So the pump borrows the clock:
                  50ms per call, four hundred calls, twenty simulated
                  seconds — the reveal scan completes and the moss is grown
                  before the shot. */
-              const realNow = performance.now.bind(performance);
-              let fake = realNow();
-              performance.now = () => (fake += 50);
-              try {
-                for (let i = 0; i < 400; i++) {
-                  sylva.renderFrame();
-                }
-              } finally {
-                performance.now = realNow;
+            const realNow = performance.now.bind(performance);
+            let fake = realNow();
+            performance.now = () => (fake += 50);
+            try {
+              for (let i = 0; i < 400; i++) {
+                sylva.renderFrame();
               }
+            } finally {
+              performance.now = realNow;
+            }
             /* a photograph is POSED: stand the lens at the elf cup's own
                reading shot, close enough that the blades and bark carry */
             const rich = this.shots.find((sh) => sh.id === 'cup');
@@ -664,6 +648,7 @@ export class SylvaStage extends Component<{
     return () => {
       live = false;
       document.body.classList.remove('sy-theater');
+      document.body.classList.remove('sy-embedded');
       window.removeEventListener('resize', onResize);
       cancelAnimationFrame(this.raf);
       this.anchors.forEach((a) => a.dispose());
@@ -938,8 +923,14 @@ export class SylvaStage extends Component<{
        * hotspot buttons could be pressed and never fired, so no card ever
        * opened and the whole rig looked like it had failed to build.
        */
-      if ((event.target as HTMLElement).closest('.sy-card, .sy-dot')) {
-        /* a control keeps its own press — see below */
+      if (
+        (event.target as HTMLElement).closest(
+          '.sy-card, .sy-dot, .sy-narrate a'
+        )
+      ) {
+        /* a control keeps its own press — and so does a CREDIT LINK:
+           capturing its pointerdown retargets the click to the stage and
+           the link never opens, which reads as a dead link */
         return;
       }
       el.setPointerCapture(event.pointerId);
@@ -1124,6 +1115,11 @@ export class SylvaStage extends Component<{
       this.sent = null;
     }
   };
+
+  /** the timeline is in the title scene: nothing told, film running */
+  private get titleOn() {
+    return this.playing && this.chapter.id === 'rest';
+  }
 
   /** from the top: a fresh lap, which begins at the title scene */
   private fromTheTop = () => {
@@ -1413,11 +1409,14 @@ export class SylvaStage extends Component<{
         <div class="sy-tile">
           <img class="sy-tile-poster" src={{POSTER}} alt="" />
           <div class="sy-tile-scrim" aria-hidden="true"></div>
+          {{! the original's own play control: a dark disc with an
+              iridescent rim, a quiet outer ring, and nothing to read }}
           <button
             type="button"
             class="sy-tile-tour"
+            aria-label="Tour the living world"
             {{on "click" (fn this.cross "sylva")}}
-          >▶&nbsp;Tour</button>
+          ></button>
           <div class="sy-tile-third" aria-hidden="true">
             <p class="sy-tile-eyebrow">A field survey</p>
             <p class="sy-tile-name">Sylva</p>
@@ -1445,27 +1444,24 @@ export class SylvaStage extends Component<{
             >⛶ Theater</button>
           </div>
         {{else}}
+          {{#if this.showBar}}
+            {{! ON TOP of the nav blur — a fixed sibling of the page,
+                z above the app topbar, so the door is never washed by
+                the bar's backdrop filter. The strip itself takes no
+                pointer, only the button does. }}
+            <div class="sy-topbar">
+              <button
+                type="button"
+                class="sy-exit"
+                {{on "click" (fn this.cross "demo" "sylva")}}
+              >How This Is Built</button>
+            </div>
+          {{/if}}
           <div
             class="sy-page
               {{if this.isTheater 'is-theater' 'is-stage'}}
               {{if this.checking 'is-checking'}}"
           >
-            {{#if this.showBar}}
-              {{! the theater's own bar: the lockup dark by construction, and
-              Exit standing exactly where the GitHub link usually does —
-              it leaves for the demo page, code and deep dive and all }}
-              {{! NO second lockup: the app's own topbar stays on screen
-                  in theater — the brand is the same element, superimposed
-                  — while its other contents fade out (see the body class
-                  rules below). This bar only holds the one door. }}
-              <div class="sy-topbar">
-                <button
-                  type="button"
-                  class="sy-exit"
-                  {{on "click" (fn this.cross "demo" "sylva")}}
-                >How This Is Built</button>
-              </div>
-            {{/if}}
             <div
               class="sy-hero"
               {{this.stage}}
@@ -1548,83 +1544,118 @@ export class SylvaStage extends Component<{
             over, written down. Keyed on the chapter so every hand-off
             replays its entrance, eyebrow first, then the line, risen and
             unblurred. It is part of the PICTURE, so film mode keeps it. }}
-              <div class="sy-narrate" aria-hidden="true">
-                {{#each (array this.chapter) key="id" as |ch|}}
-                  {{#if ch.title}}
-                    <p
-                      class="sy-narrate-eyebrow"
-                      {{motion
-                        initial=EYE_FROM
-                        animate=EYE_TO
-                        transition=EYEBROW
-                      }}
-                    >{{ch.eyebrow}}</p>
-                    <p
-                      class="sy-ghost"
-                      {{motion
-                        initial=LINE_FROM
-                        animate=LINE_TO
-                        transition=LINE
-                      }}
-                    >Sylva</p>
-                    <p
-                      class="sy-headline"
-                      {{motion
-                        initial=LINE_FROM
-                        animate=LINE_TO
-                        transition=SUB
-                      }}
-                    >{{ch.line}}</p>
-                    <p
-                      class="sy-sub"
-                      {{motion
-                        initial=LINE_FROM
-                        animate=LINE_TO
-                        transition=SUB
-                      }}
-                    >{{ch.sub}}</p>
-                    {{! the credit is OWED, and it is a pair of doors: the man
-                  and the library this world was vendored from }}
-                    <p
-                      class="sy-credit"
-                      {{motion
-                        initial=EYE_FROM
-                        animate=EYE_TO
-                        transition=CREDIT
-                      }}
-                    >A living world by
-                      <a
-                        href="https://x.com/MengTo"
-                        target="_blank"
-                        rel="noopener"
-                      >Meng To</a>
-                      ·
-                      <a
-                        href="https://threeui.com/browse"
-                        target="_blank"
-                        rel="noopener"
-                      >threeui</a>
-                      — “Living Green”</p>
-                  {{else}}
-                    <p
-                      class="sy-narrate-eyebrow"
-                      {{motion
-                        initial=EYE_FROM
-                        animate=EYE_TO
-                        transition=EYEBROW
-                      }}
-                    >{{ch.eyebrow}}</p>
-                    <p
-                      class="sy-narrate-line"
-                      {{motion
-                        initial=LINE_FROM
-                        animate=LINE_TO
-                        transition=LINE
-                      }}
-                    >{{ch.line}}</p>
-                  {{/if}}
-                {{/each}}
-              </div>
+              <Choreo class="sy-narrate" aria-hidden="true" as |n|>
+                {{#unless this.status}}
+                  {{#each (array this.chapter) key="id" as |ch|}}
+                    {{#if ch.title}}
+                      <p
+                        class="sy-narrate-eyebrow"
+                        {{motion id="t-eyebrow" role="tkick"}}
+                      >{{ch.eyebrow}}</p>
+                      <p
+                        class="sy-ghost"
+                        {{motion id="t-ghost" role="tghost"}}
+                      >Sylva</p>
+                      <p
+                        class="sy-headline"
+                        {{motion id="t-head" role="tword"}}
+                      >{{ch.line}}</p>
+                      <p
+                        class="sy-sub"
+                        {{motion id="t-sub" role="tblock"}}
+                      >{{ch.sub}}</p>
+                      <p
+                        class="sy-credit"
+                        {{motion id="t-credit" role="tblock"}}
+                      >
+                        A living world by
+                        <a
+                          href="https://x.com/MengTo"
+                          target="_blank"
+                          rel="noopener"
+                        >Meng To</a>
+                        ·
+                        <a
+                          href="https://threeui.com/browse"
+                          target="_blank"
+                          rel="noopener"
+                        >threeui</a>
+                        — “Living Green”</p>
+                    {{else}}
+                      <p
+                        class="sy-narrate-eyebrow"
+                        {{motion id="n-eyebrow" role="tkick"}}
+                      >{{ch.eyebrow}}</p>
+                      <p
+                        class="sy-narrate-line"
+                        {{motion id="n-line" role="tword"}}
+                      >{{ch.line}}</p>
+                    {{/if}}
+                  {{/each}}
+                {{/unless}}
+
+                {{! THE TYPE IS DELIVERED, not faded: this is Choreo's own
+                    text machinery doing the After Effects work. The
+                    wordmark's characters pop centre-out on an overshoot;
+                    the lines land word by word; the small print follows as
+                    blocks; and a chapter swap drops the old type in one
+                    quick fall. Every step is score vocabulary — @by,
+                    @order, @stagger — nothing hand-keyed. }}
+                <n.Parallel>
+                  <n.Tween
+                    @of={{array
+                      (n.removed "tkick")
+                      (n.removed "tghost")
+                      (n.removed "tword")
+                      (n.removed "tblock")
+                    }}
+                    @opacity={{array 1 0}}
+                    @y={{array 0 -12}}
+                    @duration={{0.18}}
+                    @ease="easeIn"
+                  />
+                  <n.Tween
+                    @of={{n.inserted "tkick"}}
+                    @by="character"
+                    @stagger={{0.016}}
+                    @opacity={{array 0 1}}
+                    @duration={{0.3}}
+                    @ease="easeOut"
+                  />
+                  <n.Tween
+                    @of={{n.inserted "tghost"}}
+                    @by="character"
+                    @order="center"
+                    @stagger={{0.05}}
+                    @delay={{0.12}}
+                    @y={{array 38 0}}
+                    @scale={{array 1.32 1}}
+                    @opacity={{array 0 1}}
+                    @duration={{0.7}}
+                    @ease={{array 0.26 1.4 0.42 1}}
+                  />
+                  <n.Tween
+                    @of={{n.inserted "tword"}}
+                    @by="word"
+                    @stagger={{0.055}}
+                    @delay={{0.3}}
+                    @y={{array 16 0}}
+                    @opacity={{array 0 1}}
+                    @filter={{array "blur(6px)" "blur(0px)"}}
+                    @duration={{0.55}}
+                    @ease={{array 0.22 1 0.36 1}}
+                  />
+                  <n.Tween
+                    @of={{n.inserted "tblock"}}
+                    @stagger={{0.22}}
+                    @delay={{0.85}}
+                    @y={{array 12 0}}
+                    @opacity={{array 0 1}}
+                    @duration={{0.6}}
+                    @ease={{array 0.22 1 0.36 1}}
+                  />
+                </n.Parallel>
+              </Choreo>
 
               {{! The dots are plain HUD, over everything: a hotspot you cannot find
             because the branch is in front of it is not a hotspot. `?film`
@@ -1636,9 +1667,11 @@ export class SylvaStage extends Component<{
                     class="sy-dot sy-play {{if this.playing 'is-on'}}"
                     {{on "click" this.toggle}}
                   >{{if this.playing "❙❙ touring" "▶ tour"}}</button>
+                  {{! lit like an active dot whenever the timeline is
+                      actually showing the title }}
                   <button
                     type="button"
-                    class="sy-dot"
+                    class="sy-dot {{if this.titleOn 'is-on'}}"
                     {{on "click" this.fromTheTop}}
                   >↺ title</button>
                   {{#each this.spots as |spot|}}
@@ -1744,7 +1777,7 @@ export class SylvaStage extends Component<{
       }
       /* the floor of light the root stands in, also the original's */
       .sy-hero::after {
-        content: '';
+        content: "";
         position: absolute;
         inset: 0;
         z-index: 0;
@@ -1813,6 +1846,11 @@ export class SylvaStage extends Component<{
         opacity: 0;
         pointer-events: none;
       }
+      /* embedded: no bar at all — the parent page owns the chrome */
+      body.sy-embedded .topbar,
+      body.sy-embedded .footer {
+        display: none;
+      }
       /* the crossing is a BITMAP morph: both stages carry the same
          view-transition name, and the browser morphs the snapshots
          between full screen and the inline seat */
@@ -1824,8 +1862,8 @@ export class SylvaStage extends Component<{
       }
       /* ── the theater's bar: dark by construction, whatever the theme ── */
       .sy-topbar {
-        position: absolute;
-        z-index: 6;
+        position: fixed;
+        z-index: 11;
         inset-inline: 0;
         top: 0;
         display: flex;
@@ -1833,7 +1871,10 @@ export class SylvaStage extends Component<{
         /* the app topbar's own metrics, so the door stands where the
            GitHub link does */
         padding: 18px 28px;
-        background: linear-gradient(rgba(3, 10, 6, 0.6), rgba(3, 10, 6, 0));
+        pointer-events: none;
+      }
+      .sy-topbar .sy-exit {
+        pointer-events: auto;
       }
       .sy-theater-btn {
         position: absolute;
@@ -1906,27 +1947,50 @@ export class SylvaStage extends Component<{
         position: absolute;
         left: 50%;
         top: 44%;
+        width: 92px;
+        height: 92px;
+        padding: 0;
         transform: translate(-50%, -50%);
-        padding: 12px 26px;
-        border-radius: 999px;
-        border: 1px solid rgba(220, 255, 232, 0.5);
-        background: rgba(6, 18, 12, 0.42);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
-        color: #eafff2;
-        font:
-          600 13px/1 ui-monospace,
-          monospace;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        text-decoration: none;
-        transition:
-          background-color 180ms ease,
-          transform 180ms ease;
+        border-radius: 50%;
+        /* the iridescent hairline: a conic sweep worn as the border */
+        border: 1px solid transparent;
+        background:
+          linear-gradient(rgba(28, 31, 26, 0.55), rgba(28, 31, 26, 0.55))
+            padding-box,
+          conic-gradient(
+              from 210deg,
+              rgba(150, 185, 255, 0.75),
+              rgba(255, 205, 150, 0.65),
+              rgba(255, 255, 255, 0.22),
+              rgba(150, 185, 255, 0.75)
+            )
+            border-box;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        cursor: pointer;
+        transition: transform 200ms ease;
+      }
+      /* the quiet outer ring */
+      .sy-tile-tour::before {
+        content: "";
+        position: absolute;
+        inset: -30px;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+      }
+      /* the play mark */
+      .sy-tile-tour::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-42%, -50%);
+        border-style: solid;
+        border-width: 11px 0 11px 18px;
+        border-color: transparent transparent transparent #ffffff;
       }
       .sy-tile-tour:hover {
-        background: rgba(126, 214, 160, 0.34);
-        transform: translate(-50%, -50%) scale(1.05);
+        transform: translate(-50%, -50%) scale(1.06);
       }
       .sy-tile-third {
         position: absolute;
@@ -2124,20 +2188,41 @@ export class SylvaStage extends Component<{
         box-sizing: border-box;
         padding: 14px 16px;
         border-radius: 14px;
-        /* the glass grammar is threeui's — a gradient pane with a lit top
-           edge — resolved in this scene's own greens */
-        background: linear-gradient(
-          158deg,
-          rgba(16, 34, 23, 0.93) 0%,
-          rgba(7, 15, 10, 0.88) 100%
-        );
-        border: 1px solid rgba(190, 240, 210, 0.22);
+        /* the glass grammar is threeui's, rim included: a SPECULAR
+           border — the hairline catches light unevenly, bright and cool
+           along the top, a warm glint on the right shoulder, near-dark at
+           the foot — worn as a conic sweep under a transparent border */
+        border: 1px solid transparent;
+        background:
+          linear-gradient(
+              158deg,
+              rgba(16, 34, 23, 0.93) 0%,
+              rgba(7, 15, 10, 0.88) 100%
+            )
+            padding-box,
+          conic-gradient(
+              from -90deg,
+              rgba(240, 250, 255, 0.85) 0%,
+              rgba(170, 205, 255, 0.5) 8%,
+              rgba(255, 205, 150, 0.45) 18%,
+              rgba(255, 255, 255, 0.08) 32%,
+              rgba(255, 255, 255, 0.03) 50%,
+              rgba(255, 255, 255, 0.08) 68%,
+              rgba(200, 230, 255, 0.4) 90%,
+              rgba(240, 250, 255, 0.85) 100%
+            )
+            border-box;
         box-shadow:
-          inset 0 1px 0 rgba(220, 255, 232, 0.16),
+          inset 0 1px 0 rgba(220, 255, 232, 0.12),
           0 24px 60px rgba(2, 8, 5, 0.4);
         transform-origin: 50% 50%;
+        will-change: transform;
       }
       .sy-card {
+        /* the entrance is transform/opacity only — keep the subtree's
+           paint self-contained and pre-promoted so the spring never asks
+           layout for anything */
+        contain: layout paint;
         position: absolute;
         top: 0;
         left: 0;
@@ -2184,6 +2269,8 @@ export class SylvaStage extends Component<{
         padding: 10px 0;
         border-radius: 10px;
         border: 1px solid rgba(126, 214, 160, 0.36);
+        /* no backdrop-filter here: a re-blur riding a springing parent is
+           the single most expensive pixel in the card */
         background: linear-gradient(
           160deg,
           rgba(126, 214, 160, 0.18),
@@ -2235,7 +2322,7 @@ export class SylvaStage extends Component<{
         position: absolute;
         z-index: 4;
         left: clamp(20px, 4.5vw, 110px);
-        bottom: clamp(76px, 13vh, 220px);
+        bottom: clamp(100px, 17vh, 280px);
         max-width: min(680px, 60vw);
         pointer-events: none;
       }
@@ -2271,11 +2358,8 @@ export class SylvaStage extends Component<{
           sans-serif;
         letter-spacing: 0.32em;
         text-transform: uppercase;
-        /* the wordmark wears the moss's own green while it holds the frame */
-        color: #8fe3ae;
-        text-shadow:
-          0 0 34px rgba(126, 214, 160, 0.35),
-          0 4px 44px rgba(3, 10, 6, 0.9);
+        color: rgba(226, 245, 232, 0.95);
+        text-shadow: 0 4px 44px rgba(3, 10, 6, 0.9);
       }
       .sy-headline {
         margin: 0 0 clamp(6px, 0.9vh, 16px);

@@ -2232,13 +2232,22 @@ export function createSylva(hosts: SylvaHosts): Sylva {
         to: p.clone().add(new THREE.Vector3(430, -20, 0)),
       };
     } else if (kind === 'burst' && spray) {
+      /* HALF THE CLOUD CROSSES IN FRONT OF THE CARD, on purpose: the hole
+         proxy writes depth at the card's plane, so scene effects sort
+         against the DOM physically — spores nearer the camera draw OVER
+         the panel, spores behind it are clipped by it. Case 5's "webgl in
+         front of the card", proven by a button. The burst is therefore
+         biased along the camera ray: a disc at the point, stretched
+         toward the lens. */
+      var toCam = camera.position.clone().sub(p).normalize();
       for (var bi = 0; bi < 90; bi++) {
         var ba = Math.random() * Math.PI * 2;
         var br = Math.sqrt(Math.random()) * 95;
+        var fwd = Math.random() * 260;
         sprayStep.set(
-          p.x + Math.cos(ba) * br,
-          p.y + Math.sin(ba) * br * 0.75 + 14,
-          p.z
+          p.x + Math.cos(ba) * br + toCam.x * fwd,
+          p.y + Math.sin(ba) * br * 0.75 + 14 + toCam.y * fwd,
+          p.z + toCam.z * fwd
         );
         spawnSpray(sprayStep);
       }

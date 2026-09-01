@@ -254,11 +254,15 @@ read as one gesture only because of *when* things fire:
   incidentally, the spike's "several cards at once" case exercised at
   every seam. One targetless close, clipped into the going-home leg, puts
   away the lap's last card.
-- **The narration is a 2D layer on the same beats.** The lower-third
-  swaps on the presented card (with a hold across travel, so the series
-  title doesn't flash between legs) and rises/unblurs on Motion's clock —
-  the 2D typography answering the 3D camera without either knowing the
-  other's implementation.
+- **The narration is a 2D layer on the same beats — and its type is
+  DELIVERED.** The lower-third swaps on the presented card (with a hold
+  across travel, so the series title doesn't flash between legs), and the
+  title card is a nested Choreo region doing After Effects work in score
+  vocabulary: the wordmark's characters pop centre-out on an overshoot
+  (`@by='character' @order='center' @stagger`), the lines land word by
+  word, the small print follows as staggered blocks, and a chapter swap
+  drops the old type in one quick fall. The 2D typography answers the 3D
+  camera without either knowing the other's implementation.
 
 ## 5. One writer per agreement
 
