@@ -386,6 +386,7 @@ const ALL_TEST_FILES: string[] = [
   './search-entries-engine-test',
   './search-bounds-test',
   './coerce-error-message-test',
+  './retrieve-scoped-css-test',
   './settled-by-test',
   './canonical-url-memo-test',
   './dependency-normalization-test',

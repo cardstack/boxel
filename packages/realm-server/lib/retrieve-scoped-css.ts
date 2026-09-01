@@ -92,19 +92,13 @@ export function decodeScopedCSSFromDeps(deps: string[]): string | null {
       continue;
     }
     // Deps come in two forms: absolute URLs (realm-local modules) and
-    // prefix-form RRIs like `@cardstack/base/...` (registered realms). A
-    // prefix-form dep is not a parseable URL — decode it as-is; the encoded
-    // CSS is baked into the string the same way either way.
-    let pathname: string;
-    try {
-      pathname = new URL(dep).pathname;
-    } catch (_error) {
-      pathname = dep;
-    }
-    if (!isScopedCSSRequest(pathname)) {
+    // prefix-form RRIs like `@cardstack/base/...` (registered realms). The
+    // decoder anchors on the trailing `.<encoded>.glimmer-scoped.css`, so
+    // both forms decode directly with no URL parse.
+    if (!isScopedCSSRequest(dep)) {
       continue;
     }
-    let decoded = decodeScopedCSSRequest(pathname);
+    let decoded = decodeScopedCSSRequest(dep);
     if (decoded?.css) {
       cssBlocks.add(decoded.css);
     }
