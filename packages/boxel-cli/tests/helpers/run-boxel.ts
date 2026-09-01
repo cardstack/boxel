@@ -1,6 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { afterEach, expect } from 'vitest';
 
 /**
  * Drive the `boxel` CLI as a subprocess — its real external interface
@@ -60,7 +61,11 @@ export interface RunBoxelOptions {
   env?: NodeJS.ProcessEnv;
   /** Text piped to the command's stdin. */
   input?: string;
-  /** Kill the command after this many ms (default 60s). */
+  /**
+   * Kill the command after this many ms (default 60s). A command that
+   * needs longer than the enclosing test's own timeout must raise both,
+   * or vitest abandons the test while the command is still running.
+   */
   timeout?: number;
 }
 
@@ -70,6 +75,8 @@ export interface BoxelResult {
   exitCode: number | null;
   /** True when the command exited 0. */
   ok: boolean;
+  /** True when the command was killed for exceeding `options.timeout`. */
+  timedOut: boolean;
   /**
    * Parse stdout as JSON (for commands run with `--json`). Throws with
    * the captured stdout/stderr attached when stdout isn't valid JSON, so
@@ -91,6 +98,74 @@ function sanitizedParentEnv(): NodeJS.ProcessEnv {
   );
 }
 
+const DEFAULT_TIMEOUT_MS = 60_000;
+/** How long a command gets to honor SIGTERM before it is SIGKILLed. */
+const KILL_GRACE_MS = 2_000;
+/** How much of a killed command's output is worth printing. */
+const OUTPUT_TAIL_CHARS = 2_000;
+
+interface InFlightCommand {
+  child: ChildProcess;
+  argv: string;
+  startedAt: number;
+  readStdout: () => string;
+  readStderr: () => string;
+}
+
+const inFlight = new Set<InFlightCommand>();
+
+function outputTail(text: string): string {
+  if (text.length === 0) {
+    return '(empty)';
+  }
+  return text.length <= OUTPUT_TAIL_CHARS
+    ? text
+    : `…${text.slice(-OUTPUT_TAIL_CHARS)}`;
+}
+
+function describeCommand(entry: InFlightCommand): string {
+  return [
+    `command: ${entry.argv}`,
+    `pid: ${entry.child.pid ?? 'n/a'}`,
+    `elapsed: ${Date.now() - entry.startedAt}ms`,
+    `--- stdout so far ---\n${outputTail(entry.readStdout())}`,
+    `--- stderr so far ---\n${outputTail(entry.readStderr())}`,
+  ].join('\n');
+}
+
+/**
+ * Kill any command still running when a test ends, and say what it was.
+ *
+ * vitest's default 30s `testTimeout` is shorter than this helper's 60s
+ * command deadline, so a wedged command outlives the test that started it
+ * and keeps writing to the realm server the *next* test is using — pushing
+ * files, creating realms, or queueing index jobs behind a test that never
+ * asked for any of it. Reaping at test boundaries keeps a single slow
+ * command from becoming a cascade of unrelated failures.
+ *
+ * The report matters as much as the kill: on its own, a timed-out test
+ * reports only `Test timed out in 30000ms`, which names neither the command
+ * that hung nor what it had printed before it did.
+ */
+export function reapInFlightCommands(testName: string): number {
+  let survivors = [...inFlight];
+  inFlight.clear();
+  for (let entry of survivors) {
+    console.error(
+      `[runBoxel] command outlived "${testName}"; killing it.\n${describeCommand(entry)}`,
+    );
+    entry.child.kill('SIGKILL');
+  }
+  return survivors.length;
+}
+
+afterEach(() => {
+  if (inFlight.size === 0) {
+    return;
+  }
+  reapInFlightCommands(expect.getState().currentTestName ?? 'unknown test');
+});
+
 export function runBoxel(
   args: string[],
   options: RunBoxelOptions = {},
@@ -102,12 +177,13 @@ export function runBoxel(
     ...options.env,
   };
 
+  let timeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS;
+
   return new Promise<BoxelResult>((resolvePromise, reject) => {
     let child = spawn(command, [...baseArgs, ...args], {
       cwd: options.cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: options.timeout ?? 60_000,
     });
 
     let stdout = '';
@@ -123,13 +199,51 @@ export function runBoxel(
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
-    child.on('error', reject);
+    let entry: InFlightCommand = {
+      child,
+      argv: [command, ...baseArgs, ...args].join(' '),
+      startedAt: Date.now(),
+      readStdout: () => stdout,
+      readStderr: () => stderr,
+    };
+    inFlight.add(entry);
+
+    // The deadline lives here rather than in `spawn`'s own `timeout` for
+    // two reasons: `spawn` sends SIGTERM only, and `boxel realm watch`
+    // installs a SIGTERM handler, so a command wedged inside that handler
+    // needs the SIGKILL follow-up; and the caller needs to be told the
+    // command was killed instead of inferring it from a null exit code.
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | undefined;
+    let deadline = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+      killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
+    }, timeoutMs);
+
+    let settle = () => {
+      clearTimeout(deadline);
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+      inFlight.delete(entry);
+    };
+
+    child.on('error', (err) => {
+      settle();
+      reject(err);
+    });
     child.on('close', (code) => {
+      settle();
+      if (timedOut) {
+        stderr += `\n[runBoxel] killed after exceeding its ${timeoutMs}ms deadline: ${entry.argv}\n`;
+      }
       resolvePromise({
         stdout,
         stderr,
         exitCode: code,
         ok: code === 0,
+        timedOut,
         json<T = unknown>(): T {
           try {
             return JSON.parse(stdout) as T;

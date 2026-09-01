@@ -1171,9 +1171,36 @@ jobs:
       - name: Run integration tests against the packed npm install
         run: pnpm test:cli:tarball
         working-directory: packages/boxel-cli
-      - name: Print server logs
+        env:
+          JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/boxel-cli-integration.xml
+      # The junit report is what makes a failure here nameable. The suite's
+      # own console summary is separated from both ends of the job log by
+      # tens of thousands of lines of realm-server request logging and
+      # dev-stack output, so a reader that fetches the log's tail — the API,
+      # and anyone scrolling — never reaches it.
+      - name: Upload junit report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
-        run: cat /tmp/server.log
+        with:
+          name: boxel-cli-test-report
+          path: junit/boxel-cli-integration.xml
+          retention-days: 30
+      - name: Upload dev stack log
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: boxel-cli-test-dev-stack-log
+          path: /tmp/server.log
+          retention-days: 30
+      # A bounded tail, because the full log is the artifact above: printing
+      # all of it here is what buries the suite's summary, and the last few
+      # hundred lines are the ones that describe the stack's state when the
+      # suite stopped.
+      - name: Print dev stack log tail
+        if: ${{ !cancelled() }}
+        run: |
+          echo "Full log is the boxel-cli-test-dev-stack-log artifact; tail follows."
+          tail -n 500 /tmp/server.log
 
   deploy:
     name: Deploy boxel to staging
