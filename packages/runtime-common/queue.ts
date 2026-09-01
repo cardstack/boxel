@@ -12,6 +12,7 @@ import type { Deferred } from './deferred.ts';
 //   | -------- | ------------------------------------------------------- |
 //   | 10       | user indexing (+ any user job); publish-awaited render  |
 //   |  9       | user prerender-html (the common case)                   |
+//   |  3       | background dependents of an interactive write           |
 //   |  1       | system indexing (+ any system job)                      |
 //   |  0       | system prerender-html                                   |
 //
@@ -41,6 +42,7 @@ import type { Deferred } from './deferred.ts';
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
+export const interactiveDependentPriority = 3;
 export const systemInitiatedPriority = 1;
 export const systemInitiatedPrerenderHtmlPriority = 0;
 

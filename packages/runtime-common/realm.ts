@@ -129,6 +129,7 @@ import {
   codeRefFromInternalKey,
   codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
+  interactiveDependentPriority,
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
@@ -1760,7 +1761,7 @@ export class Realm {
 
   // Interactive writes publish the explicitly changed files first. Once that
   // small batch is visible, enqueue the recursive dependency fan-out as
-  // system work. This preserves one serialized index lane per realm while
+  // priority-3 background work. This preserves one serialized index lane per realm while
   // preventing a single client write from waiting for dozens of dependents.
   private async updateExplicitTargetsThenEnqueueDependents(
     urls: URL[],
@@ -1782,7 +1783,7 @@ export class Realm {
       {
         ...(opts?.delete ? { delete: true } : {}),
         clientRequestId: opts?.clientRequestId ?? null,
-        priority: systemInitiatedPriority,
+        priority: interactiveDependentPriority,
         invalidationMode: 'recursive',
         onSettled: (invalidations, meta) => {
           this.broadcastIncrementalInvalidationEvent(invalidations, {
