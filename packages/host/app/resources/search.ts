@@ -570,8 +570,12 @@ export class SearchResource<
     return canonicalQuerySignature(query, this.network.virtualNetwork);
   }
 
+  // Both routes to a result set count as loading. A seeded resource commonly
+  // never performs a search at all — the seed's query signature suppresses it —
+  // so reporting only the search task would leave a window where the resource
+  // is settled-looking with an empty result set it is about to replace.
   get isLoading() {
-    return this.search.isRunning;
+    return this.search.isRunning || this.applySeed.isRunning;
   }
   get isLive() {
     return this.#isLive;

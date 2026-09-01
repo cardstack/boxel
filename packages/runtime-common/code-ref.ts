@@ -340,7 +340,7 @@ export function getField<T extends BaseDef>(
       }
       if (fieldOverride) {
         let cardThunk = fieldOverride;
-        let { computeVia, name, queryDefinition } = result;
+        let { computeVia, name, queryDefinition, eager } = result;
         let originalField = result;
         let declaredCardThunk =
           (originalField as any).declaredCardResolver ??
@@ -354,7 +354,18 @@ export function getField<T extends BaseDef>(
           name,
           isPolymorphic: true,
           queryDefinition,
+          // The override narrows which card the link resolves to; it does not
+          // restate how the field behaves. Options that travel with the
+          // declaration have to be carried across or the rebuilt field silently
+          // loses them.
+          eager,
         }) as Field;
+        // `configuration` is not a constructor parameter — the field factories
+        // assign it after construction — so carrying it across takes the same
+        // shape. It is read instance-scoped (a rebuilt field is exactly what
+        // that lookup returns), so dropping it would strip a narrowed field's
+        // rendering config.
+        (result as any).configuration = (originalField as any).configuration;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',

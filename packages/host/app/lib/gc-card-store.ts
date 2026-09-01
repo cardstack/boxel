@@ -47,6 +47,11 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 type StoredInstance = CardDef | FileDef;
 
 type StoreHooks = {
+  // Whether a query-backed relationship resolves as soon as its owner
+  // deserializes into this store, rather than waiting for something to read
+  // the field. Absent means it does not — a store that renders deterministically
+  // from the document it was handed must not start searches of its own.
+  resolvesQueryFieldsEagerly?(): boolean;
   getSearchResource<T extends CardDef | FileDef = CardDef>(
     parent: object,
     getQuery: () => Query | undefined,
@@ -1283,6 +1288,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       );
     }
     return dependencyGraph;
+  }
+
+  get resolvesQueryFieldsEagerly(): boolean {
+    return this.#storeHooks?.resolvesQueryFieldsEagerly?.() ?? false;
   }
 
   getSearchResource<T extends CardDef | FileDef = CardDef>(
