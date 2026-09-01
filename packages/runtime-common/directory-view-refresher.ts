@@ -69,7 +69,10 @@ export class DirectoryViewRefresher {
       throw errors[0];
     }
     if (errors.length > 1) {
-      throw new AggregateError(errors, 'directory refresh partially failed');
+      let messages = errors
+        .map((err) => (err instanceof Error ? err.message : String(err)))
+        .join('; ');
+      throw new Error(`directory refresh partially failed: ${messages}`);
     }
   }
 
