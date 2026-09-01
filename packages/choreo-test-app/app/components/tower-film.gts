@@ -2685,7 +2685,10 @@ export default class TowerFilm extends Component<{
               the drift overwrite each other's transform every frame —
               which is the same bug the beacon in Sylva was, and it looks
               exactly as bad. }}
-              <div class="tf-block" {{this.plate}}>
+              {{! the mode rides ON the block, not on the shared container: a
+              leaver keeps its own layout while it fades, instead of
+              teleporting to wherever the NEXT beat's mode puts blocks }}
+              <div class="tf-block is-{{b.mode}}" {{this.plate}}>
                 {{#if b.kicker}}
                   <div class="tf-plane">
                     <p class="tf-kicker" {{motion id="kicker" role="kick"}}>
@@ -2849,7 +2852,7 @@ export default class TowerFilm extends Component<{
           {{#if (if this.rolling this.hasPhoto false)}}
             <Choreo class="tf-photo" as |g|>
               {{#each (array this.beat) key="id" as |b|}}
-                <figure {{motion id="photo" role="shot"}}>
+                <figure class="is-{{b.mode}}" {{motion id="photo" role="shot"}}>
                   <img
                     src={{this.photoSrc}}
                     alt=""
@@ -3543,7 +3546,7 @@ export default class TowerFilm extends Component<{
         animation: tf-rule 760ms 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
       }
 
-      .tf-title .tf-kicker::after {
+      .is-title .tf-kicker::after {
         transform-origin: right center;
       }
 
@@ -3557,8 +3560,8 @@ export default class TowerFilm extends Component<{
         }
       }
 
-      .tf-point .tf-kicker::after,
-      .tf-lower .tf-kicker::after {
+      .is-point .tf-kicker::after,
+      .is-lower .tf-kicker::after {
         max-width: 120px;
       }
 
@@ -3710,41 +3713,41 @@ export default class TowerFilm extends Component<{
          frame's edge with the tower in the other half; a lower third sits
          bottom-left; a plate is a slab in the right third; a point is a
          caption with a leader running out of it. */
-      .tf-title .tf-block {
+      .tf-block.is-title {
         right: 6%;
         bottom: 15%;
         text-align: right;
         max-width: min(40ch, 46vw);
       }
 
-      .tf-title .tf-read {
+      .is-title .tf-read {
         justify-content: flex-end;
       }
 
-      .tf-title .tf-kicker {
+      .is-title .tf-kicker {
         flex-direction: row-reverse;
       }
 
-      .tf-title .tf-line {
+      .is-title .tf-line {
         margin-left: auto;
       }
 
-      .tf-title .tf-kanji {
+      .is-title .tf-kanji {
         font-size: clamp(72px, 11vw, 190px);
       }
 
-      .tf-lower .tf-block {
+      .tf-block.is-lower {
         left: 5.5%;
         bottom: 11%;
       }
 
       /* captions take the foot of the frame, so the settings that live
          down there move up out of their way rather than sit under them */
-      .has-subs .tf-lower .tf-block {
+      .has-subs .tf-block.is-lower {
         bottom: 21%;
       }
 
-      .has-subs .tf-title .tf-block {
+      .has-subs .tf-block.is-title {
         bottom: 24%;
       }
 
@@ -3756,7 +3759,7 @@ export default class TowerFilm extends Component<{
          lands. Ranged type in a corner was never wrong exactly — it was
          just nothing, and this chapter's beats are the ones that hold
          longest, so they are the ones that can least afford nothing. */
-      .tf-plate .tf-block {
+      .tf-block.is-plate {
         right: 5.5%;
         top: 50%;
         transform: translateY(-50%);
@@ -3767,11 +3770,11 @@ export default class TowerFilm extends Component<{
         max-width: min(46ch, 46vw);
       }
 
-      .tf-plate .tf-plane {
+      .is-plate .tf-plane {
         grid-column: 1;
       }
 
-      .tf-plate .tf-plane.is-glyph {
+      .is-plate .tf-plane.is-glyph {
         grid-column: 2;
         grid-row: 1 / -1;
         border-right: 2px solid var(--tf-accent);
@@ -3790,7 +3793,7 @@ export default class TowerFilm extends Component<{
         }
       }
 
-      .tf-plate .tf-kanji {
+      .is-plate .tf-kanji {
         writing-mode: vertical-rl;
         margin: 0;
         font-size: clamp(44px, 5.4vw, 88px);
@@ -3798,7 +3801,7 @@ export default class TowerFilm extends Component<{
         line-height: 1;
       }
 
-      .tf-plate .tf-kicker {
+      .is-plate .tf-kicker {
         margin-bottom: 18px;
       }
 
@@ -3825,13 +3828,13 @@ export default class TowerFilm extends Component<{
         z-index: -1;
       }
 
-      .tf-point .tf-block {
+      .tf-block.is-point {
         left: 5.5%;
         top: 18%;
         max-width: min(30ch, 34vw);
       }
 
-      .tf-point .tf-kanji {
+      .is-point .tf-kanji {
         font-size: clamp(48px, 6.6vw, 104px);
       }
 
@@ -3842,14 +3845,16 @@ export default class TowerFilm extends Component<{
         pointer-events: none;
       }
 
-      .tf-lower .tf-photo,
-      .tf-title .tf-photo,
-      .tf-point .tf-photo {
+      .tf-photo figure.is-lower,
+      .tf-photo figure.is-title,
+      .tf-photo figure.is-point {
+        position: absolute;
         right: 5.5%;
         top: 12%;
       }
 
-      .tf-plate .tf-photo {
+      .tf-photo figure.is-plate {
+        position: absolute;
         left: 5.5%;
         top: 12%;
       }
