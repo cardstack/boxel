@@ -316,6 +316,41 @@ module('Unit | declared screenshots', function (hooks) {
     assert.throws(() => cardApi.getScreenshots(BadType), /type must be one/);
   });
 
+  test('a transparent background on a jpeg capture is refused', function (assert) {
+    class TransparentJpeg extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'jpeg',
+        },
+      };
+    }
+    // webp carries alpha, so the same background stays legal there.
+    class TransparentWebp extends cardApi.CardDef {
+      static screenshots: Screenshots = {
+        shot: {
+          format: 'fitted',
+          width: 300,
+          height: 200,
+          background: 'transparent',
+          type: 'webp',
+        },
+      };
+    }
+    assert.throws(
+      () => cardApi.getScreenshots(TransparentJpeg),
+      /cannot be captured as jpeg/,
+    );
+    assert.strictEqual(
+      cardApi.getScreenshots(TransparentWebp).shot.background,
+      'transparent',
+      'an alpha-capable type accepts a transparent background',
+    );
+  });
+
   test('more than one useAsThumbnail across the merged chain is refused', function (assert) {
     class Video extends cardApi.FileDef {
       static screenshots: Screenshots = {

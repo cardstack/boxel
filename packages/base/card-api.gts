@@ -2789,7 +2789,8 @@ export type ScreenshotSpec = {
   // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
   // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
   deviceScaleFactor?: number;
-  // 'transparent' or any CSS color. Default 'white'.
+  // 'transparent' or any CSS color. Default 'white'. 'transparent' requires
+  // an alpha-capable `type` ('png' or 'webp') — jpeg has no alpha channel.
   background?: string;
   // Feed this capture to `cardThumbnailURL`. At most one entry across a
   // card's merged declarations may set this.
@@ -2949,6 +2950,14 @@ function assertValidScreenshotSpec(
       `${prefix}: type must be one of ${[...SCREENSHOT_IMAGE_TYPES]
         .map((v) => `"${v}"`)
         .join(', ')}`,
+    );
+  }
+  // Cross-field: jpeg has no alpha channel, so a transparent background is a
+  // contradiction it cannot represent — the capture would silently composite
+  // onto black. webp and png both carry alpha and stay legal.
+  if (entry.background === 'transparent' && entry.type === 'jpeg') {
+    throw new Error(
+      `${prefix}: background 'transparent' cannot be captured as jpeg (no alpha channel) — use type 'png' or 'webp', or an opaque background`,
     );
   }
 }
