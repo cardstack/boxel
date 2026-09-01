@@ -1000,16 +1000,25 @@ export default class TowerFilm extends Component<{
   }
 
   /**
-   * `?subs` prints the narration on the frame.
+   * CAPTIONS. `?subs` seeds them on; CC toggles them.
    *
-   * Not a caption track and not shipped on: it exists so the words can be
-   * read against the pictures before a voice exists, which is the only
-   * reliable way to discover that a line is two seconds too long for the
-   * shot it is sitting on.
+   * They are the narration, printed. That makes them two things at once
+   * and both are wanted: an accessibility track for anyone who cannot or
+   * would rather not hear the voice, and — before any voice exists — the
+   * only reliable way to find out that a line is two seconds too long for
+   * the shot it is sitting on.
    */
+  @tracked private subsOn = new URLSearchParams(window.location.search).has(
+    'subs'
+  );
+
   get subs(): boolean {
-    return new URLSearchParams(window.location.search).has('subs');
+    return this.subsOn;
   }
+
+  private cc = () => {
+    this.subsOn = !this.subsOn;
+  };
 
   get grade(): string {
     return this.beat.grade ?? this.chapter.grade ?? 'amber';
@@ -1669,6 +1678,8 @@ export default class TowerFilm extends Component<{
       this.hear();
     } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
       this.toc();
+    } else if (e.key === 'v' || e.key === 'V') {
+      this.cc();
     }
   };
 
@@ -1751,7 +1762,10 @@ export default class TowerFilm extends Component<{
 
   <template>
     <div class="tf-page {{if this.embed 'is-embed'}}">
-      <div class="tf-stage is-grade-{{this.grade}}" {{this.mount}}>
+      <div
+        class="tf-stage is-grade-{{this.grade}} {{if this.subsOn 'has-subs'}}"
+        {{this.mount}}
+      >
         <iframe
           class="tf-frame"
           src={{this.src}}
@@ -2077,8 +2091,8 @@ export default class TowerFilm extends Component<{
                   </li>
                 {{/each}}
               </ol>
-              <p class="tf-menu-keys">← → chapter · space play · M sound · C
-                close</p>
+              <p class="tf-menu-keys">← → chapter · space play · M sound · V
+                captions · C close</p>
             </div>
             <m.Tween
               @of={{m.inserted "sheet"}}
@@ -2126,6 +2140,12 @@ export default class TowerFilm extends Component<{
             class="tf-btn {{if this.sound 'is-on'}}"
             {{on "click" this.hear}}
           >{{if this.sound "♪ sound" "♪ muted"}}</button>
+          <button
+            type="button"
+            class="tf-btn {{if this.subsOn 'is-on'}}"
+            title="captions"
+            {{on "click" this.cc}}
+          >CC</button>
           <button type="button" class="tf-btn" {{on "click" this.restart}}>↺
             from the top</button>
           <span class="tf-credit">Scene:
@@ -2254,34 +2274,46 @@ export default class TowerFilm extends Component<{
         --tf-warm: #ffbe6a;
         --tf-cool: #2c4a6b;
         --tf-grade-a: 0.5;
+        --tf-vig-a: 0.9;
       }
 
       .is-grade-iron {
-        --tf-lut: saturate(0.62) contrast(1.16) brightness(0.96) sepia(0.12);
+        --tf-lut: saturate(0.58) contrast(1.2) brightness(0.9) sepia(0.14);
         --tf-warm: #d8c39a;
         --tf-cool: #1d2f45;
-        --tf-grade-a: 0.72;
+        --tf-grade-a: 0.78;
+        --tf-vig-a: 1.15;
       }
 
+      /* MIDDAY, and it is meant to be the brightest thing in the film.
+         The construction chapter is the one that has to read as
+         information — you are watching a building get assembled — so it
+         is pushed up and opened out until it is nearly a working
+         drawing, and it earns its brightness by sitting between two
+         chapters that are deliberately heavier. Contrast between
+         chapters is a bigger effect than contrast inside one. */
       .is-grade-chalk {
-        --tf-lut: saturate(0.88) contrast(1.04) brightness(1.07);
-        --tf-warm: #fff3d8;
-        --tf-cool: #4a6f86;
-        --tf-grade-a: 0.44;
+        --tf-lut: saturate(0.9) contrast(1.05) brightness(1.22);
+        --tf-warm: #fffdf4;
+        --tf-cool: #6f92a6;
+        --tf-grade-a: 0.3;
+        --tf-vig-a: 0.4;
       }
 
       .is-grade-ink {
-        --tf-lut: saturate(1.14) contrast(1.14) brightness(0.98);
+        --tf-lut: saturate(1.16) contrast(1.18) brightness(0.93);
         --tf-warm: #ffab52;
         --tf-cool: #17222f;
-        --tf-grade-a: 0.66;
+        --tf-grade-a: 0.7;
+        --tf-vig-a: 1.2;
       }
 
       .is-grade-plate {
         --tf-lut: saturate(0.94) contrast(1.01) brightness(1.03);
         --tf-warm: #f0e2c4;
         --tf-cool: #55564a;
-        --tf-grade-a: 0.3;
+        --tf-grade-a: 0.28;
+        --tf-vig-a: 0.62;
       }
 
       .tf-wipe {
@@ -2312,6 +2344,10 @@ export default class TowerFilm extends Component<{
         inset: 0;
         z-index: 1;
         pointer-events: none;
+        /* the vignette is part of the grade: a bright chapter wants it
+           nearly off, a heavy one wants it leaning in */
+        opacity: var(--tf-vig-a, 1);
+        transition: opacity 1500ms ease;
         background: radial-gradient(
           82% 74% at 50% 46%,
           transparent 0%,
@@ -2578,6 +2614,16 @@ export default class TowerFilm extends Component<{
         bottom: 11%;
       }
 
+      /* captions take the foot of the frame, so the settings that live
+         down there move up out of their way rather than sit under them */
+      .has-subs .tf-lower .tf-block {
+        bottom: 21%;
+      }
+
+      .has-subs .tf-title .tf-block {
+        bottom: 24%;
+      }
+
       .tf-plate .tf-block {
         right: 5.5%;
         top: 50%;
@@ -2654,7 +2700,7 @@ export default class TowerFilm extends Component<{
       .tf-subs {
         position: absolute;
         left: 50%;
-        bottom: 4%;
+        bottom: 3%;
         transform: translateX(-50%);
         z-index: 5;
         margin: 0;
