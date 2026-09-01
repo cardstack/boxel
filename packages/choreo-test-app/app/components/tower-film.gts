@@ -122,7 +122,9 @@ interface Beat {
    * live incoming shot;
    * 'dip' — fade through a colour: the freeze holds the old shot while
    * a veil covers it, the snap happens under the veil, and the veil
-   * lifts on the new shot. `dipTo` picks the colour.
+   * lifts on the new shot. `dipTo` picks the colour;
+   * 'iris' — the old shot closes in a circle onto the new shot's named
+   * point (`to`), handing the eye straight to the subject.
    */
   dipTo?: string;
   /** the English of the kanji, set small under it */
@@ -140,7 +142,7 @@ interface Beat {
    */
   hush?: boolean;
   id: string;
-  join?: 'blend' | 'cut' | 'dip' | 'whip' | 'wipe';
+  join?: 'blend' | 'cut' | 'dip' | 'iris' | 'whip' | 'wipe';
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
@@ -451,8 +453,11 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.72, lookY: 1.0, ox: 0.16, pitch: 8, yaw: 2 },
     ch: 0,
+    /* the argument's first turn arrives on the push dissolve */
+    cut: true,
     gloss: 'keep · watchtower',
     id: 'what',
+    join: 'blend',
     says: ['A lookout.', 'A strongroom.', 'An argument.'],
     kanji: '天守閣',
     kicker: 'ONE BUILDING, THREE JOBS',
@@ -742,6 +747,7 @@ const BEATS: Beat[] = [
     gloss: 'the roof-ridge fish',
     haze: 0.34,
     id: 'shachi',
+    join: 'iris',
     says: [
       'Tiger’s head, fish’s body',
       'Bronze, at both ends of the ridge',
@@ -1148,12 +1154,15 @@ export default class TowerFilm extends Component<{
   @tracked private booted = false;
   /** bumped on every jump cut; keying on it restarts the wipe */
   @tracked private cutStamp = 0;
-  /** the outgoing frame of a 'blend' join, and the key that replays it */
-  @tracked private blendShot = '';
+  /** the captured outgoing frame every freeze-based join plays with */
+  @tracked private freeze = '';
   @tracked private blendStamp = 0;
   /** the 'dip' join's veil colour, and the key that replays the dip */
   @tracked private dipColor = '#0d0905';
   @tracked private dipStamp = 0;
+  /** where the iris closes to, as inline custom properties */
+  @tracked private irisAt = '';
+  @tracked private irisStamp = 0;
   /**
    * THE ENDING. A film that laps back to its own first frame has no
    * ending, and the coda earns one — so when the last cue has run, the
@@ -2136,39 +2145,42 @@ export default class TowerFilm extends Component<{
       const join = beat.join ?? 'wipe';
       if (join === 'whip') {
         this.whipUntil = performance.now() + 360;
-      } else if (join === 'blend') {
-        /* capture the outgoing shot FIRST — the bridge renders one frame
-           at the pose in force and reads it back synchronously — then
-           snap; the still fades over the live incoming picture. A failed
-           capture (a zero-sized surface returns the empty data URL) is
-           not a broken image: the join degrades to a clean cut. */
-        const shot = film.snapshot();
-        if (shot.length > 64) {
-          this.blendShot = shot;
-          this.blendStamp += 1;
-        }
-        this.snap(beat.cam);
-      } else if (join === 'dip') {
-        /* the freeze holds the OUTGOING shot on screen while the veil
-           closes over it; the snap happens under cover; the veil lifts
-           on the incoming shot. A failed capture degrades to veil-only,
-           which still reads as a dip. */
-        const shot = film.snapshot();
-        if (shot.length > 64) {
-          this.blendShot = shot;
-        }
-        this.dipColor = beat.dipTo ?? '#0d0905';
-        this.dipStamp += 1;
-        this.snap(beat.cam);
       } else {
+        /**
+         * Every remaining join works the same way: capture the OUTGOING
+         * frame first — the bridge renders one on demand and reads it
+         * back synchronously — then snap, then run the join's overlay on
+         * the still while the live incoming shot plays underneath.
+         * 'wipe' sweeps it off along the sun's diagonal with a feathered
+         * edge; 'blend' is a push dissolve (it fades AND travels);
+         * 'iris' closes a circle onto the new shot's own subject; 'dip'
+         * covers the seam with a colour. A failed capture (zero-sized
+         * surface) degrades to a clean cut — a dip still gets its veil.
+         */
+        if (join !== 'cut') {
+          const shot = film.snapshot();
+          this.freeze = shot.length > 64 ? shot : '';
+        }
         this.snap(beat.cam);
-        if (join === 'wipe') {
-          /* a hard cut needs a piece of punctuation or it reads as a
-             dropped frame. One wipe, in the paper the whole film is
-             printed on, raked to the sun's own diagonal — over in a
-             fifth of a second, long enough to say "that was deliberate"
-             and too short to be a transition anybody sits through. */
-          this.cutStamp += 1;
+        if (join === 'dip') {
+          this.dipColor = beat.dipTo ?? '#0d0905';
+          this.dipStamp += 1;
+        } else if (this.freeze) {
+          if (join === 'wipe') {
+            this.cutStamp += 1;
+          } else if (join === 'blend') {
+            this.blendStamp += 1;
+          } else if (join === 'iris') {
+            /* the circle closes ON the incoming shot's named point —
+               projected now, with the camera already snapped — so the
+               iris hands the eye directly to the subject */
+            const v = film.view();
+            const p = beat.to ? film.project(...beat.to) : undefined;
+            const cx = p ? Math.max(12, Math.min(88, (p.x / v.w) * 100)) : 50;
+            const cy = p ? Math.max(12, Math.min(88, (p.y / v.h) * 100)) : 50;
+            this.irisAt = `--ix:${cx.toFixed(1)}%;--iy:${cy.toFixed(1)}%`;
+            this.irisStamp += 1;
+          }
         }
       }
     }
@@ -2594,11 +2606,14 @@ export default class TowerFilm extends Component<{
         {{! THE GRADE, over the picture and under everything else. }}
         <div class="tf-grade" aria-hidden="true"></div>
 
-        {{! THE CUT. A new element per cut, so the wipe plays from its own
-        first frame every time rather than being re-triggered. }}
+        {{! THE WIPE. The outgoing frame itself, swept off along the
+        sun's diagonal behind a feathered edge — a true editorial wipe,
+        keyed per cut so it plays from its own first frame. }}
         {{#each (array this.cutStamp) key="@identity" as |c|}}
           {{#if c}}
-            <i class="tf-wipe" aria-hidden="true"></i>
+            {{#if this.freeze}}
+              <img class="tf-swipe" src={{this.freeze}} alt="" aria-hidden="true" />
+            {{/if}}
           {{/if}}
         {{/each}}
 
@@ -2610,7 +2625,21 @@ export default class TowerFilm extends Component<{
           {{#if bs}}
             <img
               class="tf-blend"
-              src={{this.blendShot}}
+              src={{this.freeze}}
+              alt=""
+              aria-hidden="true"
+            />
+          {{/if}}
+        {{/each}}
+
+        {{! THE IRIS. The old shot closes in a circle onto the incoming
+        subject; the centre rides inline custom properties. }}
+        {{#each (array this.irisStamp) key="@identity" as |is|}}
+          {{#if is}}
+            <img
+              class="tf-iris"
+              src={{this.freeze}}
+              style={{this.irisAt}}
               alt=""
               aria-hidden="true"
             />
@@ -2623,8 +2652,8 @@ export default class TowerFilm extends Component<{
         {{#each (array this.dipStamp) key="@identity" as |ds|}}
           {{#if ds}}
             <span class="tf-dip" aria-hidden="true">
-              {{#if this.blendShot}}
-                <img src={{this.blendShot}} alt="" />
+              {{#if this.freeze}}
+                <img src={{this.freeze}} alt="" />
               {{/if}}
               <i style={{this.dipVeil}}></i>
             </span>
@@ -2954,9 +2983,21 @@ export default class TowerFilm extends Component<{
         with, so the film opens and closes in one visual language. }}
         {{#if this.gate}}
           <div class="tf-gate">
+            {{! the museum frame: a hairline border drawn just inside the
+            screen, the way a plate is matted — it makes the scene behind
+            it an exhibit before a word has landed }}
+            <i class="tf-gate-frame" aria-hidden="true"></i>
+            {{! the spine: the film's name written down the right edge in
+            its own language, the poster's quiet second voice }}
+            <span class="tf-gate-vert" aria-hidden="true">天守 — 構造の研究</span>
             <div class="tf-gate-in tf-matter">
               <i class="tf-mg-rule" aria-hidden="true"></i>
-              <p class="tf-gate-k"><span class="tf-mg-g1">天</span><span
+              <p class="tf-gate-k">
+                {{! the ghost: the same word, enormous and hollow, standing
+                behind itself — depth from one glyph repeated at two
+                weights }}
+                <span class="tf-gate-ghost" aria-hidden="true">天守</span>
+                <span class="tf-mg-g1">天</span><span
                   class="tf-mg-g2"
                 >守</span></p>
               <p class="tf-gate-t tf-mg-mark">TOWERS</p>
@@ -2976,6 +3017,15 @@ export default class TowerFilm extends Component<{
                 >begin muted</button>
               </div>
             </div>
+            {{! the index: five chapters in a strip along the foot, the
+            way a museum plate lists its figures }}
+            <p class="tf-gate-index" aria-hidden="true">
+              <span>壱 — CONTEXT</span>
+              <span>弐 — HISTORY</span>
+              <span>参 — CONSTRUCTION</span>
+              <span>肆 — DETAIL</span>
+              <span>伍 — COMPARISON</span>
+            </p>
           </div>
         {{/if}}
 
@@ -3279,25 +3329,44 @@ export default class TowerFilm extends Component<{
         --tf-vig-a: 0.36;
       }
 
-      .tf-wipe {
+      /* the outgoing frame, swept off along the sun's diagonal behind a
+         FEATHERED edge — a mask, not a clip, because a wipe with a hard
+         edge is a screen transition and a wipe with a soft one is film */
+      .tf-swipe {
         position: absolute;
-        inset: -30%;
-        z-index: 5;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
         pointer-events: none;
-        background: linear-gradient(
-          100deg,
-          transparent 0%,
-          var(--tf-paper) 34%,
-          var(--tf-paper) 66%,
-          transparent 100%
+        filter: var(--tf-lut);
+        mask-image: linear-gradient(
+          calc(var(--tf-rake, 35deg) + 72deg),
+          #000 44%,
+          transparent 56%
         );
-        transform: translateX(-140%) rotate(calc(var(--tf-rake) * 0.16));
-        animation: tf-wipe 340ms cubic-bezier(0.5, 0, 0.3, 1) forwards;
+        mask-size: 300% 300%;
+        mask-repeat: no-repeat;
+        -webkit-mask-image: linear-gradient(
+          calc(var(--tf-rake, 35deg) + 72deg),
+          #000 44%,
+          transparent 56%
+        );
+        -webkit-mask-size: 300% 300%;
+        -webkit-mask-repeat: no-repeat;
+        animation: tf-swipe 620ms cubic-bezier(0.5, 0, 0.24, 1) forwards;
       }
 
-      @keyframes tf-wipe {
-        to {
-          transform: translateX(140%) rotate(calc(var(--tf-rake) * 0.16));
+      @keyframes tf-swipe {
+        0% {
+          mask-position: 0% 0%;
+          -webkit-mask-position: 0% 0%;
+        }
+
+        100% {
+          mask-position: 100% 100%;
+          -webkit-mask-position: 100% 100%;
         }
       }
 
@@ -3310,18 +3379,46 @@ export default class TowerFilm extends Component<{
         object-fit: cover;
         pointer-events: none;
         /* the still wears the same primary as the live frame under it,
-           so the dissolve is between two graded pictures */
+           so the dissolve is between two graded pictures — and it is a
+           PUSH dissolve: the old frame travels gently forward as it
+           thins, so the transition has a direction, not just a mix */
         filter: var(--tf-lut);
-        animation: tf-blend 460ms ease-out forwards;
+        animation: tf-blend 520ms ease-out forwards;
       }
 
       @keyframes tf-blend {
         0% {
           opacity: 1;
+          transform: scale(1);
         }
 
         100% {
           opacity: 0;
+          transform: scale(1.055);
+        }
+      }
+
+      /* the old shot closes in a circle onto the new shot's subject */
+      .tf-iris {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        filter: var(--tf-lut);
+        clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
+        animation: tf-iris 680ms cubic-bezier(0.45, 0, 0.3, 1) forwards;
+      }
+
+      @keyframes tf-iris {
+        0% {
+          clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
+        }
+
+        100% {
+          clip-path: circle(0% at var(--ix, 50%) var(--iy, 50%));
         }
       }
 
@@ -4172,18 +4269,98 @@ export default class TowerFilm extends Component<{
       }
 
       .tf-gate-in {
+        position: relative;
         text-align: center;
         font-family: var(--tf-ui);
         color: #f7f0e0;
-        margin-right: clamp(24px, 8vw, 140px);
+        margin-right: clamp(40px, 11vw, 190px);
+      }
+
+      /* the museum frame: hairline, inset like a mat, above the scene
+         and under the type */
+      .tf-gate-frame {
+        position: absolute;
+        inset: clamp(14px, 2.4vw, 30px);
+        border: 1px solid rgba(247, 240, 224, 0.34);
+        pointer-events: none;
+        animation: tf-mg-fade 1200ms ease-out both;
+      }
+
+      /* the spine: vertical Japanese down the inside of the frame */
+      .tf-gate-vert {
+        position: absolute;
+        top: 50%;
+        left: clamp(30px, 4.6vw, 58px);
+        transform: translateY(-50%);
+        writing-mode: vertical-rl;
+        font-family: var(--tf-display);
+        font-size: clamp(13px, 1.3vw, 18px);
+        letter-spacing: 0.42em;
+        color: rgba(247, 240, 224, 0.66);
+        animation: tf-mg-fade 900ms ease-out both;
+        animation-delay: 2050ms;
       }
 
       .tf-gate-k {
+        position: relative;
         margin: 0;
         font-family: var(--tf-display);
-        font-size: min(17vh, 15vw);
-        line-height: 1.04;
-        text-shadow: 0 6px 60px rgba(20, 14, 4, 0.5);
+        font-size: min(22vh, 17vw);
+        line-height: 1.02;
+        text-shadow: 0 8px 70px rgba(20, 14, 4, 0.55);
+      }
+
+      /* the ghost: the title again, enormous and hollow, standing behind
+         itself — the poster's depth comes from one word at two weights */
+      .tf-gate-ghost {
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        transform: translate(-50%, -50%) scale(1.9);
+        font-size: 1em;
+        line-height: 1;
+        color: transparent;
+        -webkit-text-stroke: 1px rgba(247, 240, 224, 0.2);
+        white-space: nowrap;
+        pointer-events: none;
+        animation: tf-mg-ghost 2400ms ease-out both;
+        animation-delay: 700ms;
+      }
+
+      @keyframes tf-mg-ghost {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(2.05);
+        }
+
+        100% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1.9);
+        }
+      }
+
+      /* the index strip along the foot of the frame */
+      .tf-gate-index {
+        position: absolute;
+        left: clamp(40px, 7vw, 90px);
+        right: clamp(40px, 7vw, 90px);
+        bottom: clamp(30px, 5.4vh, 56px);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 6px clamp(12px, 2.2vw, 36px);
+        margin: 0;
+        font-family: var(--tf-ui);
+        font-size: clamp(9px, 0.8vw, 11px);
+        font-weight: 700;
+        letter-spacing: 0.22em;
+        color: rgba(247, 240, 224, 0.62);
+        animation: tf-mg-fade 900ms ease-out both;
+        animation-delay: 2500ms;
+      }
+
+      .tf-gate-index span {
+        white-space: nowrap;
       }
 
       .tf-gate-t {
@@ -4212,13 +4389,23 @@ export default class TowerFilm extends Component<{
         font: inherit;
         font-family: var(--tf-ui);
         font-size: 13px;
-        letter-spacing: 0.12em;
+        font-weight: 600;
+        letter-spacing: 0.14em;
         cursor: pointer;
-        padding: 12px 26px;
+        padding: 14px 30px;
         border-radius: 999px;
         border: 1px solid #f2e9d2;
         background: #f2e9d2;
         color: #2e2515;
+        box-shadow: 0 10px 34px rgba(20, 14, 4, 0.35);
+        transition:
+          transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 220ms ease;
+      }
+
+      .tf-go:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 16px 44px rgba(20, 14, 4, 0.42);
       }
 
       .tf-go:disabled {
