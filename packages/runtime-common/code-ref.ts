@@ -52,23 +52,29 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-// The field a narrowing produces, per instance and field name. `getField` runs
-// on every field read, render and serialize, so without this the narrowed field
-// is rebuilt from scratch on each one — and a narrowing is reached far more
-// often than "an override was installed" suggests, because a resolved link
-// installs an override for its target's concrete type even when that is the
-// type the field already declared.
+// The own properties a field class's constructor does not set, per declared
+// field. A narrowing has to carry these across itself: the field factories
+// assign `configuration` after construction, so no parameter list can reach it.
 //
-// Keyed by the override it was built for, so replacing an override misses and
-// rebuilds. The declared field a narrowing starts from is a property
-// descriptor's, which cannot change once the class is defined.
-let narrowedFields = new WeakMap<
-  BaseDef,
-  Map<
-    string,
-    { overrideCard: typeof BaseDef; field: Field<BaseDefConstructor> }
-  >
->();
+// Derived by probing the constructor rather than hand-written, which is the
+// whole point — an option added to a field declaration is carried without this
+// having to learn about it, and a hand-written list is what dropped one twice.
+// Keyed by the declared field, which belongs to a property descriptor and so is
+// class-level: this holds one small array per field declaration in the app, not
+// one per instance.
+let uncarriedKeys = new WeakMap<Field<BaseDefConstructor>, string[]>();
+
+function keysNotSetByConstructor(field: Field<BaseDefConstructor>): string[] {
+  let keys = uncarriedKeys.get(field);
+  if (!keys) {
+    let probe = new (field.constructor as any)(field);
+    keys = Object.keys(field).filter(
+      (key) => probe[key] !== (field as any)[key],
+    );
+    uncarriedKeys.set(field, keys);
+  }
+  return keys;
+}
 
 // Pure shape predicates live in `card-document-shape.ts` so callers that
 // only need to recognize a CodeRef don't pull the transitive runtime
@@ -356,57 +362,39 @@ export function getField<T extends BaseDef>(
             ? overrideOwner[fieldsUntracked]
             : overrideOwner[fields])?.[fieldName]
         : undefined;
-      if (overrideOwner && fieldOverride) {
-        let cacheForInstance = narrowedFields.get(overrideOwner);
-        let cached = cacheForInstance?.get(fieldName);
-        // Falls through to the identity registration below rather than
-        // returning here: that registration is last-writer-wins across owner
-        // classes sharing an override card, so skipping it on a hit would make
-        // the winner depend on which lookups happened to miss.
-        if (cached?.overrideCard === fieldOverride) {
-          result = cached.field;
-        } else {
-          let originalField = result;
-          // The override narrows which card the field resolves to. It does not
-          // restate how the field behaves, so the rest of the declaration has
-          // to survive the narrowing.
-          //
-          // Build through the field's own constructor, handing it the field as
-          // its own argument — a field's own property names are exactly that
-          // constructor's parameter names. This keeps the narrowed field on the
-          // same hidden class as the field it was narrowed from, which is load
-          // bearing: there are four field classes, so any shared `field.*` read
-          // site already sees four shapes, V8's polymorphic ceiling. A
-          // differently-shaped clone (`Object.create` + `Object.assign`) takes
-          // those sites to eight and turns them megamorphic, which slows reads
-          // of *declared* fields everywhere, not just narrowed ones.
-          //
-          // `Object.assign` then carries whatever the constructor does not
-          // accept. That is what makes this a clone rather than a second list
-          // of options to keep. Such a list cannot be complete: the field
-          // factories assign `configuration` after construction, so it can
-          // never travel through a parameter list, and an option the list omits
-          // is dropped with nothing to signal it — only a consumer reading that
-          // property instance-scoped shows the loss.
-          //
-          // What a narrowing changes is then stated on its own: the card the
-          // field resolves to, and that resolving it is polymorphic. Notably
-          // not `declaredCardThunk`, which resolves the type the field was
-          // *declared* with.
-          let narrowed = new (originalField.constructor as any)(originalField);
-          Object.assign(narrowed, originalField);
-          narrowed.cardThunk = () => fieldOverride;
-          narrowed.isPolymorphic = true;
-          result = narrowed as Field;
-          if (!cacheForInstance) {
-            cacheForInstance = new Map();
-            narrowedFields.set(overrideOwner, cacheForInstance);
-          }
-          cacheForInstance.set(fieldName, {
-            overrideCard: fieldOverride,
-            field: result,
-          });
+      if (fieldOverride) {
+        let originalField = result;
+        // The override narrows which card the field resolves to. It does not
+        // restate how the field behaves, so the rest of the declaration has to
+        // survive the narrowing.
+        //
+        // Build through the field's own constructor, handing it the field as its
+        // own argument — a field's own property names are exactly that
+        // constructor's parameter names. This keeps the narrowed field on the
+        // same hidden class as the field it was narrowed from, which is load
+        // bearing: there are four field classes, so any shared `field.*` read
+        // site already sees four shapes, V8's polymorphic ceiling. A
+        // differently-shaped clone takes those sites to eight and turns them
+        // megamorphic, slowing reads of *declared* fields everywhere, not just
+        // narrowed ones.
+        //
+        // Then carry across only what that constructor does not set, which is
+        // what makes this a clone of the declaration rather than a second list
+        // of options to keep. Copying every own property instead would be just
+        // as faithful but several times more expensive on a path a resolved
+        // link reaches for every one of its lookups.
+        //
+        // What a narrowing changes is stated on its own: the card the field
+        // resolves to, and that resolving it is polymorphic. Notably not
+        // `declaredCardThunk`, which resolves the type the field was *declared*
+        // with.
+        let narrowed = new (originalField.constructor as any)(originalField);
+        for (let key of keysNotSetByConstructor(originalField)) {
+          narrowed[key] = (originalField as any)[key];
         }
+        narrowed.cardThunk = () => fieldOverride;
+        narrowed.isPolymorphic = true;
+        result = narrowed as Field;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',

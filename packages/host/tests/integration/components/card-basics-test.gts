@@ -3567,27 +3567,18 @@ module('Integration | card-basics', function (hooks) {
         'replacing the override resolves to the new subtype',
       );
 
-      // The narrowed field is built once per override and reused, so repeat
-      // lookups hand back the field already built. Asserted because the
-      // assertions above hold whether or not that reuse happens.
-      assert.strictEqual(
-        getField(card, 'pets'),
-        getField(card, 'pets'),
-        'a repeat lookup reuses the field already built',
-      );
-
-      // Reuse is per owner, so one instance's narrowing cannot answer
-      // another's — including when both narrow the same field name.
+      // A narrowing is per owner, so one instance's override cannot answer
+      // another's, including when both narrow the same field name.
       let otherCard = new TestCard({ [fields]: { pets: Puppy } });
       assert.strictEqual(
         getField(otherCard, 'pets')!.card,
         Puppy,
         'a second instance resolves to its own override',
       );
-      assert.notStrictEqual(
-        getField(otherCard, 'pets'),
-        getField(card, 'pets'),
-        'and does not share the other instance\u2019s field',
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'and leaves the first instance resolving to its own',
       );
     });
 
