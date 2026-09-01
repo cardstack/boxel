@@ -20,17 +20,25 @@ function escapeCell(value: unknown): string {
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-export function toCsv<T>(rows: T[], columns: ExportColumn<T>[]): string {
+export function toCsv<T>(
+  rows: T[],
+  columns: ExportColumn<T>[],
+  preamble?: string[],
+): string {
   let header = columns.map((c) => escapeCell(c.label ?? c.key));
   let body = rows.map((row) =>
     columns.map((c) => escapeCell((c.exportValue ?? c.value)(row))),
   );
-  return [header, ...body].map((cells) => cells.join(',')).join('\r\n');
+  let table = [header, ...body].map((cells) => cells.join(',')).join('\r\n');
+  // `# `-prefixed lines carry facts that hold for the whole file (export date,
+  // a stripped URL prefix) so they aren't repeated into every row.
+  let comments = (preamble ?? []).map((line) => `# ${line}`).join('\r\n');
+  return comments ? `${comments}\r\n${table}` : table;
 }
 
 export function downloadCsv(filename: string, csv: string): void {
   // The BOM keeps Excel from mangling non-ASCII on open.
-  let blob = new Blob([`﻿${csv}`], {
+  let blob = new Blob([`\uFEFF${csv}`], {
     type: 'text/csv;charset=utf-8;',
   });
   let url = URL.createObjectURL(blob);
@@ -48,6 +56,7 @@ interface ExportButtonSignature {
     columns: ExportColumn[];
     filename: string;
     label?: string;
+    preamble?: string[];
     rows: unknown[];
   };
   Element: HTMLElement;
@@ -55,7 +64,10 @@ interface ExportButtonSignature {
 
 export class ExportButton extends GlimmerComponent<ExportButtonSignature> {
   @action download() {
-    downloadCsv(this.args.filename, toCsv(this.args.rows, this.args.columns));
+    downloadCsv(
+      this.args.filename,
+      toCsv(this.args.rows, this.args.columns, this.args.preamble),
+    );
   }
 
   <template>

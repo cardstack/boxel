@@ -38,6 +38,7 @@ import {
   isInScope,
   bucketLabel,
   consumerList,
+  conceptKindOf,
   conceptStage,
   failingChecks,
   BUCKETS,
@@ -489,6 +490,55 @@ export class MatrixTracker extends CardDef {
       return parts.join('-');
     }
 
+    // The inventory is the anti-duplication input for planning sessions
+    // (domain-interview Phase 1.5): every in-scope block regardless of the
+    // UI filters, 7 columns, realm prefix stated once in the preamble instead
+    // of repeated into ~300 sharedSpec URLs.
+    get realmHref(): string {
+      return (
+        ((this.args.model as any)?.[realmURL] as URL | undefined)?.href ?? ''
+      );
+    }
+
+    get inventoryRows(): MatrixConcept[] {
+      return [...this.blocks].sort((a, b) =>
+        `${a.lane}|${a.concept}`.localeCompare(`${b.lane}|${b.concept}`),
+      );
+    }
+
+    get inventoryPreamble(): string[] {
+      let today = new Date().toISOString().slice(0, 10);
+      return [
+        `matrix inventory ${today} — all in-scope blocks, one row each`,
+        `sharedSpec is relative to ${this.realmHref}`,
+      ];
+    }
+
+    get inventoryFilename() {
+      return `matrix-inventory-${new Date().toISOString().slice(0, 10)}`;
+    }
+
+    inventoryColumns: ExportColumn<MatrixConcept>[] = [
+      { key: 'concept', label: 'concept', value: (c) => c.concept },
+      { key: 'lane', label: 'lane', value: (c) => c.lane },
+      { key: 'kind', label: 'kind', value: (c) => conceptKindOf(c) },
+      { key: 'stage', label: 'stage', value: (c) => conceptStage(c) },
+      { key: 'domainKit', label: 'domainKit', value: (c) => c.domainKit },
+      {
+        key: 'sharedSpec',
+        label: 'sharedSpec',
+        value: (c) =>
+          this.realmHref
+            ? (c.sharedSpec ?? '').replace(this.realmHref, '')
+            : c.sharedSpec,
+      },
+      {
+        key: 'whereImplemented',
+        label: 'whereImplemented',
+        value: (c) => c.whereImplemented,
+      },
+    ];
+
     private get isInteractive() {
       return Boolean((this.args as any).viewCard);
     }
@@ -851,6 +901,14 @@ export class MatrixTracker extends CardDef {
                 @columns={{this.exportColumns}}
                 @filename={{this.exportFilename}}
                 @label='Export CSV'
+              />
+              <ExportButton
+                class='export'
+                @rows={{this.inventoryRows}}
+                @columns={{this.inventoryColumns}}
+                @filename={{this.inventoryFilename}}
+                @preamble={{this.inventoryPreamble}}
+                @label='Export inventory'
               />
             </div>
             <FilterChips
