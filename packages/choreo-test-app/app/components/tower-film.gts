@@ -3368,7 +3368,7 @@ export default class TowerFilm extends Component<{
         the timeline is, how it cuts, and a strip of live junction
         triggers that run their transition on the picture upstairs.
         ============================================================ }}
-        <section class="tf-doc">
+        <section id="cutting-room" class="tf-doc">
           <header class="tf-doc-head">
             <p class="tf-doc-kicker">UNDER THE HOOD</p>
             <h2 class="tf-doc-title">The Cutting Room</h2>
