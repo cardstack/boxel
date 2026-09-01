@@ -15,6 +15,7 @@ import {
 import type {
   MediaCacheAdapter,
   MediaObjectStat,
+  MediaPutResult,
 } from '@cardstack/runtime-common';
 import type { Readable } from 'stream';
 
@@ -56,11 +57,11 @@ export class S3MediaCacheAdapter implements MediaCacheAdapter {
     key: string,
     bytes: Uint8Array,
     opts: { contentType: string },
-  ): Promise<void> {
+  ): Promise<MediaPutResult> {
     // The key is a hash of the bytes, so an existing object under this key
     // already holds them — skip the upload (dedupe-on-write).
     if (await this.head(key)) {
-      return;
+      return { deduped: true };
     }
     await this.#client.send(
       new PutObjectCommand({
@@ -70,6 +71,7 @@ export class S3MediaCacheAdapter implements MediaCacheAdapter {
         ContentType: opts.contentType,
       }),
     );
+    return { deduped: false };
   }
 
   async head(key: string): Promise<MediaObjectStat | undefined> {

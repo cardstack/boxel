@@ -364,6 +364,17 @@ export interface RenderTimeoutDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
+  // Screenshot-capture renders only: the components of `renderElapsedMs`,
+  // measured inside `captureScreenshot`. Navigation (route transition +
+  // path settle), the prerender settle wait, the image/font paint wait, and
+  // the capture loop — the lone `page.screenshot` for a singular capture, or
+  // each entry's viewport switch + screenshot for a batch. Their sum is
+  // slightly under `renderElapsedMs`; the residual is the terminal-error
+  // probe and dimension reads.
+  screenshotNavMs?: number;
+  screenshotSettleMs?: number;
+  screenshotImagePaintMs?: number;
+  screenshotCaptureMs?: number;
   // Per-format wall-clock of the html-route renders in this visit, split by
   // the card rendering and the FileDef file rendering. Keys are the format
   // steps the visit ran (`isolated`, `head`, `atom`, `markdown`, and the
@@ -1005,6 +1016,11 @@ export type ScreenshotPrerenderArgs = {
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
+  // Worker-job identity (`jobId.reservationId`), forwarded by the remote
+  // prerenderer as the `x-boxel-job-id` header so manager and
+  // prerender-server logs for this render join back to the worker job.
+  // Ignored by in-process prerenderers.
+  jobId?: string;
 };
 
 // One captured image in a screenshot response. `deviceScaleFactor` is the
@@ -1163,6 +1179,7 @@ export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
+export * from './screenshot-perf.ts';
 export * from './capture-spec.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';

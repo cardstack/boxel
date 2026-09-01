@@ -1206,6 +1206,22 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // Per-step wall-clock across the shared render, for stage telemetry:
+  // navigation (route transition + path settle), the prerender settle wait
+  // (including any envelope-box wait), the image/font paint wait, and the
+  // capture stage (viewport switches + CDP screenshots). One record per
+  // render; a batch whose entries span several envelopes re-renders per
+  // envelope, and each stage sums across those re-renders. Together these
+  // account for nearly all of the render wall; the remainder is the terminal
+  // error probe and dimension reads.
+  stepTimings: ScreenshotStepTimings;
+}
+
+export interface ScreenshotStepTimings {
+  navMs: number;
+  settleMs: number;
+  imagePaintMs: number;
+  screenshotMs: number;
 }
 
 // Block in the browser context until images, CSS background-image URLs, and
@@ -1645,6 +1661,16 @@ export async function captureScreenshot(
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
 
+  // Per-stage wall-clock accumulators for the capture's stepTimings.
+  // `renderFor` can run more than once per batch (once per distinct
+  // envelope), so the nav/settle/image stages sum across re-renders; the
+  // capture stage sums the viewport switches and CDP screenshots, keeping
+  // the stages disjoint.
+  let navMs = 0;
+  let settleMs = 0;
+  let imagePaintMs = 0;
+  let screenshotMs = 0;
+
   // Transition render.html for the given envelope (undefined =
   // viewport-filling format) and wait for the render to settle. Returns a
   // RenderError on a terminal prerender error.
@@ -1664,12 +1690,15 @@ export async function captureScreenshot(
         },
       });
     }
+    let stepStart = Date.now();
     await transitionTo(page, 'render.html', ...htmlParams);
     await waitForRoutePathSuffix(
       page,
       `/html/${format}/${ancestorLevel}`,
       opts,
     );
+    navMs += Date.now() - stepStart;
+    stepStart = Date.now();
     await waitForPrerenderSettle(page);
     if (envelope) {
       // A query-param-only re-transition leaves the path (and the parent
@@ -1677,6 +1706,7 @@ export async function captureScreenshot(
       // signal that the model refresh flushed the new envelope to the DOM.
       await waitForEnvelopeBox(page, envelope, opts);
     }
+    settleMs += Date.now() - stepStart;
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
@@ -1694,7 +1724,9 @@ export async function captureScreenshot(
     // Bounded by an internal timeout so a slow / 401-looping image can't hang
     // the capture; an image-free render pays only the fast
     // no-pending-resources path.
+    stepStart = Date.now();
     await waitForImagePaint(page);
+    imagePaintMs += Date.now() - stepStart;
     return undefined;
   };
 
@@ -1721,7 +1753,8 @@ export async function captureScreenshot(
       if (!sameEnvelope(entryEnvelope, currentEnvelope)) {
         // Envelope changed: re-lay-out the same hydrated card in the new box
         // at the matching viewport, then re-settle (which also waits out any
-        // image loads the new box triggers).
+        // image loads the new box triggers). `renderFor` accounts its own
+        // time into the nav/settle/image stages.
         if (!sameViewport(entryViewport, currentViewport)) {
           await page.setViewport(entryViewport);
           currentViewport = entryViewport;
@@ -1741,16 +1774,20 @@ export async function captureScreenshot(
         // the initial wait: this runs once per switch, so a slow/hanging image
         // can't spend the full budget and multiply across entries. When
         // nothing new loads, the wait costs only the DOM walk plus a frame.
+        let switchStart = Date.now();
         await page.setViewport(entryViewport);
         await waitForReflow(page);
         await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
         currentViewport = entryViewport;
+        screenshotMs += Date.now() - switchStart;
       }
+      let captureStart = Date.now();
       let item = await captureOneEntry(
         page,
         entry,
         currentViewport.deviceScaleFactor,
       );
+      screenshotMs += Date.now() - captureStart;
       if ('type' in item) {
         return item;
       }
@@ -1761,7 +1798,10 @@ export async function captureScreenshot(
         .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
         .join(',')}`,
     );
-    return { captures };
+    return {
+      captures,
+      stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
+    };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing
