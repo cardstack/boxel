@@ -246,9 +246,11 @@ export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
 # outlive this shell (see teardown below), carrying the deployed credential in
 # its environment long after the final `unset`.
 
-# 3) Confirm the port is actually free, then open the tunnel. Wait for
-#    "Waiting for connections..." before connecting. Do NOT skip the check
-#    — see "a squatted port is a wrong-environment bug" below.
+# 3) Confirm the port is actually free, then open the tunnel. Do NOT skip the
+#    check — see "a squatted port is a wrong-environment bug" below. The
+#    tunnel needs a moment to bind, and since 3-6 run as one unit there is no
+#    pause in which to watch for "Waiting for connections...", so the same
+#    `lsof` probe waits for it at opposite polarity before the query.
 #
 #    `lsof`, not `ss`: `ss` is Linux-only, and a missing command's failure
 #    disappears into the pipe, so on macOS every port would read as free and
@@ -266,6 +268,14 @@ else
     --document-name AWS-StartPortForwardingSessionToRemoteHost \
     --parameters "{\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$RDS_HOST\"]}" &
   TUNNEL_PID=$!
+
+  # Wait for the forward to actually bind. Without this the query races the
+  # tunnel and fails with connection refused at a port the guard just
+  # confirmed was free.
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
 
   # 4) Run queries against localhost. The password is fetched here, on the
   #    command that uses it, and exists only for the life of that command —
@@ -307,7 +317,7 @@ ps -o args= -p <pid> | grep -o '"Target": *"[^"]*"'   # which environment it tar
 kill <pid>
 ```
 
-Note what that second command deliberately does _not_ do: print the plugin's whole argv. The AWS CLI passes the StartSession response — `SessionId`, `StreamUrl`, and a live `TokenValue` — as an argument, and substitutes the env-var name `AWS_SSM_START_SESSION_RESPONSE` for it only on plugin versions above 1.2.497.0. Pre-reqs pins no minimum version, so `ps … args` on any machine may put a live session credential on your terminal, inside the flow whose first rule is that credentials are never echoed. Match out the field you actually want, as above, or use `ps -o pid,etime,comm -p <pid>` when the pid is all you need.
+Note what that second command deliberately does _not_ do: print the plugin's whole argv. The AWS CLI passes the StartSession response — `SessionId`, `StreamUrl`, and a live `TokenValue` — as an argument, and substitutes the env-var name `AWS_SSM_START_SESSION_RESPONSE` for it only on plugin versions above 1.2.497.0. Pre-reqs requires a version above that, but a machine that has drifted below it would have `ps … args` put a live session credential on your terminal, inside the flow whose first rule is that credentials are never echoed. Match out the field you actually want, as above, or use `ps -o pid,etime,comm -p <pid>` when the pid is all you need.
 
 A leaked forward is not merely untidy: it is a standing network path from localhost into staging or prod Postgres for anything else running on the machine, and it consumes the port for later runs.
 
