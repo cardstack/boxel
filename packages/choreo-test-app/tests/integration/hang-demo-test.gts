@@ -170,22 +170,51 @@ module('Integration | hang', function (hooks) {
     const from = r.left + r.width / 2;
     const to = lane().left + lane().width * (RUNWAY - 0.02);
 
+    /**
+     * DRIVEN ON FRAMES, NOT ON A TIMER — and the reason is a burst, not a lag.
+     *
+     * Both halves of the claim read Motion's WINDOWED velocity: `aim` previews
+     * it from the frameloop, `onDragEnd` takes it at release. So the assertion
+     * is only ever as good as the samples those two share, and a drag paced by
+     * `setTimeout` does not control that.
+     *
+     * What CI caught, in its own words: `landed 0.988 vs previewed 0.763`. The
+     * puck went FURTHER than the ghost promised, not shorter — which rules out
+     * the obvious story about a stationary pointer decaying the window, and
+     * points at the opposite. Under load the timers back up and then fire
+     * together, so the last moves arrive almost simultaneously: a large
+     * displacement over a tiny real interval, which is a velocity spike at the
+     * exact moment of release. The ghost's last frame ran before the burst and
+     * previewed an ordinary throw.
+     *
+     * That is not a flake in the ordinary sense — it failed about half the
+     * time, on commits that also passed, which is the worst kind because it
+     * teaches everyone to re-run a red build.
+     *
+     * One frame per move makes bunching impossible: every sample is separated
+     * by a real frame, so the windowed velocity is built from the same six
+     * moves at the same spacing on every machine, however busy it is. The
+     * release then goes out in the SAME TASK as the reading below, which
+     * removes the last interval that load could stretch.
+     */
     trigger(el, 'pointerdown', 0, 0, { clientX: from, clientY: y });
-    await wait(20);
-    for (let i = 1; i <= 6; i++) {
+    await frames(1);
+    const STEPS = 6;
+    for (let i = 1; i <= STEPS; i++) {
       trigger(el, 'pointermove', 0, 0, {
-        clientX: from + ((to - from) * i) / 6,
+        clientX: from + ((to - from) * i) / STEPS,
         clientY: y,
       });
-      await wait(10);
+      await frames(1);
     }
     const ghost = $('.hang-ghost');
     const called = ghost.dataset['call'];
-    assert.ok(called, `the ghost is showing a landing: "${called}"`);
     /** the raw projection, not the clamped paint position */
     const previewed = parseFloat(ghost.dataset['at'] || '0');
-
+    // no await between the reading and the lift: see above
     trigger(el, 'pointerup', 0, 0, { clientX: to, clientY: y });
+
+    assert.ok(called, `the ghost was showing a landing: "${called}"`);
     await frames(3);
     await settled();
 
