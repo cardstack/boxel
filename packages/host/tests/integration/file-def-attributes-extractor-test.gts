@@ -14,7 +14,10 @@ import { baseRealm, rri } from '@cardstack/runtime-common';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
-import { FileDefAttributesExtractor } from '@cardstack/host/utils/file-def-attributes-extractor';
+import {
+  FileDefAttributesExtractor,
+  resetHardFetchFailureMemoryForTest,
+} from '@cardstack/host/utils/file-def-attributes-extractor';
 import { buildFileExtractError } from '@cardstack/host/utils/file-extract-runner';
 
 import { setupLocalIndexing, testRealmURL } from '../helpers';
@@ -43,9 +46,13 @@ module('Integration | file-def-attributes-extractor', function (hooks) {
   hooks.beforeEach(function () {
     loaderService = getService('loader-service');
     network = getService('network');
+    resetHardFetchFailureMemoryForTest();
   });
 
-  function makeExtractor(authedFetch: (request: Request) => Promise<Response>) {
+  function makeExtractor(
+    authedFetch: (request: Request) => Promise<Response>,
+    opts: { fetchRetryDelaysMs?: number[] } = { fetchRetryDelaysMs: [] },
+  ) {
     return new FileDefAttributesExtractor({
       loaderService,
       network: {
@@ -64,6 +71,7 @@ module('Integration | file-def-attributes-extractor', function (hooks) {
       contentHash: undefined,
       contentSize: undefined,
       buildError: buildFileExtractError,
+      ...opts,
     });
   }
 
@@ -99,6 +107,64 @@ module('Integration | file-def-attributes-extractor', function (hooks) {
     );
     assert.ok(result.error, 'the failure is carried on the result');
     assert.ok(fetchCount >= 1, 'the fetch was attempted');
+  });
+
+  test('a transient fetch failure is retried and the extract succeeds', async function (assert) {
+    let fetchCount = 0;
+    let extractor = makeExtractor(
+      async () => {
+        fetchCount++;
+        if (fetchCount <= 2) {
+          throw new TypeError('network error');
+        }
+        return new Response(new TextEncoder().encode(SKILL_MD));
+      },
+      { fetchRetryDelaysMs: [1, 1] },
+    );
+
+    let result = await extractor.extract();
+
+    assert.strictEqual(fetchCount, 3, 'two retries, then success');
+    assert.strictEqual(result.status, 'ready');
+    assert.strictEqual(result.searchDoc?.kind, 'skill');
+  });
+
+  test('the retry budget is finite: a persistent fetch failure still aborts', async function (assert) {
+    let fetchCount = 0;
+    let extractor = makeExtractor(
+      async () => {
+        fetchCount++;
+        throw new TypeError('network error');
+      },
+      { fetchRetryDelaysMs: [1, 1] },
+    );
+
+    let result = await extractor.extract();
+
+    assert.strictEqual(fetchCount, 3, 'the initial attempt plus two retries');
+    assert.strictEqual(result.status, 'error');
+  });
+
+  test('an origin that is already failing hard is not retried per file', async function (assert) {
+    let fetchCount = 0;
+    let deadOriginFetch = async () => {
+      fetchCount++;
+      throw new TypeError('connection refused');
+    };
+
+    // The first file against the dead origin spends the full retry budget…
+    let first = makeExtractor(deadOriginFetch, { fetchRetryDelaysMs: [1, 1] });
+    await first.extract();
+    assert.strictEqual(fetchCount, 3, 'first file retried');
+
+    // …and every following file within the failure window fails fast, so a
+    // batch of visits against a dead realm cannot stall the indexing worker
+    // for the whole batch.
+    fetchCount = 0;
+    let second = makeExtractor(deadOriginFetch, { fetchRetryDelaysMs: [1, 1] });
+    let result = await second.extract();
+    assert.strictEqual(fetchCount, 1, 'later files fail fast');
+    assert.strictEqual(result.status, 'error');
   });
 
   test('a body stream erroring mid-read aborts the extract instead of falling back to FileDef', async function (assert) {

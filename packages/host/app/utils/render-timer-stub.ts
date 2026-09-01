@@ -133,6 +133,21 @@ function timersBlocked() {
   return stubDepth > 0 && blockDepth > 0;
 }
 
+// A deliberate, bounded pause that still works while prerender timer blocking
+// is active. The stub exists to stop stray app timers from keeping a render
+// alive forever — not to forbid an explicit, finite wait a caller owns (e.g.
+// the file extractor's fetch-retry backoff). Awaiting the ambient
+// `setTimeout` under the stub would never resolve, turning that caller into a
+// permanent hang; this uses the captured native timer instead.
+export function nativeTimeout(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    let invoke =
+      invokeSetTimeout ??
+      (globalThis.setTimeout.bind(globalThis) as typeof window.setTimeout);
+    invoke(() => resolve(), ms);
+  });
+}
+
 function installStubs() {
   if (typeof window === 'undefined') {
     return;

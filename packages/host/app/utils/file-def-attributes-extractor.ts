@@ -3,6 +3,7 @@ import { isEqual } from 'lodash-es';
 import {
   baseRef,
   CardError,
+  isCardError,
   FRONTMATTER_DIAGNOSTICS_SYMBOL,
   FRONTMATTER_FILE_META_VALUE_SYMBOL,
   FRONTMATTER_PARSE_ERROR_SYMBOL,
@@ -21,6 +22,8 @@ import {
   type ToolContext,
 } from '@cardstack/runtime-common';
 import { getFieldDefinitions } from '@cardstack/runtime-common/definitions';
+
+import { nativeTimeout } from './render-timer-stub';
 
 import type { createAuthErrorGuard } from './auth-error-guard';
 
@@ -99,6 +102,44 @@ export function isFileBytesUnavailableError(
   );
 }
 
+// Short-lived, per-page memory of origins whose byte fetches are failing hard
+// (the fetch itself rejects — server gone, connection refused). It scopes the
+// retry budget in `#fetch` to one file per outage instead of every file in a
+// batch. The window only needs to bridge one indexing batch's worth of
+// visits.
+const HARD_FETCH_FAILURE_WINDOW_MS = 10_000;
+const recentHardFetchFailures = new Map<string, number>();
+
+function originOf(fileURL: string): string {
+  try {
+    return new URL(fileURL).origin;
+  } catch {
+    return fileURL;
+  }
+}
+
+function hasRecentHardFetchFailure(origin: string): boolean {
+  let failedAt = recentHardFetchFailures.get(origin);
+  return (
+    failedAt !== undefined &&
+    Date.now() - failedAt < HARD_FETCH_FAILURE_WINDOW_MS
+  );
+}
+
+function recordHardFetchFailure(origin: string) {
+  recentHardFetchFailures.set(origin, Date.now());
+}
+
+function clearHardFetchFailure(origin: string) {
+  recentHardFetchFailures.delete(origin);
+}
+
+// The failure memory is module state; tests exercising the retry budget reset
+// it so one test's dead origin does not bleed into the next.
+export function resetHardFetchFailureMemoryForTest() {
+  recentHardFetchFailures.clear();
+}
+
 export class FileDefAttributesExtractor {
   #loaderService: LoaderService;
   #network: NetworkService;
@@ -114,6 +155,7 @@ export class FileDefAttributesExtractor {
   #toolContext: ToolContext | undefined;
   #fallbackBytes: Uint8Array | null = null;
   #primaryUsed = false;
+  #fetchRetryDelaysMs: number[];
 
   constructor({
     loaderService,
@@ -128,6 +170,7 @@ export class FileDefAttributesExtractor {
     fileBytes,
     buildError,
     toolContext,
+    fetchRetryDelaysMs,
   }: {
     loaderService: LoaderService;
     network: NetworkService;
@@ -151,6 +194,10 @@ export class FileDefAttributesExtractor {
     // extract paths (room file attach, the store's direct fallback) shouldn't
     // pay for — their consumers generate schemas on demand instead.
     toolContext?: ToolContext;
+    // Pause before each byte-fetch retry; the list length is the retry
+    // budget. Overridable so tests exercise the retry loop without real
+    // waits.
+    fetchRetryDelaysMs?: number[];
   }) {
     this.#loaderService = loaderService;
     this.#network = network;
@@ -164,6 +211,7 @@ export class FileDefAttributesExtractor {
     this.#fileBytes = fileBytes;
     this.#buildError = buildError;
     this.#toolContext = toolContext;
+    this.#fetchRetryDelaysMs = fetchRetryDelaysMs ?? [250, 1000];
   }
 
   async extract(): Promise<FileDefExtractResult> {
@@ -469,7 +517,67 @@ export class FileDefAttributesExtractor {
     return this.#fallbackBytes;
   }
 
+  // A failed byte fetch is retried before the extract gives up: most
+  // index-time fetch failures are transient (a connection reset, a proxy
+  // hiccup), and each pause below precedes one retry. Auth failures and
+  // non-retryable statuses (4xx other than 429) surface immediately. The
+  // pause must be `nativeTimeout`: this code runs inside prerender pages,
+  // where the ambient `setTimeout` is blocked (render-timer-stub) and a
+  // plain timer await would hang the extract — and the indexing visit
+  // behind it — forever.
+  //
+  // The retry budget applies per ORIGIN, not per file: when an origin's
+  // fetches were already failing hard before this extract started, the realm
+  // behind it is down (not blipping), and a batch of visits against it must
+  // fail fast rather than each paying the full retry schedule — the visits
+  // run serially on the indexing worker, so per-file retries against a dead
+  // origin multiply into a stall that starves every queued job behind them.
+  // The first failure against an origin still gets its retries; a later
+  // success clears the marker.
   async #fetch(): Promise<Response> {
+    let origin = originOf(this.#fileURL);
+    let originAlreadyFailing = hasRecentHardFetchFailure(origin);
+    let delays = this.#fetchRetryDelaysMs;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        let response = await this.#fetchOnce();
+        clearHardFetchFailure(origin);
+        return response;
+      } catch (err) {
+        if (!isCardError(err)) {
+          // The fetch itself rejected — nothing reached us from the origin.
+          recordHardFetchFailure(origin);
+        }
+        if (
+          originAlreadyFailing ||
+          attempt >= delays.length ||
+          !this.#isRetryableFetchError(err)
+        ) {
+          throw err;
+        }
+        console.warn(
+          `[file-extract] retrying byte fetch for ${this.#fileURL} (attempt ${
+            attempt + 1
+          } failed):`,
+          err,
+        );
+        await nativeTimeout(delays[attempt]);
+      }
+    }
+  }
+
+  #isRetryableFetchError(err: unknown): boolean {
+    if (this.#authGuard?.isAuthError(err)) {
+      return false;
+    }
+    if (isCardError(err)) {
+      return err.status >= 500 || err.status === 429;
+    }
+    // A rejected fetch (no response at all) is a network-level failure.
+    return true;
+  }
+
+  async #fetchOnce(): Promise<Response> {
     let response: Response;
     try {
       let request = new Request(this.#fileURL, {
