@@ -1424,19 +1424,28 @@ export default class TowerFilm extends Component<{
         return;
       }
       this.film = w.__film;
-      /* the page opens on an empty site — its own clock is at zero — and
-         most of this film is about a finished building. Standing it up
-         before the first beat runs means a beat only ever has to say what
-         it CHANGES, which is also what makes `?from` land on a real shot
-         rather than on a field. */
-      w.__film.time(4.4);
-      /* seat the lens where the film opens, so the first frame is the
-         shot and not a swing towards it */
-      this.snap(this.beats[0]!.cam);
-      /* behind the gate the scene stands ready and the door unlocks;
-         everything else waits for the viewer's own hand */
-      if (this.gate) {
+      try {
+        /* the page opens on an empty site — its own clock is at zero —
+           and most of this film is about a finished building. Standing it
+           up before the first beat runs means a beat only ever has to say
+           what it CHANGES, which is also what makes `?from` land on a
+           real shot rather than on a field. */
+        w.__film.time(4.4);
+        /* seat the lens where the film opens, so the first frame is the
+           shot and not a swing towards it */
+        this.snap(this.beats[0]!.cam);
+      } finally {
+        /* the door unlocks NO MATTER WHAT the seating did: a gate whose
+           buttons can be stranded disabled by a throw above is a locked
+           theatre with the lights on */
         this.ready = true;
+      }
+      if (this.gate) {
+        /* a click that arrived while the scene was still loading was a
+           decision, not a miss — honour it now */
+        if (this.wanted !== undefined) {
+          this.begin(this.wanted);
+        }
         return;
       }
       this.begin(false);
@@ -2211,9 +2220,17 @@ export default class TowerFilm extends Component<{
     this.cutTo(0);
   };
 
+  /** a choice made at the door before the scene finished loading */
+  private wanted?: boolean;
+
   /** through the gate — on the click the audio policy was waiting for */
   private begin = (withSound: boolean) => {
-    if (!this.film || this.booted) {
+    if (this.booted) {
+      return;
+    }
+    if (!this.film) {
+      /* the scene is still arriving: keep the choice, not the click */
+      this.wanted = withSound;
       return;
     }
     this.gate = false;
@@ -2243,10 +2260,6 @@ export default class TowerFilm extends Component<{
 
   private beginSound = () => this.begin(true);
   private beginMute = () => this.begin(false);
-
-  get gateWait(): boolean {
-    return !this.ready;
-  }
 
   /** the whole film's running time, said the way a poster says it */
   get runtime(): string {
@@ -2655,13 +2668,11 @@ export default class TowerFilm extends Component<{
                 <button
                   type="button"
                   class="tf-go"
-                  disabled={{this.gateWait}}
                   {{on "click" this.beginSound}}
                 >▶ Begin — with sound</button>
                 <button
                   type="button"
                   class="tf-go is-quiet"
-                  disabled={{this.gateWait}}
                   {{on "click" this.beginMute}}
                 >begin muted</button>
               </div>
