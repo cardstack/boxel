@@ -7,6 +7,7 @@ import type {
   Realm,
 } from '@cardstack/runtime-common';
 import {
+  PREFIX_REALMS,
   foreignQueryParams,
   hasExtension,
   isRedirectRoutingRule,
@@ -160,15 +161,29 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
               process.env.REALM_SENTRY_ENVIRONMENT ||
               config.hostedEnvironment ||
               'local',
-            resolvedBaseRealmURL: rewriteRealmURL(config.resolvedBaseRealmURL),
-            resolvedCatalogRealmURL: rewriteRealmURL(
-              config.resolvedCatalogRealmURL,
+            // Both views of every prefix realm, rewritten from the one
+            // declaration: the realm-list property each realm is named by, and
+            // the served-at map the host registers its prefixes from. Hand
+            // listing these is how a realm gets added to the declaration and
+            // missed here — which ships worse than an absent prefix, because
+            // the host keeps the build-time URL while the realm-server serves
+            // that realm somewhere else. `merge` ignores undefined sources, so
+            // a realm absent from the served config stays absent.
+            ...Object.fromEntries(
+              PREFIX_REALMS.map(({ hostConfigKey }) => [
+                hostConfigKey,
+                rewriteRealmURL(
+                  (config as Record<string, string | undefined>)[hostConfigKey],
+                ),
+              ]),
             ),
-            resolvedSkillsRealmURL: rewriteRealmURL(
-              config.resolvedSkillsRealmURL,
-            ),
-            resolvedOpenRouterRealmURL: rewriteRealmURL(
-              config.resolvedOpenRouterRealmURL,
+            prefixRealmURLs: Object.fromEntries(
+              Object.entries(
+                (config.prefixRealmURLs ?? {}) as Record<string, string>,
+              ).map(([prefix, servedAt]) => [
+                prefix,
+                rewriteRealmURL(servedAt),
+              ]),
             ),
             defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
             defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),

@@ -28,7 +28,11 @@ DEFAULT_SOFTWARE_FACTORY_REALM_URL="${REALM_BASE_URL}/software-factory/"
 SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFTWARE_FACTORY_REALM_URL}"
 
 START_EXPERIMENTS=$(if [ -z "${SKIP_EXPERIMENTS:-}" ]; then echo "true"; else echo ""; fi)
-START_CATALOG=$(if [ -z "${SKIP_CATALOG:-}" ]; then echo "true"; else echo ""; fi)
+# `= "true"` rather than a non-empty test, matching services/realm-server
+# and the host config: a worker without the catalog realm cannot read back
+# the definitions cache the host's prerender writes under its prefix, so the
+# three have to agree on what the variable means, not just on its name.
+START_CATALOG=$(if [ "${SKIP_CATALOG:-}" = "true" ]; then echo ""; else echo "true"; fi)
 
 NODE_ENV=development \
   NODE_NO_WARNINGS=1 \
