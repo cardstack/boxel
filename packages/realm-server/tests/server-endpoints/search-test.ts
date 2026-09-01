@@ -469,24 +469,63 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
-    test('the item-leg page size is capped server-side; realms fan-out is not', async function (assert) {
-      // The server enforces a hard page ceiling on the live item leg for every
-      // caller (the ceiling is applied per realm before results merge). The
+    test('the item-leg page size is bounded server-side; realms fan-out is not', async function (assert) {
+      // The server bounds the live item leg for every caller, as a pair: a
+      // request naming no page is clamped to the default, and one naming a size
+      // is honored up to the absolute maximum and clamped to it above. The
       // realms fan-out cap is a separate client-side limit on the card
       // `@context` surface, so the server accepts a wide federated request.
-      setSearchBoundsForTests({ serverMaxPageSize: 2 });
+      setSearchBoundsForTests({
+        serverMaxPageSize: 2,
+        serverAbsoluteMaxPageSize: 3,
+      });
       try {
-        // An explicit item-leg page over the ceiling is rejected.
-        let over = await postSearch({
+        // Naming a size above the default is the opt-in: honored, not clamped
+        // back to the default. This is what lets a query-backed field declare
+        // the page it needs.
+        let optedIn = await postSearch({
           filter: personFilter(),
           fields: { entry: ['item'] },
           realms: [testRealm.url, secondaryRealm.url],
           page: { size: 3 },
         });
         assert.strictEqual(
+          optedIn.status,
+          200,
+          'a page above the default but within the maximum is honored',
+        );
+
+        // Above the absolute maximum it is clamped rather than rejected, so
+        // every leg that applies this bound agrees on the page — a rejection on
+        // one and a clamp on another is how a query-backed field comes to
+        // resolve from its seed and then fail on its next refresh.
+        let over = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+          page: { size: 9 },
+        });
+        assert.strictEqual(
           over.status,
-          400,
-          'an over-ceiling item-leg page is rejected',
+          200,
+          'an over-maximum item-leg page is clamped, not rejected',
+        );
+        assert.strictEqual(
+          over.body.meta.page.total,
+          4,
+          'and the true match count is still reported beside the clamped page',
+        );
+
+        // Naming no page at all still gets mandatory pagination.
+        let unpaged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        assert.strictEqual(
+          unpaged.status,
+          200,
+          'a request naming no page is clamped to the default, not rejected',
         );
 
         // A multi-realm request within the ceiling is accepted — the realms
