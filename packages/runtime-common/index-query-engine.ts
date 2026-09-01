@@ -263,6 +263,13 @@ export interface QueryResultsMeta {
   page: {
     total: number;
   };
+  // The result set omits rows nobody counted: a realm the query fanned out to
+  // did not answer, so `page.total` covers only the realms that did and is a
+  // floor rather than the match count. Set on the federated path, where a
+  // realm can drop out of a search that otherwise succeeds; a consumer that
+  // reports a count must treat the total as unknown when this is set, rather
+  // than publishing a sum that silently excludes a realm.
+  incomplete?: boolean;
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card

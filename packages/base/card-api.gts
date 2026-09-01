@@ -3991,8 +3991,17 @@ registerRelationshipProbe((instance, field) => {
       );
       // The page ceiling bounds `instances` but not this: it is what the query
       // matched, so the two disagree exactly when the field holds a prefix.
-      let total = resource.meta?.page?.total;
-      queryTotalMatchCount = typeof total === 'number' ? total : undefined;
+      //
+      // Unless the search lost a realm. Then the total covers only the realms
+      // that answered, which is a floor rather than the match count, so it is
+      // withheld — and the field is short by the amount that realm withheld
+      // along with it.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+      } else {
+        let total = resource.meta?.page?.total;
+        queryTotalMatchCount = typeof total === 'number' ? total : undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
     return {

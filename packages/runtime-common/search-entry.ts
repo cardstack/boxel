@@ -953,6 +953,11 @@ export function searchEntryWireQueryFromQuery(
 
 export function combineSearchEntryResults(
   docs: EntryCollectionDocument[],
+  // How many realms the search fanned out to. A realm that fails is dropped
+  // from `docs` rather than raising, so fewer docs than realms is the only
+  // evidence here that the merge is missing one — and the summed total then
+  // counts only the realms that answered.
+  attemptedRealmCount?: number,
 ): EntryCollectionDocument {
   let combined: EntryCollectionDocument = {
     data: [],
@@ -979,6 +984,13 @@ export function combineSearchEntryResults(
       }
       included.push(resource);
     }
+  }
+
+  if (attemptedRealmCount != null && docs.length < attemptedRealmCount) {
+    // Say the sum is short rather than letting it read as the match count. How
+    // many instances the missing realm holds is exactly what its failure
+    // withheld, so the total cannot be repaired here — only labelled.
+    combined.meta.incomplete = true;
   }
 
   if (included.length > 0) {
@@ -1017,7 +1029,10 @@ export async function searchEntryRealms(
     (label, queryLabel) =>
       `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  let combined = combineSearchEntryResults(docs);
+  let combined = combineSearchEntryResults(
+    docs,
+    realms.filter((realm) => Boolean(realm)).length,
+  );
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
