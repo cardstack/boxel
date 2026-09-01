@@ -205,6 +205,29 @@ module.exports = function (environment) {
     featureFlags: {},
   };
 
+  // Where each `@cardstack/…` prefix realm is served. This answers a different
+  // question from the `resolved*RealmURL` values it is built from: those say
+  // which realms are part of this environment — a list the test environment
+  // trims for isolation — while this says where a prefix resolves to, which
+  // the realm-server registers for any realm it starts regardless. Keeping
+  // them separate is what lets the host agree with the realm-server about the
+  // prefix set without also joining the catalog realm to every test's realm
+  // list. A realm absent from this build has no entry, and its prefix goes
+  // unregistered.
+  //
+  // The prefixes are spelled here because this file is CommonJS evaluated at
+  // build time and cannot import `PREFIX_REALMS`. A realm-server test asserts
+  // that every key here is declared there, so the two cannot drift apart
+  // silently.
+  ENV.prefixRealmURLs = Object.fromEntries(
+    [
+      ['@cardstack/base/', ENV.resolvedBaseRealmURL],
+      ['@cardstack/catalog/', ENV.resolvedCatalogRealmURL],
+      ['@cardstack/skills/', ENV.resolvedSkillsRealmURL],
+      ['@cardstack/openrouter/', ENV.resolvedOpenRouterRealmURL],
+    ].filter(([, url]) => typeof url === 'string' && url !== ''),
+  );
+
   if (environment === 'test') {
     // Testem prefers this...
     ENV.locationType = 'none';
@@ -225,23 +248,14 @@ module.exports = function (environment) {
     ENV.sqlSchema = sqlSchema;
     ENV.featureFlags = {};
 
-    // The catalog realm follows SKIP_CATALOG, the same signal the realm-server
-    // gates START_CATALOG on, so the two processes register the same set of
-    // realm prefixes. Nulling it unconditionally here made a host built for
-    // tests disagree with a realm-server that had started the catalog, and
-    // `internalKeyFor` resolves through each process's own prefix set — so the
-    // definitions cache one writes is keyed differently from what the other
-    // reads. Host CI sets SKIP_CATALOG=true, so this is already undefined
-    // there; what changes is that it is no longer undefined when the catalog
-    // realm is in fact running.
-    if (skipCatalog) {
-      ENV.resolvedCatalogRealmURL = undefined;
-    }
-    // The OpenRouter realm stays unconditionally absent: tests that exercise
-    // the model cost-tier lookup point this at their own test realm
-    // explicitly, so a real mapping would be overridden anyway. This is test
-    // isolation rather than a mirror of a realm-server switch, which is why it
-    // is not gated the way the catalog above is.
+    // Neither the catalog nor the OpenRouter realm belongs to a test's realm
+    // list: a test's definitions and search results must come from its own
+    // realm rather than from whatever a running catalog happens to hold, and
+    // tests exercising the model cost-tier lookup point OpenRouter at their own
+    // test realm. Their prefixes are unaffected — `prefixRealmURLs` above was
+    // built before this, so a prefix still resolves to a realm the
+    // realm-server started.
+    ENV.resolvedCatalogRealmURL = undefined;
     ENV.resolvedOpenRouterRealmURL = undefined;
     ENV.defaultSystemCardId = 'http://test-realm/test/SystemCard/default';
     ENV.defaultFieldSpecId = 'http://test-realm/test/fields/field';
@@ -252,15 +266,11 @@ module.exports = function (environment) {
     ENV.logLevels = '*=warn';
   }
 
-  // The catalog supplies these defaults everywhere except tests, which set
-  // their own test-realm ids above and must keep them: a test that resolved
-  // `defaultSystemCardId` into a running catalog would fetch definitions from
-  // outside its own realm, so its result would depend on what that catalog
-  // happens to hold. The test environment previously reached this block with
-  // `resolvedCatalogRealmURL` always undefined, so the guard was implicit;
-  // now that the catalog prefix is registered whenever the realm is running,
-  // it has to be stated.
-  if (ENV.resolvedCatalogRealmURL && environment !== 'test') {
+  // The catalog owns these defaults wherever it is part of the environment.
+  // A test build is never such an environment — `resolvedCatalogRealmURL` is
+  // cleared above — so the test-realm ids assigned there survive, and a test's
+  // definitions never depend on what a running catalog holds.
+  if (ENV.resolvedCatalogRealmURL) {
     ENV.defaultSystemCardId = new URL(
       'SystemCard/default',
       withTrailingSlash(ENV.resolvedCatalogRealmURL),

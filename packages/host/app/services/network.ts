@@ -73,18 +73,25 @@ export default class NetworkService extends Service {
       scheduleFetchTimer: (callback, ms) => scheduleNativeTimeout(callback, ms),
     });
     // Registered from the shared declaration rather than one block per realm,
-    // so this set cannot drift from the one the realm-server registers. A realm
-    // whose config property is absent or empty is not part of this build and is
-    // skipped, which is how a build configured without the catalog or
-    // openrouter realm leaves those prefixes unregistered. An `alias`
-    // additionally maps a `https://` spelling onto the same realm; only the
-    // base realm has one.
-    for (let { prefix, alias, hostConfigKey } of PREFIX_REALMS) {
-      let configured = (config as Record<string, unknown>)[hostConfigKey];
-      if (typeof configured !== 'string' || configured === '') {
+    // so this set cannot drift from the one the realm-server registers.
+    //
+    // The URLs come from `prefixRealmURLs`, which carries where each prefix
+    // realm is served, rather than from the realm-list properties: a test build
+    // trims the catalog and openrouter realms out of its lists for isolation
+    // while the realm-server still serves them, and the prefix has to resolve
+    // either way. A realm absent from this build has no entry and no prefix.
+    // An `alias` additionally maps a `https://` spelling onto the same realm;
+    // only the base realm has one.
+    let prefixRealmURLs = (config.prefixRealmURLs ?? {}) as Record<
+      string,
+      string
+    >;
+    for (let { prefix, alias } of PREFIX_REALMS) {
+      let servedAt = prefixRealmURLs[prefix];
+      if (typeof servedAt !== 'string' || servedAt === '') {
         continue;
       }
-      let resolvedRealmURL = new URL(withTrailingSlash(configured));
+      let resolvedRealmURL = new URL(withTrailingSlash(servedAt));
       if (alias) {
         virtualNetwork.addURLMapping(new URL(alias), resolvedRealmURL);
       }
