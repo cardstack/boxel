@@ -937,20 +937,34 @@ module(basename(import.meta.filename), function () {
 
         let calls = 0;
         let sawRecycleSettled: boolean[] = [];
+        let firstRenderEntered = new Deferred<void>();
         (built.prerenderer as any).prerenderVisit = async () => {
           calls++;
           sawRecycleSettled.push(recycleSettled);
+          if (calls === 1) {
+            firstRenderEntered.fulfill();
+          }
           return calls === 1 ? moduleFailure() : rendered();
         };
 
-        let resPromise = visitRequest(
-          request,
-          `${realmURL.href}stale-shell`,
-          authFor(),
-        );
-        // The re-render must be waiting on the recycle, not already done.
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        assert.strictEqual(calls, 1, 're-render has not started yet');
+        // Kicked into flight explicitly: supertest dispatches when its
+        // thenable is first awaited, and this test waits on the handler
+        // before awaiting the response — so without this the request is
+        // never sent and the wait below has nothing to wait for.
+        let resPromise = (async () =>
+          await visitRequest(
+            request,
+            `${realmURL.href}stale-shell`,
+            authFor(),
+          ))();
+        // Waits for the render to report itself rather than for a clock: how
+        // long the route spends parsing and authenticating before it reaches
+        // the prerenderer is not this test's subject, and on a loaded runner
+        // it is longer than any interval worth sleeping. The observation below
+        // is stable under any interleaving because the second render cannot
+        // start while the recycle promise is pending.
+        await firstRenderEntered.promise;
+        assert.strictEqual(calls, 1, 're-render waits for the recycle');
         recycleDeferred.fulfill();
 
         let res = await resPromise;
@@ -1034,12 +1048,21 @@ module(basename(import.meta.filename), function () {
       test('a drain during the re-render answers draining', async function (assert) {
         let localDraining = false;
         let drainingDeferred = new Deferred<void>();
+        // Reports when the handler has entered the re-render and parked on the
+        // recycle. Draining any earlier trips the `isDraining` check that
+        // precedes the re-render, so the handler would skip it and answer with
+        // the first result — a different path from the one under test.
+        let recycleWaitEntered = new Deferred<void>();
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           isDraining: () => localDraining,
           drainingPromise: drainingDeferred.promise,
           getHostShellHash: shellThatMovesOnce(),
-          awaitHostShellRecycle: () => new Promise<void>(() => {}),
+          awaitHostShellRecycle: () => {
+            recycleWaitEntered.fulfill();
+            // Never settles, so the drain is guaranteed to win the race.
+            return new Promise<void>(() => {});
+          },
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1049,12 +1072,17 @@ module(basename(import.meta.filename), function () {
           return moduleFailure();
         };
 
-        let resPromise = visitRequest(
-          request,
-          `${realmURL.href}drain-during-rerender`,
-          authFor(),
-        );
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        // Kicked into flight explicitly: supertest dispatches when its
+        // thenable is first awaited, and this test waits on the handler
+        // before awaiting the response — so without this the request is
+        // never sent and the wait below has nothing to wait for.
+        let resPromise = (async () =>
+          await visitRequest(
+            request,
+            `${realmURL.href}drain-during-rerender`,
+            authFor(),
+          ))();
+        await recycleWaitEntered.promise;
         localDraining = true;
         drainingDeferred.fulfill();
 
