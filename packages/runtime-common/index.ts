@@ -875,11 +875,23 @@ export type PrerenderVisitArgs = {
   renderScope?: string;
 };
 
-// The scope string both halves of a pass compute independently. A realm's
-// generation advances once per index pass, which is exactly the boundary
-// beyond which a card the tab holds may have been rewritten.
-export function renderScopeFor(realmURL: string, generation: number): string {
-  return `${realmURL}@${generation}`;
+// The scope string both halves of a pass compute independently, from the queue
+// job of the index pass — its own for the index visit, the spawning pass's for
+// the prerender-html job that pass enqueued.
+//
+// The pass's *generation* would read more naturally and is not sound: it is
+// `current_generation + 1` computed at batch start and only committed by
+// `done()`, so a pass that dies before finalizing leaves the row untouched and
+// the next pass computes the same number — the same scope, for a realm whose
+// files may have moved in between. A queue job id advances whatever happens.
+//
+// The residual is a retry of one job, which keeps its id across attempts: a
+// write landing between a failed attempt and its retry can be reduced over from
+// the earlier attempt's copies. That write enqueues its own pass, whose
+// invalidation set covers the same rows under a scope of its own, so the window
+// closes on the next pass rather than persisting.
+export function renderScopeFor(realmURL: string, passJobId: number): string {
+  return `${realmURL}@${passJobId}`;
 }
 
 // Arguments for releasing an indexing batch's ownership of an affinity,

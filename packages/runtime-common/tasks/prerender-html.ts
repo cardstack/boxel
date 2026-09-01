@@ -270,6 +270,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       realmURL: new URL(realmURL),
       changes,
       generation,
+      spawningJobId: args.spawningJobId ?? null,
       loaderEpoch,
       preWarm,
       indexWriter,

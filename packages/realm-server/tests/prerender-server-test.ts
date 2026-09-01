@@ -127,6 +127,120 @@ module(basename(import.meta.filename), function () {
       await prerenderer.stop();
     });
 
+    // The hop this file owns in the `renderScope` chain. The scope is what
+    // lets a prerender tab tell one job's resident instances from another's,
+    // and every hop between `visit-file.ts` and the page destructures it by
+    // name — so a hop that drops it fails silently: the render still returns
+    // HTML, built from instances the previous job left behind.
+    module('renderScope', function () {
+      function stubVisit(captured: { attrs: any[] }) {
+        return async function (args: any) {
+          captured.attrs.push(args);
+          return {
+            response: {
+              card: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: [],
+                types: null,
+                isolatedHTML: '<h1>stub</h1>',
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                iconHTML: null,
+                markdown: null,
+              },
+            },
+            timings: {
+              launchMs: 0,
+              renderMs: 0,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: 'page-stub',
+              affinityType: 'realm' as const,
+              affinityValue: realmURL.href,
+              reused: false,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+      }
+
+      async function postVisit(attributes: Record<string, unknown>) {
+        return await request
+          .post('/prerender-visit')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'prerender-visit-request',
+              attributes: {
+                url: `${realmURL.href}1.json`,
+                auth: testCreatePrerenderAuth(testUserId, {
+                  [realmURL.href]: ['read', 'write', 'realm-owner'],
+                }),
+                realm: realmURL.href,
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
+                renderOptions: { cardRender: true },
+                ...attributes,
+              },
+            },
+          });
+      }
+
+      test('a renderScope on the request reaches the prerenderer', async function (assert) {
+        let captured: { attrs: any[] } = { attrs: [] };
+        let original = prerenderer.prerenderVisit;
+        prerenderer.prerenderVisit = stubVisit(captured) as any;
+        try {
+          let res = await postVisit({
+            renderScope: `${realmURL.href}@4242`,
+          });
+          assert.strictEqual(res.status, 201, 'HTTP 201');
+          assert.strictEqual(
+            captured.attrs[0]?.renderScope,
+            `${realmURL.href}@4242`,
+            'the scope off the request body is forwarded to the visit',
+          );
+        } finally {
+          prerenderer.prerenderVisit = original;
+        }
+      });
+
+      test('a blank or non-string renderScope is dropped rather than forwarded', async function (assert) {
+        // The page falls back to the job id when it sees no scope, which is
+        // narrower and so never unsound. Forwarding `''` or a number would
+        // instead key every such visit to one shared bucket.
+        let original = prerenderer.prerenderVisit;
+        for (let scope of ['', '   ', 42, null]) {
+          let captured: { attrs: any[] } = { attrs: [] };
+          prerenderer.prerenderVisit = stubVisit(captured) as any;
+          try {
+            let res = await postVisit({ renderScope: scope });
+            assert.strictEqual(res.status, 201, `HTTP 201 for ${scope}`);
+            assert.strictEqual(
+              captured.attrs[0]?.renderScope,
+              undefined,
+              `${JSON.stringify(scope)} is not forwarded as a scope`,
+            );
+          } finally {
+            prerenderer.prerenderVisit = original;
+          }
+        }
+      });
+    });
+
     test('screenshot route rejects an out-of-bounds captureSpec by field name', async function (assert) {
       // This route is its own HTTP surface: without the shared bounds check
       // an oversize viewport would reach page.setViewport on a pooled page

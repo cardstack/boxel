@@ -42,8 +42,22 @@ export type ReferenceCount = Map<string, number>;
 
 const loadTrackingLogger = logger('store-load-tracking');
 // Every scope boundary a prerender tab crosses, and what it cost. A tab that
-// crosses more often than it renders is paying for reloads it doesn't need,
-// and this line is the only place that shows up.
+// crosses more often than it renders is paying for reloads it doesn't need.
+//
+// Local only, and there is no level that changes that: host log levels are
+// baked at build time from `ENV.logLevels`, and a production build pins them
+// to `*=warn` outright (`host/config/environment.js`) — the prerender service
+// loads built host assets and has no way to inject `_logDefinitions`, so
+// nothing below `warn` from host code is readable in a deployed environment
+// whatever it is written at. Raising this to `warn` to buy visibility would
+// misreport an ordinary, expected event. To read it, run a host build with
+// `LOG_LEVELS=store-job-scope=debug`.
+//
+// The deployed signal for the same question is the per-row render diagnostic
+// `searchDocLinkLoads` (`runtime-common/index.ts`), which lands in
+// `boxel_index.diagnostics`: a rebuilt row that counts link targets while
+// loading none of them is a render that resolved from residency, which is the
+// symptom a missing scope crossing produces.
 const jobScopeLogger = logger('store-job-scope');
 
 type LocalId = string;
@@ -322,13 +336,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // whose every link target is already resident performs no load at all: the
   // boundary has to be observed before the root is hydrated, so that no owner
   // in this job can be handed a target from the last one.
-  observeIndexingJob(): void {
+  //
+  // Returns whether a boundary was actually crossed, so that a caller holding
+  // state of its own keyed to the same scope — `StoreService`'s in-flight maps
+  // — can drop it in step rather than on every visit.
+  observeIndexingJob(): boolean {
     let scope = currentRenderScope();
     if (scope === undefined) {
-      return;
+      return false;
     }
     if (scope === this.#jobScopedStateJobId) {
-      return;
+      return false;
     }
     let held = this.#jobScopedStateJobId;
     let droppedInstances =
@@ -355,6 +373,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         `render scope moved from ${held} to ${scope}; dropped ${droppedInstances} instance(s) and ${droppedDocs} cached document(s)`,
       );
     }
+    return true;
   }
 
   // Instance residency is job-scoped for the same reason the document cache
@@ -529,8 +548,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return await promise;
     }
     promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
+    // Held locally as well as in the map: a scope boundary clears the map
+    // mid-flight, so reading it back in the `finally` would time this load
+    // against a newer load's start — or find nothing and drop the entry.
+    let startedAt = Date.now();
     this.#cardDocsInFlight.set(url, promise);
-    this.#cardDocStartedAt.set(url, Date.now());
+    this.#cardDocStartedAt.set(url, startedAt);
     if (!opts?.untracked) {
       this.trackLoad(promise);
     }
@@ -555,7 +578,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return doc;
     } finally {
-      let startedAt = this.#cardDocStartedAt.get(url);
       // Only retract this load's own entry. A scope boundary clears the map
       // mid-flight and the next scope may already have issued its own fetch
       // for the same URL, which an unguarded delete would evict — leaving its
@@ -602,8 +624,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return await promise;
     }
     promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
+    // Held locally for the same reason as the card-document load above.
+    let startedAt = Date.now();
     this.#fileMetaDocsInFlight.set(url, promise);
-    this.#fileMetaStartedAt.set(url, Date.now());
+    this.#fileMetaStartedAt.set(url, startedAt);
     if (!opts?.untracked) {
       this.trackLoad(promise);
     }
@@ -618,7 +642,6 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return doc;
     } finally {
-      let startedAt = this.#fileMetaStartedAt.get(url);
       // Guarded for the same reason as the card-document load above.
       if (this.#fileMetaDocsInFlight.get(url) === promise) {
         this.#fileMetaDocsInFlight.delete(url);

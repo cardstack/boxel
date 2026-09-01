@@ -241,7 +241,9 @@ export async function renderFileForIndexing({
     url: fileURL,
     auth,
     batchId,
-    renderScope: renderScopeFor(realmURL.href, batch.currentGeneration),
+    ...(jobInfo
+      ? { renderScope: renderScopeFor(realmURL.href, jobInfo.jobId) }
+      : {}),
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),
     ...(jobInfo ? { jobId: `${jobInfo.jobId}.${jobInfo.reservationId}` } : {}),
   };

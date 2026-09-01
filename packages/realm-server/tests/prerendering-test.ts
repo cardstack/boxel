@@ -7443,6 +7443,191 @@ module(basename(import.meta.filename), function () {
     });
   });
 
+  module('prerender - render scope', function () {
+    // The prerenderer is the last hop before the page: `visit-file.ts`
+    // computes the scope, it rides the request body through
+    // `remote-prerenderer.ts` and `prerender-app.ts`, and this class hands it
+    // to the render runner, which stamps it on the page. Every hop
+    // destructures it by name, so a hop that drops it is silent — the render
+    // still returns HTML, built from whatever instances the tab already held
+    // from another job. The retry path is a second, separate call site, and it
+    // matters more than the first: the retry is exactly when a tab is being
+    // reused.
+    test('the scope reaches every visit attempt, retry included', async function (assert) {
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let scopes: Array<string | undefined> = [];
+      let retryRealm = 'https://scope-retry.example/';
+      let cardURL = `${retryRealm}card`;
+      let scope = `${retryRealm}@815`;
+
+      try {
+        let attemptCount = 0;
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          let { affinityType, affinityValue, url: attemptUrl } = args;
+          scopes.push((args as { renderScope?: string }).renderScope);
+          attemptCount++;
+          let baseResponse: RenderResponse = {
+            serialized: null,
+            searchDoc: null,
+            displayNames: null,
+            deps: null,
+            types: null,
+            iconHTML: null,
+            isolatedHTML: `${attemptUrl}-render-${attemptCount}`,
+            headHTML: null,
+            atomHTML: null,
+            embeddedHTML: null,
+            fittedHTML: null,
+            markdown: null,
+          };
+          // First attempt fails with the signature the prerenderer retries on,
+          // so the second call site is exercised too.
+          let card: RenderResponse =
+            attemptCount === 1
+              ? {
+                  ...baseResponse,
+                  error: {
+                    type: 'instance-error',
+                    error: {
+                      message: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                      status: 500,
+                      title: 'boom',
+                      additionalErrors: null,
+                      stack: `Failed to execute 'removeChild' on 'Node': NotFoundError`,
+                    },
+                  },
+                }
+              : baseResponse;
+
+          return {
+            response: { card },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: `page-${attemptCount}`,
+              affinityType,
+              affinityValue,
+              reused: attemptCount > 1,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: retryRealm,
+          realm: retryRealm,
+          url: cardURL,
+          auth: 'test-auth',
+          renderOptions: { cardRender: true },
+          renderScope: scope,
+        });
+
+        assert.deepEqual(
+          scopes,
+          [scope, scope],
+          'both the initial attempt and the retry carry the scope',
+        );
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+
+    test('a visit with no scope forwards none', async function (assert) {
+      // An interactive render has no indexing job behind it. The page keys on
+      // the job id in that case, which is narrower and so never unsound; a
+      // forwarded empty string would instead pool every such visit together.
+      let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
+      let prerenderer: Prerenderer | undefined;
+      let scopes: Array<string | undefined> = [];
+      let realm = 'https://scope-absent.example/';
+
+      try {
+        RenderRunner.prototype.prerenderVisitAttempt = async function (
+          args: Parameters<RenderRunner['prerenderVisitAttempt']>[0],
+        ) {
+          let { affinityType, affinityValue, url: attemptUrl } = args;
+          scopes.push((args as { renderScope?: string }).renderScope);
+          return {
+            response: {
+              card: {
+                serialized: null,
+                searchDoc: null,
+                displayNames: null,
+                deps: null,
+                types: null,
+                iconHTML: null,
+                isolatedHTML: `${attemptUrl}-render`,
+                headHTML: null,
+                atomHTML: null,
+                embeddedHTML: null,
+                fittedHTML: null,
+                markdown: null,
+              } as RenderResponse,
+            },
+            timings: {
+              launchMs: 0,
+              renderMs: 1,
+              waits: {
+                semaphoreMs: 0,
+                admissionMs: 0,
+                tabQueueMs: 0,
+                tabStartupMs: 0,
+                tabProbeMs: 0,
+              },
+            },
+            pool: {
+              pageId: 'page-1',
+              affinityType,
+              affinityValue,
+              reused: false,
+              evicted: false,
+              timedOut: false,
+            },
+          };
+        };
+
+        prerenderer = getPrerendererForTesting({
+          maxPages: 1,
+          serverURL: 'http://127.0.0.1:4225',
+        });
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: realm,
+          realm,
+          url: `${realm}card`,
+          auth: 'test-auth',
+          renderOptions: { cardRender: true },
+        });
+
+        assert.deepEqual(scopes, [undefined], 'no scope is invented');
+      } finally {
+        RenderRunner.prototype.prerenderVisitAttempt = originalAttempt;
+        await prerenderer?.stop();
+      }
+    });
+  });
+
   module('prerender - card retries', function () {
     test('card prerender retries with clear cache on retry signature', async function (assert) {
       let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
