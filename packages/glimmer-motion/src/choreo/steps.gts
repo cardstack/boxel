@@ -12,6 +12,7 @@ import type { BeaconRef } from './beacons.ts';
 import type { GestureRef } from './gesture.ts';
 import type {
   Block,
+  Camera3DWaypoint,
   DeliveryBy,
   DeliveryOrder,
   DeriveContext,
@@ -498,17 +499,36 @@ export class Camera3D extends StepComponent<
     dolly?: number;
     duration?: number;
     ease?: Easing;
+    /** the orbit centre, in the host's scene units — tweened with the pose */
+    look?: { x: number; y: number; z: number };
     of?: Query | Query[];
     pitch?: number;
     spring?: SpringSpec;
+    /** the path's grip, 0 lively .. 1 linear — see Camera3DStep.tension */
+    tension?: number;
+    /** waypoints for a spline path — see Camera3DStep.through */
+    through?: Camera3DWaypoint[];
     x?: number;
     y?: number;
     yaw?: number;
   }
 > {
   node(): TimelineNode {
-    const { by, delay, dolly, duration, ease, pitch, spring, x, y, yaw } =
-      this.args;
+    const {
+      by,
+      delay,
+      dolly,
+      duration,
+      ease,
+      look,
+      pitch,
+      spring,
+      tension,
+      through,
+      x,
+      y,
+      yaw,
+    } = this.args;
     return {
       at: this.args.at,
       by,
@@ -516,11 +536,14 @@ export class Camera3D extends StepComponent<
       dolly,
       ease,
       kind: 'camera3d',
+      look,
       ms: msOf(duration),
       name: this.args.name,
       of: this.args.of ?? {},
       pitch,
       spring,
+      tension,
+      through,
       x,
       y,
       yaw,

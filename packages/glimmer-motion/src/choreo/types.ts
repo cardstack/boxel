@@ -391,6 +391,16 @@ export interface CameraStep extends StepBase {
 export interface Camera3DState {
   /** distance as a multiple of the host's own framing; 1 is "as framed" */
   dolly: number;
+  /**
+   * The orbit's CENTRE, in the host's own scene units — the missing sixth
+   * number the Sylva spike had to route around the score as Perform cues.
+   * A pose with an implied centre works while a scene has one subject; the
+   * moment it has several, the centre must move, and it must move ON THE
+   * CLOCK: part of the tweened pose, reconstructible by a scrub, not a
+   * side-channel with an easing of its own. Optional, so every host that
+   * never aims (the mockup's phone is always the centre) is untouched.
+   */
+  look?: { x: number; y: number; z: number };
   /** degrees above the subject */
   pitch: number;
   /**
@@ -408,15 +418,50 @@ export interface Camera3DState {
   yaw: number;
 }
 
+/**
+ * One waypoint on a `@through` path. Anything omitted carries forward from
+ * the previous waypoint (and, for the first, from the pose in force), the
+ * way keyframe holds work everywhere else.
+ */
+export interface Camera3DWaypoint {
+  dolly?: number;
+  look?: { x: number; y: number; z: number };
+  pitch?: number;
+  x?: number;
+  y?: number;
+  yaw?: number;
+}
+
 export interface Camera3DStep extends StepBase {
   /** add to the pose in force instead of replacing it — Pan's rule, in 3D */
   by?: boolean;
   dolly?: number;
   ease?: Easing;
   kind: 'camera3d';
+  /** the orbit centre this shot aims at — see Camera3DState.look */
+  look?: { x: number; y: number; z: number };
   ms?: number;
   pitch?: number;
   spring?: SpringSpec;
+  /**
+   * A PATH, not a pair: the shot runs from the pose in force THROUGH these
+   * waypoints on one clock, sampled along a Catmull-Rom spline in pose
+   * space — so the camera crosses every waypoint with continuous velocity
+   * instead of parking at each one, which no chain of two-point tweens can
+   * do without hand-matched eases. The step's own pose args are ignored
+   * when this is present; the last waypoint is the destination. `@by` does
+   * not combine with it, and the ease applies to progress along the WHOLE
+   * path ('linear' is usually what a path wants — the spline is the shape).
+   * Yaw is interpolated numerically: unwrap it in the waypoints, the way
+   * any tween here expects.
+   */
+  /**
+   * How tight a `@through` path holds its line: 0 is classic Catmull-Rom
+   * (lively, will sway), 1 is piecewise-linear, and the default 0.5 is a
+   * camera operator's steady hand.
+   */
+  tension?: number;
+  through?: Camera3DWaypoint[];
   /** truck / pedestal, in fractions of the framed height */
   x?: number;
   y?: number;
@@ -601,8 +646,11 @@ export interface Cue {
   /** camera3d: hand an orbit pose to the host, every frame it changes */
   camera3d?: {
     by?: boolean;
+    tension?: number;
+    through?: Camera3DWaypoint[];
     to: {
       dolly?: number;
+      look?: { x: number; y: number; z: number };
       pitch?: number;
       x?: number;
       y?: number;

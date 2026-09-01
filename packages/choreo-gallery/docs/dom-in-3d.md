@@ -1,8 +1,10 @@
 # DOM in 3D: what the mapping is, and what it would take to go further
 
-**Status:** two cases ship — `/mockup` (a phone) and `/long-take` (a
-laptop), both on `c.Camera3D`. Cases 3 and up are design; nothing in them
-is implemented.
+**Status:** three stages ship — `/mockup` (a phone), `/long-take` (a
+laptop), and `/_sylva` (free-floating cards in a shader world), all on
+`c.Camera3D`. Cases 3 and 4 are PROVEN by Sylva, including the input
+raycast; case 5 is exercised there in its scene-geometry form. Cases 6 up
+remain design.
 
 ## What exists
 
@@ -131,7 +133,7 @@ it is a camera zoomed to nothing. The region collapses to a point, every
 later measurement is taken through its own zero scale, and there is no way
 back — a blank screen behind a perfectly healthy run.
 
-## Case 3 — visionOS-style cards floating in 3D
+## Case 3 — visionOS-style cards floating in 3D _(shipped: `/_sylva`)_
 
 Several DOM panels at arbitrary poses in a shared scene.
 
@@ -150,13 +152,24 @@ ordinary region, and `c.Camera3D` already moves the shot. Case 2 is the
 evidence for the second half of that claim: a region inside a plane needed
 nothing from the library it would not have needed on flat ground.
 
-**The open question** is input. Pointer events land on whichever DOM
-element is topmost in paint order, which after sorting is the nearest
-card — correct by construction. But a card _behind_ geometry is still
-clickable, because the DOM knows nothing about the depth buffer. See
-case 4.
+**The open question was input, and Sylva closed it.** Pointer events
+land on whichever DOM element is topmost in paint order, which after
+sorting is the nearest card — correct by construction. A card _behind_
+geometry is still clickable, because the DOM knows nothing about the
+depth buffer — so Sylva raycasts every card press against the scene
+first (`swallow`), and if the wood is nearer along that ray than the
+card, the press belongs to the moss. The per-frame z-sort estimated
+above is real and runs in `placeCards`, in the same callback as
+everything else.
 
-## Case 4 — a pop-up card inside a 3D scene ("Accept?", "Add a comment")
+One lesson the estimate missed: the card's ENTRANCE animation and its
+hole must have one writer. Sylva's first cut animated the shell with
+Motion and slaved the hole to a `getComputedStyle` read from the host's
+loop — two rAF callbacks, no ordering guarantee, and the hole trailed
+the shell by a frame at spring speed. The host integrates the entrance
+itself now and writes both from the same numbers in the same frame.
+
+## Case 4 — a pop-up card inside a 3D scene _(shipped: `/_sylva`)_
 
 A card anchored to a point in a model, facing the viewer.
 
@@ -188,12 +201,20 @@ is subject to it. Three options:
 3. **Render the card into a texture** — which is exactly the trade the
    whole approach exists to avoid, since it loses the live DOM.
 
-Option 1 is no longer speculative; case 2 is it, running in the gallery.
-What remains unproven is the free-floating variant, where the proxy is
-authored rather than inherited from the model — and the input problem from
-case 3, which the depth buffer does not touch either way: an occluded card
-still receives pointer events. That wants a raycast against the scene at
-pointer-down before the DOM sees it, and it is the natural next spike.
+Option 1 shipped twice over: case 2 inherited its proxy from the model,
+and Sylva AUTHORS one — a `NoBlending` mesh cut to the card's own
+rounded-rect silhouette (a square hole leaks a dark notch past every
+14px corner), seated each frame at the card's animated pose. Two of
+Sylva's four cards are pinned behind the arch on purpose, as the
+occlusion test the near pair controls for. The input raycast this
+paragraph asked for is `swallow`, described under case 3.
+
+One deliberate deviation from this case's title: Sylva's cards are NOT
+billboarded. A fixed orientation is what makes a card read as PLACED —
+it foreshortens as the shot comes round, and its parallax matches the
+branch it is pinned to. The cost is that a panel is readable from one
+side only, which turned out to be a feature: framing became the tour's
+job, and the far pair reads from round the back of the tree.
 
 ## Case 5 — WebGPU / three effects over a 2D or CSS3D plane
 
@@ -201,9 +222,14 @@ Grade, bloom, distortion or a shader pass applied _on top of_ live DOM.
 
 **What it adds to the mapping: nothing.** This is the same compositing
 trick pointed the other way — the DOM shows through the hole, and anything
-drawn over it is ordinary WebGL. Both shipped demos already do a small
+drawn over it is ordinary WebGL. Both device demos already do a small
 version: the glass, its clearcoat highlight and the environment reflection
-are all drawn over a live screen.
+are all drawn over a live screen. Sylva does the free-floating version as
+a button you can press: "loose the spores" seeds a particle burst biased
+along the camera ray, and because the hole proxy WRITES DEPTH at the
+card's plane, the cloud sorts against the DOM physically — spores nearer
+the lens draw over the panel, spores behind it are clipped by it. Scene
+geometry over the hole, exactly as the constraint below prescribes.
 
 **What it does need is a decision about the hole's alpha**, which is a
 material concern rather than renderer code. Every point of tint the glass

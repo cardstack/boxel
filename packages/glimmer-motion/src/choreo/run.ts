@@ -27,6 +27,7 @@ import { motionSpeed, scaleTransition } from '../speed.ts';
 import { cssEasing, deliver, type Delivery, keyframesOf } from './deliver.ts';
 import type {
   Camera3DState,
+  Camera3DWaypoint,
   CameraState,
   ChoreoNode,
   Compiled,
@@ -39,6 +40,108 @@ import type {
   Rect,
   Sprite,
 } from './types.ts';
+
+/**
+ * One cardinal-spline component: Hermite through p1 and p2, tangents off
+ * p0 and p3 scaled by `k = (1 - tension) / 2`. Tension 0 is the classic
+ * Catmull-Rom — lively, and loose enough to overshoot between waypoints
+ * that change direction; 1 collapses the tangents and the path goes
+ * piecewise-linear. The default (0.5) is the steady hand: it still crosses
+ * every waypoint with continuous velocity, but it does not sway on the way.
+ */
+function crVal(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  u: number,
+  k: number,
+) {
+  const m1 = k * (p2 - p0);
+  const m2 = k * (p3 - p1);
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return (
+    (2 * u3 - 3 * u2 + 1) * p1 +
+    (u3 - 2 * u2 + u) * m1 +
+    (-2 * u3 + 3 * u2) * p2 +
+    (u3 - u2) * m2
+  );
+}
+
+/**
+ * Resolve a `@through` path's control points: the pose in force first, then
+ * each waypoint with its omissions carried forward. If ANY point carries a
+ * look, every point gets one (the origin, when unstated), so the aim is
+ * splined by the same arithmetic as the pose.
+ */
+function resolveThrough(
+  from: Camera3DState,
+  through: Camera3DWaypoint[],
+): Camera3DState[] {
+  const aimed = !!from.look || through.some((w) => w.look);
+  const seed: Camera3DState = {
+    ...from,
+    look: aimed ? (from.look ?? { x: 0, y: 0, z: 0 }) : undefined,
+  };
+  const pts = [seed];
+  let prev = seed;
+  for (const w of through) {
+    const p: Camera3DState = {
+      dolly: w.dolly ?? prev.dolly,
+      look: aimed ? (w.look ?? prev.look) : undefined,
+      pitch: w.pitch ?? prev.pitch,
+      x: w.x ?? prev.x,
+      y: w.y ?? prev.y,
+      yaw: w.yaw ?? prev.yaw,
+    };
+    pts.push(p);
+    prev = p;
+  }
+  return pts;
+}
+
+/** sample the spline at overall progress p ∈ [0, 1] (uniform segments) */
+function sampleThrough(
+  from: Camera3DState,
+  through: Camera3DWaypoint[],
+  progress: number,
+  tension?: number,
+): Camera3DState {
+  const k = (1 - (tension ?? 0.5)) / 2;
+  const pts = resolveThrough(from, through);
+  const segs = pts.length - 1;
+  const s = Math.min(segs - 1e-9, Math.max(0, progress * segs));
+  const i = Math.floor(s);
+  const u = s - i;
+  const P = (j: number) => pts[Math.max(0, Math.min(pts.length - 1, j))]!;
+  const p0 = P(i - 1);
+  const p1 = P(i);
+  const p2 = P(i + 1);
+  const p3 = P(i + 2);
+  const v = (key: 'dolly' | 'pitch' | 'x' | 'y' | 'yaw') =>
+    crVal(p0[key], p1[key], p2[key], p3[key], u, k);
+  const out: Camera3DState = {
+    dolly: v('dolly'),
+    pitch: v('pitch'),
+    x: v('x'),
+    y: v('y'),
+    yaw: v('yaw'),
+  };
+  if (p1.look && p2.look) {
+    const l = (a: 'x' | 'y' | 'z') =>
+      crVal(
+        (p0.look ?? p1.look)![a],
+        p1.look![a],
+        p2.look![a],
+        (p3.look ?? p2.look)![a],
+        u,
+        k,
+      );
+    out.look = { x: l('x'), y: l('y'), z: l('z') };
+  }
+  return out;
+}
 
 /** the properties whose mid-flight drive means a sprite is IN SPACE — a
  *  replacement pass must carry these on, never snap them (§3.1) */
@@ -1021,10 +1124,36 @@ export class ChoreoRun implements Run {
       }
       if (cue.camera3d) {
         const from: Camera3DState = shot ?? { ...this.initial3d };
+        const through = cue.camera3d.through;
+        if (through?.length) {
+          /**
+           * A PATH: the pose in force and the waypoints are the control
+           * points of a Catmull-Rom spline, sampled at the cue's eased
+           * progress. One clock over the whole chain, so the camera
+           * CROSSES each waypoint with continuous velocity instead of
+           * parking at it — and it stays a pure function of the clock,
+           * which no per-frame integrator can claim.
+           */
+          if (now <= t.start) {
+            shot = from;
+          } else {
+            const p = now >= t.end ? 1 : this.cameraProgress(t, now - t.start);
+            shot = sampleThrough(from, through, p, cue.camera3d.tension);
+          }
+          continue;
+        }
         const want = cue.camera3d.to;
+        const fromLook = from.look;
         const to = cue.camera3d.by
           ? {
               dolly: from.dolly * (want.dolly ?? 1),
+              look: want.look
+                ? {
+                    x: (fromLook?.x ?? 0) + want.look.x,
+                    y: (fromLook?.y ?? 0) + want.look.y,
+                    z: (fromLook?.z ?? 0) + want.look.z,
+                  }
+                : fromLook,
               pitch: from.pitch + (want.pitch ?? 0),
               x: from.x + (want.x ?? 0),
               y: from.y + (want.y ?? 0),
@@ -1032,6 +1161,7 @@ export class ChoreoRun implements Run {
             }
           : {
               dolly: want.dolly ?? from.dolly,
+              look: want.look ?? fromLook,
               pitch: want.pitch ?? from.pitch,
               x: want.x ?? from.x,
               y: want.y ?? from.y,
@@ -1048,6 +1178,16 @@ export class ChoreoRun implements Run {
             y: from.y + (to.y - from.y) * p,
             yaw: from.yaw + (to.yaw - from.yaw) * p,
           };
+          // the aim tweens with the pose: one clock, no side-channel
+          if (to.look || fromLook) {
+            const a = fromLook ?? { x: 0, y: 0, z: 0 };
+            const b = to.look ?? a;
+            shot.look = {
+              x: a.x + (b.x - a.x) * p,
+              y: a.y + (b.y - a.y) * p,
+              z: a.z + (b.z - a.z) * p,
+            };
+          }
         }
         continue;
       }
@@ -1221,7 +1361,10 @@ export class ChoreoRun implements Run {
         was.pitch !== shot.pitch ||
         was.dolly !== shot.dolly ||
         was.x !== shot.x ||
-        was.y !== shot.y
+        was.y !== shot.y ||
+        was.look?.x !== shot.look?.x ||
+        was.look?.y !== shot.look?.y ||
+        was.look?.z !== shot.look?.z
       ) {
         this.camera3d = shot;
         this.options.onCamera3D?.({ ...shot });

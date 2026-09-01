@@ -59,8 +59,10 @@ import { RackNotes } from 'test-app/components/notes/rack';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
+import { SylvaNotes } from 'test-app/components/notes/sylva';
 import { TrailNotes } from 'test-app/components/notes/trail';
 import { WiresNotes } from 'test-app/components/notes/wires';
+import { SylvaStage } from 'test-app/components/sylva-stage';
 
 export const groups = [
   'Animate',
@@ -491,6 +493,38 @@ shot = (pose) => {
 // means "let me use it" and stops the cues. Two tracks, two switches.`,
     slowmo: false,
     title: 'Mockup',
+  },
+  {
+    Example: SylvaStage,
+    apis: ['@through', '@look', 'c.Perform', '@at / @delay'],
+    group: '3D',
+    id: 'sylva',
+    lede: 'A moss world, live cards punched into it, toured by a camera that never stops.',
+    notes: SylvaNotes,
+    sample: `{{! ONE STEP IS THE WHOLE LAP: a title drift, eight reading
+    waypoints and the way home, splined by @through on a single clock —
+    the camera crosses every pose with continuous velocity, and the aim
+    rides in the waypoints via @look. The ease is linear on purpose: the
+    spline is the shape. }}
+<c.Sequence @name={{this.lapName}}>
+  <c.Camera3D @name='lap' @through={{this.lapPath}}
+    @duration={{this.lapSeconds}} @ease='linear' />
+
+  {{! presents, CLIPPED into the path: each open fires just before its
+      card's waypoint is crossed, mid-flight — and each open SWAPS the
+      cards, so the leaver and the arrival cross-fade while the camera
+      is still travelling }}
+  {{#each this.presents as |present|}}
+    <c.Perform @at={{at 'lap'}} @delay={{present.open}}
+      @action='open' @target={{present.id}} />
+  {{/each}}
+
+  {{! the last card lets go partway into the pull-out }}
+  <c.Perform @at={{at 'lap'}} @delay={{this.lapClose}} @action='close' />
+  <c.Perform @action='lap' />
+</c.Sequence>`,
+    slowmo: false,
+    title: 'Sylva',
   },
   {
     Example: Camera,

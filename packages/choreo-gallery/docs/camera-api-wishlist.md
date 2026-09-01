@@ -89,3 +89,75 @@ and layout-space measurement to get a zoom-and-centre right.
 for pinch-anchored or otherwise deliberately-off-centre zooms. `@fit` would
 just be the other, more common shape: _dive on this thing, and centre it_,
 which today costs ~30 hand-written lines and one landmine.
+
+---
+
+# `<c.Camera3D>`: what the Sylva tour had to hand-build
+
+> **Shipped.** `@look` is part of the pose now — tweened on the step's own
+> clock, carried in force like every unnamed component, relative under
+> `@by`. `@through` runs one camera step through N waypoints on a cardinal
+> spline (`@tension`, default 0.5 — 0 is classic Catmull-Rom, 1 is
+> piecewise-linear), omissions carrying forward, yaw interpolated
+> numerically so authors unwrap it. Both are covered in
+> `camera3d-test.gts`, and the Sylva tour's whole lap is now ONE
+> `@through` step with the aim in its waypoints — the Perform side-channel
+> is gone. The rest of this section is kept as the design rationale; the
+> host-side chaser remains, as the simulation half.
+
+Written after the `/_sylva` spike, whose film is a loop of camera legs over
+a 3D scene. Two gaps cost real code; both have the same shape as `@fit`
+did — the host re-deriving something the score should own.
+
+## 1. The pose has no aim — `@look`
+
+`Camera3DState` is five numbers around an implied orbit centre. The mockup
+never noticed because its centre is always the phone; the moment a scene
+has more than one subject, the centre must MOVE, and there is no way to say
+so. Sylva routes it around the score as a side-channel: `c.Perform`
+"look" cues set a host goal, and the host eases the actual centre toward it
+per frame. It works, but the aim is invisible to the timeline — a scrub
+cannot reconstruct it, and its easing is a second clock the score does not
+know about.
+
+The wish: `@look` on `c.Camera3D` — a point (or, better, a sprite/anchor
+the way `@fit` names one) that is part of the tweened pose. Six-plus
+numbers instead of five, one clock, seek-safe.
+
+## 2. A chain of tweens stops at every seam — `@through`
+
+Each `c.Camera3D` is one from→to lerp under one ease. Any ease with zero
+slope at an end (which is every ease that "settles") parks the camera at
+the seam; a tour assembled from them is fly-park-fly-park. Sylva fought
+this twice: first with a curve whose ends carry matched non-zero slope
+(`CARRY` — works, but continuity in normalised time is not continuity in
+velocity when adjacent legs travel different distances), then properly,
+with Drift's own answer: the score writes a TARGET and a host spring
+integrates the lens after it, velocity carried as state. "A score for the
+scene change, a loop for the simulation" — the chaser is the simulation
+half, and per that doctrine it does NOT belong in the score.
+
+One stage is not enough, and the reason is worth recording: a single
+critically-damped spring is C1 — velocity crosses every seam, but its
+acceleration reacts to the goal directly, so a goal that jumps (a cue
+naming a new card) or bends (a tween's seam) lands straight in the second
+derivative and the frame flinches. Cinematic motion needs the second and
+third derivatives bounded too — a dolly has mass, a fluid head has
+damping. The cheap rig for that is a CASCADE: two critically-damped
+stages in series, the second chasing the first's already-curving output.
+Sylva's host runs the pose and the aim through that cascade
+(`chase2` in `sylva-stage.gts`).
+
+But it costs random access: an integrator's pose depends on history, so a
+scrub only agrees with playback when frames are walked in order (a linear
+render is fine; a playhead is not). If a tour must stay scrubbable, the
+score-native answer is a PATH step: `@through` — one camera step over N
+waypoints on one clock, spline-interpolated (Catmull-Rom over pose space,
+yaw unwrapped), C1-continuous by construction. That is the missing
+construct, and it is the same construct any object flown through several
+poses in one breath would use — this is not camera-specific at all.
+
+Until then the working split is: anchored cues (`@at`/`@delay` against a
+named step) for anything that must fire mid-flight — that part needed no
+new API and worked exactly as documented — plus the host-side chaser for
+continuity, accepted as seek-unsafe the way Drift's camera already is.
