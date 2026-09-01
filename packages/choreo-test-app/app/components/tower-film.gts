@@ -113,6 +113,20 @@ interface Beat {
   line?: string;
   /** how the front layer is set */
   mode: 'lower' | 'plate' | 'point' | 'title';
+  /**
+   * A PHOTOGRAPH, cut in beside the model.
+   *
+   * The model is a model, and there is a limit to what a film can claim
+   * with one. A real keep at the moment the commentary names it — Himeji's
+   * white walls, the bare hill at Azuchi — settles the claim in a way no
+   * amount of procedural geometry can, which is why every architecture
+   * documentary ever made cuts to a photograph.
+   *
+   * `src` is resolved under `public/towers/`. A missing file removes the
+   * plate rather than showing a broken frame, so the film is honest with
+   * an empty folder and richer with a full one.
+   */
+  photo?: { caption: string; credit: string; src: string };
   /** its reading */
   romaji?: string;
   /** type standing out in the world, behind the building */
@@ -306,6 +320,11 @@ const BEATS: Beat[] = [
     kicker: 'THE FIRST OF ITS KIND',
     line: 'Oda Nobunaga raises a tower nobody has seen before above Lake Biwa: seven storeys, gilded, decorated inside like a palace. It burns six years later and never gets rebuilt — and every keep after it is a reply to it.',
     mode: 'plate',
+    photo: {
+      caption: 'Azuchi, Shiga — the keep’s stone platform',
+      credit: 'photograph',
+      src: 'azuchi.webp',
+    },
     romaji: 'AZUCHI-JŌ',
     sky: {
       az: -14,
@@ -341,6 +360,11 @@ const BEATS: Beat[] = [
     kicker: 'AND WHY IT STOPPED',
     line: 'In 1615 the Tokugawa allow each domain a single castle and pull the rest down. Building keeps essentially ends. Twelve original towers survive today; the famous white one at Himeji is one of them.',
     mode: 'plate',
+    photo: {
+      caption: 'Himeji Castle, Hyōgo — one of the twelve originals',
+      credit: 'photograph',
+      src: 'himeji.webp',
+    },
     romaji: 'IKKOKU-ICHIJŌ-REI',
     ticks: 4,
   },
@@ -363,6 +387,11 @@ const BEATS: Beat[] = [
     kicker: 'STAGE ONE',
     line: 'It begins with a slope. Dry-laid stone, no mortar, battered into a curve the masons called 扇の勾配 — the fan’s incline. A wall that curves sheds a shock into the hill instead of arguing with it.',
     mode: 'lower',
+    photo: {
+      caption: 'Dry-laid ishigaki, Kumamoto',
+      credit: 'photograph',
+      src: 'ishigaki.webp',
+    },
     romaji: 'ISHIGAKI',
     theme: 1,
     ticks: 5,
@@ -464,6 +493,11 @@ const BEATS: Beat[] = [
     kicker: 'ON THE RIDGE',
     line: 'A fish with a tiger’s head, tail in the air, cast in bronze at both ends of the main ridge. It is a charm against fire — the story says it swallows water and spits it over the roof.',
     mode: 'point',
+    photo: {
+      caption: 'Shachihoko, Nagoya Castle',
+      credit: 'photograph',
+      src: 'shachihoko.webp',
+    },
     romaji: 'SHACHIHOKO',
     ticks: 4,
     to: [-0.51, 13.85, -0.51],
@@ -840,6 +874,27 @@ export default class TowerFilm extends Component<{
   get src(): string {
     return `${config.rootURL}towers.html?host`;
   }
+
+  get photoSrc(): string {
+    return `${config.rootURL}towers/${this.beat.photo?.src ?? ''}`;
+  }
+
+  /** a photograph that failed to load is no photograph — drop the plate */
+  private lost = new Set<string>();
+  @tracked private lostStamp = 0;
+
+  get hasPhoto(): boolean {
+    const p = this.beat.photo;
+    return !!p && this.lostStamp >= 0 && !this.lost.has(p.src);
+  }
+
+  private missing = () => {
+    const p = this.beat.photo;
+    if (p) {
+      this.lost.add(p.src);
+      this.lostStamp += 1;
+    }
+  };
 
   /** a fresh name per lap: an edited score replays, a restarted one fights */
   get filmName(): string {
@@ -1622,6 +1677,40 @@ export default class TowerFilm extends Component<{
             </n.Parallel>
           </Choreo>
 
+          {{! THE PHOTOGRAPH. Cut in on the side the type is not using, and
+          wiped rather than faded — a fade says "meanwhile", a wipe says
+          "and here it is". It carries its own credit, because a museum
+          caption without one is a museum caption nobody can check. }}
+          {{#if this.hasPhoto}}
+            <Choreo class="tf-photo" as |g|>
+              {{#each (array this.beat) key="id" as |b|}}
+                <figure {{motion id="photo" role="shot"}}>
+                  <img
+                    src={{this.photoSrc}}
+                    alt=""
+                    {{on "error" this.missing}}
+                  />
+                  <figcaption>
+                    <span class="tf-photo-cap">{{b.photo.caption}}</span>
+                    <span class="tf-photo-cr">{{b.photo.credit}}</span>
+                  </figcaption>
+                </figure>
+              {{/each}}
+              <g.Tween
+                @of={{g.inserted "shot"}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 0% 0 0)"}}
+                @duration={{0.62}}
+                @ease={{array 0.22 1 0.36 1}}
+              />
+              <g.Tween
+                @of={{g.removed "shot"}}
+                @opacity={{array 1 0}}
+                @duration={{0.24}}
+                @ease="easeIn"
+              />
+            </Choreo>
+          {{/if}}
+
           {{! the chapter rail: where we are in the argument }}
           <div class="tf-rail" aria-hidden="true">
             <span class="tf-rail-n">{{this.chapter.n}}</span>
@@ -2051,6 +2140,63 @@ export default class TowerFilm extends Component<{
 
       .tf-point .tf-kanji {
         font-size: clamp(48px, 6.6vw, 104px);
+      }
+
+      /* ---- the photograph -------------------------------------------- */
+      .tf-photo {
+        position: absolute;
+        z-index: 4;
+        pointer-events: none;
+      }
+
+      .tf-lower .tf-photo,
+      .tf-title .tf-photo,
+      .tf-point .tf-photo {
+        right: 5.5%;
+        top: 12%;
+      }
+
+      .tf-plate .tf-photo {
+        left: 5.5%;
+        top: 12%;
+      }
+
+      .tf-photo figure {
+        margin: 0;
+        width: min(30vw, 340px);
+        background: var(--tf-paper);
+        padding: 10px 10px 8px;
+        border: 1px solid var(--tf-rule);
+        box-shadow: calc(var(--tf-shx) * 4) calc(var(--tf-shy) * 4) 26px
+          rgba(38, 28, 10, 0.26);
+      }
+
+      .tf-photo img {
+        display: block;
+        width: 100%;
+        height: auto;
+        filter: saturate(0.86) contrast(1.04);
+      }
+
+      .tf-photo figcaption {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-top: 8px;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+
+      .tf-photo-cap {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        color: var(--tf-ink);
+      }
+
+      .tf-photo-cr {
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: var(--tf-ink2);
       }
 
       /* ---- the rail -------------------------------------------------- */
