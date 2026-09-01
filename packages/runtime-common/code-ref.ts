@@ -360,6 +360,12 @@ export function getField<T extends BaseDef>(
           // loses them.
           eager,
         }) as Field;
+        // `configuration` is not a constructor parameter — the field factories
+        // assign it after construction — so carrying it across takes the same
+        // shape. It is read instance-scoped (a rebuilt field is exactly what
+        // that lookup returns), so dropping it would strip a narrowed field's
+        // rendering config.
+        (result as any).configuration = (originalField as any).configuration;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',
