@@ -45,7 +45,8 @@ The user needs:
 
 - `aws` CLI installed.
 - `jq` installed (`brew install jq` / `apt install jq`).
-- `session-manager-plugin` installed — required for the SSM port-forward tunnel to RDS. Install instructions: <https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html>. macOS: `brew install --cask session-manager-plugin`. Ubuntu: download the deb from the page and `sudo dpkg -i`.
+- `session-manager-plugin` installed, **above 1.2.497.0** — required for the SSM port-forward tunnel to RDS. Install instructions: <https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html>. macOS: `brew install --cask session-manager-plugin`. Ubuntu: download the deb from the page and `sudo dpkg -i`. Check with `session-manager-plugin --version`. At or below that version the AWS CLI passes the StartSession response — including a live `TokenValue` — as a command-line argument rather than through the environment, so the credential is visible to anything that can read the process list.
+- `lsof` — used to check whether a local port is free and to find the process holding one. Present by default on macOS and on most Linux distributions (`apt install lsof` if not).
 - A working AWS named profile in `~/.aws/credentials` for staging (typically `cardstack`) and for prod (typically `cardstack-prod`). These hold the user's long-lived access keys; they're what the team sets up via `aws configure --profile <name>` on day one. The script uses these as the _source_ profile to mint an STS session — the user can name them whatever they want and the script will prompt the first time it runs.
 - An MFA device registered on the IAM user. The script auto-detects the MFA ARN via `aws iam list-mfa-devices`, so the user does not edit anything.
 - IAM permission to `sts:AssumeRole` on `boxel-claude-readonly` in the target account. The infra side of CS-10962 grants this to the `read-only` and `full-access` groups in both staging and prod, so any teammate already set up to use staging/prod has it automatically.
@@ -209,7 +210,7 @@ PROFILE=claude-staging                         # or claude-prod
 CLUSTER=staging                                # or production (verify)
 SERVICE=boxel-realm-server-staging             # or the prod equivalent
 SSM_PREFIX=/staging/boxel                      # or /production/boxel
-LOCAL_PORT=55432                               # see "pick a port" below — verify it is free
+LOCAL_PORT=55432                               # verify it is free — see "a squatted port is a wrong-environment bug" below
 
 # 1) Find the running task and its container runtime ID. SSM port-forwarding
 #    targets ECS by `cluster_<task-id>_<runtime-id>`, where runtime-id is
@@ -247,11 +248,12 @@ export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
 
 # 3) Confirm the port is actually free, then open the tunnel. Wait for
 #    "Waiting for connections..." before connecting. Do NOT skip the check
-#    — see "a squatted port is a wrong-environment bug" below. The tunnel is
-#    opened inside the `else` so an occupied port genuinely stops here: at a
-#    top-level prompt `return` is not available and a bare `&&` chain would
-#    fall through to the next command.
-if ss -ltn | grep -q ":$LOCAL_PORT "; then
+#    — see "a squatted port is a wrong-environment bug" below.
+#
+#    `lsof`, not `ss`: `ss` is Linux-only, and a missing command's failure
+#    disappears into the pipe, so on macOS every port would read as free and
+#    the guard would wave through exactly the case it exists to catch.
+if lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "port $LOCAL_PORT is already bound — pick another, and find out what is holding it"
 else
   aws --profile $PROFILE ssm start-session \
@@ -265,6 +267,13 @@ fi
 #    command that uses it, and exists only for the life of that command —
 #    no variable that outlives it, nothing on disk, nothing for another
 #    process to inherit.
+#
+#    Gated on TUNNEL_PID: step 3 refusing only skips opening a tunnel, it does
+#    not stop this block, and `psql -p $LOCAL_PORT` would then connect to
+#    whatever already holds the port — the stale forward two headings down.
+#    The `:?` aborts instead, and also catches a re-run where TUNNEL_PID is a
+#    recycled pid from an earlier attempt.
+: "${TUNNEL_PID:?step 3 opened no tunnel — do not query}"
 PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
   --query 'Parameter.Value' --output text) \
@@ -273,11 +282,11 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
 # 5) Tear down. `kill $TUNNEL_PID` alone is NOT enough — see below.
 kill $TUNNEL_PID
 pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
-unset CLAUDE_USER PGDATABASE   # no CLAUDE_PASSWORD to unset — see step 4
+unset TUNNEL_PID CLAUDE_USER PGDATABASE   # no CLAUDE_PASSWORD to unset — see step 4
 
 # 6) Verify the port is released. If it is still listening, the plugin
 #    survived and you have left an open forward into a deployed database.
-ss -ltn | grep ":$LOCAL_PORT " && echo "TUNNEL LEAKED — kill the session-manager-plugin pid holding it"
+lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
 ```
 
 Notes:
@@ -293,10 +302,12 @@ Notes:
 Always finish with step 6. If anything is still listening:
 
 ```sh
-ss -ltnp | grep ":$LOCAL_PORT "                    # find the pid
-ps -eo pid,etime,args | grep '[s]ession-manager-plugin'   # confirm which env it targets
+lsof -ti tcp:$LOCAL_PORT -s tcp:listen             # the pid holding the port
+ps -o args= -p <pid> | grep -o '"Target": *"[^"]*"'   # which environment it targets
 kill <pid>
 ```
+
+Note what that second command deliberately does _not_ do: print the plugin's whole argv. The AWS CLI passes the StartSession response — `SessionId`, `StreamUrl`, and a live `TokenValue` — as an argument, and substitutes the env-var name `AWS_SSM_START_SESSION_RESPONSE` for it only on plugin versions above 1.2.497.0. Pre-reqs pins no minimum version, so `ps … args` on any machine may put a live session credential on your terminal, inside the flow whose first rule is that credentials are never echoed. Match out the field you actually want, as above, or use `ps -o pid,etime,comm -p <pid>` when the pid is all you need.
 
 A leaked forward is not merely untidy: it is a standing network path from localhost into staging or prod Postgres for anything else running on the machine, and it consumes the port for later runs.
 
