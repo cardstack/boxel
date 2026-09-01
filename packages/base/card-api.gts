@@ -109,6 +109,7 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
@@ -3969,6 +3970,14 @@ registerRelationshipProbe((instance, field) => {
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
     let queryTotalMatchCount: number | undefined;
+    // Recorded when the field's results were resolved, so it is available on
+    // the seeded path — which is where a partial realm failure otherwise reads
+    // as a complete set, the indexed document having baked in the rows that
+    // did arrive.
+    let queryHasUnreachableRealms = queryFieldHasUnreachableRealms(
+      instance,
+      field.name,
+    );
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
@@ -3991,6 +4000,7 @@ registerRelationshipProbe((instance, field) => {
       isQueryField: true,
       queryMembership,
       queryTotalMatchCount,
+      queryHasUnreachableRealms,
     };
   }
   return {

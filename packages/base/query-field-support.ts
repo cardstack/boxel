@@ -300,6 +300,22 @@ export function peekQueryFieldSearchResource(
   return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
 }
 
+// Whether the realms this field targets all answered when its results were
+// resolved. A realm that failed contributes its error and no rows, so the
+// field holds a set that is short by an amount nobody can measure — the count
+// it would have contributed is exactly what the failure withheld.
+//
+// Read alongside the match count rather than instead of it: once a search
+// reports a count, that count describes what the field holds now and this
+// record of an earlier failure no longer bears on it.
+export function queryFieldHasUnreachableRealms(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let errors = queryFieldStates.get(instance)?.get(fieldName)?.seedErrors;
+  return (errors?.length ?? 0) > 0;
+}
+
 // Mirror the SearchResource's resource-level error state onto the data bucket
 // so the field getter and `getRelationshipMembershipState` recognize the same sentinels they
 // already handle for direct `linksTo`. Reading `searchResource.errors` here
