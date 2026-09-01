@@ -24,6 +24,16 @@ import {
 import { toAffinityKey } from '../prerender/affinity.ts';
 import { Deferred } from '@cardstack/runtime-common';
 
+// supertest dispatches when its thenable is first awaited. A test that waits on
+// something the handler does — a stub reporting itself, a signal from inside a
+// dependency — has to send the request first, or nothing is in flight and the
+// wait has nothing to wait for. Awaiting the thenable inside an immediately
+// invoked async function is what puts it on the wire now while leaving the
+// response to be awaited later.
+function inFlight<T>(send: () => PromiseLike<T>): Promise<T> {
+  return (async () => await send())();
+}
+
 module(basename(import.meta.filename), function () {
   module('Prerender server', function (hooks) {
     let request: SuperTest<Test>;
@@ -768,9 +778,20 @@ module(basename(import.meta.filename), function () {
       let localRequest = supertest(built.app.callback());
 
       let execDeferred = new Deferred<void>();
+      let renderEntered = new Deferred<void>();
       let stubResponse = {
         response: { ok: true },
-        timings: { launchMs: 0, renderMs: 0 },
+        timings: {
+          launchMs: 0,
+          renderMs: 0,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+        },
         pool: {
           pageId: 'p',
           affinityType: 'realm',
@@ -780,8 +801,16 @@ module(basename(import.meta.filename), function () {
           timedOut: false,
         },
       };
-      let originalPrerender = (built.prerenderer as any).prerenderCard;
-      (built.prerenderer as any).prerenderCard = async () => {
+      // `prerenderVisit` is what the route calls. This previously stubbed
+      // `prerenderCard`, which is a test helper rather than a method on
+      // `Prerenderer` — behind an `as any` cast, so it attached a property
+      // nothing reads, and the render this test means to catch mid-flight was
+      // never parked.
+      let renderCalls = 0;
+      let originalPrerender = (built.prerenderer as any).prerenderVisit;
+      (built.prerenderer as any).prerenderVisit = async () => {
+        renderCalls++;
+        renderEntered.fulfill();
         await execDeferred.promise;
         return stubResponse;
       };
@@ -790,27 +819,30 @@ module(basename(import.meta.filename), function () {
         [realmURL.href]: ['read', 'write', 'realm-owner'],
       };
       let auth = testCreatePrerenderAuth(testUserId, permissions);
-      let resPromise = localRequest
-        .post('/prerender-visit')
-        .set('Accept', 'application/vnd.api+json')
-        .set('Content-Type', 'application/json')
-        .send({
-          data: {
-            type: 'prerender-visit-request',
-            attributes: {
-              url: `${realmURL.href}drain-midflight`,
-              auth,
-              realm: realmURL.href,
-              affinityType: 'realm',
-              affinityValue: realmURL.href,
-              renderOptions: { cardRender: true },
+      let resPromise = inFlight(() =>
+        localRequest
+          .post('/prerender-visit')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'prerender-visit-request',
+              attributes: {
+                url: `${realmURL.href}drain-midflight`,
+                auth,
+                realm: realmURL.href,
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
+                renderOptions: { cardRender: true },
+              },
             },
-          },
-        });
+          }),
+      );
 
-      // Allow handler to start by yielding once inside execute
-      await Promise.resolve();
-      // simulate shutdown signal while prerender is in progress (after handler start)
+      // Drains once the render has reported itself and parked, so the answer
+      // below comes from `raceAgainstDrain` giving up on a render in progress
+      // rather than from the draining guard that sits ahead of the routes.
+      await renderEntered.promise;
       localDraining = true;
       drainingDeferred.fulfill();
 
@@ -825,10 +857,15 @@ module(basename(import.meta.filename), function () {
         PRERENDER_SERVER_STATUS_DRAINING,
         'sets draining header during in-flight prerender',
       );
+      assert.strictEqual(
+        renderCalls,
+        1,
+        'the render was in flight, so the drain had something to interrupt',
+      );
 
       // clean up
       execDeferred.fulfill();
-      (built.prerenderer as any).prerenderCard = originalPrerender;
+      (built.prerenderer as any).prerenderVisit = originalPrerender;
       await built.prerenderer.stop();
     });
 
@@ -937,20 +974,27 @@ module(basename(import.meta.filename), function () {
 
         let calls = 0;
         let sawRecycleSettled: boolean[] = [];
+        let firstRenderEntered = new Deferred<void>();
         (built.prerenderer as any).prerenderVisit = async () => {
           calls++;
           sawRecycleSettled.push(recycleSettled);
+          if (calls === 1) {
+            firstRenderEntered.fulfill();
+          }
           return calls === 1 ? moduleFailure() : rendered();
         };
 
-        let resPromise = visitRequest(
-          request,
-          `${realmURL.href}stale-shell`,
-          authFor(),
+        let resPromise = inFlight(() =>
+          visitRequest(request, `${realmURL.href}stale-shell`, authFor()),
         );
-        // The re-render must be waiting on the recycle, not already done.
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        assert.strictEqual(calls, 1, 're-render has not started yet');
+        // Waits for the render to report itself rather than for a clock: how
+        // long the route spends parsing and authenticating before it reaches
+        // the prerenderer is not this test's subject, and on a loaded runner
+        // it is longer than any interval worth sleeping. The observation below
+        // is stable under any interleaving because the second render cannot
+        // start while the recycle promise is pending.
+        await firstRenderEntered.promise;
+        assert.strictEqual(calls, 1, 're-render waits for the recycle');
         recycleDeferred.fulfill();
 
         let res = await resPromise;
@@ -1034,12 +1078,21 @@ module(basename(import.meta.filename), function () {
       test('a drain during the re-render answers draining', async function (assert) {
         let localDraining = false;
         let drainingDeferred = new Deferred<void>();
+        // Reports when the handler has entered the re-render and parked on the
+        // recycle. Draining any earlier trips the `isDraining` check that
+        // precedes the re-render, so the handler would skip it and answer with
+        // the first result — a different path from the one under test.
+        let recycleWaitEntered = new Deferred<void>();
         let built = buildPrerenderApp({
           serverURL: 'http://127.0.0.1:4222',
           isDraining: () => localDraining,
           drainingPromise: drainingDeferred.promise,
           getHostShellHash: shellThatMovesOnce(),
-          awaitHostShellRecycle: () => new Promise<void>(() => {}),
+          awaitHostShellRecycle: () => {
+            recycleWaitEntered.fulfill();
+            // Never settles, so the drain is guaranteed to win the race.
+            return new Promise<void>(() => {});
+          },
         });
         let request: SuperTest<Test> = supertest(built.app.callback());
 
@@ -1049,12 +1102,14 @@ module(basename(import.meta.filename), function () {
           return moduleFailure();
         };
 
-        let resPromise = visitRequest(
-          request,
-          `${realmURL.href}drain-during-rerender`,
-          authFor(),
+        let resPromise = inFlight(() =>
+          visitRequest(
+            request,
+            `${realmURL.href}drain-during-rerender`,
+            authFor(),
+          ),
         );
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await recycleWaitEntered.promise;
         localDraining = true;
         drainingDeferred.fulfill();
 

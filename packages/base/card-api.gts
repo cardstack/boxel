@@ -122,6 +122,7 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
 import { isSavedInstance } from './-private';
@@ -361,6 +362,12 @@ interface Options {
 
 interface RelationshipOptions extends Options {
   query?: QueryWithInterpolations;
+  // Whether a query-backed relationship resolves as soon as its owner
+  // deserializes, rather than waiting for something to read the field.
+  // Defaults to true. Set it false for a field whose query is expensive or
+  // rarely read, and the search runs on first access instead. Has no meaning
+  // without `query`.
+  eager?: boolean;
 }
 
 export interface CardContext<T extends CardDef = CardDef> {
@@ -406,6 +413,7 @@ export interface FieldConstructor<T> {
   searchable?: Searchable;
   name: string;
   queryDefinition?: QueryWithInterpolations;
+  eager?: boolean;
 }
 
 type CardChangeSubscriber = (
@@ -413,6 +421,27 @@ type CardChangeSubscriber = (
   fieldName: string,
   fieldValue: any,
 ) => void;
+
+// Whether a card or field class declares any query-backed relationship. Keyed
+// by class because the answer comes from the field declarations, which an
+// instance-level link override never changes — it narrows a link's target type,
+// not whether the link is query-backed.
+const classHasQueryFields = initSharedState(
+  'classHasQueryFields',
+  () => new WeakMap<typeof BaseDef, boolean>(),
+);
+
+function hasQueryFields(instance: BaseDef): boolean {
+  let klass = instance.constructor as typeof BaseDef;
+  let cached = classHasQueryFields.get(klass);
+  if (cached === undefined) {
+    cached = Object.values(getFields(klass, { includeComputeds: true })).some(
+      (field) => Boolean(field?.queryDefinition),
+    );
+    classHasQueryFields.set(klass, cached);
+  }
+  return cached;
+}
 
 const stores = initSharedState(
   'stores',
@@ -595,6 +624,10 @@ export interface CardStore {
   recentCardDocLoads?(): Array<{ url: string; ms: number }>;
   recentFileMetaLoads?(): Array<{ url: string; ms: number }>;
   recentQueryLoads?(): Array<{ meta: QueryLoadMeta; ms: number }>;
+  // Whether a query-backed relationship resolves as soon as its owner
+  // deserializes into this store. Absent means it does not, so a store that has
+  // no opinion never starts a search on its own behalf.
+  resolvesQueryFieldsEagerly?: boolean;
   getSearchResource: GetSearchResourceFunc;
 }
 
@@ -624,6 +657,9 @@ export interface Field<
   configuration?: ConfigurationInput<any>;
   // Declarative relationship query definition, if provided
   queryDefinition?: QueryWithInterpolations;
+  // Whether a query-backed relationship resolves when its owner deserializes.
+  // Absent is the same as true; only an explicit false defers to first read.
+  eager?: boolean;
   captureQueryFieldSeedData?(
     instance: BaseDef,
     value: any,
@@ -1271,6 +1307,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly eager?: boolean;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1279,6 +1316,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     isPolymorphic,
     searchable,
     queryDefinition,
+    eager,
   }: FieldConstructor<CardT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1287,6 +1325,7 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
+    this.eager = eager;
   }
 
   get card(): CardT {
@@ -1729,6 +1768,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
   readonly searchable: Searchable | undefined;
   readonly configuration?: ConfigurationInput<any>;
   readonly queryDefinition?: QueryWithInterpolations;
+  readonly eager?: boolean;
   constructor({
     cardThunk,
     declaredCardThunk,
@@ -1737,6 +1777,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     isPolymorphic,
     searchable,
     queryDefinition,
+    eager,
   }: FieldConstructor<FieldT>) {
     this.cardThunk = cardThunk;
     this.declaredCardThunk = declaredCardThunk ?? cardThunk;
@@ -1745,6 +1786,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
     this.isPolymorphic = isPolymorphic;
     this.searchable = searchable;
     this.queryDefinition = queryDefinition;
+    this.eager = eager;
   }
 
   get card(): FieldT {
@@ -1781,7 +1823,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         instance,
         this,
         dependencyTrackingContext,
-      )!;
+      );
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
@@ -1790,7 +1832,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
-      let records = searchResource.instances ?? ([] as any[]);
+      let records = searchResource?.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
         this.card,
@@ -2451,7 +2493,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT> {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query } = options ?? {};
+      let { computeVia, searchable, query, eager } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2466,6 +2508,7 @@ export function linksTo<CardT extends LinkableDefConstructor>(
         name: fieldName,
         searchable,
         queryDefinition: query,
+        eager,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -2480,7 +2523,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 ): BaseInstanceType<CardT>[] {
   return {
     setupField(fieldName: string, ownerPrototype: BaseDef) {
-      let { computeVia, searchable, query } = options ?? {};
+      let { computeVia, searchable, query, eager } = options ?? {};
       let fieldCardThunk = cardThunk(cardOrThunk, {
         fieldName,
         ownerPrototype,
@@ -2495,6 +2538,7 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
         name: fieldName,
         searchable,
         queryDefinition: query,
+        eager,
       });
       (instance as any).configuration = options?.configuration;
       return makeDescriptor(instance);
@@ -5030,6 +5074,29 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
       instance[isSavedInstance] = true;
+    }
+
+    // Resolve every query-backed relationship on this instance — not just the
+    // ones the document carried data for, since a field whose query the
+    // document never resolved is the one with no seed to answer from and so
+    // the one that most needs its search started. Runs once the instance is
+    // fully assembled, because a query interpolates against the owner's own
+    // fields and realm context.
+    //
+    // Gated on a per-class answer first: `getFields` memoizes only inside a
+    // render context, and this runs outside one, so enumerating a card's fields
+    // here costs a full prototype walk on every deserialize. Whether a class
+    // declares any query-backed field is a property of the definition, so it is
+    // computed once and every card without one skips the walk entirely.
+    if (hasQueryFields(instance)) {
+      let store = getStore(instance);
+      for (let field of Object.values(
+        getFields(instance, { includeComputeds: true }),
+      )) {
+        if (field?.queryDefinition) {
+          resolveQueryFieldEagerly(store, instance, field);
+        }
+      }
     }
   }
 
