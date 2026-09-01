@@ -13,5 +13,7 @@ Router.map(function () {
   this.route('crossing-stress');
   // A spike, not a demo: no catalog entry, no gallery card. See sylva-stage.
   this.route('sylva', { path: '/_sylva' });
+  // A film, not a demo: see tower-film.
+  this.route('towers', { path: '/_towers' });
   this.route('demo', { path: '/:demo_id' });
 });
