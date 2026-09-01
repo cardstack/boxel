@@ -1785,12 +1785,11 @@ export class Realm {
         clientRequestId: opts?.clientRequestId ?? null,
         priority: interactiveDependentPriority,
         invalidationMode: 'recursive',
-        onSettled: (invalidations, meta) => {
+        onSettled: (invalidations, meta) =>
           this.broadcastIncrementalInvalidationEvent(invalidations, {
             clientRequestId: opts?.clientRequestId ?? null,
             generation: meta.generation,
-          });
-        },
+          }),
       },
     );
     settled.catch((err: unknown) => {
@@ -1806,11 +1805,11 @@ export class Realm {
     return foreground;
   }
 
-  private broadcastIncrementalInvalidationEvent(
+  private async broadcastIncrementalInvalidationEvent(
     invalidations: string[],
     opts?: { clientRequestId?: string | null; generation?: number },
-  ): void {
-    this.broadcastRealmEvent({
+  ): Promise<void> {
+    await this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
       invalidations,
@@ -2445,14 +2444,14 @@ export class Realm {
     let createdMap = await this.persistFileMeta(fileMetaRows);
     if (urls.length > 0) {
       await performIndex();
-      this.broadcastIncrementalInvalidationEvent([...invalidations], {
+      await this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
       });
     } else {
       // No urls actually written (e.g., content unchanged). Preserve the
       // pre-existing always-broadcast behavior.
-      this.broadcastIncrementalInvalidationEvent([...invalidations], {
+      await this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
       });
@@ -2927,7 +2926,9 @@ export class Realm {
         delete: true,
         awaitDependents: options?.waitForIndex === true,
       });
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    await this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+    });
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
@@ -2964,7 +2965,9 @@ export class Realm {
       await this.updateExplicitTargetsThenEnqueueDependents(urls, {
         delete: true,
       });
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    await this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+    });
   }
 
   get realmIndexUpdater() {
@@ -8274,7 +8277,7 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(
+    await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
