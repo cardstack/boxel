@@ -1538,7 +1538,7 @@ module(basename(import.meta.filename), function () {
         return scopes;
       }
 
-      test('the pass renders under its spawning index job\'s scope, not its own job id', async function (assert) {
+      test("the pass renders under its spawning index job's scope, not its own job id", async function (assert) {
         let spawning = jobInfo();
         let htmlJob = jobInfo();
         let scopes = await scopesForPass({

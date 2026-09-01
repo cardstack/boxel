@@ -2946,7 +2946,11 @@ export default class StoreService extends Service implements StoreInterface {
     } finally {
       // Only retract this call's own entry: a scope boundary clears the map
       // mid-flight, so a newer caller's entry can be sitting under this id.
-      if (id && deferred && this.inflightGetCards.get(id) === deferred.promise) {
+      if (
+        id &&
+        deferred &&
+        this.inflightGetCards.get(id) === deferred.promise
+      ) {
         this.inflightGetCards.delete(id);
       }
     }
