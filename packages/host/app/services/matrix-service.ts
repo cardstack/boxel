@@ -89,7 +89,11 @@ import type IndexController from '@cardstack/host/controllers/index';
 
 import type { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import Room from '@cardstack/host/lib/matrix-classes/room';
-import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
+import {
+  getRandomBackgroundURL,
+  iconURLFor,
+  PERSONAL_REALM_ENDPOINT,
+} from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 import {
   clearLocalStorage,
@@ -788,7 +792,7 @@ export default class MatrixService extends Service {
 
     await Promise.all([
       this.createPersonalRealmForUser({
-        endpoint: 'personal',
+        endpoint: PERSONAL_REALM_ENDPOINT,
         name: `${displayName}'s Workspace`,
         iconURL: iconURLFor(displayName),
         backgroundURL: getRandomBackgroundURL(),

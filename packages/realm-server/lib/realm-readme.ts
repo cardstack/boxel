@@ -1,11 +1,6 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-
-// The user's first realm is always created at this endpoint (both the host's
-// signup flow and boxel-cli's ensurePersonalRealm post `endpoint: 'personal'`),
-// and the endpoint collides on a second attempt — so it uniquely identifies the
-// user's personal, first-created realm.
-const PERSONAL_REALM_ENDPOINT = 'personal';
+import { PERSONAL_REALM_ENDPOINT } from '@cardstack/runtime-common/realm-display-defaults';
 
 // Filename of the seeded Home README, relative to the realm root. The Workspace
 // card's `readme` field (linksTo MarkdownDef) links to this so it renders on Home.
