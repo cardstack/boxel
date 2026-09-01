@@ -9,7 +9,7 @@ import { on } from '@ember/modifier';
  * previewJoin through @preview.
  */
 const TowersNotes: TOC<{
-  Args: { preview: (join: string) => void };
+  Args: { preview?: (join: string) => void };
 }> = <template>
   <section class="dive" aria-label="How it works">
     <header class="dive-head">
@@ -83,7 +83,8 @@ const TowersNotes: TOC<{
           underneath. Click any of these and it happens upstairs, right now,
           over whatever is playing:
         </p>
-        <div class="dd-joins">
+        {{#if @preview}}
+          <div class="dd-joins">
           <button
             type="button"
             {{on "click" (fn @preview "wipe")}}
@@ -124,7 +125,13 @@ const TowersNotes: TOC<{
             type="button"
             {{on "click" (fn @preview "whip")}}
           >whip<i>a fast chased tween</i></button>
-        </div>
+          </div>
+        {{else}}
+          <p>
+            (The live triggers ride the full film — take the ⛶ Theater door
+            above and scroll to the Cutting Room.)
+          </p>
+        {{/if}}
         <p>
           In the film each is placed where it means something: HISTORY
           arrives through black, the matchlock guns arrive on the flash, the

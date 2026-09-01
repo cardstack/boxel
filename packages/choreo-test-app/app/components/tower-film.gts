@@ -1,5 +1,6 @@
 import { array, concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
@@ -1340,7 +1341,12 @@ export default class TowerFilm extends Component<{
   }
 
   get embed(): boolean {
-    return this.args.embed ?? false;
+    /* the demo page mounts the theater route in an iframe with ?embed —
+       Sylva's pattern: the gate, the transport and the dive stand down
+       and the film begins muted */
+    return (
+      (this.args.embed ?? false) || /[?&]embed\b/.test(window.location.search)
+    );
   }
 
   get src(): string {
@@ -3352,6 +3358,11 @@ export default class TowerFilm extends Component<{
           >CC</button>
           <button type="button" class="tf-btn" {{on "click" this.restart}}>↺
             from the top</button>
+          <LinkTo
+            @route="demo"
+            @model="towers"
+            class="tf-btn"
+          >⛶ How This Is Built</LinkTo>
           <span class="tf-credit">Scene:
             <a
               href="https://threeui.com/browse"
@@ -4498,6 +4509,11 @@ export default class TowerFilm extends Component<{
 
       .is-embed .tf-controls {
         display: none;
+      }
+
+      /* embedded, the film fills its iframe edge to edge */
+      .is-embed .tf-stage {
+        height: 100svh;
       }
 
       /* the transport waits outside while the front door is open; it
