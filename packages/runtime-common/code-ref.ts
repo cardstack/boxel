@@ -368,30 +368,36 @@ export function getField<T extends BaseDef>(
         } else {
           let originalField = result;
           // The override narrows which card the field resolves to. It does not
-          // restate how the field behaves, so the rest of the declaration has to
-          // survive the narrowing.
+          // restate how the field behaves, so the rest of the declaration has
+          // to survive the narrowing.
           //
-          // Clone rather than reconstruct from a list of the options to keep.
-          // Such a list is a second place that has to know every property a
-          // field carries, and it cannot know them all: most of a field's
-          // options are constructor parameters, but the field factories assign
-          // `configuration` after construction, so it cannot travel through the
-          // constructor at all. An option the list omits is dropped with nothing
-          // to signal it, and only a consumer reading that property
-          // instance-scoped shows the loss.
+          // Build through the field's own constructor, handing it the field as
+          // its own argument — a field's own property names are exactly that
+          // constructor's parameter names. This keeps the narrowed field on the
+          // same hidden class as the field it was narrowed from, which is load
+          // bearing: there are four field classes, so any shared `field.*` read
+          // site already sees four shapes, V8's polymorphic ceiling. A
+          // differently-shaped clone (`Object.create` + `Object.assign`) takes
+          // those sites to eight and turns them megamorphic, which slows reads
+          // of *declared* fields everywhere, not just narrowed ones.
           //
-          // The clone carries the declaration whole, leaving this a statement of
-          // what a narrowing changes: the card the field resolves to, and that
-          // resolving it is polymorphic. Notably not `declaredCardThunk`, which
-          // resolves the type the field was *declared* with.
-          result = Object.assign(
-            Object.create(Object.getPrototypeOf(originalField)),
-            originalField,
-            {
-              cardThunk: () => fieldOverride,
-              isPolymorphic: true,
-            },
-          ) as Field;
+          // `Object.assign` then carries whatever the constructor does not
+          // accept. That is what makes this a clone rather than a second list
+          // of options to keep. Such a list cannot be complete: the field
+          // factories assign `configuration` after construction, so it can
+          // never travel through a parameter list, and an option the list omits
+          // is dropped with nothing to signal it — only a consumer reading that
+          // property instance-scoped shows the loss.
+          //
+          // What a narrowing changes is then stated on its own: the card the
+          // field resolves to, and that resolving it is polymorphic. Notably
+          // not `declaredCardThunk`, which resolves the type the field was
+          // *declared* with.
+          let narrowed = new (originalField.constructor as any)(originalField);
+          Object.assign(narrowed, originalField);
+          narrowed.cardThunk = () => fieldOverride;
+          narrowed.isPolymorphic = true;
+          result = narrowed as Field;
           if (!cacheForInstance) {
             cacheForInstance = new Map();
             narrowedFields.set(overrideOwner, cacheForInstance);
