@@ -306,6 +306,7 @@ const ALL_TEST_FILES: string[] = [
   './realm-advisory-locks-test',
   './realm-cleanup-transaction-test',
   './data-plane-write-lock-test',
+  './send-event-test',
   './realm-registry-backfill-test',
   './realm-registry-reconciler-test',
   './realm-registry-writes-test',
