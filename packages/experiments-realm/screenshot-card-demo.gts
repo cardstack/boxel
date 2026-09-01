@@ -26,7 +26,7 @@ const FormatField = enumField(StringField, {
 class Isolated extends Component<typeof ScreenshotCardDemo> {
   @tracked isRunning = false;
   @tracked errorMessage: string | null = null;
-  @tracked imageDefUrl: string | null = null;
+  @tracked imageUrl: string | null = null;
 
   get hasCommandContext() {
     return Boolean(this.args.context?.toolContext);
@@ -61,13 +61,13 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
 
     this.isRunning = true;
     this.errorMessage = null;
-    this.imageDefUrl = null;
+    this.imageUrl = null;
     try {
       let result = await new ScreenshotCardTool(toolContext).execute({
         card,
         format: this.effectiveFormat,
       });
-      this.imageDefUrl = result.captures?.[0]?.url ?? null;
+      this.imageUrl = result.captures?.[0]?.url ?? null;
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -106,11 +106,11 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
         </Button>
       </section>
 
-      {{#if this.imageDefUrl}}
+      {{#if this.imageUrl}}
         <section class='result'>
           <p>Saved to:</p>
-          <code class='url'>{{this.imageDefUrl}}</code>
-          <img src={{this.imageDefUrl}} alt='Card screenshot' />
+          <code class='url'>{{this.imageUrl}}</code>
+          <img src={{this.imageUrl}} alt='Card screenshot' />
         </section>
       {{/if}}
 

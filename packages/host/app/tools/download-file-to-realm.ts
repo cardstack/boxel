@@ -75,11 +75,13 @@ export default class DownloadFileToRealmTool extends HostBaseTool<
     // Persist through the existing binary-write path so the non-conflicting
     // filename handling, upload plumbing, and indexer promotion all stay in one
     // place — the caller never has to touch the bytes.
+    // No content type is forwarded: the binary-write path always posts
+    // octet-stream and the realm infers the file type from the destination
+    // path's extension — which is why the description asks for one.
     let writeResult = await new WriteBinaryFileTool(this.toolContext).execute({
       path,
       realm,
       base64Content,
-      contentType: response.headers.get('content-type') ?? undefined,
       useNonConflictingFilename,
     });
 

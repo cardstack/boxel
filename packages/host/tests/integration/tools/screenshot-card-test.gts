@@ -315,6 +315,59 @@ module('Integration | tools | screenshot-card', function (hooks) {
     assert.strictEqual(captured.method, null, 'no request was made');
   });
 
+  // A publicly-readable realm can pass the read guard (public reads need no
+  // auth) while holding no session token — the tool must mint one, since the
+  // endpoint rejects an unauthenticated POST.
+  test('a missing realm session is minted before the request', async function (assert) {
+    let realm = getService('realm');
+    let realToken = realm.token;
+    let loginCalls: string[] = [];
+    let minted = false;
+    let card = await getPet();
+    realm.token = (url: string) => (minted ? realToken(url) : undefined);
+    realm.login = async (realmURL: string) => {
+      loginCalls.push(realmURL);
+      minted = true;
+    };
+
+    let command = new ScreenshotCardTool(
+      getService('tool-service').toolContext,
+    );
+    let result = await command.execute({ card, format: 'isolated' });
+
+    assert.deepEqual(
+      loginCalls,
+      [testRealmURL],
+      'the card realm session is minted',
+    );
+    assert.ok(
+      captured.authorization?.startsWith('Bearer '),
+      'the request carries the minted bearer',
+    );
+    assert.strictEqual(
+      result.captures[0].url,
+      servedURL,
+      'capture succeeds after the mint',
+    );
+  });
+
+  test('a realm session that cannot be minted fails clearly before any request', async function (assert) {
+    let realm = getService('realm');
+    let card = await getPet();
+    realm.token = () => undefined;
+    // A login that cannot mint — e.g. no Matrix client available to serve it.
+    realm.login = async () => {};
+
+    let command = new ScreenshotCardTool(
+      getService('tool-service').toolContext,
+    );
+    await assert.rejects(
+      command.execute({ card, format: 'isolated' }),
+      /no session for realm/,
+    );
+    assert.strictEqual(captured.method, null, 'no request was made');
+  });
+
   test('a 503 timeout surfaces as a retryable error', async function (assert) {
     respondWith = async () =>
       new Response(null, { status: 503, headers: { 'retry-after': '3' } });

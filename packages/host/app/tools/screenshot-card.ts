@@ -103,13 +103,26 @@ export default class ScreenshotCardTool extends HostBaseTool<
     // realm token needs no Matrix client, so this works in headless
     // (run-command) contexts too.
     let token = this.realm.token(cardRealm);
+    if (!token) {
+      // A publicly-readable realm can be known without a session (public
+      // reads need no auth), but the endpoint sits behind `jwtMiddleware`,
+      // which rejects an unauthenticated POST outright. Mint a session
+      // rather than sending a request that can only 401. Headless contexts
+      // restore sessions from storage inside `token()`, so this login only
+      // runs where a Matrix client is available to serve it.
+      await this.realm.login(cardRealm);
+      token = this.realm.token(cardRealm);
+    }
+    if (!token) {
+      throw new Error(
+        `Cannot screenshot ${cardURL}: no session for realm ${cardRealm}.`,
+      );
+    }
     let headers: Record<string, string> = {
       Accept: 'application/vnd.api+json',
       'Content-Type': 'application/vnd.api+json',
+      Authorization: `Bearer ${token}`,
     };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
 
     let endpoint = new URL('/_screenshot-card', this.realmServer.url);
     let response = await vn.fetch(endpoint.href, {
@@ -190,8 +203,10 @@ export default class ScreenshotCardTool extends HostBaseTool<
   // capture spec. Only supplied fields are emitted; the paired fields
   // (viewport width/height, the four clip edges) are all-or-nothing so a
   // half-specified region fails here with a clear message rather than as an
-  // opaque 400 downstream. `fullPage` is emitted only when true — false is the
-  // engine default and would needlessly perturb the canonical capture identity.
+  // opaque 400 downstream. `fullPage` is emitted only when true — false is
+  // the engine default, and the shared parse elides default-valued fields
+  // before the capture identity is derived anyway (see `elideDefaults` in
+  // capture-spec.ts), so an explicit false adds nothing.
   private buildCaptureSpec(
     input: BaseToolModule.ScreenshotCardInput,
   ): CaptureSpecBody {

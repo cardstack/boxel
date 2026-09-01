@@ -233,9 +233,11 @@ export class ScreenshotCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
   // The capture surface, exposed one JSON-primitive field per parameter.
-  // `run-command`'s headless input path is `new InputType(rawJson)` with no
-  // card resolution, so a non-primitive (linksTo/containsMany-of-object)
-  // input can't be fed there — the geometry is flattened into
+  // `run-command`'s headless input path builds this card via
+  // `new InputType(rawJson)`; it resolves `linksTo` ids to instances (that is
+  // how `card` above reaches the tool) but cannot construct a nested
+  // `contains(SomeFieldDef)` from a plain JSON object — the field validator
+  // rejects a non-instance value. So the geometry is flattened into
   // StringField/NumberField/BooleanField fields the tool reassembles into the
   // endpoint's nested `captureSpec` (see capture-spec.ts). Every field is
   // optional; each is part of the canonical capture identity, so a capture

@@ -36,7 +36,7 @@ this.imageUrl = result.captures?.[0]?.url ?? null;
 The full demo card (`example.gts`) wraps this in a CardDef that:
 - Holds the target via `@field card = linksTo(CardDef)`.
 - Holds the format via `@field format = contains(enumField(StringField, { options: ['isolated', 'embedded'] }))`.
-- Owns `@tracked isRunning`, `@tracked errorMessage`, `@tracked imageDefUrl` for UI state.
+- Owns `@tracked isRunning`, `@tracked errorMessage`, `@tracked imageUrl` for UI state.
 - Disables the action button until `commandContext` is available and a card is linked.
 
 ## API surface
@@ -50,7 +50,7 @@ The full demo card (`example.gts`) wraps this in a CardDef that:
 | `fullPage` | `boolean` | no | Capture the whole scrollable document. Mutually exclusive with `clip`. |
 | `clipX` / `clipY` / `clipWidth` / `clipHeight` | `number` | no | Crop to a region. Provide **all four** or none. |
 
-Every capture field is a JSON primitive, deliberately: the headless `run-command` input path is `new InputType(rawJson)` with no card resolution, so the nested `captureSpec` the endpoint accepts is flattened into primitive fields the tool reassembles. The geometry fields are all part of the capture's canonical identity, so a capture carrying any of them still persists and serves under its own durable URL.
+Every capture field is a JSON primitive, deliberately: the headless `run-command` input path builds the input via `new InputType(rawJson)`, which resolves `linksTo` ids to card instances but cannot construct a nested `contains(SomeFieldDef)` from a plain JSON object — so the nested `captureSpec` the endpoint accepts is flattened into primitive fields the tool reassembles. The geometry fields are all part of the capture's canonical identity, so a capture carrying any of them still persists and serves under its own durable URL.
 
 | Output field | Type | Notes |
 |---|---|---|
