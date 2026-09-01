@@ -1324,7 +1324,10 @@ jobs:
     concurrency:
       group: host-memory-baseline-update-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
-    needs: [host-test, host-merge-reports-and-publish]
+    # host-test only: the memory reports come from its shards, and the junit
+    # report now comes from the merged PR's own run rather than from this
+    # run's merge-and-publish job.
+    needs: [host-test]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1339,9 +1342,6 @@ jobs:
       # Listing that head's workflow runs, inspecting one run's jobs, and
       # downloading its merged junit artifact.
       actions: read
-      # Reading the head's commit statuses, which is how a Percy run is told
-      # from a Percy-free one.
-      statuses: read
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -1393,7 +1393,12 @@ jobs:
           leave() { echo "$1 — leaving shard timings unchanged"; exit 0; }
           broke() { echo "::warning title=Shard timings not refreshed::$1"; exit 0; }
 
-          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" --jq '.[0].number // empty') ||
+          # This endpoint returns every PR whose history contains the commit,
+          # not just the one that merged it — an open branch that merged main
+          # in qualifies too, and the ordering is undocumented. Match on the
+          # merge commit instead of taking the first.
+          pr=$(gh api "repos/$REPO/commits/$MERGE_SHA/pulls" \
+            --jq 'map(select(.merge_commit_sha == env.MERGE_SHA)) | .[0].number // empty') ||
             broke "could not list the pull requests for $MERGE_SHA"
           [ -n "$pr" ] || leave "no PR is associated with $MERGE_SHA"
 
@@ -1405,31 +1410,45 @@ jobs:
           # shards reports only the modules that ran, and the generator keeps
           # existing values for the rest — which is how weights from different
           # eras end up mixed in one file.
+          #
+          # First attempt only, for the same reason. "Re-run failed jobs"
+          # publishes a second artifact of the same name holding just the
+          # re-run shards, and `gh run download --name` resolves to the newer
+          # one: run 33021863111 carries 121,401 B from attempt 1 and 8,259 B
+          # from attempt 2, while its conclusion still reads success. Coverage
+          # cannot catch that — the generator measures attribution against the
+          # report's own total, so a report of 273 testcases is ~100%
+          # attributable and passes.
           run_id=$(gh api "repos/$REPO/actions/runs?head_sha=$head_sha&event=pull_request&per_page=50" \
-            --jq '[.workflow_runs[] | select(.name == "CI Host" and .conclusion == "success")]
+            --jq '[.workflow_runs[]
+                   | select(.name == "CI Host" and .conclusion == "success" and .run_attempt == 1)]
                   | sort_by(.created_at) | last | .id // empty') ||
             broke "could not list workflow runs for $head_sha"
-          [ -n "$run_id" ] || leave "PR #$pr has no fully successful CI Host run"
+          [ -n "$run_id" ] || leave "PR #$pr has no first-attempt CI Host run that passed outright"
+
+          # One jobs fetch answers both remaining questions.
+          jobs_json=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100") ||
+            broke "could not inspect the jobs of run $run_id"
 
           # Percy roughly doubles some tests and leaves others alone, so a
-          # Percy-enabled PR run is no better a model of the median PR run
-          # than this push run is.
-          # Read the statuses first rather than piping straight into grep:
-          # a pipeline takes grep's exit status, so a failed call would look
-          # like "no percy context found" and take the permissive branch.
-          statuses=$(gh api "repos/$REPO/commits/$head_sha/status" --jq '.statuses[].context') ||
-            broke "could not read the commit statuses for $head_sha"
-          if printf '%s\n' "$statuses" | grep -q '^percy/'; then
-            leave "PR #$pr ran Percy"
-          fi
+          # Percy-enabled run is no better a model of the median PR run than a
+          # push run is. Ask the run itself rather than the head's commit
+          # statuses: that endpoint pages at 30, depends on Percy having posted
+          # by now, and either miss would silently take the permissive branch.
+          # `Finalise Percy` is skipped when Percy did not run and succeeds
+          # when it did, which is authoritative for this run and needs no extra
+          # call. An answer we cannot read is treated as "ran": the whole point
+          # of this filter is to not measure a Percy-loaded run.
+          percy=$(printf '%s' "$jobs_json" |
+            jq -r '[.jobs[] | select(.name | test("Finalise Percy")) | .conclusion] | first // "unknown"')
+          [ "$percy" = "skipped" ] || leave "PR #$pr's run reports Finalise Percy as $percy"
 
           # The other half of the 1.5x. `Import cached realm index` is skipped
           # rather than absent when the cache is unusable, so its conclusion
           # distinguishes the two shapes.
-          imported=$(gh api "repos/$REPO/actions/runs/$run_id/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
-                   | select(.name == "Import cached realm index" and .conclusion == "success")] | length') ||
-            broke "could not inspect the jobs of run $run_id"
+          imported=$(printf '%s' "$jobs_json" |
+            jq -r '[.jobs[] | select(.name | startswith("Host Tests")) | .steps[]?
+                    | select(.name == "Import cached realm index" and .conclusion == "success")] | length')
           [ "${imported:-0}" -gt 0 ] || leave "run $run_id indexed from scratch"
 
           gh run download -R "$REPO" "$run_id" --name host-test-report-merged -D merged-junit-report \
@@ -1475,8 +1494,17 @@ jobs:
             # Nonzero exit (e.g. the attribution-coverage floor) fails the
             # job loudly rather than committing a degraded weights file.
             if [ -f merged-junit-report/host.xml ]; then
+              # Non-fatal. The generator attributes module titles by scanning
+              # test sources on disk, which are main's after the reset above,
+              # while the report now comes from the PR's head — so a module
+              # renamed or deleted on main since that head is unattributable
+              # and can push coverage under the generator's floor, which exits
+              # nonzero. Everything else about this refresh is best-effort, and
+              # failing here would also take down the memory-baseline commit
+              # below, which has nothing to do with shard timings.
               node packages/host/scripts/generate-test-module-timings.mjs merged-junit-report/host.xml \
-                --min-drift-seconds 60 --shard-count 16
+                --min-drift-seconds 60 --shard-count 16 ||
+                echo "::warning title=Shard timings not refreshed::the generator rejected the report from run $run_id"
             else
               echo "No merged junit report available — leaving shard timings unchanged."
             fi
