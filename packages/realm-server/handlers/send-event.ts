@@ -21,22 +21,22 @@ export function createSendEvent({
   dbAdapter,
 }: SendEventDeps): SendEvent {
   return async function sendEvent(user, eventType, data) {
-    // The room lookup comes first because it is the step that can make this a
-    // no-op, and it is a local database read that cannot fail the way logging
-    // in can. Reaching Matrix first meant a user with no session room could
-    // still surface an unreachable homeserver or a bad credential as a failed
-    // notify — the same noise the skip below exists to remove, arrived at by
-    // another route.
+    // The room lookup runs before any Matrix call: it is the step that can
+    // make this a no-op, and it is a local database read, so a user with
+    // nothing to receive never depends on the homeserver being reachable.
     let roomId = await fetchSessionRoom(dbAdapter, user);
     if (!roomId) {
-      // No session room means nobody is listening: the user has never
-      // established a session, which is ordinary for a realm created by the
-      // CLI, by an admin, or by a test fixture. There is nothing to deliver
-      // and nowhere to deliver it, so this is a skip rather than a failure —
-      // sending anyway addressed a `null` room, which Matrix answered `403`
-      // and every caller logged as a failed notify with a stack trace.
+      // No session room means nowhere to deliver to. Usually the user has
+      // never established one, which is ordinary for a realm created by the
+      // CLI, by an admin, or by a test fixture. `clearSessionRoom` also nulls
+      // the column for a live session whose DM the realm server has left,
+      // until that session mints a fresh room on its next `_server-session`
+      // or realm auth — inside that window a notify the user would have
+      // received is dropped here, at a level nothing surfaces, so an absent
+      // row is not proof that nobody is listening. Either way there is
+      // nothing addressable, and callers treat the notify as best-effort.
       log.debug(
-        `skipping ${eventType} for ${user}: no session room, nothing is listening`,
+        `skipping ${eventType} for ${user}: no session room to deliver to`,
       );
       return;
     }

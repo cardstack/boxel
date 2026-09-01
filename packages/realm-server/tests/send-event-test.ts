@@ -11,7 +11,11 @@ import { createSendEvent } from '../handlers/send-event.ts';
 module(basename(import.meta.filename), function () {
   function fakeDeps(
     sessionRoomId: string | null,
-    opts: { loggedIn?: boolean; loginFails?: boolean } = {},
+    opts: {
+      loggedIn?: boolean;
+      loginFails?: boolean;
+      sendFails?: boolean;
+    } = {},
   ) {
     let sent: { roomId: string; body: unknown }[] = [];
     let logins = 0;
@@ -29,6 +33,9 @@ module(basename(import.meta.filename), function () {
         }
       },
       sendEvent: async (roomId: string, _type: string, body: unknown) => {
+        if (opts.sendFails) {
+          throw new Error('homeserver rejected the event');
+        }
         sent.push({ roomId, body });
       },
     } as unknown as MatrixClient;
@@ -42,16 +49,15 @@ module(basename(import.meta.filename), function () {
   test('an event for a user with no session room is skipped, not attempted', async function (assert) {
     let { sendEvent, sent } = fakeDeps(null);
 
-    // Resolves rather than rejects: the send is the thing that used to fail,
-    // by addressing a `null` room that Matrix answered 403.
+    // Resolves rather than rejects: a null room id is not addressable, so
+    // there is nothing to send and nothing to fail.
     await sendEvent('@mango:localhost', 'realms-list-updated');
 
     assert.deepEqual(sent, [], 'no room event was addressed to a null room');
   });
 
-  // The room lookup has to come before the login, or a user with no session
-  // room can still turn an unreachable homeserver into a failed notify — the
-  // noise this skip exists to remove, reached the other way round.
+  // The room lookup gates the login, so a user with nothing to receive is
+  // never exposed to an unreachable homeserver.
   test('a skipped event does not reach Matrix at all', async function (assert) {
     let { sendEvent, sent, loginCount } = fakeDeps(null, {
       loggedIn: false,
@@ -73,6 +79,20 @@ module(basename(import.meta.filename), function () {
 
     assert.strictEqual(loginCount(), 1, 'logged in before sending');
     assert.strictEqual(sent.length, 1, 'and delivered the event');
+  });
+
+  // The other half of the header's reasoning: callers can only catch what
+  // reaches them. A send failure has to keep propagating, or a `try/catch`
+  // added here in the name of quieting things further would swallow it past
+  // every caller's own handling with this file still green.
+  test('a real send failure still propagates to the caller', async function (assert) {
+    let { sendEvent } = fakeDeps('!room-abc:localhost', { sendFails: true });
+
+    await assert.rejects(
+      sendEvent('@mango:localhost', 'realms-list-updated'),
+      /homeserver rejected the event/,
+      'the caller decides what a failed delivery means',
+    );
   });
 
   test('an event for a user with a session room is delivered to it', async function (assert) {
