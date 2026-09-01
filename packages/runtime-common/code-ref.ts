@@ -4,7 +4,6 @@ import type {
   BaseDef,
   CardDef,
   FieldDef,
-  FieldConstructor,
 } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import { Loader } from './loader.ts';
@@ -339,33 +338,32 @@ export function getField<T extends BaseDef>(
             : undefined;
       }
       if (fieldOverride) {
-        let cardThunk = fieldOverride;
-        let { computeVia, name, queryDefinition, eager } = result;
         let originalField = result;
-        let declaredCardThunk =
-          (originalField as any).declaredCardResolver ??
-          (() => originalField.card as BaseDefConstructor);
-        result = new (originalField.constructor as unknown as Field & {
-          new (args: FieldConstructor<unknown>): Field;
-        })({
-          cardThunk: () => cardThunk,
-          declaredCardThunk,
-          computeVia,
-          name,
-          isPolymorphic: true,
-          queryDefinition,
-          // The override narrows which card the link resolves to; it does not
-          // restate how the field behaves. Options that travel with the
-          // declaration have to be carried across or the rebuilt field silently
-          // loses them.
-          eager,
-        }) as Field;
-        // `configuration` is not a constructor parameter — the field factories
-        // assign it after construction — so carrying it across takes the same
-        // shape. It is read instance-scoped (a rebuilt field is exactly what
-        // that lookup returns), so dropping it would strip a narrowed field's
-        // rendering config.
-        (result as any).configuration = (originalField as any).configuration;
+        // The override narrows which card the field resolves to. It does not
+        // restate how the field behaves, so the rest of the declaration has to
+        // survive the narrowing.
+        //
+        // Clone rather than reconstruct from a list of the options to keep.
+        // Such a list is a second place that has to know every property a
+        // field carries, and it cannot know them all: most of a field's
+        // options are constructor parameters, but the field factories assign
+        // `configuration` after construction, so it cannot travel through the
+        // constructor at all. An option the list omits is dropped with nothing
+        // to signal it, and only a consumer reading that property
+        // instance-scoped shows the loss.
+        //
+        // The clone carries the declaration whole, leaving this a statement of
+        // what a narrowing changes: the card the field resolves to, and that
+        // resolving it is polymorphic. Notably not `declaredCardThunk`, which
+        // resolves the type the field was *declared* with.
+        result = Object.assign(
+          Object.create(Object.getPrototypeOf(originalField)),
+          originalField,
+          {
+            cardThunk: () => fieldOverride,
+            isPolymorphic: true,
+          },
+        ) as Field;
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',

@@ -3467,6 +3467,64 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-polymorphic="special-string-b"]').hasText('Mango');
     });
 
+    test('narrowing a field to a subtype changes only which card it resolves to', async function (assert) {
+      class SpecialString extends StringField {
+        static displayName = 'SpecialString';
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(StringField, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Mango'] } }),
+        });
+      }
+
+      let declared = getField(
+        new TestCard({ specialField: 'Mango' }),
+        'specialField',
+      )!;
+      let narrowed = getField(
+        new TestCard({
+          specialField: 'Mango',
+          [fields]: { specialField: SpecialString },
+        }),
+        'specialField',
+      )!;
+
+      assert.strictEqual(
+        narrowed.card,
+        SpecialString,
+        'the narrowed field resolves to the subtype the override names',
+      );
+      assert.true(
+        narrowed.isPolymorphic,
+        'and reports the resolution as polymorphic',
+      );
+
+      // Everything else about the field is the declaration's. Comparing the
+      // whole property set rather than the options this test thought to name
+      // is the point: an option a field can be declared with that narrowing
+      // fails to carry surfaces here rather than in whichever consumer
+      // happens to read it instance-scoped.
+      let carried = Object.keys(declared).filter(
+        (key) => key !== 'cardThunk' && key !== 'isPolymorphic',
+      );
+      assert.deepEqual(
+        carried
+          .filter((key) => key === 'configuration' || key === 'searchable')
+          .sort(),
+        ['configuration', 'searchable'],
+        'the declared field carries the options this compares over',
+      );
+      assert.deepEqual(
+        carried.filter(
+          (key) => (narrowed as any)[key] !== (declared as any)[key],
+        ),
+        [],
+        'the narrowing moved nothing else',
+      );
+    });
+
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
       class TestField extends FieldDef {
         static displayName = 'TestField';
