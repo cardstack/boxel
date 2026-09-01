@@ -1,11 +1,17 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { LinkTo } from '@ember/routing';
+import type RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { at, Choreo, motion, type PerformCommand } from 'glimmer-motion';
-import { ChoreoMark } from 'test-app/components/choreo-mark';
+import {
+  at,
+  Choreo,
+  motion,
+  type PerformCommand,
+  viewTransition,
+} from 'glimmer-motion';
 import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import {
@@ -312,6 +318,28 @@ export class SylvaStage extends Component<{
     });
   });
 
+  @service declare private router: RouterService;
+
+  /**
+   * Theater ⇄ demo page crosses as a VIEW TRANSITION — a bitmap morph.
+   * The stage on either side carries `view-transition-name: sylva-stage`,
+   * so the browser snapshots the outgoing frame, snapshots the incoming
+   * one, and morphs the two IMAGES between the full screen and the inline
+   * seat. Tweening the real boxes was the first cut, and it moved a live
+   * WebGL canvas and an iframe through a resize per frame — the exact
+   * kind of work a crossing should not be doing. Pixels are cheap;
+   * layouts are not.
+   */
+  /* `fn` passes the click event along as a trailing arg, so the model
+     is only a model when it is actually a string */
+  private cross = (route: string, model?: unknown) => {
+    void viewTransition(async () => {
+      await (typeof model === 'string'
+        ? this.router.transitionTo(route, model)
+        : this.router.transitionTo(route));
+    });
+  };
+
   private isCtx = (ctx: string) => this.context === ctx;
 
   private get isTheater() {
@@ -573,6 +601,29 @@ export class SylvaStage extends Component<{
          */
         if (/[?&]poster\b/.test(location.search)) {
           (window as unknown as { __poster?: () => string }).__poster = () => {
+              /* a hidden tab has never run a frame, and pumping the loop
+                 back-to-back advances almost nothing — dt is real elapsed
+                 time, capped not floored. So the pump borrows the clock:
+                 50ms per call, four hundred calls, twenty simulated
+                 seconds — the reveal scan completes and the moss is grown
+                 before the shot. */
+              const realNow = performance.now.bind(performance);
+              let fake = realNow();
+              performance.now = () => (fake += 50);
+              try {
+                for (let i = 0; i < 400; i++) {
+                  sylva.renderFrame();
+                }
+              } finally {
+                performance.now = realNow;
+              }
+            /* a photograph is POSED: stand the lens at the elf cup's own
+               reading shot, close enough that the blades and bark carry */
+            const rich = this.shots.find((sh) => sh.id === 'cup');
+            const richLook = this.lookOf.get('cup');
+            if (rich && richLook) {
+              sylva.pose({ ...rich, dolly: rich.dolly * 0.95, look: richLook });
+            }
             sylva.renderFrame();
             const out = document.createElement('canvas');
             const w = 1200;
@@ -580,7 +631,7 @@ export class SylvaStage extends Component<{
             out.height = Math.round((canvas.height / canvas.width) * w);
             const g = out.getContext('2d')!;
             /* the sky is the PAGE's — the canvas itself is alpha */
-            g.fillStyle = '#05100b';
+            g.fillStyle = '#4a4d44';
             g.fillRect(0, 0, out.width, out.height);
             g.drawImage(canvas, 0, 0, out.width, out.height);
             return out.toDataURL('image/webp', 0.8);
@@ -593,7 +644,19 @@ export class SylvaStage extends Component<{
         console.error(err);
       }
     };
-    requestAnimationFrame(() => requestAnimationFrame(boot));
+    let kicked = false;
+    const kick = () => {
+      if (!kicked) {
+        kicked = true;
+        boot();
+      }
+    };
+    requestAnimationFrame(() => requestAnimationFrame(kick));
+    /* a capture tab may be BACKGROUND, where rAF never fires at all — the
+       poster hook needs the scene regardless, so ?poster adds a timer */
+    if (/[?&]poster\b/.test(location.search)) {
+      setTimeout(kick, 800);
+    }
 
     const onResize = () => this.sylva?.layout();
     window.addEventListener('resize', onResize);
@@ -1062,6 +1125,15 @@ export class SylvaStage extends Component<{
     }
   };
 
+  /** from the top: a fresh lap, which begins at the title scene */
+  private fromTheTop = () => {
+    this.playing = true;
+    this.open = null;
+    this.told = null;
+    this.sent = null;
+    this.lap += 1;
+  };
+
   /**
    * The hand-driven shot, for when the film is off. A region replays when its
    * SCORE changes, which is what turns a click on a pin into a flight — and if
@@ -1341,7 +1413,11 @@ export class SylvaStage extends Component<{
         <div class="sy-tile">
           <img class="sy-tile-poster" src={{POSTER}} alt="" />
           <div class="sy-tile-scrim" aria-hidden="true"></div>
-          <LinkTo @route="sylva" class="sy-tile-tour">▶&nbsp;Tour</LinkTo>
+          <button
+            type="button"
+            class="sy-tile-tour"
+            {{on "click" (fn this.cross "sylva")}}
+          >▶&nbsp;Tour</button>
           <div class="sy-tile-third" aria-hidden="true">
             <p class="sy-tile-eyebrow">A field survey</p>
             <p class="sy-tile-name">Sylva</p>
@@ -1360,6 +1436,13 @@ export class SylvaStage extends Component<{
               src={{EMBED}}
               {{motion initial=FRAME_FROM animate=FRAME_TO transition=FRAME_IN}}
             ></iframe>
+            {{! the door back to the full house — the same crossing the
+                tile's Tour button takes }}
+            <button
+              type="button"
+              class="sy-theater-btn"
+              {{on "click" (fn this.cross "sylva")}}
+            >⛶ Theater</button>
           </div>
         {{else}}
           <div
@@ -1371,19 +1454,16 @@ export class SylvaStage extends Component<{
               {{! the theater's own bar: the lockup dark by construction, and
               Exit standing exactly where the GitHub link usually does —
               it leaves for the demo page, code and deep dive and all }}
+              {{! NO second lockup: the app's own topbar stays on screen
+                  in theater — the brand is the same element, superimposed
+                  — while its other contents fade out (see the body class
+                  rules below). This bar only holds the one door. }}
               <div class="sy-topbar">
-                <LinkTo @route="index" class="sy-brand">
-                  <ChoreoMark />
-                  <span class="sy-brand-copy">
-                    <span class="sy-brand-name">Choreo</span>
-                    <span class="sy-brand-sub">by Cardstack</span>
-                  </span>
-                </LinkTo>
-                <LinkTo
-                  @route="demo"
-                  @model="sylva"
+                <button
+                  type="button"
                   class="sy-exit"
-                >Exit</LinkTo>
+                  {{on "click" (fn this.cross "demo" "sylva")}}
+                >How This Is Built</button>
               </div>
             {{/if}}
             <div
@@ -1556,6 +1636,11 @@ export class SylvaStage extends Component<{
                     class="sy-dot sy-play {{if this.playing 'is-on'}}"
                     {{on "click" this.toggle}}
                   >{{if this.playing "❙❙ touring" "▶ tour"}}</button>
+                  <button
+                    type="button"
+                    class="sy-dot"
+                    {{on "click" this.fromTheTop}}
+                  >↺ title</button>
                   {{#each this.spots as |spot|}}
                     <button
                       type="button"
@@ -1640,14 +1725,50 @@ export class SylvaStage extends Component<{
 
     <style>
       .sy-page {
-        background: #05100b;
+        /* the ORIGINAL's sky, verbatim: two soft radials over a near-flat
+           #4a4d44 — the canvas is alpha, so this IS the scene's ground,
+           and the tile, the theater and the iframe all read as one world */
+        background:
+          radial-gradient(
+            64% 52% at 27% 84%,
+            rgba(232, 238, 222, 0.085) 0%,
+            rgba(232, 238, 222, 0) 72%
+          ),
+          radial-gradient(
+            70% 60% at 92% 8%,
+            rgba(24, 28, 20, 0.1) 0%,
+            rgba(24, 28, 20, 0) 68%
+          ),
+          #4a4d44;
         overflow: hidden;
+      }
+      /* the floor of light the root stands in, also the original's */
+      .sy-hero::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            72% 44% at 50% 117%,
+            rgba(238, 243, 231, 0.5) 0%,
+            rgba(238, 243, 231, 0.21) 42%,
+            rgba(238, 243, 231, 0.04) 72%,
+            rgba(238, 243, 231, 0) 88%
+          ),
+          linear-gradient(
+            180deg,
+            rgba(238, 243, 231, 0) 54%,
+            rgba(238, 243, 231, 0.03) 78%,
+            rgba(238, 243, 231, 0.085) 100%
+          );
       }
       .sy-embed {
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: #05100b;
+        background: #4a4d44;
       }
       .sy-frame {
         display: block;
@@ -1656,20 +1777,50 @@ export class SylvaStage extends Component<{
         border: 0;
         transform-origin: 50% 60%;
       }
-      /* the theater owns the viewport; the stage face owns its box */
+      /* the theater owns the viewport; the stage face owns its box. Its
+         z stays MODEST — the app chrome is faded out underneath rather
+         than fought, and a huge z on a fixed flying sprite is exactly the
+         thing that janks a route crossing's own raise ordering. */
       .sy-page.is-theater {
         position: fixed;
         inset: 0;
-        z-index: 40;
+        z-index: 5;
       }
       .sy-page.is-stage {
         position: absolute;
         inset: 0;
       }
-      /* while the theater is up, the app's own chrome steps out */
-      body.sy-theater .topbar,
+      /* THE THEATER BORROWS THE APP'S TOPBAR. The lockup is the same
+         element the whole site shows, superimposed over the scene — never
+         drawn twice — with its ink pinned to the dark palette; the rest
+         of the bar and the footer fade out, and fade back on the way out. */
+      .topbar .top-links,
+      .footer {
+        transition: opacity 320ms ease;
+      }
+      body.sy-theater .topbar {
+        pointer-events: none;
+      }
+      body.sy-theater .topbar .brand {
+        pointer-events: auto;
+        color: #f3ece3;
+      }
+      body.sy-theater .topbar .brand-sub {
+        color: #d2c9bf;
+      }
+      body.sy-theater .topbar .top-links,
       body.sy-theater .footer {
-        display: none;
+        opacity: 0;
+        pointer-events: none;
+      }
+      /* the crossing is a BITMAP morph: both stages carry the same
+         view-transition name, and the browser morphs the snapshots
+         between full screen and the inline seat */
+      .sy-page.is-theater {
+        view-transition-name: sylva-stage;
+      }
+      .sy-embed {
+        view-transition-name: sylva-stage;
       }
       /* ── the theater's bar: dark by construction, whatever the theme ── */
       .sy-topbar {
@@ -1678,37 +1829,32 @@ export class SylvaStage extends Component<{
         inset-inline: 0;
         top: 0;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: clamp(10px, 1.4vh, 22px) clamp(16px, 2.2vw, 40px);
-        background: linear-gradient(rgba(3, 10, 6, 0.75), rgba(3, 10, 6, 0));
+        justify-content: flex-end;
+        /* the app topbar's own metrics, so the door stands where the
+           GitHub link does */
+        padding: 18px 28px;
+        background: linear-gradient(rgba(3, 10, 6, 0.6), rgba(3, 10, 6, 0));
       }
-      .sy-brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
+      .sy-theater-btn {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(126, 214, 160, 0.4);
+        background: rgba(6, 18, 12, 0.62);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        color: #cfe9da;
+        font:
+          11px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
         text-decoration: none;
       }
-      .sy-brand-copy {
-        display: flex;
-        flex-direction: column;
-        line-height: 1.1;
-      }
-      .sy-brand-name {
-        color: #eef7f0;
-        font:
-          700 clamp(14px, 1.1vw, 22px) / 1.1 ui-sans-serif,
-          system-ui,
-          sans-serif;
-        letter-spacing: 0.01em;
-      }
-      .sy-brand-sub {
-        color: #6f9a80;
-        font:
-          500 clamp(9px, 0.7vw, 14px) / 1.2 ui-monospace,
-          monospace;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
+      .sy-theater-btn:hover {
+        background: rgba(20, 44, 30, 0.85);
       }
       .sy-exit {
         padding: clamp(6px, 0.5vw, 11px) clamp(14px, 1.2vw, 26px);
@@ -1732,7 +1878,9 @@ export class SylvaStage extends Component<{
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: #05100b;
+        /* the photograph's own sky (threeui's misty sage), sampled from
+           the frame — whatever the crop leaves uncovered fills invisibly */
+        background: #4a4d44;
       }
       .sy-tile-poster {
         position: absolute;
@@ -1740,17 +1888,19 @@ export class SylvaStage extends Component<{
         width: 100%;
         height: 100%;
         object-fit: cover;
+        object-position: 50% 62%;
       }
       .sy-tile-scrim {
         position: absolute;
         inset: 0;
+        /* shaded in the sky's own family, not the film's night blue */
         background:
           radial-gradient(
-            60% 50% at 50% 46%,
-            rgba(3, 10, 6, 0) 40%,
-            rgba(3, 10, 6, 0.35) 100%
+            60% 50% at 50% 44%,
+            rgba(26, 28, 22, 0) 42%,
+            rgba(26, 28, 22, 0.3) 100%
           ),
-          linear-gradient(rgba(3, 10, 6, 0) 55%, rgba(3, 10, 6, 0.82) 100%);
+          linear-gradient(rgba(26, 28, 22, 0) 52%, rgba(20, 22, 17, 0.85) 100%);
       }
       .sy-tile-tour {
         position: absolute;
@@ -2121,8 +2271,11 @@ export class SylvaStage extends Component<{
           sans-serif;
         letter-spacing: 0.32em;
         text-transform: uppercase;
-        color: rgba(226, 245, 232, 0.95);
-        text-shadow: 0 4px 44px rgba(3, 10, 6, 0.9);
+        /* the wordmark wears the moss's own green while it holds the frame */
+        color: #8fe3ae;
+        text-shadow:
+          0 0 34px rgba(126, 214, 160, 0.35),
+          0 4px 44px rgba(3, 10, 6, 0.9);
       }
       .sy-headline {
         margin: 0 0 clamp(6px, 0.9vh, 16px);
