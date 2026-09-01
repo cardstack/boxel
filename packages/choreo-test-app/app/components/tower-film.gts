@@ -1320,9 +1320,32 @@ export default class TowerFilm extends Component<{
       y: number;
       yaw: number;
     }[] = [];
-    for (const b of this.beats) {
+    const beats = this.beats;
+    for (const [bi, b] of beats.entries()) {
+      /**
+       * THE SEAM IS STILL, BY CONSTRUCTION. "Author a hold either side
+       * of a cut" was a convention, and conventions drift: a spline that
+       * crosses a cut waypoint with velocity hands the snapped chaser a
+       * moving target from a standing start, and the mismatch reads as a
+       * bounce. So the builder enforces it — a beat BEFORE a cut spends
+       * its last tick parked on its tail pose, and a cut beat spends its
+       * first tick parked on its head. Repeated Catmull-Rom points come
+       * to rest and leave again; the motion is simply compressed into
+       * the remaining ticks, so the waypoint count — and therefore every
+       * cue's clock — is untouched.
+       */
+      const head = b.cut ? 1 : 0;
+      const tail = beats[bi + 1]?.cut ? 1 : 0;
       for (let k = 0; k < b.ticks; k++) {
-        const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
+        const span = b.ticks - 1 - head - tail;
+        const f =
+          b.ticks === 1
+            ? 0
+            : span <= 0
+              ? k <= head
+                ? 0
+                : 1
+              : Math.min(1, Math.max(0, (k - head) / span));
         const to = b.toCam ?? b.cam;
         pts.push({
           dolly: lerp(b.cam.dolly, to.dolly, f),
@@ -1575,6 +1598,26 @@ export default class TowerFilm extends Component<{
   }
 
   /**
+   * THE CHASER WAITS OUT THE SEAM. A cut snaps the lens to the new pose,
+   * but the score's one spline still SWEEPS the positional jump over the
+   * seam segment — for a moment after the cut, the goal is mid-crossing,
+   * somewhere between the two shots. A chaser that keeps integrating gets
+   * dragged backward toward the old shot and hauled in again, and that
+   * round trip is the BIG bounce a hard cut wore. So a cut parks the
+   * integrator on the landed pose and releases it only once the goal has
+   * crossed the seam and settled beside it (with a deadline, so a missed
+   * convergence can never freeze the film). Together with the path
+   * builder's enforced holds, the edit is what an edit is: still, cut,
+   * still — and then the new shot leaves from rest.
+   */
+  private seamHold = 0;
+
+  private cutSnap(beat: Beat) {
+    this.snap(beat.cam);
+    this.seamHold = performance.now() + TICK * 1.6 * 1000;
+  }
+
+  /**
    * One critically-damped stage. The page's own chase is the second, which
    * is the whole cascade argument getting made for free by the fact that the
    * scene lives in another document.
@@ -1612,7 +1655,25 @@ export default class TowerFilm extends Component<{
     );
     this.lastTick = stamp;
 
-    this.chase(dt);
+    /* mid-seam the goal is between two shots and not to be chased; it is
+       released the moment the goal parks beside the landed pose — or at
+       the deadline, whichever comes first */
+    if (this.seamHold) {
+      const g = this.goal;
+      const n = this.now;
+      const parked =
+        Math.abs(g.yaw - n.yaw) < 0.5 &&
+        Math.abs(g.pitch - n.pitch) < 0.5 &&
+        Math.abs(g.dolly - n.dolly) < 0.02 &&
+        Math.abs(g.lookY - n.lookY) < 0.15 &&
+        Math.abs((g.ox ?? 0) - (n.ox ?? 0)) < 0.01;
+      if (parked || stamp > this.seamHold) {
+        this.seamHold = 0;
+      }
+    }
+    if (!this.seamHold) {
+      this.chase(dt);
+    }
     /* a chaser lands on a millionth of a pixel rather than on zero, and an
        off-centre frustum that is never quite centred keeps the projection
        matrix rebuilt every frame for nothing — so zero means zero */
@@ -2045,7 +2106,7 @@ export default class TowerFilm extends Component<{
       film.trace(`t${i}`, { pts: spec.pts, r });
     });
     if (beat.cut) {
-      this.snap(beat.cam);
+      this.cutSnap(beat);
       /* a hard cut needs a piece of punctuation or it reads as a dropped
          frame. One wipe, in the paper the whole film is printed on, raked
          to the same diagonal the sun throws — over in a fifth of a second,
@@ -2166,7 +2227,8 @@ export default class TowerFilm extends Component<{
     this.playing = true;
     this.lap += 1;
     this.applyBeat(BEATS[index]!, true);
-    this.snap(BEATS[index]!.cam);
+    /* a skip is an edit like any other: land it moving */
+    this.cutSnap(BEATS[index]!);
   }
 
   private prev = () => this.goChapter(-1);
