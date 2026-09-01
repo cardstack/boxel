@@ -93,7 +93,7 @@ import {
   buildQuerySearchURL,
   getValueForResourcePath,
 } from './query-field-utils.ts';
-import { applyQueryFieldPageBound } from './search-bounds.ts';
+import { applyServerSearchPageBound } from './search-bounds.ts';
 
 // We allow up to this many traversals into the same card type per
 // `populateQueryFields` walk, matching the field-set the host emits at
@@ -1035,12 +1035,12 @@ export class RealmIndexQueryEngine {
 
     let { realms } = normalized;
     // Bound what this expansion assembles into the card's document. The pass
-    // runs in-process, so neither the `_search` endpoint's ceiling nor the card
-    // `@context` cap reaches it, and a same-realm field ran to every matching
-    // row while the same field's cross-realm leg came back clamped by the peer
-    // realm's endpoint. One ceiling now holds on both, and `total` below
-    // carries what the page left out.
-    let query = applyQueryFieldPageBound(normalized.query);
+    // runs in-process, so no HTTP bound reaches it, and a same-realm field ran
+    // to every matching row while the same field's cross-realm leg came back
+    // bounded by the peer realm's endpoint. Applying the server bound here is
+    // what makes the field resolve to the same page on every leg, and `total`
+    // below carries what that page left out.
+    let query = applyServerSearchPageBound(normalized.query);
     // The seed URL advertises the query as authored, not the bounded one. It is
     // the client's copy of this field's query, and the client rebuilds the same
     // query from the same definition to decide whether the seed already answers

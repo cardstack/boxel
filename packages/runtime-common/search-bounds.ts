@@ -1,3 +1,4 @@
+import { logger } from './log.ts';
 import type { Query } from './query.ts';
 import type { SearchEntryFieldset } from './search-entry.ts';
 
@@ -196,6 +197,8 @@ export class SearchBoundError extends Error {
 const HTML_LEG_HINT =
   'for large or wide result sets, use prerendered HTML search results (@context.searchResultsComponent), which this cap does not apply to';
 
+const log = logger('search-bounds');
+
 // Reject a federated item-leg request that fans out to more realms than the
 // cap. It can't be clamped (we can't choose which realms to drop), so the
 // author must narrow the `realms` list.
@@ -208,14 +211,31 @@ export function assertRealmsBound(realms: string[]): void {
   }
 }
 
-// Enforce mandatory pagination on an item-leg query. `dflt` is the size a
-// query that names none is clamped to, so a non-paginating caller gets the
-// first page rather than every row. `max` is the size an explicit page is
-// rejected above; between the two, a caller that named a size gets it, having
-// asked for that cost knowingly. Passing the same number for both collapses to
-// one threshold, which is what the card `@context` cap wants. Returns the
-// (possibly clamped) query without mutating input.
-function boundPageSize(query: Query, dflt: number, max: number): Query {
+// Enforce mandatory pagination on an item-leg query. `dflt` is the size a query
+// that names none is clamped to, so a non-paginating caller gets the first page
+// rather than every row. `max` is the ceiling an explicit page may not pass;
+// between the two, a caller that named a size gets it, having asked for that
+// cost knowingly.
+//
+// `overMax` decides what happens past the ceiling, and the two answers exist for
+// two different kinds of caller. `reject` is for a caller that can act on being
+// told no — card code calling `getCards` surfaces the error in the card, and the
+// author who wrote the number is the one who sees it. `clamp` is for a caller
+// that cannot: a query-backed field's page is authored once and then resolved by
+// machinery on three separate legs (the indexer's expansion, a peer realm's
+// `_search`, the client's live refresh), so a rejection on one of them and a
+// clamp on another is how a field comes to work from its seed and then fail on
+// refresh. Clamping everywhere keeps the legs agreeing, and it is honest because
+// `meta.page.total` reports the true match count beside the short page — so a
+// caller can always see it got less than it asked for.
+//
+// Returns the (possibly clamped) query without mutating input.
+function boundPageSize(
+  query: Query,
+  dflt: number,
+  max: number,
+  overMax: 'reject' | 'clamp',
+): Query {
   let page = query.page;
   if (page == null) {
     // No page at all: apply the mandatory default so the result set is bounded.
@@ -230,10 +250,20 @@ function boundPageSize(query: Query, dflt: number, max: number): Query {
     return { ...query, page: { ...page, size: dflt } } as Query;
   }
   if (size > max) {
-    throw new SearchBoundError(
-      400,
-      `page.size ${size} exceeds the maximum of ${max}; request a smaller page, or ${HTML_LEG_HINT}`,
+    if (overMax === 'reject') {
+      throw new SearchBoundError(
+        400,
+        `page.size ${size} exceeds the maximum of ${max}; request a smaller page, or ${HTML_LEG_HINT}`,
+      );
+    }
+    // Clamping is the quiet path, so leave an artifact. Without one the only
+    // symptom is a result set smaller than the caller asked for, which looks
+    // like the query matching less rather than the bound intervening — the
+    // question "why am I only getting 2000?" has no answer anywhere else.
+    log.warn(
+      `page.size ${size} exceeds the maximum of ${max}; clamped to ${max}. The true match count rides meta.page.total; ${HTML_LEG_HINT}`,
     );
+    return { ...query, page: { ...page, size: max } } as Query;
   }
   return query;
 }
@@ -242,51 +272,35 @@ function boundPageSize(query: Query, dflt: number, max: number): Query {
 // item-leg searches (see host StoreService). One threshold, not two: untrusted
 // card code doesn't get to opt into a larger page by asking for one.
 export function applySearchPageBound(query: Query): Query {
-  return boundPageSize(query, maxPageSize, maxPageSize);
+  return boundPageSize(query, maxPageSize, maxPageSize, 'reject');
 }
 
-// The server-side page bounds, enforced on every item-leg request the server
-// handles regardless of caller. A request naming no page is clamped to the
-// default (higher than the card `@context` cap — the host may legitimately page
-// larger); one naming a size is honored up to the absolute maximum and rejected
-// above it. The pair is what lets a caller with a reason — a query-backed field
-// declaring the page it needs — ask for more than the default while still
-// leaving the server's own work bounded.
+// The server-side page bounds. These hold on every item-leg request the server
+// handles regardless of caller, and on the indexer's own in-process query-field
+// expansion, which is server work that no HTTP bound would otherwise reach.
+//
+// A request naming no page is clamped to the default (higher than the card
+// `@context` cap — the host may legitimately page larger). One naming a size is
+// honored up to the absolute maximum, and clamped to it above. That pair is what
+// lets a caller with a reason — a query-backed field declaring the page it needs
+// — ask for more than the default while still leaving the server's work bounded.
+//
+// Clamping rather than rejecting is what keeps a query-backed field's three
+// resolution legs agreeing. The field's page is authored once and then applied
+// by the indexer's expansion, by a peer realm's `_search`, and by the client's
+// live refresh; a rejection on one and a clamp on another is how a field comes
+// to resolve from its seed and then fail the first time it refreshes. It is also
+// what keeps an over-large page from making a card unindexable, since that page
+// is read on every index of every instance of it. The shortfall is never silent:
+// `meta.page.total` carries the true match count beside the short page, and a
+// query-backed field surfaces it as `isPartial`.
 export function applyServerSearchPageBound(query: Query): Query {
-  return boundPageSize(query, serverMaxPageSize, serverAbsoluteMaxPageSize);
-}
-
-// The bounds for a query-backed relationship's own expansion pass, which the
-// indexer runs in-process rather than over HTTP. Neither endpoint bound reaches
-// that pass, so it applies the same pair here and the field is bounded the same
-// way wherever it resolves — in the indexer, through a peer realm's `_search`,
-// or on the client's live refresh.
-//
-// A field that declares no page gets the default, which is the ceiling the
-// author is told about and the one `isPartial` reports against. A field that
-// declares one has opted into that size: it is honored, which is what makes the
-// declared page a real lever rather than a suggestion the ceiling overrules.
-//
-// Where the endpoint rejects an over-maximum page, this clamps. A field's
-// `page.size` is authored once and read on every index of every instance of
-// that card, so rejecting it would make the card unindexable rather than fail
-// the one request that asked for too much. Clamping is safe because the
-// shortfall is reported: the true match count rides `meta.total` on the
-// relationship, and `getRelationshipMembershipState` reads it back as
-// `isPartial`.
-export function applyQueryFieldPageBound(query: Query): Query {
-  let page = query.page;
-  let size = Number((page as { size?: unknown } | undefined)?.size);
-  if (!Number.isFinite(size) || size < 1) {
-    return { ...query, page: { ...(page ?? {}), size: serverMaxPageSize } };
-  }
-  if (size > serverAbsoluteMaxPageSize) {
-    return {
-      ...query,
-      page: { ...(page ?? {}), size: serverAbsoluteMaxPageSize },
-    };
-  }
-  return query;
+  return boundPageSize(
+    query,
+    serverMaxPageSize,
+    serverAbsoluteMaxPageSize,
+    'clamp',
+  );
 }
 
 // Run an item-leg search under the wall-clock budget. The runner receives an

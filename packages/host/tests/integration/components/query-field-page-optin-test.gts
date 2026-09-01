@@ -172,9 +172,13 @@ module('Integration | query-field page opt-in', function (hooks) {
     let { getRelationshipMembershipState } = cardApi;
     let status = getRelationshipMembershipState(await loadHost(), 'overAsking');
 
-    // Clamped rather than rejected: an over-maximum page is authored once and
-    // read on every index of every instance, so rejecting it would make the
-    // card unindexable instead of failing one request.
+    // Clamped rather than rejected, for two reasons. The page is authored once
+    // and read on every index of every instance, so rejecting it would make the
+    // card unindexable instead of failing one request. And the same page is
+    // applied by three separate legs — this expansion, a peer realm's
+    // `_search`, and the client's live refresh — so a rejection on one of them
+    // and a clamp on another is how a field resolves from its seed and then
+    // fails the first time it refreshes.
     assert.strictEqual(
       status.membership?.length,
       ABSOLUTE_MAX,
