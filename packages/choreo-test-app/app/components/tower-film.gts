@@ -106,6 +106,8 @@ interface Beat {
   gloss?: string;
   /** which of the six towers stands here; overrides the chapter's grade */
   grade?: string;
+  /** how thick the air is, 0 the hour's own and 1 as heavy as it goes */
+  haze?: number;
   id: string;
   /** the key term, in Japanese */
   kanji?: string;
@@ -158,6 +160,14 @@ interface Beat {
   };
   /** which of the six towers stands here */
   style?: number;
+  /**
+   * WHERE THE SUN IS FOR THIS SHOT, degrees — bearing and height above the
+   * horizon. The page models the sun as a property of the hour, which is
+   * right for a landing page and too coarse for a film: a shot wants its
+   * own raking light without changing what time it is. Omit and the hour
+   * keeps it.
+   */
+  sun?: { az: number; el: number };
   /** time of day: 0 morning, 1 noon, 2 sunset, 3 night */
   theme?: number;
   /** how long it runs, in TICKS — see the note on the path */
@@ -414,6 +424,7 @@ const BEATS: Beat[] = [
       src: 'himeji.webp',
     },
     romaji: 'IKKOKU-ICHIJŌ-REI',
+    theme: 3,
     ticks: 4,
   },
 
@@ -430,6 +441,7 @@ const BEATS: Beat[] = [
     cam: { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
     ch: 2,
     gloss: 'the stone base',
+    haze: 0.42,
     id: 'ishigaki',
     says: [
       'No mortar. None.',
@@ -446,7 +458,8 @@ const BEATS: Beat[] = [
       src: 'ishigaki.webp',
     },
     romaji: 'ISHIGAKI',
-    theme: 3,
+    sun: { az: -70, el: 12 },
+    theme: 0,
     ticks: 5,
     to: [2.8, 1.6, 0.6],
     toCam: { dolly: 1.12, lookY: -3.2, ox: -0.12, pitch: 1, yaw: 84 },
@@ -456,6 +469,7 @@ const BEATS: Beat[] = [
     cam: { dolly: 1.05, lookY: -2.2, ox: -0.12, pitch: 2, yaw: 90 },
     ch: 2,
     gloss: 'post and beam',
+    haze: 0.2,
     id: 'timber',
     says: ['A timber cage', 'Posts stand ON stone', 'The joints do the work'],
     kanji: '柱梁',
@@ -463,7 +477,7 @@ const BEATS: Beat[] = [
     vo: 'Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.',
     mode: 'lower',
     romaji: 'CHŪRYŌ',
-    theme: 0,
+    sun: { az: -30, el: 62 },
     ticks: 6,
     toCam: { dolly: 1.0, lookY: -0.9, ox: -0.12, pitch: 4, yaw: 102 },
   },
@@ -483,6 +497,7 @@ const BEATS: Beat[] = [
     vo: 'Then it gets wrapped. Lime plaster, thick enough to be armour. White, because white does not burn.',
     mode: 'lower',
     romaji: 'SHIRAKABE',
+    sun: { az: -8, el: 78 },
     ticks: 4,
     toCam: { dolly: 1.0, lookY: 0.8, ox: -0.12, pitch: 7, yaw: 118 },
   },
@@ -498,7 +513,6 @@ const BEATS: Beat[] = [
     vo: 'At the top, one room you can see out of. Everything below it is how you get that room into the air.',
     mode: 'lower',
     romaji: 'BŌRŌ',
-    theme: 1,
     ticks: 5,
     toCam: { dolly: 0.94, lookY: 2.8, ox: -0.12, pitch: 13, yaw: 133 },
   },
@@ -518,6 +532,7 @@ const BEATS: Beat[] = [
     vo: 'Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.',
     mode: 'lower',
     romaji: 'KAWARA',
+    theme: 1,
     ticks: 6,
     toCam: { dolly: 0.72, lookY: 2.2, ox: -0.1, pitch: 12, yaw: 148 },
   },
@@ -539,6 +554,7 @@ const BEATS: Beat[] = [
     says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
+    toCam: { dolly: 0.84, lookY: 1.5, ox: 0.18, pitch: 14, yaw: 158 },
     vo: 'Same building. Same afternoon. From here, only the lens moves.',
     mode: 'plate',
     romaji: 'SAIBU',
@@ -556,6 +572,7 @@ const BEATS: Beat[] = [
     ch: 3,
     cut: true,
     gloss: 'the roof-ridge fish',
+    haze: 0.34,
     id: 'shachi',
     says: [
       'Tiger’s head, fish’s body',
@@ -564,6 +581,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '鯱',
     kicker: 'ON THE RIDGE',
+    toCam: { dolly: 4.35, lookY: 6.85, ox: -0.18, pitch: 7, yaw: 164 },
     vo: "Tiger's head, fish's body, cast in bronze. It swallows water and spits it on the roof. That was the fire plan.",
     mode: 'point',
     photo: {
@@ -572,7 +590,7 @@ const BEATS: Beat[] = [
       src: 'shachihoko.webp',
     },
     romaji: 'SHACHIHOKO',
-    theme: 2,
+    sun: { az: 120, el: 26 },
     ticks: 5,
     to: [-0.51, 13.85, -0.51],
     trace: [{ pts: RIDGE, wide: true }],
@@ -591,6 +609,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '千鳥破風',
     kicker: 'IN THE ROOF SLOPE',
+    toCam: { dolly: 3.7, lookY: -1.2, ox: -0.18, pitch: 4, yaw: 174 },
     vo: 'Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.',
     mode: 'point',
     romaji: 'CHIDORI-HAFU',
@@ -612,6 +631,7 @@ const BEATS: Beat[] = [
     ],
     kanji: '高欄',
     kicker: 'AROUND THE TOP',
+    toCam: { dolly: 4.0, lookY: 4.3, ox: -0.18, pitch: 8, yaw: 184 },
     vo: 'A rail on a ledge too narrow to walk. Built to be seen, not used.',
     mode: 'point',
     romaji: 'KŌRAN',
@@ -625,6 +645,7 @@ const BEATS: Beat[] = [
     ch: 3,
     cut: true,
     gloss: 'the fan’s incline',
+    haze: 0.3,
     id: 'ishi2',
     says: [
       'Vertical at the top',
@@ -633,9 +654,11 @@ const BEATS: Beat[] = [
     ],
     kanji: '扇の勾配',
     kicker: 'AT THE FOOT',
+    toCam: { dolly: 3.2, lookY: -5.0, ox: -0.18, pitch: 2, yaw: 192 },
     vo: 'Vertical at the top. Flaring at the foot. The shock does not stop at this wall. It runs into the hill.',
     mode: 'point',
     romaji: 'ŌGI-NO-KŌBAI',
+    sun: { az: 250, el: 9 },
     ticks: 5,
     to: [2.8, 1.6, 0.6],
     trace: [
@@ -648,6 +671,7 @@ const BEATS: Beat[] = [
     cam: { dolly: 1.9, lookY: -1.9, ox: -0.12, pitch: 0, yaw: 190 },
     ch: 3,
     gloss: 'the eave',
+    haze: 0.55,
     id: 'noki',
     says: [
       'A metre of overhang',
@@ -682,6 +706,7 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.66, lookY: 1.8, ox: 0.16, pitch: 10, yaw: 206 },
     ch: 4,
     gloss: 'comparison',
+    haze: 0.12,
     id: 'hikaku',
     says: ['Six towers', 'One problem', 'Height, from what you have'],
     kanji: '比較',
@@ -698,7 +723,7 @@ const BEATS: Beat[] = [
       track: 0.2,
       y: 11,
     },
-    theme: 0,
+    sun: { az: -35, el: 58 },
     ticks: 4,
     wx: 0,
   },
@@ -813,7 +838,6 @@ const BEATS: Beat[] = [
       y: 7.5,
     },
     style: 0,
-    theme: 1,
     ticks: 6,
     toCam: { dolly: 0.6, lookY: -0.4, ox: 0.2, pitch: 16, yaw: 264 },
   },
@@ -837,9 +861,12 @@ const smooth = (t: number) => {
 
 /** what the vendored page publishes — see the HOST FILM BRIDGE block there */
 interface FilmApi {
+  duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
+  haze(v: null | number): void;
   height(): number;
+  light(p: null | { az?: number; el?: number }): void;
   palette(): {
     accent: string;
     ink: string;
@@ -900,6 +927,9 @@ export default class TowerFilm extends Component<{
   private lineEl?: SVGLineElement;
   private dotEl?: SVGCircleElement;
   private traceEls: SVGPolylineElement[] = [];
+  private dim?: HTMLElement;
+  /** the dim's own value, chased rather than cut so it never snaps on */
+  private dimNow = 0;
   private plateEl?: HTMLElement;
   private rowEls: HTMLElement[] = [];
   private raf = 0;
@@ -967,6 +997,18 @@ export default class TowerFilm extends Component<{
 
   get beat(): Beat {
     return this.beats[this.beatIndex] ?? this.beats[0]!;
+  }
+
+  /**
+   * `?subs` prints the narration on the frame.
+   *
+   * Not a caption track and not shipped on: it exists so the words can be
+   * read against the pictures before a voice exists, which is the only
+   * reliable way to discover that a line is two seconds too long for the
+   * shot it is sitting on.
+   */
+  get subs(): boolean {
+    return new URLSearchParams(window.location.search).has('subs');
   }
 
   get grade(): string {
@@ -1127,6 +1169,15 @@ export default class TowerFilm extends Component<{
     ] as SVGPolylineElement[];
   });
 
+  private dimEl = modifier((el: HTMLElement) => {
+    this.dim = el;
+    return () => {
+      if (this.dim === el) {
+        this.dim = undefined;
+      }
+    };
+  });
+
   private plate = modifier((el: HTMLElement) => {
     this.plateEl = el;
     /* the rows, nearest plane last — the big glyph is the near one */
@@ -1249,7 +1300,7 @@ export default class TowerFilm extends Component<{
     }
 
     this.trackPoint(film, beat, local);
-    this.traceShape(film, beat, local);
+    this.traceShape(film, beat, local, dt);
     this.parallax(local);
     this.follow(film);
     this.wear(film);
@@ -1369,8 +1420,9 @@ export default class TowerFilm extends Component<{
    * length, so the draw-on is a real pen travelling the real path rather
    * than a fade wearing a costume.
    */
-  private traceShape(film: FilmApi, beat: Beat, local: number) {
+  private traceShape(film: FilmApi, beat: Beat, local: number, dt: number) {
     const specs = beat.trace ?? [];
+    let drew = 0;
     const host = this.frameEl?.getBoundingClientRect();
     const v = film.view();
     for (const [i, el] of this.traceEls.entries()) {
@@ -1406,11 +1458,21 @@ export default class TowerFilm extends Component<{
       }
       /* the beat's first fifth draws the line; after that it simply is */
       const draw = Math.min(1, Math.max(0, (local - 0.06) / 0.16));
+      drew = Math.max(drew, draw);
       el.setAttribute('points', pts.trim());
       el.setAttribute('stroke-dasharray', String(len));
       el.setAttribute('stroke-dashoffset', String(len * (1 - draw)));
-      el.setAttribute('stroke-width', spec.wide ? '2.6' : '1.4');
+      el.setAttribute('stroke-width', spec.wide ? '3.4' : '2');
       el.style.opacity = draw > 0 ? '1' : '0';
+    }
+    /* the callout earns the dim too — a leader and a ring are annotation
+       just as much as a traced eave is */
+    if (beat.to) {
+      drew = Math.max(drew, Math.min(1, Math.max(0, (local - 0.08) / 0.18)));
+    }
+    if (this.dim) {
+      this.dimNow += (drew - this.dimNow) * Math.min(1, dt * 3.2);
+      this.dim.style.opacity = this.dimNow.toFixed(3);
     }
   }
 
@@ -1496,9 +1558,17 @@ export default class TowerFilm extends Component<{
     if (beat.theme !== undefined) {
       film.theme(beat.theme, instant);
     }
+    /* both are shot properties, so both are released when a beat does not
+       ask — otherwise one raking close-up would light the rest of the film */
+    film.light(
+      beat.sun ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD } : null
+    );
+    film.haze(beat.haze ?? null);
     if (beat.wx !== undefined) {
       film.wx(beat.wx, instant);
     }
+    this.hush();
+    this.speak(beat);
   }
 
   private shot = (state: {
@@ -1602,6 +1672,40 @@ export default class TowerFilm extends Component<{
     }
   };
 
+  /**
+   * THE NARRATION, one file per beat.
+   *
+   * `public/towers/vo/<id>.mp3`, played on the beat's entrance and stopped
+   * when the beat changes. Per beat rather than one long track because
+   * chapter skip RE-CUTS the film: a single track would have to be sought,
+   * and a sought track against a re-cut score drifts inside a chapter.
+   *
+   * A missing file is silence, not an error. The film ships before the
+   * voice does, and the score has to be right either way. While a line
+   * plays the scene's own music ducks under it, which is the one piece of
+   * mixing that cannot wait for a mix.
+   */
+  private voice?: HTMLAudioElement;
+
+  private speak(beat: Beat) {
+    if (!this.sound) {
+      return;
+    }
+    const el = (this.voice ??= new Audio());
+    el.pause();
+    el.src = `${config.rootURL}towers/vo/${beat.id}.mp3`;
+    el.onended = () => this.film?.duck(1);
+    void el.play().then(
+      () => this.film?.duck(0.18),
+      () => this.film?.duck(1)
+    );
+  }
+
+  private hush() {
+    this.voice?.pause();
+    this.film?.duck(1);
+  }
+
   /** the scene brought its own score — six of them, one per tower */
   private hear = () => {
     this.sound = !this.sound;
@@ -1681,6 +1785,16 @@ export default class TowerFilm extends Component<{
         It darkens at the same diagonal the sun throws, so the corner
         away from the light is the heavier one. }}
         <div class="tf-vig" aria-hidden="true"></div>
+
+        {{! THE DIM. A wash that comes in WITH the annotation and lifts
+        with it, because a line drawn over a picture is only as readable
+        as the picture lets it be — and this scene is a bright ochre wash
+        corner to corner, which is the worst possible ground for a thin
+        red line. Dimming the plate is what a lecturer does when the
+        slide goes up. It sits under the traces and over the grade, so
+        the lines and the type stay at full strength and only the
+        photograph steps back. }}
+        <div class="tf-dim" aria-hidden="true" {{this.dimEl}}></div>
 
         {{! THE OVERLAY. The traces are polylines authored in the scene's
         own coordinates and projected every frame, so they lie ON the
@@ -1888,6 +2002,10 @@ export default class TowerFilm extends Component<{
             </Choreo>
           {{/if}}
 
+          {{#if this.subs}}
+            <p class="tf-subs">{{this.beat.vo}}</p>
+          {{/if}}
+
           {{! the chapter rail: where we are in the argument }}
           <div class="tf-rail" aria-hidden="true">
             <span class="tf-rail-n">{{this.chapter.n}}</span>
@@ -2038,6 +2156,14 @@ export default class TowerFilm extends Component<{
         --tf-ink2: #8b7c5c;
         --tf-ink3: #3f3520;
         --tf-accent: #a8621f;
+        /* THE ANNOTATION RED, and it is a different colour from the
+           editorial accent on purpose. The accent is ink — it belongs to
+           the page and takes the page's palette. This is a marker: it is
+           not in the scene, it never was, and it should look like
+           somebody drew on the photograph. Muted burnt orange over ochre
+           moss reads as part of the picture, which is exactly what an
+           annotation must not do. */
+        --tf-mark: #ff2412;
         --tf-rule: #c2b18c;
         /* The sun, in two numbers: tf-rake is the angle its light makes
            across the frame, tf-shx/tf-shy the direction away from it.
@@ -2243,6 +2369,19 @@ export default class TowerFilm extends Component<{
         );
       }
 
+      .tf-dim {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        opacity: 0;
+        background: radial-gradient(
+          76% 66% at 50% 48%,
+          rgba(24, 18, 8, 0.24) 0%,
+          rgba(24, 18, 8, 0.46) 100%
+        );
+      }
+
       /* ---- traces and callouts -------------------------------------- */
       .tf-track {
         position: absolute;
@@ -2253,8 +2392,21 @@ export default class TowerFilm extends Component<{
         z-index: 2;
       }
 
+      /* the marker glows, and the glow is doing real work: a 2px line laid
+         over moss competes with the moss at exactly its own frequency, and
+         a soft bloom around it gives the eye a low-frequency edge to catch
+         first. Two shadows rather than one — a tight hot core and a wide
+         faint halo — because a single wide blur reads as a mistake and a
+         single tight one is invisible at this scale. */
+      .tf-trace,
+      .tf-leader,
+      .tf-track circle {
+        filter: drop-shadow(0 0 3px rgba(255, 36, 18, 0.95))
+          drop-shadow(0 0 11px rgba(255, 60, 20, 0.55));
+      }
+
       .tf-trace {
-        stroke: var(--tf-accent);
+        stroke: var(--tf-mark);
         stroke-linecap: round;
         stroke-linejoin: round;
         opacity: 0;
@@ -2262,8 +2414,8 @@ export default class TowerFilm extends Component<{
       }
 
       .tf-leader {
-        stroke: var(--tf-ink3);
-        stroke-width: 1.5;
+        stroke: var(--tf-mark);
+        stroke-width: 1.8;
         stroke-dasharray: 5 4;
         opacity: 0;
         transition: opacity 400ms ease;
@@ -2271,8 +2423,8 @@ export default class TowerFilm extends Component<{
 
       .tf-track circle {
         fill: none;
-        stroke: var(--tf-accent);
-        stroke-width: 2.2;
+        stroke: var(--tf-mark);
+        stroke-width: 2.6;
         opacity: 0;
         transition: opacity 400ms ease;
       }
@@ -2307,13 +2459,31 @@ export default class TowerFilm extends Component<{
         gap: 12px;
       }
 
+      /* the rule draws itself out of the kicker. It is a pseudo-element,
+         so Motion cannot own it — but the whole block is rebuilt on every
+         beat, which means a plain CSS animation runs from its first frame
+         each time and needs no retriggering. */
       .tf-kicker::after {
         content: "";
         flex: 1;
         height: 2px;
         background: var(--tf-accent);
-        transform: skewX(calc(var(--tf-rake) * -0.22));
         transform-origin: left center;
+        animation: tf-rule 760ms 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      .tf-title .tf-kicker::after {
+        transform-origin: right center;
+      }
+
+      @keyframes tf-rule {
+        from {
+          transform: scaleX(0);
+        }
+
+        to {
+          transform: scaleX(1);
+        }
       }
 
       .tf-point .tf-kicker::after,
@@ -2479,6 +2649,23 @@ export default class TowerFilm extends Component<{
         font-size: 10px;
         letter-spacing: 0.06em;
         color: var(--tf-ink2);
+      }
+
+      .tf-subs {
+        position: absolute;
+        left: 50%;
+        bottom: 4%;
+        transform: translateX(-50%);
+        z-index: 5;
+        margin: 0;
+        max-width: 66ch;
+        text-align: center;
+        font-family: var(--tf-ui);
+        font-size: 15px;
+        line-height: 1.5;
+        color: #f7efdd;
+        background: rgba(20, 15, 6, 0.66);
+        padding: 9px 18px;
       }
 
       /* ---- the rail -------------------------------------------------- */
