@@ -1,31 +1,19 @@
 #!/bin/sh
 #MISE description="Ensure PostgreSQL is running and ready"
 
-# Start the container if needed. Multiple tasks may call this concurrently,
-# so handle the race: docker run can fail if another process already created
-# the container — that's fine, we just ensure it's started.
-if [ -z "$(docker ps -f name=boxel-pg --all --format '{{.Names}}')" ]; then
-  echo "Starting new boxel-pg container on port ${PGPORT:-5435}..."
-  # If you bump postgres, also update start-pg.sh and the GHCR mirror so CI
-  # keeps caching it (it must match the version pinned there):
-  # .github/workflows/mirror-test-images.yml and
-  # .github/actions/warm-test-images/action.yml.
-  #
-  # max_connections is raised above postgres's default of 100 because one
-  # boxel-pg backs every service in a test stack — realm servers plus their
-  # worker pools, and the matrix suite stacks a second isolated set on top —
-  # and each opens its own pg pool (up to PG_POOL_MAX=40), so the default
-  # ceiling is exhausted under load. Keep this in sync with start-pg.sh.
-  docker run --name boxel-pg -e POSTGRES_HOST_AUTH_METHOD=trust -p "${PGPORT:-5435}":5432 -d postgres:16.3 -c max_connections=400 >/dev/null 2>&1 || true
-fi
-# Ensure the container is running (handles both the race case and stopped containers)
-docker start boxel-pg >/dev/null 2>&1 || true
+# The container spec and the start/repair logic live in scripts/pg-container.sh,
+# shared with packages/postgres/scripts/start-pg.sh.
+_REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+. "$_REPO_ROOT/scripts/pg-container.sh"
+unset _REPO_ROOT
+
+boxel_pg_ensure_running
 
 # Wait for readiness
 COUNT=0
 MAX_ATTEMPTS=10
 
-while ! docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do
+while ! boxel_pg_is_ready; do
   if [ $COUNT -eq 0 ]; then
     echo "Waiting for postgres"
   fi
@@ -45,18 +33,13 @@ done
 # realm's readiness check never passes. This task is a shared dependency of
 # the realm-server and worker tasks, so creating the databases here closes
 # the race for every host CI job, not just one.
-#
-# `docker exec ... -h localhost -p 5432` forces TCP inside the container:
-# the postgres:16.3 image does not always create the unix socket, so a bare
-# `psql -U postgres` can fail on the socket path. Postgres listens on
-# *:5432 (trust auth), so localhost works regardless.
 ensure_db() {
   db="$1"
   [ -z "$db" ] && return 0
   # Create unconditionally and treat "already exists" as success, so a
   # concurrent creator (the realm-server and worker tasks may run this in
   # parallel) can't lose a check-then-create race.
-  if out=$(docker exec boxel-pg psql -h localhost -p 5432 -U postgres -w -c "CREATE DATABASE $db" 2>&1); then
+  if out=$(boxel_pg_psql -c "CREATE DATABASE $db" 2>&1); then
     echo "Created database $db"
   elif echo "$out" | grep -q "already exists"; then
     echo "Database $db already exists"

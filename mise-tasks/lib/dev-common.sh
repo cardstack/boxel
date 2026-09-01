@@ -5,6 +5,9 @@
 
 REPO_ROOT="$(cd "../.." && pwd)"
 
+# boxel_pg_is_ready and friends, shared with the scripts that start boxel-pg.
+. "$REPO_ROOT/scripts/pg-container.sh"
+
 # Use absolute paths so spawned processes carry absolute argv[0]; this keeps
 # the regex sweeps in `sweep_orphaned_services` anchored to this checkout
 # reliable regardless of how the binary was originally resolved by PATH.
@@ -352,7 +355,7 @@ NODE_TEST_REALM_READY="${REALM_TEST_READY_SCHEME}://${REALM_TEST_URL#*://}/node-
 if [ -n "$BOXEL_ENVIRONMENT" ]; then
   ./scripts/start-pg.sh
   echo "Waiting for Postgres to accept connections…"
-  until docker exec boxel-pg pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
+  until boxel_pg_is_ready; do sleep 1; done
   "$REPO_ROOT/scripts/ensure-branch-db.sh"
   echo "Running database migrations…"
   pnpm migrate
