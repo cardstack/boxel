@@ -43,14 +43,11 @@ const sharedBrowserConfig = {
     ],
     'prefer-const': 'off',
     '@typescript-eslint/no-explicit-any': 'off',
-    '@typescript-eslint/ban-types': 'off',
-    // The three rules `ban-types` was split into. Off for the same reason it is:
     // `{}` and `Function` are used deliberately here, mostly in type plumbing.
     '@typescript-eslint/no-empty-object-type': 'off',
     '@typescript-eslint/no-unsafe-function-type': 'off',
     '@typescript-eslint/no-wrapper-object-types': 'off',
-    // Successor to `no-var-requires`, which this repo also leaves off: config
-    // files and a few CJS interop points require by design.
+    // Config files and a few CJS interop points require by design.
     '@typescript-eslint/no-require-imports': 'off',
     // A bare member expression is how a getter consumes a tracked property to
     // register a reactive dependency, and `cond && doThing()` is used as a
@@ -155,7 +152,6 @@ module.exports = {
       },
       extends: ['plugin:n/recommended'],
       rules: {
-        '@typescript-eslint/no-var-requires': 'off',
         'n/no-process-exit': 'off',
         'n/hashbang': 'off',
       },
@@ -237,6 +233,34 @@ module.exports = {
             pathGroupsExcludedImportTypes: [],
           },
         ],
+      },
+    },
+    {
+      // Type-aware linting.
+      //
+      // `no-url-from-realm-identifier` asks whether a value carries one of the
+      // realm-identifier brands, which exist only in the type system, so the
+      // rule needs a TypeScript program. Without `parserOptions.project` it is
+      // silently inert.
+      //
+      // Scoped to app code. The build and config scripts at the package root
+      // are outside `tsconfig.json`, where asking for a program is a parse
+      // error rather than a lint result. Tests are left out for signal: they
+      // build URLs by interpolating the test realm's identifier, which is
+      // always a URL there, so the rule has 342 things to say about them and
+      // 8 about the app.
+      //
+      // The parser for each file still comes from the overrides above —
+      // `@typescript-eslint/parser` for `.ts`, `ember-eslint-parser` for
+      // `.gts` — and only the program is added here.
+      files: ['app/**/*.{ts,gts}'],
+      excludedFiles: ['**/*.d.ts'],
+      parserOptions: {
+        project: './tsconfig.json',
+        tsconfigRootDir: __dirname,
+      },
+      rules: {
+        '@cardstack/boxel/no-url-from-realm-identifier': 'error',
       },
     },
   ],

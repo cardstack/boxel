@@ -12,7 +12,10 @@ import type {
   QueuePublisher,
   QueueRunner,
   Realm,
+  ScreenshotCapturePerfEvent,
+  ScreenshotPerfEvent,
   ScreenshotPrerenderResponse,
+  ScreenshotRequestPerfEvent,
   VirtualNetwork as VirtualNetworkType,
 } from '@cardstack/runtime-common';
 import {
@@ -28,6 +31,7 @@ import {
   putMedia,
   query,
   screenshotCard,
+  setScreenshotPerfSink,
 } from '@cardstack/runtime-common';
 
 import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
@@ -119,6 +123,20 @@ module(basename(import.meta.filename), function () {
     // When set, in-flight captures park on it — the lever for the sync-wait
     // timeout test.
     let captureGate: Deferred<void> | undefined;
+    // When set, captures throw it — the lever for the job-rejection error
+    // test.
+    let captureFailure: Error | undefined;
+    // Telemetry captured through the perf sink instead of the log channel,
+    // so tests assert on records, not stdout.
+    let perfEvents: ScreenshotPerfEvent[];
+
+    hooks.beforeEach(function () {
+      perfEvents = [];
+      setScreenshotPerfSink((event) => perfEvents.push(event));
+    });
+    hooks.afterEach(function () {
+      setScreenshotPerfSink(undefined);
+    });
 
     setupDB(hooks, {
       beforeEach: async (
@@ -132,6 +150,7 @@ module(basename(import.meta.filename), function () {
         adapter = new FakeMediaCacheAdapter();
         captureCalls = 0;
         captureGate = undefined;
+        captureFailure = undefined;
         virtualNetwork = new VirtualNetwork();
         ({ realm } = await createRealm({
           dir: await mkdtemp(join(tmpdir(), 'media-cache-dsl-test-')),
@@ -165,12 +184,31 @@ module(basename(import.meta.filename), function () {
           if (captureGate) {
             await captureGate.promise;
           }
+          if (captureFailure) {
+            throw captureFailure;
+          }
           return {
             status: 'ready',
             base64: PNG_BASE64,
             width: 8,
             height: 6,
             contentType: 'image/png',
+            // The shape the real prerenderer attaches: an HTTP request id
+            // plus the timing diagnostics block, so the telemetry tests can
+            // assert the task lifts every stage into its capture record.
+            meta: {
+              requestId: 'stub-prerender-req',
+              diagnostics: {
+                launchMs: 5,
+                waits: { semaphoreMs: 1 },
+                renderElapsedMs: 20,
+                tabReused: true,
+                screenshotNavMs: 4,
+                screenshotSettleMs: 6,
+                screenshotImagePaintMs: 7,
+                screenshotCaptureMs: 3,
+              },
+            },
           };
         },
       } as unknown as Prerenderer;
@@ -239,9 +277,13 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    async function get(pathAndQuery: string, method = 'GET') {
+    async function get(
+      pathAndQuery: string,
+      method = 'GET',
+      headers: Record<string, string> = {},
+    ) {
       let response = await realm.handle(
-        new Request(`${REALM_URL}${pathAndQuery}`, { method }),
+        new Request(`${REALM_URL}${pathAndQuery}`, { method, headers }),
       );
       return response!;
     }
@@ -391,6 +433,51 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a job carrying both a persist target and captureSpec overrides never persists', async function (assert) {
+      // No producer publishes this pairing — the POST handler sets
+      // `persist: null` whenever a spec has overrides — but the task is the
+      // last line of defense: the persist identity is the canonical
+      // capture's, so persisting an override render under it would serve
+      // that render on the canonical `_screenshot/` URL.
+      await seedInstanceRow('card-1');
+      await startWorker();
+
+      let entryKey = {
+        realmURL: REALM_URL,
+        sourceURL: `${REALM_URL}card-1`,
+        captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+        sourceGeneration: 1,
+      };
+      let job = await publisher.publish<ScreenshotPrerenderResponse>({
+        jobType: 'screenshot-card',
+        concurrencyGroup: `screenshot:${REALM_URL}`,
+        timeout: 60,
+        priority: 0,
+        args: {
+          realmURL: REALM_URL,
+          realmUsername: OWNER,
+          runAs: OWNER,
+          cardId: `${REALM_URL}card-1`,
+          format: 'isolated',
+          captureSpec: { viewport: { width: 1280, height: 800 } },
+          persist: { ...entryKey, lane: 'on-demand' },
+        },
+      });
+      let result = await job.done;
+
+      assert.strictEqual(result.status, 'ready', 'the capture itself ran');
+      assert.strictEqual(
+        result.base64,
+        PNG_BASE64,
+        'the bytes still reach the caller',
+      );
+      assert.strictEqual(
+        await findMediaCacheEntry(dbAdapter, entryKey),
+        undefined,
+        'nothing was persisted under the canonical ledger identity',
+      );
+    });
+
     test('concurrent misses for one spec coalesce onto one capture', async function (assert) {
       await seedInstanceRow('card-1');
       await seedRealmConfigRow(true);
@@ -501,6 +588,272 @@ module(basename(import.meta.filename), function () {
 
       assert.strictEqual(response.status, 404);
       assert.strictEqual(captureCalls, 0);
+      assert.deepEqual(perfEvents, [], 'addressing misses emit no telemetry');
+    });
+
+    module('capture-stage telemetry', function () {
+      function requestEvent(): ScreenshotRequestPerfEvent | undefined {
+        return perfEvents.find(
+          (event): event is ScreenshotRequestPerfEvent =>
+            event.eventType === 'request',
+        );
+      }
+      function captureEvent(): ScreenshotCapturePerfEvent | undefined {
+        return perfEvents.find(
+          (event): event is ScreenshotCapturePerfEvent =>
+            event.eventType === 'capture',
+        );
+      }
+
+      test('a rendered capture emits correlated request and capture records, and the ledger row keeps the breakdown', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        await startWorker();
+
+        let response = await get('_screenshot/card-1?format=embedded', 'GET', {
+          'x-boxel-logging-correlation-id': 'corr-dsl-1',
+        });
+        assert.strictEqual(response.status, 200);
+
+        let request = requestEvent();
+        assert.strictEqual(request?.outcome, 'rendered');
+        assert.strictEqual(request?.surface, 'get-dsl');
+        assert.strictEqual(request?.correlationId, 'corr-dsl-1');
+        assert.false(request?.hasTwin);
+        assert.strictEqual(request?.sourceURL, `${REALM_URL}card-1`);
+        assert.strictEqual(typeof request?.jobId, 'number');
+        let stages = [
+          'generationLookupMs',
+          'ledgerLookupMs',
+          'gateMs',
+          'precheckMs',
+          'enqueueMs',
+          'jobWaitMs',
+          'serveMs',
+        ] as const;
+        let stageSum = 0;
+        for (let stage of stages) {
+          let value = request?.[stage];
+          assert.strictEqual(typeof value, 'number', `${stage} is recorded`);
+          stageSum += value as number;
+        }
+        assert.ok(
+          stageSum <= request!.totalMs,
+          `stages (${stageSum}ms) sum to at most the wall-clock (${request!.totalMs}ms)`,
+        );
+
+        let capture = captureEvent();
+        assert.strictEqual(capture?.status, 'ready');
+        assert.strictEqual(
+          capture?.correlationId,
+          'corr-dsl-1',
+          'the capture record carries the surface request correlation id',
+        );
+        assert.strictEqual(
+          capture?.jobId,
+          request?.jobId,
+          'request and capture records join on the job id',
+        );
+        assert.strictEqual(typeof capture?.reservationId, 'number');
+        assert.strictEqual(
+          typeof capture?.queueWaitMs,
+          'number',
+          'queue wait comes from the claim clock via JobInfo',
+        );
+        assert.strictEqual(capture?.surface, 'get-dsl');
+        assert.strictEqual(capture?.lane, 'on-demand');
+        assert.strictEqual(capture?.persistOutcome, 'uploaded');
+        assert.strictEqual(capture?.prerenderRequestId, 'stub-prerender-req');
+        assert.strictEqual(capture?.launchMs, 5);
+        assert.strictEqual(capture?.semaphoreMs, 1);
+        assert.strictEqual(capture?.renderMs, 20);
+        assert.strictEqual(capture?.navMs, 4);
+        assert.strictEqual(capture?.settleMs, 6);
+        assert.strictEqual(capture?.imagePaintMs, 7);
+        assert.strictEqual(capture?.screenshotMs, 3);
+        assert.true(capture?.tabReused);
+        assert.strictEqual(typeof capture?.permissionsMs, 'number');
+        assert.strictEqual(typeof capture?.prerenderMs, 'number');
+        assert.strictEqual(typeof capture?.decodeMs, 'number');
+        assert.strictEqual(typeof capture?.persistMs, 'number');
+
+        // `MediaCacheEntry` deliberately omits the diagnostics column (the
+        // serve path never reads it), so the ledger copy is asserted with
+        // its own query.
+        let rows = (await query(dbAdapter, [
+          `SELECT diagnostics FROM media_cache_ledger WHERE source_url = '${REALM_URL}card-1'`,
+        ])) as { diagnostics: Record<string, unknown> | null }[];
+        let diagnostics = rows[0]?.diagnostics;
+        assert.strictEqual(
+          diagnostics?.eventType,
+          'capture',
+          'the ledger row persists the capture record',
+        );
+        assert.strictEqual(diagnostics?.persistOutcome, 'uploaded');
+        assert.strictEqual(diagnostics?.correlationId, 'corr-dsl-1');
+        assert.strictEqual(typeof diagnostics?.queueWaitMs, 'number');
+      });
+
+      test('a ledger hit is visibly the hit path: one request record, zero render attribution', async function (assert) {
+        await seedInstanceRow('card-1');
+        await putMedia(dbAdapter, adapter, {
+          realmURL: REALM_URL,
+          sourceURL: `${REALM_URL}card-1`,
+          captureSpecHash: await captureSpecHash({ format: 'isolated' }),
+          sourceGeneration: 1,
+          bytes: PNG_BYTES,
+          contentType: 'image/png',
+          lane: 'on-demand',
+        });
+
+        let response = await get('_screenshot/card-1');
+        assert.strictEqual(response.status, 200);
+
+        assert.strictEqual(perfEvents.length, 1, 'one record for a hit');
+        let request = requestEvent();
+        assert.strictEqual(request?.outcome, 'hit');
+        assert.strictEqual(request?.jobId, null, 'no job ran');
+        assert.strictEqual(request?.jobWaitMs, undefined);
+        assert.strictEqual(typeof request?.serveMs, 'number');
+        assert.strictEqual(typeof request?.ledgerLookupMs, 'number');
+      });
+
+      test('a gated miss emits a gated record and stops at the gate', async function (assert) {
+        await seedInstanceRow('card-1');
+
+        let response = await get('_screenshot/card-1');
+        assert.strictEqual(response.status, 403);
+
+        let request = requestEvent();
+        assert.strictEqual(request?.outcome, 'gated');
+        assert.strictEqual(typeof request?.gateMs, 'number');
+        assert.strictEqual(request?.precheckMs, undefined);
+        assert.strictEqual(request?.enqueueMs, undefined);
+      });
+
+      test('a congested 503 emits a congested record and upholds the Retry-After contract', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        await insertJob(dbAdapter, {
+          job_type: 'screenshot-card',
+          concurrency_group: `screenshot:${REALM_URL}`,
+        });
+
+        let response = await get('_screenshot/card-1');
+
+        assert.strictEqual(response.status, 503);
+        // The client half of this contract is the host's auth service
+        // worker, which absorbs exactly a 503 whose Retry-After parses as a
+        // number and which it can read cross-origin — so both properties
+        // are pinned here, not just prose.
+        let retryAfter = response.headers.get('retry-after');
+        assert.true(
+          Number.isInteger(Number(retryAfter)),
+          `Retry-After is an integer (got ${retryAfter})`,
+        );
+        assert.true(
+          Number(retryAfter) >= 1,
+          `Retry-After is at least one second (got ${retryAfter})`,
+        );
+        assert.ok(
+          (response.headers.get('access-control-expose-headers') ?? '')
+            .toLowerCase()
+            .includes('retry-after'),
+          'Retry-After is CORS-exposed so cross-origin callers can read it',
+        );
+
+        let request = requestEvent();
+        assert.strictEqual(request?.outcome, 'congested');
+        assert.false(request?.hasTwin);
+        assert.strictEqual(typeof request?.precheckMs, 'number');
+        assert.strictEqual(request?.enqueueMs, undefined, 'nothing enqueued');
+      });
+
+      test('a timed-out sync wait emits a timeout record; the capture record follows when the job lands', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        captureGate = new Deferred<void>();
+        await startWorker();
+
+        let response = await get('_screenshot/card-1');
+        assert.strictEqual(response.status, 503);
+
+        let request = requestEvent();
+        assert.strictEqual(request?.outcome, 'timeout');
+        assert.strictEqual(typeof request?.jobId, 'number');
+        assert.ok(
+          (request?.jobWaitMs ?? 0) >= SYNC_WAIT_MS - 50,
+          'the wait ran the full sync budget',
+        );
+
+        captureGate.fulfill();
+        captureGate = undefined;
+        let deadline = Date.now() + 10_000;
+        while (!captureEvent() && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        let capture = captureEvent();
+        assert.strictEqual(
+          capture?.jobId,
+          request?.jobId,
+          'the late capture record still joins the timed-out request',
+        );
+        assert.strictEqual(capture?.persistOutcome, 'uploaded');
+      });
+
+      test('a job that throws still emits: an error capture record and an error request record', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        captureFailure = new Error('prerender exhausted its retries');
+        await startWorker();
+
+        let response = await get('_screenshot/card-1');
+        assert.strictEqual(response.status, 500);
+
+        let request = requestEvent();
+        assert.strictEqual(
+          request?.outcome,
+          'error',
+          'a rejected job reads as a rise in error, not a drop in request volume',
+        );
+        assert.strictEqual(typeof request?.jobId, 'number');
+        assert.strictEqual(typeof request?.jobWaitMs, 'number');
+
+        let capture = captureEvent();
+        assert.strictEqual(capture?.status, 'error');
+        assert.strictEqual(capture?.persistOutcome, 'skipped');
+        assert.strictEqual(
+          capture?.jobId,
+          request?.jobId,
+          'the failed capture record still joins its request',
+        );
+        assert.strictEqual(typeof capture?.permissionsMs, 'number');
+        assert.strictEqual(
+          typeof capture?.prerenderMs,
+          'number',
+          'the throw is attributed to the prerender stage',
+        );
+      });
+
+      test('re-capturing identical bytes records a dedupe-on-write hit', async function (assert) {
+        await seedInstanceRow('card-1');
+        await seedRealmConfigRow(true);
+        await startWorker();
+
+        assert.strictEqual((await get('_screenshot/card-1')).status, 200);
+        // An edit bumps the generation — a new capture identity — but the
+        // stub render produces the same bytes, so the store dedupes the
+        // upload while the ledger gains a row.
+        await query(dbAdapter, [
+          `UPDATE boxel_index SET generation = 2 WHERE url = '${REALM_URL}card-1.json'`,
+        ]);
+        perfEvents = [];
+        setScreenshotPerfSink((event) => perfEvents.push(event));
+
+        assert.strictEqual((await get('_screenshot/card-1')).status, 200);
+        assert.strictEqual(captureCalls, 2, 'the edit forced a re-render');
+        assert.strictEqual(captureEvent()?.persistOutcome, 'deduped');
+      });
     });
   });
 });

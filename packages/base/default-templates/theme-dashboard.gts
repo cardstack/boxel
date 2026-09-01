@@ -6,31 +6,55 @@ import { action } from '@ember/object';
 import { guidFor } from '@ember/object/internals';
 import { modifier } from 'ember-modifier';
 
+import ExternalLinkIcon from '@cardstack/boxel-icons/external-link';
+import PaletteIcon from '@cardstack/boxel-icons/palette';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
-import ChevronCompactRight from '@cardstack/boxel-icons/chevron-compact-right';
-import ChevronCompactLeft from '@cardstack/boxel-icons/chevron-compact-left';
+import MenuIcon from '@cardstack/boxel-icons/menu';
+import VersionIcon from '@cardstack/boxel-icons/book-text';
 
 import {
+  BoxelDropdown,
   Button,
   CardContainer,
   BoxelContainer,
+  ContextButton,
   FieldContainer,
   BoxelInput,
+  Menu as BoxelMenu,
+  Pill,
+  Switch,
 } from '@cardstack/boxel-ui/components';
 import {
+  and,
   bool,
   cn,
+  eq,
+  MenuItem,
   themeScope,
   themeScopedCss,
 } from '@cardstack/boxel-ui/helpers';
 
-import { DEFAULT_THEME_SCALE } from '../structured-theme-variables';
+import {
+  DEFAULT_THEME_SCALE,
+  FontPreviews,
+} from '../structured-theme-variables';
+import CardInfoTemplates from '../default-templates/card-info';
+
+import type {
+  BoxComponent,
+  CardDef,
+  FieldsTypeFor,
+  PartialBaseInstanceType,
+} from '../card-api';
 
 function scrollToSection(sectionId: string, event: Event) {
   event.preventDefault();
-  let navEl = event.currentTarget as HTMLElement;
-  let card = navEl.closest('.detailed-style-reference');
+  scrollToSectionFrom(event.currentTarget as HTMLElement, sectionId);
+}
+
+function scrollToSectionFrom(navEl: HTMLElement, sectionId: string) {
+  let card = navEl.closest('[data-theme-dashboard]');
   let section = card?.querySelector(
     `[id="${sectionId}"]`,
   ) as HTMLElement | null;
@@ -47,7 +71,8 @@ function scrollToSection(sectionId: string, event: Event) {
     scrollContainer.getBoundingClientRect().top -
     stickyNavHeight;
   scrollContainer.scrollBy({ top: delta, behavior: 'smooth' });
-  history.pushState(null, '', `#${sectionId}`);
+  // replaceState keeps the hash without polluting the host app's history
+  history.replaceState(null, '', `#${sectionId}`);
 }
 
 function findScrollableParent(el: HTMLElement): HTMLElement | null {
@@ -71,15 +96,18 @@ export interface SectionSignature {
   fieldName?: string | null /* optional field to render */;
 }
 
-export class CssFieldEditor extends GlimmerComponent<{
+export class ThemeImporter extends GlimmerComponent<{
   Args: {
     label?: string;
     placeholder?: string;
-    setCss?: (content: string) => void;
+    setCss?: (content: string) => boolean | void;
   };
+  Blocks: { default: [] };
   Element: HTMLElement;
 }> {
-  defaultLabel = 'Paste your CSS below to customize the theme variables:';
+  @tracked private draftCss = '';
+  @tracked private error: string | undefined;
+
   defaultPlaceholder = `:root {
   --background: hsl(0 0% 100%);
   --foreground: oklch(0.52 0.13 144.17);
@@ -94,43 +122,121 @@ export class CssFieldEditor extends GlimmerComponent<{
   /* ... */
 }`;
 
+  private get isDraftEmpty() {
+    return !this.draftCss.trim().length;
+  }
+
+  private updateDraft = (value: string) => {
+    this.draftCss = value;
+    this.error = undefined;
+  };
+
+  private applyCss = () => {
+    if (this.args.setCss?.(this.draftCss) === false) {
+      this.error = 'No :root or .dark variables found in that CSS.';
+    }
+  };
+
   <template>
-    <FieldContainer
-      class='css-field-editor'
-      @vertical={{true}}
-      @label={{if @label.length @label this.defaultLabel}}
-      @tag='label'
-      ...attributes
-    >
-      <BoxelInput
-        @type='textarea'
-        @onInput={{@setCss}}
-        @placeholder={{if
-          @placeholder.length
-          @placeholder
-          this.defaultPlaceholder
-        }}
-        class='css-textarea'
-        data-test-custom-css-variables
-      />
-    </FieldContainer>
+    <div class='css-field-editor-panel' ...attributes>
+      <p class='css-field-editor-hint'>
+        {{#if (has-block)}}
+          {{yield}}
+        {{else}}
+          Paste a theme export (<a
+            class='css-field-editor-hint-link'
+            href='https://tweakcn.com'
+            target='_blank'
+            rel='noopener noreferrer'
+          >tweakcn</a>,
+          <a
+            class='css-field-editor-hint-link'
+            href='https://ui.shadcn.com/themes'
+            target='_blank'
+            rel='noopener noreferrer'
+          >shadcn</a>, or any CSS with
+          <code>:root</code>
+          and
+          <code>.dark</code>
+          blocks). Its font families are imported alongside the variables.
+        {{/if}}
+      </p>
+      <FieldContainer
+        class='css-field-editor'
+        @vertical={{true}}
+        @label={{if @label.length @label 'Theme CSS'}}
+        @tag='label'
+      >
+        <BoxelInput
+          @type='textarea'
+          @value={{this.draftCss}}
+          @onInput={{this.updateDraft}}
+          @placeholder={{if
+            @placeholder.length
+            @placeholder
+            this.defaultPlaceholder
+          }}
+          class='css-textarea'
+          data-test-custom-css-variables
+        />
+      </FieldContainer>
+      {{#if this.error}}
+        <p class='css-field-editor-error' role='alert'>{{this.error}}</p>
+      {{/if}}
+      <div class='css-field-editor-actions'>
+        <Button
+          @kind='primary'
+          @size='small'
+          @disabled={{this.isDraftEmpty}}
+          {{on 'click' this.applyCss}}
+          data-test-import-theme
+        >
+          Import Theme
+        </Button>
+      </div>
+    </div>
     <style scoped>
-      .css-field-editor {
-        gap: var(--boxel-sp);
-      }
-      .css-textarea {
-        min-height: 15rem;
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        font-size: var(--boxel-font-size-xs);
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-      }
-      .css-textarea::placeholder {
-        opacity: 0.5;
+      @layer baseComponent {
+        .css-field-editor-panel {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+        }
+        .css-field-editor-hint {
+          margin: 0;
+          max-width: 45rem;
+          color: var(--muted-foreground);
+        }
+        .css-field-editor-hint-link {
+          color: inherit;
+          text-decoration: underline;
+        }
+        .css-field-editor-hint-link:hover,
+        .css-field-editor-hint-link:focus-visible {
+          color: var(--primary);
+        }
+        .css-field-editor {
+          gap: var(--boxel-sp);
+        }
+        .css-textarea {
+          min-height: 15rem;
+          font-size: var(--boxel-font-size-xs);
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+        }
+        .css-textarea::placeholder {
+          opacity: 0.5;
+        }
+        .css-field-editor-error {
+          margin: 0;
+          color: var(--destructive, var(--boxel-error-200));
+        }
+        .css-field-editor-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
       }
     </style>
   </template>
@@ -309,51 +415,6 @@ export class CardContainerCss extends GlimmerComponent<{
         <code>--boxel-*</code>
         internals with Boxel defaults as fallbacks.
       </p>
-      <div class='card-container-mappings'>
-        <div class='card-container-mapping-group'>
-          <h4>Layout</h4>
-          <dl>
-            <dt><code>--background</code></dt><dd>background-color</dd>
-            <dt><code>--foreground</code></dt><dd>color</dd>
-            <dt><code>--border</code></dt><dd>border color (when boundaries
-              shown)</dd>
-            <dt><code>--radius</code></dt><dd>base border-radius (all steps,
-              base default: 0.625rem [10px])</dd>
-            <dt><code>--spacing * 4</code></dt><dd>base spacing (all steps, base
-              default: 0.25rem * 4 = 1rem [16px])</dd>
-            <dt><code>--theme-font-size</code></dt><dd>base font-size (all
-              steps, default 1rem [16px])</dd>
-            <dt><code>--theme-scale</code></dt><dd>type and spacing scale ratio
-              (default 1.333)</dd>
-            <dt><code>--font-sans</code></dt><dd>font-family (default: IBM Plex
-              Sans, sans-serif)</dd>
-          </dl>
-        </div>
-        <div class='card-container-mapping-group'>
-          <h4>Layering Pairs</h4>
-          <p class='card-container-mapping-note'>Use these pairs on nested
-            containers to differentiate visual layers without repeating colors.</p>
-          <dl>
-            <dt><code>--background</code></dt><dd><code>--foreground</code></dd>
-            <dt><code>--card</code></dt><dd><code>--card-foreground</code></dd>
-            <dt><code>--sidebar</code></dt><dd><code
-              >--sidebar-foreground</code></dd>
-            <dt><code>--popover</code></dt><dd><code
-              >--popover-foreground</code></dd>
-          </dl>
-        </div>
-        <div class='card-container-mapping-group'>
-          <h4>Typography <em>(optional overrides)</em></h4>
-          <dl>
-            <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
-            <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
-            <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
-            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
-            <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
-          </dl>
-        </div>
-      </div>
-      <h3 class='computed-vars-heading'>Computed CSS Variables</h3>
       <div class='computed-vars-section'>
         <div class='computed-vars-group'>
           <h4>Spacing</h4>
@@ -411,121 +472,134 @@ export class CardContainerCss extends GlimmerComponent<{
             <pre class='computed-vars-pre'>{{this.borderRadiusVarsString}}</pre>
           {{/if}}
         </div>
+        <div class='card-container-mapping-group'>
+          <h4>Typography <em>(optional overrides)</em></h4>
+          <dl>
+            <dt><code>--boxel-heading-*</code></dt><dd>h1</dd>
+            <dt><code>--boxel-section-heading-*</code></dt><dd>h2</dd>
+            <dt><code>--boxel-subheading-*</code></dt><dd>h3</dd>
+            <dt><code>--boxel-body-*</code></dt><dd>p</dd>
+            <dt><code>--boxel-caption-*</code></dt><dd>small</dd>
+          </dl>
+        </div>
       </div>
     </div>
     <style scoped>
-      .card-container-description {
-        font-size: var(--boxel-font-size-sm);
-        color: var(--dsr-muted-fg);
-        margin-block: 0 var(--boxel-sp-lg);
-      }
-      .card-container-description code,
-      .card-container-mappings code {
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: 0.9em;
-      }
-      .card-container-mappings {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-        gap: var(--boxel-sp-lg);
-        margin-bottom: var(--boxel-sp-lg);
-      }
-      .card-container-mapping-group {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-      }
-      .card-container-mapping-group h4 {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .card-container-mapping-group dl {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--boxel-sp-4xs) var(--boxel-sp-sm);
-        margin: 0;
-        font-size: var(--boxel-font-size-xs);
-        align-items: baseline;
-      }
-      .card-container-mapping-note {
-        font-size: var(--boxel-font-size-xs);
-        color: var(--dsr-muted-fg);
-        margin-bottom: var(--boxel-sp-xs);
-      }
-      .card-container-mapping-group dt {
-        font-weight: 500;
-      }
-      .card-container-mapping-group dd {
-        margin: 0;
-        color: var(--dsr-muted-fg);
-      }
-      .computed-vars-heading {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
-        margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
-        padding-top: var(--boxel-sp-lg);
-        border-top: 1px solid var(--dsr-border);
-      }
-      .computed-vars-section {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-        gap: var(--boxel-sp-lg);
-      }
-      .computed-vars-group {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .computed-vars-group h4 {
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        color: var(--dsr-muted-fg);
-        margin: 0;
-      }
-      .computed-vars-group--full {
-        grid-column: 1 / -1;
-      }
-      .computed-vars-description {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        color: var(--dsr-muted-fg);
-      }
-      .computed-vars-description code {
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: 0.9em;
-      }
-      .computed-vars-pre {
-        margin: 0;
-        padding: var(--boxel-sp-xs) 0 0;
-        font-family: var(
-          --font-mono,
-          var(--boxel-monospace-font-family, monospace)
-        );
-        font-size: var(--boxel-font-size-xs);
-        white-space: pre-wrap;
-        flex: 1;
+      @layer baseComponent {
+        .card-container-description {
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground);
+          margin-block: 0 var(--boxel-sp-lg);
+        }
+        .card-container-description code,
+        .card-container-mappings code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+        .card-container-mappings {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+          gap: var(--boxel-sp-lg);
+          margin-bottom: var(--boxel-sp-lg);
+        }
+        .card-container-mapping-group {
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--boxel-border-radius);
+          padding: var(--boxel-sp);
+        }
+        .card-container-mapping-group h4 {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .card-container-mapping-group dl {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: var(--boxel-sp-4xs) var(--boxel-sp-sm);
+          margin: 0;
+          font-size: var(--boxel-font-size-xs);
+          align-items: baseline;
+        }
+        .card-container-mapping-note {
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+          margin-bottom: var(--boxel-sp-xs);
+        }
+        .card-container-mapping-group dt {
+          font-weight: 500;
+        }
+        .card-container-mapping-group dd {
+          margin: 0;
+          color: var(--muted-foreground);
+        }
+        .computed-vars-heading {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin-block: var(--boxel-sp-lg) var(--boxel-sp-sm);
+          padding-top: var(--boxel-sp-lg);
+          border-top: 1px solid var(--border);
+        }
+        .computed-vars-section {
+          display: grid;
+          /* min() lets the column shrink instead of overflowing a narrow card */
+          grid-template-columns: repeat(
+            auto-fill,
+            minmax(min(18rem, 100%), 1fr)
+          );
+          gap: var(--boxel-sp-lg);
+        }
+        .computed-vars-group {
+          background-color: var(--card);
+          color: var(--card-foreground);
+          border: 1px solid var(--border);
+          border-radius: var(--radius);
+          padding: var(--boxel-sp);
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+        .computed-vars-group h4 {
+          font-size: var(--boxel-font-size-xs);
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          color: var(--muted-foreground);
+          margin: 0;
+        }
+        .computed-vars-description {
+          margin: 0;
+          font-size: var(--boxel-font-size-sm);
+          color: var(--muted-foreground);
+        }
+        .computed-vars-description code {
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: 0.9em;
+        }
+        .computed-vars-pre {
+          margin: 0;
+          padding: var(--boxel-sp-xs) 0 0;
+          overflow-x: auto;
+          font-family: var(
+            --font-mono,
+            var(--boxel-monospace-font-family, monospace)
+          );
+          font-size: var(--boxel-font-size-xs);
+          flex: 1;
+        }
       }
     </style>
   </template>
@@ -591,7 +665,9 @@ export class NavSection extends GlimmerComponent<{
     <style scoped>
       @layer baseComponent {
         .nav-section {
-          scroll-margin-top: calc(var(--boxel-sp) * 4);
+          scroll-margin-top: var(--boxel-sp-4xl);
+          /* let wide children scroll or wrap instead of overflowing the card */
+          min-width: 0;
         }
         .nav-section:not(.nav-section--hide-counter) {
           counter-increment: section;
@@ -602,13 +678,13 @@ export class NavSection extends GlimmerComponent<{
           align-items: center;
           gap: var(--boxel-sp);
           padding-bottom: var(--boxel-sp);
-          border-bottom: 2px solid var(--dsr-border);
+          border-bottom: 2px solid var(--border);
         }
         .nav-section-number {
           display: inline-block;
           font-size: var(--boxel-font-size-sm);
           font-weight: 700;
-          color: var(--dsr-muted-fg);
+          color: var(--muted-foreground);
           font-variant-numeric: tabular-nums;
           min-width: 2rem;
         }
@@ -621,14 +697,14 @@ export class NavSection extends GlimmerComponent<{
         }
 
         .nav-section-content {
-          padding-block: calc(var(--boxel-sp) * 2);
+          padding-block: var(--boxel-sp-xl);
         }
 
         @media (max-width: 768px) {
           .nav-section-header {
             flex-direction: column;
             align-items: flex-start;
-            gap: calc(var(--boxel-sp) * 0.5);
+            gap: var(--boxel-sp-xs);
           }
           .nav-section-button {
             margin-left: initial;
@@ -648,214 +724,355 @@ export class NavSection extends GlimmerComponent<{
   }
 }
 
-export class SimpleNavBar extends GlimmerComponent<{
-  Args: {
-    items?: SectionSignature[];
-  };
-  Element: HTMLElement;
-}> {
-  <template>
-    <nav class='structured-theme-nav' ...attributes>
-      <ul class='structured-theme-nav-list'>
-        {{#each @items as |navItem|}}
-          <li>
-            <Button
-              @as='anchor'
-              @href='#{{navItem.id}}'
-              @kind='secondary'
-              @size='small'
-              class='boxel-ellipsize'
-              {{on 'click' (fn scrollToSection navItem.id)}}
-            >
-              {{navItem.navTitle}}
-            </Button>
-          </li>
-        {{/each}}
-      </ul>
-    </nav>
-    <style scoped>
-      .structured-theme-nav {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp) calc(var(--boxel-sp) * 2);
-        border-bottom: 1px solid var(--dsr-border);
-      }
-      .structured-theme-nav-list {
-        list-style-type: none;
-        padding: 0;
-        margin: 0;
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--boxel-sp-xs);
-      }
-    </style>
-  </template>
-}
-
 export class NavBar extends GlimmerComponent<{
   Args: {
     sections?: SectionSignature[];
+    // affixes a dark-mode toggle to the right end of the bar
+    toggleDarkMode?: () => void;
+    isDarkMode?: boolean;
   };
   Element: HTMLElement;
 }> {
+  // items that don't fit move into the "more" dropdown; null means all fit
+  @tracked private visibleCount: number | null = null;
+
+  // at mobile widths the item strip becomes a hamburger menu
+  @tracked private isCompact = false;
+
+  private navElement: HTMLElement | null = null;
+  private navList: HTMLElement | null = null;
+  private navToggle: HTMLElement | null = null;
+
+  // space kept free for the "more" trigger before items are dropped
+  private moreButtonReserve = 40;
+
+  private compactMaxWidth = 400;
+
+  private get hasOverflowMenu() {
+    return this.visibleCount !== null;
+  }
+
+  private toMenuItem = (section: SectionSignature) =>
+    new MenuItem({
+      label: section.navTitle,
+      action: () => this.scrollFromMenu(section.id),
+    });
+
+  private get overflowMenuItems() {
+    let sections = this.args.sections ?? [];
+    if (this.visibleCount === null) {
+      return [];
+    }
+    return sections.slice(this.visibleCount).map(this.toMenuItem);
+  }
+
+  private get allMenuItems() {
+    return (this.args.sections ?? []).map(this.toMenuItem);
+  }
+
+  private isHidden = (index: number) =>
+    this.visibleCount !== null && index >= this.visibleCount;
+
+  private registerNav = modifier((el: HTMLElement) => {
+    this.navElement = el;
+    return () => {
+      this.navElement = null;
+    };
+  });
+
+  // the dropdown content is portaled outside the card, so the menu action
+  // cannot walk up from its own element; scroll from the captured nav instead
+  private scrollFromMenu = (sectionId: string) => {
+    if (this.navElement) {
+      scrollToSectionFrom(this.navElement, sectionId);
+    }
+  };
+
+  private trackFit = modifier(
+    (el: HTMLElement, [_sections]: [SectionSignature[] | undefined]) => {
+      let update = () => this.updateVisibleCount(el);
+      // the ResizeObserver's async first delivery is the initial measurement;
+      // measuring synchronously here would cause a backtracking re-render
+      let observer = new ResizeObserver(update);
+      observer.observe(el);
+      return () => observer.disconnect();
+    },
+  );
+
+  // the container's observer has already fired by the time the strip
+  // re-renders out of compact mode; observing the list re-measures it. the
+  // list tracks its items' widths because overflowed items leave the flow and
+  // at least one always stays in it, so a late-loading webfont or a per-mode
+  // font swap resizes the list and re-measures
+  private trackListFit = modifier((el: HTMLElement) => {
+    this.navList = el;
+    let update = () => this.updateVisibleCount(el.parentElement as HTMLElement);
+    let observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      this.navList = null;
+    };
+  });
+
+  private registerToggle = modifier((el: HTMLElement) => {
+    this.navToggle = el;
+    return () => {
+      this.navToggle = null;
+    };
+  });
+
+  // measures against the container, whose width is set from outside, so the
+  // "more" button appearing cannot re-trigger the measurement. overflowed
+  // items stay rendered (out of flow, not display:none) so widths stay
+  // readable while contributing nothing to the list's own width
+  private updateVisibleCount(container: HTMLElement) {
+    this.isCompact = container.clientWidth <= this.compactMaxWidth;
+    let list = this.navList;
+    let items = list ? (Array.from(list.children) as HTMLElement[]) : [];
+    if (!list || !items.length) {
+      this.visibleCount = null;
+      return;
+    }
+    let containerStyle = getComputedStyle(container);
+    let available =
+      container.clientWidth -
+      parseFloat(containerStyle.paddingLeft) -
+      parseFloat(containerStyle.paddingRight);
+    if (this.navToggle) {
+      // the toggle is a sibling flex item, so it costs the container's gap too
+      available -=
+        this.navToggle.offsetWidth +
+        (parseFloat(containerStyle.columnGap) || 0);
+    }
+    let gap = parseFloat(getComputedStyle(list).columnGap) || 0;
+    let widths = items.map((item) => item.offsetWidth);
+    let total =
+      widths.reduce((sum, width) => sum + width, 0) + gap * (items.length - 1);
+    if (total <= available) {
+      this.visibleCount = null;
+      return;
+    }
+    available -= this.moreButtonReserve;
+    let used = 0;
+    let count = 0;
+    for (let width of widths) {
+      let next = used + (count > 0 ? gap : 0) + width;
+      if (next > available) {
+        break;
+      }
+      used = next;
+      count++;
+    }
+    // the first item stays in the bar even when it has to ellipsize: it keeps
+    // one item in flow, so the list's own box goes on tracking item widths,
+    // and an empty strip beside a "more" button reads as broken. it is still
+    // listed in the menu, so no section becomes unreachable
+    this.visibleCount = Math.max(count, 1);
+  }
+
   <template>
-    <nav class='dsr-nav' ...attributes>
-      <button
-        type='button'
-        class='nav-scroll nav-scroll--left'
-        aria-label='Scroll navigation left'
-        {{on 'click' (fn this.scrollTo 'left')}}
-      >
-        <ChevronCompactLeft />
-      </button>
-      <div class='nav-container'>
-        <div class='nav-grid'>
-          {{#each @sections as |section|}}
-            <a
-              href='#{{section.id}}'
-              class='nav-item'
-              {{on 'click' (fn scrollToSection section.id)}}
-            >{{section.navTitle}}</a>
-          {{/each}}
-        </div>
+    <nav
+      class='dsr-nav'
+      aria-label='Sections'
+      {{this.registerNav}}
+      ...attributes
+      data-test-theme-nav
+    >
+      <div class='nav-container' {{this.trackFit @sections}}>
+        {{#if this.isCompact}}
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <ContextButton
+                class='nav-menu-button'
+                @variant='ghost'
+                @label='Sections menu'
+                @icon={{MenuIcon}}
+                {{bindings}}
+                data-test-theme-nav-menu
+              />
+            </:trigger>
+            <:content as |dd|>
+              <BoxelMenu
+                class='nav-dropdown-menu'
+                @closeMenu={{dd.close}}
+                @items={{this.allMenuItems}}
+              />
+            </:content>
+          </BoxelDropdown>
+        {{else}}
+          <ul
+            class={{cn 'nav-grid' nav-grid--clipped=this.hasOverflowMenu}}
+            {{this.trackListFit}}
+            data-test-theme-nav-list
+          >
+            {{#each @sections as |section index|}}
+              <li class={{if (this.isHidden index) 'nav-item-hidden'}}>
+                <Button
+                  @as='anchor'
+                  @href='#{{section.id}}'
+                  @kind='link-muted'
+                  class='nav-item'
+                  {{on 'click' (fn scrollToSection section.id)}}
+                  data-test-theme-nav-item={{section.id}}
+                >{{section.navTitle}}</Button>
+              </li>
+            {{/each}}
+          </ul>
+
+          {{#if this.hasOverflowMenu}}
+            <div class='nav-more-button-container'>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <ContextButton
+                    class='nav-more-button'
+                    @variant='ghost'
+                    @label='More sections'
+                    @icon='context-menu-vertical'
+                    {{bindings}}
+                    data-test-theme-nav-more
+                  />
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    class='nav-dropdown-menu'
+                    @closeMenu={{dd.close}}
+                    @items={{this.overflowMenuItems}}
+                  />
+                </:content>
+              </BoxelDropdown>
+            </div>
+          {{/if}}
+        {{/if}}
+
+        {{#if @toggleDarkMode}}
+          <ModeToggle
+            class='nav-mode-toggle'
+            @toggleDarkMode={{@toggleDarkMode}}
+            @isDarkMode={{bool @isDarkMode}}
+            {{this.registerToggle}}
+          />
+        {{/if}}
       </div>
-      <button
-        type='button'
-        class='nav-scroll nav-scroll--right'
-        aria-label='Scroll navigation right'
-        {{on 'click' (fn this.scrollTo 'right')}}
-      >
-        <ChevronCompactRight />
-      </button>
     </nav>
     <style scoped>
-      /* Navigation */
-      .dsr-nav {
-        position: sticky;
-        top: 0;
-        border-bottom: 1px solid var(--dsr-border);
-        z-index: 10;
-        backdrop-filter: blur(8px);
-        display: flex;
-        align-items: stretch;
-        padding-inline: var(--boxel-sp);
-      }
-      .nav-grid {
-        display: flex;
-        gap: calc(var(--boxel-sp) * 0.5);
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        flex: 1;
-        position: relative;
-        align-items: center;
-      }
-      .nav-grid::-webkit-scrollbar {
-        display: none;
-      }
-      .nav-item {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        color: var(--dsr-fg);
-        text-decoration: none;
-        white-space: nowrap;
-        padding: calc(var(--boxel-sp) * 0.5) calc(var(--boxel-sp) * 0.75);
-        border: none;
-        border-radius: calc(var(--boxel-border-radius) * 0.5);
-      }
-      .nav-item:hover {
-        background-color: var(--accent);
-        color: var(--accent-foreground);
-      }
-      .nav-scroll {
-        flex-shrink: 0;
-        border: none;
-        background: none;
-        color: var(--dsr-muted-fg);
-        width: 2.25rem;
-        height: 5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition:
-          color var(--boxel-transition),
-          box-shadow var(--boxel-transition),
-          transform var(--boxel-transition);
-        opacity: 0.5;
-        padding: 0;
-      }
-      .nav-scroll:hover,
-      .nav-scroll:focus-visible {
-        color: var(--dsr-fg);
-        outline: none;
-        background: color-mix(in lab, var(--dsr-fg) 10%, transparent);
-      }
-      .nav-scroll--left {
-        order: -1;
-      }
-      .nav-scroll--right {
-        order: 1;
-      }
-      .nav-container {
-        position: relative;
-        flex-grow: 1;
-        display: flex;
-        overflow: hidden;
-      }
-      .nav-container::before,
-      .nav-container::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 1rem;
-        pointer-events: none;
-        z-index: 1;
-      }
-      .nav-container::before {
-        left: 0;
-        background: linear-gradient(to right, var(--dsr-bg) 5%, transparent);
-      }
-      .nav-container::after {
-        right: 0;
-        background: linear-gradient(to left, var(--dsr-bg) 5%, transparent);
-      }
-
-      @media (max-width: 768px) {
+      @layer baseComponent {
+        /* Navigation */
         .dsr-nav {
-          padding: var(--boxel-sp);
+          --dsr-nav-height: 3.25rem;
+          --dsr-nav-item-max-width: 12rem;
+          position: sticky;
+          top: 0;
+          height: var(--dsr-nav-height);
+          width: 100%;
+          border-bottom: 1px solid var(--border);
+          z-index: 10;
+          background: color-mix(in oklch, var(--background) 80%, transparent);
+          backdrop-filter: blur(8px);
+          display: flex;
+          align-items: stretch;
+          justify-content: space-between;
         }
         .nav-grid {
-          gap: var(--boxel-sp);
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          justify-content: space-between;
+          gap: var(--boxel-sp-xs);
+          min-width: 0;
+          overflow: hidden;
+          position: relative;
+          align-items: center;
         }
-        .nav-scroll {
-          display: none;
+        /* an item that doesn't fit moves into the overflow menu rather than
+           being truncated in place */
+        .nav-grid > li {
+          flex-shrink: 0;
         }
-        .nav-container::before,
-        .nav-container::after {
-          display: none;
+        /* the list shrinks to its in-flow items, so the "more" button sits
+           right after the last visible one */
+        .nav-grid--clipped {
+          justify-content: flex-start;
+          flex: none;
+        }
+        /* out of flow rather than display:none, so the item keeps a real box
+           the fit measurement and its ResizeObserver can read, while adding
+           nothing to the list's width. max-content because shrink-to-fit
+           would otherwise be clamped by the now-narrow list */
+        .nav-item-hidden {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: max-content;
+          visibility: hidden;
+        }
+        .nav-item {
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 500;
+          white-space: nowrap;
+          padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+          /* text-overflow needs a block box; the Button is inline-flex */
+          display: block;
+          max-width: var(--dsr-nav-item-max-width);
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .nav-mode-toggle {
+          align-self: center;
+          justify-content: flex-end;
+          margin-left: auto;
+        }
+        .nav-more-button-container,
+        .nav-menu-button {
+          align-self: center;
+          flex-shrink: 0;
+        }
+        .nav-more-button,
+        .nav-menu-button {
+          color: var(--muted-foreground);
+        }
+        .nav-more-button :deep(svg),
+        .nav-menu-button :deep(svg) {
+          stroke-width: 1px;
+        }
+        .nav-more-button:hover,
+        .nav-more-button:focus-visible,
+        .nav-menu-button:hover,
+        .nav-menu-button:focus-visible {
+          color: var(--foreground);
+          background: color-mix(in oklch, var(--foreground) 10%, transparent);
+        }
+        .nav-more-button:focus-visible,
+        .nav-menu-button:focus-visible {
+          outline: 2px solid var(--ring, var(--boxel-highlight));
+        }
+        /* portaled next to the app root, so it needs its own viewport cap */
+        .nav-dropdown-menu {
+          max-height: 50vh;
+          overflow-y: auto;
+        }
+        .nav-container {
+          position: relative;
+          flex-grow: 1;
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          overflow: hidden;
+          padding-inline: var(--boxel-sp-xl);
+        }
+
+        @container (width <= 768px) {
+          .nav-grid {
+            gap: var(--boxel-sp);
+          }
+          /* matches .dsr-content's compact padding so items stay aligned */
+          .nav-container {
+            padding-inline: var(--boxel-sp);
+          }
         }
       }
     </style>
   </template>
-
-  private scrollTo = (direction: 'left' | 'right', event: Event) => {
-    event.preventDefault();
-    let navContainer = (event.currentTarget as HTMLElement)
-      ?.closest('.dsr-nav')
-      ?.querySelector('.nav-grid') as HTMLElement | null;
-    if (!navContainer) {
-      return;
-    }
-    let offset =
-      direction === 'left'
-        ? -navContainer.clientWidth * 0.8
-        : navContainer.clientWidth * 0.8;
-    navContainer.scrollBy({ left: offset, behavior: 'smooth' });
-  };
 }
 
 export class ModeToggle extends GlimmerComponent<{
@@ -863,94 +1080,214 @@ export class ModeToggle extends GlimmerComponent<{
     toggleDarkMode: () => void;
     isDarkMode: boolean;
   };
-  Element: HTMLButtonElement;
+  Element: HTMLLabelElement;
 }> {
   <template>
-    <Button
-      class='mode-toggle'
-      @kind='primary'
-      @size='small'
-      {{on 'click' @toggleDarkMode}}
+    <Switch
+      @isEnabled={{@isDarkMode}}
+      @onChange={{@toggleDarkMode}}
+      @size='touch'
+      @checkedIcon={{Moon}}
+      @uncheckedIcon={{Sun}}
+      @label='Dark mode'
       data-test-mode={{if @isDarkMode 'toggle-light' 'toggle-dark'}}
       ...attributes
-    >
-      {{#if @isDarkMode}}
-        <Sun width='16' height='16' class='toggle-icon' role='presentation' />
-        Light Mode
-      {{else}}
-        <Moon width='16' height='16' class='toggle-icon' role='presentation' />
-        Dark Mode
-      {{/if}}
-    </Button>
-    <style scoped>
-      .mode-toggle {
-        gap: var(--boxel-sp-xs);
-        transition: none;
-      }
-      .toggle-icon {
-        flex-shrink: 0;
-      }
-    </style>
+    />
   </template>
 }
 
 export class ThemeDashboardHeader extends GlimmerComponent<{
   Args: {
+    mode?: 'isolated' | 'edit';
     title?: string;
     description?: string;
-    isDarkMode?: boolean;
     metaLabel?: string;
+    // the version field lives on StructuredTheme, not CardDef, and this
+    // template can't import the card without a cycle
+    fields?: FieldsTypeFor<CardDef> & { version: BoxComponent };
+    model?: PartialBaseInstanceType<typeof CardDef>;
     version?: string;
   };
   Element: HTMLElement;
   Blocks: { meta: []; default: [] };
 }> {
-  <template>
-    <header class='theme-dashboard-header' ...attributes>
-      {{#if (has-block 'meta')}}
-        {{yield to='meta'}}
-      {{else}}
-        <div class='theme-dashboard-header-meta'>
-          <span class='theme-dashboard-header-meta-label'>
-            {{if @metaLabel @metaLabel 'Style Guide'}}
-          </span>
-          <span class='theme-dashboard-header-meta-version'>
-            Version
-            {{if @version @version '1.0'}}
-          </span>
-        </div>
-      {{/if}}
-      <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
-      {{#if @description}}
-        <p class='theme-dashboard-header-tagline'>{{@description}}</p>
-      {{/if}}
+  // CardInfoTemplates.edit insists on a strict `CardDef` for `@model`; the
+  // partial model card templates pass in only exercises the loose shape, so
+  // cast here rather than in every caller
+  private get cardInfoModel(): CardDef {
+    return this.args.model as unknown as CardDef;
+  }
 
+  <template>
+    <header
+      class='theme-dashboard-header {{if @mode @mode "isolated"}}'
+      ...attributes
+    >
+      {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
+        <CardInfoTemplates.edit
+          @fields={{@fields}}
+          @model={{this.cardInfoModel}}
+          @hideThemeChooser={{true}}
+        />
+        <FieldContainer
+          class='theme-dashboard-version-edit-field'
+          @icon={{VersionIcon}}
+          @label='Version No'
+          @tag='label'
+        >
+          <@fields.version />
+        </FieldContainer>
+      {{else}}
+        {{#if (has-block 'meta')}}
+          {{yield to='meta'}}
+        {{else}}
+          <div class='theme-dashboard-header-meta'>
+            <span class='theme-dashboard-header-meta-label'>
+              {{if @metaLabel @metaLabel 'Style Guide'}}
+            </span>
+            <span class='theme-dashboard-header-meta-version'>
+              Version
+              {{if @version @version '1.0'}}
+            </span>
+          </div>
+        {{/if}}
+        <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
+        {{#if @description}}
+          <p class='theme-dashboard-header-tagline'>{{@description}}</p>
+        {{/if}}
+      {{/if}}
       {{yield}}
     </header>
     <style scoped>
       @layer baseComponent {
         .theme-dashboard-header {
-          border-bottom: 1px solid var(--dsr-border);
-          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
-          background-color: var(--dsr-muted);
-          color: var(--dsr-muted-fg);
+          border-bottom: 1px solid var(--border);
+          background-color: var(--muted);
+          color: var(--muted-foreground);
+          text-wrap: pretty;
+        }
+        .isolated {
+          padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
+        }
+        .edit {
+          padding: var(--boxel-sp-xl);
         }
         .theme-dashboard-header-meta {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: calc(var(--boxel-sp) * 1.5);
+          margin-bottom: var(--boxel-sp-lg);
           font-size: var(--boxel-caption-font-size);
           text-transform: uppercase;
           letter-spacing: var(--boxel-lsp-xxl);
           font-weight: 600;
         }
         .theme-dashboard-header-title {
-          margin-bottom: calc(var(--boxel-sp) * 0.75);
-          color: var(--dsr-fg);
+          margin-bottom: var(--boxel-sp-sm);
+          color: var(--foreground);
         }
         .theme-dashboard-header-tagline {
           max-width: 48rem;
+        }
+        .theme-dashboard-version-edit-field {
+          margin-top: var(--boxel-sp);
+        }
+      }
+    </style>
+  </template>
+}
+
+// Shown in a dashboard's body while the card has no theme CSS yet
+export class ThemeDashboardEmptyState extends GlimmerComponent<{
+  Args: {
+    message?: string;
+  };
+  Element: HTMLElement;
+}> {
+  <template>
+    <div
+      class='dashboard-empty-state'
+      ...attributes
+      data-test-dashboard-empty-state
+    >
+      <PaletteIcon
+        class='dashboard-empty-state-icon'
+        width='48'
+        height='48'
+        aria-hidden='true'
+      />
+      <h2 class='dashboard-empty-state-title'>No theme yet</h2>
+      <p class='dashboard-empty-state-message'>
+        {{#if @message}}
+          {{@message}}
+        {{else}}
+          Switch to edit mode to import a theme or build one field by field.
+        {{/if}}
+      </p>
+    </div>
+    <style scoped>
+      @layer baseComponent {
+        .dashboard-empty-state {
+          /* fills the grown content area so the footer below stays pinned
+             to the bottom of the card; the message itself stays at the top */
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xl);
+          text-align: center;
+          text-wrap: pretty;
+          color: var(--muted-foreground);
+        }
+        .dashboard-empty-state-icon {
+          flex-shrink: 0;
+        }
+        .dashboard-empty-state-title {
+          margin: 0;
+          color: var(--foreground);
+          font-size: var(--boxel-font-size);
+        }
+        .dashboard-empty-state-message {
+          margin: 0;
+          max-width: 30rem;
+          text-wrap: balance;
+        }
+      }
+    </style>
+  </template>
+}
+
+// Pill samples for the semantic color roles, rendered with the ambient theme
+// tokens. Shared by the theme visualizer and the brand guide.
+export class PreviewPills extends GlimmerComponent<{
+  Element: HTMLElement;
+}> {
+  <template>
+    <div class='preview-pills' ...attributes>
+      <Pill data-test-pill-preview='default'>Default</Pill>
+      <Pill @variant='primary' data-test-pill-preview='primary'>
+        Primary
+      </Pill>
+      <Pill @variant='secondary' data-test-pill-preview='secondary'>
+        Secondary
+      </Pill>
+      <Pill @variant='accent' data-test-pill-preview='accent'>
+        Accent
+      </Pill>
+      <Pill @variant='muted' data-test-pill-preview='muted'>
+        Muted
+      </Pill>
+      <Pill @variant='destructive' data-test-pill-preview='destructive'>
+        Destructive
+      </Pill>
+    </div>
+    <style scoped>
+      @layer baseComponent {
+        .preview-pills {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-xs);
         }
       }
     </style>
@@ -959,28 +1296,70 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
 
 export class ThemeVisualizer extends GlimmerComponent<{
   Args: {
-    toggleDarkMode?: () => void;
-    isDarkMode?: boolean;
+    fontStack?: { label: string; stack?: string }[];
+    cssImports?: string[] | null;
+    editMode?: boolean;
   };
-  Blocks: { colorPalette: []; typography: [] };
+  Blocks: { colorPalette: []; cssImports: []; typography: [] };
   Element: HTMLElement;
 }> {
+  private get hasNoImports() {
+    return !this.args.cssImports?.length;
+  }
+
+  private get showFontsSection() {
+    return Boolean(this.args.fontStack?.length || this.hasNoImports);
+  }
+
   <template>
     <section class='dsr-theme-visualizer' ...attributes>
       <div class='dsr-theme-visualizer-header'>
         <h2>Theme Visualizer</h2>
-        {{#if @toggleDarkMode}}
-          <ModeToggle
-            @toggleDarkMode={{@toggleDarkMode}}
-            @isDarkMode={{bool @isDarkMode}}
-          />
-        {{/if}}
       </div>
       <div class='structured-theme-visualizer'>
         {{#if (has-block 'colorPalette')}}
           <div>
             <h3 class='structured-theme-visualizer-subtitle'>Color System</h3>
+            <PreviewPills class='visualizer-preview-pills' />
             {{yield to='colorPalette'}}
+          </div>
+        {{/if}}
+        {{#if @editMode}}
+          {{yield to='cssImports'}}
+        {{else if this.showFontsSection}}
+          <div data-test-font-imports-section>
+            <h3 class='structured-theme-visualizer-subtitle'>Fonts</h3>
+            <FontPreviews @fontStack={{@fontStack}} />
+            {{#if @cssImports.length}}
+              <FieldContainer
+                class='css-imports-preview'
+                @label='CSS Imports'
+                @vertical={{true}}
+              >
+                <ul class='font-import-links'>
+                  {{#each @cssImports as |importUrl|}}
+                    <li>
+                      <a
+                        class='font-import-link'
+                        href={{importUrl}}
+                        target='_blank'
+                        rel='noopener noreferrer'
+                      >
+                        <ExternalLinkIcon
+                          class='font-import-link-icon'
+                          width='14'
+                          height='14'
+                          aria-hidden='true'
+                        />
+                        {{importUrl}}
+                      </a>
+                    </li>
+                  {{/each}}
+                </ul>
+              </FieldContainer>
+            {{else if this.hasNoImports}}
+              <p class='font-import-empty'><em>No web fonts referenced.</em></p>
+            {{/if}}
           </div>
         {{/if}}
         {{#if (has-block 'typography')}}
@@ -989,43 +1368,63 @@ export class ThemeVisualizer extends GlimmerComponent<{
             {{yield to='typography'}}
           </div>
         {{/if}}
-        <div>
-          <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
-          <div class='structured-theme-component-samples'>
-            <Button @kind='primary' @size='small' @rectangular={{true}}>
-              Primary Action
-            </Button>
-            <Button @kind='secondary' @size='small' @rectangular={{true}}>
-              Secondary Action
-            </Button>
-            <CardContainer
-              @displayBoundaries={{true}}
-              class='structured-theme-component-sample-card'
-            >
-              <BoxelContainer @display='grid'>
-                <h3>Sample Card</h3>
-                <p>
-                  Card component showcasing background, borders, and shadows
-                  from the theme system.
-                </p>
-              </BoxelContainer>
-            </CardContainer>
+        {{#unless @editMode}}
+          <div>
+            <h3 class='structured-theme-visualizer-subtitle'>Components</h3>
+            <div class='structured-theme-component-samples'>
+              <Button
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='default'
+              >
+                Default Action
+              </Button>
+              <Button
+                @kind='primary'
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='primary'
+              >
+                Primary Action
+              </Button>
+              <Button
+                @kind='secondary'
+                @size='small'
+                @rectangular={{true}}
+                data-test-action-sample='secondary'
+              >
+                Secondary Action
+              </Button>
+              <CardContainer
+                @displayBoundaries={{true}}
+                class='structured-theme-component-sample-card'
+              >
+                <BoxelContainer @display='grid'>
+                  <h3>Sample Card</h3>
+                  <p>
+                    Card component showcasing background, borders, and shadows
+                    from the theme system.
+                  </p>
+                </BoxelContainer>
+              </CardContainer>
+            </div>
           </div>
-        </div>
+        {{/unless}}
       </div>
     </section>
 
     <style scoped>
       @layer baseComponent {
         .dsr-theme-visualizer {
-          background-color: var(--dsr-card);
-          color: var(--dsr-card-fg);
+          background-color: var(--card);
+          color: var(--card-foreground);
           border-radius: var(--boxel-border-radius);
-          padding: calc(var(--boxel-sp) * 2);
-          border: 1px solid var(--dsr-border);
+          padding: var(--boxel-sp-xl);
+          min-width: 0;
+          border: 1px solid var(--border);
         }
         .dsr-theme-visualizer + :deep(*) {
-          margin-top: calc(var(--boxel-sp) * 2);
+          margin-top: var(--boxel-sp-xl);
         }
         .dsr-theme-visualizer-header {
           display: flex;
@@ -1033,23 +1432,29 @@ export class ThemeVisualizer extends GlimmerComponent<{
           justify-content: space-between;
           align-items: center;
           gap: var(--boxel-sp-xs);
-          margin-bottom: calc(var(--boxel-sp) * 2);
+          margin-bottom: var(--boxel-sp-xl);
           padding-bottom: var(--boxel-sp);
-          border-bottom: 2px solid var(--dsr-border);
+          border-bottom: 2px solid var(--border);
         }
         .structured-theme-visualizer {
           display: flex;
           flex-direction: column;
-          gap: calc(var(--boxel-sp) * 4);
-          background-color: var(--dsr-bg);
-          color: var(--dsr-fg);
-          border-radius: var(--boxel-border-radius);
-          padding: calc(var(--boxel-sp) * 2);
-          border: 2px solid var(--dsr-border);
+          gap: var(--boxel-sp-4xl);
+          background-color: var(--background);
+          color: var(--foreground);
+          border-radius: var(--radius);
+          padding: var(--boxel-sp-xl);
+          border: 2px solid var(--border);
+        }
+        @container (width <= 768px) {
+          .dsr-theme-visualizer,
+          .structured-theme-visualizer {
+            padding-inline: var(--boxel-sp);
+          }
         }
         .structured-theme-visualizer-subtitle {
           border-bottom: var(--boxel-border);
-          margin-bottom: calc(var(--boxel-sp) * 2);
+          margin-bottom: var(--boxel-sp-xl);
         }
         .structured-theme-component-samples {
           display: flex;
@@ -1057,12 +1462,50 @@ export class ThemeVisualizer extends GlimmerComponent<{
           gap: var(--boxel-sp);
           align-items: flex-start;
         }
+        .visualizer-preview-pills {
+          margin-bottom: var(--boxel-sp);
+        }
       }
       .structured-theme-component-sample-card {
-        background-color: var(--dsr-card);
-        color: var(--dsr-card-fg);
-        border: 1px solid var(--dsr-border);
-        box-shadow: var(--boxel-box-shadow);
+        background-color: var(--card);
+        color: var(--card-foreground);
+      }
+      .css-imports-preview {
+        margin-top: var(--boxel-sp-xl);
+      }
+      .font-import-links {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-2xs);
+      }
+      .font-import-link {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-2xs);
+        padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
+        background-color: var(--muted);
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius-sm);
+        font-family: var(--font-mono);
+        font-size: var(--boxel-font-size-xs);
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .font-import-link:hover,
+      .font-import-link:focus-visible {
+        text-decoration: underline;
+      }
+      .font-import-link-icon {
+        flex-shrink: 0;
+        align-self: center;
+      }
+      .font-import-empty {
+        margin: var(--boxel-sp) 0 0;
+        color: var(--muted-foreground);
       }
     </style>
   </template>
@@ -1078,8 +1521,10 @@ export class ThemeDashboard extends GlimmerComponent<{
     isDarkMode?: boolean;
     themeCss?: string | null;
     themeId?: string | null;
+    // affixes a dark-mode toggle to the right end of the nav bar
+    toggleDarkMode?: () => void;
   };
-  Blocks: { default: []; header: []; navBar: [] };
+  Blocks: { default: []; header: [] };
   Element: HTMLElement;
 }> {
   // Content-derived rather than guidFor: this markup can be persisted as
@@ -1105,7 +1550,8 @@ export class ThemeDashboard extends GlimmerComponent<{
     >
       <article
         id='top'
-        class={{cn 'detailed-style-reference' dsr--dark=@isDarkMode}}
+        class='detailed-style-reference'
+        data-theme-dashboard
         data-boxel-theme-scope={{if @themeCss this.themeScopeId}}
         ...attributes
       >
@@ -1121,21 +1567,14 @@ export class ThemeDashboard extends GlimmerComponent<{
         {{/if}}
         {{#if (has-block 'header')}}
           {{yield to='header'}}
-        {{else}}
-          <ThemeDashboardHeader
-            class='dsr-header'
-            @title={{@title}}
-            @description={{@description}}
-            @isDarkMode={{@isDarkMode}}
-            @metaLabel={{@headerLabel}}
-            @version={{@version}}
-          />
         {{/if}}
 
-        {{#if (has-block 'navBar')}}
-          {{yield to='navBar'}}
-        {{else if @sections.length}}
-          <NavBar @sections={{@sections}} />
+        {{#if @sections.length}}
+          <NavBar
+            @sections={{@sections}}
+            @toggleDarkMode={{@toggleDarkMode}}
+            @isDarkMode={{@isDarkMode}}
+          />
         {{/if}}
 
         <div class='dsr-content'>
@@ -1159,44 +1598,14 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
-          --dsr-bg: var(--background, var(--boxel-light));
-          --dsr-fg: var(--foreground, var(--boxel-700));
-          --dsr-muted: var(
-            --muted,
-            color-mix(in oklab, var(--dsr-fg) 10%, var(--dsr-bg))
-          );
-          --dsr-muted-fg: var(
-            --muted-foreground,
-            color-mix(in oklab, var(--dsr-fg) 60%, var(--dsr-bg))
-          );
-          --dsr-border: var(
-            --border,
-            color-mix(in oklab, var(--dsr-fg) 20%, var(--dsr-bg))
-          );
-          --dsr-card: var(
-            --card,
-            color-mix(in oklab, var(--dsr-fg) 5%, var(--dsr-bg))
-          );
-          --dsr-card-fg: var(--card-foreground, var(--dsr-fg));
-
-          min-height: 100vh;
-          background-color: var(--dsr-bg);
-          color: var(--dsr-fg);
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background-color: var(--background);
+          color: var(--foreground);
           overflow-y: auto;
-        }
-        .dsr--dark {
-          --dsr-bg: var(--background, var(--boxel-700));
-          --dsr-fg: var(--foreground, var(--boxel-light));
-        }
-        .dsr--dark :deep(input),
-        .dsr--dark :deep(textarea),
-        .dsr--dark :deep(pre) {
-          background-color: color-mix(
-            in oklab,
-            var(--dsr-bg),
-            var(--boxel-dark) 20%
-          );
-          color: var(--foreground, var(--boxel-light));
+          /* the NavBar's container queries key off the card, not the viewport */
+          container-type: inline-size;
         }
 
         .dsr-header :deep(h1) {
@@ -1208,18 +1617,24 @@ export class ThemeDashboard extends GlimmerComponent<{
 
         /* Content */
         .dsr-content {
+          /* fills the space above the footer so it stays pinned to the
+             bottom of the card when the body is short */
+          flex-grow: 1;
+          display: flex;
+          flex-direction: column;
+          width: 100%;
           max-width: 56rem;
           margin: 0 auto;
-          padding: calc(var(--boxel-sp) * 3) calc(var(--boxel-sp) * 2);
+          padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
           counter-reset: section;
         }
 
         /* Footer */
         .dsr-footer {
-          border-top: 1px solid var(--dsr-border);
-          padding: calc(var(--boxel-sp) * 2);
-          background-color: var(--dsr-muted);
-          color: var(--dsr-muted-fg);
+          border-top: 1px solid var(--border);
+          padding: var(--boxel-sp-xl);
+          background-color: var(--muted);
+          color: var(--muted-foreground);
         }
         .footer-content {
           max-width: 56rem;
@@ -1235,17 +1650,10 @@ export class ThemeDashboard extends GlimmerComponent<{
         /* Responsive */
         @media (max-width: 768px) {
           .dsr-header {
-            padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
-          }
-          .style-title {
-            font-size: clamp(1.75rem, 8vw, 2.5rem);
+            padding: var(--boxel-sp-xl) var(--boxel-sp);
           }
           .dsr-content {
-            padding: calc(var(--boxel-sp) * 2) var(--boxel-sp);
-          }
-          .theme-toggle {
-            width: 100%;
-            justify-content: center;
+            padding: var(--boxel-sp-xl) var(--boxel-sp);
           }
         }
       }

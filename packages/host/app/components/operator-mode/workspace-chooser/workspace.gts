@@ -11,7 +11,7 @@ import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
 import Home from '@cardstack/boxel-icons/home';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { format as formatDate } from 'date-fns';
-import { dropTask, task } from 'ember-concurrency';
+import { didCancel, dropTask, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import pluralize from 'pluralize';
 
@@ -39,6 +39,7 @@ import {
 import {
   ensureTrailingSlash,
   hasExecutableExtension,
+  logger,
   RealmPaths,
   SupportedMimeType,
   type RealmIdentifier,
@@ -75,6 +76,8 @@ interface Signature {
     navIndex?: number;
   };
 }
+
+const log = logger('component:workspace-chooser/workspace');
 
 export default class Workspace extends Component<Signature> {
   <template>
@@ -1656,7 +1659,9 @@ export default class Workspace extends Component<Signature> {
 
   constructor(...args: [any, any]) {
     super(...args);
-    this.loadRealmTask.perform();
+    this.loadRealmTask
+      .perform()
+      .catch((error: unknown) => this.reportRealmLoadFailure(error));
   }
 
   willDestroy() {
@@ -1664,10 +1669,38 @@ export default class Workspace extends Component<Signature> {
     this.clearReindexError();
   }
 
+  // Fills in the session and the realm metadata the tile renders from. The
+  // tile renders immediately off `realm.info()`, which answers synchronously
+  // with a placeholder, so this runs in the background and nothing awaits it.
   private loadRealmTask = task(async () => {
     await this.realm.login(this.args.realmIdentifier);
     await this.realm.ensureRealmMeta(this.args.realmIdentifier);
   });
+
+  // An unconsumed ember-concurrency task instance reports its error through
+  // `Ember.onerror`, or throws it from a run-loop timer when nothing sets
+  // that. Without a catch here a rejected load fails whichever test is
+  // running rather than the one that rendered this tile.
+  //
+  // The load is best-effort: on failure the tile keeps the placeholder name
+  // `realm.info()` returns and an empty stats row. It does not re-request on
+  // its own — the real values arrive whenever something else populates the
+  // realm resource's info. Cancellation is the ordinary teardown path, when
+  // the chooser closes mid-load, and stays silent.
+  //
+  // The stack is logged alongside the message because `TypeError: Failed to
+  // fetch` — how a realm round trip fails when the connection drops rather
+  // than answering an error status — names neither the request nor the
+  // caller on its own.
+  private reportRealmLoadFailure(error: unknown) {
+    if (didCancel(error)) {
+      return;
+    }
+    log.warn(
+      `workspace tile background realm load failed for ${this.args.realmIdentifier}: ${error}`,
+      error instanceof Error ? error.stack : undefined,
+    );
+  }
 
   @cached
   private get realmInfo() {

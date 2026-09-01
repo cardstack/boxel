@@ -86,6 +86,23 @@ module('Unit | Utility | searchInFlightKey (host)', function () {
     );
   });
 
+  test('different wire scopes produce different keys', function (assert) {
+    assert.notStrictEqual(
+      searchInFlightKey([realmA], baseQuery, 'cards'),
+      searchInFlightKey([realmA], baseQuery, 'files'),
+    );
+  });
+
+  test('an explicit wire scope is distinct from omitted', function (assert) {
+    // The store keys on the *resolved* wire scope, so a resolved 'cards' must
+    // not collide with the undefined wire default (a positive-type / 'all'
+    // request) — otherwise the two would coalesce into one in-flight fetch.
+    assert.notStrictEqual(
+      searchInFlightKey([realmA], baseQuery),
+      searchInFlightKey([realmA], baseQuery, 'cards'),
+    );
+  });
+
   test('pagination differences produce different keys', function (assert) {
     let p1: Query = { ...baseQuery, page: { number: 0, size: 10 } };
     let p2: Query = { ...baseQuery, page: { number: 1, size: 10 } };

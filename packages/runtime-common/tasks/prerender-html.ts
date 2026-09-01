@@ -280,7 +280,12 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       realmOwnerUserId: userId,
       prerenderer,
       auth,
-      jobInfo: jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 },
+      jobInfo: jobInfo ?? {
+        jobId: -1,
+        reservationId: -1,
+        priority: 0,
+        queueWaitMs: null,
+      },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,
     });

@@ -724,6 +724,17 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     return this.getCardItem('error', id);
   }
 
+  // Every card error currently held, as [store key, error] pairs. Reading it
+  // inside an autotracked computation re-runs when an error is added or
+  // removed. The non-tracked bucket is included so a caller sweeping errors
+  // sees the same set `getCardError` would return for each key.
+  cardErrorEntries(): [string, CardErrorJSONAPI][] {
+    return [
+      ...this.#nonTrackedCardInstanceErrors.entries(),
+      ...this.#cardInstanceErrors.entries(),
+    ];
+  }
+
   getFileMetaError(id: string) {
     return this.getFileMetaItem('error', id);
   }

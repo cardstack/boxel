@@ -104,6 +104,13 @@ export interface JobInfo extends JSONTypes.Object {
   // / non-job callers that mint a synthetic JobInfo can pass
   // `priority: 0`.
   priority: number;
+  // Enqueue → reservation claim, measured against the database clock at
+  // claim time (the same value the queue's starting-job log line reports).
+  // Lets a handler attribute queue wait in its own telemetry without
+  // re-querying the jobs table. `| null` rather than `?:` for the same
+  // index-signature reason as `priority`; null means the queue couldn't
+  // compute it (or the JobInfo is synthetic).
+  queueWaitMs: number | null;
 }
 
 export interface StatusArgs {

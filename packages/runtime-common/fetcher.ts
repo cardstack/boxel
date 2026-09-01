@@ -45,7 +45,10 @@ export function fetcher(
         ? urlOrRequest
         : new Request(urlOrRequest, init);
 
-    let token = fetcherWaiter.beginAsync();
+    // Labeled with the request it stands for: this waiter holds `settled()`
+    // open for every fetch the app makes, so a hung one is only actionable if
+    // the pending token says which request it is.
+    let token = fetcherWaiter.beginAsync(undefined, describeRequest(request));
     try {
       return responseWithWaiters(await buildNext(middlewareStack)(request));
     } finally {
@@ -53,6 +56,32 @@ export function fetcher(
     }
   };
   return instance;
+}
+
+// Method and target of a request, for a waiter label. This waiter labels every
+// request the app's network layer makes, and a diagnostic that prints the label
+// ends up in a log, so query values are replaced with a placeholder: knowing
+// which request is outstanding needs the request's shape, never its values.
+//
+// The host's own fetch-debugging helper (`describeFetchRequest` in
+// `host/tests/helpers/setup.ts`) prints into the same dump without redacting,
+// so the two do not yet agree on policy.
+function describeRequest(request: Request): string {
+  let target: string;
+  try {
+    let url = new URL(request.url);
+    let keys = Array.from(new Set(url.searchParams.keys()));
+    url.search = '';
+    url.hash = '';
+    target = url.href;
+    if (keys.length > 0) {
+      target += `?${keys.map((key) => `${key}=[redacted]`).join('&')}`;
+    }
+  } catch {
+    // A URL the parser rejects still must not carry its query into the log.
+    target = request.url.split('?')[0];
+  }
+  return `${request.method} ${target}`;
 }
 
 async function simulateNetworkBehaviors(

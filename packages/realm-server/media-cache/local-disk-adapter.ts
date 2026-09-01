@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import type {
   MediaCacheAdapter,
   MediaObjectStat,
+  MediaPutResult,
 } from '@cardstack/runtime-common';
 
 export class LocalDiskMediaCacheAdapter implements MediaCacheAdapter {
@@ -27,12 +28,12 @@ export class LocalDiskMediaCacheAdapter implements MediaCacheAdapter {
     key: string,
     bytes: Uint8Array,
     _opts: { contentType: string },
-  ): Promise<void> {
+  ): Promise<MediaPutResult> {
     let path = this.pathFor(key);
     // The key is a hash of the bytes, so an existing file under this key
     // already holds them — skip the write (dedupe-on-write).
     if (await this.head(key)) {
-      return;
+      return { deduped: true };
     }
     await mkdir(dirname(path), { recursive: true });
     // Write-then-rename so a reader never sees a half-written object and a
@@ -43,6 +44,7 @@ export class LocalDiskMediaCacheAdapter implements MediaCacheAdapter {
     let tempPath = `${path}.${process.pid}.tmp`;
     await writeFile(tempPath, bytes);
     await rename(tempPath, path);
+    return { deduped: false };
   }
 
   async head(key: string): Promise<MediaObjectStat | undefined> {

@@ -104,6 +104,17 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  isDeclaredScreenshotFormat,
+  isValidScreenshotName,
+  DECLARED_SCREENSHOT_FORMATS,
+  SCREENSHOT_NAME_MAX_LENGTH,
+  SCREENSHOT_NAME_PATTERN,
+  SCREENSHOT_MAX_VIEWPORT_WIDTH,
+  SCREENSHOT_MAX_VIEWPORT_HEIGHT,
+  SCREENSHOT_MAX_DEVICE_SCALE_FACTOR,
+  SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
+  SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR,
+  type DeclaredScreenshotFormat,
 } from '@cardstack/runtime-common';
 import {
   captureQueryFieldSeedData,
@@ -2745,6 +2756,265 @@ export type BaseDefComponent = ComponentLike<{
   };
 }>;
 
+// One declared screenshot (an entry in a CardDef/FileDef `static
+// screenshots` slot): exactly one of `render` or `format` names what to
+// draw, and the rest parameterizes the capture box.
+//
+// `render` is a *capture-only* component: referenced only from this
+// declaration and rendered only by the screenshot render route — never
+// exposed through the card's format API or `@fields`. Capture-only restricts
+// where the component renders, not what it may use: it gets the full author
+// surface (`@model`/`@fields`/`@context`) and may render linked data.
+//
+// `format` reuses one of the card's display formats instead. A format-based
+// screenshot referenced by that same format's own markup (say, a fitted
+// template that embeds its own `format: 'fitted'` capture) is circular —
+// use a dedicated `render` component there.
+export type ScreenshotSpec = {
+  // CSS px of the capture box (the fitted envelope).
+  width: number;
+  height: number;
+  // Output px = size × deviceScaleFactor. Defaults to
+  // SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR (2). Each edge × the effective
+  // scale must stay within SCREENSHOT_MAX_PHYSICAL_EDGE_PX.
+  deviceScaleFactor?: number;
+  // 'transparent' or any CSS color. Default 'white'.
+  background?: string;
+  // Feed this capture to `cardThumbnailURL`. At most one entry across a
+  // card's merged declarations may set this.
+  useAsThumbnail?: boolean;
+  // What invalidates the capture: the instance's index generation (any
+  // edit), or — for file-backed defs — the file's content hash, so a
+  // metadata-only edit skips recapture. Default 'generation'.
+  // 'file-content' is only legal on FileDef chains: a CardDef has no file
+  // bytes to key by, so getScreenshots refuses it there.
+  keyBy?: 'generation' | 'file-content';
+  // Encoded image type. Default 'png'.
+  type?: 'png' | 'jpeg' | 'webp';
+} & (
+  | { render: BaseDefComponent; format?: undefined }
+  | { format: DeclaredScreenshotFormat; render?: undefined }
+);
+
+const SCREENSHOT_SPEC_FIELDS = new Set([
+  'render',
+  'format',
+  'width',
+  'height',
+  'deviceScaleFactor',
+  'background',
+  'useAsThumbnail',
+  'keyBy',
+  'type',
+]);
+const SCREENSHOT_KEY_BY_VALUES = new Set(['generation', 'file-content']);
+const SCREENSHOT_IMAGE_TYPES = new Set(['png', 'jpeg', 'webp']);
+
+function screenshotOwnerName(owner: typeof BaseDef): string {
+  return owner.name || owner.displayName || 'card';
+}
+
+// Strict on principle, mirroring the capture-spec parsers: a field the
+// capture engine cannot honor is refused by name rather than ignored, so a
+// typo'd declaration fails loudly at read time instead of silently capturing
+// something other than what the author meant.
+function assertValidScreenshotSpec(
+  owner: typeof BaseDef,
+  name: string,
+  spec: unknown,
+): asserts spec is ScreenshotSpec {
+  let prefix = `screenshot "${name}" on ${screenshotOwnerName(owner)}`;
+  if (!isValidScreenshotName(name)) {
+    throw new Error(
+      `${prefix}: name must be a URL-safe path segment (${SCREENSHOT_NAME_PATTERN.source}, at most ${SCREENSHOT_NAME_MAX_LENGTH} characters)`,
+    );
+  }
+  if (spec === null || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error(`${prefix}: spec must be an object`);
+  }
+  let entry = spec as Record<string, unknown>;
+  for (let key of Object.keys(entry)) {
+    if (!SCREENSHOT_SPEC_FIELDS.has(key)) {
+      throw new Error(`${prefix}: unknown field "${key}"`);
+    }
+  }
+  let hasRender = entry.render !== undefined;
+  let hasFormat = entry.format !== undefined;
+  if (hasRender === hasFormat) {
+    throw new Error(`${prefix}: declare exactly one of render or format`);
+  }
+  if (
+    hasRender &&
+    !(
+      typeof entry.render === 'function' ||
+      (typeof entry.render === 'object' && entry.render !== null)
+    )
+  ) {
+    throw new Error(`${prefix}: render must be a component`);
+  }
+  if (hasFormat && !isDeclaredScreenshotFormat(entry.format)) {
+    throw new Error(
+      `${prefix}: format must be one of ${DECLARED_SCREENSHOT_FORMATS.map(
+        (f) => `"${f}"`,
+      ).join(', ')}`,
+    );
+  }
+  for (let [field, max] of [
+    ['width', SCREENSHOT_MAX_VIEWPORT_WIDTH],
+    ['height', SCREENSHOT_MAX_VIEWPORT_HEIGHT],
+  ] as const) {
+    let value = entry[field];
+    if (
+      typeof value !== 'number' ||
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > max
+    ) {
+      throw new Error(
+        `${prefix}: ${field} must be an integer between 1 and ${max}`,
+      );
+    }
+  }
+  if (entry.deviceScaleFactor !== undefined) {
+    let dsf = entry.deviceScaleFactor;
+    if (
+      typeof dsf !== 'number' ||
+      !Number.isFinite(dsf) ||
+      dsf <= 0 ||
+      dsf > SCREENSHOT_MAX_DEVICE_SCALE_FACTOR
+    ) {
+      throw new Error(
+        `${prefix}: deviceScaleFactor must be a number between 0 (exclusive) and ${SCREENSHOT_MAX_DEVICE_SCALE_FACTOR}`,
+      );
+    }
+  }
+  // The Chromium single-texture cap is on physical pixels, so the CSS bounds
+  // above are necessary but not sufficient: compose each edge with the scale
+  // the capture will actually apply — the declared one, or the default when
+  // the author writes none.
+  let effectiveScale =
+    typeof entry.deviceScaleFactor === 'number'
+      ? entry.deviceScaleFactor
+      : SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR;
+  for (let field of ['width', 'height'] as const) {
+    if (
+      (entry[field] as number) * effectiveScale >
+      SCREENSHOT_MAX_PHYSICAL_EDGE_PX
+    ) {
+      throw new Error(
+        `${prefix}: ${field} × deviceScaleFactor must be <= ${SCREENSHOT_MAX_PHYSICAL_EDGE_PX} physical pixels (deviceScaleFactor defaults to ${SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR})`,
+      );
+    }
+  }
+  if (
+    entry.background !== undefined &&
+    (typeof entry.background !== 'string' || entry.background.length === 0)
+  ) {
+    throw new Error(
+      `${prefix}: background must be 'transparent' or a CSS color`,
+    );
+  }
+  if (
+    entry.useAsThumbnail !== undefined &&
+    typeof entry.useAsThumbnail !== 'boolean'
+  ) {
+    throw new Error(`${prefix}: useAsThumbnail must be a boolean`);
+  }
+  if (
+    entry.keyBy !== undefined &&
+    !SCREENSHOT_KEY_BY_VALUES.has(entry.keyBy as string)
+  ) {
+    throw new Error(
+      `${prefix}: keyBy must be one of ${[...SCREENSHOT_KEY_BY_VALUES]
+        .map((v) => `"${v}"`)
+        .join(', ')}`,
+    );
+  }
+  if (
+    entry.type !== undefined &&
+    !SCREENSHOT_IMAGE_TYPES.has(entry.type as string)
+  ) {
+    throw new Error(
+      `${prefix}: type must be one of ${[...SCREENSHOT_IMAGE_TYPES]
+        .map((v) => `"${v}"`)
+        .join(', ')}`,
+    );
+  }
+}
+
+// The one read path for `static screenshots`: merges declarations by name up
+// the prototype chain (a subclass adds new names and overrides inherited
+// ones wholesale, per name), validating each entry and the merged result's
+// at-most-one-`useAsThumbnail` constraint. Read through this rather than the
+// static directly — a plain property read sees only the nearest declaration,
+// dropping everything an ancestor declared.
+export function getScreenshots(
+  cardOrFileClass: typeof CardDef | typeof FileDef,
+): Record<string, ScreenshotSpec> {
+  // Collect declaration levels base-most first so a subclass's entry lands
+  // after (and thus overrides) its ancestor's.
+  let levels: {
+    owner: typeof BaseDef;
+    declarations: Record<string, unknown>;
+  }[] = [];
+  let current: unknown = cardOrFileClass;
+  while (typeof current === 'function') {
+    let descriptor = Object.getOwnPropertyDescriptor(current, 'screenshots');
+    if (descriptor) {
+      let declarations = descriptor.get
+        ? descriptor.get.call(current)
+        : descriptor.value;
+      if (declarations != null) {
+        if (typeof declarations !== 'object' || Array.isArray(declarations)) {
+          throw new Error(
+            `static screenshots on ${screenshotOwnerName(
+              current as typeof BaseDef,
+            )} must be an object mapping names to specs`,
+          );
+        }
+        levels.unshift({ owner: current as typeof BaseDef, declarations });
+      }
+    }
+    current = Object.getPrototypeOf(current);
+  }
+  let merged: Record<string, ScreenshotSpec> = {};
+  // keyBy 'file-content' needs file bytes to key by, so it is only legal
+  // when the class being read is file-backed. Checked against the merge
+  // target rather than the declaring owner — a FileDef chain can never feed
+  // a CardDef chain, so any 'file-content' entry reachable from a CardDef
+  // was declared on that CardDef chain itself.
+  let isFileBacked =
+    cardOrFileClass === FileDef || cardOrFileClass.prototype instanceof FileDef;
+  for (let { owner, declarations } of levels) {
+    for (let [name, spec] of Object.entries(declarations)) {
+      assertValidScreenshotSpec(owner, name, spec);
+      if (spec.keyBy === 'file-content' && !isFileBacked) {
+        throw new Error(
+          `screenshot "${name}" on ${screenshotOwnerName(
+            owner,
+          )}: keyBy 'file-content' requires a file-backed def (FileDef or a subclass); a card has no file content to key by — use 'generation' or omit keyBy`,
+        );
+      }
+      merged[name] = spec;
+    }
+  }
+  let thumbnails = Object.keys(merged).filter(
+    (name) => merged[name].useAsThumbnail,
+  );
+  if (thumbnails.length > 1) {
+    throw new Error(
+      `${screenshotOwnerName(
+        cardOrFileClass,
+      )} declares more than one useAsThumbnail screenshot (${thumbnails
+        .map((name) => `"${name}"`)
+        .join(
+          ', ',
+        )}); at most one entry may feed the thumbnail — override an inherited entry by name to clear its flag`,
+    );
+  }
+  return merged;
+}
+
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
   // class type cannot masquerade as a FieldDef class type
@@ -2930,7 +3200,7 @@ export class CSSField extends TextAreaField {
             var(--boxel-monospace-font-family, monospace)
           );
           font-size: var(--boxel-font-size-xs);
-          white-space: pre-wrap;
+          overflow-x: auto;
         }
         .css-field::placeholder {
           opacity: 0.5;
@@ -3117,6 +3387,20 @@ export class FileDef extends BaseDef {
   @field contentHash = contains(StringField);
   @field contentSize = contains(NumberField);
 
+  // Server-managed timestamps (epoch seconds), read off the resource `meta`
+  // (stamped at serialization under the same key names a card uses, so
+  // `createFromSerialized` carries them onto `this[meta]`) — not `@field`s, so
+  // they never round-trip on a write. These mirror the names a card exposes
+  // through `getCardMeta`, so a consumer reads a file's timestamps the same way
+  // it reads a card's without reaching for `getCardMeta` on a FileDef.
+  get lastModified(): number | undefined {
+    return this[meta]?.lastModified;
+  }
+
+  get resourceCreatedAt(): number | undefined {
+    return this[meta]?.resourceCreatedAt;
+  }
+
   // The four shared format shells own identity, facts, budgets, and state for
   // every file family. What they can't know is how to draw the file itself — a
   // waveform, a page, a 3D scene — so a family supplies that one renderer here
@@ -3149,6 +3433,12 @@ export class FileDef extends BaseDef {
   // the prototype chain, but having an own property keeps subclass overrides
   // less surprising.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
+
+  // Opt-in declared screenshots (see CardDef.screenshots): merged by name up
+  // the prototype chain via `getScreenshots`. File families whose capture
+  // derives from the file's bytes (a video's poster frame, say) declare
+  // `keyBy: 'file-content'` so a metadata-only edit skips recapture.
+  static screenshots?: Record<string, ScreenshotSpec>;
 
   static async extractAttributes(
     url: string,
@@ -3352,6 +3642,12 @@ export class CardDef extends BaseDef {
   // turndown (registered on `globalThis` by `packages/host`). Subclasses can
   // override `static markdown` to author bespoke markdown directly.
   static markdown: BaseDefComponent = DefaultMarkdownFallbackTemplate;
+  // Opt-in declared screenshots: captures rendered at indexing time and
+  // served from the realm's `_screenshot/…?name=` route. Names are URL path
+  // segments. Declarations merge by name up the prototype chain — read them
+  // via `getScreenshots`, never off the static directly, or ancestors'
+  // entries are dropped. FieldDef has no addressable URL, so it has no slot.
+  static screenshots?: Record<string, ScreenshotSpec>;
 
   static get hasCustomEditTemplate(): boolean {
     return this.edit !== CardDef.edit;

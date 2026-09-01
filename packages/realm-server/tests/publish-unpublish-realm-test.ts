@@ -1350,6 +1350,14 @@ module(basename(import.meta.filename), function () {
       // asserts the gating invariant: once readiness reports ready, the
       // published index already reflects the updated source.
       test('a cold republish does not report ready before the swapped files are reindexed (CS-11362)', async function (assert) {
+        // QUnit arms one timeout per test promise, from `test.timeout` or the
+        // suite-wide `QUnit.config.testTimeout`, at the moment that promise is
+        // awaited. The readiness poll below declares a budget larger than the
+        // suite-wide one, so without raising it here the poll can never reach
+        // its own deadline and its message can never be the one a failure
+        // reports. Sized to clear that poll plus the republish work ahead of
+        // it.
+        assert.timeout(300_000);
         let sourceRealmURL = new URL(sourceRealmUrlString);
         let sourceRealmFsPath = join(
           dir.name,

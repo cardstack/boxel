@@ -109,6 +109,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '@cardstack/boxel-host/commands/show-card/default',
       commandInput: {},
+      dedupeKey: null,
       jobInfo: { id: 1 } as any,
     });
 
@@ -150,6 +151,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '   ',
       commandInput: {},
+      dedupeKey: null,
       jobInfo: { id: 2 } as any,
     });
 
@@ -201,6 +203,7 @@ const tests = Object.freeze({
       runAs: '@alice',
       command: 'http://localhost:4200/commands/create-submission',
       commandInput: null,
+      dedupeKey: null,
       jobInfo: { id: 3 } as any,
     });
 
@@ -255,6 +258,7 @@ const tests = Object.freeze({
       runAs: '@alice:localhost',
       command: '@cardstack/catalog/commands/create-submission/default',
       commandInput: { listingId: 'http://localhost:4201/catalog/AppListing/1' },
+      dedupeKey: null,
       jobInfo: { id: 4 } as any,
     });
 

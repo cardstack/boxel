@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "update:eslint-docs": "eslint-doc-generator",
-    "update": "node ./scripts/update-rules.js && pnpm run update:eslint-docs"
+    "update:format": "prettier --write README.md docs lib/recommended-rules.js",
+    "update": "node ./scripts/update-rules.js && pnpm run update:eslint-docs && pnpm run update:format"
   },
   "keywords": [],
   "author": "Cardstack",

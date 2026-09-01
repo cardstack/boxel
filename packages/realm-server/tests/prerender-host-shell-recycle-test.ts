@@ -1,16 +1,22 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
+import type { RenderVisitResponse } from '@cardstack/runtime-common';
+import { isMissingExportMessage } from '@cardstack/runtime-common/package-shim-handler';
 import {
   createDrainSubscriber,
   decideHostShellRecycle,
   raceAgainstDrain,
+  shouldRerenderForShellChange,
+  stampHostShellTokens,
 } from '../prerender/prerender-app.ts';
 
 // Unit tests for the host-shell recycle decision a prerender server makes on
 // every heartbeat: the manager echoes the current host-shell token, and the
-// server recycles its browser when that token differs from the one it warmed
-// against (the host was redeployed). See PRERENDER_HOST_SHELL_HASH_HEADER.
+// server recycles its browser for any token that isn't the one it warmed
+// against — including the first token it ever sees, since a server that boots
+// mid-deploy has warmed against the outgoing host bundle. See
+// PRERENDER_HOST_SHELL_HASH_HEADER.
 module(basename(import.meta.filename), function () {
   module('decideHostShellRecycle', function () {
     test('no token reported yet → no recycle, baseline unchanged', function (assert) {
@@ -24,9 +30,17 @@ module(basename(import.meta.filename), function () {
       });
     });
 
-    test('first token seen → adopt as baseline, no recycle', function (assert) {
+    // The regression this guards is the one that disarms the whole mechanism.
+    // A prerender server has no record of which host shell its pages loaded,
+    // and the deploy train restarts it before the realm server it loads that
+    // shell from — so on the first token it sees, "I warmed against something
+    // else" is the assumption that keeps stale pages out of the pool. Silently
+    // adopting the token as a baseline instead leaves a server rendering new
+    // realm source against an old bundle until ordinary pool churn replaces
+    // the tab.
+    test('first token seen → recycle, since the warm predates knowing the token', function (assert) {
       assert.deepEqual(decideHostShellRecycle('aaa', undefined), {
-        recycle: false,
+        recycle: true,
         nextWarmed: 'aaa',
       });
     });
@@ -43,6 +57,206 @@ module(basename(import.meta.filename), function () {
         recycle: true,
         nextWarmed: 'bbb',
       });
+    });
+  });
+
+  module('shouldRerenderForShellChange', function () {
+    // The message a page throws when it resolves current realm source against
+    // a bundle that predates the export — the shape both production poisonings
+    // took, minted in `package-shim-handler`.
+    const MISSING_EXPORT =
+      "Module 'https://packages/@cardstack/boxel-ui/components' has no " +
+      "exported member 'MarkdownContentShell'. If this is a card, check the " +
+      "import statement that names 'MarkdownContentShell'.";
+
+    function visitResponse(message?: string): RenderVisitResponse {
+      return (message === undefined
+        ? { card: { isolatedHTML: '<div></div>' } }
+        : {
+            card: { error: { error: { message } } },
+          }) as unknown as RenderVisitResponse;
+    }
+
+    test('a module error under a changed shell is re-rendered', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: visitResponse(MISSING_EXPORT),
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
+    test("the same error under a steady shell is the card's own", function (assert) {
+      assert.false(
+        shouldRerenderForShellChange({
+          response: visitResponse(MISSING_EXPORT),
+          shellAtStart: 'b778fe76',
+          shellAtCompletion: 'b778fe76',
+        }),
+        'nothing moved under the render, so the failure describes the card',
+      );
+    });
+
+    test('a changed shell alone does not re-render', function (assert) {
+      assert.false(
+        shouldRerenderForShellChange({
+          response: visitResponse(),
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+        'a render that straddled a deploy and succeeded is left alone',
+      );
+      assert.false(
+        shouldRerenderForShellChange({
+          response: visitResponse('Card is not found at http://example/x'),
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+        'only module resolution is suspect when the bundle changes',
+      );
+    });
+
+    // The deploy shape this exists for: the train restarts prerender before the
+    // realm server, so a server booting mid-train warms against the outgoing
+    // bundle and the first token it hears is the new one. On such a server
+    // there is no `X -> Y` to observe, so excluding `undefined -> X` excluded
+    // the whole boot window — the same transition `decideHostShellRecycle`
+    // treats as a definite change.
+    test('the first token learned mid-render counts as a change', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: visitResponse(MISSING_EXPORT),
+          shellAtStart: undefined,
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
+    test('a server that has heard no token at all is left alone', function (assert) {
+      for (let atStart of [undefined, 'babf3612']) {
+        assert.false(
+          shouldRerenderForShellChange({
+            response: visitResponse(MISSING_EXPORT),
+            shellAtStart: atStart,
+            shellAtCompletion: undefined,
+          }),
+          `(${atStart} -> undefined) says nothing about which bundle rendered`,
+        );
+      }
+    });
+
+    // A FileDef render's failure is persisted on the same terms as a card's —
+    // `prerender-html-visit` writes `fileRender.error` as a cached
+    // `file-error` row — so leaving these sub-responses out would let Markdown
+    // and friends stay poisoned by exactly the failure this recovers from.
+    test('the error counts from any sub-response that gets persisted', function (assert) {
+      for (let key of ['fileRender', 'fileExtract'] as const) {
+        assert.true(
+          shouldRerenderForShellChange({
+            response: {
+              [key]: { error: { error: { message: MISSING_EXPORT } } },
+            } as unknown as RenderVisitResponse,
+            shellAtStart: 'babf3612',
+            shellAtCompletion: 'b778fe76',
+          }),
+          `${key}.error is checked`,
+        );
+        assert.false(
+          shouldRerenderForShellChange({
+            response: {
+              [key]: { error: { error: { message: 'Card is not found' } } },
+            } as unknown as RenderVisitResponse,
+            shellAtStart: 'babf3612',
+            shellAtCompletion: 'b778fe76',
+          }),
+          `${key} is still only suspect for module resolution`,
+        );
+      }
+    });
+
+    test('the error also counts when it made the page unusable', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: {
+            pageUnusableError: { error: { message: MISSING_EXPORT } },
+          } as unknown as RenderVisitResponse,
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
+    // A render whose own failure is a timeout or a wedge can carry the module
+    // error only in the console errors `RenderRunner` merges onto
+    // `additionalErrors` — and the row is persisted with it either way.
+    test('the error counts when it is only among the merged console errors', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timed out after 30000ms',
+                  additionalErrors: [{ message: MISSING_EXPORT }],
+                },
+              },
+            },
+          } as unknown as RenderVisitResponse,
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
+    test('the message matcher tracks what the loader actually throws', function (assert) {
+      assert.true(isMissingExportMessage(MISSING_EXPORT));
+      assert.true(
+        isMissingExportMessage(`ReferenceError: ${MISSING_EXPORT}`),
+        'matches when the error was stringified with its class name',
+      );
+      assert.false(
+        isMissingExportMessage('Module not found: @cardstack/boxel-ui'),
+        'a missing module is a different failure from a missing export',
+      );
+    });
+  });
+
+  module('stampHostShellTokens', function () {
+    // Under `diagnostics`, because that is the only meta key
+    // `flattenPrerenderMeta` carries onto the persisted row — a token stamped
+    // beside it never reaches the row an operator inspects.
+    test('records both tokens under diagnostics, beside the render breakdown', function (assert) {
+      let response = {
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
+      } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: 'babf3612',
+        atCompletion: 'b778fe76',
+      });
+      assert.deepEqual(response.meta, {
+        requestId: 'abc',
+        diagnostics: {
+          renderMs: 12,
+          hostShellHash: 'babf3612',
+          hostShellHashAtCompletion: 'b778fe76',
+        },
+      } as unknown as typeof response.meta);
+    });
+
+    test('a server that knows no token stamps nothing', function (assert) {
+      let response = {
+        meta: { requestId: 'abc' },
+      } as unknown as RenderVisitResponse;
+      stampHostShellTokens(response, {
+        atStart: undefined,
+        atCompletion: undefined,
+      });
+      assert.deepEqual(
+        response.meta,
+        { requestId: 'abc' } as unknown as typeof response.meta,
+        'no empty keys, and no diagnostics object invented',
+      );
     });
   });
 

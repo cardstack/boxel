@@ -45,7 +45,7 @@ export default class Login extends Component<Signature> {
   <template>
     {{#if this.exchangingSsoToken}}
       <div class='centered-loading' data-test-sso-exchanging>
-        <span class='loading-title'>Signing you in with Google</span>
+        <span class='loading-title'>Signing you in…</span>
         <LoadingIndicator class='loading-spinner' />
         {{#if this.error}}
           <div class='error' data-test-login-error>{{this.error}}</div>
@@ -53,7 +53,7 @@ export default class Login extends Component<Signature> {
       </div>
     {{else}}
       <span class='title'>Sign in to your Boxel Account</span>
-      {{#if this.showGoogleButton}}
+      {{#if this.showGoogleSubtitle}}
         <p class='subtitle'>Use Google to get started in one tap - we'll create
           your Boxel account if you don't have one yet.</p>
       {{/if}}
@@ -224,6 +224,7 @@ export default class Login extends Component<Signature> {
   @tracked private password: string | undefined;
   @tracked private googleSsoAvailable = false;
   @tracked private exchangingSsoToken = false;
+  @tracked private startedFromLoginToken = false;
   @service declare private matrixService: MatrixService;
   @service declare router: RouterService;
 
@@ -245,12 +246,21 @@ export default class Login extends Component<Signature> {
     // would flash for ~1-2s between mount and the auth flip.
     if (new URLSearchParams(window.location.search).has('loginToken')) {
       this.exchangingSsoToken = true;
+      this.startedFromLoginToken = true;
     }
     this.consumeSsoLoginToken.perform();
   }
 
   private get showGoogleButton() {
     return this.googleSsoAvailable;
+  }
+
+  // The subtitle offers to *create* an account, which is only true on the
+  // genuine Google entry point. A login-token hand-off (e.g. `boxel browse`)
+  // that fails also falls back to this form, but its user already has an
+  // account, so suppress the create-account copy there.
+  private get showGoogleSubtitle() {
+    return this.showGoogleButton && !this.startedFromLoginToken;
   }
 
   private get isLoginButtonDisabled() {
@@ -343,10 +353,21 @@ export default class Login extends Component<Signature> {
         refreshRoutes: true,
       });
     } catch (e: any) {
-      if (isMatrixError(e)) {
-        this.error = `Google sign-in failed. ${extractMatrixErrorMessage(e)}`;
+      if (
+        isMatrixError(e) &&
+        e.httpStatus === 403 &&
+        e.errcode === 'M_FORBIDDEN'
+      ) {
+        // A single-use, short-lived login token that's spent or expired comes
+        // back as 403 M_FORBIDDEN, so name the recovery instead of the
+        // password-form "check your credentials" advice extractMatrixErrorMessage
+        // returns. Other 403s (e.g. M_USER_DEACTIVATED) fall through — telling a
+        // deactivated user to mint a fresh link would just loop them.
+        this.error = `This sign-in link has expired or was already used. Get a new one and try again.`;
+      } else if (isMatrixError(e)) {
+        this.error = `Sign-in failed. ${extractMatrixErrorMessage(e)}`;
       } else {
-        this.error = `Google sign-in failed: ${e.message}`;
+        this.error = `Sign-in failed: ${e.message}`;
       }
       // Fall back to the password form so the user can recover.
       this.exchangingSsoToken = false;
@@ -368,9 +389,9 @@ export default class Login extends Component<Signature> {
       auth = await this.matrixService.login(this.username, this.password);
     } catch (e: any) {
       if (isMatrixError(e)) {
-        this.error = `Sign in failed. ${extractMatrixErrorMessage(e)}`;
+        this.error = `Sign-in failed. ${extractMatrixErrorMessage(e)}`;
       } else {
-        this.error = `Sign in failed: ${e.message}`;
+        this.error = `Sign-in failed: ${e.message}`;
       }
 
       throw e;

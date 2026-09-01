@@ -170,6 +170,9 @@ function maybeSerializeCodeRef(
     // against the base; bare specifiers and absolute URLs pass through.
     if (isUrlLike(codeRef.module) && typeof base === 'string') {
       try {
+        // Guarded by `isUrlLike` above — a prefix form takes the as-is branch
+        // instead — and wrapped in a catch for a malformed URL.
+        // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
         return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
       } catch {
         // fall through to the as-is shape below

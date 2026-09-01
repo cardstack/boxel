@@ -3,7 +3,7 @@
 // linked face onto the specimen container and every sample below inherits it,
 // so what shows is the real typeface, not a description of it.
 //
-// Each mode gets a different amount of the specimen — a single showcase glyph in
+// Each format gets a different amount of the specimen — a single showcase glyph in
 // a budgeted collection cell, a compact name-plus-pangram inline, and a full
 // waterfall with a character map when isolated — while all three share one
 // FontFace load.
@@ -92,7 +92,7 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
   }
 
   <template>
-    {{#if (eq @mode 'fitted')}}
+    {{#if (eq @format 'fitted')}}
       <div
         class='specimen specimen--fitted'
         {{applyFileFont null this.resourceUrl this.specimenFamily}}
@@ -101,7 +101,7 @@ export class FontSpecimen extends GlimmerComponent<FilePreviewSignature> {
         <span class='fitted-glyphs'>{{this.fittedGlyphs}}</span>
         <span class='fitted-name'>{{this.displayName}}</span>
       </div>
-    {{else if (eq @mode 'embedded')}}
+    {{else if (eq @format 'embedded')}}
       <div
         class='specimen specimen--embedded'
         {{applyFileFont null this.resourceUrl this.specimenFamily}}

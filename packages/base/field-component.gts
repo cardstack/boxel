@@ -358,6 +358,19 @@ export function getBoxComponent(
                 }}
                   {{#if (isCard model.value)}}
                     {{#let model.value as |card|}}
+                      {{! A rendered field boundary carries
+                          data-card-field=<fieldName> so selector-based
+                          screenshot capture and region discovery can address
+                          fields in templates that never opted in. That is: this
+                          card-as-field container and the compound-field wrapper
+                          below, plus the plural wrappers in
+                          contains-many-component and links-to-many-component —
+                          both their view (`plural-field`) and edit
+                          (`*-editor`) forms. Stamped unconditionally; inert for
+                          CSS. Omitted where no boundary element is rendered — a
+                          card at the root (no field context), and a primitive
+                          leaf field, which renders bare with no wrapper to
+                          carry it. }}
                       <DefaultFormatsProvider
                         @value={{defaultFieldFormats effectiveFormats.cardDef}}
                       >
@@ -380,6 +393,7 @@ export function getBoxComponent(
                           }}
                           data-boxel-card-id={{card.id}}
                           data-boxel-card-format={{effectiveFormats.cardDef}}
+                          data-card-field={{field.name}}
                           data-test-card={{card.id}}
                           data-test-card-format={{effectiveFormats.cardDef}}
                           data-test-field-component-card
@@ -420,6 +434,7 @@ export function getBoxComponent(
                       <div
                         class='compound-field
                           {{effectiveFormats.fieldDef}}-format'
+                        data-card-field={{field.name}}
                         data-test-compound-field-format={{effectiveFormats.fieldDef}}
                         data-test-compound-field-component
                         ...attributes
@@ -596,6 +611,18 @@ function getFields(card: typeof CardDef): {
   return fields;
 }
 
+// The child-format cascade (RP-2.6). `childFieldFormatsFor` in
+// `@cardstack/runtime-common/boxel-execution-protocol/child-formats` is the
+// same table for every consumer outside this file, so an edit here that is not
+// made there renders nested cards in one format inside the Host and another
+// wherever authored code is caged.
+//
+// Nothing checks that the two agree. This function is module-private, so a
+// conformance suite cannot reach it; the suite holds `childFieldFormatsFor` to
+// a table written out longhand, and this copy is held to nothing. Keeping them
+// aligned is a matter of editing both. The copy exists because a realm module
+// can only import what the host's virtual network shims, and widening that
+// surface is not this function's call to make.
 function defaultFieldFormats(containingFormat: Format): FieldFormats {
   switch (containingFormat) {
     case 'edit':

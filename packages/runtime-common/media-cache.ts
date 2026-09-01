@@ -11,6 +11,7 @@ import {
   type Expression,
 } from './expression.ts';
 import { uint8ArrayToHex } from './index.ts';
+import { effectiveHasError, prerenderedJoin } from './index-query-engine.ts';
 
 const log = logger('media-cache');
 
@@ -47,12 +48,15 @@ export interface MediaObjectStat {
 // `put` must leave the object durable before resolving, and may skip the
 // upload when the key is already stored — the key is a hash of the bytes, so
 // an existing object under the same key already holds them (dedupe-on-write).
+// The result reports which of the two happened (`deduped: true` = the bytes
+// were already stored and no upload ran) so capture telemetry can tell a
+// dedupe hit from a real upload.
 export interface MediaCacheAdapter {
   put(
     key: string,
     bytes: Uint8Array,
     opts: { contentType: string },
-  ): Promise<void>;
+  ): Promise<MediaPutResult>;
   head(key: string): Promise<MediaObjectStat | undefined>;
   getStream(key: string): Promise<AsyncIterable<Uint8Array> | undefined>;
   delete(key: string): Promise<void>;
@@ -79,14 +83,28 @@ export interface MediaCacheEntryKey {
   sourceGeneration: number;
 }
 
+export interface MediaPutResult {
+  deduped: boolean;
+}
+
 export interface MediaCacheEntry extends MediaCacheEntryKey {
   objectKey: string;
   sourceContentHash: string | null;
   lane: MediaCacheLane;
   contentType: string;
   sizeBytes: number;
+  // Pixel dimensions of the capture, recorded so serving paths that answer
+  // from the ledger never decode the bytes; null when the capture engine
+  // didn't report them.
+  width: number | null;
+  height: number | null;
   createdAt: number;
   lastAccessedAt: number;
+  // The row's `diagnostics` column (the capture's
+  // `ScreenshotCapturePerfEvent`-shaped stage breakdown, written by
+  // `updateMediaCacheDiagnostics`) is deliberately NOT part of this shape:
+  // `findMediaCacheEntry` answers every `<img>` serve, and no serving path
+  // reads the breakdown — read that column with its own query instead.
 }
 
 // The content address for a blob of output bytes. sha256 rather than the
@@ -129,15 +147,19 @@ export async function putMedia(
     sourceGeneration,
     sourceContentHash = null,
     lane,
+    width = null,
+    height = null,
   }: MediaCacheEntryKey & {
     bytes: Uint8Array;
     contentType: string;
     lane: MediaCacheLane;
     sourceContentHash?: string | null;
+    width?: number | null;
+    height?: number | null;
   },
-): Promise<{ objectKey: string; sizeBytes: number }> {
+): Promise<{ objectKey: string; sizeBytes: number; deduped: boolean }> {
   let objectKey = await computeMediaCacheKey(bytes);
-  await adapter.put(objectKey, bytes, { contentType });
+  let { deduped } = await adapter.put(objectKey, bytes, { contentType });
   let priorRows = (await query(dbAdapter, [
     `SELECT object_key FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
@@ -160,6 +182,8 @@ export async function putMedia(
     lane,
     content_type: contentType,
     size_bytes: bytes.length,
+    width,
+    height,
     created_at: now,
     last_accessed_at: now,
   });
@@ -175,7 +199,36 @@ export async function putMedia(
   if (priorObjectKey && priorObjectKey !== objectKey) {
     await reclaimRepointedObject(dbAdapter, adapter, priorObjectKey);
   }
-  return { objectKey, sizeBytes: bytes.length };
+  return { objectKey, sizeBytes: bytes.length, deduped };
+}
+
+// Records a capture's stage-telemetry breakdown on its ledger row. A
+// separate write from `putMedia` because the breakdown includes the persist
+// leg's own duration and outcome, which exist only once the put has
+// returned. Callers treat it as best-effort: a missing breakdown never
+// affects serving, so this must never fail a capture.
+export async function updateMediaCacheDiagnostics(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    sourceURL,
+    captureSpecHash,
+    sourceGeneration,
+  }: MediaCacheEntryKey,
+  diagnostics: Record<string, unknown>,
+): Promise<void> {
+  await query(dbAdapter, [
+    `UPDATE media_cache_ledger SET diagnostics =`,
+    param(JSON.stringify(diagnostics)),
+    `WHERE realm_url =`,
+    param(realmURL),
+    `AND source_url =`,
+    param(sourceURL),
+    `AND capture_spec_hash =`,
+    param(captureSpecHash),
+    `AND source_generation =`,
+    param(sourceGeneration),
+  ] as Expression);
 }
 
 // Reclaims the object a repointing upsert stripped of its reference — unless
@@ -245,8 +298,15 @@ export async function findMediaCacheEntry(
     sourceGeneration?: number;
   },
 ): Promise<MediaCacheEntry | undefined> {
+  // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
+  // `SELECT *`: this read answers every ledger-served `<img>` request, and
+  // `*` would also drag the row's `diagnostics` breakdown (~30 keys nothing
+  // on the serve path reads) across the wire on each of them.
   let rows = (await query(dbAdapter, [
-    `SELECT * FROM media_cache_ledger WHERE realm_url =`,
+    `SELECT realm_url, source_url, capture_spec_hash, source_generation,
+            object_key, source_content_hash, lane, content_type, size_bytes,
+            width, height, created_at, last_accessed_at
+     FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
     `AND source_url =`,
     param(sourceURL),
@@ -266,6 +326,8 @@ export async function findMediaCacheEntry(
     lane: MediaCacheLane;
     content_type: string;
     size_bytes: number | string;
+    width: number | null;
+    height: number | null;
     created_at: number | string;
     last_accessed_at: number | string;
   }[];
@@ -283,9 +345,44 @@ export async function findMediaCacheEntry(
     lane: row.lane,
     contentType: row.content_type,
     sizeBytes: Number(row.size_bytes),
+    width: row.width == null ? null : Number(row.width),
+    height: row.height == null ? null : Number(row.height),
     createdAt: Number(row.created_at),
     lastAccessedAt: Number(row.last_accessed_at),
   };
+}
+
+// The generation of a live indexed instance, addressable by either its
+// extensionless card-id URL or its `.json` file URL — the capture-identity
+// resolution a caller needs before it can compute a MediaCache key. Returns
+// undefined when the instance is absent, tombstoned, or in effective-error
+// state.
+//
+// "Live" here MUST mean what `IndexQueryEngine.liveInstanceGeneration` (the
+// GET `_screenshot/` serving gate) means, or a capture persisted under this
+// probe's generation resolves to a URL that route answers as a miss. The
+// row predicate is that method's, built from the same exported fragments
+// (`prerenderedJoin`, `effectiveHasError`), plus a realm scope this caller
+// has and the engine's path does not need.
+export async function findLiveInstanceGeneration(
+  dbAdapter: DBAdapter,
+  { realmURL, instanceURL }: { realmURL: string; instanceURL: string },
+): Promise<number | undefined> {
+  let rows = (await query(dbAdapter, [
+    `SELECT i.generation FROM boxel_index AS i ${prerenderedJoin()}
+     WHERE (i.url =`,
+    param(instanceURL),
+    `OR i.file_alias =`,
+    param(instanceURL),
+    `) AND i.realm_url =`,
+    param(realmURL),
+    `AND i.type = 'instance'
+      AND (i.is_deleted = FALSE OR i.is_deleted IS NULL)
+      AND NOT ${effectiveHasError()}
+     LIMIT 1`,
+  ] as Expression)) as { generation: number | string }[];
+  let row = rows[0];
+  return row == null ? undefined : Number(row.generation);
 }
 
 // ---------------------------------------------------------------------------

@@ -298,6 +298,72 @@ is ignored with a diagnostic, because honoring it host-side would execute
 the module's authored field templates in the main document. This is an
 instance of R5: nothing may de-escalate isolation.
 
+**RP-6.6** R1's trusted-provenance predicate is a test on the module's
+identifier and admits nothing else: the Base realm, the Cardstack packages
+pseudo-origin, and `@cardstack/*` bare specifiers. A bare specifier reaches
+the predicate BEFORE the Loader resolves it, so URL normalization has not
+run and cannot protect it; that form is therefore admitted only when it is
+unambiguously a path inside an `@cardstack` package — decodable, free of
+`\`, `%`, `?` and `#`, and free of `.`/`..` segments — and is rejected
+rather than normalized otherwise. Nothing derived from a module's SOURCE
+participates in this decision, so no cache, hash, or graph result can reach
+it. The scope `@cardstack/<name>/` is NOT by itself the predicate: it is also
+the realm-alias namespace (`addRealmMapping` registers one such prefix per
+mapped realm, generically), so provenance within the scope is decided by an
+allowlist of Host package names. A realm's alias spelling and its URL spelling
+must always agree about that realm; the Base realm is on the list because it
+is trusted on its own account. A wider set of import origins is Host-provided
+— the icons host, the framework stand-ins, and whatever else a runtime shims —
+which is the graph walk's pruning test (RP-6.7) and NOT a grant of Direct
+execution: what a module may import says nothing about who wrote it
+(`trusted-modules.ts`).
+
+**RP-6.7** An authored module's classification yields its module graph: the
+set reachable from the entry over static import edges and literal-specifier
+dynamic imports, collected in full before anything is read off it, with
+Host-provided modules (RP-6.6) recorded as edges but never fetched or
+followed, and bounded at 256 module reads — attempted reads, not successful
+ones, so unreadable imports cannot outrun the bound. Pruning is sound only
+where trust begins: a pruned module's closure is the Host's to resolve, so
+published realm content is walked like any other authored source however
+Host-owned its realm. The graph is the exact read
+authority a stronger runtime is given — a Sandbox authorizes a module fetch
+against it before any authenticated request fires — so it is reported with
+an availability flag, and it is an authorization list only when that flag
+says the walk read every module it reached. An unresolvable specifier, an
+unreadable or unparseable dependency, and an exceeded bound each mark the
+graph unavailable and name the failure; a render over an unavailable graph
+fails closed with that diagnostic rather than authorizing a wider set, and
+an unavailable result is not memoized. Computed dynamic specifiers cannot
+be statically authorized, are absent from the graph, and are refused at
+runtime. The graph is over the specifiers the author wrote; a module the
+compiler synthesizes from one of them is not an authored edge and is not in it.
+The scoped-CSS sibling of a module carries its own content in its URL and is
+resolved by the loader without a realm read, so it is not part of the read
+authority — a gate that is asked for one admits it exactly when the module it
+was derived from is in the graph, and never on its own. Graph entries are not
+in one canonical spelling: a gate must fold the same identifier family the
+Loader does rather than compare strings exactly. The result is a property of
+the graph, not of traversal: a diamond
+reached from either side and a cycle entered from either end yield the same
+graph and the same reported failure. A caller-supplied draft revision is
+classified for that caller alone and never enters the memo other entries
+read, so an unsaved buffer cannot decide the read authority of a card it is
+not the source of.
+
+**RP-6.8** Classification reports whether a module's own source declares any
+`static edit = …` template — on any class the module defines, whether that is
+the card class or a FieldDef, under any spelling that names one declaration:
+with or without a type annotation, with the modifiers TypeScript allows before
+the name, under a string-literal computed key, and as a static getter. This is the fact RP-6.3's exception reads, and it is a property of
+the module's declaration rather than of its graph: a module that declares none
+contributes no authored code to the edit surface. It is established for
+authored modules only, since a trusted module renders every format Direct.
+The two errors are not symmetric and the detection errs deliberately: reporting
+a declaration that is not there keeps the surface in the stronger context,
+which R5 always permits, while missing one hands a surface containing authored
+code to trusted Base chrome, which R5 forbids.
+
 ## RP-7 Relationships and lazy loading
 
 **RP-7.1** Link state is a five-way union: `present`, `not-loaded`,
@@ -590,28 +656,94 @@ isolated render) plus its scoped-CSS URLs.
 
 **RP-14.1** The protocol module is
 `packages/runtime-common/boxel-execution-protocol.ts`: cloneable, versioned,
-no Ember imports. Records (≈10): `CodeRef`; `BoxelDescription` (ref, kind,
+no Ember imports. Records: `CodeRef`; `BoxelDescription` (ref, kind,
 ancestors, fields, formats, presentation statics); `FieldDescription`
-(name, kind, field type ref, resolved configuration, computed?);
+(`fieldName`, `type` code ref, `kind`, `isComputed`) — configuration is
+**not** on the type description, because resolution takes the owning root
+instance as `this` and memoizes per `(instance, fieldName)` (RP-5.1–5.2);
+`ResolvedField` (a field's declaration plus the configuration resolved
+against one instance), which is what `getFields`/`getField` answer with and
+which carries no value, since the value lives in the projection's model;
 `InstanceProjection` (id, type ref, revision, cloneable model with linked
-values as `{$boxel:{id,type}}` **references, never expanded graphs**);
-`TemplateBundle` (validated wire templates + typed dependency union
-`trusted-component | authored-component | trusted-helper | safe-modifier |
-block`; unknown kind rejects the generation); `SafeEvent` (exported,
-versioned); `ComponentUpdate` (`{generation, changed, effects}`); the
-protocol-version/feature record.
+values as `{$boxel:{id,type}}` **references, never expanded graphs**, plus
+its presentation); `InstancePresentation` (title, summary, thumbnailURL,
+theme reference, and the Host-derived `isThemed` / `themeScope` /
+`themeCss` / `cssImports` that a themed card's trusted `CardContainer`
+invocation requires — RP-11.3 — which must cross as data because the Theme
+card itself crosses only as a reference, and resolving that reference is
+the graph walk a projection forbids); `TemplateBundle` (validated wire
+templates + typed dependency union
+`trusted-export | authored-component | literal-value`; the generation is
+rejected by an unknown kind, by a kind without the members it is redeemed
+through, by a descriptor a consumer could not reify, and by a reference —
+the bundle's root, or an `authored-component` — naming a template the
+bundle does not carry, since each of those reaches the consumer as a
+failure past every gate rather than as a refusal);
+`SafeEvent` (exported, versioned); `ComponentUpdate`
+(`{generation, changed, effects}`); `ProjectedError` (a thrown error as
+data, carrying `stack` and a `cause` chain the protocol module's own
+projector bounds, so presentation shows the root cause and not the boundary
+wrapper); `MaterializationPurpose`; the protocol-version/feature record.
 
-**RP-14.2** Operations (`BoxelRuntime`, per tier): `loadBoxel`,
-`describeBoxel`, `createFromSerialized`, `getFields`/`getField`,
-`getRenderSlot(instance, format)`, `invokeAction`, `serializeCard`,
-`dispose`. Nothing else — mutation is not an operation on this interface
-(RP-9.8: it is a Host-granted `set` capability).
+`isThemed` is carried and not derived: Base answers it one way for a card
+linking a Theme and another for a Theme card previewing its own CSS, and
+the second links no Theme at all — so neither the theme reference nor
+`themeCss` implies it.
 
-**RP-14.3** Version discipline: every record carries the protocol version;
-**consumers check it** and fail closed to last-known-good with one
-diagnostic. `requiredFeatures` is populated by producers and
-rejected-when-unknown by consumers. Semantic and transport versions are
-independent and both enforced.
+`trusted-export` is a single portal token — module plus export name — and
+not a per-category split. Whether that export is admissible as a component,
+a helper, or a modifier is decided where the token is redeemed, against the
+Host's vocabulary for the position it appears in; capture holds only a
+reference to the export and cannot classify it. `literal-value` is the
+plain data a template closed over, crossing as cloned JSON. Three kinds,
+because scope classification has three outcomes: a vocabulary admitting a
+kind no producer emits gives the Host neither a rule to redeem it by nor a
+rule to refuse it against.
+
+**RP-14.2** Operations (`BoxelRuntime`, per tier), declared in the protocol
+module and exactly eight: `loadBoxel`,
+`createFromSerialized(resource, doc, relativeTo, purpose)`, `describeBoxel`,
+`getFields`/`getField` (answering `ResolvedField`, whose members are named
+`fieldName` / `type` / `kind` — deliberately not RP-3.6's `fieldType`, which
+names the _kind_ string there, so one name never carries two meanings across
+these two sections), `projectInstance` (answering `InstanceProjection`),
+`serializeCard`, `dispose`. The interface also carries `mode`. Every argument
+and every result is a handle, a record the protocol module proves cloneable,
+or a JSON:API document — `LooseCardResource` and `LooseSingleCardDocument`,
+which are cloneable in practice because the format they describe is JSON but
+are not provably so while the types describing them are index-signature-less
+interfaces. That is what lets one interface serve a local call, a call into a
+Compartment, and a call across a message port unchanged. The module proves the name list and the interface
+cannot drift.
+
+The `purpose` is required, not optional: an indexing pass must fail loudly on
+a definition it cannot identify where an interactive surface degrades to an
+error card, and a runtime that cannot tell the two apart lets an indexing
+failure ride as a rendering failure.
+
+Three things are **not** operations here. Mutation is a Host-granted `set`
+capability, re-authorized per use (RP-9.8). Producing a mountable component is
+process-local and its result is not cloneable, so it cannot be a member of a
+tier-neutral interface — a tier's adapter offers its own render entry point
+beside this one, and what crosses a boundary is the projection, not the
+component. Invoking an authored action belongs to a component instance, so it
+is the component runtime's, and its result crosses back as a `ComponentUpdate`.
+The set is closed in the sense that matters: a tier needing a _cross-boundary_
+behavior these cannot express is a spec change, while a tier-local capability
+its own Host code calls directly — source volatility (RP-18), instance sync
+(RP-20.5/20.6) — is not an operation on this interface.
+
+**RP-14.3** Version discipline: every record that crosses on its own carries
+the protocol version; **consumers check it** and fail closed to
+last-known-good with one diagnostic. `requiredFeatures` is populated by
+producers and rejected-when-unknown by consumers. Semantic and transport
+versions are independent and both enforced. A consumer acts on the record a
+gate **returns**, never on the one it supplied: a producer sits across a
+trust boundary, so a check that leaves the caller holding the producer's own
+object proves nothing about what the consumer later reads — an accessor runs
+again, a proxy answers differently, a member the check skipped is still
+reachable. Each member is read once, as own data, and what the gate hands
+back is built from those reads.
 
 **RP-14.4** Record parity: Direct, Capsule, and Sandbox produce
 deep-equal `BoxelDescription`/`InstanceProjection` records for the same

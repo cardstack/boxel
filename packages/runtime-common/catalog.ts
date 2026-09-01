@@ -222,6 +222,9 @@ export class ListingPathResolver {
       return id.split('/').slice(2).join('/').replace(/\/+$/, '');
     }
     try {
+      // Prefix forms return above, so only a URL-shaped id reaches here; the
+      // catch covers one that is neither.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       let { pathname } = new URL(id);
       return decodeURI(pathname).replace(/^\//, '').replace(/\/+$/, '');
     } catch {

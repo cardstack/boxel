@@ -80,7 +80,11 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
 
   <template>
     <PermissionsConsumer as |permissions|>
-      <div class='contains-many-editor' data-test-contains-many={{@field.name}}>
+      <div
+        class='contains-many-editor'
+        data-card-field={{@field.name}}
+        data-test-contains-many={{@field.name}}
+      >
         {{#if this.decoratedChildren.length}}
           <ul
             {{sortableGroup
@@ -144,7 +148,12 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
             {{on 'click' this.add}}
             data-test-add-new
           >
-            <IconPlus class='icon' width='12px' height='12px' role='presentation' />
+            <IconPlus
+              class='icon'
+              width='12px'
+              height='12px'
+              role='presentation'
+            />
             Add
             {{getPlural @field.card.displayName}}
           </Button>
@@ -362,6 +371,7 @@ export function getContainsManyComponent({
                 class='plural-field containsMany-field
                   {{effectiveFormat}}-format
                   {{unless arrayField.children.length "empty"}}'
+                data-card-field={{field.name}}
                 data-test-plural-view={{field.fieldType}}
                 data-test-plural-view-field={{field.name}}
                 data-test-plural-view-format={{effectiveFormat}}

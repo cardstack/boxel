@@ -85,7 +85,14 @@ export default class SearchResultHeader extends Component<Signature> {
 
   <template>
     <header class='search-result-header' data-test-search-result-header>
-      <div class='summary' data-test-search-label>{{@summaryText}}</div>
+      {{! Carries a total result count, which moves whenever a realm gains a
+      card — see the note on the section count in ./section-header.gts for why
+      that is hidden from Percy rather than compared. }}
+      <div
+        class='summary'
+        data-test-search-label
+        data-test-percy-hide
+      >{{@summaryText}}</div>
       <div class='controls'>
         {{#if this.showSelectionMenu}}
           <SelectionMenu

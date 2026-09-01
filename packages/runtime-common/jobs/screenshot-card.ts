@@ -5,12 +5,25 @@ import {
   type QueueCoalesceDecision,
   type QueuePublisher,
 } from '../queue.ts';
-import type { ScreenshotPrerenderResponse, DBAdapter } from '../index.ts';
+import {
+  hasCaptureSpecOverrides,
+  type ScreenshotPrerenderResponse,
+  type DBAdapter,
+} from '../index.ts';
 import type {
   ScreenshotCardArgs,
   ScreenshotPersistArgs,
 } from '../tasks/screenshot-card.ts';
 
+// Timeout for a screenshot job — a wedged-worker backstop covering one render +
+// settle + the capture loop. A batch captures every entry from a single settle,
+// so the marginal per-entry cost (viewport resize + screenshot) is small, and
+// the batch ceiling (`SCREENSHOT_MAX_CAPTURES`) is sized to finish well within
+// the sync-wait budget; one flat value covers singular and batch alike, so the
+// timeout does not scale with capture count. The render itself is separately
+// capped at `cardRenderTimeout` (RENDER_TIMEOUT_MS, default 60s), so a slow
+// render surfaces as a Render timeout regardless of this value — this is the
+// backstop for a worker wedged outside the render (dispatch, result upload).
 export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 
 // Concurrent requests for one capture fold onto one job: the per-realm
@@ -18,22 +31,37 @@ export const SCREENSHOT_CARD_JOB_TIMEOUT_SEC = 60;
 // this two simultaneous misses for the same spec would each run a full
 // render (the store's dedupe-on-write only saves the second upload, not the
 // Chrome work). A twin must match the whole capture identity — card, format,
-// render identity, and persist target — since joining hands the incoming
-// caller the twin's result verbatim. Queued and in-flight twins both join;
-// an in-flight join just registers a late waiter on the running job.
+// render identity, captureSpec, and persist target — since joining hands the
+// incoming caller the twin's result verbatim. Queued and in-flight twins
+// both join; an in-flight join just registers a late waiter on the running
+// job.
 //
-// Only the ledger-backed GET lane coalesces. Its persist target pins the
-// source generation, so a joined caller can never be handed a capture of a
-// different revision. `POST /_screenshot-card` publishes with `persist: null`
-// — a render-now request whose identity carries no freshness axis, so an
-// in-flight twin could be up to a reservation-lease old and of a pre-edit
-// card; those always insert.
-function chooseScreenshotCardCoalesceDecision(
+// Only persist-carrying jobs coalesce — both surfaces publish them: the GET
+// `_screenshot/` lane always, `POST /_screenshot-card` whenever the instance
+// is indexed and the server has a store. A persist target pins the source
+// generation, so a joined caller can never be handed a capture of a
+// different revision. A `persist: null` job (unindexed card, or a server
+// with no MediaCache) is a render-now request whose identity carries no
+// freshness axis — an in-flight twin could be up to a reservation-lease old
+// and of a pre-edit card — so those always insert. A job with captureSpec
+// overrides also always inserts, on both the incoming and candidate sides:
+// the persist identity cannot represent the overrides, so an override job
+// is never a canonical job's twin (the producers uphold that pairing by
+// setting `persist: null` on override jobs, and the task refuses the
+// persist if one slips through — this predicate must not depend on it).
+// The `runAs` equality below keeps joins within one render identity: the
+// GET lane renders as the realm owner and the POST lane as the requester,
+// so cross-surface twins never join even when their persist targets match.
+export function chooseScreenshotCardCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
   let incomingArgs = parseScreenshotCardArgs(incoming.args);
-  if (!incomingArgs || !incomingArgs.persist) {
+  if (
+    !incomingArgs ||
+    !incomingArgs.persist ||
+    hasCaptureSpecOverrides(incomingArgs.captureSpec)
+  ) {
     return { type: 'insert' };
   }
   let twin = [...candidates, ...inFlightCandidates].find((candidate) => {
@@ -43,6 +71,7 @@ function chooseScreenshotCardCoalesceDecision(
     let candidateArgs = parseScreenshotCardArgs(candidate.args);
     return (
       candidateArgs !== undefined &&
+      !hasCaptureSpecOverrides(candidateArgs.captureSpec) &&
       candidateArgs.cardId === incomingArgs.cardId &&
       candidateArgs.format === incomingArgs.format &&
       candidateArgs.runAs === incomingArgs.runAs &&
@@ -124,9 +153,10 @@ export interface ScreenshotQueueEstimate {
   // even starts.
   estimatedWaitMs: number;
   // True when a queued or in-flight job already carries this exact capture
-  // identity: the incoming request would coalesce onto it and cost no new
-  // Chrome work, so the caller skips the congestion pre-check rather than
-  // 503-ing a request the lane is about to satisfy for free.
+  // identity — persist target AND `runAs`, the full coalesce key: the
+  // incoming request would coalesce onto it and cost no new Chrome work, so
+  // the caller skips the congestion pre-check rather than 503-ing a request
+  // the lane is about to satisfy for free.
   hasTwin: boolean;
 }
 
@@ -140,13 +170,19 @@ export interface ScreenshotQueueEstimate {
 export async function estimateScreenshotQueueWait(
   dbAdapter: DBAdapter,
   concurrencyGroup: string,
-  // The persist identity of the capture about to be requested. When a queued
-  // or in-flight job already matches it, the request coalesces rather than
-  // rendering, so `hasTwin` lets the caller bypass the congestion gate.
+  // The capture identity about to be requested: the persist target plus the
+  // `runAs` the caller would render under. When a queued or in-flight job
+  // already matches all of it, the request coalesces rather than rendering,
+  // so `hasTwin` lets the caller bypass the congestion gate. `runAs` must be
+  // part of the match because the coalesce join requires it — a persist-only
+  // match would report jobs the caller cannot actually join (a POST job runs
+  // as its requester, a GET job as the realm owner) and wave a
+  // gate-skipping request into a lane that then renders anyway.
   twinOf?: {
     sourceURL: string;
     captureSpecHash: string;
     sourceGeneration: number;
+    runAs: string;
   },
 ): Promise<ScreenshotQueueEstimate> {
   if (dbAdapter.kind !== 'pg') {
@@ -182,10 +218,12 @@ export async function estimateScreenshotQueueWait(
     ] as Expression) as Promise<{ avg_ms: number | string | null }[]>,
     twinOf
       ? (query(dbAdapter, [
-          // A pending/in-flight job carrying the same persist target (jsonb
-          // extraction, so the compares are text — sourceGeneration binds as
-          // a string to match). Confined to the GET lane's identity fields;
-          // POST jobs have no persist and never appear here.
+          // A pending/in-flight job carrying the same persist target and
+          // `runAs` (jsonb extraction, so the compares are text —
+          // sourceGeneration binds as a string to match). Mirrors the
+          // coalesce join's key exactly: both surfaces publish
+          // persist-carrying jobs, and only a same-`runAs` job is one the
+          // caller would join.
           `SELECT EXISTS (
              SELECT 1 FROM jobs
               WHERE status = 'unfulfilled'
@@ -198,6 +236,8 @@ export async function estimateScreenshotQueueWait(
           param(twinOf.captureSpecHash),
           `AND args->'persist'->>'sourceGeneration' =`,
           param(String(twinOf.sourceGeneration)),
+          `AND args->>'runAs' =`,
+          param(twinOf.runAs),
           `) AS has_twin`,
         ] as Expression) as Promise<{ has_twin: boolean }[]>)
       : Promise.resolve([{ has_twin: false }]),

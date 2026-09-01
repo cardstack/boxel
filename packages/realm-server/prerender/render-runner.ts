@@ -10,6 +10,8 @@ import {
   type FileRenderResponse,
   type RenderRouteOptions,
   type RunCommandResponse,
+  type ScreenshotCaptureSpec,
+  type ScreenshotFormat,
   type ScreenshotPrerenderResponse,
   type AffinityType,
   type PrerenderQueue,
@@ -520,6 +522,7 @@ export class RenderRunner {
     url,
     auth,
     format,
+    captureSpec,
     opts,
     priority,
     signal,
@@ -529,7 +532,8 @@ export class RenderRunner {
     realm: string;
     url: string;
     auth: string;
-    format: 'isolated' | 'embedded';
+    format: ScreenshotFormat;
+    captureSpec?: ScreenshotCaptureSpec;
     opts?: { timeoutMs?: number; simulateTimeoutMs?: number };
     priority?: number;
     signal?: AbortSignal;
@@ -587,6 +591,7 @@ export class RenderRunner {
         expectedNonce: nonce,
         simulateTimeoutMs: opts?.simulateTimeoutMs,
         timeoutMs: opts?.timeoutMs,
+        ...(captureSpec ? { captureSpec } : {}),
       };
 
       let capture = await withTimeout(
@@ -624,12 +629,30 @@ export class RenderRunner {
         };
       } else {
         let shot = capture as ScreenshotCapture;
+        // Top-level base64/width/height mirror captures[0] for back-compat with
+        // the shipped host tool + staging capture command, which read the
+        // singular fields.
+        let first = shot.captures[0];
         response = {
           status: 'ready',
-          base64: shot.base64,
-          width: shot.width,
-          height: shot.height,
+          captures: shot.captures,
+          base64: first.base64,
+          width: first.width,
+          height: first.height,
           contentType: 'image/png',
+          // Step timings ride on meta.diagnostics so they survive the remote
+          // wire: `decorateRenderErrorsWithTimings` merges its own (disjoint)
+          // timing fields onto this block, and the remote prerenderer client
+          // returns `data.attributes` — meta included — while dropping the
+          // response envelope's `meta.timing`/`meta.pool`.
+          meta: {
+            diagnostics: {
+              screenshotNavMs: shot.stepTimings.navMs,
+              screenshotSettleMs: shot.stepTimings.settleMs,
+              screenshotImagePaintMs: shot.stepTimings.imagePaintMs,
+              screenshotCaptureMs: shot.stepTimings.screenshotMs,
+            },
+          },
         };
       }
 
