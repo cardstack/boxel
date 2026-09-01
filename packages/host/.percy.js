@@ -31,9 +31,30 @@ module.exports = {
      * argument the font hostnames above are blocked for — the difference is
      * that these images are load-bearing for what the snapshot looks like,
      * so they have to be captured rather than dropped.
+     *
+     * `i.postimg.cc` is deliberately NOT listed, and adding it back will
+     * start losing snapshots again. Allow-listing a host promotes its assets
+     * into resources the page load waits for, so a host that answers slowly
+     * stops being a slow snapshot and becomes a failed one: the `load` event
+     * never fires, Percy retries the navigation three times, and drops the
+     * snapshot. Every dropped snapshot traced this way named the same two
+     * URLs as still-active requests at the timeout, both on that host:
+     *
+     *   Error: Navigation failed: Timed out waiting for the page load event
+     *     Active requests:
+     *     - https://i.postimg.cc/VNvHH93M/pawel-czerwinski-…-unsplash.jpg
+     *     - https://i.postimg.cc/L8yXRvws/icon.png
+     *
+     * Unlisted it reverts to the older, milder failure above — fetched,
+     * discarded, page still loads. That costs seconds per snapshot rather
+     * than the snapshot itself. The hosts that remain are ours, and have not
+     * shown this behaviour.
+     *
+     * The real fix is to stop pointing realm fixtures at a third-party image
+     * host at all, so nothing in a snapshot's critical path depends on one
+     * answering.
      */
     'allowed-hostnames': [
-      'i.postimg.cc',
       'boxel-images.boxel.ai',
       'boxel-assets-store.s3.us-east-1.amazonaws.com',
     ],
