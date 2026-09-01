@@ -1,5 +1,3 @@
-/* eslint-disable camelcase */
-
 // The declared-screenshot manifest ({name → {specHash, objectKey, …}}) the
 // prerender-html pass records per row. Both tables: the working table's rows
 // are promoted into the production mirror column-for-column.
