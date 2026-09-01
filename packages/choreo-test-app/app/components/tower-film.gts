@@ -131,9 +131,11 @@ interface Beat {
    * 'wipe' (default) — clean splice plus the raked paper flash;
    * 'cut' — the splice alone;
    * 'whip' — no snap: the chaser races a stiff spring across the jump,
-   * a fast smooth tween that never glides.
+   * a fast smooth tween that never glides;
+   * 'blend' — a freeze-blend dissolve: the outgoing frame is captured
+   * the instant before the snap and fades over the live incoming shot.
    */
-  join?: 'cut' | 'whip' | 'wipe';
+  join?: 'blend' | 'cut' | 'whip' | 'wipe';
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
@@ -777,6 +779,7 @@ const BEATS: Beat[] = [
     cut: true,
     gloss: 'the balcony rail',
     id: 'koran',
+    join: 'blend',
     says: [
       'A rail on a ledge',
       'Too narrow to walk',
@@ -1087,6 +1090,7 @@ interface FilmApi {
   ): { on: boolean; x: number; y: number; z: number };
   rewind(): void;
   sky(id: string, spec: object, place: object): void;
+  snapshot(): string;
   sound(on: boolean): void;
   style(i: number): number;
   styleIndex(): number;
@@ -1120,6 +1124,9 @@ export default class TowerFilm extends Component<{
   @tracked private booted = false;
   /** bumped on every jump cut; keying on it restarts the wipe */
   @tracked private cutStamp = 0;
+  /** the outgoing frame of a 'blend' join, and the key that replays it */
+  @tracked private blendShot = '';
+  @tracked private blendStamp = 0;
   /**
    * THE ENDING. A film that laps back to its own first frame has no
    * ending, and the coda earns one — so when the last cue has run, the
@@ -2098,6 +2105,18 @@ export default class TowerFilm extends Component<{
       const join = beat.join ?? 'wipe';
       if (join === 'whip') {
         this.whipUntil = performance.now() + 360;
+      } else if (join === 'blend') {
+        /* capture the outgoing shot FIRST — the bridge renders one frame
+           at the pose in force and reads it back synchronously — then
+           snap; the still fades over the live incoming picture. A failed
+           capture (a zero-sized surface returns the empty data URL) is
+           not a broken image: the join degrades to a clean cut. */
+        const shot = film.snapshot();
+        if (shot.length > 64) {
+          this.blendShot = shot;
+          this.blendStamp += 1;
+        }
+        this.snap(beat.cam);
       } else {
         this.snap(beat.cam);
         if (join === 'wipe') {
@@ -2537,6 +2556,21 @@ export default class TowerFilm extends Component<{
         {{#each (array this.cutStamp) key="@identity" as |c|}}
           {{#if c}}
             <i class="tf-wipe" aria-hidden="true"></i>
+          {{/if}}
+        {{/each}}
+
+        {{! THE FREEZE-BLEND. The outgoing frame, held as a still and
+        faded over the live incoming shot — keyed per blend so each
+        dissolve plays from its own first frame. It sits under the
+        grade, so both frames wear the same colourist's pass. }}
+        {{#each (array this.blendStamp) key="@identity" as |bs|}}
+          {{#if bs}}
+            <img
+              class="tf-blend"
+              src={{this.blendShot}}
+              alt=""
+              aria-hidden="true"
+            />
           {{/if}}
         {{/each}}
 
@@ -3204,6 +3238,30 @@ export default class TowerFilm extends Component<{
       @keyframes tf-wipe {
         to {
           transform: translateX(140%) rotate(calc(var(--tf-rake) * 0.16));
+        }
+      }
+
+      .tf-blend {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        /* the still wears the same primary as the live frame under it,
+           so the dissolve is between two graded pictures */
+        filter: var(--tf-lut);
+        animation: tf-blend 460ms ease-out forwards;
+      }
+
+      @keyframes tf-blend {
+        0% {
+          opacity: 1;
+        }
+
+        100% {
+          opacity: 0;
         }
       }
 
