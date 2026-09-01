@@ -111,6 +111,20 @@ interface Beat {
    * montage, which is what every comparison film ends on.
    */
   cycle?: { kanji: string; style: number }[];
+  /**
+   * HOW THE SEAM PLAYS, for a cut beat (docs/choreo-splices.md):
+   * 'wipe' (default) — clean splice plus the raked paper flash;
+   * 'cut' — the splice alone;
+   * 'whip' — no snap: the chaser races a stiff spring across the jump,
+   * a fast smooth tween that never glides;
+   * 'blend' — a freeze-blend dissolve (the crossfade): the outgoing
+   * frame is captured the instant before the snap and fades over the
+   * live incoming shot;
+   * 'dip' — fade through a colour: the freeze holds the old shot while
+   * a veil covers it, the snap happens under the veil, and the veil
+   * lifts on the new shot. `dipTo` picks the colour.
+   */
+  dipTo?: string;
   /** the English of the kanji, set small under it */
   gloss?: string;
   /** which of the six towers stands here; overrides the chapter's grade */
@@ -126,16 +140,7 @@ interface Beat {
    */
   hush?: boolean;
   id: string;
-  /**
-   * HOW THE SEAM PLAYS, for a cut beat (docs/choreo-splices.md):
-   * 'wipe' (default) — clean splice plus the raked paper flash;
-   * 'cut' — the splice alone;
-   * 'whip' — no snap: the chaser races a stiff spring across the jump,
-   * a fast smooth tween that never glides;
-   * 'blend' — a freeze-blend dissolve: the outgoing frame is captured
-   * the instant before the snap and fades over the live incoming shot.
-   */
-  join?: 'blend' | 'cut' | 'whip' | 'wipe';
+  join?: 'blend' | 'cut' | 'dip' | 'whip' | 'wipe';
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
@@ -463,8 +468,12 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.9, lookY: 1.4, ox: 0.14, pitch: 6, yaw: 18 },
     ch: 1,
+    /* HISTORY opens through black — three and a half centuries pass in
+       the dark between the standing keep and the first of its kind */
+    cut: true,
     gloss: 'Azuchi, 1576',
     id: 'azuchi',
+    join: 'dip',
     says: ['1576', 'Seven storeys. Gilded.', 'Gone in six years.'],
     kanji: '安土城',
     kicker: 'THE FIRST OF ITS KIND',
@@ -538,9 +547,12 @@ const BEATS: Beat[] = [
     build: [0, 1.07],
     cam: { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
     ch: 2,
+    /* out of the edict's night, through black, into the building morning */
+    cut: true,
     gloss: 'the stone base',
     haze: 0.42,
     id: 'ishigaki',
+    join: 'dip',
     says: [
       'No mortar. None.',
       '扇の勾配 — the fan’s incline',
@@ -683,8 +695,11 @@ const BEATS: Beat[] = [
     build: 4.4,
     cam: { dolly: 0.54, lookY: 0.9, ox: 0, pitch: 12, yaw: 149 },
     ch: 2,
+    /* the breath is entered on a dissolve, not a step */
+    cut: true,
     hush: true,
     id: 'muneage',
+    join: 'blend',
     mode: 'clear',
     ticks: 2,
     toCam: { dolly: 0.5, lookY: 0.9, ox: 0, pitch: 13, yaw: 152 },
@@ -862,9 +877,14 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: 0.16, pitch: 10, yaw: 206 },
     ch: 4,
+    /* the museum plate arrives through paper — a light dip, not a dark
+       one: the gallery wall, not the passage of time */
+    cut: true,
+    dipTo: '#f2ead6',
     gloss: 'comparison',
     haze: 0.12,
     id: 'hikaku',
+    join: 'dip',
     says: ['Six towers', 'One problem', 'Height, from what you have'],
     kanji: '比較',
     kicker: 'ONE PROBLEM',
@@ -1003,7 +1023,11 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.62, lookY: -0.6, ox: 0.2, pitch: 14, yaw: 256 },
     ch: 4,
+    /* the closing dissolve: the lineup's last stamp melts into the
+       final shot */
+    cut: true,
     id: 'coda',
+    join: 'blend',
     says: ['Six materials', 'One problem', '天守'],
     kanji: '天守',
     vo: 'Six materials. One problem. Six answers. Not a fortress that happens to be beautiful. A roof, built tall enough to be seen from the fields.',
@@ -1127,6 +1151,9 @@ export default class TowerFilm extends Component<{
   /** the outgoing frame of a 'blend' join, and the key that replays it */
   @tracked private blendShot = '';
   @tracked private blendStamp = 0;
+  /** the 'dip' join's veil colour, and the key that replays the dip */
+  @tracked private dipColor = '#0d0905';
+  @tracked private dipStamp = 0;
   /**
    * THE ENDING. A film that laps back to its own first frame has no
    * ending, and the coda earns one — so when the last cue has run, the
@@ -1457,6 +1484,10 @@ export default class TowerFilm extends Component<{
     return /[฀-๿ក-៿]/.test(this.beat.kanji ?? '')
       ? 'is-tall'
       : '';
+  }
+
+  get dipVeil(): string {
+    return `background:${this.dipColor}`;
   }
 
   /** the lineup's current kanji; empty between lineups */
@@ -2117,6 +2148,18 @@ export default class TowerFilm extends Component<{
           this.blendStamp += 1;
         }
         this.snap(beat.cam);
+      } else if (join === 'dip') {
+        /* the freeze holds the OUTGOING shot on screen while the veil
+           closes over it; the snap happens under cover; the veil lifts
+           on the incoming shot. A failed capture degrades to veil-only,
+           which still reads as a dip. */
+        const shot = film.snapshot();
+        if (shot.length > 64) {
+          this.blendShot = shot;
+        }
+        this.dipColor = beat.dipTo ?? '#0d0905';
+        this.dipStamp += 1;
+        this.snap(beat.cam);
       } else {
         this.snap(beat.cam);
         if (join === 'wipe') {
@@ -2571,6 +2614,20 @@ export default class TowerFilm extends Component<{
               alt=""
               aria-hidden="true"
             />
+          {{/if}}
+        {{/each}}
+
+        {{! THE DIP. Freeze under, veil over: the old shot holds while
+        the colour closes, the seam passes in the dark (or the light),
+        and the veil lifts on the new shot. }}
+        {{#each (array this.dipStamp) key="@identity" as |ds|}}
+          {{#if ds}}
+            <span class="tf-dip" aria-hidden="true">
+              {{#if this.blendShot}}
+                <img src={{this.blendShot}} alt="" />
+              {{/if}}
+              <i style={{this.dipVeil}}></i>
+            </span>
           {{/if}}
         {{/each}}
 
@@ -3257,6 +3314,59 @@ export default class TowerFilm extends Component<{
 
       @keyframes tf-blend {
         0% {
+          opacity: 1;
+        }
+
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .tf-dip {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      .tf-dip img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        filter: var(--tf-lut);
+        animation: tf-dip-frame 760ms linear forwards;
+      }
+
+      /* the freeze holds until the veil has fully closed, then drops
+         under cover — the incoming shot is never seen before the dip */
+      @keyframes tf-dip-frame {
+        0%,
+        38% {
+          opacity: 1;
+        }
+
+        42%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      .tf-dip i {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        animation: tf-dip-veil 760ms ease-in-out forwards;
+      }
+
+      @keyframes tf-dip-veil {
+        0% {
+          opacity: 0;
+        }
+
+        32%,
+        48% {
           opacity: 1;
         }
 

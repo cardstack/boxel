@@ -81,7 +81,8 @@ covers film grammar:
 | `cut`     | step function, nothing else               | micro-fade out (~120 ms)     | leaver fades ~200 ms, no travel |
 | `wipe`    | cut + a punctuation overlay (~340 ms)     | micro-fade out               | as `cut`                      |
 | `whip`    | goal jumps; chaser races on a stiff spring (~350 ms) — a fast smooth tween, never a glide | micro-fade under the whip | old text exits during the whip |
-| `blend`   | crossfade of the two frames               | equal-power crossfade        | old and new co-resident, cross-faded |
+| `blend`   | the crossfade: freeze-blend dissolve (~460 ms) | equal-power crossfade   | old and new co-resident, cross-faded |
+| `dip`     | fade through a colour (~760 ms): freeze holds the old shot, the veil closes, the seam passes covered, the veil lifts on the new — colour per junction (black for time, paper for the gallery wall) | micro-fade out under the closing veil | as `cut` |
 
 Rules that hold for every join:
 
