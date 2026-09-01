@@ -752,21 +752,15 @@ export default class InteractSubmode extends Component {
     }
 
     let items: { name: string; icon: Icon; ref: ResolvedCodeRef }[] = [];
-    // A realm index card id and a recent card's id can be in different forms
-    // (e.g. the base realm's alias `https://cardstack.com/base/index` vs an
-    // instance's registered-prefix form `@cardstack/base/index`). Unresolve
-    // both sides to the same form so index cards are excluded regardless.
-    let { virtualNetwork } = this.network;
+    // Both sides are canonical: the realm list holds identifiers in canonical
+    // form and a card's `id` is canonical in memory, so index cards compare
+    // directly.
     const excludedCardIds = new Set(
-      this.realmServer.availableRealmIndexCardIds.map((id) =>
-        virtualNetwork.unresolveURL(id),
-      ),
+      this.realmServer.availableRealmIndexCardIds,
     );
 
     recentCards
-      .filter(
-        (card) => !excludedCardIds.has(virtualNetwork.unresolveURL(card.id)),
-      ) // filter out realm index cards
+      .filter((card) => !excludedCardIds.has(card.id)) // filter out realm index cards
       .map((card) => {
         let ref = identifyCard(card.constructor);
         let name = cardTypeDisplayName(card);

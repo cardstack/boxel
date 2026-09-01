@@ -13,7 +13,7 @@ import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  baseRealm,
+  baseRealmRRI,
   ensureTrailingSlash,
   publishRealm as publishRealmOperation,
   SupportedMimeType,
@@ -111,8 +111,14 @@ export default class RealmServerService extends Service {
   @service declare private realmServer: RealmServerService;
   private auth: AuthStatus = { type: 'anonymous' };
   private client: ExtendedClient | undefined;
+  // Realm identifiers in canonical form. The base realm is the only entry with
+  // a registered prefix, so it is the only one whose form could disagree with
+  // an instance's `id`; user and catalog entries arrive from `_realm-auth` and
+  // `_catalog-realms` as real URLs with no prefix to fold to, and are already
+  // canonical. Seeding base with its alias URL instead is what obliges every
+  // caller comparing this list against a card id to reconcile the two forms.
   private availableRealms = new TrackedArray<AvailableRealm>([
-    { type: 'base', url: baseRealm.url },
+    { type: 'base', url: baseRealmRRI },
   ]);
   private archivedRealmsList = new TrackedArray<ArchivedRealmInfo>([]);
   private archivedRealmsFetched = false;
@@ -145,7 +151,7 @@ export default class RealmServerService extends Service {
     );
     this.logout();
     this.availableRealms = new TrackedArray([
-      { type: 'base', url: baseRealm.url },
+      { type: 'base', url: baseRealmRRI },
       ...catalogRealms,
     ]);
     // Clear in place rather than reassigning: the `archivedRealms` @cached
@@ -355,7 +361,7 @@ export default class RealmServerService extends Service {
     this.auth = { type: 'anonymous' };
     this.availableRealms.splice(0, this.availableRealms.length, {
       type: 'base',
-      url: baseRealm.url,
+      url: baseRealmRRI,
     });
     this.unreachableRealmServersList.splice(
       0,
