@@ -30,8 +30,23 @@ function escapeXml(str) {
     .replace(/'/g, '&apos;');
 }
 
+// QUnit 2.x's `testEnd` payload is { name, suiteName, fullName, runtime,
+// status, errors, assertions } — there is no `module`. Reading one put every
+// testcase in a suite called "default", which made the report useless for
+// anything that needs to know where a test lives.
+//
+// `fullName` is the module path ending in the test name, and every test file
+// here opens with `module(basename(import.meta.filename), …)`, so its first
+// element is the file. That is the attribution shard weighting needs, and it
+// is exact rather than inferred. `suiteName` (the innermost module) is the
+// fallback for a test declared outside any file-level module.
+function moduleNameFor(data) {
+  const fullName = Array.isArray(data.fullName) ? data.fullName : [];
+  return fullName[0] || data.suiteName || 'default';
+}
+
 QUnit.on('testEnd', (data) => {
-  const moduleName = data.module || 'default';
+  const moduleName = moduleNameFor(data);
   const testName = data.name || 'unknown';
   const runtime = (data.runtime || 0) / 1000; // ms → seconds
   const status = data.status; // passed, failed, skipped, todo
