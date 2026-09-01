@@ -71,6 +71,8 @@ jobs:
               - *shared
               - '.github/workflows/build-host.yml'
               - '.github/workflows/deploy-host.yml'
+              - '.github/workflows/deploy-release.yml'
+              - '.github/workflows/deploy-ui.yml'
               - '.github/workflows/manual-deploy.yml'
               - 'packages/ai-bot/**'
               - 'packages/bot-runner/**'

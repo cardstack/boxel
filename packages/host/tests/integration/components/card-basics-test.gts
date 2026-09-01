@@ -982,6 +982,106 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test="number"]').containsText('10');
     });
 
+    // The capture/discovery contract: a rendered field boundary — a card
+    // rendered as a field, a compound field's wrapper, and the plural wrappers
+    // in both their view and edit forms — carries data-card-field=<fieldName>,
+    // so selector-based screenshot capture and region discovery can address
+    // fields in templates that never opted in. The card root itself carries no
+    // field context, so it must not carry the attribute.
+    test('rendered field boundaries carry data-card-field', async function (assert) {
+      class Guest extends FieldDef {
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span><@fields.name /></span>
+          </template>
+        };
+      }
+
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span><@fields.name /></span>
+          </template>
+        };
+      }
+
+      class Person extends CardDef {
+        @field guest = contains(Guest);
+        @field nicknames = containsMany(StringField);
+        @field pet = linksTo(Pet);
+        @field pets = linksToMany(Pet);
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <@fields.guest />
+            <@fields.nicknames />
+            <@fields.pet />
+            <@fields.pets />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+      let mango = new Pet({ name: 'Mango' });
+      let vanGogh = new Pet({ name: 'Van Gogh' });
+      let person = new Person({
+        guest: new Guest({ name: 'Hassan' }),
+        nicknames: ['Art', 'Arty'],
+        pet: mango,
+        pets: [mango, vanGogh],
+      });
+      await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+      await saveCard(vanGogh, `${testRealmURL}Pet/van-gogh`, loader);
+      await saveCard(person, `${testRealmURL}Person/arthur`, loader);
+
+      await renderCard(loader, person, 'isolated');
+
+      assert
+        .dom('[data-test-compound-field-component][data-card-field="guest"]')
+        .exists('a compound field wrapper carries its field name');
+      assert
+        .dom(
+          '[data-test-plural-view-field="nicknames"][data-card-field="nicknames"]',
+        )
+        .exists('a containsMany plural wrapper carries its field name');
+      assert
+        .dom(
+          `[data-card-field="pet"][data-test-card="${testRealmURL}Pet/mango"]`,
+        )
+        .exists('a linksTo card boundary carries its field name');
+      assert
+        .dom('[data-test-plural-view-field="pets"][data-card-field="pets"]')
+        .exists('a linksToMany plural wrapper carries its field name');
+      assert
+        .dom(
+          '[data-card-field="pets"] [data-card-field="pets"][data-test-field-component-card]',
+        )
+        .exists(
+          { count: 2 },
+          'each linksToMany item boundary carries the plural field name',
+        );
+      assert
+        .dom(`[data-test-card="${testRealmURL}Person/arthur"]`)
+        .doesNotHaveAttribute(
+          'data-card-field',
+          'the card root has no field context, so no data-card-field',
+        );
+
+      // Edit format renders plural fields through their own editor wrappers,
+      // distinct elements from the view-format plural wrappers above. A
+      // containsMany of primitives has no per-item boundary, so the editor
+      // wrapper is the only element that can name the field for discovery.
+      await renderCard(loader, person, 'edit');
+      assert
+        .dom('.contains-many-editor[data-card-field="nicknames"]')
+        .exists('a containsMany editor wrapper carries its field name');
+      assert
+        .dom('.links-to-many-editor[data-card-field="pets"]')
+        .exists('a linksToMany editor wrapper carries its field name');
+    });
+
     test('render a field in atom format', async function (assert) {
       class EmphasizedString extends FieldDef {
         static [primitive]: string;
