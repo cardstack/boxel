@@ -405,9 +405,16 @@ export default class StoreService extends Service implements StoreInterface {
   // boundary would answer a caller in the new scope with an instance built
   // from a document read before the write — exactly what dropping residency
   // exists to prevent, arriving by a different route. Dropping the entries
-  // costs only deduplication: the pending work still settles, and the new
-  // scope issues its own read. Only on an actual crossing, so that two visits
+  // stops the adoption: the pending work still settles, and the new scope
+  // issues its own read. Only on an actual crossing, so that two visits
   // within one job keep their dedup.
+  //
+  // What the drop does not stop is the settling read's own `setCard`, which
+  // plants its pre-boundary instance into the new scope's residency — it
+  // removes the map entry, not the write that lands after it. Reaching that
+  // needs a read still in flight when the next visit builds its model, which
+  // is what `#waitForRenderLoadStability` stands between; it is the residual
+  // this design leaves, not something the drop closes.
   observeIndexingJob(): void {
     if (!this.store.observeIndexingJob()) {
       return;

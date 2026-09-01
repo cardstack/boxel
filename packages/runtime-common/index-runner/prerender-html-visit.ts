@@ -477,8 +477,18 @@ async function visitForPrerenderedHtml({
     batchId,
     // The job of the index pass that spawned this one, so both halves of that
     // pass present a tab with one scope. A job enqueued without a spawning
-    // pass keys on its own.
-    renderScope: renderScopeFor(realmURL.href, spawningJobId ?? jobInfo.jobId),
+    // pass keys on its own — except when it has no real job either, where the
+    // caller's `-1` placeholder would make one bucket shared by every such
+    // pass; carry no scope there and let the page fall back to the job id,
+    // which is narrower and so never unsound. Same rule as `visit-file.ts`.
+    ...((spawningJobId ?? jobInfo.jobId) >= 0
+      ? {
+          renderScope: renderScopeFor(
+            realmURL.href,
+            spawningJobId ?? jobInfo.jobId,
+          ),
+        }
+      : {}),
     visitType: 'prerender-html',
     renderOptions,
     ...(jobPriority !== undefined ? { priority: jobPriority } : {}),

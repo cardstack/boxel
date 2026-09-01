@@ -47,9 +47,11 @@ const loadTrackingLogger = logger('store-load-tracking');
 // Local only, and there is no level that changes that: host log levels are
 // baked at build time from `ENV.logLevels`, and a production build pins them
 // to `*=warn` outright (`host/config/environment.js`) — the prerender service
-// loads built host assets and has no way to inject `_logDefinitions`, so
-// nothing below `warn` from host code is readable in a deployed environment
-// whatever it is written at. Raising this to `warn` to buy visibility would
+// loads built host assets, and while it could inject `_logDefinitions` ahead
+// of the page (`setup-globals.ts` defers to an existing value, and
+// `page-pool.ts` already uses `evaluateOnNewDocument` for other globals),
+// nothing does. So nothing below `warn` from host code is readable in a
+// deployed environment today, whatever it is written at. Raising this to `warn` to buy visibility would
 // misreport an ordinary, expected event. To read it, run a host build with
 // `LOG_LEVELS=store-job-scope=debug`.
 //
@@ -259,28 +261,34 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
 
-  // ── Job-scoped wire-document cache ─────────────────────────────────────
+  // ── Scope-scoped wire-document cache ───────────────────────────────────
   // Successful card-source / file-meta documents fetched during an indexing
-  // render, keyed by URL and scoped to the indexing job identity
-  // (`__boxelJobId`), so a shared link target (one Policy referenced by
-  // hundreds of Claims) fetches once per job instead of once per
-  // referencing card. The identity map already short-circuits most repeat
+  // render, keyed by URL and scoped to the render scope (`renderScopeFor`,
+  // falling back to `__boxelJobId`), so a shared link target (one Policy
+  // referenced by hundreds of Claims) fetches once per scope instead of once
+  // per referencing card. The identity map already short-circuits most repeat
   // loads while a target instance stays resident; this cache covers the
   // window after the GC sweep evicts an unreferenced target, turning its
   // re-load into a local deserialize instead of a network round-trip.
   //
-  // Staleness contract — one consistent view of every target per job. For
-  // the indexed realm's own files this is exact: the job serializes with
-  // that realm's writes, and a mid-job write is picked up by the follow-up
-  // job its invalidation enqueues. A cross-realm target CAN change mid-job,
+  // Staleness contract — one consistent view of every target per scope. For
+  // the indexed realm's own files an index pass serializes with that realm's
+  // writes, and a mid-pass write is picked up by the follow-up pass its
+  // invalidation enqueues. One caveat the scope keying adds: a scope spans
+  // the index pass AND the `prerender_html` job it spawned, which are
+  // separate queue jobs, so a write landing between them is not excluded the
+  // way a write during a single pass is. That is bounded to HTML — in split
+  // mode the html job writes only `prerendered_html`, never a search doc —
+  // and the write's own pass regenerates it under a fresh scope. A
+  // cross-realm target CAN change mid-scope,
   // and the cache pins the version first observed — deliberately, matching
-  // the job-scoped instance reuse in the link getter's lazy-load path,
+  // the scope-scoped instance reuse in the link getter's lazy-load path,
   // which pins any target the moment its instance enters the store. The
-  // delta this cache adds is bounded to the job: only a post-GC-eviction
-  // re-load could have observed a newer cross-realm version mid-job, and
+  // delta this cache adds is bounded to the scope: only a post-GC-eviction
+  // re-load could have observed a newer cross-realm version mid-scope, and
   // one pinned version beats mixing pre- and post-write versions across a
-  // single job's rows. Across jobs nothing changes: entries die with the
-  // job, and cross-realm freshness between jobs is governed by what
+  // single scope's rows. Across scopes nothing changes: entries die with the
+  // scope, and cross-realm freshness between scopes is governed by what
   // re-indexes the consumer (dep-driven invalidation fans out within a
   // realm; a consumer of a peer realm's card is refreshed by its own
   // realm's next index of it). This is a looser gate than the resolved-doc
@@ -288,14 +296,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // narrower: a document fetched by URL, not a query result whose
   // membership can silently change under a peer realm's swap.
   //
-  // Gated to prerender + job id, cleared the first time a different job id
-  // is observed, never consulted by the live app.
+  // Gated to prerender + render scope, cleared the first time a different
+  // scope is observed, never consulted by the live app.
   #jobScopedDocCache = new Map<
     string,
     SingleCardDocument | SingleFileMetaDocument
   >();
   #jobScopedStateJobId: string | undefined;
-  // Bumped on every clear (the jobId-change clear and `reset()`). A load
+  // Bumped on every clear (the scope-change clear and `reset()`). A load
   // captures this alongside its cache key and skips its populate when the
   // generation moved while the fetch was in flight — a document fetched
   // under one job must not seed the next job's cache, whose realm sources
@@ -456,12 +464,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#fetch = fetch;
     this.#virtualNetwork = virtualNetwork;
     this.#storeHooks = storeHooks;
-    // A store built during an indexing render belongs to the job running at
+    // A store built during an indexing render belongs to the scope running at
     // the time — `resetCache` replaces the store mid-job, and a card can then
     // become resident through `add` alone, which touches neither the load path
-    // nor the model build. Without this the held id would still read "no job
-    // observed" while the store holds that job's instances, and the next job
-    // would be handed them.
+    // nor the model build. Without this the held scope would read "none
+    // observed", which differs from the running one, so the next thing to
+    // observe the boundary would count the scope it is already in as a
+    // crossing and drop what that scope had just built. (Not a staleness hole
+    // in the other direction: an unrecorded scope differs from the next one
+    // too, so the cross-job drop happens either way.)
     this.#jobScopedStateJobId = currentRenderScope();
   }
 
@@ -586,14 +597,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#cardDocsInFlight.delete(url);
         this.#cardDocStartedAt.delete(url);
       }
-      if (typeof startedAt === 'number') {
-        this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
-          url,
-          ms: Date.now() - startedAt,
-          outcome,
-          generation: this.#loadGeneration,
-        });
-      }
+      this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
+        url,
+        ms: Date.now() - startedAt,
+        outcome,
+        generation: this.#loadGeneration,
+      });
     }
   }
 
@@ -647,12 +656,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         this.#fileMetaDocsInFlight.delete(url);
         this.#fileMetaStartedAt.delete(url);
       }
-      if (typeof startedAt === 'number') {
-        this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
-          url,
-          ms: Date.now() - startedAt,
-        });
-      }
+      this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
+        url,
+        ms: Date.now() - startedAt,
+      });
     }
   }
 

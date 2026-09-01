@@ -3711,8 +3711,10 @@ function lazilyLoadLink(
       let fieldValue: CardDef | FileDef;
       // Inside an indexing render the store is scoped to the realm view being
       // rendered: it drops every instance it holds when the render scope moves
-      // (`CardStore.observeIndexingJob`, called before a render hydrates its
-      // card and from the load path), so every instance in it was deserialized
+      // (the host store's `observeIndexingJob`, called before a render
+      // hydrates its card and from the load path — not a member of the
+      // `CardStore` interface in this file), so every instance in it was
+      // deserialized
       // against THIS view of the realm's files. Note it is that drop which
       // carries the guarantee, not the `clearCache` reset — that one is
       // scheduled only when a pass invalidates an executable, and reaches only

@@ -1575,6 +1575,20 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a pass with no real queue job carries no scope at all', async function (assert) {
+        // `tasks/prerender-html.ts` substitutes a `-1` placeholder jobInfo when
+        // the queue supplies none, to keep the logging shape. Turning that into
+        // `<realm>@-1` would be the one construction that puts genuinely
+        // unrelated passes in one scope, so the placeholder carries no scope
+        // and the page falls back to the job id — narrower, never unsound.
+        let scopes = await scopesForPass({
+          spawningJobId: null,
+          info: { jobId: -1, reservationId: -1, priority: 0 },
+        });
+
+        assert.deepEqual(scopes, [undefined], 'no scope is sent');
+      });
+
       test('two passes over the same realm do not share a scope', async function (assert) {
         let first = jobInfo();
         let second = jobInfo();

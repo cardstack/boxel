@@ -38,8 +38,13 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // module change; carried in args rather than read from the DB because the
   // job can run before its spawning pass commits the epoch.
   loaderEpoch: string;
-  // The index job that computed this invalidation set. Dashboard/log
-  // correlation only.
+  // The index job that computed this invalidation set. Load-bearing, not just
+  // correlation: it is the render scope this job's visits run under
+  // (`renderScopeFor`), so the pass and the index pass that spawned it share
+  // one prerender-tab residency rather than each dropping what the other just
+  // built. Stop populating it and every visit falls back to this job's own id
+  // — no test fails, and a tab alternating between the two passes reloads
+  // every link target on every alternation.
   spawningJobId: number | null;
   // How many publishes were merged into this job while it sat pending.
   // Dashboard/log correlation only; null means none. In-flight piggyback
@@ -281,6 +286,12 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       realmOwnerUserId: userId,
       prerenderer,
       auth,
+      // `-1` keeps the logging shape when the queue supplies no job (it always
+      // does in production). It must not reach the render scope, though:
+      // `<realm>@-1` would be one bucket shared by every such pass, which is
+      // the one construction that can put unrelated passes in one scope.
+      // `visit-file.ts` omits the scope in the same situation; `null` here
+      // routes to the same omission rather than to the sentinel.
       jobInfo: jobInfo ?? { jobId: -1, reservationId: -1, priority: 0 },
       jobPriority: jobInfo?.priority,
       onProgress: reportProgress,

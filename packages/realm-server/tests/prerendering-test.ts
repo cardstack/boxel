@@ -7450,9 +7450,11 @@ module(basename(import.meta.filename), function () {
     // to the render runner, which stamps it on the page. Every hop
     // destructures it by name, so a hop that drops it is silent — the render
     // still returns HTML, built from whatever instances the tab already held
-    // from another job. The retry path is a second, separate call site, and it
-    // matters more than the first: the retry is exactly when a tab is being
-    // reused.
+    // from another job. The retry is covered because that is when a tab is
+    // being reused; it re-enters the same lexical call site, so what this
+    // pins is that nothing between the attempts strips the scope. The
+    // post-`#restartBrowser` attempt is the genuinely separate literal and is
+    // not exercised here.
     test('the scope reaches every visit attempt, retry included', async function (assert) {
       let originalAttempt = RenderRunner.prototype.prerenderVisitAttempt;
       let prerenderer: Prerenderer | undefined;

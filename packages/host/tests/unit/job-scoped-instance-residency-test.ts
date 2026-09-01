@@ -156,21 +156,35 @@ module('Unit | job-scoped instance residency', function (hooks) {
     );
   });
 
-  test('a store built during a job holds that job, not "no job yet"', async function (assert) {
+  test('a store built mid-job does not drop what that job put in it', async function (assert) {
     // `resetCache` replaces the store mid-job, and a card can become resident
-    // through `add` alone — no load, no model build. A store that recorded no
-    // job would then hand those instances to the next one.
+    // through `add` alone — no load, no model build. A replacement store that
+    // recorded no scope reads as "no scope observed", which differs from the
+    // running one, so the *next* thing to observe the boundary — possibly the
+    // very next render of the same job — would treat the job it is already in
+    // as a crossing and drop everything it had just built.
     let store = makeStore();
     let jade = makePerson('Jade');
     store.setCard(residentURL, jade);
 
-    (globalThis as any).__boxelJobId = '18.24';
-    store.observeIndexingJob();
+    // Same job the store was built under. No crossing.
+    assert.false(
+      store.observeIndexingJob(),
+      'observing the job the store was built under is not a crossing',
+    );
+    assert.strictEqual(
+      store.getCard(residentURL),
+      jade,
+      'and the instance that job made resident is still there',
+    );
 
+    // The next job is still a crossing.
+    (globalThis as any).__boxelJobId = '18.24';
+    assert.true(store.observeIndexingJob(), 'the next job is a crossing');
     assert.strictEqual(
       store.getCard(residentURL),
       undefined,
-      'the job it was built under is the one it drops at',
+      'and it drops what the previous job left',
     );
   });
 
