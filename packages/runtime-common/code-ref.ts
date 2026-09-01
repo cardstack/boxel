@@ -62,6 +62,14 @@ let localIdentities = new WeakMap<
 // Keyed by the declared field, which belongs to a property descriptor and so is
 // class-level: this holds one small array per field declaration in the app, not
 // one per instance.
+//
+// Derived once, which assumes a declared field's own properties are complete
+// before anything narrows it. They are: each of the four field factories
+// assigns `configuration` before returning the descriptor that `getField`
+// reads, and nothing mutates a field afterwards. A property that appeared on a
+// declared field only after its first narrowing would be dropped from every
+// narrowing thereafter, so a factory that grew a deferred assignment would need
+// to invalidate here.
 let uncarriedKeys = new WeakMap<Field<BaseDefConstructor>, string[]>();
 
 function keysNotSetByConstructor(field: Field<BaseDefConstructor>): string[] {
@@ -349,12 +357,9 @@ export function getField<T extends BaseDef>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
-      // Only a card instance can carry an override, and it is also what the
-      // rebuild is cached against. Resolving that owner once means the cache
-      // cannot be reached without the guard the override lookup already
-      // depends on. Reading through `fields` rather than `fieldsUntracked`
-      // entangles the caller with card tracking, so the choice between them
-      // stays here, ahead of the cache.
+      // Only a card instance can carry an override. Reading through `fields`
+      // rather than `fieldsUntracked` is what entangles the caller with card
+      // tracking, so which of the two is read stays a property of the lookup.
       let overrideOwner =
         instance && isCardInstance(instance) ? instance : undefined;
       let fieldOverride: typeof BaseDef | undefined = overrideOwner
@@ -369,8 +374,10 @@ export function getField<T extends BaseDef>(
         // survive the narrowing.
         //
         // Build through the field's own constructor, handing it the field as its
-        // own argument — a field's own property names are exactly that
-        // constructor's parameter names. This keeps the narrowed field on the
+        // own argument. That works because every constructor parameter name is
+        // an own property of the field holding the value the constructor stored
+        // under it — not the converse, since a field also carries properties no
+        // parameter names. This keeps the narrowed field on the
         // same hidden class as the field it was narrowed from, which is load
         // bearing: there are four field classes, so any shared `field.*` read
         // site already sees four shapes, V8's polymorphic ceiling. A

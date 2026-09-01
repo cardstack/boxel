@@ -3550,11 +3550,11 @@ module('Integration | card-basics', function (hooks) {
         'declaredCardThunk',
       ]);
 
-      // The narrowed field is cached against the override it was built for, so
-      // replacing the override has to produce a field resolving to the new
-      // one. Asserted directly rather than through a re-render, so a stale
-      // cache fails here instead of as a component that renders the previous
-      // subtype.
+      // Replacing an override has to produce a field resolving to the new
+      // subtype, and one owner's override must not answer another's. Asserted
+      // against `getField` directly rather than through a re-render, so a
+      // failure reads as the wrong field rather than as a component rendering
+      // the previous subtype.
       class Kitten extends Pet {
         static displayName = 'Kitten';
       }
@@ -3567,8 +3567,6 @@ module('Integration | card-basics', function (hooks) {
         'replacing the override resolves to the new subtype',
       );
 
-      // A narrowing is per owner, so one instance's override cannot answer
-      // another's, including when both narrow the same field name.
       let otherCard = new TestCard({ [fields]: { pets: Puppy } });
       assert.strictEqual(
         getField(otherCard, 'pets')!.card,
