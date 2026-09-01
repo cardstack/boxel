@@ -102,13 +102,18 @@ Rules that hold for every join:
    boundary and each medium interprets its lane — the same way a beat is
    one object read by camera, type, and voice.
 
-**`blend` and the WebGL problem.** A crossfade needs both frames alive at
-once. For DOM and video that is two elements and an opacity ramp. For a
-WebGL scene it means snapshotting the outgoing frame (a copy of the
-canvas into a texture/overlay at the seam) and fading the still over the
-live incoming shot — a *freeze-blend*, which is also what most editors
-actually do under a short dissolve. That is the planned implementation;
-until then `whip` is the moving alternative and `wipe` the graphic one.
+**`blend` and the WebGL problem (implemented).** A crossfade needs both
+frames alive at once. For DOM and video that is two elements and an
+opacity ramp. For a WebGL scene the answer turned out cleaner than the
+snapshot-a-frame-late compromise this note first predicted: the bridge
+renders one frame *on demand* and reads the canvas back in the same
+task — `preserveDrawingBuffer` never matters, and the freeze is captured
+the instant **before** the incoming pose is applied. The still fades over
+the live shot (~460 ms), wearing the live frame's own primary grade and
+sitting under the split-tone, so both sides of the dissolve pass through
+one colourist's hands. A capture from a zero-sized surface degrades to a
+clean cut, never a broken image. This is the *freeze-blend* — what most
+editors actually cut under a short dissolve anyway.
 
 **Library form (future).** The natural home is a step:
 
