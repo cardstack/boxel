@@ -641,6 +641,13 @@ export interface Field<
   ): Promise<any>;
   emptyValue(instance: BaseDef): any;
   validate(instance: BaseDef, value: any): void;
+  // Deserialization-only guard, applied before `validate` when a document is
+  // being loaded. A link field's target lives in another document — its index
+  // row can be wrong or stale independently of this card — so a target that
+  // does not satisfy the field's declared type is dropped (with a warning)
+  // rather than making this whole card unloadable. Direct assignment does not
+  // pass through here: `validate` still throws for a user-set mismatch.
+  sanitizeDeserialized?(instance: BaseDef, value: any): any;
   component(model: Box<BaseDef>): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT> | undefined;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
@@ -1592,6 +1599,26 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
     return value;
   }
 
+  sanitizeDeserialized(_instance: CardDef, value: any) {
+    if (!value || isNonPresentLink(value) || primitive in this.card) {
+      return value;
+    }
+    if (
+      instanceOf(value, this.card) &&
+      !(isFileDef(this.card) && !value.id)
+    ) {
+      return value;
+    }
+    console.warn(
+      `dropping deserialized linksTo '${this.name}' target: ${
+        value.constructor?.name
+      } does not satisfy ${this.card.name}${
+        isFileDef(this.card) && !value.id ? ' (missing id)' : ''
+      }`,
+    );
+    return null;
+  }
+
   captureQueryFieldSeedData(
     instance: BaseDef,
     value: CardDef,
@@ -2254,6 +2281,34 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       rawArrayValues(values),
       { hideSlot: isNonPresentLink },
     );
+  }
+
+  sanitizeDeserialized(_instance: BaseDef, values: any[] | null) {
+    if (values == null || !Array.isArray(values) || primitive in this.card) {
+      return values;
+    }
+    let expectedCard = this.declaredCard;
+    let conforms = (value: any) =>
+      isNonPresentLink(value) ||
+      value == null ||
+      (instanceOf(value, expectedCard) &&
+        !(isFileDef(expectedCard) && !value.id));
+    let raw = rawArrayValues(values);
+    if (raw.every(conforms)) {
+      return values;
+    }
+    for (let value of raw) {
+      if (!conforms(value)) {
+        console.warn(
+          `dropping deserialized linksToMany '${this.name}' entry: ${
+            value.constructor?.name
+          } does not satisfy ${expectedCard.name}${
+            isFileDef(expectedCard) && !value.id ? ' (missing id)' : ''
+          }`,
+        );
+      }
+    }
+    return raw.filter(conforms);
   }
 
   captureQueryFieldSeedData(
@@ -4659,6 +4714,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
         );
       }
       propagateRealmContext(value, realmURLString);
+      if (field.sanitizeDeserialized) {
+        value = field.sanitizeDeserialized(instance, value);
+      }
       field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
