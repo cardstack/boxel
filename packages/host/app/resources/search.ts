@@ -216,10 +216,15 @@ export class SearchResource<
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
-  // The applied seed reported no match count and one must not be inferred from
-  // its rows. Tracked, because `totalMatchCount` is read during render and has
-  // to re-derive when a live search later supplies a real count.
-  @tracked private seedTotalUnknown = false;
+  // No match count is known yet and one must not be inferred. Tracked, because
+  // `totalMatchCount` is read during render and has to re-derive when a seed or
+  // a live search supplies a real count.
+  //
+  // Starts `true` so the getter fails safe in the window before `modify()` runs
+  // — `_meta`'s initializer carries a placeholder zero for the rendering path,
+  // and reading that as a match count would report "this query matches nothing"
+  // to anything that asked early.
+  @tracked private seedTotalUnknown = true;
   #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;

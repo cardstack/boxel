@@ -152,12 +152,15 @@ let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 
-// The (size, max) pairs already reported by `warnOncePerClamp`. A clamp is
-// driven by an authored page size rather than by request data, so the set of
-// distinct pairs is small and bounded by how many such sizes exist in the
-// realm's card definitions — it does not grow with traffic. Reset alongside the
-// bounds themselves so a test that lowers the ceiling still sees its warning.
+// The (size, max) pairs already reported by `warnOncePerClamp`. In practice a
+// clamp is driven by an authored page size — a constant in a card definition —
+// so the distinct pairs are few and recur, which is what makes deduping the
+// warning worthwhile. The size nonetheless arrives on a request, so the key
+// space is the caller's to choose and the set is capped rather than trusted to
+// stay small. Reset alongside the bounds themselves, so a test that lowers the
+// ceiling still sees its warning.
 let reportedClamps = new Set<string>();
+const MAX_REPORTED_CLAMPS = 32;
 
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
@@ -223,6 +226,16 @@ const HTML_LEG_HINT =
 function warnOncePerClamp(size: number, max: number): void {
   let key = `${size}/${max}`;
   if (reportedClamps.has(key)) {
+    return;
+  }
+  // `size` reaches here from a request body, so the key space is caller-chosen
+  // rather than bounded by what the realm's cards declare. Real traffic
+  // produces a handful of distinct sizes — every authored page size is a
+  // constant — but a caller walking 2001, 2002, 2003… would otherwise retain an
+  // entry each. Past the cap the clamp still applies and is simply no longer
+  // logged, which is the right trade: the artifact exists for the authored
+  // sizes that recur, not for a caller enumerating one-shot values.
+  if (reportedClamps.size >= MAX_REPORTED_CLAMPS) {
     return;
   }
   reportedClamps.add(key);
