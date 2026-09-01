@@ -3471,58 +3471,84 @@ module('Integration | card-basics', function (hooks) {
       class SpecialString extends StringField {
         static displayName = 'SpecialString';
       }
+      class Pet extends CardDef {
+        static displayName = 'Pet';
+      }
+      class Puppy extends Pet {
+        static displayName = 'Puppy';
+      }
       class TestCard extends CardDef {
         static displayName = 'TestCard';
         @field specialField = contains(StringField, {
           searchable: true,
           configuration: () => ({ enum: { options: ['Mango'] } }),
         });
+        // The link arity carries options the `contains` one has no slot for —
+        // `queryDefinition`, `eager`, and the `declaredCardThunk` that keeps
+        // resolving the declared type — and it is the arity a narrowing
+        // actually reaches, since a resolved link installs an override for
+        // its target's concrete type.
+        @field pets = linksToMany(() => Pet, {
+          searchable: true,
+          configuration: () => ({ enum: { options: ['Van Gogh'] } }),
+          query: { filter: { eq: { title: 'Van Gogh' } } },
+          eager: false,
+        });
       }
 
-      let declared = getField(
-        new TestCard({ specialField: 'Mango' }),
-        'specialField',
-      )!;
-      let narrowed = getField(
-        new TestCard({
-          specialField: 'Mango',
-          [fields]: { specialField: SpecialString },
-        }),
-        'specialField',
-      )!;
+      // Comparing the whole property set, rather than the options this test
+      // thought to name, is the point: a declared option that narrowing fails
+      // to carry surfaces here rather than in whichever consumer happens to
+      // read it instance-scoped.
+      function assertOnlyTheNarrowingChanged(
+        fieldName: string,
+        override: typeof CardDef | typeof StringField,
+        expectedOptions: string[],
+      ) {
+        let declared = getField(new TestCard(), fieldName)!;
+        let narrowed = getField(
+          new TestCard({ [fields]: { [fieldName]: override } }),
+          fieldName,
+        )!;
 
-      assert.strictEqual(
-        narrowed.card,
-        SpecialString,
-        'the narrowed field resolves to the subtype the override names',
-      );
-      assert.true(
-        narrowed.isPolymorphic,
-        'and reports the resolution as polymorphic',
-      );
+        assert.strictEqual(
+          narrowed.card,
+          override,
+          `${fieldName} resolves to the subtype the override names`,
+        );
+        assert.true(
+          narrowed.isPolymorphic,
+          `${fieldName} reports the resolution as polymorphic`,
+        );
 
-      // Everything else about the field is the declaration's. Comparing the
-      // whole property set rather than the options this test thought to name
-      // is the point: an option a field can be declared with that narrowing
-      // fails to carry surfaces here rather than in whichever consumer
-      // happens to read it instance-scoped.
-      let carried = Object.keys(declared).filter(
-        (key) => key !== 'cardThunk' && key !== 'isPolymorphic',
-      );
-      assert.deepEqual(
-        carried
-          .filter((key) => key === 'configuration' || key === 'searchable')
-          .sort(),
-        ['configuration', 'searchable'],
-        'the declared field carries the options this compares over',
-      );
-      assert.deepEqual(
-        carried.filter(
-          (key) => (narrowed as any)[key] !== (declared as any)[key],
-        ),
-        [],
-        'the narrowing moved nothing else',
-      );
+        let carried = Object.keys(declared).filter(
+          (key) => key !== 'cardThunk' && key !== 'isPolymorphic',
+        );
+        assert.deepEqual(
+          carried.filter((key) => expectedOptions.includes(key)).sort(),
+          [...expectedOptions].sort(),
+          `${fieldName} carries the options this compares over`,
+        );
+        assert.deepEqual(
+          carried.filter(
+            (key) => (narrowed as any)[key] !== (declared as any)[key],
+          ),
+          [],
+          `narrowing ${fieldName} moved nothing else`,
+        );
+      }
+
+      assertOnlyTheNarrowingChanged('specialField', SpecialString, [
+        'configuration',
+        'searchable',
+      ]);
+      assertOnlyTheNarrowingChanged('pets', Puppy, [
+        'configuration',
+        'searchable',
+        'queryDefinition',
+        'eager',
+        'declaredCardThunk',
+      ]);
     });
 
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
