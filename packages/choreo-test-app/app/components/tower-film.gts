@@ -124,7 +124,14 @@ interface Beat {
    * a veil covers it, the snap happens under the veil, and the veil
    * lifts on the new shot. `dipTo` picks the colour;
    * 'iris' — the old shot closes in a circle onto the new shot's named
-   * point (`to`), handing the eye straight to the subject.
+   * point (`to`), handing the eye straight to the subject;
+   * 'blur' — a blur dissolve: the old frame defocuses as it thins;
+   * 'luma' — an optical dissolve: the old frame fades in lighten blend,
+   * so its highlights linger longest, the way film stock dissolved;
+   * 'flash' — a two-breath white pop, no freeze: the gun-crack join;
+   * 'defocus' — a rack: the old frame blurs away while the incoming
+   * shot arrives soft and pulls itself sharp;
+   * 'sweep' — the sun itself flares across the seam and settles.
    */
   dipTo?: string;
   /** the English of the kanji, set small under it */
@@ -142,7 +149,18 @@ interface Beat {
    */
   hush?: boolean;
   id: string;
-  join?: 'blend' | 'cut' | 'dip' | 'iris' | 'whip' | 'wipe';
+  join?:
+    | 'blend'
+    | 'blur'
+    | 'cut'
+    | 'defocus'
+    | 'dip'
+    | 'flash'
+    | 'iris'
+    | 'luma'
+    | 'sweep'
+    | 'whip'
+    | 'wipe';
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
@@ -507,8 +525,11 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 1.15, lookY: -2.6, ox: -0.1, pitch: 1, yaw: 34 },
     ch: 1,
+    /* the guns arrive the way guns arrive */
+    cut: true,
     gloss: 'the matchlock gun',
     id: 'teppo',
+    join: 'flash',
     says: [
       '1543 — the gun lands',
       'Walls get lower, thicker',
@@ -828,6 +849,7 @@ const BEATS: Beat[] = [
     gloss: 'the fan’s incline',
     haze: 0.3,
     id: 'ishi2',
+    join: 'defocus',
     says: [
       'Vertical at the top',
       'Flaring at the foot',
@@ -851,9 +873,12 @@ const BEATS: Beat[] = [
     build: 4.4,
     cam: { dolly: 1.9, lookY: -1.9, ox: -0.12, pitch: 0, yaw: 190 },
     ch: 3,
+    /* the weather beat arrives through its own mist */
+    cut: true,
     gloss: 'the eave',
     haze: 0.55,
     id: 'noki',
+    join: 'blur',
     says: [
       'A metre of overhang',
       'It keeps water off the wall',
@@ -1167,6 +1192,9 @@ export default class TowerFilm extends Component<{
   /** where the iris closes to, as inline custom properties */
   @tracked private irisAt = '';
   @tracked private irisStamp = 0;
+  @tracked private blurStamp = 0;
+  @tracked private lumaStamp = 0;
+  @tracked private flashStamp = 0;
   /**
    * THE ENDING. A film that laps back to its own first frame has no
    * ending, and the coda earns one — so when the last cue has run, the
@@ -2183,9 +2211,28 @@ export default class TowerFilm extends Component<{
         if (join === 'dip') {
           this.dipColor = beat.dipTo ?? '#0d0905';
           this.dipStamp += 1;
+        } else if (join === 'flash') {
+          this.flashStamp += 1;
+        } else if (join === 'sweep') {
+          this.lightSweep(film, beat);
+        } else if (join === 'defocus') {
+          /* the rack: the freeze blurs away above while the live frame
+             arrives soft and pulls itself sharp underneath */
+          if (this.freeze) {
+            this.blurStamp += 1;
+          }
+          this.liveEl
+            ?.animate(
+              [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
+              { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' }
+            );
         } else if (this.freeze) {
           if (join === 'wipe') {
             this.cutStamp += 1;
+          } else if (join === 'blur') {
+            this.blurStamp += 1;
+          } else if (join === 'luma') {
+            this.lumaStamp += 1;
           } else if (join === 'blend') {
             this.blendStamp += 1;
           } else if (join === 'iris') {
@@ -2432,6 +2479,109 @@ export default class TowerFilm extends Component<{
     this.fades.set(el, timer);
   }
 
+  /** the wrapper the live picture sits in, for rack-defocus */
+  private liveEl?: HTMLElement;
+
+  private liveWrap = modifier((el: HTMLElement) => {
+    this.liveEl = el;
+    return () => {
+      if (this.liveEl === el) {
+        this.liveEl = undefined;
+      }
+    };
+  });
+
+  /**
+   * THE LIGHT SWEEP: the sun itself flares across the seam — swings
+   * high and past, then settles back onto whatever light the beat
+   * actually asked for. Fire-and-forget; the restore hands the key
+   * back to the beat's own sun (or the hour's).
+   */
+  private lightSweep(film: FilmApi, beat: Beat) {
+    const t0 = performance.now();
+    const dur = 950;
+    const base = beat.sun
+      ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD }
+      : null;
+    const step = () => {
+      const f = (performance.now() - t0) / dur;
+      if (f >= 1 || !this.film) {
+        film.light(base);
+        return;
+      }
+      const swing = Math.sin(f * Math.PI);
+      film.light({
+        az: (base?.az ?? 0.4) + (1 - f) * 2.2 - 1.1,
+        el: (base?.el ?? 0.4) + swing * 0.3,
+      });
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  /**
+   * THE DEMO STRIP under the film triggers any join as a pure overlay
+   * on whatever is playing — no beat change, no snap: the transition
+   * itself, exhibited on the living picture.
+   */
+  private previewJoin = (join: string) => {
+    const film = this.film;
+    if (!film || !this.booted) {
+      return;
+    }
+    if (join !== 'flash' && join !== 'sweep' && join !== 'whip') {
+      const shot = film.snapshot();
+      this.freeze = shot.length > 64 ? shot : '';
+      if (!this.freeze && join !== 'dip') {
+        return;
+      }
+    }
+    switch (join) {
+      case 'blend':
+        this.blendStamp += 1;
+        break;
+      case 'blur':
+        this.blurStamp += 1;
+        break;
+      case 'defocus':
+        this.blurStamp += 1;
+        this.liveEl?.animate(
+          [{ filter: 'blur(9px)' }, { filter: 'blur(0px)' }],
+          { duration: 700, easing: 'cubic-bezier(0.3, 0, 0.3, 1)' }
+        );
+        break;
+      case 'dip':
+        this.dipColor = '#0d0905';
+        this.dipStamp += 1;
+        break;
+      case 'flash':
+        this.flashStamp += 1;
+        break;
+      case 'iris': {
+        const v = film.view();
+        const b = this.beat;
+        const pt = b.to ? film.project(...b.to) : undefined;
+        const cx = pt ? Math.max(12, Math.min(88, (pt.x / v.w) * 100)) : 50;
+        const cy = pt ? Math.max(12, Math.min(88, (pt.y / v.h) * 100)) : 46;
+        this.irisAt = `--ix:${cx.toFixed(1)}%;--iy:${cy.toFixed(1)}%`;
+        this.irisStamp += 1;
+        break;
+      }
+      case 'luma':
+        this.lumaStamp += 1;
+        break;
+      case 'sweep':
+        this.lightSweep(film, this.beat);
+        break;
+      case 'whip':
+        this.whipUntil = performance.now() + 360;
+        break;
+      case 'wipe':
+        this.cutStamp += 1;
+        break;
+    }
+  };
+
   /** cancel a fade mid-flight and stand the line back up (resume) */
   private revive(el: HTMLAudioElement) {
     const timer = this.fades.get(el);
@@ -2604,12 +2754,16 @@ export default class TowerFilm extends Component<{
         class="tf-stage is-grade-{{this.grade}} {{if this.subsOn 'has-subs'}}"
         {{this.mount}}
       >
-        <iframe
-          class="tf-frame"
-          src={{this.src}}
-          title="Towers"
-          loading="eager"
-        ></iframe>
+        {{! the live picture's own wrapper, so a rack-defocus can blur
+        the scene without touching the grade riding the iframe itself }}
+        <div class="tf-live" {{this.liveWrap}}>
+          <iframe
+            class="tf-frame"
+            src={{this.src}}
+            title="Towers"
+            loading="eager"
+          ></iframe>
+        </div>
 
         {{! A scrim, not a box. The scene is a bright ochre wash and the
         type is dark, which is the wrong way round for legibility — so
@@ -2661,6 +2815,24 @@ export default class TowerFilm extends Component<{
               alt=""
               aria-hidden="true"
             />
+          {{/if}}
+        {{/each}}
+
+        {{! blur and luma dissolves, and the flash — the last of the
+        junction vocabulary's overlays }}
+        {{#each (array this.blurStamp) key="@identity" as |bl|}}
+          {{#if bl}}
+            <img class="tf-blurout" src={{this.freeze}} alt="" aria-hidden="true" />
+          {{/if}}
+        {{/each}}
+        {{#each (array this.lumaStamp) key="@identity" as |lu|}}
+          {{#if lu}}
+            <img class="tf-luma" src={{this.freeze}} alt="" aria-hidden="true" />
+          {{/if}}
+        {{/each}}
+        {{#each (array this.flashStamp) key="@identity" as |fl|}}
+          {{#if fl}}
+            <i class="tf-flash" aria-hidden="true"></i>
           {{/if}}
         {{/each}}
 
@@ -3189,6 +3361,95 @@ export default class TowerFilm extends Component<{
             <a href="https://x.com/MengTo" target="_blank" rel="noopener">Meng
               To</a></span>
         </div>
+
+        {{! ============================================================
+        THE CUTTING ROOM — the deep-dive under the film. The film above
+        is the exhibit; this is the plate on the wall beside it: what
+        the timeline is, how it cuts, and a strip of live junction
+        triggers that run their transition on the picture upstairs.
+        ============================================================ }}
+        <section class="tf-doc">
+          <header class="tf-doc-head">
+            <p class="tf-doc-kicker">UNDER THE HOOD</p>
+            <h2 class="tf-doc-title">The Cutting Room</h2>
+            <p class="tf-doc-lede">The film above has no video file, no
+              timeline scrubber, and no editor — it is cut, graded, mixed and
+              narrated live by a Choreo score. This is what the timeline can
+              do.</p>
+          </header>
+
+          <div class="tf-doc-grid">
+            <article>
+              <h3><span>一</span> One clock, one path</h3>
+              <p>The whole film is a single camera step: every beat
+                contributes waypoints to one spline, one tick per two
+                seconds, and every cue — a line of narration, a stage mark, a
+                traced eave — is a delay into that same clock. There is no
+                playlist to drift out of sync, because there is nothing to
+                sync: the shot list and the script are one object.</p>
+            </article>
+            <article>
+              <h3><span>二</span> Splices</h3>
+              <p>A waypoint marked <code>cut</code> splits the path into
+                shots. Each side is sampled as its own clamped spline — no
+                velocity ever crosses a seam — and the pose is a step
+                function at the cut's own instant. The outgoing shot plays
+                through the seam; the incoming one begins exactly on it.
+                Nothing interpolates, integrates, or resamples across the
+                boundary.</p>
+            </article>
+            <article>
+              <h3><span>三</span> Junctions</h3>
+              <p>A seam carries a policy, not just a location. Eleven joins
+                cover the grammar — try them on the film above, live:</p>
+              <div class="tf-doc-joins">
+                <button type="button" {{on "click" (fn this.previewJoin "wipe")}}>wipe<i>feathered, raked to the sun</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "blend")}}>blend<i>push dissolve</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "blur")}}>blur<i>defocus dissolve</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "luma")}}>luma<i>highlights linger</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "iris")}}>iris<i>closes on the subject</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "dip")}}>dip<i>through a colour</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "flash")}}>flash<i>two-breath pop</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "defocus")}}>defocus<i>rack focus</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "sweep")}}>sweep<i>the sun flares</i></button>
+                <button type="button" {{on "click" (fn this.previewJoin "whip")}}>whip<i>a fast chased tween</i></button>
+              </div>
+            </article>
+            <article>
+              <h3><span>四</span> Linked tracks</h3>
+              <p>Every track crosses a seam on its own clock. A sentence
+                interrupted by a new line barge-fades on its own audio
+                element while the new one starts clean; a seam into a silent
+                shot is an L-cut — the sentence finishes over the new
+                picture. The music ducks fast and recovers slow, and no
+                boundary ever hard-clips a waveform.</p>
+            </article>
+            <article>
+              <h3><span>五</span> Navigation is an edit</h3>
+              <p>Chapter skip does not seek — the lens is an integrator, and
+                a seek would arrive with the wrong velocity. Skipping
+                re-cuts: the beat list is sliced, the path, cues and
+                sequence name change together, and the score plays a
+                different, shorter film whose first waypoint is spliced. The
+                transport is the same re-cut wearing a broadcast bar.</p>
+            </article>
+            <article>
+              <h3><span>六</span> The bridge</h3>
+              <p>The scene is a vendored page on its own three.js, reached
+                through one function-call bridge: pose goals for a cascaded
+                camera chase, tubes drawn on the geometry, a shader post
+                pass (grain, aberration, vignette, a milk lift), the sun
+                moved per shot, the air thickened, the music ducked — and a
+                one-frame synchronous snapshot that makes every freeze-based
+                join possible.</p>
+            </article>
+          </div>
+
+          <footer class="tf-doc-foot">
+            <p>Design note: <code>docs/choreo-splices.md</code> · Scene:
+              threeui by Meng To · Cut by a score — Choreo</p>
+          </footer>
+        </section>
       {{/unless}}
     </div>
 
@@ -3242,8 +3503,8 @@ export default class TowerFilm extends Component<{
         --tf-shy: 2px;
         --tf-rake: 35deg;
 
-        position: fixed;
-        inset: 0;
+        position: relative;
+        min-height: 100svh;
         background: var(--tf-paper);
         display: flex;
         flex-direction: column;
@@ -3252,8 +3513,14 @@ export default class TowerFilm extends Component<{
 
       .tf-stage {
         position: relative;
-        flex: 1;
+        height: calc(100svh - 52px);
+        flex: none;
         overflow: hidden;
+      }
+
+      .tf-live {
+        position: absolute;
+        inset: 0;
       }
 
       .tf-frame {
@@ -3413,6 +3680,65 @@ export default class TowerFilm extends Component<{
         100% {
           opacity: 0;
           transform: scale(1.055);
+        }
+      }
+
+      /* the blur dissolve — and the freeze half of the rack-defocus */
+      .tf-blurout {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        animation: tf-blurout 640ms ease-out forwards;
+      }
+
+      @keyframes tf-blurout {
+        0% {
+          opacity: 1;
+          filter: var(--tf-lut) blur(0);
+        }
+
+        100% {
+          opacity: 0;
+          filter: var(--tf-lut) blur(13px);
+        }
+      }
+
+      /* the optical dissolve: lighten blend, so highlights linger */
+      .tf-luma {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        filter: var(--tf-lut);
+        mix-blend-mode: lighten;
+        animation: tf-blend 700ms ease-in forwards;
+      }
+
+      /* two breaths of white, no freeze — the gun-crack */
+      .tf-flash {
+        position: absolute;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+        background: #fff8ec;
+        animation: tf-flash 300ms ease-out forwards;
+      }
+
+      @keyframes tf-flash {
+        0%,
+        22% {
+          opacity: 0.92;
+        }
+
+        100% {
+          opacity: 0;
         }
       }
 
@@ -4667,6 +4993,134 @@ export default class TowerFilm extends Component<{
           opacity: 0.88;
           transform: rotate(-2.5deg) scale(1);
         }
+      }
+
+      /* ---- the cutting room ------------------------------------------ */
+      .tf-doc {
+        background: #efe4c9;
+        border-top: 1px solid #cbb992;
+        padding: clamp(44px, 7vw, 96px) 7% clamp(40px, 6vw, 80px);
+        color: #3f3520;
+        font-family: var(--tf-ui);
+      }
+
+      .tf-doc-head {
+        max-width: 760px;
+        margin-bottom: clamp(30px, 4vw, 56px);
+      }
+
+      .tf-doc-kicker {
+        margin: 0 0 10px;
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.34em;
+        color: #96551b;
+      }
+
+      .tf-doc-title {
+        margin: 0 0 14px;
+        font-family: var(--tf-display);
+        font-size: clamp(30px, 4vw, 52px);
+        font-weight: 500;
+        color: #2e2515;
+      }
+
+      .tf-doc-lede {
+        margin: 0;
+        font-family: var(--tf-display);
+        font-size: clamp(16px, 1.5vw, 20px);
+        line-height: 1.55;
+        color: #5c4f36;
+      }
+
+      .tf-doc-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: clamp(24px, 3vw, 44px);
+      }
+
+      .tf-doc-grid article h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        color: #2e2515;
+      }
+
+      .tf-doc-grid article h3 span {
+        display: inline-block;
+        margin-right: 8px;
+        font-family: var(--tf-display);
+        font-weight: 400;
+        color: #96551b;
+      }
+
+      .tf-doc-grid article p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.65;
+        color: #55462c;
+      }
+
+      .tf-doc-grid code {
+        font-size: 12px;
+        background: rgba(46, 37, 21, 0.08);
+        padding: 1px 5px;
+        border-radius: 4px;
+      }
+
+      .tf-doc-joins {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .tf-doc-joins button {
+        appearance: none;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+        border: 1px solid #c2b18c;
+        background: #f6edd6;
+        color: #2e2515;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        padding: 8px 13px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition:
+          transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+          background 180ms ease;
+      }
+
+      .tf-doc-joins button:hover {
+        transform: translateY(-2px);
+        background: #fdf6e2;
+      }
+
+      .tf-doc-joins button i {
+        font-style: normal;
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: #8b7c5c;
+      }
+
+      .tf-doc-foot {
+        margin-top: clamp(34px, 5vw, 64px);
+        padding-top: 18px;
+        border-top: 1px solid #cbb992;
+      }
+
+      .tf-doc-foot p {
+        margin: 0;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: #8b7c5c;
       }
 
       /* the app's own chrome, gone: this route is a frame, not a page */
