@@ -69,6 +69,18 @@ function makeFileSystem() {
       export class Plain extends CardDef {
         @field name = contains(StringField);
       }
+
+      // Renders the linked card in a display format, so the persisted
+      // isolated_html carries the linked data as text — the inspectable
+      // twin of the capture-only path above.
+      export class ProductWithMakerView extends Product {
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <h1>Viewed product: <@fields.name/></h1>
+            <@fields.maker/>
+          </template>
+        }
+      }
     `,
     'widget.json': {
       data: {
@@ -410,6 +422,65 @@ module(basename(import.meta.filename), function (hooks) {
       ),
       `the re-capture re-loaded the linked card, so it remains a dep (deps: ${JSON.stringify(
         depsAfter,
+      )})`,
+    );
+  });
+
+  test('a display-format render of linked data is fresh after the linked card is edited', async function (assert) {
+    let makerDoc = (name: string) =>
+      JSON.stringify({
+        data: {
+          attributes: { name },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Maker' },
+          },
+        },
+      });
+    await writeAndSettle('maker2.json', makerDoc('Initech'));
+    await writeAndSettle(
+      'viewed.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Viewed' },
+          relationships: {
+            maker: { links: { self: './maker2' } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: rri('./product'),
+              name: 'ProductWithMakerView',
+            },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}viewed.json`,
+    );
+    assert.ok(
+      row!.isolated_html?.includes('Initech'),
+      `the render shows the linked name (html: ${row!.isolated_html?.slice(
+        0,
+        500,
+      )})`,
+    );
+
+    await writeAndSettle('maker2.json', makerDoc('Initrode'));
+    let after = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}viewed.json`,
+    );
+    assert.ok(
+      after!.generation > row!.generation,
+      'editing the linked card re-rendered the consumer',
+    );
+    assert.ok(
+      after!.isolated_html?.includes('Initrode'),
+      `the re-render shows the edited linked name (html: ${after!.isolated_html?.slice(
+        0,
+        500,
       )})`,
     );
   });

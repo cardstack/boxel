@@ -71,6 +71,11 @@ export interface PrerenderHtmlPassArgs {
   // every visit so each prerender tab this pass touches resets its loader
   // exactly once when the realm's module surface changed.
   loaderEpoch: string;
+  // The queue id of the index pass that spawned this job, when one did. The
+  // spawning-generation gate waits for that pass's commit only while this
+  // job is still running; null means the job spawns from committed state and
+  // the gate's watermark check answers on its first probe.
+  spawningJobId?: number | null;
   // True when a from-scratch index pass spawned this job: run the realm-wide
   // module pre-warm sweep before the format renders begin. False on
   // incremental spawns — the sweep is O(realm module count).
@@ -125,6 +130,7 @@ export async function runPrerenderHtmlPass({
   changes,
   generation,
   loaderEpoch,
+  spawningJobId,
   preWarm,
   indexWriter,
   definitionLookup,
@@ -284,10 +290,19 @@ export async function runPrerenderHtmlPass({
   // the invalidation set is known (deliberately, so queue latency and the
   // module pre-warm above overlap the tail of the index pass), so ungated
   // visits can read pre-edit documents and persist superseded linked data
-  // under the new generation. The wait is bounded: a spawning pass that dies
-  // before commit never advances the watermark, and production then still
-  // serves exactly what these renders would read — proceeding renders a
-  // consistent state, and the eventual re-index re-renders these rows.
+  // under the new generation.
+  //
+  // The wait's true bound is the spawning job's liveness, not wall clock: a
+  // spawner that reached a terminal status without advancing the watermark
+  // (its commit failed, or the realm was wiped out from under it — deletion
+  // and unpublish do this legitimately) will never advance it, and
+  // production then still serves exactly what these renders would read, so
+  // proceeding renders a consistent state. Holding a worker on wall clock
+  // instead starves every job queued behind this one for the full ceiling
+  // in exactly those flows. The ceiling below is a backstop against
+  // pathological job-row states only. A job with no spawner recorded spawns
+  // from committed state (reconcile, legacy enqueuers) and its watermark
+  // check passes on the first probe.
   if (dbAdapter) {
     let gateStart = Date.now();
     let committed = false;
@@ -298,6 +313,25 @@ export async function runPrerenderHtmlPass({
       ])) as { current_generation: number | string }[];
       if (row != null && Number(row.current_generation) >= generation) {
         committed = true;
+        break;
+      }
+      if (spawningJobId == null) {
+        break;
+      }
+      let [spawner] = (await query(dbAdapter, [
+        `SELECT status FROM jobs WHERE id =`,
+        param(spawningJobId),
+      ])) as { status: string }[];
+      if (!spawner || spawner.status !== 'unfulfilled') {
+        // The spawner commits its batch and only then resolves, so a
+        // terminal status read here may postdate a commit the watermark
+        // probe above predates — give the watermark one last read.
+        let [finalRow] = (await query(dbAdapter, [
+          'SELECT current_generation FROM realm_generations WHERE realm_url =',
+          param(realmURL.href),
+        ])) as { current_generation: number | string }[];
+        committed =
+          finalRow != null && Number(finalRow.current_generation) >= generation;
         break;
       }
       await delay(250);
@@ -311,7 +345,7 @@ export async function runPrerenderHtmlPass({
       }
     } else {
       log.warn(
-        `${jobTag} spawning generation ${generation} was not committed within ${SPAWNING_GENERATION_WAIT_MS} ms; rendering against the committed index`,
+        `${jobTag} generation ${generation} is not committed and its spawning job ${spawningJobId ?? '(none)'} is not running; rendering against the committed index`,
       );
     }
   }

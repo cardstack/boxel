@@ -272,6 +272,7 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
       changes,
       generation,
       loaderEpoch,
+      spawningJobId: args.spawningJobId ?? null,
       preWarm,
       indexWriter,
       definitionLookup,
