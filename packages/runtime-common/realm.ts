@@ -208,6 +208,7 @@ import type {
 
 import { RealmAuthDataSource } from './realm-auth-data-source.ts';
 import { AliasCache } from './cache/alias-cache.ts';
+import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
@@ -907,6 +908,11 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
+  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
+    for await (let _entry of this.#adapter.readdir(directory)) {
+      // draining the listing is the whole effect; the entries are not used
+    }
+  });
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -1980,6 +1986,14 @@ export class Realm {
     if (hasExecutableExtension(path)) {
       this.#dropTranspiledModuleEntry(path);
     }
+  }
+
+  // Refresh this instance's filesystem view of the directories that hold
+  // `path`, after a peer instance wrote or deleted that path. See
+  // DirectoryViewRefresher for why a shared-filesystem peer needs this and how
+  // repeated requests for one directory are coalesced.
+  refreshDirectoryView(path: LocalPath): Promise<void> {
+    return this.#directoryViewRefresher.refresh(path);
   }
 
   // CS-11028: shared drop helper for any in-process site that invalidates a
