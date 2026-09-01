@@ -1,4 +1,4 @@
-import { array, concat, fn } from '@ember/helper';
+import { array, concat, fn, get } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -102,6 +102,15 @@ interface Beat {
    * edit reads: still, cut, still.
    */
   cut?: boolean;
+  /**
+   * THE LINEUP. Six towers were shown one at a time, which is six
+   * portraits; a comparison is only paid off when they stand in the same
+   * frame. The scene can only grow one tower per frame — so the lineup is
+   * cut in TIME instead of space: the styles cycle on a metronome inside
+   * one held shot, a second each, the kanji stamping over each. A recap
+   * montage, which is what every comparison film ends on.
+   */
+  cycle?: { kanji: string; style: number }[];
   /** the English of the kanji, set small under it */
   gloss?: string;
   /** which of the six towers stands here; overrides the chapter's grade */
@@ -139,8 +148,9 @@ interface Beat {
     /** the height it climbs to */
     to: number;
   };
-  /** how the front layer is set */
-  mode: 'lower' | 'plate' | 'point' | 'title';
+  /** how the front layer is set; 'clear' is no furniture at all — the
+   *  one mode whose whole job is to get out of the picture's way */
+  mode: 'clear' | 'lower' | 'plate' | 'point' | 'title';
   /**
    * A PHOTOGRAPH, cut in beside the model.
    *
@@ -242,6 +252,42 @@ interface Beat {
 const TICK = 2;
 
 /**
+ * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
+ * files in `public/towers/vo/`. The kinetic type is paced against the VOICE,
+ * not against the beat: the last cue should land as the line is finishing,
+ * whether the read is four seconds or thirteen. Estimating this went wrong
+ * once already (see docs/towers-vo.md) — so it is measured, and a re-record
+ * means re-measuring. A beat missing from here paces against its own length.
+ */
+const VO_SECS: Record<string, number> = {
+  azuchi: 8.44,
+  boro: 7.0,
+  'c-cn': 7.76,
+  'c-jp': 4.31,
+  'c-kh': 8.59,
+  'c-th': 6.11,
+  'c-tr': 7.47,
+  'c-vn': 7.84,
+  coda: 11.36,
+  detail: 3.58,
+  hafu: 10.21,
+  hikaku: 6.5,
+  ikkoku: 8.2,
+  ishi2: 7.11,
+  ishigaki: 11.55,
+  kawara: 9.27,
+  koran: 5.85,
+  noki: 8.36,
+  plaster: 5.85,
+  shachi: 10.63,
+  shiro: 8.18,
+  teppo: 7.29,
+  timber: 12.8,
+  title: 6.03,
+  what: 5.8,
+};
+
+/**
  * THE GRADE — a colourist's pass over the picture, per chapter.
  *
  * The scene lights itself beautifully and evenly, and evenly is the
@@ -328,7 +374,10 @@ const BEATS: Beat[] = [
    * ---------------------------------------------------------------- */
   {
     build: 4.4,
-    cam: { dolly: 0.62, lookY: -1.2, ox: 0.2, pitch: 12, yaw: -34 },
+    /* the film opens from as far out as the lens goes and spends the
+       whole first beat arriving — a slow push from "a landscape with
+       something in it" to "this building, specifically" */
+    cam: { dolly: 0.3, lookY: -1.2, ox: 0.2, pitch: 12, yaw: -46 },
     ch: 0,
     gloss: 'the keep',
     id: 'title',
@@ -358,8 +407,13 @@ const BEATS: Beat[] = [
     toCam: { dolly: 0.64, lookY: -1.0, ox: 0.2, pitch: 13, yaw: -26 },
   },
   {
-    cam: { dolly: 0.58, lookY: 2.2, ox: -0.1, pitch: 18, yaw: -18 },
+    /* CUT to the ground itself — a worm's-eye from the foot of the
+       stone, the lens as low as the rig goes, aimed up the whole height.
+       The line says the castle is the ground, so the shot stands ON it,
+       and the tower is tall because you are finally under it. */
+    cam: { dolly: 1.55, lookY: 4.6, ox: -0.1, pitch: 0, yaw: -18 },
     ch: 0,
+    cut: true,
     gloss: 'castle',
     id: 'shiro',
     says: ['Not the tower.', 'The ground.', 'Ditches, banks, terraces.'],
@@ -369,7 +423,7 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'SHIRO',
     ticks: 5,
-    toCam: { dolly: 0.6, lookY: 2.0, ox: -0.1, pitch: 15, yaw: -6 },
+    toCam: { dolly: 1.3, lookY: 5.4, ox: -0.1, pitch: 2, yaw: -4 },
   },
   {
     cam: { dolly: 0.72, lookY: 1.0, ox: 0.16, pitch: 8, yaw: 2 },
@@ -478,9 +532,9 @@ const BEATS: Beat[] = [
     kicker: 'STAGE ONE',
     vo: "Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.",
     mark: {
-      bearing: 104,
+      bearing: 120,
       lines: ['石垣'],
-      r: 5,
+      r: 7,
       size: 1.5,
       to: 3.3,
     },
@@ -509,9 +563,9 @@ const BEATS: Beat[] = [
     kicker: 'STAGE TWO',
     vo: "Chūryō. Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.",
     mark: {
-      bearing: 122,
+      bearing: 138,
       lines: ['柱梁'],
-      r: 5,
+      r: 7,
       size: 1.5,
       to: 6.2,
     },
@@ -536,9 +590,9 @@ const BEATS: Beat[] = [
     kicker: 'STAGE THREE',
     vo: "Shirakabe. Lime plaster, thick enough to be armour. White, because white does not burn.",
     mark: {
-      bearing: 139,
+      bearing: 155,
       lines: ['白壁'],
-      r: 5,
+      r: 7,
       size: 1.5,
       to: 8.8,
     },
@@ -559,12 +613,13 @@ const BEATS: Beat[] = [
     kicker: 'STAGE FOUR',
     vo: "Bōrō. At the top, one room you can see out of. Everything below it is how you get that room into the air.",
     mark: {
-      bearing: 154,
+      bearing: 170,
       lines: ['望楼'],
-      r: 5,
+      r: 7,
       size: 1.5,
       to: 11.2,
     },
+    haze: 0.38,
     mode: 'lower',
     romaji: 'BŌRŌ',
     ticks: 5,
@@ -585,9 +640,9 @@ const BEATS: Beat[] = [
     kanji: '瓦',
     vo: "Kawara. Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.",
     mark: {
-      bearing: 169,
+      bearing: 185,
       lines: ['瓦'],
-      r: 5,
+      r: 7,
       size: 1.5,
       to: 13.5,
     },
@@ -596,6 +651,24 @@ const BEATS: Beat[] = [
     theme: 1,
     ticks: 6,
     toCam: { dolly: 0.72, lookY: 2.2, ox: -0.1, pitch: 12, yaw: 148 },
+  },
+  /**
+   * THE SILENCE. The roof has just closed and the building stands finished
+   * for the first time, in the brightest light the film owns — and nobody
+   * says anything. No voice, no type, no scrim; the frame centres for the
+   * only time in the film and the music comes back up on its own, because
+   * `speak` finds no line and lifts the duck. Emotion in a documentary is
+   * made of the one beat where the narrator trusts the picture. Four
+   * seconds is the length of a breath taken on purpose.
+   */
+  {
+    build: 4.4,
+    cam: { dolly: 0.54, lookY: 0.9, ox: 0, pitch: 12, yaw: 149 },
+    ch: 2,
+    id: 'muneage',
+    mode: 'clear',
+    ticks: 2,
+    toCam: { dolly: 0.5, lookY: 0.9, ox: 0, pitch: 13, yaw: 152 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -652,6 +725,7 @@ const BEATS: Beat[] = [
     },
     romaji: 'SHACHIHOKO',
     sun: { az: 120, el: 26 },
+    theme: 2,
     ticks: 6,
     to: [-0.51, 13.85, -0.51],
     trace: [{ pts: RIDGE, wide: true }],
@@ -662,6 +736,7 @@ const BEATS: Beat[] = [
     ch: 3,
     cut: true,
     gloss: 'the plover gable',
+    haze: 0.45,
     id: 'hafu',
     says: [
       'A dormer named for a plover',
@@ -696,6 +771,7 @@ const BEATS: Beat[] = [
     vo: "Kōran. A rail on a ledge too narrow to walk. Built to be seen, not used.",
     mode: 'point',
     romaji: 'KŌRAN',
+    theme: 0,
     ticks: 4,
     to: [0.13, 11.3, -1.84],
     trace: [{ pts: RAIL, wide: true }],
@@ -775,6 +851,7 @@ const BEATS: Beat[] = [
     vo: 'Six towers. Same lens, same distance. One question. Height, out of whatever you have.',
     mode: 'plate',
     romaji: 'HIKAKU',
+    theme: 0,
     sky: {
       az: -14,
       dist: 28,
@@ -815,6 +892,7 @@ const BEATS: Beat[] = [
     romaji: 'BǍOTǍ',
     style: 1,
     ticks: 5,
+    wx: 3,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 226 },
@@ -826,9 +904,11 @@ const BEATS: Beat[] = [
     kicker: 'VIETNAM',
     vo: 'Vietnam. A masonry body, thin tiled eaves. You are not meant to climb it. A reliquary that reads as a tower.',
     mode: 'lower',
+    haze: 0.55,
     romaji: 'THÁP',
     style: 2,
     ticks: 5,
+    wx: 0,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 233 },
@@ -842,6 +922,7 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'PRANG',
     style: 3,
+    theme: 1,
     ticks: 4,
   },
   {
@@ -856,6 +937,7 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'PRASAT',
     style: 4,
+    theme: 2,
     ticks: 5,
   },
   {
@@ -874,7 +956,31 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'CAMİ',
     style: 5,
+    theme: 0,
     ticks: 5,
+  },
+
+  /**
+   * THE LINEUP — the recap montage the comparison was owed. One held
+   * frame, the six towers cycling through it on a metronome, newest
+   * acquaintance first and the tenshu last — so the film walks back to
+   * its subject and the coda opens on a building already standing.
+   */
+  {
+    cam: { dolly: 0.66, lookY: 1.8, ox: 0, pitch: 10, yaw: 250 },
+    ch: 4,
+    cycle: [
+      { kanji: 'CAMİ', style: 5 },
+      { kanji: 'ប្រាសាទ', style: 4 },
+      { kanji: 'ปรางค์', style: 3 },
+      { kanji: '佛塔', style: 2 },
+      { kanji: '寶塔', style: 1 },
+      { kanji: '天守', style: 0 },
+    ],
+    id: 'lineup',
+    mode: 'clear',
+    ticks: 3,
+    toCam: { dolly: 0.66, lookY: 1.8, ox: 0, pitch: 10, yaw: 254 },
   },
 
   /* ---------------------------------------------------------------- *
@@ -937,6 +1043,7 @@ const smooth = (t: number) => {
 
 /** what the vendored page publishes — see the HOST FILM BRIDGE block there */
 interface FilmApi {
+  clearTrace(id: string): void;
   duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
@@ -975,6 +1082,11 @@ interface FilmApi {
   sun(): { h: number; on: boolean; w: number; x: number; y: number };
   theme(i: number, instant?: boolean): void;
   time(v: number): void;
+  trace(
+    id: string,
+    spec: { color?: string; glow?: string; pts: Pt3[]; r?: number }
+  ): void;
+  traceDraw(id: string, t: number): void;
   view(): {
     az: number;
     el: number;
@@ -997,12 +1109,21 @@ export default class TowerFilm extends Component<{
   @tracked private booted = false;
   /** bumped on every jump cut; keying on it restarts the wipe */
   @tracked private cutStamp = 0;
+  /**
+   * THE ENDING. A film that laps back to its own first frame has no
+   * ending, and the coda earns one — so when the last cue has run, the
+   * run simply stops: the final pose holds, the music settles down a
+   * step, and a card offers the way back in. Replay is a choice the
+   * viewer makes, never something the clock does to them.
+   */
+  @tracked private ended = false;
+  /** which tower the lineup's metronome is on; -1 between lineups */
+  @tracked private cycleStep = -1;
 
   private film?: FilmApi;
   private frameEl?: HTMLElement;
   private lineEl?: SVGLineElement;
   private dotEl?: SVGCircleElement;
-  private traceEls: SVGPolylineElement[] = [];
   private tetherEl?: SVGLineElement;
   private dim?: HTMLElement;
   /** the dim's own value, chased rather than cut so it never snaps on */
@@ -1051,6 +1172,32 @@ export default class TowerFilm extends Component<{
 
   /** sound is off until asked for: nobody's first second should be音 */
   @tracked private sound = false;
+
+  /**
+   * THE GATE. This film is narrated, and narration behind a mute button
+   * is a film shown with the projector lamp off — so the front door asks.
+   * One held frame, one choice, and the choice IS the user gesture that
+   * autoplay policy wants anyway: the browser unlocks audio on the same
+   * click that starts the picture. Museums have worked this way forever.
+   *
+   * `?from` skips it (an authoring link wants the shot, not the lobby)
+   * and so does embedding.
+   */
+  @tracked private gate = false;
+  /** the scene is loaded and seated behind the gate — the door can open */
+  @tracked private ready = false;
+
+  /**
+   * One pass BEHIND `booted`, on purpose. A region's first render
+   * collects no score, so anything standing in it on that pass — the
+   * first beat's type, a head photo — was never inserted and never
+   * animates. Content mounts on this flag instead, which flips a tick
+   * later: the same render that gives the score its first real pass
+   * hands the front layer a genuine insertion, and the opening beat's
+   * type is DELIVERED like every other beat's instead of being found
+   * already on the glass.
+   */
+  @tracked private rolling = false;
 
   get beats(): Beat[] {
     return this.from > 0 ? BEATS.slice(this.from) : BEATS;
@@ -1195,6 +1342,39 @@ export default class TowerFilm extends Component<{
     return `width:${Math.round(((this.beatIndex + 1) / this.beats.length) * 100)}%`;
   }
 
+  /**
+   * WHEN EACH CUE LANDS — paced against the voice, not the clock.
+   *
+   * The phrases used to arrive on four fixed delays, which meant a
+   * fourteen-second beat finished its type with five seconds of dead air
+   * and a short one crowded the read. So the cues spread themselves: the
+   * first lands early, the last lands as the measured line is finishing
+   * (`VO_SECS`), and a beat with no recording paces against two thirds of
+   * its own length, which is where a read for it would sit anyway.
+   */
+  get sayAt(): number[] {
+    const b = this.beat;
+    const n = b.says?.length ?? 0;
+    const dur = b.ticks * TICK;
+    const vo = VO_SECS[b.id];
+    const first = 0.5;
+    /* land the last cue on the line's last breath, never inside the
+       beat's own exit */
+    const last = Math.max(
+      first + 0.8,
+      Math.min(vo ? vo - 0.4 : dur * 0.66, dur - 1.4)
+    );
+    return [0, 1, 2, 3].map((i) =>
+      n <= 1 ? first : first + (Math.min(i, n - 1) * (last - first)) / (n - 1)
+    );
+  }
+
+  /** the lineup's current kanji; empty between lineups */
+  get stamp(): string {
+    const c = this.beat.cycle;
+    return c && this.cycleStep >= 0 ? (c[this.cycleStep]?.kanji ?? '') : '';
+  }
+
   private mount = modifier((el: HTMLElement) => {
     this.frameEl = el;
     this.pageEl = el.closest('.tf-page') as HTMLElement;
@@ -1209,6 +1389,7 @@ export default class TowerFilm extends Component<{
     if (!this.embed) {
       document.body.classList.add('tf-film');
     }
+    this.gate = !this.embed && this.from === 0;
     const onLoad = () => {
       const w = (frame as HTMLIFrameElement).contentWindow as unknown as {
         __film?: FilmApi;
@@ -1226,20 +1407,30 @@ export default class TowerFilm extends Component<{
       /* seat the lens where the film opens, so the first frame is the
          shot and not a swing towards it */
       this.snap(this.beats[0]!.cam);
-      this.applyBeat(this.beats[0]!, true);
-      this.booted = true;
-      this.lastTick = performance.now();
-      this.raf = requestAnimationFrame(this.frame);
+      /* behind the gate the scene stands ready and the door unlocks;
+         everything else waits for the viewer's own hand */
+      if (this.gate) {
+        this.ready = true;
+        return;
+      }
+      this.begin(false);
     };
     frame.addEventListener('load', onLoad);
-    /* a cached iframe can be complete before the listener is attached */
+    /* a cached iframe can be complete before the listener is attached —
+       but never boot from inside the mount modifier itself: this runs
+       during the render pass, and a `booted` flipped here renders the
+       score region in the SAME pass, where the rig is not an insertion
+       and the whole run resolves to nothing. A timeout puts the flip in
+       its own pass, which is what the load event gives the slow path. */
+    let bootTimer = 0;
     if (
       (frame as HTMLIFrameElement).contentDocument?.readyState === 'complete'
     ) {
-      onLoad();
+      bootTimer = window.setTimeout(onLoad, 0);
     }
     return () => {
       cancelAnimationFrame(this.raf);
+      window.clearTimeout(bootTimer);
       window.removeEventListener('keydown', this.key);
       frame.removeEventListener('load', onLoad);
       document.body.classList.remove('tf-film');
@@ -1251,9 +1442,6 @@ export default class TowerFilm extends Component<{
     this.lineEl = el.querySelector('line.tf-leader') as SVGLineElement;
     this.tetherEl = el.querySelector('line.tf-tether') as SVGLineElement;
     this.dotEl = el.querySelector('circle') as SVGCircleElement;
-    this.traceEls = [
-      ...el.querySelectorAll('polyline'),
-    ] as SVGPolylineElement[];
   });
 
   private dimEl = modifier((el: HTMLElement) => {
@@ -1301,7 +1489,10 @@ export default class TowerFilm extends Component<{
    * scene lives in another document.
    */
   private chase(dt: number) {
-    const w = 6.5;
+    /* softer than it was: the lens is an operator's hand, not a servo.
+       Lower stiffness filters the spline's residual sway before the
+       page's own chase filters it again. */
+    const w = 4.4;
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
       const g = k === 'ox' ? (this.goal.ox ?? 0) : this.goal[k];
       const m = k === 'ox' ? (this.mid.ox ?? 0) : this.mid[k];
@@ -1357,6 +1548,24 @@ export default class TowerFilm extends Component<{
 
     if (Array.isArray(beat.build)) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
+    }
+
+    /* the lineup's metronome: the beat divides itself evenly among its
+       towers and the last one holds the remainder, so the recap ends
+       standing on the film's own subject */
+    if (beat.cycle?.length) {
+      const step = Math.min(
+        beat.cycle.length - 1,
+        Math.floor(local * beat.cycle.length)
+      );
+      if (step !== this.cycleStep) {
+        this.cycleStep = step;
+        const c = beat.cycle[step]!;
+        if (film.styleIndex() !== c.style) {
+          film.style(c.style);
+        }
+        film.time(4.4);
+      }
     }
 
     /* the world layer fades with the beat rather than cutting with it */
@@ -1501,78 +1710,59 @@ export default class TowerFilm extends Component<{
     if (!rows.length) {
       return;
     }
-    /* ease the whole thing in so a cut does not start mid-drift */
-    const t = smooth(Math.min(1, local * 1.15));
+    /* ease in over the head of the beat, then KEEP MOVING: the old curve
+       saturated at half the beat and the block sat still for the rest,
+       which is exactly the pasted-on look the parallax exists to kill.
+       This one never stops — a slow push that lasts the whole shot. */
+    const t = smooth(Math.min(1, local * 1.6)) * (0.35 + 0.65 * local);
     /**
-     * A CLOSE-UP GETS ALMOST NONE OF THIS. Parallax on the type exists to
+     * A CLOSE-UP GETS LESS OF THIS. Parallax on the type exists to
      * stop a caption looking pasted onto a moving picture. On a 4× detail
      * shot the picture is barely moving and the caption is the largest
      * thing on screen, so the same amplitude stops reading as depth and
      * starts reading as drift. It has to scale with what the shot behind
      * it is actually doing.
      */
-    const amp = this.beat.mode === 'point' ? 0.28 : 1;
+    const amp = this.beat.mode === 'point' ? 0.35 : 1;
+    /* the last moments of the beat let go: the planes keep travelling
+       and fade under the swap, so an exit is an exit and not a vanish */
+    const out = local > 0.93 ? Math.max(0, (1 - local) / 0.07) : 1;
     for (const [i, el] of rows.entries()) {
       /* the glyph sits near the top of the block and should be the
-         NEAREST plane, so depth runs down the block rather than up it */
+         NEAREST plane, so depth runs down the block rather than up it —
+         and each plane travels at its OWN rate, slightly detuned, so the
+         stack reads as separate sheets of glass rather than one card */
       const depth = 1 - i / Math.max(1, rows.length - 1);
-      const dx = -14 * depth * t * amp;
-      const dy = -9 * depth * t * amp;
-      const sc = 1 + 0.035 * depth * t * amp;
+      const rate = 1 + 0.22 * Math.sin(i * 2.4);
+      /* the x-glide is SHARED: staggering it per row shifts every text
+         line's left edge differently, which the eye reads as broken
+         indentation, not depth. The planes separate in y and scale,
+         where the type's own alignment cannot be injured. */
+      const dx = -11 * t * amp;
+      const dy = -(5 + 13 * depth) * t * amp * rate;
+      const sc = 1 + 0.055 * depth * t * amp;
       el.style.transform = `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale(${sc.toFixed(4)})`;
+      el.style.opacity = out.toFixed(3);
     }
   }
 
   /**
-   * Project a world polyline into the frame and stroke it, drawing it on
-   * over the head of its beat. The dash pattern is the line's own measured
-   * length, so the draw-on is a real pen travelling the real path rather
-   * than a fade wearing a costume.
+   * THE TRACES LIVE IN THE SCENE NOW. They began as SVG projected over
+   * the frame — approximately right and one frame behind the lens on
+   * every move. As tubes in the page's own scene they are exact: they
+   * lie ON the eave because they are geometry at the eave's own
+   * coordinates, the building occludes them honestly, and the draw-on
+   * is the tube's index buffer revealed in path order. Each line in a
+   * set starts a moment after the one before it — a hand annotating,
+   * not a diagram switching on.
    */
   private traceShape(film: FilmApi, beat: Beat, local: number, dt: number) {
     const specs = beat.trace ?? [];
     let drew = 0;
-    const host = this.frameEl?.getBoundingClientRect();
-    const v = film.view();
-    for (const [i, el] of this.traceEls.entries()) {
-      const spec = specs[i];
-      if (!spec || !host) {
-        el.style.opacity = '0';
-        continue;
-      }
-      const sx = host.width / v.w;
-      const sy = host.height / v.h;
-      let pts = '';
-      let len = 0;
-      let px = 0;
-      let py = 0;
-      let on = false;
-      for (const [n, p] of spec.pts.entries()) {
-        const q = film.project(p[0], p[1], p[2]);
-        const x = q.x * sx;
-        const y = q.y * sy;
-        if (q.on) {
-          on = true;
-        }
-        if (n > 0) {
-          len += Math.hypot(x - px, y - py);
-        }
-        px = x;
-        py = y;
-        pts += `${x.toFixed(1)},${y.toFixed(1)} `;
-      }
-      if (!on) {
-        el.style.opacity = '0';
-        continue;
-      }
-      /* the beat's first fifth draws the line; after that it simply is */
-      const draw = Math.min(1, Math.max(0, (local - 0.06) / 0.16));
+    for (const [i] of specs.entries()) {
+      const draw = Math.min(1, Math.max(0, (local - 0.06 - i * 0.12) / 0.16));
       drew = Math.max(drew, draw);
-      el.setAttribute('points', pts.trim());
-      el.setAttribute('stroke-dasharray', String(len));
-      el.setAttribute('stroke-dashoffset', String(len * (1 - draw)));
-      el.setAttribute('stroke-width', spec.wide ? '3.4' : '2');
-      el.style.opacity = draw > 0 ? '1' : '0';
+      film.traceDraw(`t${i}`, draw);
     }
     /* the callout earns the dim too — a leader and a ring are annotation
        just as much as a traced eave is */
@@ -1602,9 +1792,11 @@ export default class TowerFilm extends Component<{
       }
       return;
     }
-    /* the climb takes the first fifth of the beat and overshoots once */
+    /* the climb takes the first fifth of the beat and SETTLES — barely
+       past its mark, once. The old spring bounced at the top like a
+       carnival bell, which no surveyor's mark has ever done. */
     const raw = Math.min(1, Math.max(0, (local - 0.04) / 0.2));
-    const c1 = 1.34;
+    const c1 = 0.45;
     const p = raw - 1;
     const rise = raw >= 1 ? 1 : 1 + (c1 + 1) * p * p * p + c1 * p * p;
     const y = m.to * rise;
@@ -1713,6 +1905,23 @@ export default class TowerFilm extends Component<{
       return;
     }
     this.beatAt = performance.now();
+    this.cycleStep = -1;
+    /* the traces are the beat's own; stand this beat's up unrevealed and
+       take the last beat's down */
+    for (let i = 0; i < 4; i++) {
+      film.clearTrace(`t${i}`);
+    }
+    /* the tube's thickness is a SCREEN quantity wearing world units: a
+       marker line should read the same weight in a wide shot as in a 4×
+       close-up, so the radius is sized against the shot's magnification */
+    const mag = (beat.cam.dolly + (beat.toCam?.dolly ?? beat.cam.dolly)) / 2;
+    beat.trace?.forEach((spec, i) => {
+      const r = Math.max(
+        0.03,
+        Math.min(0.2, (spec.wide ? 0.13 : 0.085) / mag)
+      );
+      film.trace(`t${i}`, { pts: spec.pts, r });
+    });
     if (beat.cut) {
       this.snap(beat.cam);
       /* a hard cut needs a piece of punctuation or it reads as a dropped
@@ -1770,11 +1979,13 @@ export default class TowerFilm extends Component<{
 
   private dispatch = (command: PerformCommand) => {
     if (command.action === 'lap') {
-      if (this.playing) {
-        this.lap += 1;
-        this.beatIndex = 0;
-        this.applyBeat(this.beats[0]!);
-      }
+      /* the last cue has run: hold the pose, settle the music a step,
+         and offer the card. Looping past your own ending is how a film
+         tells the viewer it never meant any of it. */
+      this.playing = false;
+      this.ended = true;
+      this.voice?.pause();
+      this.film?.duck(0.35);
       return;
     }
     if (command.action === 'beat') {
@@ -1788,6 +1999,12 @@ export default class TowerFilm extends Component<{
 
   private toggle = () => {
     this.playing = !this.playing;
+    /* a paused picture with a running voice is two films; hold both */
+    if (!this.playing) {
+      this.voice?.pause();
+    } else if (this.sound && this.voice?.src && !this.voice.ended) {
+      void this.voice.play().catch(() => this.film?.duck(1));
+    }
   };
 
   /**
@@ -1823,6 +2040,7 @@ export default class TowerFilm extends Component<{
   private cutTo(index: number) {
     this.from = index;
     this.beatIndex = 0;
+    this.ended = false;
     this.playing = true;
     this.lap += 1;
     this.applyBeat(BEATS[index]!, true);
@@ -1834,6 +2052,20 @@ export default class TowerFilm extends Component<{
 
   private key = (e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey) {
+      return;
+    }
+    /* at the door, one key opens it — with the sound the film was made
+       with, since a keypress is as much a gesture as a click */
+    if (this.gate) {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        this.begin(true);
+      }
+      return;
+    }
+    if (this.ended && (e.key === ' ' || e.key === 'Enter')) {
+      e.preventDefault();
+      this.replay();
       return;
     }
     if (e.key === 'ArrowRight') {
@@ -1871,6 +2103,12 @@ export default class TowerFilm extends Component<{
 
   private speak(beat: Beat) {
     if (!this.sound) {
+      return;
+    }
+    /* a beat with no line is a beat that WANTS the music: lift the duck
+       rather than asking the network for a file that was never recorded */
+    if (!beat.vo) {
+      this.film?.duck(1);
       return;
     }
     const el = (this.voice ??= new Audio());
@@ -1913,6 +2151,55 @@ export default class TowerFilm extends Component<{
   };
 
   private restart = () => {
+    this.cutTo(0);
+  };
+
+  /** through the gate — on the click the audio policy was waiting for */
+  private begin = (withSound: boolean) => {
+    if (!this.film || this.booted) {
+      return;
+    }
+    this.gate = false;
+    if (withSound) {
+      this.sound = true;
+      this.film.sound(true);
+    }
+    this.applyBeat(this.beats[0]!, true);
+    this.booted = true;
+    this.lastTick = performance.now();
+    this.raf = requestAnimationFrame(this.frame);
+    /**
+     * ONE MORE PASS, on purpose. A region's first render collects no
+     * score — `firstRender` compiles an empty tree — so the run only
+     * exists after a SECOND pass, and that pass has to be paid for by a
+     * tracked write somewhere. Every cut so far happened to buy one
+     * within a second (a cue firing, a cycle stepping); a cut whose head
+     * beat writes nothing — one quiet beat, deep-linked — never did, and
+     * the film stood at its first pose forever. Bumping the lap edits
+     * the sequence's name, which is a real edit the region must collect.
+     */
+    window.setTimeout(() => {
+      this.lap += 1;
+      this.rolling = true;
+    }, 0);
+  };
+
+  private beginSound = () => this.begin(true);
+  private beginMute = () => this.begin(false);
+
+  get gateWait(): boolean {
+    return !this.ready;
+  }
+
+  /** the whole film's running time, said the way a poster says it */
+  get runtime(): string {
+    const s = BEATS.reduce((n, b) => n + b.ticks, 0) * TICK;
+    return `${Math.floor(s / 60)} min ${s % 60 ? `${s % 60} s` : ''}`.trim();
+  }
+
+  /** back in from the end card */
+  private replay = () => {
+    this.ended = false;
     this.cutTo(0);
   };
 
@@ -2004,11 +2291,10 @@ export default class TowerFilm extends Component<{
         eave and the batter rather than near them; they draw themselves
         on at the head of a beat. Then the callout: a leader from the
         caption to a point on the building, and a ring on the point. }}
+        {{! the traces themselves live IN the scene now (see traceShape);
+        the glass keeps only what must connect DOM to world — the leader
+        from a caption, the mark's tether, the ring on a named point }}
         <svg class="tf-track" aria-hidden="true" {{this.trackEls}}>
-          <polyline class="tf-trace" points="" fill="none" />
-          <polyline class="tf-trace" points="" fill="none" />
-          <polyline class="tf-trace" points="" fill="none" />
-          <polyline class="tf-trace" points="" fill="none" />
           <line class="tf-leader" x1="0" y1="0" x2="0" y2="0" />
           <line class="tf-tether" x1="0" y1="0" x2="0" y2="0" />
           <circle cx="0" cy="0" r="7" />
@@ -2029,7 +2315,8 @@ export default class TowerFilm extends Component<{
             would move it, and the whole job of a ghost numeral is to sit
             perfectly still while everything in front of it does not. }}
             <span class="tf-ghost" aria-hidden="true">{{this.chapter.n}}</span>
-            {{#each (array this.beat) key="id" as |b|}}
+            {{#if this.rolling}}
+              {{#each (array this.beat) key="id" as |b|}}
               {{! EACH ROW IS A PLANE, and the nesting is load-bearing: the
               wrapper is the plane and the host's loop drifts it, the
               paragraph inside is the type and Motion delivers it. One
@@ -2059,14 +2346,16 @@ export default class TowerFilm extends Component<{
                     </div>
                   {{/if}}
                 {{/unless}}
-                <div class="tf-plane">
-                  <p class="tf-read" {{motion id="read" role="read"}}>
-                    <span class="tf-romaji">{{b.romaji}}</span>
-                    {{#if b.gloss}}
-                      <span class="tf-gloss">{{b.gloss}}</span>
-                    {{/if}}
-                  </p>
-                </div>
+                {{#if b.romaji}}
+                  <div class="tf-plane">
+                    <p class="tf-read" {{motion id="read" role="read"}}>
+                      <span class="tf-romaji">{{b.romaji}}</span>
+                      {{#if b.gloss}}
+                        <span class="tf-gloss">{{b.gloss}}</span>
+                      {{/if}}
+                    </p>
+                  </div>
+                {{/if}}
                 {{! KINETIC TYPE, not a paragraph. Each phrase is its own
                 sprite with its own role, because Choreo's text delivery
                 splits a sprite and ladders INSIDE it — a stagger across
@@ -2075,14 +2364,22 @@ export default class TowerFilm extends Component<{
                 cues, and a cue has a time. }}
                 {{#each b.says as |say index|}}
                   <div class="tf-plane">
+                    {{! the inner span is the line's BEHAVIOR: Motion owns
+                    the p (delivery), the wrapper owns the plane (drift),
+                    and this owns what the words themselves do — so a line
+                    about flaring can flare without three writers fighting
+                    over one transform. Styled per line, by address. }}
                     <p
                       class="tf-say"
                       {{motion id=(concat "say" index) role=(concat "s" index)}}
-                    >{{say}}</p>
+                    ><span
+                        class="tf-sayx sx-{{b.id}}-{{index}}"
+                      >{{say}}</span></p>
                   </div>
                 {{/each}}
               </div>
-            {{/each}}
+              {{/each}}
+            {{/if}}
 
             <n.Parallel>
               <n.Tween
@@ -2121,10 +2418,9 @@ export default class TowerFilm extends Component<{
                   "inset(-14% 0 -14% 0)"
                 }}
                 @y={{array 34 0}}
-                @scale={{array 1.06 1}}
                 @opacity={{array 0 1}}
                 @duration={{0.76}}
-                @ease={{array 0.2 1.06 0.3 1}}
+                @ease={{array 0.22 1 0.36 1}}
               />
               <n.Tween
                 @of={{n.inserted "read"}}
@@ -2135,12 +2431,13 @@ export default class TowerFilm extends Component<{
                 @duration={{0.52}}
                 @ease={{array 0.22 1 0.36 1}}
               />
-              {{! four slots, landing ACROSS the beat rather than together:
-              the film is narrated, so the type keeps pace with a voice
-              instead of arriving as a wall }}
+              {{! four slots, landing ACROSS the beat rather than together —
+              and paced against the measured read (see `sayAt`), so the
+              last cue lands as the voice finishes whether the line runs
+              four seconds or thirteen }}
               <n.Tween
                 @of={{n.inserted "s0"}}
-                @delay={{0.5}}
+                @delay={{get this.sayAt 0}}
                 @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @y={{array 16 0}}
                 @opacity={{array 0 1}}
@@ -2149,7 +2446,7 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "s1"}}
-                @delay={{2.2}}
+                @delay={{get this.sayAt 1}}
                 @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @y={{array 16 0}}
                 @opacity={{array 0 1}}
@@ -2158,7 +2455,7 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "s2"}}
-                @delay={{3.9}}
+                @delay={{get this.sayAt 2}}
                 @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @y={{array 16 0}}
                 @opacity={{array 0 1}}
@@ -2167,7 +2464,7 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "s3"}}
-                @delay={{5.6}}
+                @delay={{get this.sayAt 3}}
                 @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @y={{array 16 0}}
                 @opacity={{array 0 1}}
@@ -2189,11 +2486,21 @@ export default class TowerFilm extends Component<{
             </n.Parallel>
           </Choreo>
 
+          {{! THE STAMP. The lineup's kanji, hit onto the frame with each
+          tower — a new element per step so the strike replays from its
+          own first frame, exactly the wipe's trick. It is a hanko, not a
+          title: it lands hard, settles at once, and is simply replaced. }}
+          {{#if this.stamp}}
+            {{#each (array this.cycleStep) key="@identity"}}
+              <p class="tf-stamp" aria-hidden="true">{{this.stamp}}</p>
+            {{/each}}
+          {{/if}}
+
           {{! THE PHOTOGRAPH. Cut in on the side the type is not using, and
           wiped rather than faded — a fade says "meanwhile", a wipe says
           "and here it is". It carries its own credit, because a museum
           caption without one is a museum caption nobody can check. }}
-          {{#if this.hasPhoto}}
+          {{#if (if this.rolling this.hasPhoto false)}}
             <Choreo class="tf-photo" as |g|>
               {{#each (array this.beat) key="id" as |b|}}
                 <figure {{motion id="photo" role="shot"}}>
@@ -2256,7 +2563,7 @@ export default class TowerFilm extends Component<{
                   @through={{this.path}}
                   @duration={{this.filmSeconds}}
                   @ease="linear"
-                  @tension={{0.55}}
+                  @tension={{0.26}}
                 />
                 {{#each this.cues as |cue|}}
                   <c.Perform
@@ -2269,6 +2576,72 @@ export default class TowerFilm extends Component<{
                 <c.Perform @action="lap" />
               </c.Sequence>
             {{/if}}
+          </Choreo>
+        {{/if}}
+
+        {{! THE GATE. The film is narrated, so the front door asks — and
+        the click that answers is the same gesture autoplay policy wants.
+        The scene stands behind it, already seated on the opening frame. }}
+        {{#if this.gate}}
+          <div class="tf-gate">
+            <div class="tf-gate-in">
+              <p class="tf-gate-k">天守</p>
+              <p class="tf-gate-t">TOWERS</p>
+              <p class="tf-gate-s">A construction study · {{this.runtime}}</p>
+              <div class="tf-gate-row">
+                <button
+                  type="button"
+                  class="tf-go"
+                  disabled={{this.gateWait}}
+                  {{on "click" this.beginSound}}
+                >▶ Begin — with sound</button>
+                <button
+                  type="button"
+                  class="tf-go is-quiet"
+                  disabled={{this.gateWait}}
+                  {{on "click" this.beginMute}}
+                >begin muted</button>
+              </div>
+            </div>
+          </div>
+        {{/if}}
+
+        {{! THE END CARD. It arrives a moment after the last line has
+        settled, over the held final frame — the film does not loop past
+        its own ending; watching again is the viewer's choice. }}
+        {{#if this.ended}}
+          <Choreo class="tf-end" as |m|>
+            <div class="tf-end-in" {{motion id="end" role="card"}}>
+              <p class="tf-end-k">終</p>
+              <p class="tf-end-t">TOWERS</p>
+              <p class="tf-end-s">A construction study</p>
+              <div class="tf-gate-row">
+                <button
+                  type="button"
+                  class="tf-go"
+                  {{on "click" this.replay}}
+                >↺ Watch again</button>
+                <button
+                  type="button"
+                  class="tf-go is-quiet"
+                  {{on "click" this.toc}}
+                >☰ Chapters</button>
+              </div>
+            </div>
+            <m.Tween
+              @of={{m.inserted "card"}}
+              @delay={{0.7}}
+              @opacity={{array 0 1}}
+              @y={{array 18 0}}
+              @duration={{0.9}}
+              @ease={{array 0.22 1 0.36 1}}
+            />
+            <m.Tween
+              @of={{m.removed "card"}}
+              @opacity={{array 1 0}}
+              @duration={{0.2}}
+              @ease="easeIn"
+            />
           </Choreo>
         {{/if}}
       </div>
@@ -2319,7 +2692,7 @@ export default class TowerFilm extends Component<{
           </Choreo>
         {{/if}}
 
-        <div class="tf-controls">
+        <div class="tf-controls {{if this.gate 'is-away'}}">
           <button
             type="button"
             class="tf-btn tf-icon"
@@ -2477,7 +2850,7 @@ export default class TowerFilm extends Component<{
          DETAIL is rich and close; COMPARISON is a museum plate, flat and
          even, because a comparison that flatters one subject is not one. */
       .is-grade-amber {
-        --tf-lut: saturate(1.06) contrast(1.02) brightness(1.02);
+        --tf-lut: saturate(1.06) contrast(1.02) brightness(1.08);
         --tf-warm: #ffbe6a;
         --tf-cool: #2c4a6b;
         --tf-grade-a: 0.5;
@@ -2485,7 +2858,7 @@ export default class TowerFilm extends Component<{
       }
 
       .is-grade-iron {
-        --tf-lut: saturate(0.58) contrast(1.2) brightness(0.9) sepia(0.14);
+        --tf-lut: saturate(0.58) contrast(1.2) brightness(0.97) sepia(0.14);
         --tf-warm: #d8c39a;
         --tf-cool: #1d2f45;
         --tf-grade-a: 0.78;
@@ -2500,7 +2873,7 @@ export default class TowerFilm extends Component<{
          chapters that are deliberately heavier. Contrast between
          chapters is a bigger effect than contrast inside one. */
       .is-grade-chalk {
-        --tf-lut: saturate(0.9) contrast(1.05) brightness(1.22);
+        --tf-lut: saturate(0.9) contrast(1.05) brightness(1.27);
         --tf-warm: #fffdf4;
         --tf-cool: #6f92a6;
         --tf-grade-a: 0.3;
@@ -2508,7 +2881,7 @@ export default class TowerFilm extends Component<{
       }
 
       .is-grade-ink {
-        --tf-lut: saturate(1.16) contrast(1.18) brightness(0.93);
+        --tf-lut: saturate(1.16) contrast(1.16) brightness(1.0);
         --tf-warm: #ffab52;
         --tf-cool: #17222f;
         --tf-grade-a: 0.7;
@@ -2516,7 +2889,7 @@ export default class TowerFilm extends Component<{
       }
 
       .is-grade-plate {
-        --tf-lut: saturate(0.94) contrast(1.01) brightness(1.03);
+        --tf-lut: saturate(0.94) contrast(1.01) brightness(1.09);
         --tf-warm: #f0e2c4;
         --tf-cool: #55564a;
         --tf-grade-a: 0.28;
@@ -2635,25 +3008,15 @@ export default class TowerFilm extends Component<{
         z-index: 2;
       }
 
-      /* the marker glows, and the glow is doing real work: a 2px line laid
-         over moss competes with the moss at exactly its own frequency, and
-         a soft bloom around it gives the eye a low-frequency edge to catch
-         first. Two shadows rather than one — a tight hot core and a wide
-         faint halo — because a single wide blur reads as a mistake and a
-         single tight one is invisible at this scale. */
-      .tf-trace,
+      /* the marker glows, and the glow is doing real work: a thin line
+         over moss competes with the moss at exactly its own frequency,
+         and a soft bloom gives the eye a low-frequency edge to catch
+         first. (The traces on the building carry their own glow shell in
+         the scene now; this dresses only what is still on the glass.) */
       .tf-leader,
       .tf-track circle {
         filter: drop-shadow(0 0 3px rgba(255, 36, 18, 0.95))
           drop-shadow(0 0 11px rgba(255, 60, 20, 0.55));
-      }
-
-      .tf-trace {
-        stroke: var(--tf-mark);
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: 0;
-        transition: opacity 260ms ease;
       }
 
       .tf-tether {
@@ -2801,11 +3164,82 @@ export default class TowerFilm extends Component<{
         font-weight: 400;
         line-height: 1.24;
         color: var(--tf-ink);
-        max-width: 21ch;
+        /* a cue is a phrase: wide enough that most set on ONE line, and
+           balanced when they must break, so a wrap is an even couplet
+           and never a widowed word */
+        max-width: 26ch;
+        text-wrap: balance;
       }
 
       .tf-say:last-child {
         margin-bottom: 0;
+      }
+
+      /* ---- lines that DO what they SAY ------------------------------ *
+         Behavior animations on the inner span, addressed per line. They
+         run the length of the beat, so whenever the delivery reveals a
+         line it is already mid-behavior — never waiting, never done. */
+      .tf-sayx {
+        display: inline-block;
+      }
+
+      /* "Vertical at the top" — dead plumb: a rigid drop, no ease-out
+         wobble, arriving like a plumb line snapping taut */
+      .sx-ishi2-0 {
+        animation: tf-plumb 7s cubic-bezier(0.6, 0, 0.1, 1) both;
+      }
+
+      @keyframes tf-plumb {
+        0% {
+          transform: translateY(-16px) scaleY(1.18);
+        }
+
+        100% {
+          transform: translateY(0) scaleY(1);
+        }
+      }
+
+      /* "Flaring at the foot" — the line itself flares, tracking wide
+         from its left foot for the whole shot, the batter's own curve */
+      .sx-ishi2-1 {
+        transform-origin: 0 100%;
+        animation: tf-flare 11s linear both;
+      }
+
+      @keyframes tf-flare {
+        0% {
+          letter-spacing: 0;
+        }
+
+        100% {
+          letter-spacing: 0.13em;
+        }
+      }
+
+      /* "The shock runs into the hill" — an impact that lands, digs a
+         hair past its mark, and settles */
+      .sx-ishi2-2 {
+        animation: tf-sink 8s cubic-bezier(0.34, 1.3, 0.36, 1) both;
+      }
+
+      @keyframes tf-sink {
+        0% {
+          transform: translateY(-14px);
+        }
+
+        34% {
+          transform: translateY(2px);
+        }
+
+        100% {
+          transform: translateY(0);
+        }
+      }
+
+      /* "And that weight is what steadies it" — the kawara line carries
+         mass: it settles downward once, heavily, and does not move again */
+      .sx-kawara-2 {
+        animation: tf-sink 9s cubic-bezier(0.5, 1.2, 0.4, 1) both;
       }
 
       /* the four ways a beat is set. A title is ranged right against the
@@ -3199,6 +3633,183 @@ export default class TowerFilm extends Component<{
 
       .is-embed .tf-controls {
         display: none;
+      }
+
+      /* the transport waits outside while the front door is open; it
+         keeps its height so the frame does not reflow when it returns */
+      .tf-controls.is-away {
+        visibility: hidden;
+      }
+
+      /* a clear beat owns nothing on the glass, the numeral included */
+      .tf-clear .tf-ghost {
+        display: none;
+      }
+
+      /* ---- the gate --------------------------------------------------- */
+      /* the card stands BESIDE the tower, never over it: the boot pose
+         seats the building left of centre, so the door takes the right
+         third — the same real estate the title beat's type owns — and
+         its wash leans that way too instead of dimming the whole frame */
+      .tf-gate {
+        position: absolute;
+        inset: 0;
+        z-index: 7;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        background: linear-gradient(
+          100deg,
+          rgba(28, 22, 10, 0.08) 32%,
+          rgba(28, 22, 10, 0.62) 74%
+        );
+        backdrop-filter: blur(1px);
+      }
+
+      .tf-gate-in {
+        text-align: center;
+        font-family: var(--tf-ui);
+        color: #f7f0e0;
+        margin-right: clamp(24px, 8vw, 140px);
+      }
+
+      .tf-gate-k {
+        margin: 0;
+        font-family: var(--tf-display);
+        font-size: min(17vh, 15vw);
+        line-height: 1.04;
+        text-shadow: 0 6px 60px rgba(20, 14, 4, 0.5);
+      }
+
+      .tf-gate-t {
+        margin: 10px 0 0;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 0.5em;
+        text-indent: 0.5em;
+      }
+
+      .tf-gate-s {
+        margin: 6px 0 30px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.72);
+      }
+
+      .tf-gate-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+      }
+
+      .tf-go {
+        appearance: none;
+        font: inherit;
+        font-family: var(--tf-ui);
+        font-size: 13px;
+        letter-spacing: 0.12em;
+        cursor: pointer;
+        padding: 12px 26px;
+        border-radius: 999px;
+        border: 1px solid #f2e9d2;
+        background: #f2e9d2;
+        color: #2e2515;
+      }
+
+      .tf-go:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      .tf-go.is-quiet {
+        background: transparent;
+        color: #f2e9d2;
+        border-color: rgba(242, 233, 210, 0.5);
+      }
+
+      .tf-go.is-quiet:hover {
+        border-color: #f2e9d2;
+      }
+
+      /* ---- the end card ---------------------------------------------- */
+      .tf-end {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(28, 22, 10, 0.5);
+        backdrop-filter: blur(2px);
+      }
+
+      .tf-end-in {
+        text-align: center;
+        font-family: var(--tf-ui);
+        color: #f7f0e0;
+      }
+
+      .tf-end-k {
+        margin: 0;
+        font-family: var(--tf-display);
+        font-size: min(18vh, 19vw);
+        line-height: 1;
+        text-shadow: 0 6px 60px rgba(20, 14, 4, 0.55);
+      }
+
+      .tf-end-t {
+        margin: 12px 0 0;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.5em;
+        text-indent: 0.5em;
+      }
+
+      .tf-end-s {
+        margin: 6px 0 26px;
+        font-size: 12px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.7);
+      }
+
+      /* ---- the stamp -------------------------------------------------- *
+         A hanko, not a title: it strikes, settles at once, and is simply
+         replaced by the next. Seal-red on purpose — it shares the
+         annotation's ink because it IS an annotation, pressed over each
+         tower as the lineup calls the roll. */
+      .tf-stamp {
+        position: absolute;
+        inset: 0;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        pointer-events: none;
+        font-family: var(--tf-display);
+        font-weight: 700;
+        font-size: min(24vh, 16vw);
+        letter-spacing: 0.04em;
+        color: var(--tf-mark);
+        mix-blend-mode: multiply;
+        animation: tf-stamp 700ms cubic-bezier(0.16, 1.3, 0.3, 1) both;
+      }
+
+      @keyframes tf-stamp {
+        0% {
+          opacity: 0;
+          transform: rotate(-2.5deg) scale(1.5);
+        }
+
+        16% {
+          opacity: 0.92;
+          transform: rotate(-2.5deg) scale(0.99);
+        }
+
+        100% {
+          opacity: 0.88;
+          transform: rotate(-2.5deg) scale(1);
+        }
       }
 
       /* the app's own chrome, gone: this route is a frame, not a page */
