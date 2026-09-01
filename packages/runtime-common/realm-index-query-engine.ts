@@ -1002,8 +1002,9 @@ export class RealmIndexQueryEngine {
     searchURL: string;
     // How many instances the query matches across every realm it targets,
     // independent of how many `results` the bounded page carries. `undefined`
-    // when no realm reported one, which is the only state that can't
-    // distinguish a complete set from a truncated one.
+    // means the count is unknown — no realm reported one, or one of them
+    // failed and took its share of the count with it. A consumer must not read
+    // that as zero.
     total: number | undefined;
   }> {
     let fieldPath = fieldName.includes('.')
@@ -1136,12 +1137,23 @@ export class RealmIndexQueryEngine {
       results: aggregated,
       errors,
       searchURL,
-      // Cross-realm dedup drops an id two realms both reported, and a realm
-      // that errored contributed rows to neither count. Either can leave the
-      // summed total below what survived, and a total under the row count would
-      // read as "fewer matches than you were handed" — so the rows the field
-      // actually holds are the floor.
-      total: total == null ? undefined : Math.max(total, aggregated.length),
+      // A realm that failed reported no count, and how many instances it holds
+      // is exactly what the failure withheld — so the realms that did answer
+      // sum to a number that is not the match count and cannot be known to be
+      // one. Publishing it would hand a rollup a confident figure over an
+      // incomplete set, which is the failure this total exists to prevent
+      // rather than a smaller version of it. Unknown is the honest answer, and
+      // a consumer tells it from a real count because it is absent, not zero.
+      //
+      // Where every realm answered, the only remaining gap is cross-realm
+      // dedup: an id two realms both reported is counted twice and kept once,
+      // which can put the sum below the rows that survived. A total under the
+      // row count would read as "fewer matches than you were handed", so the
+      // rows the field actually holds are the floor.
+      total:
+        errors.length > 0 || total == null
+          ? undefined
+          : Math.max(total, aggregated.length),
     };
   }
 
