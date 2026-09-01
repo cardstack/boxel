@@ -186,9 +186,25 @@ function contextFor(region: Choreo): ChoreoContext {
 
 interface Signature {
   Args: {
+    /**
+     * WHERE THE SHOT STANDS BEFORE THE FIRST RUN. A `@through` spline
+     * prepends the pose in force, and with no prior run that pose is the
+     * default rig — dolly 1, yaw 0 — somewhere no film ever authored. A
+     * host that hard-opens on a known pose (it seated its own scene there
+     * before the score existed) declares it here, and the first segment
+     * starts from the shot instead of travelling to it. Read once, before
+     * the first run; after that the pose in force is the run's own.
+     */
+    camera3dFrom?: Camera3DState;
     /** outline the region and its participants; console.table each run */
     debug?: boolean;
     id?: string;
+    /**
+     * A `c.Camera3D` cue moved the shot. Called every frame it changes —
+     * scrubs included, since the pose is sampled from the score — with a
+     * pose the host applies to whatever it is drawing with.
+     */
+    onCamera3D?: (state: Camera3DState) => void;
     /**
      * The dispatcher for `<c.Perform>` commands (§C4). Called once per
      * command as the run's clock comes to include it — during forward
@@ -197,12 +213,6 @@ interface Signature {
      * Dispatches are deferred past the render pass, so a command may
      * mutate tracked state freely.
      */
-    /**
-     * A `c.Camera3D` cue moved the shot. Called every frame it changes —
-     * scrubs included, since the pose is sampled from the score — with a
-     * pose the host applies to whatever it is drawing with.
-     */
-    onCamera3D?: (state: Camera3DState) => void;
     onPerform?: (command: PerformCommand) => void;
     /**
      * The backward half of the fold: the clock moved to before a command
@@ -328,14 +338,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * that read it would be invalidated by the very landing it causes, and
    * the region would render forever.
    */
-  /** where a c.Camera3D left the shot, carried between runs */
-  private resting3d: Camera3DState = {
-    dolly: 1,
-    pitch: 0,
-    x: 0,
-    y: 0,
-    yaw: 0,
-  };
+  /** where a c.Camera3D left the shot, carried between runs — seeded by
+   *  `@camera3dFrom` when the host knows its own opening pose */
+  private resting3d: Camera3DState = this.args.camera3dFrom
+    ? { ...this.args.camera3dFrom }
+    : {
+        dolly: 1,
+        pitch: 0,
+        x: 0,
+        y: 0,
+        yaw: 0,
+      };
   private restingCamera: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */

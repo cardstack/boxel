@@ -1280,6 +1280,23 @@ export default class TowerFilm extends Component<{
     return `film-${this.lap}`;
   }
 
+  /**
+   * The pose the score OPENS on, declared to the region — without it the
+   * first spline segment travels in from the library's default rig, a
+   * two-second bounce every cold boot wore before its first real frame.
+   */
+  get openPose() {
+    const c = this.beats[0]!.cam;
+    return {
+      dolly: c.dolly,
+      look: { x: 0, y: c.lookY, z: 0 },
+      pitch: c.pitch,
+      x: c.ox ?? 0,
+      y: 0,
+      yaw: c.yaw,
+    };
+  }
+
   get filmSeconds(): number {
     return this.beats.reduce((n, b) => n + b.ticks, 0) * TICK;
   }
@@ -1428,6 +1445,12 @@ export default class TowerFilm extends Component<{
         return;
       }
       this.film = w.__film;
+      /* a RUNNING film needs nothing from the door. This path re-fires
+         whenever the modifier re-installs (it reads tracked state), and
+         re-seating here yanked the lens back to the cut's head. */
+      if (this.booted) {
+        return;
+      }
       try {
         /* the page opens on an empty site — its own clock is at zero —
            and most of this film is about a finished building. Standing it
@@ -1474,6 +1497,27 @@ export default class TowerFilm extends Component<{
       (frame as HTMLIFrameElement).contentDocument?.readyState === 'complete'
     ) {
       bootTimer = window.setTimeout(onLoad, 0);
+    }
+    /**
+     * THE LOOP COMES BACK. This modifier reads tracked state (`from`,
+     * `booted`), so it re-installs on every re-cut and on the boot
+     * itself — and its own cleanup below cancels the frame loop each
+     * time. The old code got away with it because the load path
+     * re-booted the world wholesale; now that a running film is left
+     * alone, the re-install has to hand back the one thing it took.
+     */
+    if (this.booted) {
+      /* the cleanup nulled the bridge as well; take it straight back
+         rather than waiting a tick for the load path */
+      const w = (frame as HTMLIFrameElement).contentWindow as unknown as {
+        __film?: FilmApi;
+      } | null;
+      if (w?.__film) {
+        this.film = w.__film;
+      }
+      cancelAnimationFrame(this.raf);
+      this.lastTick = performance.now();
+      this.raf = requestAnimationFrame(this.frame);
     }
     return () => {
       cancelAnimationFrame(this.raf);
@@ -2638,7 +2682,12 @@ export default class TowerFilm extends Component<{
         behind the boot flag the rig is a genuine insertion, which is also
         the moment the film should begin. }}
         {{#if this.booted}}
-          <Choreo @onCamera3D={{this.shot}} @onPerform={{this.dispatch}} as |c|>
+          <Choreo
+            @onCamera3D={{this.shot}}
+            @onPerform={{this.dispatch}}
+            @camera3dFrom={{this.openPose}}
+            as |c|
+          >
             <i class="tf-rig" {{motion id="rig"}} aria-hidden="true"></i>
             {{#if this.playing}}
               <c.Sequence @name={{this.filmName}}>
@@ -3749,6 +3798,10 @@ export default class TowerFilm extends Component<{
         border-radius: 999px;
         font: inherit;
         cursor: pointer;
+        /* one line, one height — a pill that wraps its label reads as a
+           different control from its neighbours */
+        white-space: nowrap;
+        flex: none;
       }
 
       .tf-icon {
