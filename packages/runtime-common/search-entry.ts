@@ -953,10 +953,12 @@ export function searchEntryWireQueryFromQuery(
 
 export function combineSearchEntryResults(
   docs: EntryCollectionDocument[],
-  // How many realms the search fanned out to. A realm that fails is dropped
-  // from `docs` rather than raising, so fewer docs than realms is the only
-  // evidence here that the merge is missing one — and the summed total then
-  // counts only the realms that answered.
+  // How many realms the request asked for. A realm goes missing two ways and
+  // neither raises: it never resolves to an instance (the peer is down, the
+  // mount failed), or it resolves and its search rejects. Both leave `docs`
+  // one short, which is the only evidence here that a realm is missing — and
+  // the summed total then counts only the realms that answered. Count the
+  // asked-for realms, not the resolved ones, so the first way is caught too.
   attemptedRealmCount?: number,
 ): EntryCollectionDocument {
   let combined: EntryCollectionDocument = {
@@ -1029,10 +1031,12 @@ export async function searchEntryRealms(
     (label, queryLabel) =>
       `searchEntryRealms realm search failed: ${label} query=${queryLabel}`,
   );
-  let combined = combineSearchEntryResults(
-    docs,
-    realms.filter((realm) => Boolean(realm)).length,
-  );
+  // `realms` is positional with the requested realm list: an entry is nullish
+  // exactly when that realm could not be resolved to an instance. Passing the
+  // full length therefore asks the merge to account for those too, rather than
+  // letting a realm that never got as far as a search drop out of the tally
+  // that decides whether the total is short.
+  let combined = combineSearchEntryResults(docs, realms.length);
   if (timings) {
     timings.incr('results', combined.data?.length ?? 0);
   }
