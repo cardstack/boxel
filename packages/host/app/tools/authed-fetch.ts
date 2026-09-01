@@ -30,18 +30,20 @@ export default class AuthedFetchTool extends HostBaseTool<
     if (input.acceptHeader) {
       headers['Accept'] = input.acceptHeader;
     }
+    if (input.contentType) {
+      headers['Content-Type'] = input.contentType;
+    }
     const response = await this.network.authedFetch(input.url, {
       method: input.method ?? 'GET',
       headers,
+      body: input.requestBody || undefined,
     });
     let body: Record<string, any> = {};
-    if (response.ok) {
-      let text = await response.text();
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = { rawText: text };
-      }
+    let text = await response.text();
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text ? { rawText: text } : {};
     }
     return new AuthedFetchResult({
       ok: response.ok,

@@ -1,5 +1,24 @@
 import { query, param, type DBAdapter, type Expression } from './index.ts';
 
+const realmViewColumnCache = new WeakMap<DBAdapter, Promise<boolean>>();
+
+function hasRealmViewColumn(db: DBAdapter): Promise<boolean> {
+  let cached = realmViewColumnCache.get(db);
+  if (!cached) {
+    cached = db
+      .getColumnNames('realm_file_meta')
+      .then((columns) => columns.includes('realm_view'));
+    realmViewColumnCache.set(db, cached);
+  }
+  return cached;
+}
+
+async function fileMetaConflictTarget(db: DBAdapter): Promise<string> {
+  return (await hasRealmViewColumn(db))
+    ? '(realm_url, realm_view, file_path)'
+    : '(realm_url, file_path)';
+}
+
 // Returns created_at (epoch seconds) or undefined if not found
 export async function getCreatedTime(
   db: DBAdapter,
@@ -137,6 +156,7 @@ export async function ensureFileCreatedAt(
 
   // Insert and re-read
   let now = Math.floor(Date.now() / 1000);
+  let conflictTarget = await fileMetaConflictTarget(db);
   await query(db, [
     'INSERT INTO realm_file_meta (realm_url, file_path, created_at) VALUES',
     '(',
@@ -146,7 +166,7 @@ export async function ensureFileCreatedAt(
     ',',
     param(now),
     ')',
-    'ON CONFLICT (realm_url, file_path) DO NOTHING',
+    `ON CONFLICT ${conflictTarget} DO NOTHING`,
   ]);
 
   let created = await getCreatedTime(db, realmURL, localPath);
@@ -168,6 +188,7 @@ export async function persistFileMeta(
   if (!db || rows.length === 0) return createdMap;
 
   // Insert rows for all paths; do not overwrite existing ones
+  let conflictTarget = await fileMetaConflictTarget(db);
   let expr: Expression = [
     'INSERT INTO realm_file_meta (realm_url, file_path, created_at, content_hash, content_size) VALUES',
   ];
@@ -191,7 +212,7 @@ export async function persistFileMeta(
   // The ON CONFLICT clause uses COALESCE to preserve existing values when the new value is null.
   // This is correct behavior for the case where file content hasn't changed.
   expr.push(
-    'ON CONFLICT (realm_url, file_path) DO UPDATE SET content_hash =',
+    `ON CONFLICT ${conflictTarget} DO UPDATE SET content_hash =`,
     'COALESCE(EXCLUDED.content_hash, realm_file_meta.content_hash)',
     ', content_size =',
     'COALESCE(EXCLUDED.content_size, realm_file_meta.content_size)',

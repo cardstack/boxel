@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "patient:margaret-okonkwo",
+      "displayName": "Margaret Okonkwo",
+      "jobTitle": "Patient",
+      "principalType": "patient",
+      "department": "",
+      "cardInfo": {
+        "name": "Margaret Okonkwo",
+        "summary": "Patient self-access principal",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

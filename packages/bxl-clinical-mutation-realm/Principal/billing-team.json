@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:patient-billing",
+      "displayName": "Patient billing",
+      "jobTitle": "Billing userset",
+      "principalType": "team",
+      "department": "Revenue cycle",
+      "cardInfo": {
+        "name": "Patient billing",
+        "summary": "Billing access group",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./owen-grant" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "family:arjun-ramaswamy",
+      "displayName": "Arjun Ramaswamy",
+      "jobTitle": "Approved family caregiver",
+      "principalType": "family",
+      "department": "Family access",
+      "cardInfo": {
+        "name": "Arjun Ramaswamy",
+        "summary": "Approved family member for Priya Ramaswamy",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

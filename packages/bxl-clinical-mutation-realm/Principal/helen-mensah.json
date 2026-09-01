@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "family:helen-mensah",
+      "displayName": "Helen Mensah",
+      "jobTitle": "Designated healthcare proxy",
+      "principalType": "family",
+      "department": "Patient-authorized contact",
+      "cardInfo": {
+        "name": "Helen Mensah",
+        "summary": "Margaret Okonkwo's longtime friend and designated healthcare proxy",
+        "notes": "Synthetic person.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/night-shift"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../principal",
+        "name": "Principal"
+      }
+    }
+  }
+}

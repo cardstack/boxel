@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "facilityId": "hospital-facility:northstar",
+      "name": "Northstar Medical Center",
+      "campus": "Harbor Campus",
+      "switchboard": "+1 212 555 0140",
+      "cardInfo": {
+        "name": "Northstar Medical Center",
+        "summary": "Parent facility resource for operational-context inheritance.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": {
+      "adoptsFrom": { "module": "../facility", "name": "HospitalFacility" }
+    }
+  }
+}

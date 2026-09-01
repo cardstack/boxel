@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:clinical-pharmacy",
+      "displayName": "Clinical pharmacy",
+      "jobTitle": "Pharmacy userset",
+      "principalType": "team",
+      "department": "Pharmacy",
+      "cardInfo": {
+        "name": "Clinical pharmacy",
+        "summary": "Medication access group",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./elena-ruiz" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -395,8 +395,10 @@ export class IndexRunner {
     current: IndexRunner,
     {
       changes,
+      invalidationMode,
     }: {
       changes: { url: URL; operation: 'update' | 'delete' }[];
+      invalidationMode?: 'direct' | 'recursive';
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
@@ -468,7 +470,11 @@ export class IndexRunner {
     // prerender-server affinity rather than leaking them.
     try {
       try {
-        await current.batch.invalidate(urls);
+        if (invalidationMode === 'direct') {
+          await current.batch.invalidateDirect(urls);
+        } else {
+          await current.batch.invalidate(urls);
+        }
         discoverMs = Date.now() - discoverStart;
         current.#notifyInvalidationsReady(
           current.batch.invalidations,

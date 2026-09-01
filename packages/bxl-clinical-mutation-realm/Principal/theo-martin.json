@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:theo-martin",
+      "displayName": "Dr. Theo Martin",
+      "jobTitle": "Emergency physician",
+      "principalType": "person",
+      "department": "Emergency medicine",
+      "cardInfo": {
+        "name": "Dr. Theo Martin",
+        "summary": "Break-glass emergency clinician",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

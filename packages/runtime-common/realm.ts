@@ -130,6 +130,7 @@ import {
   codeRefFromInternalKey,
   codeRefWithAbsoluteIdentifier,
   userInitiatedPriority,
+  interactiveDependentPriority,
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
@@ -242,7 +243,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
-import { userExists } from './db-queries/user-queries.ts';
+import { getOrCreateUser } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -360,6 +361,25 @@ const CACHE_MISS_VALUE = 'miss';
 // just delay the fallthrough on missed NOTIFY, smaller budgets risk
 // a second transpile before the winner finishes.
 const MODULE_TRANSPILE_CACHE_TABLE = 'module_transpile_cache';
+const transpileCacheRealmViewColumnCache = new WeakMap<
+  DBAdapter,
+  Promise<boolean>
+>();
+
+function transpileCacheConflictTarget(db: DBAdapter): Promise<string> {
+  let cached = transpileCacheRealmViewColumnCache.get(db);
+  if (!cached) {
+    cached = db
+      .getColumnNames(MODULE_TRANSPILE_CACHE_TABLE)
+      .then((columns) => columns.includes('realm_view'));
+    transpileCacheRealmViewColumnCache.set(db, cached);
+  }
+  return cached.then((hasRealmView) =>
+    hasRealmView
+      ? '(realm_url, realm_view, canonical_path)'
+      : '(realm_url, canonical_path)',
+  );
+}
 const COALESCE_NOTIFY_WAIT_MS = 180_000;
 // `localPath`s (no leading slash) exempt from the archived-realm seal: the
 // realm's public operational endpoints, which must keep working while a realm
@@ -769,19 +789,15 @@ export interface FileWriteResult extends AdapterWriteResult {
 export interface WriteOptions {
   clientRequestId?: string | null;
   serializeFile?: boolean | null;
-  // When false, the write returns as soon as the source bytes are durable;
-  // the *final* index flush kicks off in the background. Callers that need
-  // to know when indexing has settled can `await realm.incrementalIndexing()`.
-  // Defaults to true (preserve the synchronous-indexing semantic existing
-  // callers depend on).
+  // Every write waits for its explicitly changed files to be indexed. When
+  // true, also wait for the recursive dependent invalidation job. The default
+  // keeps dependents asynchronous so interactive writes become visible first.
   //
   // Note: in a mixed-batch `writeMany` call where a module is followed by
   // an instance, the *intermediate* index flush that fileSerialization
   // depends on is still awaited inline regardless of this flag — without
   // it, the next instance's serialization would fail. This flag governs
-  // only the final indexing await. The first concrete caller is the per-
-  // file `+source` POST handler, which writes a single file at a time, so
-  // the intermediate-flush path is not exercised in practice.
+  // only the recursive dependent indexing await.
   waitForIndex?: boolean | null;
 }
 
@@ -1244,6 +1260,11 @@ export class Realm {
         this.handleAtomicOperations.bind(this),
       )
       .post(
+        '/_mutate',
+        SupportedMimeType.CardJson,
+        this.mutateCardInstance.bind(this),
+      )
+      .post(
         '/_cancel-indexing-job',
         SupportedMimeType.JSON,
         this.cancelIndexingJob.bind(this),
@@ -1329,11 +1350,11 @@ export class Realm {
 
     if (!sessionRoom) {
       await this.#matrixClient.login();
-      let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
-      if (!userExistsInDB) {
-        // TODO: should we create it if it doesn't exist?
-        return undefined;
-      }
+      // A realm-specific /_session can be the first authenticated request in
+      // a fresh database. Create the user row here just like the server-level
+      // session endpoint does; otherwise no session_room_id is persisted and
+      // foreground Matrix invalidations have no delivery target.
+      await getOrCreateUser(this.#dbAdapter, matrixUserId);
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
@@ -1632,6 +1653,8 @@ export class Realm {
     opts?: {
       delete?: true;
       clientRequestId?: string | null;
+      priority?: number;
+      invalidationMode?: 'direct' | 'recursive';
     },
   ): Promise<{ invalidations: string[]; generation?: number }> {
     if (urls.length === 0) {
@@ -1643,6 +1666,8 @@ export class Realm {
     await this.#realmIndexUpdater.update(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
+      priority: opts?.priority ?? userInitiatedPriority,
+      invalidationMode: opts?.invalidationMode ?? 'recursive',
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         // Drop the searchCards in-flight map: the worker's batch.done()
         // swap landed in this realm's boxel_index, so any pending
@@ -1682,6 +1707,8 @@ export class Realm {
     opts: {
       delete?: true;
       clientRequestId?: string | null;
+      priority?: number;
+      invalidationMode?: 'direct' | 'recursive';
       onSettled?: (
         invalidations: string[],
         meta: { generation?: number },
@@ -1700,6 +1727,8 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueUpdate(urls, {
       ...(opts?.delete ? { delete: true } : {}),
       clientRequestId: opts?.clientRequestId ?? null,
+      priority: opts.priority ?? userInitiatedPriority,
+      invalidationMode: opts.invalidationMode ?? 'recursive',
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
         await this.touchSourceRealmUpdatedAt();
@@ -1732,11 +1761,69 @@ export class Realm {
     return { settled };
   }
 
-  private broadcastIncrementalInvalidationEvent(
+  // Interactive writes publish the explicitly changed files first. Once that
+  // small batch is visible, enqueue the recursive dependency fan-out as
+  // priority-3 background work. This preserves one serialized index lane per realm while
+  // preventing a single client write from waiting for dozens of dependents.
+  private async updateExplicitTargetsThenEnqueueDependents(
+    urls: URL[],
+    opts?: {
+      delete?: true;
+      clientRequestId?: string | null;
+      awaitDependents?: boolean;
+    },
+  ): Promise<{ invalidations: string[]; generation?: number }> {
+    let foreground = await this.updateIndexAndCollectInvalidations(urls, {
+      ...(opts?.delete ? { delete: true } : {}),
+      clientRequestId: opts?.clientRequestId ?? null,
+      priority: userInitiatedPriority,
+      invalidationMode: 'direct',
+    });
+
+    // A direct indexing visit can legitimately report no recursive
+    // invalidations even though it replaced the explicitly requested root in
+    // boxel_index. Interactive callers still need that root in the foreground
+    // Matrix event so an already-rendered card reloads. Dependents continue to
+    // come exclusively from the deferred recursive job below.
+    foreground.invalidations = [
+      ...new Set([
+        ...foreground.invalidations,
+        ...urls.map((url) => url.href.replace(/\.json$/, '')),
+      ]),
+    ];
+
+    let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
+      urls,
+      {
+        ...(opts?.delete ? { delete: true } : {}),
+        clientRequestId: opts?.clientRequestId ?? null,
+        priority: interactiveDependentPriority,
+        invalidationMode: 'recursive',
+        onSettled: (invalidations, meta) =>
+          this.broadcastIncrementalInvalidationEvent(invalidations, {
+            clientRequestId: opts?.clientRequestId ?? null,
+            generation: meta.generation,
+          }),
+      },
+    );
+    settled.catch((err: unknown) => {
+      this.#log.error(
+        `Background dependent indexing failed for ${this.url} (urls: ${urls
+          .map((url) => url.href)
+          .join(', ')}): ${stringifyErrorForLog(err)}`,
+      );
+    });
+    if (opts?.awaitDependents) {
+      await settled;
+    }
+    return foreground;
+  }
+
+  private async broadcastIncrementalInvalidationEvent(
     invalidations: string[],
     opts?: { clientRequestId?: string | null; generation?: number },
-  ): void {
-    this.broadcastRealmEvent({
+  ): Promise<void> {
+    await this.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental',
       invalidations,
@@ -2252,8 +2339,9 @@ export class Realm {
     let clientRequestId: string | null = options?.clientRequestId ?? null;
     let performIndex = async () => {
       let { invalidations: workingInvalidations, generation } =
-        await this.updateIndexAndCollectInvalidations(urls, {
+        await this.updateExplicitTargetsThenEnqueueDependents(urls, {
           clientRequestId,
+          awaitDependents: options?.waitForIndex === true,
         });
       invalidations = new Set([...invalidations, ...workingInvalidations]);
       indexGeneration = generation ?? indexGeneration;
@@ -2368,70 +2456,16 @@ export class Realm {
 
     // persist file meta (created_at) to DB independent of index and retrieve created
     let createdMap = await this.persistFileMeta(fileMetaRows);
-    let waitForIndex = options?.waitForIndex !== false;
     if (urls.length > 0) {
-      if (waitForIndex) {
-        await performIndex();
-        this.broadcastIncrementalInvalidationEvent([...invalidations], {
-          clientRequestId,
-          generation: indexGeneration,
-        });
-      } else {
-        // Two-phase: await the durable queue insert inline so pre-enqueue
-        // failures (DB partial outage) propagate back to this method's
-        // caller and ultimately to the HTTP client — without that, a write
-        // could land on disk and never get indexed, leaving the realm
-        // silently stale. The worker settle is fire-and-forget; worker-
-        // time failures surface via error_doc inside the worker as before.
-        // Deferred is registered synchronously inside enqueueUpdate before
-        // any await, so realm.incrementalIndexing() reflects this work as
-        // pending the moment we return.
-        // Snapshot any invalidations from in-loop intermediate flushes (the
-        // module-then-instance gate at line 1262) so the broadcast unions
-        // them with the deferred-flush results. Without this, mixed-batch
-        // writeMany calls with waitForIndex:false would silently drop the
-        // earlier flushes' invalidations and leave subscribers with stale
-        // state for those URLs. Single-file callers (+source / binary)
-        // never hit the intermediate path, so this snapshot is empty for
-        // them — but it's correct for the primitive in general.
-        let priorInvalidations = [...invalidations];
-        let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
-          urls,
-          {
-            clientRequestId,
-            // Route the post-worker broadcast through onSettled so it runs
-            // INSIDE the indexing deferred lifecycle. Without this, the
-            // broadcast would fire from an outer .then() after the deferred
-            // is already removed — meaning realm.incrementalIndexing()
-            // resolves before the broadcast, and an afterEach drain that
-            // awaits the drain still races with the broadcast against
-            // test teardown (mock-matrix already destroyed → broadcast
-            // throws on serverState).
-            onSettled: (deferredInvalidations, meta) => {
-              this.broadcastIncrementalInvalidationEvent(
-                [...new Set([...priorInvalidations, ...deferredInvalidations])],
-                {
-                  clientRequestId,
-                  generation: meta.generation ?? indexGeneration,
-                },
-              );
-            },
-          },
-        );
-        settled.catch((err: unknown) => {
-          // Covers worker job rejection AND post-worker realm-side work
-          // (onInvalidation / handleExecutableInvalidations / broadcast).
-          this.#log.error(
-            `Deferred indexing chain failed for ${this.url} (urls: ${urls
-              .map((u) => u.href)
-              .join(', ')}): ${stringifyErrorForLog(err)}`,
-          );
-        });
-      }
+      await performIndex();
+      await this.broadcastIncrementalInvalidationEvent([...invalidations], {
+        clientRequestId,
+        generation: indexGeneration,
+      });
     } else {
       // No urls actually written (e.g., content unchanged). Preserve the
       // pre-existing always-broadcast behavior.
-      this.broadcastIncrementalInvalidationEvent([...invalidations], {
+      await this.broadcastIncrementalInvalidationEvent([...invalidations], {
         clientRequestId,
         generation: indexGeneration,
       });
@@ -2489,6 +2523,14 @@ export class Realm {
     return this.#virtualNetwork.isRegisteredPrefix(href)
       ? this.#virtualNetwork.toURL(href).href
       : href;
+  }
+
+  #resolveRealmRelativeHref(href: string): URL {
+    let resolvedHref = this.#resolveAtomicHref(href);
+    if (resolvedHref.startsWith('/') && !resolvedHref.startsWith('//')) {
+      resolvedHref = resolvedHref.slice(1);
+    }
+    return new URL(resolvedHref, this.paths.url);
   }
 
   private async checkBeforeAtomicWrite(
@@ -2738,15 +2780,10 @@ export class Realm {
 
       if (files.size > 0) {
         try {
-          // /_atomic returns once writes are durable, not once they are
-          // indexed. Callers that need indexed state must drain via
-          // realm.incrementalIndexing() (server-side), wait on the
-          // matrix 'index' incremental event (client-side), or opt-in
-          // to a synchronous response by passing `?waitForIndex=true`
-          // on the POST URL. The query-param path is intended for
-          // one-shot CLI / agent flows where Matrix subscription is
-          // impractical and a search poll-loop would race indexing
-          // latency. Mixed module+instance batches are still
+          // /_atomic publishes the explicitly changed targets before it
+          // returns. Recursive dependents continue asynchronously unless
+          // the caller opts into `?waitForIndex=true`. Mixed
+          // module+instance batches are still
           // serialized correctly: the in-loop intermediate flush in
           // _batchWriteUnlocked at the `lastWriteType === 'module' &&
           // currentWriteType === 'instance'` gate is always awaited,
@@ -2898,44 +2935,14 @@ export class Realm {
     await this.#notifyFileChange(path);
     // Remove file meta for this path
     await this.removeFileMeta([path]);
-    let waitForIndex = options?.waitForIndex !== false;
-    if (waitForIndex) {
-      let { invalidations, generation } =
-        await this.updateIndexAndCollectInvalidations([url], {
-          delete: true,
-        });
-      this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
-    } else {
-      // Mirrors the write() waitForIndex:false path: await the durable
-      // enqueue so DB-side failures still bubble out, but fire-and-forget
-      // the worker settle. The post-worker broadcast runs inside the
-      // deferred lifecycle via onSettled so realm.incrementalIndexing()
-      // doesn't resolve before the broadcast.
-      let enqueueStart = Date.now();
-      let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
-        [url],
-        {
-          delete: true,
-          onSettled: (deferredInvalidations, meta) => {
-            this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
-              generation: meta.generation,
-            });
-          },
-        },
-      );
-      settled.then(
-        () => {
-          this.#log.info(
-            `Deferred delete-indexing settled for ${url.href} in ${Date.now() - enqueueStart}ms`,
-          );
-        },
-        (err: unknown) => {
-          this.#log.error(
-            `Deferred delete-indexing chain failed for ${url.href} after ${Date.now() - enqueueStart}ms: ${stringifyErrorForLog(err)}`,
-          );
-        },
-      );
-    }
+    let { invalidations, generation } =
+      await this.updateExplicitTargetsThenEnqueueDependents([url], {
+        delete: true,
+        awaitDependents: options?.waitForIndex === true,
+      });
+    await this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+    });
   }
 
   async deleteAll(paths: LocalPath[]): Promise<void> {
@@ -2969,10 +2976,12 @@ export class Realm {
     // Remove file meta for all deleted paths
     await this.removeFileMeta(paths);
     let { invalidations, generation } =
-      await this.updateIndexAndCollectInvalidations(urls, {
+      await this.updateExplicitTargetsThenEnqueueDependents(urls, {
         delete: true,
       });
-    this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
+    await this.broadcastIncrementalInvalidationEvent(invalidations, {
+      generation,
+    });
   }
 
   get realmIndexUpdater() {
@@ -3783,6 +3792,7 @@ export class Realm {
     querier?: Querier,
   ): Promise<void> {
     let runQuery = querier ?? dbAdapterQuerier(this.#dbAdapter);
+    let conflictTarget = await transpileCacheConflictTarget(this.#dbAdapter);
     // On the pinned-querier path this UPSERT runs inside the
     // coordinator's lock transaction. L2 persistence is best-effort, but
     // a pg error here would abort that transaction and break the
@@ -3830,7 +3840,7 @@ export class Realm {
         param(capturedGeneration),
         ',',
         param(Date.now()),
-        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        `) ON CONFLICT ${conflictTarget} DO UPDATE SET`,
         'body = EXCLUDED.body,',
         'headers = EXCLUDED.headers,',
         'dependency_keys = EXCLUDED.dependency_keys,',
@@ -3893,6 +3903,7 @@ export class Realm {
 
   async #deleteTranspileCacheRow(canonicalPath: string): Promise<void> {
     try {
+      let conflictTarget = await transpileCacheConflictTarget(this.#dbAdapter);
       // Tombstone-and-bump rather than physically DELETE: an in-flight
       // writer that captured this path's generation BEFORE the
       // invalidate needs to observe the bumped generation when it
@@ -3911,7 +3922,7 @@ export class Realm {
         ',',
         'NULL, NULL, NULL, 1,',
         param(Date.now()),
-        ') ON CONFLICT (realm_url, canonical_path) DO UPDATE SET',
+        `) ON CONFLICT ${conflictTarget} DO UPDATE SET`,
         'body = NULL,',
         'headers = NULL,',
         'dependency_keys = NULL,',
@@ -4657,11 +4668,8 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Source-content-type callers, by definition, don't depend on indexed
-    // state — if they did they would use application/vnd.card+json. Return
-    // as soon as the source bytes are durable; indexing happens async and
-    // surfaces errors via error_doc as before. Subscribers to indexing
-    // events still see the broadcast once the worker settles.
+    // Source callers wait only for the explicit target to become visible.
+    // Recursive dependent invalidations continue in the background.
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
@@ -4688,9 +4696,8 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Binary files have no indexable card representation, so awaiting the
-    // index update would be even more wasteful than for card source. Return
-    // as soon as the bytes are durable.
+    // Binary writes use the same target-first policy. Their recursive
+    // dependent invalidations continue in the background.
     let bytes = new Uint8Array(await request.arrayBuffer());
     let { lastModified, created } = await this.write(
       this.paths.local(new URL(request.url)),
@@ -4915,11 +4922,8 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    // Source-content-type callers, by definition, don't depend on indexed
-    // state — symmetric with upsertCardSource. Return as soon as the file
-    // is gone from disk; indexing happens async and surfaces errors via
-    // error_doc as before. Subscribers to indexing events still see the
-    // broadcast once the worker settles.
+    // Symmetric with upsertCardSource: publish the explicit tombstone first,
+    // then process recursive dependent invalidations asynchronously.
     let localName = this.paths.local(new URL(request.url));
     let handle = await this.getFileWithFallbacks(localName, [
       ...executableExtensions,
@@ -5774,6 +5778,252 @@ export class Realm {
             ...(etag ? { etag } : {}),
             ...etagSuppressedHeader(foreignDeps),
             ...lastModifiedHeader(doc),
+            ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
+          },
+        },
+        requestContext,
+      });
+    });
+  }
+
+  // Prototype: run Mutation BXL against the persisted JSON document, then
+  // atomically write the transformed source. Card loading and indexing are
+  // intentionally outside the mutation request path.
+  private async mutateCardInstance(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch (err: any) {
+      return badRequest({
+        message: `The request body was not valid JSON: ${err.message}`,
+        requestContext,
+      });
+    }
+    if (!isMutateRequestBody(body)) {
+      return badRequest({
+        message: `Request body must include string "href" and "source"`,
+        requestContext,
+      });
+    }
+    let syntax = body.syntax === 'solidified' ? 'solidified' : 'readable';
+    let programId =
+      typeof body.programId === 'string' && body.programId.length > 0
+        ? body.programId
+        : `mutate:${uuidV4()}`;
+
+    let localPath: LocalPath;
+    try {
+      localPath = this.paths.local(this.#resolveRealmRelativeHref(body.href));
+    } catch (error: any) {
+      return badRequest({
+        message: error?.message ?? `Invalid href '${body.href}'`,
+        requestContext,
+      });
+    }
+    if (localPath.endsWith('.json')) {
+      localPath = localPath.slice(0, -'.json'.length);
+    }
+    if (await this.nonJsonFileExists(localPath)) {
+      return unsupportedMediaType(request, requestContext);
+    }
+    if (localPath.startsWith('_')) {
+      return methodNotAllowed(request, requestContext);
+    }
+    if (await this.openFileForMetadata(localPath)) {
+      return methodNotAllowed(request, requestContext);
+    }
+
+    let url = this.paths.fileURL(localPath);
+    let instanceURL = url.href.replace(/\.json$/, '');
+
+    let initialFile = await this.readFileAsText(`${localPath}.json`);
+    if (!initialFile) {
+      return notFound(request, requestContext);
+    }
+    let initialDoc: LooseSingleCardDocument;
+    try {
+      initialDoc = JSON.parse(initialFile.content);
+      if (!isCardResource(initialDoc?.data)) {
+        throw new Error('stored file is not a card document');
+      }
+    } catch (err: any) {
+      return systemError({
+        requestContext,
+        message: `cannot apply mutation, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
+        additionalError: err,
+        id: instanceURL,
+      });
+    }
+
+    // Module loading and loaderless schema preparation can involve a cache
+    // fill. Keep both outside the realm write lock; only the final re-read,
+    // BXL source rewrite, and atomic file write are serialized.
+    let bxlMutation: {
+      isBxlMutationError: (error: unknown) => boolean;
+      mutateBxlCardSource: (
+        document: LooseSingleCardDocument,
+        source: string,
+        options: Record<string, unknown>,
+      ) => { document: LooseSingleCardDocument };
+      mutationSchemaForCardSource: (
+        definition: unknown,
+        options: { lookupDefinition: (codeRef: unknown) => Promise<unknown> },
+      ) => Promise<unknown>;
+    };
+    try {
+      bxlMutation = (await import(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+        '@cardstack/bxl/mutation' as string
+      )) as typeof bxlMutation;
+    } catch (err: any) {
+      return systemError({
+        requestContext,
+        message: `Could not load BXL mutation support: ${err.message}`,
+        additionalError: err,
+        id: instanceURL,
+      });
+    }
+
+    let initialCodeRef = initialDoc.data.meta.adoptsFrom;
+    let absoluteCodeRef = codeRefWithAbsoluteIdentifier(
+      initialCodeRef,
+      url,
+      undefined,
+      this.#virtualNetwork,
+    ) as ResolvedCodeRef;
+    let schema: unknown;
+    try {
+      let definition =
+        await this.#definitionLookup.lookupDefinition(absoluteCodeRef);
+      schema = await bxlMutation.mutationSchemaForCardSource(definition, {
+        lookupDefinition: async (codeRef) => {
+          if (!isCodeRef(codeRef)) {
+            return undefined;
+          }
+          try {
+            return await this.#definitionLookup.lookupDefinition(
+              codeRefWithAbsoluteIdentifier(
+                codeRef,
+                url,
+                undefined,
+                this.#virtualNetwork,
+              ) as ResolvedCodeRef,
+            );
+          } catch {
+            return undefined;
+          }
+        },
+      });
+    } catch (err: any) {
+      return badRequest({
+        message: `Could not prepare the BXL mutation schema for ${JSON.stringify(absoluteCodeRef)}: ${err.message}`,
+        requestContext,
+        id: instanceURL,
+      });
+    }
+
+    return await this.#dbAdapter.withWriteLock(this.url, async () => {
+      let existingFile = await this.readFileAsText(`${localPath}.json`);
+      if (!existingFile) {
+        return notFound(request, requestContext);
+      }
+      let existingDoc: LooseSingleCardDocument;
+      try {
+        existingDoc = JSON.parse(existingFile.content);
+        if (!isCardResource(existingDoc?.data)) {
+          throw new Error('stored file is not a card document');
+        }
+      } catch (err: any) {
+        return systemError({
+          requestContext,
+          message: `cannot apply mutation, the existing file for ${instanceURL} is not a valid card document: ${err.message}`,
+          additionalError: err,
+          id: instanceURL,
+        });
+      }
+      if (!isEqual(existingDoc.data.meta.adoptsFrom, initialCodeRef)) {
+        return badRequest({
+          requestContext,
+          message: `The card definition changed while preparing the BXL mutation; retry against the current source`,
+          id: instanceURL,
+        });
+      }
+
+      let mutatedDocument: LooseSingleCardDocument;
+      try {
+        mutatedDocument = bxlMutation.mutateBxlCardSource(
+          existingDoc,
+          body.source,
+          {
+            schema,
+            syntax,
+            programId,
+            targetId: instanceURL,
+            // JSON:API relationship links in Card source are relative to the
+            // containing Card document, not to the realm root. Project them
+            // as canonical loaded-Card IDs so relationship selectors can
+            // find, remove, and move existing links.
+            resolveReference: (reference: string) =>
+              new URL(this.#resolveAtomicHref(reference), url).href.replace(
+                /\.json$/,
+                '',
+              ),
+            formatReference: (cardId: string) => cardId,
+            resolveCard: (id: string) => ({ id }),
+          },
+        ).document;
+      } catch (err: any) {
+        if (bxlMutation.isBxlMutationError(err)) {
+          return badRequest({
+            message: `BXL mutation ${String(err.phase)} error (${String(err.code)}): ${err.message}`,
+            requestContext,
+            id: instanceURL,
+          });
+        }
+        return systemError({
+          requestContext,
+          message: err.message,
+          additionalError: err,
+          id: instanceURL,
+        });
+      }
+
+      if (isEqual(mutatedDocument, existingDoc)) {
+        return createResponse({
+          body: null,
+          init: { status: 204, headers: { 'cache-control': 'no-store' } },
+          requestContext,
+        });
+      }
+
+      let files = new Map<LocalPath, string>();
+      let fileURL = new URL(`${url}.json`);
+      files.set(
+        this.paths.local(fileURL),
+        JSON.stringify(mutatedDocument, null, 2),
+      );
+      // Publish the mutated target first. Do not make the HTTP request wait
+      // for its recursive invalidation closure: a highly connected card can
+      // fan out to much of a realm even though this write changed one file.
+      let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
+        // `_mutate` is a DML/command endpoint, not an optimistic Card API
+        // edit. The initiating client has no local card-model update to keep,
+        // so it must receive the Matrix invalidation and reload the changed
+        // card. A future optimistic Card API mutation path can pass its
+        // client request ID and suppress its own echo there.
+        clientRequestId: null,
+        waitForIndex: false,
+      });
+      return createResponse({
+        body: null,
+        init: {
+          status: 204,
+          headers: {
+            'cache-control': 'no-store',
+            'last-modified': formatRFC7231(lastModified * 1000),
             ...(created ? { 'x-created': formatRFC7231(created * 1000) } : {}),
           },
         },
@@ -8080,6 +8330,9 @@ export class Realm {
       let { invalidations, generation } =
         await this.updateIndexAndCollectInvalidations([url], {
           ...(operation === 'removed' ? { delete: true } : {}),
+          // Filesystem changes are background synchronization. Interactive
+          // HTTP writes (including /_mutate) remain at priority 10.
+          priority: systemInitiatedPriority,
         });
       this.broadcastIncrementalInvalidationEvent(invalidations, { generation });
     }
@@ -8096,7 +8349,7 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(
+    await this.#adapter.broadcastRealmEvent(
       event,
       this.url,
       this.#matrixClient,
@@ -8392,4 +8645,36 @@ function assertRealmPermissions(
       }
     }
   }
+}
+
+function isMutateRequestBody(body: unknown): body is {
+  href: string;
+  source: string;
+  syntax?: 'readable' | 'solidified';
+  programId?: string;
+} {
+  if (typeof body !== 'object' || body === null) {
+    return false;
+  }
+  let candidate = body as Record<string, unknown>;
+  if (typeof candidate.href !== 'string' || candidate.href.length === 0) {
+    return false;
+  }
+  if (typeof candidate.source !== 'string' || candidate.source.length === 0) {
+    return false;
+  }
+  if (
+    candidate.syntax !== undefined &&
+    candidate.syntax !== 'readable' &&
+    candidate.syntax !== 'solidified'
+  ) {
+    return false;
+  }
+  if (
+    candidate.programId !== undefined &&
+    typeof candidate.programId !== 'string'
+  ) {
+    return false;
+  }
+  return true;
 }

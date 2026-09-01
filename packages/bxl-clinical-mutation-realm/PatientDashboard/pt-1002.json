@@ -1,0 +1,118 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "resourceId": "patient-record:pt-1002",
+      "patientId": "PT-1002",
+      "firstName": "Warner",
+      "lastName": "Cohen",
+      "dob": "1955-09-12",
+      "gender": "Male",
+      "bloodType": "A+",
+      "admissionDate": "2026-07-29",
+      "dischargeDate": null,
+      "status": "admitted",
+      "ward": "ICU",
+      "room": "3-08",
+      "diagnosis": "Septic shock",
+      "severity": "Critical",
+      "allergies": "No known drug allergies",
+      "careSummary": "Vasopressor requirement is decreasing. Continue ventilation bundle, cultures, and renal perfusion monitoring.",
+      "visitingStartHour": 11,
+      "visitingEndHour": 19,
+      "vitals": {
+        "bpSystolic": 92,
+        "bpDiastolic": 58,
+        "heartRate": 122,
+        "tempC": 38.9,
+        "oxygenSaturation": 91,
+        "weightKg": 81
+      },
+      "billing": { "roomCharge": 4200, "procedures": 12500, "pharmacy": 1850 },
+      "medications": [
+        {
+          "name": "Norepinephrine",
+          "doseMg": 0.1,
+          "frequency": "Continuous infusion",
+          "startDate": "2026-07-29",
+          "lastDoseAt": "Continuous",
+          "nextDoseAt": "Titrated hourly",
+          "lastDoseStatus": "Running"
+        },
+        {
+          "name": "Vancomycin",
+          "doseMg": 1500,
+          "frequency": "Every 12 hours",
+          "startDate": "2026-07-29",
+          "lastDoseAt": "Today · 06:00",
+          "nextDoseAt": "Today · 18:00",
+          "lastDoseStatus": "Administered"
+        }
+      ],
+      "caretakerInstructions": [
+        {
+          "activity": "Meals",
+          "status": "NPO",
+          "instruction": "No food or drink by mouth while ventilated.",
+          "schedule": "Reassess after respiratory review"
+        },
+        {
+          "activity": "Feeding",
+          "status": "Tube feeding",
+          "instruction": "Clinical team manages enteral nutrition; family should not offer food.",
+          "schedule": "Continuous per ICU order"
+        },
+        {
+          "activity": "Bathroom",
+          "status": "Bed-level care",
+          "instruction": "Call the nurse for all toileting and hygiene needs.",
+          "schedule": "As needed"
+        },
+        {
+          "activity": "Mobility",
+          "status": "Clinical team only",
+          "instruction": "Do not reposition without ICU staff assistance.",
+          "schedule": "Turn schedule every 2 hours"
+        }
+      ],
+      "internalNotes": [
+        {
+          "authoredAt": "2026-07-30 08:10",
+          "author": "Amara Shah, RN",
+          "category": "ICU handoff",
+          "text": "Sedation lightened for neurologic assessment. Family update scheduled after rounds."
+        }
+      ],
+      "auditTrail": [
+        {
+          "occurredAt": "2026-07-30 08:12",
+          "actor": "Amara Shah, RN",
+          "action": "Recorded ICU assessment"
+        }
+      ],
+      "cardInfo": {
+        "name": "Warner Cohen · PT-1002",
+        "summary": "Critical ICU record with a separate care-team userset.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "policy": { "links": { "self": "../ClinicalAccessPolicy/main" } },
+      "facility": { "links": { "self": "../HospitalFacility/northstar" } },
+      "patient": { "links": { "self": "../Principal/warner-cohen" } },
+      "attending": { "links": { "self": "../Principal/theo-martin" } },
+      "careTeam": { "links": { "self": "../Principal/icu-care-team" } },
+      "pharmacyTeam": { "links": { "self": "../Principal/pharmacy-team" } },
+      "billingTeam": { "links": { "self": "../Principal/billing-team" } },
+      "family": { "links": { "self": "../Principal/family-pt-1002" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-dashboard",
+        "name": "PatientDashboard"
+      }
+    }
+  }
+}

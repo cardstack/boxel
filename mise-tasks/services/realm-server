@@ -132,6 +132,11 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   ${START_EXPERIMENTS:+--fromUrl="${REALM_BASE_URL}/experiments/"} \
   ${START_EXPERIMENTS:+--toUrl="${REALM_BASE_URL}/experiments/"} \
   \
+  --path='../bxl-clinical-mutation-realm' \
+  --username='bxl_clinical_mutation_realm' \
+  --fromUrl="${REALM_BASE_URL}/bxl-clinical-mutation/" \
+  --toUrl="${REALM_BASE_URL}/bxl-clinical-mutation/" \
+  \
   --path='../openrouter-realm' \
   --username='openrouter_realm' \
   --fromUrl='@cardstack/openrouter/' \

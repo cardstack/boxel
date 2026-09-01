@@ -1,0 +1,203 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "BXL Clinical Mutation Atlas",
+      "scenarios": [
+        {
+          "level": "01",
+          "pattern": "Assert + nested contains + audit",
+          "title": "Escalate an acute rhythm-control event",
+          "intent": "Assert that Margaret is still admitted, record a clinically significant change across nested vitals, raise acuity, rewrite the care summary, and append the corresponding audit event as one atomic command.",
+          "techniques": [
+            "assert(...) checks a multi-field baseline before any write",
+            "Nested scalar paths update several contained vital-sign leaves",
+            "Sequential statements form one all-or-nothing mutation",
+            "append(...) creates a contained audit event",
+            "del(...[* predicate]) removes every matching audit event on reverse"
+          ],
+          "applySource": "assert(\n  .status == \"admitted\" and\n  .severity == \"Moderate\" and\n  .vitals.heartRate == 94 and\n  .vitals.bpSystolic == 138 and\n  .vitals.bpDiastolic == 88;\n  \"Apply unavailable: the patient is not at the admitted rhythm-control baseline\"\n);\n.vitals.bpSystolic = 168;\n.vitals.bpDiastolic = 104;\n.vitals.heartRate = 132;\n.vitals.oxygenSaturation = 91;\n.severity = \"Critical\";\n.careSummary = \"Rapid atrial fibrillation with hypoxemia. Begin continuous telemetry, oxygen support, and urgent cardiology review.\";\nappend(\n  .auditTrail;\n  {\n    occurredAt: \"2026-09-01 10:12\",\n    actor: \"Jordan Blake, RN\",\n    action: \"Escalated acute rhythm-control event to critical\"\n  }\n);",
+          "resetSource": "assert(\n  .severity == \"Critical\" and\n  .vitals.heartRate == 132 and\n  .vitals.bpSystolic == 168;\n  \"Reverse unavailable: the acute rhythm-control escalation is not currently applied\"\n);\n.vitals.bpSystolic = 138;\n.vitals.bpDiastolic = 88;\n.vitals.heartRate = 94;\n.vitals.oxygenSaturation = 97;\n.severity = \"Moderate\";\n.careSummary = \"Rate control is improving. Continue telemetry, anticoagulation monitoring, and assisted ambulation twice daily.\";\ndel(\n  .auditTrail[* .occurredAt == \"2026-09-01 10:12\"]\n);",
+          "viewerPartyId": "person:aisha-tahir",
+          "viewerLabel": "Dr. Aisha Tahir · attending cardiologist"
+        },
+        {
+          "level": "02",
+          "pattern": "Exact-one selector + compound update",
+          "title": "Titrate Warfarin and hold the next dose",
+          "intent": "Select exactly one medication by clinical identity, increase its dose without replacing the medication object, change its administration state, and record why. A stale or ambiguous medication match rejects the whole edit.",
+          "techniques": [
+            "select(...) requires exactly one containsMany match",
+            "|= performs an in-place arithmetic dose update",
+            "Sibling fields change together without replacing the medication",
+            "append(...) records the clinical reason",
+            "Forward and reverse assertions reject stale state"
+          ],
+          "applySource": "assert(\n  (.medications[] | select(.name == \"Warfarin\") | .doseMg) == 5 and\n  (.medications[] | select(.name == \"Warfarin\") | .lastDoseStatus) == \"Administered\";\n  \"Apply unavailable: Warfarin must be at the 5 mg administered baseline\"\n);\n(\n  .medications[]\n  | select(.name == \"Warfarin\")\n  | .doseMg\n) |= . + 2.5;\n(\n  .medications[]\n  | select(.name == \"Warfarin\")\n  | .lastDoseStatus\n) = \"Held — INR review\";\nappend(\n  .internalNotes;\n  {\n    authoredAt: \"2026-09-01 10:20\",\n    author: \"Dr. Aisha Tahir\",\n    category: \"Anticoagulation\",\n    text: \"Warfarin titrated to 7.5 mg; next dose held pending repeat INR.\"\n  }\n);",
+          "resetSource": "assert(\n  (.medications[] | select(.name == \"Warfarin\") | .doseMg) == 7.5 and\n  (.medications[] | select(.name == \"Warfarin\") | .lastDoseStatus) == \"Held — INR review\";\n  \"Reverse unavailable: the Warfarin titration and dose hold are not currently applied\"\n);\n(\n  .medications[]\n  | select(.name == \"Warfarin\")\n  | .doseMg\n) = 5;\n(\n  .medications[]\n  | select(.name == \"Warfarin\")\n  | .lastDoseStatus\n) = \"Administered\";\ndel(\n  .internalNotes[* .authoredAt == \"2026-09-01 10:20\"]\n);",
+          "viewerPartyId": "person:elena-ruiz",
+          "viewerLabel": "Elena Ruiz, PharmD · clinical pharmacist"
+        },
+        {
+          "level": "03",
+          "pattern": "Explicit bulk selector + one-or-more safety",
+          "title": "Place every administered medication on transfer hold",
+          "intent": "Use the visible bulk marker to update every currently administered medication while preserving dose, timing, and all sibling fields. An empty match is an error rather than a false success.",
+          "techniques": [
+            "[* predicate] explicitly selects every matching contained record",
+            "One-or-more bulk mutation fails when nothing matches",
+            "Only administration state changes; sibling medication data survives",
+            "Audit append and bulk cleanup remain atomic"
+          ],
+          "applySource": "assert(\n  any(.medications[]; .lastDoseStatus == \"Administered\");\n  \"Apply unavailable: there are no administered medications to place on transfer hold\"\n);\n(\n  .medications[* .lastDoseStatus == \"Administered\"]\n  | .lastDoseStatus\n) = \"Transfer hold\";\nappend(\n  .auditTrail;\n  {\n    occurredAt: \"2026-09-01 10:28\",\n    actor: \"Elena Ruiz, PharmD\",\n    action: \"Placed all administered medications on transfer hold\"\n  }\n);",
+          "resetSource": "assert(\n  any(.medications[]; .lastDoseStatus == \"Transfer hold\");\n  \"Reverse unavailable: no medications are currently on transfer hold\"\n);\n(\n  .medications[* .lastDoseStatus == \"Transfer hold\"]\n  | .lastDoseStatus\n) = \"Administered\";\ndel(\n  .auditTrail[* .occurredAt == \"2026-09-01 10:28\"]\n);",
+          "viewerPartyId": "person:elena-ruiz",
+          "viewerLabel": "Elena Ruiz, PharmD · clinical pharmacist"
+        },
+        {
+          "level": "04",
+          "pattern": "Sequential arithmetic + computed field",
+          "title": "Post a cardioversion and its pharmacy charge",
+          "intent": "Increment two nested billing leaves in reading order. The Card's computed total updates without BXL touching or duplicating that derived field, then an audit event explains the coordinated charge.",
+          "techniques": [
+            "Sequential |= arithmetic updates two billing leaves",
+            "The Card model recomputes the derived total outside BXL",
+            "Multiple nested values commit as one write",
+            "assert(...) protects the expected billing snapshot",
+            "append(...) and bulk del(...) maintain the audit trail"
+          ],
+          "applySource": "assert(\n  .billing.procedures == 4200 and\n  .billing.pharmacy == 310;\n  \"Apply unavailable: billing has changed from the expected pre-charge baseline\"\n);\n.billing.procedures |= . + 2850;\n.billing.pharmacy |= . + 640;\nappend(\n  .auditTrail;\n  {\n    occurredAt: \"2026-09-01 10:35\",\n    actor: \"Northstar Billing Interface\",\n    action: \"Posted cardioversion procedure and anticoagulation pharmacy charges\"\n  }\n);",
+          "resetSource": "assert(\n  .billing.procedures == 7050 and\n  .billing.pharmacy == 950;\n  \"Reverse unavailable: the cardioversion and pharmacy charges are not currently posted\"\n);\n.billing.procedures = 4200;\n.billing.pharmacy = 310;\ndel(\n  .auditTrail[* .occurredAt == \"2026-09-01 10:35\"]\n);",
+          "viewerPartyId": "person:owen-grant",
+          "viewerLabel": "Owen Grant · billing specialist"
+        },
+        {
+          "level": "05",
+          "pattern": "Insert contained item by stable anchor",
+          "title": "Insert fall precautions beside mobility care",
+          "intent": "Insert a complete contained instruction immediately after the stable Mobility anchor. The surrounding ordered care plan is not rebuilt, and reverse deletes by meaning rather than array position.",
+          "techniques": [
+            "insert_item_after(...) performs a surgical ordered insertion",
+            "select(...) finds a stable semantic anchor instead of an index",
+            "An inline object constructs the new contained record",
+            "Unrelated care-plan items retain identity and order",
+            "Bulk del(...) reverses by meaning rather than position"
+          ],
+          "applySource": "assert(\n  all(.caretakerInstructions[]; .activity != \"Fall precautions\");\n  \"Apply unavailable: fall precautions are already present in the care plan\"\n);\ninsert_item_after(\n  {\n    activity: \"Fall precautions\",\n    status: \"High risk\",\n    instruction: \"Use gait belt and two-person assist until orthostatic symptoms resolve.\",\n    schedule: \"Every transfer\"\n  };\n  .caretakerInstructions[]\n  | select(.activity == \"Mobility\")\n);",
+          "resetSource": "assert(\n  any(.caretakerInstructions[]; .activity == \"Fall precautions\");\n  \"Reverse unavailable: fall precautions are not present in the care plan\"\n);\ndel(\n  .caretakerInstructions[* .activity == \"Fall precautions\"]\n);",
+          "viewerPartyId": "person:jordan-blake",
+          "viewerLabel": "Jordan Blake, RN · cardiac night nurse"
+        },
+        {
+          "level": "06",
+          "pattern": "Move contained item by stable anchors",
+          "title": "Promote mobility to the first care priority",
+          "intent": "Move the complete Mobility instruction before Meals without replacing the array. Its status, instruction, schedule, and FieldDef metadata travel together as one structural intent.",
+          "techniques": [
+            "move_item_before(...) reorders a containsMany collection",
+            "Two select(...) expressions identify stable semantic anchors",
+            "The contained item moves intact with all nested fields",
+            "reorder_by(...) restores canonical baseline order",
+            "assert(...) verifies both forward and reverse ordering"
+          ],
+          "applySource": "assert(\n  .caretakerInstructions[0].activity == \"Meals\" and\n  .caretakerInstructions[3].activity == \"Mobility\";\n  \"Apply unavailable: daily care is not in the expected baseline order\"\n);\nmove_item_before(\n  .caretakerInstructions[] | select(.activity == \"Mobility\");\n  .caretakerInstructions[] | select(.activity == \"Meals\")\n);",
+          "resetSource": "assert(\n  .caretakerInstructions[0].activity == \"Mobility\";\n  \"Reverse unavailable: Mobility is not currently the first care priority\"\n);\nreorder_by(\n  .caretakerInstructions;\n  .activity;\n  [\"Meals\", \"Feeding\", \"Bathroom\", \"Mobility\"]\n);",
+          "viewerPartyId": "person:jordan-blake",
+          "viewerLabel": "Jordan Blake, RN · cardiac night nurse"
+        },
+        {
+          "level": "07",
+          "pattern": "Deep copy + sequential transformation",
+          "title": "Draft a discharge summary from the live care plan",
+          "intent": "Deep-copy the current care summary into a distinct discharge field, then transform only the copy. Later care-plan edits cannot mutate the draft by aliasing.",
+          "techniques": [
+            "copy_value_to(source; destination) deep-copies source data",
+            "The copied value does not alias the original field",
+            "Later statements transform only the destination",
+            "Null and non-null assertions make apply and reverse safe"
+          ],
+          "applySource": "assert(\n  .dischargeSummaryDraft == null;\n  \"Apply unavailable: a discharge-summary draft already exists\"\n);\ncopy_value_to(\n  .careSummary;\n  .dischargeSummaryDraft\n);\n.dischargeSummaryDraft |= . + \" Discharge when rate remains controlled for 24 hours; arrange INR follow-up within 48 hours.\";",
+          "resetSource": "assert(\n  .dischargeSummaryDraft != null;\n  \"Reverse unavailable: there is no discharge-summary draft to clear\"\n);\n.dischargeSummaryDraft = null;",
+          "viewerPartyId": "person:aisha-tahir",
+          "viewerLabel": "Dr. Aisha Tahir · attending cardiologist"
+        },
+        {
+          "level": "08",
+          "pattern": "linksToMany append + relationship move",
+          "title": "Reorder and expand a multidisciplinary consult team",
+          "intent": "Move the emergency physician ahead of the pharmacist by stable Card identity, then append an ICU nurse and cardiac night nurse. The adapter emits one relationship move and two relationship inserts while maintaining JSON:API keys.",
+          "techniques": [
+            "move_item_before(...) reorders linksToMany relationships",
+            "append(...; card(...)) adds linked Cards by canonical identity",
+            "Stable Card IDs replace fragile array positions",
+            "The adapter maintains JSON:API relationship keys",
+            "Bulk relationship deletion restores the original team"
+          ],
+          "applySource": "assert(\n  all(.consultingClinicians[]; .id != \"https://localhost:4251/bxl-clinical-mutation/Principal/amara-shah\" and .id != \"https://localhost:4251/bxl-clinical-mutation/Principal/jordan-blake\");\n  \"Apply unavailable: the ICU and night-nurse consultants are already linked\"\n);\nmove_item_before(\n  .consultingClinicians[]\n  | select(.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/theo-martin\");\n  .consultingClinicians[]\n  | select(.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/elena-ruiz\")\n);\nappend(\n  .consultingClinicians;\n  card(\"https://localhost:4251/bxl-clinical-mutation/Principal/amara-shah\")\n);\nappend(\n  .consultingClinicians;\n  card(\"https://localhost:4251/bxl-clinical-mutation/Principal/jordan-blake\")\n);",
+          "resetSource": "assert(\n  any(.consultingClinicians[]; .id == \"https://localhost:4251/bxl-clinical-mutation/Principal/amara-shah\") and\n  any(.consultingClinicians[]; .id == \"https://localhost:4251/bxl-clinical-mutation/Principal/jordan-blake\");\n  \"Reverse unavailable: the expanded multidisciplinary consult team is not currently linked\"\n);\ndel(\n  .consultingClinicians[* .id == \"https://localhost:4251/bxl-clinical-mutation/Principal/amara-shah\"]\n);\ndel(\n  .consultingClinicians[* .id == \"https://localhost:4251/bxl-clinical-mutation/Principal/jordan-blake\"]\n);\nmove_item_before(\n  .consultingClinicians[]\n  | select(.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/elena-ruiz\");\n  .consultingClinicians[]\n  | select(.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/theo-martin\")\n);",
+          "viewerPartyId": "person:aisha-tahir",
+          "viewerLabel": "Dr. Aisha Tahir · attending cardiologist"
+        },
+        {
+          "level": "09",
+          "pattern": "containsMany + nested linksTo",
+          "title": "Designate a longtime friend as healthcare proxy",
+          "intent": "Append an authorization record for Margaret's documented longtime friend Helen Mensah, then attach its nested person link in the same atomic program. The contained legal role and linked identity cannot drift apart.",
+          "techniques": [
+            "append(...) adds a record to containsMany",
+            "card(...) assigns the nested linksTo person relationship",
+            "Contained legal role and linked identity commit atomically",
+            "any(...) and all(...) express relationship preconditions",
+            "Bulk del(...) removes the complete authorization record"
+          ],
+          "applySource": "assert(\n  all(.careContacts[]; .personLabel != \"Helen Mensah\");\n  \"Apply unavailable: Helen Mensah is already designated as healthcare proxy\"\n);\nappend(\n  .careContacts;\n  {\n    relationship: \"Longtime friend · healthcare proxy\",\n    authorization: \"May receive clinical updates and participate in discharge decisions under the signed proxy directive\",\n    personLabel: \"Helen Mensah\"\n  }\n);\n(\n  .careContacts[]\n  | select(.personLabel == \"Helen Mensah\")\n  | .person\n) = card(\n  \"https://localhost:4251/bxl-clinical-mutation/Principal/helen-mensah\"\n);",
+          "resetSource": "assert(\n  any(.careContacts[]; .personLabel == \"Helen Mensah\");\n  \"Reverse unavailable: Helen Mensah is not currently designated as healthcare proxy\"\n);\ndel(\n  .careContacts[* .personLabel == \"Helen Mensah\"]\n);",
+          "viewerPartyId": "person:aisha-tahir",
+          "viewerLabel": "Dr. Aisha Tahir · attending cardiologist"
+        },
+        {
+          "level": "10",
+          "pattern": "Atomic ICU transfer · contains + links + resources",
+          "title": "Execute a complete ICU transfer command",
+          "intent": "Assert the live admission, move Margaret to ICU, escalate vitals and acuity, replace the care-team link, publish one protocol into two linked collections, prepend a new monitoring instruction, and append the audit event—all or nothing.",
+          "techniques": [
+            "assert(...) validates a multi-field clinical baseline",
+            "Nested assignments update scalar and contained values",
+            "card(...) replaces a linksTo care-team relationship",
+            "prepend(...) adds the highest-priority contained instruction",
+            "One resource is appended to two linksToMany collections",
+            "The complete cross-structure command commits or rejects atomically"
+          ],
+          "applySource": "assert(\n  .status == \"admitted\" and\n  .ward == \"Cardiology\" and\n  .room == \"6B-14\" and\n  .severity == \"Moderate\" and\n  .careTeam.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/cardiac-care-team\";\n  \"Apply unavailable: the patient is not at the admitted Cardiology baseline\"\n);\n.ward = \"Intensive Care\";\n.room = \"ICU-12\";\n.severity = \"Critical\";\n.vitals.heartRate = 138;\n.vitals.oxygenSaturation = 89;\n.careTeam = card(\n  \"https://localhost:4251/bxl-clinical-mutation/Principal/icu-care-team\"\n);\nprepend(\n  .caretakerInstructions;\n  {\n    activity: \"Continuous monitoring\",\n    status: \"Critical\",\n    instruction: \"Continuous telemetry and pulse oximetry; notify ICU fellow for sustained HR above 130.\",\n    schedule: \"Continuous\"\n  }\n);\nappend(\n  .carePlanResources;\n  card(\"https://localhost:4251/bxl-clinical-mutation/ClinicalResource/news-response\")\n);\nappend(\n  .sharedProtocolResources;\n  card(\"https://localhost:4251/bxl-clinical-mutation/ClinicalResource/news-response\")\n);\nappend(\n  .auditTrail;\n  {\n    occurredAt: \"2026-09-01 10:45\",\n    actor: \"Dr. Aisha Tahir\",\n    action: \"Transferred patient to ICU-12 with critical monitoring protocol\"\n  }\n);",
+          "resetSource": "assert(\n  .ward == \"Intensive Care\" and\n  .room == \"ICU-12\" and\n  .severity == \"Critical\" and\n  .careTeam.id == \"https://localhost:4251/bxl-clinical-mutation/Principal/icu-care-team\";\n  \"Reverse unavailable: the complete ICU transfer is not currently applied\"\n);\n.ward = \"Cardiology\";\n.room = \"6B-14\";\n.severity = \"Moderate\";\n.vitals.heartRate = 94;\n.vitals.oxygenSaturation = 97;\n.careTeam = card(\n  \"https://localhost:4251/bxl-clinical-mutation/Principal/cardiac-care-team\"\n);\ndel(\n  .caretakerInstructions[* .activity == \"Continuous monitoring\"]\n);\ndel(\n  .carePlanResources[* .id == \"https://localhost:4251/bxl-clinical-mutation/ClinicalResource/news-response\"]\n);\ndel(\n  .sharedProtocolResources[* .id == \"https://localhost:4251/bxl-clinical-mutation/ClinicalResource/news-response\"]\n);\ndel(\n  .auditTrail[* .occurredAt == \"2026-09-01 10:45\"]\n);",
+          "viewerPartyId": "person:aisha-tahir",
+          "viewerLabel": "Dr. Aisha Tahir · attending cardiologist"
+        }
+      ],
+      "cardInfo": {
+        "name": "BXL Clinical Mutation Atlas",
+        "summary": "Ten surgical BXL operations in one interactive clinical card",
+        "notes": "Synthetic clinical data only.",
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinical-mutation-workbench",
+        "name": "ClinicalMutationWorkbench"
+      }
+    },
+    "relationships": {
+      "target": {
+        "links": {
+          "self": "../PatientDashboard/pt-1001"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/night-shift"
+        }
+      }
+    }
+  }
+}

@@ -27,6 +27,8 @@ let mockFetchResponse: {
   text: () => Promise<string>;
 };
 
+let lastFetchArgs: { url: string; options?: RequestInit } | undefined;
+
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
@@ -67,14 +69,19 @@ module('Integration | tools | authed-fetch', function (hooks) {
     Object.defineProperty(networkService, 'authedFetch', {
       get() {
         return async (
-          _url: string,
-          _options?: RequestInit,
+          url: string,
+          options?: RequestInit,
         ): Promise<typeof mockFetchResponse> => {
+          lastFetchArgs = { url, options };
           return mockFetchResponse;
         };
       },
       configurable: true,
     });
+  });
+
+  hooks.beforeEach(function () {
+    lastFetchArgs = undefined;
   });
 
   test('returns ok, status, and body for a successful JSON response', async function (assert) {
@@ -106,6 +113,42 @@ module('Integration | tools | authed-fetch', function (hooks) {
     });
     assert.false(result.ok);
     assert.strictEqual(result.status, 404);
-    assert.deepEqual(result.body, {});
+    assert.deepEqual(result.body, { rawText: 'not found' });
+  });
+
+  test('sends a JSON request body with authentication', async function (assert) {
+    mockFetchResponse = {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: 'mutated' }),
+    };
+    let toolService = getService('tool-service');
+    let command = new AuthedFetchTool(toolService.toolContext);
+    let requestBody = JSON.stringify({
+      href: '/Student/demo',
+      source: '.location = "In Classroom";',
+      syntax: 'solidified',
+    });
+
+    let result = await command.execute({
+      url: 'https://example.com/realm/_mutate',
+      method: 'POST',
+      acceptHeader: 'application/vnd.card+json',
+      contentType: 'application/json',
+      requestBody,
+    });
+
+    assert.true(result.ok);
+    assert.deepEqual(lastFetchArgs, {
+      url: 'https://example.com/realm/_mutate',
+      options: {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+          'Content-Type': 'application/json',
+        },
+        body: requestBody,
+      },
+    });
   });
 });

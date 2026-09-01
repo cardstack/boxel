@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:nia-okafor",
+      "displayName": "Nia Okafor",
+      "jobTitle": "Privacy officer",
+      "principalType": "person",
+      "department": "Compliance",
+      "cardInfo": {
+        "name": "Nia Okafor",
+        "summary": "Policy-sourced privacy officer",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

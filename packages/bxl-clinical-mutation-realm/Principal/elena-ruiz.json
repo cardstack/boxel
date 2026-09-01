@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:elena-ruiz",
+      "displayName": "Elena Ruiz, PharmD",
+      "jobTitle": "Clinical pharmacist",
+      "principalType": "person",
+      "department": "Pharmacy",
+      "cardInfo": {
+        "name": "Elena Ruiz, PharmD",
+        "summary": "Pharmacy-team member",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

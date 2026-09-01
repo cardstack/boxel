@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:casey-ward",
+      "displayName": "Casey Ward, RN",
+      "jobTitle": "Suspended care-team member",
+      "principalType": "person",
+      "department": "Cardiology",
+      "cardInfo": {
+        "name": "Casey Ward, RN",
+        "summary": "Positive membership with explicit mutation refusal",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

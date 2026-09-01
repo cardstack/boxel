@@ -2204,6 +2204,30 @@ export class Batch {
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
   }
 
+  // Tombstone and revisit only the URLs explicitly supplied by the writer.
+  // This is the foreground half of an interactive write. The recursive
+  // dependency fan-out is deliberately scheduled as separate background
+  // work after this batch commits, so the changed card becomes visible first.
+  async invalidateDirect(urls: URL[]): Promise<void> {
+    if (this.#prerenderHtmlOnly) {
+      throw new Error(`a prerenderHtmlOnly batch cannot invalidate sources`);
+    }
+    await this.ready;
+    this.#currentInvalidationId = uuidv4();
+    let invalidations = [
+      ...new Set(
+        (
+          await Promise.all(urls.map((url) => this.invalidationSeeds(url)))
+        ).flat(),
+      ),
+    ];
+    if (invalidations.length === 0) {
+      return;
+    }
+    await this.tombstoneEntries(invalidations);
+    this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
+  }
+
   // Returns the minimum projection (url, type, deps) needed to order
   // invalidations by dependency. Server-side selection picks one row per
   // (url, type) with priority: working-non-deleted > production > working-deleted,

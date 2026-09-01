@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "family:devon-okonkwo",
+      "displayName": "Devon Okonkwo",
+      "jobTitle": "Approved family caregiver",
+      "principalType": "family",
+      "department": "Family access",
+      "cardInfo": {
+        "name": "Devon Okonkwo",
+        "summary": "Approved family member for Margaret Okonkwo",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

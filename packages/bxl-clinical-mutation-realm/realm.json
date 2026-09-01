@@ -1,0 +1,16 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": { "name": "BXL Clinical Access" },
+      "iconURL": "https://boxel-images.boxel.ai/icons/Letter-b.png",
+      "backgroundURL": "https://boxel-images.boxel.ai/background-images/4k-perforated-sheet.jpg"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "@cardstack/base/realm-config",
+        "name": "RealmConfig"
+      }
+    }
+  }
+}

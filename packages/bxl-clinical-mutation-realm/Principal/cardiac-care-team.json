@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:cardiac-care",
+      "displayName": "Cardiac care team",
+      "jobTitle": "Patient care userset",
+      "principalType": "team",
+      "department": "Cardiology",
+      "cardInfo": {
+        "name": "Cardiac care team",
+        "summary": "Root userset containing a nested night team",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./cardiac-night-team" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

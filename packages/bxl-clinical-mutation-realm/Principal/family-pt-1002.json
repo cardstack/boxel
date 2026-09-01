@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:family-pt-1002",
+      "displayName": "Warner Cohen family",
+      "jobTitle": "Patient-specific family userset",
+      "principalType": "team",
+      "department": "Family access",
+      "cardInfo": {
+        "name": "Warner Cohen family",
+        "summary": "Approved family userset isolated to PT-1002",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./sara-cohen" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

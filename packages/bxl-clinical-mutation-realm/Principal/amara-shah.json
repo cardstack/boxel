@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:amara-shah",
+      "displayName": "Amara Shah, RN",
+      "jobTitle": "ICU nurse",
+      "principalType": "person",
+      "department": "Intensive care",
+      "cardInfo": {
+        "name": "Amara Shah, RN",
+        "summary": "ICU care-team member",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}
