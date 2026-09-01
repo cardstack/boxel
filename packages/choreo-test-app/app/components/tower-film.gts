@@ -1393,9 +1393,22 @@ export default class TowerFilm extends Component<{
        * last run left the lens.
        */
       const splice = b.cut === true || (bi === 0 && this.from > 0);
+      /**
+       * A HOLD BREATHES. Before the splices, every "held" shot secretly
+       * lived on the one spline's residual sway; clamped shots took that
+       * away and the holds went DEAD — three static slides in the first
+       * minute. A shot with no authored tail now drifts on its own: a
+       * few degrees of orbit and a whisper of push over its whole
+       * length, too slow to read as a move and just enough that the
+       * frame is alive. An authored toCam always wins.
+       */
+      const to = b.toCam ?? {
+        ...b.cam,
+        dolly: b.cam.dolly * 1.035,
+        yaw: b.cam.yaw + 2.6,
+      };
       for (let k = 0; k < b.ticks; k++) {
         const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
-        const to = b.toCam ?? b.cam;
         pts.push({
           cut: splice && k === 0 ? true : undefined,
           dolly: lerp(b.cam.dolly, to.dolly, f),
