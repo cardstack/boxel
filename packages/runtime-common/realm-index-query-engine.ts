@@ -1145,11 +1145,14 @@ export class RealmIndexQueryEngine {
       // rather than a smaller version of it. Unknown is the honest answer, and
       // a consumer tells it from a real count because it is absent, not zero.
       //
-      // Where every realm answered, the only remaining gap is cross-realm
-      // dedup: an id two realms both reported is counted twice and kept once,
-      // which can put the sum below the rows that survived. A total under the
-      // row count would read as "fewer matches than you were handed", so the
-      // rows the field actually holds are the floor.
+      // Where every realm answered, the sum can still fall below the rows in
+      // hand: a realm that returned rows without a reportable count adds
+      // nothing to the total. A total under the row count would read as "fewer
+      // matches than you were handed", so the rows the field actually holds are
+      // the floor. (Cross-realm dedup pushes the other way — two realms both
+      // reporting an id count it twice and keep it once — which this floor does
+      // not and need not correct, since an over-count only overstates
+      // partiality rather than hiding it.)
       total:
         errors.length > 0 || total == null
           ? undefined

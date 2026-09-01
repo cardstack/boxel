@@ -787,7 +787,10 @@ export function relationshipStateForEntry<T extends CardDef>(
 //         this,
 //         'everyActivity',
 //       );
-//       return totalMatchCount ?? 0;
+//       // `undefined` is unknown, not zero — see below. Returning it leaves the
+//       // field empty, which reads as "no answer"; `?? 0` would render a
+//       // confident nought over a set nobody counted.
+//       return totalMatchCount;
 //     },
 //   });
 //
@@ -818,9 +821,14 @@ export interface RelationshipProbeResult<T extends CardDef = CardDef> {
   // Resolved membership for a query-backed field (`undefined` while in flight).
   // Ignored for declared fields, whose membership comes from the data bucket.
   queryMembership?: RelationshipState<T>[] | undefined;
-  // The match count the field's search reported (`meta.page.total`), which the
-  // page ceiling does not bound. Ignored for declared fields.
+  // The match count the field's search reported, which the page ceiling does
+  // not bound. Ignored for declared fields.
   queryTotalMatchCount?: number | undefined;
+  // Whether that search's result set is a bounded prefix of the match set.
+  // Supplied rather than derived from `queryMembership`, because only the
+  // search resource holds the match count and the server's own result set in
+  // the same terms. Ignored for declared fields.
+  queryIsPartial?: boolean;
 }
 type RelationshipProbe = (
   instance: CardDef,
@@ -875,20 +883,25 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
       resolved && field.fieldType === 'linksTo'
         ? [resolved[0] ?? relationshipStateForEntry<T>(null)]
         : resolved;
-    // A singular field reports no count: its query is forced to `page.size = 1`
+    // A singular field reports neither: its query is forced to `page.size = 1`
     // and it surfaces the first match by design, so a total above one describes
     // the query rather than a shortfall in the field.
-    let totalMatchCount =
-      field.fieldType === 'linksTo' ? undefined : probe?.queryTotalMatchCount;
+    let isSingular = field.fieldType === 'linksTo';
+    let totalMatchCount = isSingular ? undefined : probe?.queryTotalMatchCount;
     return {
       isLoading,
       isLoaded: !isLoading && membership !== undefined,
       membership,
       totalMatchCount,
+      // Taken from the probe rather than compared against `membership` here.
+      // The comparison has to happen where the match count and the server's own
+      // result set sit together; `membership` is that set after reconciliation
+      // against local Store state, so measuring against it would call a field
+      // partial because the user edited one of its cards out of the filter.
       isPartial:
-        totalMatchCount != null &&
-        membership !== undefined &&
-        totalMatchCount > membership.length,
+        !isSingular && membership !== undefined
+          ? Boolean(probe?.queryIsPartial)
+          : false,
     };
   }
 

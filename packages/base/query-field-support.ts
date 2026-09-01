@@ -212,12 +212,20 @@ export function ensureQueryFieldSearchResource(
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
             // The indexer's match count, so a seeded field knows straight away
-            // whether it holds the whole set. Absent it, the resource infers a
-            // total from the record count and a truncated seed reads as
-            // complete until a live re-query corrects it.
+            // whether it holds the whole set. Absent it, the resource would
+            // infer a total from the record count and a truncated seed would
+            // read as complete until a live re-query corrected it — so when the
+            // indexer resolved this field and still reported no count, say the
+            // count is unknowable rather than leave the resource to guess. That
+            // is the state a field lands in when one of its realms failed, and
+            // the state where guessing does the most damage: the rows in hand
+            // look like the whole set precisely because the failure withheld
+            // the rest.
             ...(fieldState?.seedTotal != null
               ? { meta: { page: { total: fieldState.seedTotal } } }
-              : {}),
+              : seedSearchURL != null
+                ? { totalUnknown: true }
+                : {}),
           }
         : undefined,
     },

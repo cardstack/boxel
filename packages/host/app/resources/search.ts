@@ -154,6 +154,13 @@ export interface Args<T extends CardDef | FileDef = CardDef> {
           // expansion in prerender mode — the resource fetches each
           // ID by URL instead of running a live re-query.
           cardURLs?: string[];
+          // The seed's match count is not knowable, so it must not be
+          // inferred from the rows. Set when the producer resolved the seed but
+          // deliberately reported no total — a query-backed field whose realm
+          // failed, for instance, where the count is exactly what the failure
+          // withheld. Without this the `meta` fallback below would take the row
+          // count for the total and turn "unknown" into "complete".
+          totalUnknown?: boolean;
         }
       | undefined;
     dependencyTracking?: RuntimeDependencyTrackingContext | undefined;
@@ -209,6 +216,10 @@ export class SearchResource<
   #cardInitiated = false;
   #getDefaultRealm: (() => string | undefined) | undefined;
   #seedApplied = false;
+  // The applied seed reported no match count and one must not be inferred from
+  // its rows. Tracked, because `totalMatchCount` is read during render and has
+  // to re-derive when a live search later supplies a real count.
+  @tracked private seedTotalUnknown = false;
   #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
   #previousQueryString: string | undefined;
@@ -759,6 +770,34 @@ export class SearchResource<
     return this._errors;
   }
 
+  // How many rows the query matches, as against how many this resource holds.
+  // `undefined` means unknown — not zero: the seed reported no count and one
+  // could not be inferred from its rows, and no search has since supplied one.
+  @cached
+  get totalMatchCount(): number | undefined {
+    if (this.seedTotalUnknown) {
+      return undefined;
+    }
+    let total = this._meta?.page?.total;
+    return typeof total === 'number' ? total : undefined;
+  }
+
+  // The result set this resource holds is a bounded prefix of what the query
+  // matches, so reducing over it undercounts.
+  //
+  // Deliberately compares the match count against `_instances` — the server's
+  // own result set — and not against `instances`, which is that set reconciled
+  // against local Store state. The two counts have to come from the same world:
+  // reconciliation can drop a row the user just edited out of the filter, or
+  // add one they just created, and neither says anything about whether the
+  // server's page was short. Comparing across the two reports a shortfall on an
+  // ordinary local edit, which is the one thing this flag must never do.
+  @cached
+  get isPartial(): boolean {
+    let total = this.totalMatchCount;
+    return total != null && total > this._instances.length;
+  }
+
   private async updateInstances(
     newInstances: T[],
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
@@ -868,6 +907,11 @@ export class SearchResource<
           return type !== 'card-error';
         }) as unknown as T[];
       }
+      // The row count stands in for the total only when the seed didn't report
+      // one AND didn't say the count is unknowable. A producer that withheld
+      // the count deliberately sets `totalUnknown`, and inferring it from the
+      // rows there would turn "unknown" into "you have all of them".
+      this.seedTotalUnknown = Boolean(seed.totalUnknown);
       this._meta = seed.meta ?? { page: { total: cards.length } };
       this._errors = seed.errors;
       await this.updateInstances(cards, dependencyTrackingContext);
@@ -905,6 +949,9 @@ export class SearchResource<
             .map((r) => r.id)
             .join(',')}`,
         );
+        // A completed search reports its own count, which supersedes a seed
+        // that had none.
+        this.seedTotalUnknown = false;
         this._meta = meta;
         this._errors = undefined;
         await this.updateInstances(instances, dependencyTrackingContext);
@@ -914,6 +961,11 @@ export class SearchResource<
         }
         this.#log.error(`search task failed`, err);
         this._errors = [searchErrorEntry(err)];
+        // A search that failed matched nothing it could report. The zero here
+        // pairs with the emptied result set for the loading/rendering path; it
+        // is not a match count, so `totalMatchCount` stays unknown rather than
+        // letting a rollup read the failure as "there are none".
+        this.seedTotalUnknown = true;
         this._meta = { page: { total: 0 } };
         if (this._instances.length > 0) {
           try {

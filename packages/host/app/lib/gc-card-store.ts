@@ -1307,6 +1307,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
         isLoading: false,
         meta: { page: { total: 0 } },
         errors: undefined,
+        // No search ran, so there is no match count — `undefined`, not the
+        // zero in `meta` above, which is a placeholder for the rendering path.
+        totalMatchCount: undefined,
+        isPartial: false,
       } as StoreSearchResource<T>;
     }
     return this.#storeHooks.getSearchResource(

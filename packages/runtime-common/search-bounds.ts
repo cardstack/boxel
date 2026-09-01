@@ -2,6 +2,8 @@ import { logger } from './log.ts';
 import type { Query } from './query.ts';
 import type { SearchEntryFieldset } from './search-entry.ts';
 
+const log = logger('search-bounds');
+
 // ---------------------------------------------------------------------------
 // Hard resource bounds for search, so no single search can exhaust the
 // realm-server's single event loop. They apply to the ITEM leg only — the live
@@ -23,10 +25,12 @@ import type { SearchEntryFieldset } from './search-entry.ts';
 //     larger. Server-side, SERVER_MAX_SEARCH_PAGE_SIZE is the default a request
 //     with no page is clamped to (mandatory pagination — a non-paginating caller
 //     gets the first page, not every row), and SERVER_ABSOLUTE_MAX_PAGE_SIZE is
-//     the ceiling an explicit page is rejected above. A caller between the two
+//     the ceiling an explicit page is clamped to above. A caller between the two
 //     has opted in: it named a size, so it is asking for that cost knowingly,
-//     and the result set is still bounded. The true match count rides
-//     `meta.page.total` either way, so a caller can paginate instead.
+//     and the result set is still bounded. The card cap rejects instead of
+//     clamping, because there the author who wrote the number is the one who
+//     sees the error. The true match count rides `meta.page.total` either way,
+//     so a caller can paginate — and can see that it got a short page.
 //   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) and concurrency
 //     (SEARCH_CONCURRENCY_CAP) — client-side only, on the card `@context`
 //     surface: the host federates widely and runs its own searches freely.
@@ -94,14 +98,25 @@ export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
 // territory, reachable only by naming a size. Kept at or above the default, so
 // an env override that inverts the two cannot make the default itself
 // rejectable.
+const REQUESTED_SERVER_ABSOLUTE_MAX_PAGE_SIZE = parsePositiveInt(
+  env.SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+  DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+  MIN_PAGE_SIZE,
+);
 export const SERVER_ABSOLUTE_MAX_PAGE_SIZE = Math.max(
   SERVER_MAX_SEARCH_PAGE_SIZE,
-  parsePositiveInt(
-    env.SERVER_ABSOLUTE_MAX_PAGE_SIZE,
-    DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE,
-    MIN_PAGE_SIZE,
-  ),
+  REQUESTED_SERVER_ABSOLUTE_MAX_PAGE_SIZE,
 );
+// Say so when the floor discarded the operator's number. Tightening the maximum
+// below the default is a reasonable thing to reach for during an incident, and
+// it does nothing on its own — SERVER_MAX_SEARCH_PAGE_SIZE has to come down too
+// — so the one configuration where this knob appears not to work is the one
+// where it is most likely to be used.
+if (REQUESTED_SERVER_ABSOLUTE_MAX_PAGE_SIZE < SERVER_MAX_SEARCH_PAGE_SIZE) {
+  log.warn(
+    `SERVER_ABSOLUTE_MAX_PAGE_SIZE=${REQUESTED_SERVER_ABSOLUTE_MAX_PAGE_SIZE} is below SERVER_MAX_SEARCH_PAGE_SIZE=${SERVER_MAX_SEARCH_PAGE_SIZE}, so it was raised to ${SERVER_MAX_SEARCH_PAGE_SIZE}; lower SERVER_MAX_SEARCH_PAGE_SIZE as well to tighten the ceiling below the default page.`,
+  );
+}
 
 // Max realms a single federated item-leg request may fan out to.
 export const MAX_REALMS_PER_SEARCH_REQUEST = parsePositiveInt(
@@ -137,6 +152,13 @@ let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 
+// The (size, max) pairs already reported by `warnOncePerClamp`. A clamp is
+// driven by an authored page size rather than by request data, so the set of
+// distinct pairs is small and bounded by how many such sizes exist in the
+// realm's card definitions — it does not grow with traffic. Reset alongside the
+// bounds themselves so a test that lowers the ceiling still sees its warning.
+let reportedClamps = new Set<string>();
+
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
   serverMaxPageSize?: number;
@@ -162,6 +184,7 @@ export function setSearchBoundsForTests(overrides: {
 }
 
 export function resetSearchBoundsForTests(): void {
+  reportedClamps = new Set();
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
   serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
   serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
@@ -197,7 +220,16 @@ export class SearchBoundError extends Error {
 const HTML_LEG_HINT =
   'for large or wide result sets, use prerendered HTML search results (@context.searchResultsComponent), which this cap does not apply to';
 
-const log = logger('search-bounds');
+function warnOncePerClamp(size: number, max: number): void {
+  let key = `${size}/${max}`;
+  if (reportedClamps.has(key)) {
+    return;
+  }
+  reportedClamps.add(key);
+  log.warn(
+    `page.size ${size} exceeds the maximum of ${max}; clamped to ${max} (further identical clamps are not logged). The true match count rides meta.page.total; ${HTML_LEG_HINT}`,
+  );
+}
 
 // Reject a federated item-leg request that fans out to more realms than the
 // cap. It can't be clamped (we can't choose which realms to drop), so the
@@ -236,10 +268,15 @@ function boundPageSize(
   max: number,
   overMax: 'reject' | 'clamp',
 ): Query {
+  // The default can never exceed the ceiling. Production can't invert them
+  // (the exported consts are floored at module load), but the test seam can,
+  // and a default above `max` would hand out a page larger than the one an
+  // explicit request is held to.
+  let effectiveDefault = Math.min(dflt, max);
   let page = query.page;
   if (page == null) {
     // No page at all: apply the mandatory default so the result set is bounded.
-    return { ...query, page: { size: dflt } } as Query;
+    return { ...query, page: { size: effectiveDefault } } as Query;
   }
   let size = Number((page as { size?: unknown }).size);
   if (!Number.isFinite(size) || size < 1) {
@@ -247,7 +284,7 @@ function boundPageSize(
     // bound the result set — and would compile to `LIMIT undefined` / a
     // negative limit — so treat it like an absent page and clamp to the
     // default rather than let it through unbounded.
-    return { ...query, page: { ...page, size: dflt } } as Query;
+    return { ...query, page: { ...page, size: effectiveDefault } } as Query;
   }
   if (size > max) {
     if (overMax === 'reject') {
@@ -260,9 +297,17 @@ function boundPageSize(
     // symptom is a result set smaller than the caller asked for, which looks
     // like the query matching less rather than the bound intervening — the
     // question "why am I only getting 2000?" has no answer anywhere else.
-    log.warn(
-      `page.size ${size} exceeds the maximum of ${max}; clamped to ${max}. The true match count rides meta.page.total; ${HTML_LEG_HINT}`,
-    );
+    //
+    // Logged once per distinct (size, max) pair, because the caller that trips
+    // this is typically a query-backed field whose page is authored once and
+    // then applied on every index of every instance of that card: a realm with
+    // ten thousand of them would otherwise emit ten thousand identical lines
+    // per reindex, which buries the artifact rather than providing one.
+    warnOncePerClamp(size, max);
+    // `page.number` is carried through unchanged, so a smaller size moves the
+    // window as well as narrowing it: `{size: 5000, number: 3}` becomes offset
+    // 6000, not 15000. A caller walking pages from zero still sees every row
+    // exactly once; one computing its own offset from `size × number` does not.
     return { ...query, page: { ...page, size: max } } as Query;
   }
   return query;

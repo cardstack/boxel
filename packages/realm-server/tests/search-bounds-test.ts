@@ -241,6 +241,21 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a default above the maximum cannot hand out a larger page than an explicit request', function (assert) {
+      // Production floors the pair at module load, but the test seam does not,
+      // and an unclamped default would give a caller that named nothing a
+      // bigger page than one that asked for the maximum.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1000,
+        serverAbsoluteMaxPageSize: 10,
+      });
+      assert.deepEqual(
+        applyServerSearchPageBound({} as Query).page,
+        { size: 10 },
+        'the default is held to the maximum',
+      );
+    });
+
     test('collapsing the two overrides leaves no opt-in room', function (assert) {
       setSearchBoundsForTests({
         serverMaxPageSize: 5,
