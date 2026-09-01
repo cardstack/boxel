@@ -1453,11 +1453,55 @@ export default class TowerFilm extends Component<{
        * length, too slow to read as a move and just enough that the
        * frame is alive. An authored toCam always wins.
        */
-      const to = b.toCam ?? {
+      const drift = b.toCam ?? {
         ...b.cam,
         dolly: b.cam.dolly * 1.05,
         pitch: b.cam.pitch + 1.4,
         yaw: b.cam.yaw + 6,
+      };
+      /**
+       * A SHOT MUST MOVE ON SCREEN, not on paper.
+       *
+       * Frame-differencing a screen capture of the cut said it plainly:
+       * outside the seams, whole minutes of this film change by about
+       * 5/255 per SECOND — 0.08 per frame, which is nothing at all. The
+       * authored tails looked like moves in the score (four to eight
+       * degrees of orbit, three per cent of push) and read as STILLS in
+       * the picture, because an orbit barely displaces the subject it is
+       * aimed at and two chase stages low-pass whatever is left.
+       *
+       * So a tail is a DIRECTION and a floor, not a distance: what the
+       * beat asks for is honoured, and anything slower than a real slow
+       * move is stretched up to one. The floors are per second, so a
+       * long hold travels further than a short one and every shot drifts
+       * at the same speed. The push does most of the work — a scale
+       * change moves every pixel and the aim keeps the subject centred —
+       * and the orbit gives the background its parallax.
+       *
+       * Only a shot that ENDS AT A SEAM may be stretched. Inside a
+       * continuous run the next beat's head is this same lens still
+       * travelling, and pushing this tail past it would make the camera
+       * arrive, back up and go again: the bounce the splices were cut to
+       * kill. A cut may overshoot because nothing crosses it — the far
+       * side is a different shot.
+       */
+      const seam = bi === beats.length - 1 || beats[bi + 1]!.cut === true;
+      const secs = b.ticks * TICK;
+      const sgn = (d: number) => (d < 0 ? -1 : 1);
+      const dYaw = drift.yaw - b.cam.yaw;
+      const floorYaw = seam ? Math.min(22, 2 * secs) : 0;
+      const dDolly = drift.dolly - b.cam.dolly;
+      const floorDolly = seam ? b.cam.dolly * Math.min(0.22, 0.022 * secs) : 0;
+      const to = {
+        ...drift,
+        dolly:
+          Math.abs(dDolly) < floorDolly
+            ? b.cam.dolly + sgn(dDolly) * floorDolly
+            : drift.dolly,
+        yaw:
+          Math.abs(dYaw) < floorYaw
+            ? b.cam.yaw + sgn(dYaw) * floorYaw
+            : drift.yaw,
       };
       for (let k = 0; k < b.ticks; k++) {
         const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
