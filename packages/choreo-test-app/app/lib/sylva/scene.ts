@@ -2240,13 +2240,21 @@ export function createSylva(hosts: SylvaHosts): Sylva {
          biased along the camera ray: a disc at the point, stretched
          toward the lens. */
       var toCam = camera.position.clone().sub(p).normalize();
-      for (var bi = 0; bi < 90; bi++) {
+      for (var bi = 0; bi < 220; bi++) {
         var ba = Math.random() * Math.PI * 2;
-        var br = Math.sqrt(Math.random()) * 95;
-        var fwd = Math.random() * 260;
+        /* spread across the PANEL's own footprint, so the cloud has to
+           traverse the glass to disperse */
+        var br = Math.sqrt(Math.random()) * 150;
+        /* most of the cloud lives in the near band between the lens and
+           the card — 60..240px forward — where every spore reads against
+           the panel behind it */
+        var fwd = 60 + Math.random() * 180;
+        if (bi % 4 === 0) {
+          fwd = -30 + Math.random() * 60; /* a quarter stays at the glass */
+        }
         sprayStep.set(
           p.x + Math.cos(ba) * br + toCam.x * fwd,
-          p.y + Math.sin(ba) * br * 0.75 + 14 + toCam.y * fwd,
+          p.y + Math.sin(ba) * br * 0.6 + toCam.y * fwd,
           p.z + toCam.z * fwd
         );
         spawnSpray(sprayStep);

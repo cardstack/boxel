@@ -212,20 +212,6 @@ const REST = { dolly: 1.34, pitch: 4, x: 0, y: -0.12, yaw: 0 };
  */
 const SWING = { dolly: 0.05, x: 0.018, yaw: 7 } as const;
 
-/**
- * THE CARD GROWS OUT OF ITS PIN, and the geometry of that is already known:
- * `off` is the vector from the pin to the card, so starting the content at
- * `-off` puts it exactly on the marker and animating to zero walks it out to
- * where it lives. A beacon measured rather than derived, and it costs nothing
- * because the offset was already the thing that placed the card.
- *
- * It rides an INNER wrapper because the card's own transform is rewritten
- * every frame by `objectCss` — anything animating the outer box is overwritten
- * before it paints. The wrapper is free, which is the useful part: it moves in
- * the card's own plane, so the entrance is foreshortened by the same camera as
- * everything else rather than sliding flatly across the screen.
- */
-const OPENING = { bounce: 0.18, type: 'spring', visualDuration: 0.42 } as const;
 const CONTENT = { bounce: 0, type: 'spring', visualDuration: 0.3 } as const;
 
 /** the card's own radius, shared with the hole so the corners agree */
@@ -776,7 +762,7 @@ export class SylvaStage extends Component<{
       const st = this.entry.get(spot.id) ?? { e: 0, v: 0 };
       this.entry.set(spot.id, st);
       /* critically damped toward seated (1) or parked-on-the-pin (0) —
-         about the OPENING spring's pace, without its bounce */
+         about the old entrance spring's pace, without its bounce */
       const EW = 12;
       st.v +=
         (EW * EW * ((shown ? 1 : 0) - st.e) - 2 * EW * st.v) * this.frameDt;
@@ -792,6 +778,19 @@ export class SylvaStage extends Component<{
         shell.style.transform =
           `translate(${entrance.dx.toFixed(2)}px, ` +
           `${entrance.dy.toFixed(2)}px) scale(${entrance.s.toFixed(4)})`;
+        /**
+         * OPACITY RIDES THE SAME SPRING. It was Motion's, on its own
+         * clock, and the fade outran the shrink: a card mid-close spent
+         * frames as a half-transparent full-size slab with the page's
+         * grey showing through it — the jarring box. Derived from the
+         * one integrator, the panel stays essentially opaque while it
+         * travels and lets go only as it reaches the dot; the hole hides
+         * on the same threshold, so nothing grey is ever left standing.
+         */
+        shell.style.opacity = Math.max(
+          0,
+          Math.min(1, eased * 1.3 - 0.12)
+        ).toFixed(3);
       }
       const show = shown || eased > 0.02;
       const m = anchor.face(show, entrance);
@@ -1319,9 +1318,15 @@ export class SylvaStage extends Component<{
       this.sylva?.cue('burst', this.anchors.get(spot.id)?.at());
       return;
     }
-    /* aimed at the PIN — the point on the wood — not the card's midpoint,
-       which hangs in open air where a gust has no moss to part */
-    this.sylva?.cue(spot.cue.kind, this.anchors.get(spot.id)?.at());
+    /* the gust aims at the PIN — the point on the wood, where there is
+       moss to part; the BURST aims at the CARD's own midpoint, because
+       the whole point of the spores is to be seen crossing the panel */
+    this.sylva?.cue(
+      spot.cue.kind,
+      spot.cue.kind === 'burst'
+        ? this.lookOf.get(spot.id)
+        : this.anchors.get(spot.id)?.at()
+    );
   };
 
   private cueClass = (id: string) =>
@@ -1369,18 +1374,6 @@ export class SylvaStage extends Component<{
   };
 
   private isOpen = (id: string) => this.open === id;
-
-  /**
-   * The card's presence — OPACITY ONLY. The entrance's transform used to be
-   * Motion's too, and the hole was slaved to a getComputedStyle read of it:
-   * two rAF loops, no ordering guarantee, and whenever the stage's frame ran
-   * first the hole wore LAST frame's pose — a dark notch chasing the card's
-   * leading corner at spring speed. The host integrates the entrance itself
-   * now (`entry`, in placeCards) and writes the SAME numbers to the shell's
-   * style and the hole: one writer, zero frames of disagreement.
-   */
-  private shell = (spot: Spot) =>
-    this.open === spot.id ? { opacity: 1 } : { opacity: 0 };
 
   /**
    * The rows, staggered behind it. A panel whose text is simply there the
@@ -1478,10 +1471,7 @@ export class SylvaStage extends Component<{
                       {{this.register spot.id}}
                       {{on "pointerdown" (fn this.swallow spot.id)}}
                     >
-                      <div
-                        class="sy-shell"
-                        {{motion animate=(this.shell spot) transition=OPENING}}
-                      >
+                      <div class="sy-shell">
                         <p
                           class="sy-kind"
                           {{motion animate=(this.row spot 0)}}
@@ -2180,6 +2170,14 @@ export class SylvaStage extends Component<{
        * belongs to the thing that fades.
        */
       .sy-shell {
+        /* HIDDEN AT REST, in the stylesheet. Presence is written inline
+           by the host's spring every frame — but until the loop's first
+           frame (boot takes seconds), and for any card not yet placed,
+           the inline write does not exist, and a default-visible shell
+           stands full-size wherever its untransformed box happens to be:
+           the grey box, parked at the viewport corner. The base state of
+           a card is closed; only the loop may say otherwise. */
+        opacity: 0;
         display: flex;
         flex-direction: column;
         gap: 2px;
@@ -2189,9 +2187,11 @@ export class SylvaStage extends Component<{
         padding: 14px 16px;
         border-radius: 14px;
         /* the glass grammar is threeui's, rim included: a SPECULAR
-           border — the hairline catches light unevenly, bright and cool
-           along the top, a warm glint on the right shoulder, near-dark at
-           the foot — worn as a conic sweep under a transparent border */
+           border — bright and cool along the top, a warm glint on the
+           right shoulder, near-dark at the foot — worn as a conic sweep
+           under a transparent border. (It took the blame for a jank that
+           was really the shell's opacity fading on a second clock; with
+           presence host-owned, it is innocent and reinstated.) */
         border: 1px solid transparent;
         background:
           linear-gradient(
