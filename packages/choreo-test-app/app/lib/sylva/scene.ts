@@ -1873,8 +1873,11 @@ export function createSylva(hosts: SylvaHosts): Sylva {
       mouseR: uMouseRadNear,
     });
     scene.add(nearGroup);
-    if (!small)
-      bf = buildButterfly(nearGroup, nearLimbs, nearGroup.userData.uni);
+    /* ALWAYS. The landing page trims the butterfly on small viewports as
+       a decoration it can spare; here it is a named resident with a card
+       and a trigger — a moth that exists only above 900px is a broken
+       promise, not an optimisation. */
+    bf = buildButterfly(nearGroup, nearLimbs, nearGroup.userData.uni);
 
     /* ---- far ridge: same builder, pushed back and washed into the air.
             It dissolves before it reaches the cards (local x 0.5 → 4.0) and

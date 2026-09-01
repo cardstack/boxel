@@ -1,9 +1,12 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { at, Choreo, motion, type PerformCommand } from 'glimmer-motion';
+import { ChoreoMark } from 'test-app/components/choreo-mark';
+import config from 'test-app/config/environment';
 import { cameraCss, objectCss, perspective } from 'test-app/lib/css3d';
 import {
   createSylva,
@@ -115,7 +118,9 @@ const SPOTS: Spot[] = [
     // the crest at 25% — front of the arch, so the card is never occluded
     at: [0.25, 0.566, 0.34],
     blurb: 'Feeding on the moss crest, wings folded. Two seen this week.',
-    camera: { dolly: 0.72, pitch: 7, x: 0.06, y: -0.04, yaw: -13 },
+    // wider than the other reads, and framed a touch high: the butterfly
+    // lives in the air over the crest, and scene 1 must show it
+    camera: { dolly: 0.84, pitch: 7, x: 0.06, y: 0.05, yaw: -13 },
     cue: { kind: 'flight', label: 'Flush the moth' },
     id: 'moth',
     kind: 'Insect',
@@ -145,7 +150,9 @@ const SPOTS: Spot[] = [
     blurb: 'In the hollow under the arch, where the light does not reach.',
     // the camera ducks LOW and looks up into the hollow — level with the
     // wood, the crest lies straight across the panel
-    camera: { dolly: 0.68, pitch: -13, x: 0.04, y: -0.02, yaw: 27 },
+    // pedestal well negative: the card rides high in frame, clear of
+    // the touring controls along the bottom edge
+    camera: { dolly: 0.68, pitch: -13, x: 0.04, y: -0.12, yaw: 27 },
     // spores, not a gust: from this low back angle a parting of the moss
     // happens out of frame, and a thing you cannot see is not an action
     cue: { kind: 'burst', label: 'Loose the spores' },
@@ -188,19 +195,6 @@ const SPOTS: Spot[] = [
  * leg's dive into the moth card is the establishing zoom.
  */
 const REST = { dolly: 1.34, pitch: 4, x: 0, y: -0.12, yaw: 0 };
-
-/**
- * THE ONE CURVE THE WHOLE LOOP RIDES, and its ends do not rest.
- *
- * A cubic-bezier with y1 = 0 or y2 = 1 has zero slope at that end: the
- * camera stops there, however briefly — and a tour assembled from such
- * curves halts at every seam, approach after read after return. This one
- * enters and leaves at matched non-zero slope (~0.4 of its mean speed), so
- * every joint hands its velocity to the next step and the lap plays as one
- * unbroken move: it breathes — quicker mid-flight, slower past a card —
- * but it never, ever stops.
- */
-const CARRY = [0.33, 0.13, 0.67, 0.87] as const;
 
 /**
  * How far the reading pan travels, either side of the square-on pose.
@@ -253,10 +247,85 @@ const LINE_TO = { filter: 'blur(0px)', opacity: 1, y: 0 } as const;
 /** the card's own radius, shared with the hole so the corners agree */
 const CARD_R = 14;
 
+/**
+ * The gallery face. Forty thousand blades of moss and two shader roots is
+ * not a thing to composite twenty-five times in a grid — so the tile is a
+ * PHOTOGRAPH of the world with the title dropped on it, and the world
+ * itself only boots where someone asked to enter it. Root-relative, never
+ * `/` — see the mockup's note on deploy paths.
+ */
+const POSTER = `${config.rootURL}sylva-poster.webp`;
+
+/**
+ * The demo page does not run the world in-process. Forty-five thousand
+ * blades, two shader roots and a render loop sharing a main thread with
+ * the gallery's own Magic Move is a pacing bug wearing a demo's clothes —
+ * so the stage face mounts the theater route in an IFRAME: its own
+ * context, its own compositor budget, torn down whole when the route
+ * changes. The `embed` flag strips the theater's bar inside it; the frame
+ * itself is tweened in like any other element.
+ */
+const EMBED = `${config.rootURL}_sylva?embed`;
+const FRAME_FROM = { opacity: 0, scale: 0.97 } as const;
+const FRAME_TO = { opacity: 1, scale: 1 } as const;
+const FRAME_IN = { duration: 0.5, ease: [0.22, 1, 0.36, 1] } as const;
+
 const CARD_W = 260;
 const CARD_H = 168;
 
-export class SylvaStage extends Component {
+export class SylvaStage extends Component<{
+  Args: {
+    /** the full-screen face: nothing on screen but the world, its bar,
+     * and an Exit where the GitHub link usually stands */
+    theater?: boolean;
+  };
+}> {
+  /**
+   * THREE FACES, one component. `tile` (a gallery card): the poster, the
+   * lower third, a translucent Tour button — no WebGL at all. `stage` (its
+   * own demo page): the live world in the normal stage box, beside the
+   * code and the deep dive. `theater` (/_sylva): the world full-screen.
+   * The route says theater outright; the other two are told apart by the
+   * box the component wakes up in, the same test the mockup uses.
+   */
+  @tracked private context: 'boot' | 'stage' | 'theater' | 'tile' = this.args
+    .theater
+    ? 'theater'
+    : 'boot';
+
+  /**
+   * One probe render decides which face to wear — see the context note.
+   * The write is DEFERRED A FRAME: the probe mounts during whatever render
+   * pass is putting the gallery up, and a tracked write inside that pass
+   * replays it and cancels the very crossing that is flying the cards in —
+   * the fold trap, met here as broken acceptance tests rather than theory.
+   */
+  private place = modifier((el: HTMLElement) => {
+    if (this.context !== 'boot') {
+      return;
+    }
+    const face = el.closest('.stage-wrap') ? 'stage' : 'tile';
+    requestAnimationFrame(() => {
+      if (this.context === 'boot') {
+        this.context = face;
+      }
+    });
+  });
+
+  private isCtx = (ctx: string) => this.context === ctx;
+
+  private get isTheater() {
+    return this.context === 'theater';
+  }
+
+  /** running inside the demo page's iframe: the world, minus the bar */
+  readonly embed =
+    typeof location !== 'undefined' && /[?&]embed\b/.test(location.search);
+
+  private get showBar() {
+    return this.isTheater && !this.embed;
+  }
+
   @tracked status = 'growing the roots…';
   @tracked open: string | null = null;
   /** the pose the camera is actually at; Choreo writes it, the pointer writes it */
@@ -403,6 +472,10 @@ export class SylvaStage extends Component {
   }
   private cardEls = new Map<string, HTMLElement>();
   private pinEls = new Map<string, HTMLElement>();
+  /** each card's entrance, integrated by the host: 0 on the pin, 1 seated */
+  private entry = new Map<string, { e: number; v: number }>();
+  /** the loop's dt, for the entrance springs in placeCards */
+  private frameDt = 0;
   private camEl?: HTMLElement;
   private cssEl?: HTMLElement;
   private pinCamEl?: HTMLElement;
@@ -420,6 +493,12 @@ export class SylvaStage extends Component {
     const canvas = el.querySelector('canvas') as HTMLCanvasElement | null;
     if (!canvas) {
       return;
+    }
+
+    /* theater: the app's own chrome steps out — the scene brings its own
+       bar, dark by construction, with Exit standing where GitHub does */
+    if (this.isTheater) {
+      document.body.classList.add('sy-theater');
     }
 
     let live = true;
@@ -486,6 +565,27 @@ export class SylvaStage extends Component {
         });
         this.sylva = sylva;
         this.status = '';
+        /**
+         * `?poster` arms the tile-photograph hook: freeze a frame, scale
+         * it down, hand back a webp data URL. A dev tool, not a feature —
+         * it is how `public/sylva-poster.webp` gets refreshed when the
+         * world changes.
+         */
+        if (/[?&]poster\b/.test(location.search)) {
+          (window as unknown as { __poster?: () => string }).__poster = () => {
+            sylva.renderFrame();
+            const out = document.createElement('canvas');
+            const w = 1200;
+            out.width = w;
+            out.height = Math.round((canvas.height / canvas.width) * w);
+            const g = out.getContext('2d')!;
+            /* the sky is the PAGE's — the canvas itself is alpha */
+            g.fillStyle = '#05100b';
+            g.fillRect(0, 0, out.width, out.height);
+            g.drawImage(canvas, 0, 0, out.width, out.height);
+            return out.toDataURL('image/webp', 0.8);
+          };
+        }
         this.loop();
       } catch (err) {
         this.status = `the scene did not come up: ${String(err)}`;
@@ -500,6 +600,7 @@ export class SylvaStage extends Component {
 
     return () => {
       live = false;
+      document.body.classList.remove('sy-theater');
       window.removeEventListener('resize', onResize);
       cancelAnimationFrame(this.raf);
       this.anchors.forEach((a) => a.dispose());
@@ -536,6 +637,7 @@ export class SylvaStage extends Component {
     const now = performance.now();
     const dt = Math.min(0.1, this.lastTick ? (now - this.lastTick) / 1000 : 0);
     this.lastTick = now;
+    this.frameDt = dt;
     /**
      * The pose and the aim both CHASE the score rather than obeying it —
      * two cascaded critically-damped stages each (see `poseMid`), so the
@@ -551,8 +653,8 @@ export class SylvaStage extends Component {
       this.poseMidV,
       this.poseNow,
       this.poseVel,
-      14,
-      9,
+      20,
+      13,
       dt,
       ['dolly', 'pitch', 'x', 'y', 'yaw'] as const
     );
@@ -562,8 +664,8 @@ export class SylvaStage extends Component {
       this.lookMidV,
       this.lookNow,
       this.lookNowV,
-      6,
-      3.5,
+      7,
+      4.5,
       dt,
       ['x', 'y', 'z'] as const
     );
@@ -623,16 +725,27 @@ export class SylvaStage extends Component {
        * reads instead of the content vanishing on the first frame.
        */
       const shell = el.firstElementChild as HTMLElement | null;
-      let entrance: { dx: number; dy: number; s: number } | undefined;
-      let show = shown;
+      const st = this.entry.get(spot.id) ?? { e: 0, v: 0 };
+      this.entry.set(spot.id, st);
+      /* critically damped toward seated (1) or parked-on-the-pin (0) —
+         about the OPENING spring's pace, without its bounce */
+      const EW = 12;
+      st.v +=
+        (EW * EW * ((shown ? 1 : 0) - st.e) - 2 * EW * st.v) * this.frameDt;
+      st.e += st.v * this.frameDt;
+      const eased = Math.max(0, Math.min(1, st.e));
+      const entrance = {
+        dx: -spot.off[0] * (1 - eased),
+        /* CSS counts y downward; the offset was written in world up */
+        dy: spot.off[1] * (1 - eased),
+        s: 0.55 + 0.45 * eased,
+      };
       if (shell) {
-        const cs = getComputedStyle(shell);
-        const t = new DOMMatrixReadOnly(
-          cs.transform === 'none' ? undefined : cs.transform
-        );
-        entrance = { dx: t.e, dy: t.f, s: t.a };
-        show = shown || (parseFloat(cs.opacity) || 0) > 0.04;
+        shell.style.transform =
+          `translate(${entrance.dx.toFixed(2)}px, ` +
+          `${entrance.dy.toFixed(2)}px) scale(${entrance.s.toFixed(4)})`;
       }
+      const show = shown || eased > 0.02;
       const m = anchor.face(show, entrance);
       el.style.transform = objectCss(m.card);
       const pin = this.pinEls.get(spot.id);
@@ -821,6 +934,7 @@ export class SylvaStage extends Component {
    */
   private shot = (state: {
     dolly: number;
+    look?: { x: number; y: number; z: number };
     pitch: number;
     x: number;
     y: number;
@@ -833,6 +947,12 @@ export class SylvaStage extends Component {
       y: state.y,
       yaw: state.yaw,
     };
+    /* the aim arrives WITH the pose now — `@look` rides the score's own
+       clock (and the lap spline), so there is no side-channel left; the
+       cascade below still rounds whatever the score hands it */
+    if (state.look) {
+      this.lookGoal = state.look;
+    }
   };
 
   /**
@@ -862,7 +982,6 @@ export class SylvaStage extends Component {
     this.open = spot.id;
     this.told = spot.id;
     this.sent = spot.id;
-    this.lookGoal = this.lookOf.get(spot.id) ?? { x: 0, y: 0, z: 0 };
   };
 
   /**
@@ -889,26 +1008,6 @@ export class SylvaStage extends Component {
       return;
     }
     const id = String(command.target ?? '');
-    if (command.action === 'look') {
-      /**
-       * Re-aim the orbit — at a card, or home to the origin when the cue
-       * names no target. `lookGoal` is a plain field, so this write is safe
-       * inside the dispatch itself, and the loop's easing supplies the
-       * glide; the cue only says WHERE.
-       */
-      if (this.playing) {
-        this.lookGoal = this.lookOf.get(id) ?? { x: 0, y: 0, z: 0 };
-        if (!id) {
-          // going home: the narration hands back to the series title
-          requestAnimationFrame(() => {
-            if (this.playing) {
-              this.told = null;
-            }
-          });
-        }
-      }
-      return;
-    }
     requestAnimationFrame(() => {
       if (!this.playing) {
         return;
@@ -918,6 +1017,11 @@ export class SylvaStage extends Component {
         this.told = id;
       } else if (command.action === 'close' && (!id || this.open === id)) {
         this.open = null;
+        if (!id) {
+          // the targetless close is the going-home one: the narration
+          // hands back to the series title for the pull-out
+          this.told = null;
+        }
       }
     });
   };
@@ -1027,12 +1131,74 @@ export class SylvaStage extends Component {
   }
 
   /**
+   * THE LAP, as waypoints: each leg's swing pair with its card's own point
+   * as the aim, and the way home last. `@through` splines the lot on one
+   * clock — see the score below.
+   */
+  private get lapPath() {
+    const home = { x: 0, y: 0, z: 0 };
+    return [
+      /* THE TITLE SCENE: two wide waypoints before any card — the camera
+         drifts gently across the whole root while the title card reads,
+         never resting, going nowhere in particular yet */
+      { ...REST, dolly: 1.3, look: home, yaw: -6 },
+      { ...REST, dolly: 1.26, look: home, yaw: 5 },
+      ...this.legs.flatMap((leg) => {
+        const look = this.lookOf.get(leg.id);
+        return [
+          { ...leg.into, look },
+          { ...leg.past, look },
+        ];
+      }),
+      { ...REST, look: home },
+    ];
+  }
+
+  /** waypoints spent on the title scene before the first card */
+  private readonly titlePts = 2;
+
+  /** the whole lap's clock; segments are uniform, so timing is arithmetic */
+  private readonly lapSeconds = 31;
+
+  /** one uniform spline segment, seconds */
+  private get lapSegment() {
+    return this.lapSeconds / (this.legs.length * 2 + this.titlePts + 1);
+  }
+
+  /**
+   * When each card is presented: just before its reading waypoint is
+   * crossed — waypoint 2k+1 of the path, at (2k+1) segments — so the
+   * entrance is airborne, never parked.
+   */
+  private get presents() {
+    return this.legs.map((leg, k) => ({
+      id: leg.id,
+      open: Math.max(0, (2 * k + 1 + this.titlePts) * this.lapSegment - 0.9),
+    }));
+  }
+
+  /** the last card lets go a beat into the pull-out */
+  private get lapClose() {
+    return (2 * this.legs.length + this.titlePts) * this.lapSegment + 0.6;
+  }
+
+  /** the aim a hand-flight carries — the visited card's point, or home */
+  private get aimLook() {
+    return (
+      (this.sent ? this.lookOf.get(this.sent) : undefined) ?? {
+        x: 0,
+        y: 0,
+        z: 0,
+      }
+    );
+  }
+
+  /**
    * THE NARRATION PLANE's current chapter: the visited spot's line, or the
    * series title over the establishing shot. Keyed by id in the template so
    * a hand-off replays the lower-third's entrance.
    */
   private get chapter(): {
-    credit?: string;
     eyebrow: string;
     id: string;
     line: string;
@@ -1050,7 +1216,6 @@ export class SylvaStage extends Component {
        * vendored from threeui.
        */
       return {
-        credit: 'A living world by Meng To · threeui — “Living Green”',
         eyebrow: 'A field survey',
         id: 'rest',
         line: 'Step into the living world',
@@ -1137,17 +1302,17 @@ export class SylvaStage extends Component {
 
   private isOpen = (id: string) => this.open === id;
 
-  /** where the content starts: on the pin, small — see OPENING */
+  /**
+   * The card's presence — OPACITY ONLY. The entrance's transform used to be
+   * Motion's too, and the hole was slaved to a getComputedStyle read of it:
+   * two rAF loops, no ordering guarantee, and whenever the stage's frame ran
+   * first the hole wore LAST frame's pose — a dark notch chasing the card's
+   * leading corner at spring speed. The host integrates the entrance itself
+   * now (`entry`, in placeCards) and writes the SAME numbers to the shell's
+   * style and the hole: one writer, zero frames of disagreement.
+   */
   private shell = (spot: Spot) =>
-    this.open === spot.id
-      ? { opacity: 1, scale: 1, x: 0, y: 0 }
-      : {
-          opacity: 0,
-          scale: 0.55,
-          x: -spot.off[0],
-          /* CSS counts y downward and the offset was written in world up */
-          y: spot.off[1],
-        };
+    this.open === spot.id ? { opacity: 1 } : { opacity: 0 };
 
   /**
    * The rows, staggered behind it. A panel whose text is simply there the
@@ -1165,248 +1330,486 @@ export class SylvaStage extends Component {
       : { opacity: 0, transition: CONTENT, y: 8 };
 
   <template>
-    <div class="sy-page {{if this.checking 'is-checking'}}">
-      <div class="sy-hero" {{this.stage}} {{this.track}} {{this.controls}}>
-        {{! THE DOM, UNDER THE CANVAS. Everything visible here arrives through
+    {{#if (this.isCtx "boot")}}
+      <div class="sy-probe" {{this.place}}></div>
+    {{else}}
+      {{#if (this.isCtx "tile")}}
+        {{! THE TILE: a photograph of the world, the title's lower third,
+          and one translucent door into the theater. No WebGL here — the
+          gallery mounts every card at once, and this scene is the most
+          expensive thing in the building. }}
+        <div class="sy-tile">
+          <img class="sy-tile-poster" src={{POSTER}} alt="" />
+          <div class="sy-tile-scrim" aria-hidden="true"></div>
+          <LinkTo @route="sylva" class="sy-tile-tour">▶&nbsp;Tour</LinkTo>
+          <div class="sy-tile-third" aria-hidden="true">
+            <p class="sy-tile-eyebrow">A field survey</p>
+            <p class="sy-tile-name">Sylva</p>
+            <p class="sy-tile-line">Step into the living world</p>
+          </div>
+        </div>
+      {{else}}
+        {{#if (this.isCtx "stage")}}
+          {{! the demo page's face: the theater in a frame, sized to the
+              stage box and tweened in — the heavy world stays in its own
+              context and unmounts with the frame }}
+          <div class="sy-embed">
+            <iframe
+              class="sy-frame"
+              title="Sylva — the living world"
+              src={{EMBED}}
+              {{motion initial=FRAME_FROM animate=FRAME_TO transition=FRAME_IN}}
+            ></iframe>
+          </div>
+        {{else}}
+          <div
+            class="sy-page
+              {{if this.isTheater 'is-theater' 'is-stage'}}
+              {{if this.checking 'is-checking'}}"
+          >
+            {{#if this.showBar}}
+              {{! the theater's own bar: the lockup dark by construction, and
+              Exit standing exactly where the GitHub link usually does —
+              it leaves for the demo page, code and deep dive and all }}
+              <div class="sy-topbar">
+                <LinkTo @route="index" class="sy-brand">
+                  <ChoreoMark />
+                  <span class="sy-brand-copy">
+                    <span class="sy-brand-name">Choreo</span>
+                    <span class="sy-brand-sub">by Cardstack</span>
+                  </span>
+                </LinkTo>
+                <LinkTo
+                  @route="demo"
+                  @model="sylva"
+                  class="sy-exit"
+                >Exit</LinkTo>
+              </div>
+            {{/if}}
+            <div
+              class="sy-hero"
+              {{this.stage}}
+              {{this.track}}
+              {{this.controls}}
+            >
+              {{! THE DOM, UNDER THE CANVAS. Everything visible here arrives through
             a hole the scene cuts for it — see `anchor()`. }}
-        <div class="sy-css" {{this.cssHost}}>
-          <div class="sy-cam">
-            {{#each this.spots as |spot|}}
-              <div
-                class="sy-card {{if (this.isOpen spot.id) 'is-open'}}"
-                {{this.register spot.id}}
-                {{on "pointerdown" (fn this.swallow spot.id)}}
-              >
-                <div
-                  class="sy-shell"
-                  {{motion animate=(this.shell spot) transition=OPENING}}
-                >
-                  <p
-                    class="sy-kind"
-                    {{motion animate=(this.row spot 0)}}
-                  >{{spot.kind}}</p>
-                  <h2
-                    class="sy-name"
-                    {{motion animate=(this.row spot 1)}}
-                  >{{spot.name}}</h2>
-                  <p
-                    class="sy-blurb"
-                    {{motion animate=(this.row spot 2)}}
-                  >{{spot.blurb}}</p>
-                  <div class="sy-note" {{motion animate=(this.row spot 3)}}>
-                    {{! A REAL CONTROL, and the reason the approach exists:
+              <div class="sy-css" {{this.cssHost}}>
+                <div class="sy-cam">
+                  {{#each this.spots as |spot|}}
+                    <div
+                      class="sy-card {{if (this.isOpen spot.id) 'is-open'}}"
+                      {{this.register spot.id}}
+                      {{on "pointerdown" (fn this.swallow spot.id)}}
+                    >
+                      <div
+                        class="sy-shell"
+                        {{motion animate=(this.shell spot) transition=OPENING}}
+                      >
+                        <p
+                          class="sy-kind"
+                          {{motion animate=(this.row spot 0)}}
+                        >{{spot.kind}}</p>
+                        <h2
+                          class="sy-name"
+                          {{motion animate=(this.row spot 1)}}
+                        >{{spot.name}}</h2>
+                        <p
+                          class="sy-blurb"
+                          {{motion animate=(this.row spot 2)}}
+                        >{{spot.blurb}}</p>
+                        <div
+                          class="sy-note"
+                          {{motion animate=(this.row spot 3)}}
+                        >
+                          {{! A REAL CONTROL, and the reason the approach exists:
                     the card is not a picture of UI — this button is live,
                     occluded by a branch and still pressable, and pressing
                     it reaches back INTO the scene. }}
-                    <button
-                      type="button"
-                      class={{this.cueClass spot.id}}
-                      {{on "click" (fn this.act spot)}}
-                    >
-                      <span class="sy-cue-dot" aria-hidden="true"></span>
-                      {{spot.cue.label}}
-                    </button>
-                  </div>
+                          <button
+                            type="button"
+                            class={{this.cueClass spot.id}}
+                            {{on "click" (fn this.act spot)}}
+                          >
+                            <span class="sy-cue-dot" aria-hidden="true"></span>
+                            {{spot.cue.label}}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  {{/each}}
                 </div>
               </div>
-            {{/each}}
-          </div>
-        </div>
 
-        <canvas class="sy-canvas"></canvas>
+              <canvas class="sy-canvas"></canvas>
 
-        {{! THE PINS RIDE OVER THE CANVAS, in a second camera layer.
+              {{! THE PINS RIDE OVER THE CANVAS, in a second camera layer.
             They were under it to begin with, alongside the cards, and the moss
             promptly swallowed them: only cards get a hole cut, so a pin behind
             a branch simply was not there. Correct for a card, wrong for a pin —
             occlusion is what the CARDS are here to demonstrate, whereas a
             marker that is hidden by scenery is a marker nobody can find.
             Same matrix, same billboard, opposite side of the canvas. }}
-        <div class="sy-css sy-css--front" {{this.pinHost}}>
-          <div class="sy-cam">
-            {{#each this.spots as |spot|}}
-              <button
-                type="button"
-                class="sy-pin {{if (this.isOpen spot.id) 'is-on'}}"
-                title={{spot.name}}
-                {{this.pin spot.id}}
-                {{on "click" (fn this.visit spot)}}
-              ></button>
-            {{/each}}
-          </div>
-        </div>
+              <div class="sy-css sy-css--front" {{this.pinHost}}>
+                <div class="sy-cam">
+                  {{#each this.spots as |spot|}}
+                    <button
+                      type="button"
+                      class="sy-pin {{if (this.isOpen spot.id) 'is-on'}}"
+                      title={{spot.name}}
+                      {{this.pin spot.id}}
+                      {{on "click" (fn this.visit spot)}}
+                    ></button>
+                  {{/each}}
+                </div>
+              </div>
 
-        {{! THE NARRATION PLANE. A lower-third over everything: the voice
+              {{! THE NARRATION PLANE. A lower-third over everything: the voice
             over, written down. Keyed on the chapter so every hand-off
             replays its entrance, eyebrow first, then the line, risen and
             unblurred. It is part of the PICTURE, so film mode keeps it. }}
-        <div class="sy-narrate" aria-hidden="true">
-          {{#each (array this.chapter) key="id" as |ch|}}
-            {{#if ch.title}}
-              <p
-                class="sy-narrate-eyebrow"
-                {{motion initial=EYE_FROM animate=EYE_TO transition=EYEBROW}}
-              >{{ch.eyebrow}}</p>
-              <p
-                class="sy-ghost"
-                {{motion initial=LINE_FROM animate=LINE_TO transition=LINE}}
-              >Sylva</p>
-              <p
-                class="sy-headline"
-                {{motion initial=LINE_FROM animate=LINE_TO transition=SUB}}
-              >{{ch.line}}</p>
-              <p
-                class="sy-sub"
-                {{motion initial=LINE_FROM animate=LINE_TO transition=SUB}}
-              >{{ch.sub}}</p>
-              <p
-                class="sy-credit"
-                {{motion initial=EYE_FROM animate=EYE_TO transition=CREDIT}}
-              >{{ch.credit}}</p>
-            {{else}}
-              <p
-                class="sy-narrate-eyebrow"
-                {{motion initial=EYE_FROM animate=EYE_TO transition=EYEBROW}}
-              >{{ch.eyebrow}}</p>
-              <p
-                class="sy-narrate-line"
-                {{motion initial=LINE_FROM animate=LINE_TO transition=LINE}}
-              >{{ch.line}}</p>
-            {{/if}}
-          {{/each}}
-        </div>
+              <div class="sy-narrate" aria-hidden="true">
+                {{#each (array this.chapter) key="id" as |ch|}}
+                  {{#if ch.title}}
+                    <p
+                      class="sy-narrate-eyebrow"
+                      {{motion
+                        initial=EYE_FROM
+                        animate=EYE_TO
+                        transition=EYEBROW
+                      }}
+                    >{{ch.eyebrow}}</p>
+                    <p
+                      class="sy-ghost"
+                      {{motion
+                        initial=LINE_FROM
+                        animate=LINE_TO
+                        transition=LINE
+                      }}
+                    >Sylva</p>
+                    <p
+                      class="sy-headline"
+                      {{motion
+                        initial=LINE_FROM
+                        animate=LINE_TO
+                        transition=SUB
+                      }}
+                    >{{ch.line}}</p>
+                    <p
+                      class="sy-sub"
+                      {{motion
+                        initial=LINE_FROM
+                        animate=LINE_TO
+                        transition=SUB
+                      }}
+                    >{{ch.sub}}</p>
+                    {{! the credit is OWED, and it is a pair of doors: the man
+                  and the library this world was vendored from }}
+                    <p
+                      class="sy-credit"
+                      {{motion
+                        initial=EYE_FROM
+                        animate=EYE_TO
+                        transition=CREDIT
+                      }}
+                    >A living world by
+                      <a
+                        href="https://x.com/MengTo"
+                        target="_blank"
+                        rel="noopener"
+                      >Meng To</a>
+                      ·
+                      <a
+                        href="https://threeui.com/browse"
+                        target="_blank"
+                        rel="noopener"
+                      >threeui</a>
+                      — “Living Green”</p>
+                  {{else}}
+                    <p
+                      class="sy-narrate-eyebrow"
+                      {{motion
+                        initial=EYE_FROM
+                        animate=EYE_TO
+                        transition=EYEBROW
+                      }}
+                    >{{ch.eyebrow}}</p>
+                    <p
+                      class="sy-narrate-line"
+                      {{motion
+                        initial=LINE_FROM
+                        animate=LINE_TO
+                        transition=LINE
+                      }}
+                    >{{ch.line}}</p>
+                  {{/if}}
+                {{/each}}
+              </div>
 
-        {{! The dots are plain HUD, over everything: a hotspot you cannot find
+              {{! The dots are plain HUD, over everything: a hotspot you cannot find
             because the branch is in front of it is not a hotspot. `?film`
             removes them — chrome has no place in an export. }}
-        {{#unless this.film}}
-          <div class="sy-dots">
-            <button
-              type="button"
-              class="sy-dot sy-play {{if this.playing 'is-on'}}"
-              {{on "click" this.toggle}}
-            >{{if this.playing "❙❙ touring" "▶ tour"}}</button>
-            {{#each this.spots as |spot|}}
-              <button
-                type="button"
-                class="sy-dot {{if (this.isOpen spot.id) 'is-on'}}"
-                {{on "click" (fn this.visit spot)}}
-              >{{spot.name}}</button>
-            {{/each}}
-            <span class="sy-hint">drag to look — the fern and the wren read from
-              round the back</span>
-          </div>
-        {{/unless}}
+              {{#unless this.film}}
+                <div class="sy-dots">
+                  <button
+                    type="button"
+                    class="sy-dot sy-play {{if this.playing 'is-on'}}"
+                    {{on "click" this.toggle}}
+                  >{{if this.playing "❙❙ touring" "▶ tour"}}</button>
+                  {{#each this.spots as |spot|}}
+                    <button
+                      type="button"
+                      class="sy-dot {{if (this.isOpen spot.id) 'is-on'}}"
+                      {{on "click" (fn this.visit spot)}}
+                    >{{spot.name}}</button>
+                  {{/each}}
+                  <span class="sy-hint">drag to look — the fern and the wren
+                    read from round the back</span>
+                </div>
+              {{/unless}}
 
-        {{#if this.status}}
-          <p class="sy-status">{{this.status}}</p>
-        {{/if}}
-      </div>
+              {{#if this.status}}
+                <p class="sy-status">{{this.status}}</p>
+              {{/if}}
+            </div>
 
-      <Choreo
-        @onCamera3D={{this.shot}}
-        @onPerform={{this.dispatch}}
-        @onPerformReset={{this.resetPerform}}
-        as |c|
-      >
-        {{! A region collects its score from a render pass, and a pass with no
+            <Choreo
+              @onCamera3D={{this.shot}}
+              @onPerform={{this.dispatch}}
+              @onPerformReset={{this.resetPerform}}
+              as |c|
+            >
+              {{! A region collects its score from a render pass, and a pass with no
             participants in it is a pass with nothing to run. The camera is the
             only thing this region drives, so it needs one member to exist for
             — a marker with no size and nothing to draw. }}
-        <i class="sy-rig" {{motion id="rig"}} aria-hidden="true"></i>
-        {{#if this.playing}}
-          {{! THE SWEEP, cut like a wildlife film: the camera is never parked.
-              Each leg approaches a hotspot on a glide, PRESENTS its card the
-              moment the approach lands, and then pans slowly on THROUGH the
-              reading pose while the card is up — the drift is the read, the
-              way a long lens keeps easing past a subject while the voice over
-              names it. The card is put away as the pan ends and the next
-              approach doubles as the departure. No Waits anywhere: a Wait is
-              a parked frame, and a parked frame is a slideshow. }}
-          <c.Sequence @name={{this.lapName}}>
-            {{#each this.legs as |leg|}}
-              {{! re-aim the orbit at this card as its approach begins — the
-                  loop's easing turns the retarget into the approach's own
-                  slow pan, so the flight and the re-aim are one move }}
-              <c.Perform @action="look" @target={{leg.id}} />
-              {{! THE PRESENT OVERLAPS THE APPROACH — as a CLIPPED cue,
-                  not a parked one. The open used to sit at the seam between
-                  the two camera steps, which put the card's entrance on the
-                  flight's slowest frame: arrive, stop, THEN bloom. It is now
-                  anchored to the approach step itself — `at` its start, a
-                  delay into its span — so it lifts out of the sequence's
-                  flow and fires mid-flight: the card grows out of its dot
-                  while the camera still carries real speed, and the closing
-                  card of the LAST leg is still fading through this same
-                  approach. Two crossings per seam, no dead air. }}
-              <c.Camera3D
-                @name={{leg.name}}
-                @yaw={{leg.into.yaw}}
-                @pitch={{leg.into.pitch}}
-                @dolly={{leg.into.dolly}}
-                @x={{leg.into.x}}
-                @y={{leg.into.y}}
-                @duration={{2.4}}
-                @ease={{CARRY}}
-              />
-              {{! the same open a press on the dot asks for }}
-              <c.Perform
-                @at={{at leg.name}}
-                @delay={{1.3}}
-                @action="open"
-                @target={{leg.id}}
-              />              <c.Camera3D
-                @yaw={{leg.past.yaw}}
-                @pitch={{leg.past.pitch}}
-                @dolly={{leg.past.dolly}}
-                @x={{leg.past.x}}
-                @y={{leg.past.y}}
-                @duration={{3.8}}
-                @ease={{CARRY}}
-              />
-              {{! NO CLOSE. The next leg's open SWAPS the cards — the leaver
-                  fades out while the arrival grows from its dot, both
-                  mid-flight: a cross-fade, and incidentally the spike's
-                  "several cards at once" case exercised on every seam. Only
-                  the lap's last card needs an actual close, clipped into
-                  the going-home flight below. }}
-            {{/each}}
-            {{! the orbit comes home with the camera: no target = the origin }}
-            <c.Perform @action="look" />
-            <c.Camera3D
-              @name="home"
-              @yaw={{REST.yaw}}
-              @pitch={{REST.pitch}}
-              @dolly={{REST.dolly}}
-              @x={{REST.x}}
-              @y={{REST.y}}
-              @duration={{3}}
-              @ease={{CARRY}}
-            />
-            {{! the last card lets go partway into the pull-out — a targetless
-                close puts away whichever card is still up }}
-            <c.Perform @at={{at "home"}} @delay={{0.6}} @action="close" />
-            <c.Perform @action="lap" />
-          </c.Sequence>
-        {{else}}
-          <c.Camera3D
-            @yaw={{this.aim.yaw}}
-            @pitch={{this.aim.pitch}}
-            @dolly={{this.aim.dolly}}
-            @x={{this.aim.x}}
-            @y={{this.aim.y}}
-            @duration={{1.1}}
-          />
+              <i class="sy-rig" {{motion id="rig"}} aria-hidden="true"></i>
+              {{#if this.playing}}
+                {{! THE SWEEP IS ONE STEP. Eight reading-swing waypoints and the
+              way home, splined by `@through` on a single clock — so the
+              camera crosses every pose with continuous velocity instead of
+              parking at seams, and the whole lap stays a pure function of
+              the clock (scrubbable, exportable), which the host-side chaser
+              alone could never claim. The aim rides IN the waypoints via
+              `@look`: no side-channel, no second easing. The ease is
+              linear on purpose — the spline is the shape. }}
+                <c.Sequence @name={{this.lapName}}>
+                  <c.Camera3D
+                    @name="lap"
+                    @through={{this.lapPath}}
+                    @duration={{this.lapSeconds}}
+                    @ease="linear"
+                  />
+                  {{! presents, CLIPPED into the path: each open fires just before
+                its card's waypoint is crossed, mid-flight — and each open
+                SWAPS the cards, so the leaver and the arrival cross-fade
+                while the camera is still travelling }}
+                  {{#each this.presents as |present|}}
+                    <c.Perform
+                      @at={{at "lap"}}
+                      @delay={{present.open}}
+                      @action="open"
+                      @target={{present.id}}
+                    />
+                  {{/each}}
+                  {{! the last card lets go partway into the pull-out — a
+                targetless close puts away whichever card is still up }}
+                  <c.Perform
+                    @at={{at "lap"}}
+                    @delay={{this.lapClose}}
+                    @action="close"
+                  />
+                  <c.Perform @action="lap" />
+                </c.Sequence>
+              {{else}}
+                <c.Camera3D
+                  @yaw={{this.aim.yaw}}
+                  @pitch={{this.aim.pitch}}
+                  @dolly={{this.aim.dolly}}
+                  @x={{this.aim.x}}
+                  @y={{this.aim.y}}
+                  @look={{this.aimLook}}
+                  @duration={{1.1}}
+                />
+              {{/if}}
+            </Choreo>
+          </div>
         {{/if}}
-      </Choreo>
-    </div>
+      {{/if}}
+    {{/if}}
 
     <style>
       .sy-page {
-        position: fixed;
-        inset: 0;
         background: #05100b;
         overflow: hidden;
+      }
+      .sy-embed {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: #05100b;
+      }
+      .sy-frame {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        transform-origin: 50% 60%;
+      }
+      /* the theater owns the viewport; the stage face owns its box */
+      .sy-page.is-theater {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+      }
+      .sy-page.is-stage {
+        position: absolute;
+        inset: 0;
+      }
+      /* while the theater is up, the app's own chrome steps out */
+      body.sy-theater .topbar,
+      body.sy-theater .footer {
+        display: none;
+      }
+      /* ── the theater's bar: dark by construction, whatever the theme ── */
+      .sy-topbar {
+        position: absolute;
+        z-index: 6;
+        inset-inline: 0;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: clamp(10px, 1.4vh, 22px) clamp(16px, 2.2vw, 40px);
+        background: linear-gradient(rgba(3, 10, 6, 0.75), rgba(3, 10, 6, 0));
+      }
+      .sy-brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+      }
+      .sy-brand-copy {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.1;
+      }
+      .sy-brand-name {
+        color: #eef7f0;
+        font:
+          700 clamp(14px, 1.1vw, 22px) / 1.1 ui-sans-serif,
+          system-ui,
+          sans-serif;
+        letter-spacing: 0.01em;
+      }
+      .sy-brand-sub {
+        color: #6f9a80;
+        font:
+          500 clamp(9px, 0.7vw, 14px) / 1.2 ui-monospace,
+          monospace;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .sy-exit {
+        padding: clamp(6px, 0.5vw, 11px) clamp(14px, 1.2vw, 26px);
+        border-radius: 999px;
+        border: 1px solid rgba(126, 214, 160, 0.4);
+        background: rgba(6, 18, 12, 0.6);
+        backdrop-filter: blur(10px);
+        color: #cfe9da;
+        font:
+          clamp(11px, 0.85vw, 18px) / 1 ui-monospace,
+          monospace;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-decoration: none;
+      }
+      .sy-exit:hover {
+        background: rgba(20, 44, 30, 0.85);
+      }
+      /* ── the tile ─────────────────────────────────────────────── */
+      .sy-tile {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: #05100b;
+      }
+      .sy-tile-poster {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .sy-tile-scrim {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            60% 50% at 50% 46%,
+            rgba(3, 10, 6, 0) 40%,
+            rgba(3, 10, 6, 0.35) 100%
+          ),
+          linear-gradient(rgba(3, 10, 6, 0) 55%, rgba(3, 10, 6, 0.82) 100%);
+      }
+      .sy-tile-tour {
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        transform: translate(-50%, -50%);
+        padding: 12px 26px;
+        border-radius: 999px;
+        border: 1px solid rgba(220, 255, 232, 0.5);
+        background: rgba(6, 18, 12, 0.42);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: #eafff2;
+        font:
+          600 13px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        text-decoration: none;
+        transition:
+          background-color 180ms ease,
+          transform 180ms ease;
+      }
+      .sy-tile-tour:hover {
+        background: rgba(126, 214, 160, 0.34);
+        transform: translate(-50%, -50%) scale(1.05);
+      }
+      .sy-tile-third {
+        position: absolute;
+        left: 18px;
+        bottom: 14px;
+        right: 18px;
+      }
+      .sy-tile-eyebrow {
+        margin: 0 0 4px;
+        font:
+          500 9px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        color: #7ed6a0;
+      }
+      .sy-tile-name {
+        margin: 0 0 2px;
+        font:
+          300 26px/1 ui-sans-serif,
+          system-ui,
+          sans-serif;
+        letter-spacing: 0.3em;
+        text-transform: uppercase;
+        color: rgba(226, 245, 232, 0.96);
+      }
+      .sy-tile-line {
+        margin: 0;
+        font:
+          300 13px/1.3 ui-serif,
+          Georgia,
+          serif;
+        color: #9fc2ac;
       }
       .sy-hero {
         position: absolute;
@@ -1449,31 +1852,109 @@ export class SylvaStage extends Component {
       /* the line-up test: a hollow ring, so the scene's magenta dot shows
          through the middle when the two projections agree */
       .sy-page.is-checking .sy-pin {
-        background: transparent;
-        border-color: #7ef2ff;
         width: 22px;
         height: 22px;
+        border: 2px solid #7ef2ff;
+        background: transparent;
       }
+      .sy-page.is-checking .sy-pin::before,
+      .sy-page.is-checking .sy-pin::after {
+        display: none;
+      }
+      /* THE DOTS ARE ALIVE, and they are little spheres, not stickers.
+         The button's own transform is written every frame by the host
+         (objectCss), so the breathing and the ring live on pseudo-elements
+         — the one place a CSS animation survives an inline transform. */
       .sy-pin {
         position: absolute;
         top: 0;
         left: 0;
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         padding: 0;
+        border: 0;
         border-radius: 50%;
-        border: 2px solid rgba(220, 255, 232, 0.9);
-        background: rgba(126, 214, 160, 0.55);
-        box-shadow: 0 0 0 4px rgba(6, 18, 12, 0.45);
+        background: transparent;
         cursor: pointer;
       }
-      .sy-pin.is-on {
-        background: #7ed6a0;
+      .sy-pin::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        /* a sphere: hot highlight up-left, shadowed limb down-right */
+        background: radial-gradient(
+          circle at 32% 28%,
+          #eafff2 0%,
+          #a5ecc2 32%,
+          #5bb787 66%,
+          #2a6e4d 100%
+        );
+        box-shadow:
+          0 0 0 3px rgba(6, 18, 12, 0.4),
+          0 2px 8px rgba(3, 10, 6, 0.55),
+          0 0 16px rgba(126, 214, 160, 0.5);
+        animation: sy-throb 2.6s ease-in-out infinite;
+      }
+      .sy-pin::after {
+        content: "";
+        position: absolute;
+        inset: -3px;
+        border-radius: 50%;
+        border: 1.5px solid rgba(158, 232, 188, 0.7);
+        animation: sy-ring 2.6s ease-out infinite;
+      }
+      /* the four breathe out of phase, like things that are each alive */
+      .sy-pin:nth-of-type(2)::before,
+      .sy-pin:nth-of-type(2)::after {
+        animation-delay: -0.7s;
+      }
+      .sy-pin:nth-of-type(3)::before,
+      .sy-pin:nth-of-type(3)::after {
+        animation-delay: -1.4s;
+      }
+      .sy-pin:nth-of-type(4)::before,
+      .sy-pin:nth-of-type(4)::after {
+        animation-delay: -2.1s;
+      }
+      @keyframes sy-throb {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.16);
+        }
+      }
+      @keyframes sy-ring {
+        0% {
+          transform: scale(0.65);
+          opacity: 0.9;
+        }
+        70%,
+        100% {
+          transform: scale(1.9);
+          opacity: 0;
+        }
+      }
+      .sy-pin.is-on::before {
+        background: radial-gradient(
+          circle at 32% 28%,
+          #ffffff 0%,
+          #c9f7db 30%,
+          #7ed6a0 64%,
+          #3c8f66 100%
+        );
+        box-shadow:
+          0 0 0 3px rgba(6, 18, 12, 0.4),
+          0 2px 8px rgba(3, 10, 6, 0.55),
+          0 0 24px rgba(126, 214, 160, 0.9);
       }
       .sy-pin.is-behind {
-        opacity: 0.32;
-        border-color: rgba(220, 255, 232, 0.5);
-        box-shadow: none;
+        opacity: 0.34;
+      }
+      .sy-pin.is-behind::after {
+        display: none;
       }
       /**
        * THE PANEL LIVES ON THE SHELL, not on the positioned box.
@@ -1661,6 +2142,12 @@ export class SylvaStage extends Component {
           sans-serif;
         color: #9fc2ac;
         text-shadow: 0 1px 16px rgba(3, 10, 6, 0.8);
+      }
+      .sy-narrate a {
+        pointer-events: auto;
+        color: #9fe0ba;
+        text-decoration: underline dotted rgba(126, 214, 160, 0.6);
+        text-underline-offset: 3px;
       }
       .sy-credit {
         margin: clamp(10px, 1.6vh, 28px) 0 0;

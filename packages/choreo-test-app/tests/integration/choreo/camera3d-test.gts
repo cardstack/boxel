@@ -70,6 +70,11 @@ const frames = (n: number) =>
     requestAnimationFrame(step);
   });
 
+/** an aim off in the scene, for the @look tests */
+const AIM = { x: 100, y: 50, z: -20 };
+/** three waypoints; pitch appears at the second and must carry to the third */
+const PATH = [{ yaw: 30 }, { pitch: 10, yaw: 60 }, { yaw: 90 }];
+
 /** the pose the host last received */
 const latest = (): Camera3DState =>
   shots[shots.length - 1] ?? { dolly: 1, pitch: 0, x: 0, y: 0, yaw: 0 };
@@ -208,6 +213,115 @@ module('Integration | choreo | c.Camera3D', function (hooks) {
       Math.abs(mid.yaw - 37.5) < 0.9,
       `a direct seek into a relative cue folds the prefix first: ` +
         `${mid.yaw.toFixed(2)}`
+    );
+  });
+
+  test('@look tweens the orbit centre with the pose, and it carries', async function (assert) {
+    await render(
+      <template>
+        <Shot @seize={{seize}} as |take|>
+          <Choreo @onCamera3D={{watch}} as |c|>
+            {{grab c}}
+            <div
+              data-box
+              style="width:{{take}}0px;height:20px"
+              {{motion id="box"}}
+            ></div>
+            <c.Sequence>
+              <c.Camera3D
+                @yaw={{20}}
+                @look={{AIM}}
+                @duration={{1}}
+                @ease="linear"
+              />
+              {{! no @look here: the aim in force carries, like every
+                  other unnamed pose component }}
+              <c.Camera3D @yaw={{-20}} @duration={{1}} @ease="linear" />
+            </c.Sequence>
+          </Choreo>
+        </Shot>
+      </template>
+    );
+    await roll();
+
+    // halfway in: the aim lerps from the origin alongside the yaw
+    const half = await at(0.5);
+    assert.ok(
+      Math.abs((half.look?.x ?? 0) - 50) < 1.5 &&
+        Math.abs((half.look?.z ?? 0) - -10) < 0.8,
+      `the centre travels on the same clock: ` +
+        `${half.look?.x.toFixed(1)}, ${half.look?.z.toFixed(1)}`
+    );
+
+    // through the second cue, which never mentions look: it holds
+    const later = await at(1.5);
+    assert.ok(
+      Math.abs((later.look?.x ?? 0) - 100) < 0.01,
+      `an unnamed aim carries in force: ${later.look?.x.toFixed(2)}`
+    );
+
+    // and a seek back reconstructs it like any pose component
+    const back = await at(0.5);
+    assert.ok(
+      Math.abs((back.look?.x ?? 0) - 50) < 1.5,
+      `a seek reconstructs the aim: ${back.look?.x.toFixed(1)}`
+    );
+  });
+
+  test('@through runs one clock through every waypoint', async function (assert) {
+    await render(
+      <template>
+        <Shot @seize={{seize}} as |take|>
+          <Choreo @onCamera3D={{watch}} as |c|>
+            {{grab c}}
+            <div
+              data-box
+              style="width:{{take}}0px;height:20px"
+              {{motion id="box"}}
+            ></div>
+            <c.Sequence>
+              <c.Camera3D @through={{PATH}} @duration={{3}} @ease="linear" />
+            </c.Sequence>
+          </Choreo>
+        </Shot>
+      </template>
+    );
+    await roll();
+
+    // mid-first-segment: en route, between the pose in force and waypoint 1
+    const early = await at(0.5);
+    assert.ok(
+      early.yaw > 4 && early.yaw < 26,
+      `the spline is moving inside a segment: ${early.yaw.toFixed(2)}`
+    );
+
+    // uniform segments: waypoint 2 is CROSSED exactly at 2/3 of the clock
+    const cross = await at(2);
+    assert.ok(
+      Math.abs(cross.yaw - 60) < 0.9,
+      `a waypoint is crossed, on time: ${cross.yaw.toFixed(2)}`
+    );
+    assert.ok(
+      Math.abs(cross.pitch - 10) < 0.9,
+      `with its own pitch: ${cross.pitch.toFixed(2)}`
+    );
+
+    // and the last waypoint is a LANDING, exact
+    const end = await at(3);
+    assert.ok(
+      Math.abs(end.yaw - 90) < 0.01,
+      `the path lands exactly on its last waypoint: ${end.yaw.toFixed(3)}`
+    );
+    assert.ok(
+      Math.abs(end.pitch - 10) < 0.01,
+      `omissions carry forward to the end: ${end.pitch.toFixed(3)}`
+    );
+
+    // pure function of the clock: seeking back into the path agrees
+    const again = await at(2);
+    assert.ok(
+      Math.abs(again.yaw - 60) < 0.9,
+      `a seek into the path reconstructs it: ${again.yaw.toFixed(2)}`
     );
   });
 

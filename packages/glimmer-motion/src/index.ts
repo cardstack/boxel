@@ -22,6 +22,7 @@ export type {
   Block,
   Bounds,
   Camera3DState,
+  Camera3DWaypoint,
   CameraState,
   DeliveryBy,
   DeliveryOrder,

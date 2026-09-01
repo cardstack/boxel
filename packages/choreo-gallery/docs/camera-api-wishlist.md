@@ -94,6 +94,17 @@ which today costs ~30 hand-written lines and one landmine.
 
 # `<c.Camera3D>`: what the Sylva tour had to hand-build
 
+> **Shipped.** `@look` is part of the pose now — tweened on the step's own
+> clock, carried in force like every unnamed component, relative under
+> `@by`. `@through` runs one camera step through N waypoints on a cardinal
+> spline (`@tension`, default 0.5 — 0 is classic Catmull-Rom, 1 is
+> piecewise-linear), omissions carrying forward, yaw interpolated
+> numerically so authors unwrap it. Both are covered in
+> `camera3d-test.gts`, and the Sylva tour's whole lap is now ONE
+> `@through` step with the aim in its waypoints — the Perform side-channel
+> is gone. The rest of this section is kept as the design rationale; the
+> host-side chaser remains, as the simulation half.
+
 Written after the `/_sylva` spike, whose film is a loop of camera legs over
 a 3D scene. Two gaps cost real code; both have the same shape as `@fit`
 did — the host re-deriving something the score should own.

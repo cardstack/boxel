@@ -1,3 +1,3 @@
 import { SylvaStage } from 'test-app/components/sylva-stage';
 
-<template><SylvaStage /></template>
+<template><SylvaStage @theater={{true}} /></template>
