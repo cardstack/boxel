@@ -163,6 +163,10 @@ const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 // so a persistently-down server doesn't spin forever.
 const UNREACHABLE_RETRY_INTERVAL_MS = 10_000;
 const MAX_UNREACHABLE_RETRY_ATTEMPTS = 6;
+// Pause before each retry of a failed SystemCard load. Without a retry, one
+// transient failure at boot locks the whole session into the fallback model
+// list and the hardcoded default skills.
+const SYSTEM_CARD_RETRY_DELAYS_MS = [5_000, 15_000, 60_000, 5 * 60_000];
 
 const realmEventsLogger = logger('realm:events');
 
@@ -3227,6 +3231,9 @@ export default class MatrixService extends Service {
       envDefaultFailed ||
       (userChoiceFailed && !envDefaultId) ||
       (this._systemCardWasLost && !loadedCard);
+    if (this._systemCardLoadFailed) {
+      this.scheduleSystemCardRetry();
+    }
 
     if (loadedCard?.id !== this._systemCard?.id) {
       this._systemCardInvalidationUnsub?.();
@@ -3245,6 +3252,41 @@ export default class MatrixService extends Service {
       this._systemCard = loadedCard;
     }
   }
+
+  private scheduleSystemCardRetry() {
+    if (isTesting()) {
+      // Tests drive recovery via `setSystemCard` directly so the assertions
+      // are deterministic; skip the background timer loop, which would
+      // otherwise keep firing while a stubbed card stays unloadable.
+      return;
+    }
+    if (!this._systemCardLoadFailed || this.retrySystemCardLoadTask.isRunning) {
+      return;
+    }
+    this.retrySystemCardLoadTask.perform();
+  }
+
+  // Bounded like retryUnreachableRealmServersTask: after the schedule is
+  // exhausted the session stays on the fallback SystemCard until something
+  // else re-enters setSystemCard (an account-data change, a reload).
+  private retrySystemCardLoadTask = restartableTask(async () => {
+    for (
+      let attempt = 0;
+      this._systemCardLoadFailed &&
+      attempt < SYSTEM_CARD_RETRY_DELAYS_MS.length;
+      attempt++
+    ) {
+      await rawTimeout(SYSTEM_CARD_RETRY_DELAYS_MS[attempt]);
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      try {
+        await this.setSystemCard(this._userChoiceId);
+      } catch (err) {
+        console.error('Failed to retry SystemCard load', err);
+      }
+    }
+  });
 
   // Fires when the active SystemCard is deleted in the same session (either
   // via the in-tab UI or via a matrix-auth-room invalidation originating

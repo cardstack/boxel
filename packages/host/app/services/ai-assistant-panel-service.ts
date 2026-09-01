@@ -2,6 +2,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Service from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { allSettled, restartableTask } from 'ember-concurrency';
@@ -261,6 +262,50 @@ export default class AiAssistantPanelService extends Service {
     if (hidePastSessionsList) {
       this.hidePastSessions();
     }
+    void this.ensureDefaultSkillsApplied(roomId);
+  }
+
+  // Rooms this session has already checked for a missing default-skill state
+  // (or repaired). Rechecking on every entry would re-run the skills tool for
+  // rooms the user deliberately keeps skill-less mid-session.
+  private skillBackfillCheckedRooms = new Set<string>();
+
+  // A room created while the default-skill lookup was failing (the SystemCard
+  // unavailable, the skills realm unreachable) carries an empty skills state
+  // permanently: room state is persisted, the panel reuses the unused room as
+  // the "new session", and nothing re-applies the defaults. On entering a
+  // room that has no messages and has never had a skill attached, apply the
+  // defaults now. A room where the user disabled every skill is untouched —
+  // disabling moves a skill to the disabled list rather than removing it.
+  private async ensureDefaultSkillsApplied(roomId: string) {
+    if (isTesting()) {
+      // Tests assert on room skill state they set up themselves; a background
+      // backfill would mutate it nondeterministically.
+      return;
+    }
+    if (this.skillBackfillCheckedRooms.has(roomId)) {
+      return;
+    }
+    if (this.doCreateRoom.isRunning) {
+      // Room creation applies (or defers) the defaults itself.
+      return;
+    }
+    let resource = this.matrixService.roomResources.get(roomId);
+    let room = resource?.matrixRoom;
+    if (!room) {
+      // Room state has not synced yet; a later entry re-checks.
+      return;
+    }
+    let { enabledSkillCards = [], disabledSkillCards = [] } =
+      room.skillsConfig ?? {};
+    this.skillBackfillCheckedRooms.add(roomId);
+    if (enabledSkillCards.length || disabledSkillCards.length) {
+      return;
+    }
+    if (resource!.messages.length > 0) {
+      return;
+    }
+    await this.applyDefaultSkillsToRoom(roomId);
   }
 
   @action
