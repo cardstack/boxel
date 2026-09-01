@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 import { at, Choreo, motion, type PerformCommand } from 'glimmer-motion';
+import TowersNotes from 'test-app/components/notes/towers';
 import config from 'test-app/config/environment';
 
 /**
@@ -3362,94 +3363,12 @@ export default class TowerFilm extends Component<{
               To</a></span>
         </div>
 
-        {{! ============================================================
-        THE CUTTING ROOM — the deep-dive under the film. The film above
-        is the exhibit; this is the plate on the wall beside it: what
-        the timeline is, how it cuts, and a strip of live junction
-        triggers that run their transition on the picture upstairs.
-        ============================================================ }}
-        <section id="cutting-room" class="tf-doc">
-          <header class="tf-doc-head">
-            <p class="tf-doc-kicker">UNDER THE HOOD</p>
-            <h2 class="tf-doc-title">The Cutting Room</h2>
-            <p class="tf-doc-lede">The film above has no video file, no
-              timeline scrubber, and no editor — it is cut, graded, mixed and
-              narrated live by a Choreo score. This is what the timeline can
-              do.</p>
-          </header>
-
-          <div class="tf-doc-grid">
-            <article>
-              <h3><span>一</span> One clock, one path</h3>
-              <p>The whole film is a single camera step: every beat
-                contributes waypoints to one spline, one tick per two
-                seconds, and every cue — a line of narration, a stage mark, a
-                traced eave — is a delay into that same clock. There is no
-                playlist to drift out of sync, because there is nothing to
-                sync: the shot list and the script are one object.</p>
-            </article>
-            <article>
-              <h3><span>二</span> Splices</h3>
-              <p>A waypoint marked <code>cut</code> splits the path into
-                shots. Each side is sampled as its own clamped spline — no
-                velocity ever crosses a seam — and the pose is a step
-                function at the cut's own instant. The outgoing shot plays
-                through the seam; the incoming one begins exactly on it.
-                Nothing interpolates, integrates, or resamples across the
-                boundary.</p>
-            </article>
-            <article>
-              <h3><span>三</span> Junctions</h3>
-              <p>A seam carries a policy, not just a location. Eleven joins
-                cover the grammar — try them on the film above, live:</p>
-              <div class="tf-doc-joins">
-                <button type="button" {{on "click" (fn this.previewJoin "wipe")}}>wipe<i>feathered, raked to the sun</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "blend")}}>blend<i>push dissolve</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "blur")}}>blur<i>defocus dissolve</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "luma")}}>luma<i>highlights linger</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "iris")}}>iris<i>closes on the subject</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "dip")}}>dip<i>through a colour</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "flash")}}>flash<i>two-breath pop</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "defocus")}}>defocus<i>rack focus</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "sweep")}}>sweep<i>the sun flares</i></button>
-                <button type="button" {{on "click" (fn this.previewJoin "whip")}}>whip<i>a fast chased tween</i></button>
-              </div>
-            </article>
-            <article>
-              <h3><span>四</span> Linked tracks</h3>
-              <p>Every track crosses a seam on its own clock. A sentence
-                interrupted by a new line barge-fades on its own audio
-                element while the new one starts clean; a seam into a silent
-                shot is an L-cut — the sentence finishes over the new
-                picture. The music ducks fast and recovers slow, and no
-                boundary ever hard-clips a waveform.</p>
-            </article>
-            <article>
-              <h3><span>五</span> Navigation is an edit</h3>
-              <p>Chapter skip does not seek — the lens is an integrator, and
-                a seek would arrive with the wrong velocity. Skipping
-                re-cuts: the beat list is sliced, the path, cues and
-                sequence name change together, and the score plays a
-                different, shorter film whose first waypoint is spliced. The
-                transport is the same re-cut wearing a broadcast bar.</p>
-            </article>
-            <article>
-              <h3><span>六</span> The bridge</h3>
-              <p>The scene is a vendored page on its own three.js, reached
-                through one function-call bridge: pose goals for a cascaded
-                camera chase, tubes drawn on the geometry, a shader post
-                pass (grain, aberration, vignette, a milk lift), the sun
-                moved per shot, the air thickened, the music ducked — and a
-                one-frame synchronous snapshot that makes every freeze-based
-                join possible.</p>
-            </article>
-          </div>
-
-          <footer class="tf-doc-foot">
-            <p>Design note: <code>docs/choreo-splices.md</code> · Scene:
-              threeui by Meng To · Cut by a score — Choreo</p>
-          </footer>
-        </section>
+        {{! THE CUTTING ROOM — the wall plate under the exhibit, set in
+        the house dive template like every other demo's deep dive. The
+        film hands it one thing: the live junction trigger. }}
+        <div id="cutting-room" class="tf-notes">
+          <TowersNotes @preview={{this.previewJoin}} />
+        </div>
       {{/unless}}
     </div>
 
@@ -4995,132 +4914,58 @@ export default class TowerFilm extends Component<{
         }
       }
 
-      /* ---- the cutting room ------------------------------------------ */
-      .tf-doc {
-        background: #efe4c9;
-        border-top: 1px solid #cbb992;
-        padding: clamp(44px, 7vw, 96px) 7% clamp(40px, 6vw, 80px);
-        color: #3f3520;
-        font-family: var(--tf-ui);
+      /* ---- the cutting room ------------------------------------------ *
+         The dive itself is the app's own template (.dive/.dd, app.css);
+         this wrapper just seats it on the app's page ground below the
+         film, and the joins strip is the one film-only element. */
+      .tf-notes {
+        background: var(--bg-page);
+        border-top: 1px solid var(--line);
+        padding: 10px clamp(20px, 5vw, 60px) 80px;
       }
 
-      .tf-doc-head {
-        max-width: 760px;
-        margin-bottom: clamp(30px, 4vw, 56px);
+      .tf-notes .dive {
+        max-width: 1080px;
+        margin: 0 auto;
       }
 
-      .tf-doc-kicker {
-        margin: 0 0 10px;
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.34em;
-        color: #96551b;
-      }
-
-      .tf-doc-title {
-        margin: 0 0 14px;
-        font-family: var(--tf-display);
-        font-size: clamp(30px, 4vw, 52px);
-        font-weight: 500;
-        color: #2e2515;
-      }
-
-      .tf-doc-lede {
-        margin: 0;
-        font-family: var(--tf-display);
-        font-size: clamp(16px, 1.5vw, 20px);
-        line-height: 1.55;
-        color: #5c4f36;
-      }
-
-      .tf-doc-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: clamp(24px, 3vw, 44px);
-      }
-
-      .tf-doc-grid article h3 {
-        margin: 0 0 10px;
-        font-size: 14px;
-        font-weight: 800;
-        letter-spacing: 0.14em;
-        color: #2e2515;
-      }
-
-      .tf-doc-grid article h3 span {
-        display: inline-block;
-        margin-right: 8px;
-        font-family: var(--tf-display);
-        font-weight: 400;
-        color: #96551b;
-      }
-
-      .tf-doc-grid article p {
-        margin: 0;
-        font-size: 14px;
-        line-height: 1.65;
-        color: #55462c;
-      }
-
-      .tf-doc-grid code {
-        font-size: 12px;
-        background: rgba(46, 37, 21, 0.08);
-        padding: 1px 5px;
-        border-radius: 4px;
-      }
-
-      .tf-doc-joins {
+      .dd-joins {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
-        margin-top: 14px;
       }
 
-      .tf-doc-joins button {
+      .dd-joins button {
         appearance: none;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
         gap: 2px;
-        border: 1px solid #c2b18c;
-        background: #f6edd6;
-        color: #2e2515;
+        border: 1px solid var(--line);
+        background: transparent;
+        color: var(--ink);
         font: inherit;
         font-size: 13px;
         font-weight: 700;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.04em;
         padding: 8px 13px;
         border-radius: 10px;
         cursor: pointer;
         transition:
           transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-          background 180ms ease;
+          border-color 180ms ease;
       }
 
-      .tf-doc-joins button:hover {
+      .dd-joins button:hover {
         transform: translateY(-2px);
-        background: #fdf6e2;
+        border-color: var(--ember);
       }
 
-      .tf-doc-joins button i {
+      .dd-joins button i {
         font-style: normal;
         font-size: 10px;
         font-weight: 500;
-        letter-spacing: 0.04em;
-        color: #8b7c5c;
-      }
-
-      .tf-doc-foot {
-        margin-top: clamp(34px, 5vw, 64px);
-        padding-top: 18px;
-        border-top: 1px solid #cbb992;
-      }
-
-      .tf-doc-foot p {
-        margin: 0;
-        font-size: 12px;
-        letter-spacing: 0.06em;
-        color: #8b7c5c;
+        color: color-mix(in srgb, var(--ink) 60%, var(--bg-page));
       }
 
       /* the app's own chrome, gone: this route is a frame, not a page */
