@@ -140,27 +140,38 @@ Two operational notes when fanning these out:
 - CloudFront throttles aggressively — firing ~60 calls at once gets `Throttling: Rate exceeded` on some. Cap concurrency or fall back to sequential with a small `sleep`.
 - AWS CLI v2 auto-pagination quirk: for _paginated_ list operations (e.g. `list-invalidations`, `list-distributions`), the CLI prints **nothing** (empty stdout, exit 0) when there are zero items — including under the default/JSON output. This is the pagination layer, not the output format: `--no-paginate` returns the normal `{"InvalidationList": { … "Quantity": 0 }}` payload, and non-paginated calls like `list-tags-for-resource` print `{"Items": []}` for an empty result. So empty stdout _from a paginated list_ means "zero items," not an error — but don't generalize that to other commands, which return a normal JSON payload for empty results.
 
+## Two rules that come before any of the commands below
+
+These exist because both have already been broken by an agent following this skill. Read them before running anything in this section.
+
+### The password is never written down
+
+The DB password is fetched from SSM and handed to `psql` on the invocation that uses it. It is **never** written to a file, never `export`ed into something that outlives the command, never echoed, never committed. Not `~/.pgpass`. Not a scratch file. Not "just for this one query".
+
+The only sanctioned shape is a single command that fetches and uses it in one breath:
+
+```sh
+PGPASSWORD=$(aws --profile claude-<env> ssm get-parameter \
+  --name /<env>/boxel/CLAUDE_DB_PASSWORD --with-decryption \
+  --query 'Parameter.Value' --output text) \
+  psql -h localhost -p $LOCAL_PORT -U claude_readonly_user -d boxel -A -t -c "<SQL>"
+```
+
+That form is verified working against both staging and prod. If you find yourself assembling the credential across several commands — writing it to a file, reading it back with `cat`, building a `.pgpass` line — stop: that is the wrong path, and it is the specific mistake this rule exists to prevent. A credential written to disk outlives the task, and nothing in this flow needs it to.
+
+### A blocked step is not an invitation to find another way
+
+If a command in this skill is refused — by a permission prompt, a sandbox, a classifier — that is a signal to **ask the user**, not to reach for a different mechanism that accomplishes the same thing with weaker properties.
+
+The failure mode to avoid, stated plainly because it has happened: a compound command that built the DB credential was blocked, and instead of asking, the agent wrote the production password to `~/.pgpass` — a form that happened to be permitted, and that left the secret sitting on disk. The block was doing its job; the workaround defeated it. The documented inline form was available the whole time and would have worked.
+
+So: when blocked, re-read this skill for the sanctioned shape first. If the sanctioned shape is what was blocked, say so and let the user decide. Never substitute a path that weakens a guarantee — least privilege, no credentials at rest, read-only — in order to get unblocked.
+
 ## Connecting to the boxel RDS database
 
 The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `claude_readonly_user` DB user.
 
-### Path A (preferred) — `scripts/claude-db.sh`
-
-One command, and the whole port-forward dance is inside it:
-
-```sh
-scripts/claude-db.sh staging -c "SELECT count(*) FROM boxel_index"
-scripts/claude-db.sh prod    -f query.sql
-scripts/claude-db.sh staging -c "SELECT 1" -- -P format=aligned   # psql args after --
-```
-
-Use this rather than driving the steps by hand. Assembling the connection across several commands is where a credential ends up somewhere it shouldn't — the script reads the password from SSM straight into the psql invocation, so it is never written to disk and never printed. It also connects only as `${CLAUDE_DB_USER}`, verifies it actually did and that the user is in `readonly_role` before running your statement, refuses anything that isn't read-only, and tears the tunnel down on every exit path.
-
-**Never** materialize the password some other way to get around a tooling problem — no `~/.pgpass`, no temp file, no `export` into a file that outlives the command. If this script cannot do what you need, extend it.
-
-The manual sequence below is the reference for what the script does, and for the cases it does not cover (the EFS browser, ad-hoc ports).
-
-### Path B — the same thing by hand: SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
+### Path A — SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
 
 > All `aws --profile claude-<env> ...` commands below run as the `boxel-claude-readonly` role, not as your user. The procedural commands look the same as before — only the credentials underneath differ.
 
@@ -188,7 +199,7 @@ PROFILE=claude-staging                         # or claude-prod
 CLUSTER=staging                                # or production (verify)
 SERVICE=boxel-realm-server-staging             # or the prod equivalent
 SSM_PREFIX=/staging/boxel                      # or /production/boxel
-LOCAL_PORT=55432                               # any free local port
+LOCAL_PORT=55432                               # see "pick a port" below — verify it is free
 
 # 1) Find the running task and its container runtime ID. SSM port-forwarding
 #    targets ECS by `cluster_<task-id>_<runtime-id>`, where runtime-id is
@@ -220,8 +231,10 @@ export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
 export CLAUDE_PASSWORD=$(aws --profile $PROFILE ssm get-parameter \
   --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption --query 'Parameter.Value' --output text)
 
-# 3) Open the tunnel in the background. Wait for "Waiting for connections..."
-#    in its output before connecting.
+# 3) Confirm the port is actually free, then open the tunnel. Wait for
+#    "Waiting for connections..." before connecting. Do NOT skip the check
+#    — see "a squatted port is a wrong-environment bug" below.
+ss -ltn | grep -q ":$LOCAL_PORT " && echo "port $LOCAL_PORT is in use — pick another" && return 1
 aws --profile $PROFILE ssm start-session \
   --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
   --document-name AWS-StartPortForwardingSessionToRemoteHost \
@@ -234,9 +247,14 @@ TUNNEL_PID=$!
 PGUSER=$CLAUDE_USER PGPASSWORD=$CLAUDE_PASSWORD \
   psql -h localhost -p $LOCAL_PORT -A -t -c "<SQL>"
 
-# 5) Tear down.
+# 5) Tear down. `kill $TUNNEL_PID` alone is NOT enough — see below.
 kill $TUNNEL_PID
+pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
 unset CLAUDE_USER CLAUDE_PASSWORD PGDATABASE
+
+# 6) Verify the port is released. If it is still listening, the plugin
+#    survived and you have left an open forward into a deployed database.
+ss -ltn | grep ":$LOCAL_PORT " && echo "TUNNEL LEAKED — kill the session-manager-plugin pid holding it"
 ```
 
 Notes:
@@ -244,6 +262,26 @@ Notes:
 - The SSM port-forward target syntax is `ecs:<cluster>_<taskId>_<runtimeId>` — underscores, not colons.
 - The RDS endpoint is reached via the container as a network hop — the container itself doesn't participate beyond providing a route to the VPC.
 - Origin of this approach: Buck's `awsx rds-tunnel production` script (not currently in git).
+
+#### Tearing the tunnel down actually requires two kills
+
+`aws ssm start-session` **forks `session-manager-plugin`, and that child owns the listening socket.** Killing the `aws` process leaves the plugin orphaned and the port still bound — so the naive `kill $TUNNEL_PID` leaks one open forward into a deployed database per invocation, silently. This has happened: five orphaned forwards accumulated in a single session, one of them into **production** RDS, each surviving ~20 minutes until someone noticed.
+
+Always finish with step 6. If anything is still listening:
+
+```sh
+ss -ltnp | grep ":$LOCAL_PORT "                    # find the pid
+ps -eo pid,etime,args | grep '[s]ession-manager-plugin'   # confirm which env it targets
+kill <pid>
+```
+
+A leaked forward is not merely untidy: it is a standing network path from localhost into staging or prod Postgres for anything else running on the machine, and it consumes the port for later runs.
+
+#### A squatted port is a wrong-environment bug, not just a failed connection
+
+If the port you chose is already bound — commonly by a _leaked_ tunnel from an earlier run — the new `aws ssm start-session` fails to bind, but a readiness probe that only checks "is something listening on this port" sees the **old** tunnel and reports success. Your "prod" query then runs against whatever environment the stale forward points at.
+
+The identity check cannot save you here: the user name (`claude_readonly_user`) and database name are identical in both environments, so `SELECT current_user` looks correct either way. Verify the port is free _before_ opening the tunnel, and if you need certainty about which environment answered, select something environment-distinguishing (a known realm URL, a row count you already know) rather than trusting the connection.
 
 ### Only ever connect as `claude_readonly_user` — IAM enforces this, behavioral rule is belt-and-suspenders
 
@@ -548,4 +586,4 @@ aws --profile claude-staging elbv2 describe-load-balancer-attributes \
 ## Future skill / scripting room
 
 - The script writes `claude_session_expiration` so a future iteration can auto-refresh by prompting Claude Code for a fresh MFA token. Today, refresh is fully manual.
-- `scripts/claude-db.sh` now covers the DB path (see Path A). The EFS browser still wants the same treatment — it repeats the task-lookup and tunnel steps with a different service and port.
+- A nice next step is a `query-staging-db.sh` wrapper that hides the SSM port-forward dance — taking SQL on stdin and printing only the result rows. The pieces are all here; not built yet.
