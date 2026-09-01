@@ -250,8 +250,8 @@ interface Signature {
 let debugStyle: HTMLStyleElement | undefined;
 
 /**
- * One rule every region shares: an orphaned skin flies with its
- * backdrop-filters OFF. A backdrop-filter can never be cached — it
+ * Two rules every region shares. An orphaned skin flies with its
+ * backdrop-filters OFF: a backdrop-filter can never be cached — it
  * re-samples and re-blurs whatever is behind it on every frame — and
  * inside a scaling, fading leaver that is paid at full price for the
  * whole flight (the camera demo's four glass panels, over its gradient
@@ -259,6 +259,15 @@ let debugStyle: HTMLStyleElement | undefined;
  * skin is a memory of the OLD scene, and its glass sampling the new
  * scene behind it shows the wrong world. The panels keep their own
  * translucent grounds, so they still read as glass in the crossfade.
+ *
+ * And an orphaned skin does not REPLAY ITS BIRTH: re-inserting a node
+ * restarts every CSS animation on it, so a leaver re-parented into the
+ * orphan layer re-ran its entrance choreography — rules drawing
+ * themselves, letters settling out of a blur — while it was supposed to
+ * be dying. A one-frame-old memory acting out its own arrival is the
+ * flash the Towers film chased for a night. The run's own exit motion
+ * is WAAPI and survives re-parenting untouched; only stylesheet
+ * animations restart, and on a memory they are all lies.
  */
 let orphanStyle: HTMLStyleElement | undefined;
 function ensureOrphanStyle() {
@@ -268,8 +277,12 @@ function ensureOrphanStyle() {
   orphanStyle = document.createElement('style');
   orphanStyle.setAttribute('data-choreo-style', '');
   orphanStyle.textContent =
-    '[data-choreo-orphans] *{backdrop-filter:none!important;' +
-    '-webkit-backdrop-filter:none!important;}';
+    '[data-choreo-orphans] *,' +
+    '[data-choreo-orphans] *::before,' +
+    '[data-choreo-orphans] *::after' +
+    '{backdrop-filter:none!important;' +
+    '-webkit-backdrop-filter:none!important;' +
+    'animation:none!important;}';
   document.head.appendChild(orphanStyle);
 }
 
