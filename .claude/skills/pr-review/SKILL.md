@@ -8,7 +8,7 @@ allowed-tools: Read, Grep, Bash(gh pr view *, gh pr diff *, gh api *, git fetch 
 
 A review is critique, addressed to someone who already knows this code better than the reviewer does — usually the person who just wrote it. Thoroughness belongs to the investigation, not to the page: trace everything, verify everything, then post only what the author has to act on.
 
-Every comment asks for something — a change, a decision, or an answer — and every *sentence* inside it earns its place by changing what the author does about that ask. Explaining a change back to its author is the failure this skill exists to prevent: it reads as thorough, it costs the author real time, and the comments that do need their attention get buried behind it.
+Every comment asks for something — a change, a decision, or an answer — and every _sentence_ inside it earns its place by changing what the author does about that ask. Explaining a change back to its author is the failure this skill exists to prevent: it reads as thorough, it costs the author real time, and the comments that do need their attention get buried behind it.
 
 Expect most of the work to stay invisible. A review that traced six paths and found one problem posts one comment; the other five are why that comment can be trusted, not five more things to read.
 
@@ -36,9 +36,15 @@ Work through the diff as if inheriting the code, not skimming it.
 
 - **Trace the mechanism, not the appearance.** For each behavioral claim — in code, comments, tests, or the PR description — follow the actual code path and name it: files, functions, the branch taken. A claim that can't be traced is a finding in itself.
 - **Verify empirically when the claim is checkable.** Run the query and read the plan; write the four-line repro; execute the test; compile the expression and inspect the output. Verification is what earns the right to state a claim flatly; the comment then carries only the part of it the author needs in order to believe the claim, never the transcript of the check. Hedged phrasing in your own draft ("probably", "I believe", "should") is a to-do marker: go check, then delete either the hedge or the claim.
+- **Hunt the load-bearing comment.** A comment that _justifies_ rather than describes — "the store is job-scoped, so a resident instance is current", "the tab is reset on the first render of each job", "keeps the credential in this subshell only" — is an assertion the code has to keep, and it is where a reviewer's attention is least likely to land, because the comment reads as the answer to the question it raises. For each one, find the mechanism that would have to enforce it and confirm that mechanism still reaches that far. The tells are justifying words: _so_, _because_, _safe since_, _always_, _never_, _only ever_, _guaranteed_.
+
+  Four ways it goes wrong, all seen in this repo. The claim was true when written and the mechanism has since narrowed (a cache reset that now fires only on executable invalidation, while the comment still says "each job"). The mechanism reaches less than the words do (a reset that clears one tab of the five serving a pass). A change adds a _new_ claim its own call path does not deliver (a boundary observed on the load path, when the path that matters never loads). Or prose and code contradict outright a dozen lines apart (a rule saying the password is never exported, above a flow that exports it).
+
+  Two things make this class worth its own pass. It is invisible to tests and typecheckers, because nothing is wrong _locally_ — the code does what it says on the line, just not what the paragraph above promises. And a false justification is load-bearing in the worst way: the next author reads it, believes the invariant, and builds a short-circuit or a reuse on top of it. That is how a stale-read bug gets _designed in_ rather than introduced. When the enforcing mechanism cannot be found, that is a finding whether or not you can yet name the failure it permits.
+
 - **Hunt twin implementations.** Where one contract has two homes — the Postgres and SQLite adapters, server-side SQL compilation vs. client-side matching (`index-query-engine.ts` / `instance-filter-matcher.ts`), wire spelling vs. internal API — confirm the change landed on all of them. Twin divergence is a top finding class because nothing fails loudly when they drift.
 - **Hunt drift-by-duplication.** A decision re-implemented in two places (a filter literal repeated across call sites, a copied assembly loop) drifts the first time one copy learns something. Enumerate every site; suggest the single home.
-- **Hunt the consumers a narrowed type left behind.** A diff that brands or narrows a widely-used type — `string` to a branded identifier, a union down to one member — compiles precisely *because* the new type still satisfies the old one, so a green typecheck is evidence of nothing. The finding is the call sites that were correct against the old type and are wrong against the new one: whatever parses, concatenates, slices, or compares the old spelling. A re-typing spanning a hundred files has usually audited the definitions and not the consumers. Ask for the enumeration.
+- **Hunt the consumers a narrowed type left behind.** A diff that brands or narrows a widely-used type — `string` to a branded identifier, a union down to one member — compiles precisely _because_ the new type still satisfies the old one, so a green typecheck is evidence of nothing. The finding is the call sites that were correct against the old type and are wrong against the new one: whatever parses, concatenates, slices, or compares the old spelling. A re-typing spanning a hundred files has usually audited the definitions and not the consumers. Ask for the enumeration.
 
   The class also runs backwards: untouched code goes wrong the day a type it reads is narrowed. The blindness there is the typechecker's, not the review's — but the sweep it takes is not the one above, because a breaking consumer need never name the narrowed type. `new URL(ref.module)` mentions no identifier type at all, so reading outward through callers and callees does not reach it. Enumerate instead by the operations that assume the old spelling — parsing, slicing, concatenating, comparing — across the whole tree. A diff that narrows a type owes that sweep; one that fixes a single such site owes an account of what swept for the rest.
 
@@ -46,7 +52,10 @@ Work through the diff as if inheriting the code, not skimming it.
 
 - **Look for orphans.** Does the change leave dead machinery behind — a node kind with no emitters, an adapter rewrite with no remaining producer, an index no plan uses? Check what still depends on it before calling it dead; partial deadness ("only one of these rewrites is now unused") is the common case.
 - **Cost the hot paths.** Columns fetched but never read, per-row work inside loops, predicates no index can serve, cache keys that split on semantically equal spellings.
-- **Tests pin what they claim.** A test asserting output *shape* can read as confirming *semantics* it never checks. Ask of each new test: what would have to break for this to fail? Flag asserted-but-misleading coverage and name the missing negative-space test. Where a contract is guarded only by comments on both sides, suggest the executable check that would replace the comment.
+- **Tests pin what they claim.** A test asserting output _shape_ can read as confirming _semantics_ it never checks. Ask of each new test: what would have to break for this to fail? Flag asserted-but-misleading coverage and name the missing negative-space test. Where a contract is guarded only by comments on both sides, suggest the executable check that would replace the comment.
+
+  For a test accompanying a fix, ask the sharper version: **would it fail without the fix?** A test that passes either way is documentation, not coverage, and it is easy to write by accident — the harness quietly supplies the condition the bug needs (a store the test process also writes to, a pool that hands out a fresh tab each time), so the scenario is reproduced in shape but not in substance. The author is the one who can cheaply answer it, by reverting the fix and running the test, so ask for that answer rather than guessing. Where the discriminating environment genuinely cannot be built, a test pinned at the narrower unit plus a plain statement of what is _not_ covered beats an end-to-end test that cannot fail.
+
 - **Docs move with contracts.** If the diff changes documented behavior, the docs are part of the diff — and doc claims get verified like code claims (a key documented as "present on both row kinds" is checked against the code that stamps it).
 - **Migrations**: paired schema regeneration, `down()` fidelity against the exact names/opclasses the original migration created, and the concurrency pattern established in the migrations directory.
 
@@ -74,9 +83,9 @@ Everything else has to earn its way in. Mechanism and evidence are support, not 
 
 The exposition that shows up most, in rough order:
 
-- **Narrating the diff back to its author.** They wrote it. Say what the change *misses*, not what it does. Quoting their own PR description or commit message back at them as evidence is the same move wearing evidence's clothes.
+- **Narrating the diff back to its author.** They wrote it. Say what the change _misses_, not what it does. Quoting their own PR description or commit message back at them as evidence is the same move wearing evidence's clothes.
 - **The subsystem tour.** Walking a load path in full when the ask is "declare this dependency in three manifests" — the author edits the three manifests either way. Depth that impressed you during investigation is not thereby worth the author's time.
-- **The contrast case.** Why some *other* code doesn't have this problem. A clause, if it is the model for the fix; never a paragraph.
+- **The contrast case.** Why some _other_ code doesn't have this problem. A clause, if it is the model for the fix; never a paragraph.
 - **The verification log.** Everything checked that came back clean (Phase 3).
 - **The closing re-derivation** of a class and severity already stated.
 
@@ -98,7 +107,7 @@ Reference code by path and symbol name (`packages/runtime-common/expression.ts`,
 
 The body is the layer above the threads:
 
-1. **Opening sentence: the lens.** One sentence on what this review went after. Its job is to tell the author what the review did *not* cover, so a quiet review isn't read as a clean bill of health.
+1. **Opening sentence: the lens.** One sentence on what this review went after. Its job is to tell the author what the review did _not_ cover, so a quiet review isn't read as a clean bill of health.
 2. **Bottom line, bolded.** The verdict in one or two sentences — including "no blocking issues" when that is the finding. This sentence is the whole of the review's "this holds": never a tour of the design's strengths, never a list of what came back clean, never repeated per thread.
 3. **Answers to open discussion questions**, decided by mechanical facts rather than preference.
 4. **Numbered recommendations**, each one line plus a pointer to the inline thread that carries the detail. The detail stays in the thread; a recommendation that restates its thread gets read twice and acted on once.
@@ -122,7 +131,7 @@ Pre-submit self-check over every comment and the body:
 - Evergreen: no ticket IDs, no PR numbers, no journey narration in your prose.
 - Every claim either carries its evidence or states that it was verified and how.
 - Every finding carries its class and blocking-ness.
-- Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out. A reply that closes a thread the author opened is the exception: stating that a fix lands *is* the answer they are waiting on.
+- Every comment asks for something — a change, a decision, or an answer. Anything that only records that the code is correct comes out. A reply that closes a thread the author opened is the exception: stating that a fix lands _is_ the answer they are waiting on.
 - **One pass with a knife, over every comment and the body.** Take each sentence and ask what the author does differently for having read it. Cut what narrates their own diff back to them, what tours a subsystem the ask doesn't turn on, what explains why other code is fine, and what reports a clean check. On a review whose findings are all non-blocking, expect this pass to remove more than it keeps — that is exactly where volume substitutes for substance.
 
 Then report back to the user: the bottom line, the finding count by class, and a link to the review.
