@@ -374,6 +374,17 @@ export interface RenderTimeoutDiagnostics {
   renderElapsedMs?: number;
   // Sum of launch + render elapsed (server-observed).
   totalElapsedMs?: number;
+  // Screenshot-capture renders only: the components of `renderElapsedMs`,
+  // measured inside `captureScreenshot`. Navigation (route transition +
+  // path settle), the prerender settle wait, the image/font paint wait, and
+  // the capture loop — the lone `page.screenshot` for a singular capture, or
+  // each entry's viewport switch + screenshot for a batch. Their sum is
+  // slightly under `renderElapsedMs`; the residual is the terminal-error
+  // probe and dimension reads.
+  screenshotNavMs?: number;
+  screenshotSettleMs?: number;
+  screenshotImagePaintMs?: number;
+  screenshotCaptureMs?: number;
   // Per-format wall-clock of the html-route renders in this visit, split by
   // the card rendering and the FileDef file rendering. Keys are the format
   // steps the visit ran (`isolated`, `head`, `atom`, `markdown`, and the
@@ -708,6 +719,18 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Host-shell token the prerender server had been told was current when this
+  // render started, and again when its response was assembled. Two different
+  // values mean the render straddled a host redeploy: the page resolved
+  // modules against a bundle the realm server may already have stopped
+  // serving. Unremarkable for a render that succeeded, and decisive for one
+  // that failed to resolve a module — that failure then describes the
+  // environment rather than the card, which is what an operator reading the
+  // error row needs to know. Lives here rather than on the response meta
+  // because `flattenPrerenderMeta` carries `diagnostics` onto the persisted
+  // row and drops every other meta key.
+  hostShellHash?: string;
+  hostShellHashAtCompletion?: string;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -997,6 +1020,15 @@ export type ScreenshotCaptureOverrides = {
   // only "back to no clip" spelling an object-valued field has); it elides
   // away after the merge, so a normalized spec never carries null.
   clip?: { x: number; y: number; width: number; height: number } | null;
+  // CSS selector for a single element to capture — an element-handle
+  // screenshot of the first match, tightly cropped to its box. Mutually
+  // exclusive with `clip` and `fullPage` (an element screenshot honors
+  // neither). The selector is bounded in length; the capture path resolves it
+  // with `document.querySelector`, so a non-CSS (e.g. XPath-shaped) string is a
+  // named capture error rather than a wrong crop. A batch entry may set
+  // `target: null` to drop a batch-wide target default, the same "back to no
+  // target" spelling `clip` has; it elides away after the merge.
+  target?: string | null;
   // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
   // parent-owned box rather than the viewport, so it needs this to lay out
   // and fire its `@container fitted-card` queries. Required for fitted
@@ -1044,6 +1076,11 @@ export type ScreenshotPrerenderArgs = {
   // Worker-job priority threaded through from the producer side. See
   // ModulePrerenderArgs for the contract.
   priority?: number;
+  // Worker-job identity (`jobId.reservationId`), forwarded by the remote
+  // prerenderer as the `x-boxel-job-id` header so manager and
+  // prerender-server logs for this render join back to the worker job.
+  // Ignored by in-process prerenderers.
+  jobId?: string;
 };
 
 // One captured image in a screenshot response. `deviceScaleFactor` is the
@@ -1174,6 +1211,7 @@ import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './http-range.ts';
 export * from './paths.ts';
+export * from './directory-view-refresher.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';
 export * from './published-realm-url.ts';
@@ -1201,6 +1239,7 @@ export * from './job-utils.ts';
 export * from './prerender-html-reconcile.ts';
 export * from './media-cache.ts';
 export * from './media-cache-serving.ts';
+export * from './screenshot-perf.ts';
 export * from './capture-spec.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';

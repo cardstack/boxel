@@ -18,9 +18,11 @@ export class FakeMediaCacheAdapter implements MediaCacheAdapter {
       this.failNextPut = false;
       throw new Error('simulated put failure');
     }
-    if (!this.objects.has(key)) {
-      this.objects.set(key, bytes);
+    if (this.objects.has(key)) {
+      return { deduped: true };
     }
+    this.objects.set(key, bytes);
+    return { deduped: false };
   }
   async head(key: string) {
     let bytes = this.objects.get(key);

@@ -3259,7 +3259,7 @@ export class CSSField extends TextAreaField {
             var(--boxel-monospace-font-family, monospace)
           );
           font-size: var(--boxel-font-size-xs);
-          white-space: pre-wrap;
+          overflow-x: auto;
         }
         .css-field::placeholder {
           opacity: 0.5;

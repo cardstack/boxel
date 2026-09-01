@@ -1462,7 +1462,7 @@ module('Unit | index-writer', function (hooks) {
     let batch = await indexWriter.createBatch(
       new URL(testRealmURL),
       virtualNetwork,
-      { jobId: 42, reservationId: 1, priority: 0 },
+      { jobId: 42, reservationId: 1, priority: 0, queueWaitMs: null },
     );
     await batch.done();
 
@@ -3280,6 +3280,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     assert.strictEqual(
@@ -3335,6 +3336,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     assert.strictEqual(
@@ -3378,6 +3380,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     assert.strictEqual(
@@ -3423,6 +3426,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     assert.strictEqual(
@@ -3470,6 +3474,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     assert.true(
@@ -3528,6 +3533,7 @@ module('Unit | index-writer', function (hooks) {
         jobId: 42,
         reservationId: 1,
         priority: 0,
+        queueWaitMs: null,
       },
     );
     // Note: no updateEntry / invalidate call — simulating a retry that

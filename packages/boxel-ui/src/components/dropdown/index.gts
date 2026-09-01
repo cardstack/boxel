@@ -18,6 +18,7 @@ type DropdownTriggerNamedArgs = {
   dropdown: Dropdown;
   eventType?: 'click' | 'mousedown';
   id: string;
+  onTriggerElement?: (element: DropdownTriggerElement | null) => void;
   stopPropagation?: boolean;
 };
 
@@ -167,6 +168,34 @@ class BoxelDropdown extends Component<Signature> {
     this.args.onClose?.();
   }
 
+  // BasicDropdown's plain close() refocuses the trigger with a bare focus(),
+  // whose scroll-into-view cancels a smooth scroll a menu action just started;
+  // the focus trap returns focus to the trigger instead, with preventScroll
+  @action closeSkippingFocus(dropdown: Dropdown) {
+    dropdown.actions.close(undefined, true);
+  }
+
+  // the trigger modifier hands its element over, so the return-focus target
+  // needs no lookup — and a lookup would be wrong anyway with the same
+  // dropdown rendered in more than one stack
+  private triggerElement: DropdownTriggerElement | null = null;
+
+  @action setTriggerElement(element: DropdownTriggerElement | null) {
+    this.triggerElement = element;
+  }
+
+  // The trap's default return target is whatever had focus when it activated,
+  // which is the trigger only when the user clicked it to open — an
+  // @initiallyOpened or registerAPI-driven open activates with focus on
+  // <body>. Name the trigger explicitly, falling back to the default because
+  // focus-trap throws when an option resolves to nothing and some triggers
+  // (the operator-mode overlay's) unmount while open.
+  private triggerReturnFocus = () => {
+    return (
+      previouslyFocused: HTMLElement | SVGElement,
+    ): HTMLElement | SVGElement => this.triggerElement ?? previouslyFocused;
+  };
+
   <template>
     {{!--
       Note:
@@ -187,6 +216,7 @@ class BoxelDropdown extends Component<Signature> {
           dropdown=dd
           id=this.dropdownId
           eventType='click'
+          onTriggerElement=this.setTriggerElement
           stopPropagation=false
         )
         as |ddModifier|
@@ -195,6 +225,9 @@ class BoxelDropdown extends Component<Signature> {
         {{yield ddModifier to='trigger'}}
       {{/let}}
 
+      {{! preventScroll keeps the trap's focus moves (including the return
+          focus to the trigger on close) from scrolling it into view — that
+          scroll step cancels any smooth scroll a menu action just started }}
       <dd.Content
         @onMouseLeave={{fn this.onMouseLeave dd}}
         data-test-boxel-dropdown-content
@@ -205,13 +238,15 @@ class BoxelDropdown extends Component<Signature> {
             initialFocus=(concat
               "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
             )
-            onDeactivate=dd.actions.close
+            onDeactivate=(fn this.closeSkippingFocus dd)
+            setReturnFocus=(this.triggerReturnFocus)
             allowOutsideClick=true
             fallbackFocus=(concat '#ember-basic-dropdown-content-' dd.uniqueId)
+            preventScroll=true
           )
         }}
       >
-        {{yield (hash close=dd.actions.close) to='content'}}
+        {{yield (hash close=(fn this.closeSkippingFocus dd)) to='content'}}
       </dd.Content>
     </BasicDropdown>
 
@@ -322,6 +357,7 @@ class BoxelDropdown extends Component<Signature> {
       dropdown,
       id,
       eventType: desiredEventType,
+      onTriggerElement,
       stopPropagation,
     } = named;
 
@@ -390,7 +426,10 @@ class BoxelDropdown extends Component<Signature> {
     );
     updateAria();
 
+    onTriggerElement?.(element);
+
     return function cleanup() {
+      onTriggerElement?.(null);
       element.removeEventListener(
         'click',
         handleMouseEvent as EventListenerOrEventListenerObject,

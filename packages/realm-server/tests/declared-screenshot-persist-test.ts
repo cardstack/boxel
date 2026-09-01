@@ -22,7 +22,12 @@ import { setupDB } from './helpers/index.ts';
 
 const realmURL = new URL('http://example.test/realm/');
 const sourceURL = `${realmURL.href}mango`;
-const jobInfo = { jobId: 1, reservationId: 1, priority: 0 };
+const jobInfo = {
+  jobId: 1,
+  reservationId: 1,
+  priority: 0,
+  queueWaitMs: null,
+};
 const log = logger('declared-screenshot-persist-test');
 
 // A tiny valid-enough payload; the persist path treats bytes as opaque.

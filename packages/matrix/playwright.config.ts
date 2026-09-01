@@ -1,17 +1,54 @@
 import { defineConfig, devices } from '@playwright/test';
+import { join } from 'path';
+import {
+  assignSpecFiles,
+  discoverSpecFiles,
+  loadSpecTimings,
+  parseShardCoordinates,
+  specFileMatchers,
+} from './support/shard-spec-files.ts';
 
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
 
+const testDir = join(import.meta.dirname, 'tests');
+
+// CI splits the suite across shards by cost rather than by test count, so
+// `--shard` is not used: each shard is handed its coordinates as
+// MATRIX_TEST_SHARD (`<index>/<total>`) and narrows `testMatch` to the spec
+// files bin-packed onto it. See support/shard-spec-files.ts. Unset — a local
+// `pnpm test` — runs the whole suite.
+const shard = parseShardCoordinates(process.env.MATRIX_TEST_SHARD);
+const shardSpecFiles = shard
+  ? assignSpecFiles(
+      discoverSpecFiles(testDir),
+      shard.index,
+      shard.total,
+      loadSpecTimings(join(testDir, 'spec-timings.json')),
+    )
+  : undefined;
+
 export default defineConfig({
-  testDir: './tests',
+  testDir,
+  ...(shardSpecFiles
+    ? { testMatch: specFileMatchers(testDir, shardSpecFiles) }
+    : {}),
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 2,
   globalSetup: 'tests/global.setup.ts',
-  reporter: process.env.CI ? 'blob' : 'html',
+  // Without `--shard`, every shard's blob report would default to the same
+  // `report.zip`, and the merge job downloads all of them into one directory.
+  reporter: process.env.CI
+    ? [
+        [
+          'blob',
+          { fileName: shard ? `report-${shard.index}.zip` : 'report.zip' },
+        ],
+      ]
+    : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL: 'https://localhost:4205/test',

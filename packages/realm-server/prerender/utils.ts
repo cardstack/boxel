@@ -58,7 +58,7 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
 
-import type { CDPSession, Page } from 'puppeteer';
+import type { CDPSession, ElementHandle, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
@@ -1233,6 +1233,22 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // Per-step wall-clock across the shared render, for stage telemetry:
+  // navigation (route transition + path settle), the prerender settle wait
+  // (including any envelope-box wait), the image/font paint wait, and the
+  // capture stage (viewport switches + CDP screenshots). One record per
+  // render; a batch whose entries span several envelopes re-renders per
+  // envelope, and each stage sums across those re-renders. Together these
+  // account for nearly all of the render wall; the remainder is the terminal
+  // error probe and dimension reads.
+  stepTimings: ScreenshotStepTimings;
+}
+
+export interface ScreenshotStepTimings {
+  navMs: number;
+  settleMs: number;
+  imagePaintMs: number;
+  screenshotMs: number;
 }
 
 // Block in the browser context until images, CSS background-image URLs, and
@@ -1346,10 +1362,18 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip, envelope } =
+  let { viewport, deviceScaleFactor, fullPage, clip, target, envelope } =
     captureSpec ?? {};
   return [
-    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, envelope },
+    {
+      name: 'default',
+      viewport,
+      deviceScaleFactor,
+      fullPage,
+      clip,
+      target,
+      envelope,
+    },
   ];
 }
 
@@ -1529,6 +1553,52 @@ async function captureOneEntry(
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A `target` is an element-handle screenshot, a capture call distinct from
+  // the page-level one below: it crops to the first match's box and honors no
+  // clip/fullPage (rejected above). `page.$` runs the selector through
+  // `document.querySelector`, so a selector that matches nothing, or is not a
+  // valid CSS selector (including an XPath-shaped string, which querySelector
+  // cannot execute), is a capture error naming the selector rather than an
+  // uncaught throw or a wrong crop.
+  if (entry.target) {
+    let handle: ElementHandle<Element> | null;
+    try {
+      handle = await page.$(entry.target);
+    } catch (err) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target selector is invalid: ${entry.target}`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (!handle) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target matched no element: ${entry.target}`,
+        { title: 'Screenshot target not found' },
+      );
+    }
+    try {
+      let base64 = (await handle.screenshot({
+        encoding: 'base64',
+        type: 'png',
+      })) as string;
+      // The element screenshot's extent is Chromium's, not ours to predict, so
+      // the reported CSS dims come from the PNG's IHDR (physical px at bytes
+      // 16..23) divided back by the scale in effect — report and bytes cannot
+      // disagree.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      return {
+        name: entry.name,
+        base64,
+        width: Math.round(header.readUInt32BE(16) / deviceScaleFactor),
+        height: Math.round(header.readUInt32BE(20) / deviceScaleFactor),
+        deviceScaleFactor,
+      };
+    } finally {
+      await handle.dispose();
+    }
+  }
   // Reported CSS dimensions of the capture. `fullPage` reports the captured
   // document (derived from the PNG itself below, so report and bytes cannot
   // disagree); `clip` reports its own region; otherwise the viewport. Device
@@ -1645,15 +1715,30 @@ export async function captureScreenshot(
     }`,
   );
 
-  // Defensive: `fullPage` and `clip` are mutually exclusive (Puppeteer ignores
-  // clip under fullPage). The shared capture-spec parse already 400s this on
-  // both request surfaces, but a direct prerender-server caller could still
-  // send it — fail cleanly rather than return a silently-wrong screenshot.
+  // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
+  // fullPage capture ignores a clip, and an element (`target`) screenshot
+  // honors neither. The shared capture-spec parse already 400s these on both
+  // request surfaces, but a direct prerender-server caller could still send one
+  // — fail cleanly rather than return a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
         page,
         `capture "${entry.name}" cannot set both fullPage and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.clip) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.fullPage) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and fullPage`,
         { title: 'Invalid screenshot capture spec' },
       );
     }
@@ -1679,6 +1764,16 @@ export async function captureScreenshot(
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
 
+  // Per-stage wall-clock accumulators for the capture's stepTimings.
+  // `renderFor` can run more than once per batch (once per distinct
+  // envelope), so the nav/settle/image stages sum across re-renders; the
+  // capture stage sums the viewport switches and CDP screenshots, keeping
+  // the stages disjoint.
+  let navMs = 0;
+  let settleMs = 0;
+  let imagePaintMs = 0;
+  let screenshotMs = 0;
+
   // Transition render.html for the given envelope (undefined =
   // viewport-filling format) and wait for the render to settle. Returns a
   // RenderError on a terminal prerender error.
@@ -1698,12 +1793,15 @@ export async function captureScreenshot(
         },
       });
     }
+    let stepStart = Date.now();
     await transitionTo(page, 'render.html', ...htmlParams);
     await waitForRoutePathSuffix(
       page,
       `/html/${format}/${ancestorLevel}`,
       opts,
     );
+    navMs += Date.now() - stepStart;
+    stepStart = Date.now();
     await waitForPrerenderSettle(page);
     if (envelope) {
       // A query-param-only re-transition leaves the path (and the parent
@@ -1711,6 +1809,7 @@ export async function captureScreenshot(
       // signal that the model refresh flushed the new envelope to the DOM.
       await waitForEnvelopeBox(page, envelope, opts);
     }
+    settleMs += Date.now() - stepStart;
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
@@ -1728,7 +1827,9 @@ export async function captureScreenshot(
     // Bounded by an internal timeout so a slow / 401-looping image can't hang
     // the capture; an image-free render pays only the fast
     // no-pending-resources path.
+    stepStart = Date.now();
     await waitForImagePaint(page);
+    imagePaintMs += Date.now() - stepStart;
     return undefined;
   };
 
@@ -1755,7 +1856,8 @@ export async function captureScreenshot(
       if (!sameEnvelope(entryEnvelope, currentEnvelope)) {
         // Envelope changed: re-lay-out the same hydrated card in the new box
         // at the matching viewport, then re-settle (which also waits out any
-        // image loads the new box triggers).
+        // image loads the new box triggers). `renderFor` accounts its own
+        // time into the nav/settle/image stages.
         if (!sameViewport(entryViewport, currentViewport)) {
           await page.setViewport(entryViewport);
           currentViewport = entryViewport;
@@ -1775,17 +1877,21 @@ export async function captureScreenshot(
         // the initial wait: this runs once per switch, so a slow/hanging image
         // can't spend the full budget and multiply across entries. When
         // nothing new loads, the wait costs only the DOM walk plus a frame.
+        let switchStart = Date.now();
         await page.setViewport(entryViewport);
         await waitForReflow(page);
         await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
         currentViewport = entryViewport;
+        screenshotMs += Date.now() - switchStart;
       }
+      let captureStart = Date.now();
       let item = await captureOneEntry(
         page,
         entry,
         currentViewport.deviceScaleFactor,
         opts?.entryOutput?.[entry.name],
       );
+      screenshotMs += Date.now() - captureStart;
       if ('type' in item) {
         return item;
       }
@@ -1796,7 +1902,10 @@ export async function captureScreenshot(
         .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
         .join(',')}`,
     );
-    return { captures };
+    return {
+      captures,
+      stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
+    };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing
