@@ -1,4 +1,4 @@
-import { array, fn } from '@ember/helper';
+import { array, concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -104,13 +104,13 @@ interface Beat {
   cut?: boolean;
   /** the English of the kanji, set small under it */
   gloss?: string;
+  /** which of the six towers stands here; overrides the chapter's grade */
+  grade?: string;
   id: string;
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
   kicker?: string;
-  /** the sentence. This is the voice-over, written down. */
-  line?: string;
   /** how the front layer is set */
   mode: 'lower' | 'plate' | 'point' | 'title';
   /**
@@ -129,6 +129,13 @@ interface Beat {
   photo?: { caption: string; credit: string; src: string };
   /** its reading */
   romaji?: string;
+  /**
+   * WHAT IS ACTUALLY ON SCREEN: a few short phrases, delivered one after
+   * another across the beat rather than all at once. Kinetic type, not a
+   * paragraph — each lands on its own delay, and four is the ceiling
+   * because a fifth is a slide.
+   */
+  says?: string[];
   /** type standing out in the world, behind the building */
   sky?: {
     /**
@@ -168,6 +175,18 @@ interface Beat {
    * themselves on over the head of the beat and hold.
    */
   trace?: { pts: Pt3[]; wide?: boolean }[];
+  /**
+   * THE VOICE-OVER, and it is not drawn.
+   *
+   * A block of prose on screen is a thing the viewer has to read while
+   * also watching, and it loses both ways: too slow to be a caption, too
+   * fast to be a page. This film is narrated, so the sentence belongs to
+   * the voice and the screen gets `says` instead. The text stays here
+   * because it IS the script — the thing the voice is reading — and a
+   * film whose narration lives in a different file from its shot list is
+   * a film that will drift out of sync with itself.
+   */
+  vo?: string;
   /** weather: 0 clear, 1 rain, 2 storm, 3 snow */
   wx?: number;
 }
@@ -186,12 +205,27 @@ interface Beat {
  */
 const TICK = 2;
 
+/**
+ * THE GRADE — a colourist's pass over the picture, per chapter.
+ *
+ * The scene lights itself beautifully and evenly, and evenly is the
+ * problem: five chapters that argue different things all come out the
+ * same temperature, so nothing about the picture tells you the film has
+ * moved on. A grade is how film has always solved this. Each one is a
+ * filter on the picture plus a split tone over it — warmth pushed into
+ * the highlights, coolness into the shadows, at the strength a mood
+ * wants — and the whole thing crossfades over a second and a half, so a
+ * chapter change is felt before it is read.
+ *
+ * It grades the PICTURE only. The type sits above it, ungraded, the way
+ * titles sit above a graded plate on any finished film.
+ */
 const CHAPTERS = [
-  { n: '01', title: 'CONTEXT' },
-  { n: '02', title: 'HISTORY' },
-  { n: '03', title: 'CONSTRUCTION' },
-  { n: '04', title: 'DETAIL' },
-  { n: '05', title: 'COMPARISON' },
+  { grade: 'amber', n: '01', title: 'CONTEXT' },
+  { grade: 'iron', n: '02', title: 'HISTORY' },
+  { grade: 'chalk', n: '03', title: 'CONSTRUCTION' },
+  { grade: 'ink', n: '04', title: 'DETAIL' },
+  { grade: 'plate', n: '05', title: 'COMPARISON' },
 ];
 
 const RAD = Math.PI / 180;
@@ -262,9 +296,14 @@ const BEATS: Beat[] = [
     ch: 0,
     gloss: 'the keep',
     id: 'title',
+    says: [
+      'Sixteenth-century Japan',
+      'Stone, timber, tile',
+      'And a roof you can see for miles',
+    ],
     kanji: '天守',
     kicker: 'A CONSTRUCTION STUDY',
-    line: 'A Japanese castle tower — what it is, where it came from, and how it stands up.',
+    vo: 'You know the shape. Almost nobody knows what is holding it up. So let us take one apart.',
     mode: 'title',
     romaji: 'TENSHU',
     /* 普請 fushin, the old word for a building works — the scene's own
@@ -279,7 +318,7 @@ const BEATS: Beat[] = [
       y: 7.5,
     },
     theme: 0,
-    ticks: 4,
+    ticks: 5,
     toCam: { dolly: 0.64, lookY: -1.0, ox: 0.2, pitch: 13, yaw: -26 },
   },
   {
@@ -287,12 +326,13 @@ const BEATS: Beat[] = [
     ch: 0,
     gloss: 'castle',
     id: 'shiro',
+    says: ['Not the tower.', 'The ground.', 'Ditches, banks, terraces.'],
     kanji: '城',
     kicker: 'WHAT A CASTLE IS',
-    line: 'A Japanese castle is not the tower. It is the ground — ditches, banks, and a hill cut into terraces. The tower is the last thing built on it, and the first thing you see.',
+    vo: 'The castle is not the tower. The castle is the ground. Ditches, banks, a hill cut into shelves.',
     mode: 'lower',
     romaji: 'SHIRO',
-    ticks: 4,
+    ticks: 5,
     toCam: { dolly: 0.6, lookY: 2.0, ox: -0.1, pitch: 15, yaw: -6 },
   },
   {
@@ -300,12 +340,13 @@ const BEATS: Beat[] = [
     ch: 0,
     gloss: 'keep · watchtower',
     id: 'what',
+    says: ['A lookout.', 'A strongroom.', 'An argument.'],
     kanji: '天守閣',
     kicker: 'ONE BUILDING, THREE JOBS',
-    line: 'A lookout, a strongroom, and an argument. Most keeps were fought over rarely and looked at daily — which tells you which job the design was really serving.',
+    vo: 'A lookout. A strongroom. An advert. You can guess which one got the money.',
     mode: 'plate',
     romaji: 'TENSHUKAKU',
-    ticks: 3,
+    ticks: 4,
   },
 
   /* ---------------------------------------------------------------- *
@@ -316,9 +357,10 @@ const BEATS: Beat[] = [
     ch: 1,
     gloss: 'Azuchi, 1576',
     id: 'azuchi',
+    says: ['1576', 'Seven storeys. Gilded.', 'Gone in six years.'],
     kanji: '安土城',
     kicker: 'THE FIRST OF ITS KIND',
-    line: 'Oda Nobunaga raises a tower nobody has seen before above Lake Biwa: seven storeys, gilded, decorated inside like a palace. It burns six years later and never gets rebuilt — and every keep after it is a reply to it.',
+    vo: 'Fifteen seventy-six. Seven gilded storeys over Lake Biwa. It burned in six years. Everything after it is a reply.',
     mode: 'plate',
     photo: {
       caption: 'Azuchi, Shiga — the keep’s stone platform',
@@ -336,19 +378,24 @@ const BEATS: Beat[] = [
       y: 11,
     },
     theme: 2,
-    ticks: 4,
+    ticks: 5,
   },
   {
     cam: { dolly: 1.15, lookY: -2.6, ox: -0.1, pitch: 1, yaw: 34 },
     ch: 1,
     gloss: 'the matchlock gun',
     id: 'teppo',
+    says: [
+      '1543 — the gun lands',
+      'Walls get lower, thicker',
+      'Height becomes address',
+    ],
     kanji: '鉄砲',
     kicker: 'WHY THE SHAPE CHANGED',
-    line: 'Firearms reach Japan in 1543. Within a generation the walls that matter get lower, thicker and stony, and height stops being defence. What height becomes is address.',
+    vo: 'Then the guns arrive. Walls get lower, thicker, stonier. Height stops being armour and turns into an address.',
     mode: 'lower',
     romaji: 'TEPPŌ',
-    ticks: 4,
+    ticks: 5,
     toCam: { dolly: 1.05, lookY: -1.4, ox: -0.1, pitch: 4, yaw: 44 },
   },
   {
@@ -356,9 +403,10 @@ const BEATS: Beat[] = [
     ch: 1,
     gloss: 'one domain, one castle',
     id: 'ikkoku',
+    says: ['1615', 'One castle per province', 'Twelve keeps survive'],
     kanji: '一国一城令',
     kicker: 'AND WHY IT STOPPED',
-    line: 'In 1615 the Tokugawa allow each domain a single castle and pull the rest down. Building keeps essentially ends. Twelve original towers survive today; the famous white one at Himeji is one of them.',
+    vo: 'Sixteen fifteen. One castle per province. The rest come down. Twelve original keeps are still standing.',
     mode: 'plate',
     photo: {
       caption: 'Himeji Castle, Hyōgo — one of the twelve originals',
@@ -383,9 +431,14 @@ const BEATS: Beat[] = [
     ch: 2,
     gloss: 'the stone base',
     id: 'ishigaki',
+    says: [
+      'No mortar. None.',
+      '扇の勾配 — the fan’s incline',
+      'The wall sheds the shock',
+    ],
     kanji: '石垣',
     kicker: 'STAGE ONE',
-    line: 'It begins with a slope. Dry-laid stone, no mortar, battered into a curve the masons called 扇の勾配 — the fan’s incline. A wall that curves sheds a shock into the hill instead of arguing with it.',
+    vo: 'Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.',
     mode: 'lower',
     photo: {
       caption: 'Dry-laid ishigaki, Kumamoto',
@@ -393,7 +446,7 @@ const BEATS: Beat[] = [
       src: 'ishigaki.webp',
     },
     romaji: 'ISHIGAKI',
-    theme: 1,
+    theme: 3,
     ticks: 5,
     to: [2.8, 1.6, 0.6],
     toCam: { dolly: 1.12, lookY: -3.2, ox: -0.12, pitch: 1, yaw: 84 },
@@ -404,12 +457,14 @@ const BEATS: Beat[] = [
     ch: 2,
     gloss: 'post and beam',
     id: 'timber',
+    says: ['A timber cage', 'Posts stand ON stone', 'The joints do the work'],
     kanji: '柱梁',
     kicker: 'STAGE TWO',
-    line: 'Above the stone the keep is a timber cage. Posts stand on footing stones rather than in the ground, tied by beams, and the joints do the work that bolts would do — a frame that can be shaken and stay standing.',
+    vo: 'Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.',
     mode: 'lower',
     romaji: 'CHŪRYŌ',
-    ticks: 5,
+    theme: 0,
+    ticks: 6,
     toCam: { dolly: 1.0, lookY: -0.9, ox: -0.12, pitch: 4, yaw: 102 },
   },
   {
@@ -418,9 +473,14 @@ const BEATS: Beat[] = [
     ch: 2,
     gloss: 'the white wall',
     id: 'plaster',
+    says: [
+      'Lime over bamboo lath',
+      '塗籠 — wrapped up',
+      'White because white will not burn',
+    ],
     kanji: '白壁',
     kicker: 'STAGE THREE',
-    line: 'Lime plaster over a bamboo lath, laid on thick enough to be armour — 塗籠, nurigome, the wrapped-up wall. It is white because white does not burn, and fire was the likelier enemy.',
+    vo: 'Then it gets wrapped. Lime plaster, thick enough to be armour. White, because white does not burn.',
     mode: 'lower',
     romaji: 'SHIRAKABE',
     ticks: 4,
@@ -432,12 +492,14 @@ const BEATS: Beat[] = [
     ch: 2,
     gloss: 'the watch storey',
     id: 'boro',
+    says: ['A room to see from', 'The reason for all the rest'],
     kanji: '望楼',
     kicker: 'STAGE FOUR',
-    line: 'The top storey is the reason for all the rest: a room to see from, railed on the outside, small enough that the roofs below can carry it.',
+    vo: 'At the top, one room you can see out of. Everything below it is how you get that room into the air.',
     mode: 'lower',
     romaji: 'BŌRŌ',
-    ticks: 4,
+    theme: 1,
+    ticks: 5,
     toCam: { dolly: 0.94, lookY: 2.8, ox: -0.12, pitch: 13, yaw: 133 },
   },
   {
@@ -446,12 +508,17 @@ const BEATS: Beat[] = [
     ch: 2,
     gloss: 'the clay tile',
     id: 'kawara',
+    says: [
+      'Hung, not nailed',
+      'The heaviest thing here',
+      'And that weight is what steadies it',
+    ],
     kicker: 'STAGE FIVE',
     kanji: '瓦',
-    line: 'Fired clay, hung on battens rather than nailed. The roof is the heaviest thing in the building — and that weight, pressing down through the frame, is part of what holds it steady.',
+    vo: 'Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.',
     mode: 'lower',
     romaji: 'KAWARA',
-    ticks: 5,
+    ticks: 6,
     toCam: { dolly: 0.72, lookY: 2.2, ox: -0.1, pitch: 12, yaw: 148 },
   },
 
@@ -469,9 +536,10 @@ const BEATS: Beat[] = [
     ch: 3,
     gloss: 'four things worth naming',
     id: 'detail',
+    says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
-    line: 'Everything from here is one building at one moment. Only the lens moves — and it moves by cutting.',
+    vo: 'Same building. Same afternoon. From here, only the lens moves.',
     mode: 'plate',
     romaji: 'SAIBU',
     ticks: 3,
@@ -489,9 +557,14 @@ const BEATS: Beat[] = [
     cut: true,
     gloss: 'the roof-ridge fish',
     id: 'shachi',
+    says: [
+      'Tiger’s head, fish’s body',
+      'Bronze, at both ends of the ridge',
+      'A charm against fire',
+    ],
     kanji: '鯱',
     kicker: 'ON THE RIDGE',
-    line: 'A fish with a tiger’s head, tail in the air, cast in bronze at both ends of the main ridge. It is a charm against fire — the story says it swallows water and spits it over the roof.',
+    vo: "Tiger's head, fish's body, cast in bronze. It swallows water and spits it on the roof. That was the fire plan.",
     mode: 'point',
     photo: {
       caption: 'Shachihoko, Nagoya Castle',
@@ -499,7 +572,8 @@ const BEATS: Beat[] = [
       src: 'shachihoko.webp',
     },
     romaji: 'SHACHIHOKO',
-    ticks: 4,
+    theme: 2,
+    ticks: 5,
     to: [-0.51, 13.85, -0.51],
     trace: [{ pts: RIDGE, wide: true }],
   },
@@ -510,12 +584,17 @@ const BEATS: Beat[] = [
     cut: true,
     gloss: 'the plover gable',
     id: 'hafu',
+    says: [
+      'A dormer named for a plover',
+      'Light and air into a deep floor',
+      'And a place to look down from',
+    ],
     kanji: '千鳥破風',
     kicker: 'IN THE ROOF SLOPE',
-    line: 'The triangular dormer set into the roof, named for a plover. It lets light into a deep floor and gives someone a place to look down from — ornament that is also a firing position.',
+    vo: 'Named after a plover. Light and air for a deep floor. Also somewhere to stand and look down at you.',
     mode: 'point',
     romaji: 'CHIDORI-HAFU',
-    ticks: 4,
+    ticks: 5,
     to: [1.59, 5.5, -1.59],
     trace: [{ pts: RING_EAVE1, wide: true }],
   },
@@ -526,9 +605,14 @@ const BEATS: Beat[] = [
     cut: true,
     gloss: 'the balcony rail',
     id: 'koran',
+    says: [
+      'A rail on a ledge',
+      'Too narrow to walk',
+      'Meant to be seen, not used',
+    ],
     kanji: '高欄',
     kicker: 'AROUND THE TOP',
-    line: 'The railed walk around the watch storey. On a good many keeps it is a fiction — a rail on a ledge too narrow to walk — because what it is really for is to be seen from the town below.',
+    vo: 'A rail on a ledge too narrow to walk. Built to be seen, not used.',
     mode: 'point',
     romaji: 'KŌRAN',
     ticks: 4,
@@ -542,12 +626,17 @@ const BEATS: Beat[] = [
     cut: true,
     gloss: 'the fan’s incline',
     id: 'ishi2',
+    says: [
+      'Vertical at the top',
+      'Flaring at the foot',
+      'The shock runs into the hill',
+    ],
     kanji: '扇の勾配',
     kicker: 'AT THE FOOT',
-    line: 'The curve is the whole argument of the base: vertical where it meets the timber, flaring where it meets the ground, so a shock runs down it into the hill instead of trying to stop at a wall.',
+    vo: 'Vertical at the top. Flaring at the foot. The shock does not stop at this wall. It runs into the hill.',
     mode: 'point',
     romaji: 'ŌGI-NO-KŌBAI',
-    ticks: 4,
+    ticks: 5,
     to: [2.8, 1.6, 0.6],
     trace: [
       { pts: BATTER_L, wide: true },
@@ -560,12 +649,17 @@ const BEATS: Beat[] = [
     ch: 3,
     gloss: 'the eave',
     id: 'noki',
+    says: [
+      'A metre of overhang',
+      'It keeps water off the wall',
+      'Style is drainage, first',
+    ],
     kanji: '軒',
     kicker: 'AND THE REASON FOR ALL OF IT',
-    line: 'The eaves overhang by a metre and more, and every line you have been reading as style is first a way of keeping water off an earth, timber and plaster wall. Watch what the building is for.',
+    vo: 'A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.',
     mode: 'lower',
     romaji: 'NOKI',
-    ticks: 5,
+    ticks: 6,
     to: [-0.46, 4.98, -3.29],
     toCam: { dolly: 1.6, lookY: -1.2, ox: -0.12, pitch: 3, yaw: 200 },
     trace: [
@@ -589,9 +683,10 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'comparison',
     id: 'hikaku',
+    says: ['Six towers', 'One problem', 'Height, from what you have'],
     kanji: '比較',
     kicker: 'ONE PROBLEM',
-    line: 'Every tower here is an answer to the same question: how do you get height out of the material you happen to have? Same lens, same distance, same clock — only the building changes.',
+    vo: 'Six towers. Same lens, same distance. One question. Height, out of whatever you have.',
     mode: 'plate',
     romaji: 'HIKAKU',
     sky: {
@@ -604,7 +699,7 @@ const BEATS: Beat[] = [
       y: 11,
     },
     theme: 0,
-    ticks: 3,
+    ticks: 4,
     wx: 0,
   },
   {
@@ -612,9 +707,10 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Japan · the keep',
     id: 'c-jp',
+    says: ['Timber frame, stone skirt', 'Height by stacking roofs'],
     kanji: '天守',
     kicker: 'JAPAN',
-    line: 'A timber frame in a stone skirt, gaining height by stacking roofs. The weight goes straight down the posts; the roofs do the expressing.',
+    vo: 'Japan. A timber frame in a stone skirt. Height by stacking roofs.',
     mode: 'lower',
     romaji: 'TENSHU',
     style: 0,
@@ -625,35 +721,38 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'China · the pagoda',
     id: 'c-cn',
+    says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
     kicker: 'CHINA',
-    line: 'Tiers around a core, with bracket sets — 斗栱, dougong — stepping the eaves far out past the wall. The same timber logic, taken upward instead of outward.',
+    vo: 'China. Tiers round a core, brackets stepping the eaves past the wall. The same timber thinking, pointed up.',
     mode: 'lower',
     romaji: 'BǍOTǍ',
     style: 1,
-    ticks: 4,
+    ticks: 5,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 226 },
     ch: 4,
     gloss: 'Vietnam · the tower',
     id: 'c-vn',
+    says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
     kicker: 'VIETNAM',
-    line: 'A masonry body with thin tiled eaves marking each storey. You are not meant to go up it: it is a reliquary that reads as a tower, not a lookout that reads as a shrine.',
+    vo: 'Vietnam. A masonry body, thin tiled eaves. You are not meant to climb it. A reliquary that reads as a tower.',
     mode: 'lower',
     romaji: 'THÁP',
     style: 2,
-    ticks: 4,
+    ticks: 5,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 233 },
     ch: 4,
     gloss: 'Thailand · the prang',
     id: 'c-th',
+    says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
     kicker: 'THAILAND',
-    line: 'A tall rounded tower over a stepped base, tapering the whole way. The shape is not structural ambition but cosmology — it is a mountain, and the base is the world it stands in.',
+    vo: 'Thailand. Tapering the whole way up. That shape is not ambition. It is a mountain.',
     mode: 'lower',
     romaji: 'PRANG',
     style: 3,
@@ -664,26 +763,32 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     id: 'c-kh',
+    says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
     kicker: 'CAMBODIA',
-    line: 'Laterite terraces carrying dressed sandstone, corbelled rather than arched. With no true arch the only way to close a tower is to keep narrowing it — so the silhouette is the structure admitting its limit.',
+    vo: 'Cambodia. Corbelled stone, never arched. With no arch, the only way to close a tower is to keep narrowing it.',
     mode: 'lower',
     romaji: 'PRASAT',
     style: 4,
-    ticks: 4,
+    ticks: 5,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 247 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
     id: 'c-tr',
+    says: [
+      'Mass in compression',
+      'A dome on an octagon',
+      'The height goes to the minaret',
+    ],
     kanji: 'CAMİ',
     kicker: 'TÜRKIYE',
-    line: 'The opposite answer. Mass in compression: a dome on an octagon over a stone hall, the interior kept as one room — and the height taken out of the building altogether and given to a separate minaret.',
+    vo: 'Türkiye answers backwards. Mass in compression, a dome on an octagon, and the height handed to a minaret.',
     mode: 'lower',
     romaji: 'CAMİ',
     style: 5,
-    ticks: 4,
+    ticks: 5,
   },
 
   /* ---------------------------------------------------------------- *
@@ -693,8 +798,9 @@ const BEATS: Beat[] = [
     cam: { dolly: 0.62, lookY: -0.6, ox: 0.2, pitch: 14, yaw: 256 },
     ch: 4,
     id: 'coda',
+    says: ['Six materials', 'One problem', '天守'],
     kanji: '天守',
-    line: 'Six towers, one problem, six materials. Come back to the first one and it reads differently: not a fortress that happens to be beautiful, but a roof structure tall enough to be seen from the fields.',
+    vo: 'Six materials. One problem. Six answers. Not a fortress that happens to be beautiful. A roof, built tall enough to be seen from the fields.',
     mode: 'title',
     romaji: 'TENSHU',
     sky: {
@@ -707,8 +813,8 @@ const BEATS: Beat[] = [
       y: 7.5,
     },
     style: 0,
-    theme: 2,
-    ticks: 5,
+    theme: 1,
+    ticks: 6,
     toCam: { dolly: 0.6, lookY: -0.4, ox: 0.2, pitch: 16, yaw: 264 },
   },
 ];
@@ -861,6 +967,10 @@ export default class TowerFilm extends Component<{
 
   get beat(): Beat {
     return this.beats[this.beatIndex] ?? this.beats[0]!;
+  }
+
+  get grade(): string {
+    return this.beat.grade ?? this.chapter.grade ?? 'amber';
   }
 
   get chapter() {
@@ -1537,7 +1647,7 @@ export default class TowerFilm extends Component<{
 
   <template>
     <div class="tf-page {{if this.embed 'is-embed'}}">
-      <div class="tf-stage" {{this.mount}}>
+      <div class="tf-stage is-grade-{{this.grade}}" {{this.mount}}>
         <iframe
           class="tf-frame"
           src={{this.src}}
@@ -1554,6 +1664,9 @@ export default class TowerFilm extends Component<{
           class="tf-scrim tf-scrim-{{this.beat.mode}}"
           aria-hidden="true"
         ></div>
+
+        {{! THE GRADE, over the picture and under everything else. }}
+        <div class="tf-grade" aria-hidden="true"></div>
 
         {{! THE CUT. A new element per cut, so the wipe plays from its own
         first frame every time rather than being re-triggered. }}
@@ -1591,29 +1704,50 @@ export default class TowerFilm extends Component<{
           quick fall. All of it is score vocabulary. }}
           <Choreo class="tf-type tf-{{this.beat.mode}}" as |n|>
             {{#each (array this.beat) key="id" as |b|}}
+              {{! EACH ROW IS A PLANE, and the nesting is load-bearing: the
+              wrapper is the plane and the host's loop drifts it, the
+              paragraph inside is the type and Motion delivers it. One
+              writer each. Put both on one element and the entrance and
+              the drift overwrite each other's transform every frame —
+              which is the same bug the beacon in Sylva was, and it looks
+              exactly as bad. }}
               <div class="tf-block" {{this.plate}}>
                 {{#if b.kicker}}
-                  <p class="tf-kicker" {{motion id="kicker" role="kick"}}>
-                    {{b.kicker}}
-                  </p>
+                  <div class="tf-plane">
+                    <p class="tf-kicker" {{motion id="kicker" role="kick"}}>
+                      <span>{{b.kicker}}</span>
+                    </p>
+                  </div>
                 {{/if}}
                 {{#if b.kanji}}
-                  <p class="tf-kanji" {{motion id="kanji" role="glyph"}}>
-                    {{b.kanji}}
+                  <div class="tf-plane is-glyph">
+                    <p class="tf-kanji" {{motion id="kanji" role="glyph"}}>
+                      {{b.kanji}}
+                    </p>
+                  </div>
+                {{/if}}
+                <div class="tf-plane">
+                  <p class="tf-read" {{motion id="read" role="read"}}>
+                    <span class="tf-romaji">{{b.romaji}}</span>
+                    {{#if b.gloss}}
+                      <span class="tf-gloss">{{b.gloss}}</span>
+                    {{/if}}
                   </p>
-                {{/if}}
-                <p class="tf-read" {{motion id="read" role="read"}}>
-                  <span class="tf-romaji">{{b.romaji}}</span>
-                  {{#if b.gloss}}
-                    <span class="tf-gloss">{{b.gloss}}</span>
-                  {{/if}}
-                </p>
-                {{#if b.line}}
-                  <p
-                    class="tf-line"
-                    {{motion id="line" role="line"}}
-                  >{{b.line}}</p>
-                {{/if}}
+                </div>
+                {{! KINETIC TYPE, not a paragraph. Each phrase is its own
+                sprite with its own role, because Choreo's text delivery
+                splits a sprite and ladders INSIDE it — a stagger across
+                four separate lines has to be four steps with four delays.
+                Which is the honest way to write it anyway: these are
+                cues, and a cue has a time. }}
+                {{#each b.says as |say index|}}
+                  <div class="tf-plane">
+                    <p
+                      class="tf-say"
+                      {{motion id=(concat "say" index) role=(concat "s" index)}}
+                    >{{say}}</p>
+                  </div>
+                {{/each}}
               </div>
             {{/each}}
 
@@ -1623,7 +1757,6 @@ export default class TowerFilm extends Component<{
                   (n.removed "kick")
                   (n.removed "glyph")
                   (n.removed "read")
-                  (n.removed "line")
                 }}
                 @opacity={{array 1 0}}
                 @y={{array 0 -14}}
@@ -1663,16 +1796,60 @@ export default class TowerFilm extends Component<{
                 @duration={{0.5}}
                 @ease={{array 0.22 1 0.36 1}}
               />
+              {{! four slots, landing ACROSS the beat rather than together:
+              the film is narrated, so the type keeps pace with a voice
+              instead of arriving as a wall }}
               <n.Tween
-                @of={{n.inserted "line"}}
+                @of={{n.inserted "s0"}}
                 @by="word"
-                @stagger={{0.028}}
-                @delay={{0.6}}
-                @y={{array 12 0}}
+                @stagger={{0.05}}
+                @delay={{0.5}}
+                @y={{array 24 0}}
                 @opacity={{array 0 1}}
-                @filter={{array "blur(5px)" "blur(0px)"}}
-                @duration={{0.62}}
+                @duration={{0.5}}
                 @ease={{array 0.22 1 0.36 1}}
+              />
+              <n.Tween
+                @of={{n.inserted "s1"}}
+                @by="word"
+                @stagger={{0.05}}
+                @delay={{2.2}}
+                @y={{array 24 0}}
+                @opacity={{array 0 1}}
+                @duration={{0.5}}
+                @ease={{array 0.22 1 0.36 1}}
+              />
+              <n.Tween
+                @of={{n.inserted "s2"}}
+                @by="word"
+                @stagger={{0.05}}
+                @delay={{3.9}}
+                @y={{array 24 0}}
+                @opacity={{array 0 1}}
+                @duration={{0.5}}
+                @ease={{array 0.22 1 0.36 1}}
+              />
+              <n.Tween
+                @of={{n.inserted "s3"}}
+                @by="word"
+                @stagger={{0.05}}
+                @delay={{5.6}}
+                @y={{array 24 0}}
+                @opacity={{array 0 1}}
+                @duration={{0.5}}
+                @ease={{array 0.22 1 0.36 1}}
+              />
+              <n.Tween
+                @of={{array
+                  (n.removed "s0")
+                  (n.removed "s1")
+                  (n.removed "s2")
+                  (n.removed "s3")
+                }}
+                @opacity={{array 1 0}}
+                @y={{array 0 -16}}
+                @duration={{0.2}}
+                @ease="easeIn"
               />
             </n.Parallel>
           </Choreo>
@@ -1862,6 +2039,28 @@ export default class TowerFilm extends Component<{
         --tf-ink3: #3f3520;
         --tf-accent: #a8621f;
         --tf-rule: #c2b18c;
+        /* The sun, in two numbers: tf-rake is the angle its light makes
+           across the frame, tf-shx/tf-shy the direction away from it.
+           They dress the things that are PHYSICALLY on the frame — the
+           photograph's own plate, the rake of a rule — and deliberately
+           not the type. An offset shadow behind a headline is a sticker
+           effect: it claims the letters are objects lying on the picture,
+           which they are not, and getting the angle right does not rescue
+           it. Type here earns its contrast from the scrim. */
+        /* TYPE. The display face is a serif on purpose. This film is set
+           beside mincho kanji and stands in front of a building, and a
+           wide-tracked geometric sans fights both — it is also the first
+           thing every deck reaches for, which is reason enough to leave
+           it alone. A warm old-style serif sits with the kanji instead of
+           arguing with it. The sans is kept for small mechanical labels
+           only, and its tracking is pulled well back from the point where
+           letterspaced caps start reading as a logo. */
+        --tf-display:
+          "Iowan Old Style", "Charter", "Palatino Linotype", Palatino,
+          "Book Antiqua", Georgia, serif;
+        --tf-ui:
+          "Helvetica Neue", "Franklin Gothic Medium", Inter, system-ui,
+          sans-serif;
         --tf-shx: 2px;
         --tf-shy: 2px;
         --tf-rake: 35deg;
@@ -1887,6 +2086,76 @@ export default class TowerFilm extends Component<{
         height: 100%;
         border: 0;
         display: block;
+        /* the primary: contrast, saturation and lift, per grade */
+        filter: var(--tf-lut);
+        transition: filter 1500ms ease;
+      }
+
+      /* ---- the grade ------------------------------------------------- *
+         Two passes, the way a colourist works: a primary on the picture
+         itself (above), then a split tone laid over it — warmth into the
+         highlights on one diagonal, coolness into the shadows on the
+         other. Soft-light rather than overlay, because overlay crushes this scene's
+         mid-tones and the whole point is to keep the moss and the plaster
+         legible while moving the mood underneath them.
+         ---------------------------------------------------------------- */
+      .tf-grade {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        mix-blend-mode: soft-light;
+        opacity: var(--tf-grade-a);
+        background: linear-gradient(
+          var(--tf-rake),
+          var(--tf-warm) 0%,
+          transparent 46%,
+          transparent 58%,
+          var(--tf-cool) 100%
+        );
+        transition:
+          background 1500ms ease,
+          opacity 1500ms ease;
+      }
+
+      /* the five moods. CONTEXT opens warm and open; HISTORY is archival —
+         desaturated, cool, contrastier, the look of a document rather than
+         a day; CONSTRUCTION goes clean and bright, nearly a blueprint;
+         DETAIL is rich and close; COMPARISON is a museum plate, flat and
+         even, because a comparison that flatters one subject is not one. */
+      .is-grade-amber {
+        --tf-lut: saturate(1.06) contrast(1.02) brightness(1.02);
+        --tf-warm: #ffbe6a;
+        --tf-cool: #2c4a6b;
+        --tf-grade-a: 0.5;
+      }
+
+      .is-grade-iron {
+        --tf-lut: saturate(0.62) contrast(1.16) brightness(0.96) sepia(0.12);
+        --tf-warm: #d8c39a;
+        --tf-cool: #1d2f45;
+        --tf-grade-a: 0.72;
+      }
+
+      .is-grade-chalk {
+        --tf-lut: saturate(0.88) contrast(1.04) brightness(1.07);
+        --tf-warm: #fff3d8;
+        --tf-cool: #4a6f86;
+        --tf-grade-a: 0.44;
+      }
+
+      .is-grade-ink {
+        --tf-lut: saturate(1.14) contrast(1.14) brightness(0.98);
+        --tf-warm: #ffab52;
+        --tf-cool: #17222f;
+        --tf-grade-a: 0.66;
+      }
+
+      .is-grade-plate {
+        --tf-lut: saturate(0.94) contrast(1.01) brightness(1.03);
+        --tf-warm: #f0e2c4;
+        --tf-cool: #55564a;
+        --tf-grade-a: 0.3;
       }
 
       .tf-wipe {
@@ -1989,9 +2258,6 @@ export default class TowerFilm extends Component<{
         stroke-linecap: round;
         stroke-linejoin: round;
         opacity: 0;
-        filter: drop-shadow(
-          var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.28)
-        );
         transition: opacity 260ms ease;
       }
 
@@ -2018,8 +2284,7 @@ export default class TowerFilm extends Component<{
         z-index: 3;
         pointer-events: none;
         color: var(--tf-ink);
-        font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
-        text-shadow: var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.22);
+        font-family: var(--tf-display);
       }
 
       .tf-block {
@@ -2031,9 +2296,10 @@ export default class TowerFilm extends Component<{
          diagonal is the sun's, so the graphic furniture rakes the same
          way the shadows do */
       .tf-kicker {
-        font-size: clamp(12px, 1vw, 15px);
-        font-weight: 800;
-        letter-spacing: 0.3em;
+        font-family: var(--tf-ui);
+        font-size: clamp(11px, 0.92vw, 14px);
+        font-weight: 700;
+        letter-spacing: 0.17em;
         color: var(--tf-ink3);
         margin: 0 0 14px;
         display: flex;
@@ -2074,24 +2340,40 @@ export default class TowerFilm extends Component<{
       }
 
       .tf-romaji {
-        font-size: clamp(13px, 1.15vw, 17px);
-        font-weight: 800;
-        letter-spacing: 0.26em;
+        font-family: var(--tf-ui);
+        font-size: clamp(12px, 1.02vw, 15px);
+        font-weight: 700;
+        letter-spacing: 0.15em;
       }
 
       .tf-gloss {
-        font-size: clamp(12px, 1vw, 15px);
-        letter-spacing: 0.05em;
+        font-family: var(--tf-display);
+        font-size: clamp(13px, 1.06vw, 16px);
+        letter-spacing: 0.01em;
         color: var(--tf-ink3);
         font-style: italic;
       }
 
-      .tf-line {
-        margin: 0;
-        font-size: clamp(15px, 1.4vw, 21px);
-        line-height: 1.55;
-        color: var(--tf-ink3);
-        max-width: 34ch;
+      /* the planes are the host's to move; the type on them is Motion's */
+      .tf-plane {
+        will-change: transform;
+      }
+
+      /* a phrase is a HEADLINE, not body copy: it is on screen for two
+         seconds and read at a glance, so it is set at the size a glance
+         needs and it never runs past two lines */
+      .tf-say {
+        margin: 0 0 12px;
+        font-family: var(--tf-display);
+        font-size: clamp(20px, 2.15vw, 37px);
+        font-weight: 400;
+        line-height: 1.24;
+        color: var(--tf-ink);
+        max-width: 21ch;
+      }
+
+      .tf-say:last-child {
+        margin-bottom: 0;
       }
 
       /* the four ways a beat is set. A title is ranged right against the
@@ -2183,7 +2465,7 @@ export default class TowerFilm extends Component<{
         flex-direction: column;
         gap: 2px;
         padding-top: 8px;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-family: var(--tf-ui);
       }
 
       .tf-photo-cap {
@@ -2208,12 +2490,11 @@ export default class TowerFilm extends Component<{
         display: flex;
         align-items: center;
         gap: 14px;
-        font-size: 12px;
-        font-weight: 800;
-        letter-spacing: 0.28em;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.17em;
         color: var(--tf-ink3);
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
-        text-shadow: var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.18);
+        font-family: var(--tf-ui);
       }
 
       .tf-rail-n {
@@ -2260,7 +2541,7 @@ export default class TowerFilm extends Component<{
         padding: 34px 40px 26px;
         min-width: min(460px, 84vw);
         box-shadow: 0 30px 70px rgba(30, 22, 8, 0.34);
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-family: var(--tf-ui);
       }
 
       .tf-menu-head {
@@ -2344,7 +2625,7 @@ export default class TowerFilm extends Component<{
         padding: 10px 5.5%;
         background: #e3d2ae;
         border-top: 1px solid #cbb992;
-        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-family: var(--tf-ui);
         font-size: 11px;
         letter-spacing: 0.14em;
       }
