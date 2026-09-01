@@ -26,17 +26,30 @@ const RIFF_MAGIC = [0x52, 0x49, 0x46, 0x46];
 function makeFileSystem() {
   return {
     'product.gts': `
-      import { contains, field, CardDef, Component, type ScreenshotSpec } from "@cardstack/base/card-api";
+      import { contains, field, linksTo, CardDef, Component, type ScreenshotSpec } from "@cardstack/base/card-api";
       import StringField from "@cardstack/base/string";
 
+      export class Maker extends CardDef {
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <span>Made by <@fields.name/></span>
+          </template>
+        }
+      }
+
+      // Renders linked data no display format touches — the screenshot's
+      // deps must come from this component's own loads.
       class HeroShot extends Component<typeof Product> {
         <template>
           <h1>Hero shot: <@fields.name/></h1>
+          <@fields.maker/>
         </template>
       }
 
       export class Product extends CardDef {
         @field name = contains(StringField);
+        @field maker = linksTo(Maker);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <h1>Product: <@fields.name/></h1>
@@ -282,6 +295,81 @@ module(basename(import.meta.filename), function (hooks) {
       generations,
       [firstGeneration, secondRow!.generation],
       'both generations hold ledger rows (the older is GC-superseded, not overwritten)',
+    );
+  });
+
+  test('a capture-only component’s linked-data loads land in the row’s deps and invalidate the screenshot', async function (assert) {
+    await writeAndSettle(
+      'maker.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Acme' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Maker' },
+          },
+        },
+      }),
+    );
+    await writeAndSettle(
+      'gadget.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Gadget' },
+          relationships: {
+            maker: { links: { self: './maker' } },
+          },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Product' },
+          },
+        },
+      }),
+    );
+
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}gadget.json`,
+    );
+    assert.ok(row, 'the instance row exists');
+    let deps = (row!.deps ?? []) as string[];
+    assert.ok(
+      deps.some(
+        (dep) =>
+          dep === `${testRealm}maker` || dep === `${testRealm}maker.json`,
+      ),
+      `the linked card only the capture-only component renders is a dep (deps: ${JSON.stringify(
+        deps,
+      )})`,
+    );
+
+    let firstGeneration = row!.generation;
+    let heroBefore = (row!.screenshots as ScreenshotManifest).hero;
+
+    // Editing the linked data must fan out to this row — the screenshot of
+    // it is stale until re-captured.
+    await writeAndSettle(
+      'maker.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Acme Industries' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Maker' },
+          },
+        },
+      }),
+    );
+    let after = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}gadget.json`,
+    );
+    assert.ok(
+      after!.generation > firstGeneration,
+      'editing the linked card re-rendered the screenshot’s row',
+    );
+    let heroAfter = (after!.screenshots as ScreenshotManifest).hero;
+    assert.notStrictEqual(
+      heroAfter.objectKey,
+      heroBefore.objectKey,
+      'the re-capture rendered the edited linked data (different pixels, different object)',
     );
   });
 });

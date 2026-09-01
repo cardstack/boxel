@@ -1656,6 +1656,23 @@ export class RenderRunner {
             response.screenshots =
               stepResult.value as DeclaredScreenshotVisitResult;
           }
+          if (!cardShortCircuit) {
+            // The settle-time deps snapshot read after the isolated render
+            // predates the captures above — a capture-only component's loads
+            // (linked cards, their images) land in the tracker only during
+            // its render.screenshot render. Re-snapshot now so those loads
+            // fan into the row's deps and edits to that data invalidate the
+            // screenshot. Best-effort like the initial read: a null refresh
+            // (stale host build, dead page) keeps the settle-time deps.
+            let refreshedDeps = await abortable(signal, () =>
+              this.#refreshCapturedDeps(page),
+            );
+            if (refreshedDeps) {
+              capturedDeps = [
+                ...new Set([...(capturedDeps ?? []), ...refreshedDeps]),
+              ].sort();
+            }
+          }
         }
 
         // The fused visit runs meta last, after the format renders above
@@ -2184,6 +2201,32 @@ export class RenderRunner {
         () =>
           (globalThis as { __boxelRenderCapturedDeps?: unknown })
             .__boxelRenderCapturedDeps ?? null,
+      );
+      if (!Array.isArray(deps)) {
+        return null;
+      }
+      return deps.filter((dep): dep is string => typeof dep === 'string');
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  // Post-settle re-snapshot via the render route's refresh hook: the card's
+  // tracking session accumulates through child-route renders (capture-only
+  // screenshot components), so a late snapshot is a superset of the
+  // settle-time one. Best-effort like #readCapturedDeps; null when the hook
+  // is absent (stale host build) or the page died mid-call.
+  async #refreshCapturedDeps(page: Page): Promise<string[] | null> {
+    try {
+      let deps = await page.evaluate(() =>
+        (globalThis as { __boxelRenderRefreshCapturedDeps?: unknown })
+          .__boxelRenderRefreshCapturedDeps instanceof Function
+          ? (
+              globalThis as unknown as {
+                __boxelRenderRefreshCapturedDeps: () => unknown;
+              }
+            ).__boxelRenderRefreshCapturedDeps()
+          : null,
       );
       if (!Array.isArray(deps)) {
         return null;
