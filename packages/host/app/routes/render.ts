@@ -414,6 +414,22 @@ export default class RenderRoute extends Route<Model> {
         (globalThis as any).__boxelLoaderEpoch = parsedOptions.loaderEpoch;
       }
     }
+    // Instance-epoch synchronization: the store outlives visits on a warm
+    // tab, and an instance-only invalidation keeps the loader epoch — so
+    // without this, a linked card loaded lazily by an earlier visit (a
+    // capture-only screenshot component is the canonical reader) satisfies
+    // `lazilyLoadLink` from the identity map and the re-render repaints the
+    // superseded data. Resetting the store when the epoch differs — once
+    // per tab per batch — keeps instances warm across one batch's visits
+    // while making each batch's renders a pure function of its generation.
+    // The loader stays warm; modules are the loader epoch's jurisdiction.
+    if (parsedOptions.instanceEpoch !== undefined) {
+      let held = (globalThis as any).__boxelInstanceEpoch as string | undefined;
+      if (held !== parsedOptions.instanceEpoch) {
+        this.store.resetCache();
+        (globalThis as any).__boxelInstanceEpoch = parsedOptions.instanceEpoch;
+      }
+    }
     if (parsedOptions.clearCache) {
       this.loaderService.resetLoader({
         clearFetchCache: true,

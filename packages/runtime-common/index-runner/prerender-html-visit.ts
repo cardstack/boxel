@@ -586,6 +586,11 @@ async function visitForPrerenderedHtml({
     // boxel_index read.
     fileExtract: true,
     loaderEpoch,
+    // One store reset per tab per batch: a warm tab's store may hold linked
+    // cards a prior batch's renders loaded lazily, and an instance-only
+    // invalidation keeps the loader epoch, so without this a re-rendered
+    // consumer repaints (and re-captures) superseded linked data.
+    instanceEpoch: batchId,
     ...(contentHash !== undefined && contentSize !== undefined
       ? { fileContentHash: contentHash, fileContentSize: contentSize }
       : {}),

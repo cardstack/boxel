@@ -371,5 +371,19 @@ module(basename(import.meta.filename), function (hooks) {
       heroBefore.objectKey,
       'the re-capture rendered the edited linked data (different pixels, different object)',
     );
+    // The linked card must stay a dep across the re-render: a capture that
+    // reads it from a warm store instead of loading it records no load, the
+    // re-snapshot drops it from deps, and every later edit of the linked
+    // card stops invalidating this screenshot.
+    let depsAfter = (after!.deps ?? []) as string[];
+    assert.ok(
+      depsAfter.some(
+        (dep) =>
+          dep === `${testRealm}maker` || dep === `${testRealm}maker.json`,
+      ),
+      `the re-capture re-loaded the linked card, so it remains a dep (deps: ${JSON.stringify(
+        depsAfter,
+      )})`,
+    );
   });
 });
