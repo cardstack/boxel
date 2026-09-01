@@ -183,6 +183,7 @@ export interface IncrementalIndexEnqueueArgs {
   realmUsername: string;
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
+  invalidationMode?: 'direct' | 'recursive';
 }
 
 export function makeIncrementalArgsWithCallerMetadata(
@@ -196,6 +197,7 @@ export function makeIncrementalArgsWithCallerMetadata(
     realmUsername: args.realmUsername,
     changes: args.changes,
     ignoreData: args.ignoreData,
+    invalidationMode: args.invalidationMode ?? 'recursive',
     coalescedCallers,
   };
 }

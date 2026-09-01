@@ -43,6 +43,7 @@ NODE_ENV=development \
   node worker-manager.ts \
   --allPriorityCount="${WORKER_ALL_PRIORITY_COUNT:-1}" \
   --highPriorityCount="${WORKER_HIGH_PRIORITY_COUNT:-0}" \
+  --userIndexCount="${WORKER_USER_INDEX_COUNT:-1}" \
   --port="${WORKER_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
@@ -62,7 +63,9 @@ NODE_ENV=development \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
+  --fromUrl="${REALM_BASE_URL}/tessar-admin/" \
+  --toUrl="${REALM_BASE_URL}/tessar-admin/" \
+  \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   2>&1 | "$LOG_TEE" worker
-

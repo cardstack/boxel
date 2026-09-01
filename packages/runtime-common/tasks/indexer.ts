@@ -48,6 +48,7 @@ export interface IncrementalArgs extends WorkerArgs {
   changes: IncrementalChange[];
   ignoreData: Record<string, string>;
   coalescedCallers: CoalescedCaller[];
+  invalidationMode: 'direct' | 'recursive';
 }
 
 export interface IncrementalResult {
@@ -159,7 +160,14 @@ function parseIncrementalArgsForCoalesce(
   if (!isObjectLike(args)) {
     return undefined;
   }
-  let { realmURL, realmUsername, ignoreData, changes, coalescedCallers } = args;
+  let {
+    realmURL,
+    realmUsername,
+    ignoreData,
+    changes,
+    coalescedCallers,
+    invalidationMode,
+  } = args;
   if (
     typeof realmURL !== 'string' ||
     typeof realmUsername !== 'string' ||
@@ -173,6 +181,7 @@ function parseIncrementalArgsForCoalesce(
     realmUsername,
     ignoreData: ignoreData as Record<string, string>,
     changes: changes as IncrementalChange[],
+    invalidationMode: invalidationMode === 'direct' ? 'direct' : 'recursive',
     coalescedCallers: Array.isArray(coalescedCallers)
       ? (coalescedCallers as CoalescedCaller[])
       : [],
@@ -200,9 +209,18 @@ function chooseIncrementalCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates, inFlightCandidates } = context;
-  let sameTypeCandidate = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
-  );
+  let sameTypeCandidate = candidates.find((candidate) => {
+    if (candidate.jobType !== incoming.jobType) {
+      return false;
+    }
+    let existingArgs = parseIncrementalArgsForCoalesce(candidate.args);
+    let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
+    return (
+      !existingArgs ||
+      !incomingArgs ||
+      existingArgs.invalidationMode === incomingArgs.invalidationMode
+    );
+  });
   if (sameTypeCandidate) {
     let existingArgs = parseIncrementalArgsForCoalesce(sameTypeCandidate.args);
     let incomingArgs = parseIncrementalArgsForCoalesce(incoming.args);
@@ -251,6 +269,9 @@ function chooseIncrementalCoalesceDecision(
       }
       let existingArgs = parseIncrementalArgsForCoalesce(candidate.args);
       if (!existingArgs) {
+        continue;
+      }
+      if (existingArgs.invalidationMode !== incomingArgs.invalidationMode) {
         continue;
       }
       if (incrementalChangesCover(existingArgs.changes, incomingArgs.changes)) {
@@ -466,7 +487,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
   createPrerenderAuth,
 }) =>
   async function (args) {
-    let { jobInfo, realmUsername, changes, realmURL } = args;
+    let { jobInfo, realmUsername, changes, realmURL, invalidationMode } = args;
 
     log.debug(
       `${jobIdentity(jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
@@ -531,6 +552,7 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
           operation,
           url: new URL(url),
         })),
+        invalidationMode,
       });
 
     log.debug(

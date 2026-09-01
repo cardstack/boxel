@@ -247,6 +247,11 @@ export class RealmIndexUpdater {
       // job's own rejection still propagates through `settled`.
       onFailed?: (error: unknown) => Promise<void> | void;
       clientRequestId?: string | null;
+      // Interactive request paths use the default userInitiatedPriority.
+      // Background producers may lower their work so a client mutation can
+      // be claimed first.
+      priority?: number;
+      invalidationMode?: 'direct' | 'recursive';
     },
   ): Promise<{ settled: Promise<void> }> {
     let indexingDeferred = new Deferred<void>();
@@ -262,13 +267,14 @@ export class RealmIndexUpdater {
         realmURL: this.#realm.url,
         realmUsername: await this.#realm.getRealmOwnerUsername(),
         ignoreData: { ...this.#ignoreData },
+        invalidationMode: opts?.invalidationMode ?? 'recursive',
       };
       let clientRequestId = opts?.clientRequestId ?? null;
       job = await this.#queue.publish<IncrementalDoneResult>({
         jobType: 'incremental-index',
         concurrencyGroup: indexingConcurrencyGroup(this.#realm.url),
         timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
-        priority: userInitiatedPriority,
+        priority: opts?.priority ?? userInitiatedPriority,
         args: makeIncrementalArgsWithCallerMetadata(args, clientRequestId),
         mapResult: mapIncrementalDoneResult(clientRequestId),
       });
@@ -328,6 +334,8 @@ export class RealmIndexUpdater {
         meta: { generation?: number },
       ) => Promise<void>;
       clientRequestId?: string | null;
+      priority?: number;
+      invalidationMode?: 'direct' | 'recursive';
     },
   ): Promise<void> {
     let { settled } = await this.enqueueUpdate(urls, opts);
