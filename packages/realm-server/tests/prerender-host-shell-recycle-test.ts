@@ -117,19 +117,31 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('an unknown token on either side is left alone', function (assert) {
-      for (let [atStart, atCompletion] of [
-        [undefined, 'b778fe76'],
-        ['babf3612', undefined],
-        [undefined, undefined],
-      ] as [string | undefined, string | undefined][]) {
+    // The deploy shape this exists for: the train restarts prerender before the
+    // realm server, so a server booting mid-train warms against the outgoing
+    // bundle and the first token it hears is the new one. On such a server
+    // there is no `X -> Y` to observe, so excluding `undefined -> X` excluded
+    // the whole boot window — the same transition `decideHostShellRecycle`
+    // treats as a definite change.
+    test('the first token learned mid-render counts as a change', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: visitResponse(MISSING_EXPORT),
+          shellAtStart: undefined,
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
+    test('a server that has heard no token at all is left alone', function (assert) {
+      for (let atStart of [undefined, 'babf3612']) {
         assert.false(
           shouldRerenderForShellChange({
             response: visitResponse(MISSING_EXPORT),
             shellAtStart: atStart,
-            shellAtCompletion: atCompletion,
+            shellAtCompletion: undefined,
           }),
-          `(${atStart} -> ${atCompletion}) says nothing about which bundle rendered`,
+          `(${atStart} -> undefined) says nothing about which bundle rendered`,
         );
       }
     });
@@ -175,6 +187,28 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    // A render whose own failure is a timeout or a wedge can carry the module
+    // error only in the console errors `RenderRunner` merges onto
+    // `additionalErrors` — and the row is persisted with it either way.
+    test('the error counts when it is only among the merged console errors', function (assert) {
+      assert.true(
+        shouldRerenderForShellChange({
+          response: {
+            card: {
+              error: {
+                error: {
+                  message: 'Render timed out after 30000ms',
+                  additionalErrors: [{ message: MISSING_EXPORT }],
+                },
+              },
+            },
+          } as unknown as RenderVisitResponse,
+          shellAtStart: 'babf3612',
+          shellAtCompletion: 'b778fe76',
+        }),
+      );
+    });
+
     test('the message matcher tracks what the loader actually throws', function (assert) {
       assert.true(isMissingExportMessage(MISSING_EXPORT));
       assert.true(
@@ -189,9 +223,12 @@ module(basename(import.meta.filename), function () {
   });
 
   module('stampHostShellTokens', function () {
-    test('records both tokens without disturbing the rest of meta', function (assert) {
+    // Under `diagnostics`, because that is the only meta key
+    // `flattenPrerenderMeta` carries onto the persisted row — a token stamped
+    // beside it never reaches the row an operator inspects.
+    test('records both tokens under diagnostics, beside the render breakdown', function (assert) {
       let response = {
-        meta: { requestId: 'abc' },
+        meta: { requestId: 'abc', diagnostics: { renderMs: 12 } },
       } as unknown as RenderVisitResponse;
       stampHostShellTokens(response, {
         atStart: 'babf3612',
@@ -199,9 +236,12 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(response.meta, {
         requestId: 'abc',
-        hostShellHash: 'babf3612',
-        hostShellHashAtCompletion: 'b778fe76',
-      });
+        diagnostics: {
+          renderMs: 12,
+          hostShellHash: 'babf3612',
+          hostShellHashAtCompletion: 'b778fe76',
+        },
+      } as unknown as typeof response.meta);
     });
 
     test('a server that knows no token stamps nothing', function (assert) {
@@ -214,8 +254,8 @@ module(basename(import.meta.filename), function () {
       });
       assert.deepEqual(
         response.meta,
-        { requestId: 'abc' },
-        'no empty keys added for what the server does not know',
+        { requestId: 'abc' } as unknown as typeof response.meta,
+        'no empty keys, and no diagnostics object invented',
       );
     });
   });

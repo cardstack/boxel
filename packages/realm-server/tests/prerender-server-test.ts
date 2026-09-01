@@ -832,6 +832,243 @@ module(basename(import.meta.filename), function () {
       await built.prerenderer.stop();
     });
 
+    // The stale-shell re-render, at the route rather than through its
+    // predicate. What matters here is the plumbing the predicate can't see:
+    // which token the handler samples, that the re-render waits for the
+    // recycle, that it happens exactly once, and what a drain or a rejection
+    // during it answers.
+    module('stale-shell re-render', function () {
+      const MISSING_EXPORT =
+        "Module 'https://packages/@cardstack/boxel-ui/components' has no " +
+        "exported member 'MarkdownContentShell'.";
+
+      function poolMeta() {
+        return {
+          pageId: 'p',
+          affinityType: 'realm',
+          affinityValue: realmURL.href,
+          reused: false,
+          evicted: false,
+          timedOut: false,
+        };
+      }
+
+      // The handler's success log reads every `waits` field, so a stub that
+      // omits them throws there rather than at the assertion.
+      function timings() {
+        return {
+          launchMs: 0,
+          renderMs: 0,
+          waits: {
+            semaphoreMs: 0,
+            admissionMs: 0,
+            tabQueueMs: 0,
+            tabStartupMs: 0,
+            tabProbeMs: 0,
+          },
+        };
+      }
+
+      function moduleFailure() {
+        return {
+          response: { card: { error: { error: { message: MISSING_EXPORT } } } },
+          timings: timings(),
+          pool: poolMeta(),
+        };
+      }
+
+      function rendered() {
+        return {
+          response: { card: { isolatedHTML: '<div>fresh</div>' } },
+          timings: timings(),
+          pool: poolMeta(),
+        };
+      }
+
+      // Reports `babf3612` on the first sample and `b778fe76` after, which is
+      // a shell change learned while the render was in flight.
+      function shellThatMovesOnce() {
+        let samples = 0;
+        return () => (++samples > 1 ? 'b778fe76' : 'babf3612');
+      }
+
+      function visitRequest(
+        request: SuperTest<Test>,
+        url: string,
+        auth: string,
+      ) {
+        return request
+          .post('/prerender-visit')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/json')
+          .send({
+            data: {
+              type: 'prerender-visit-request',
+              attributes: {
+                url,
+                auth,
+                realm: realmURL.href,
+                affinityType: 'realm',
+                affinityValue: realmURL.href,
+                renderOptions: { cardRender: true },
+              },
+            },
+          });
+      }
+
+      function authFor() {
+        return testCreatePrerenderAuth(testUserId, {
+          [realmURL.href]: ['read', 'write', 'realm-owner'],
+        });
+      }
+
+      test('a module failure under a moved shell is re-rendered once, after the recycle', async function (assert) {
+        let recycleSettled = false;
+        let recycleDeferred = new Deferred<void>();
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: shellThatMovesOnce(),
+          awaitHostShellRecycle: () =>
+            recycleDeferred.promise.then(() => {
+              recycleSettled = true;
+            }),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        let sawRecycleSettled: boolean[] = [];
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          sawRecycleSettled.push(recycleSettled);
+          return calls === 1 ? moduleFailure() : rendered();
+        };
+
+        let resPromise = visitRequest(
+          request,
+          `${realmURL.href}stale-shell`,
+          authFor(),
+        );
+        // The re-render must be waiting on the recycle, not already done.
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        assert.strictEqual(calls, 1, 're-render has not started yet');
+        recycleDeferred.fulfill();
+
+        let res = await resPromise;
+        assert.strictEqual(res.status, 201, 'answers with the replacement');
+        assert.strictEqual(calls, 2, 'exactly one re-render');
+        assert.deepEqual(
+          sawRecycleSettled,
+          [false, true],
+          'the second render ran only after the recycle settled',
+        );
+        assert.strictEqual(
+          res.body.data.attributes.card.isolatedHTML,
+          '<div>fresh</div>',
+          "the replacement's result is what is returned",
+        );
+        assert.strictEqual(
+          res.body.data.attributes.meta.diagnostics.hostShellHashAtCompletion,
+          'b778fe76',
+          'the tokens ride under diagnostics, where they reach a row',
+        );
+        await built.prerenderer.stop();
+      });
+
+      test("a module failure under a steady shell is returned as the card's own", async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: () => 'b778fe76',
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}steady-shell`,
+          authFor(),
+        );
+        assert.strictEqual(res.status, 201);
+        assert.strictEqual(calls, 1, 'no re-render');
+        assert.strictEqual(
+          res.body.data.attributes.card.error.error.message,
+          MISSING_EXPORT,
+          'the failure is returned for the caller to persist',
+        );
+        await built.prerenderer.stop();
+      });
+
+      test('a rejecting re-render answers 500 so the visit is retried elsewhere', async function (assert) {
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          getHostShellHash: shellThatMovesOnce(),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          if (++calls === 1) {
+            return moduleFailure();
+          }
+          throw new Error('page closed mid-recycle');
+        };
+
+        let res = await visitRequest(
+          request,
+          `${realmURL.href}rejecting-rerender`,
+          authFor(),
+        );
+        assert.strictEqual(
+          res.status,
+          500,
+          'remote-prerenderer maps this to a retryable error rather than persisting the distrusted result',
+        );
+        assert.strictEqual(calls, 2, 'the re-render was attempted');
+        await built.prerenderer.stop();
+      });
+
+      test('a drain during the re-render answers draining', async function (assert) {
+        let localDraining = false;
+        let drainingDeferred = new Deferred<void>();
+        let built = buildPrerenderApp({
+          serverURL: 'http://127.0.0.1:4222',
+          isDraining: () => localDraining,
+          drainingPromise: drainingDeferred.promise,
+          getHostShellHash: shellThatMovesOnce(),
+          awaitHostShellRecycle: () => new Promise<void>(() => {}),
+        });
+        let request: SuperTest<Test> = supertest(built.app.callback());
+
+        let calls = 0;
+        (built.prerenderer as any).prerenderVisit = async () => {
+          calls++;
+          return moduleFailure();
+        };
+
+        let resPromise = visitRequest(
+          request,
+          `${realmURL.href}drain-during-rerender`,
+          authFor(),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        localDraining = true;
+        drainingDeferred.fulfill();
+
+        let res = await resPromise;
+        assert.strictEqual(
+          res.status,
+          PRERENDER_SERVER_DRAINING_STATUS_CODE,
+          'reports draining rather than the failure it distrusts',
+        );
+        assert.strictEqual(calls, 1, 'the re-render never ran');
+        await built.prerenderer.stop();
+      });
+    });
+
     test('draining race does not leak unhandled rejection from execute', async function (assert) {
       let unhandled = 0;
       let onUnhandled = () => unhandled++;
