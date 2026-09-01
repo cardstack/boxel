@@ -765,18 +765,46 @@ export function relationshipStateForEntry<T extends CardDef>(
 //     result set — membership is not yet known. A re-triggered live query
 //     returns it to `undefined` while running, then back to an array.
 //
-// `isLoaded` says membership is known and nothing is in flight, which is the
-// signal to read a rollup over the field and trust the answer. It is the pair
+// `isLoaded` says membership is known and nothing is in flight. It is the pair
 // `isLoading` needs: a query-backed field whose search has not begun reports
 // `isLoading: false` with no membership, so `isLoading` alone cannot tell "no
 // answer yet" from "the answer is empty". The three states are:
 //   - `isLoading: true`                    — a fetch or search is running;
 //   - `isLoading: false, isLoaded: false`  — nothing has resolved this field;
-//   - `isLoading: false, isLoaded: true`   — membership is final (possibly `[]`).
+//   - `isLoading: false, isLoaded: true`   — membership is settled (possibly `[]`).
+//
+// `isLoaded` alone is not enough to trust a rollup, because a settled
+// membership can still be a prefix. A query-backed field resolves through a
+// page-bounded search, so a query matching more instances than the ceiling
+// allows settles holding the first page of them. `totalMatchCount` is what the
+// query actually matches and `isPartial` says membership falls short of it —
+// so a rollup that must be exact checks `isPartial` before reducing, and a
+// count-shaped one reads `totalMatchCount` and never touches the rows:
+//
+//   @field activityCount = contains(NumberField, {
+//     computeVia: function (this: Classroom) {
+//       let { totalMatchCount } = getRelationshipMembershipState(
+//         this,
+//         'everyActivity',
+//       );
+//       return totalMatchCount ?? 0;
+//     },
+//   });
+//
+// Both are query-only. A declared link holds exactly what its document names,
+// so it reports `totalMatchCount: undefined` and `isPartial: false`.
 export interface RelationshipStatus<T extends CardDef = CardDef> {
   isLoading: boolean;
   isLoaded: boolean;
   membership: RelationshipState<T>[] | undefined;
+  // How many instances the field's query matches, independent of how many
+  // membership carries. `undefined` for a declared link, and for a query-backed
+  // field until its search has reported one.
+  totalMatchCount: number | undefined;
+  // Membership is a bounded prefix of the match set, so reducing over it
+  // undercounts. Never true while the count is unknown or membership is still
+  // unresolved — this claims a shortfall, it does not hedge about one.
+  isPartial: boolean;
 }
 
 // `getRelationshipMembershipState` reports `isLoading` and query-field membership, both of
@@ -790,6 +818,9 @@ export interface RelationshipProbeResult<T extends CardDef = CardDef> {
   // Resolved membership for a query-backed field (`undefined` while in flight).
   // Ignored for declared fields, whose membership comes from the data bucket.
   queryMembership?: RelationshipState<T>[] | undefined;
+  // The match count the field's search reported (`meta.page.total`), which the
+  // page ceiling does not bound. Ignored for declared fields.
+  queryTotalMatchCount?: number | undefined;
 }
 type RelationshipProbe = (
   instance: CardDef,
@@ -844,10 +875,20 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
       resolved && field.fieldType === 'linksTo'
         ? [resolved[0] ?? relationshipStateForEntry<T>(null)]
         : resolved;
+    // A singular field reports no count: its query is forced to `page.size = 1`
+    // and it surfaces the first match by design, so a total above one describes
+    // the query rather than a shortfall in the field.
+    let totalMatchCount =
+      field.fieldType === 'linksTo' ? undefined : probe?.queryTotalMatchCount;
     return {
       isLoading,
       isLoaded: !isLoading && membership !== undefined,
       membership,
+      totalMatchCount,
+      isPartial:
+        totalMatchCount != null &&
+        membership !== undefined &&
+        totalMatchCount > membership.length,
     };
   }
 
@@ -878,8 +919,15 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
   }
   // A declared link's membership comes straight from the data bucket, so it is
   // known as soon as the owner deserializes; only an in-flight target load
-  // holds it back from final.
-  return { isLoading, isLoaded: !isLoading, membership };
+  // holds it back from final. It holds every target its document names — there
+  // is no query behind it and so no page that could cut one short.
+  return {
+    isLoading,
+    isLoaded: !isLoading,
+    membership,
+    totalMatchCount: undefined,
+    isPartial: false,
+  };
 }
 
 export interface BrokenLinkFinding {

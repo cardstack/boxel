@@ -527,6 +527,11 @@ export type GetSearchResourceFuncOpts = {
     // skipped query-backed expansion — the resource loads each ID by
     // URL instead of running a live re-query.
     cardURLs?: string[];
+    // The result meta the seed was resolved under, chiefly `page.total` —
+    // the query's match count, which exceeds `cards.length` when the page
+    // ceiling clamped the expansion. Absent it, the resource takes the
+    // record count for the total and a truncated seed reads as complete.
+    meta?: QueryResultsMeta;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -3963,18 +3968,30 @@ registerRelationshipProbe((instance, field) => {
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
+    let queryTotalMatchCount: number | undefined;
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
-      // directly), so this takes precedence.
+      // directly), so this takes precedence. A failed search matched nothing it
+      // could report, so the count stays unknown rather than reading a stale
+      // one off the resource.
       queryMembership = [relationshipStateForEntry(bucketEntry)];
     } else if (!isLoading && resource) {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
+      // The page ceiling bounds `instances` but not this: it is what the query
+      // matched, so the two disagree exactly when the field holds a prefix.
+      let total = resource.meta?.page?.total;
+      queryTotalMatchCount = typeof total === 'number' ? total : undefined;
     }
     // Otherwise membership stays undefined: in flight, or never queried.
-    return { isLoading, isQueryField: true, queryMembership };
+    return {
+      isLoading,
+      isQueryField: true,
+      queryMembership,
+      queryTotalMatchCount,
+    };
   }
   return {
     isLoading: hasInflightLoadForField(instance, field.name),
