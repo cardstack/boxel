@@ -111,6 +111,40 @@ module('Integration | file-chooser/panel', function (hooks) {
       );
   });
 
+  test('the chooser file tree stays read-only and healthy-only', async function (assert) {
+    const harness = new PanelHarness();
+
+    await render(
+      <template>
+        <FileChooser
+          @initialRealmURL={{testRealmURL}}
+          @onRealmChange={{harness.onRealmChange}}
+          @onUploadComplete={{harness.onUploadComplete}}
+          as |chooser|
+        >
+          <chooser.FileTree @realmURL={{testRealmURL}} />
+        </FileChooser>
+      </template>,
+    );
+
+    await waitFor('[data-test-file="pet.gts"]');
+    // The chooser never passes onDeleteFile, so the shared IndexedFileTree
+    // must render no delete affordance — neither the per-row trigger nor a
+    // right-click menu.
+    assert
+      .dom('.file-menu-trigger')
+      .doesNotExist('no file-row context-menu trigger renders in the chooser');
+    await triggerEvent('[data-test-file-row="pet.gts"]', 'contextmenu');
+    assert
+      .dom('[data-test-boxel-menu-item-text="Delete"]')
+      .doesNotExist('right-click opens no delete menu in the chooser');
+    // The chooser omits includeErrors (healthy-only), so no error affordance
+    // ever renders.
+    assert
+      .dom('[data-test-file-error]')
+      .doesNotExist('no error affordance renders in the chooser');
+  });
+
   test('switching workspace notifies the host and bumps the recreation key', async function (assert) {
     const harness = new PanelHarness();
 

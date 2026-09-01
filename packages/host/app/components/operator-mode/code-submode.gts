@@ -833,7 +833,6 @@ export default class CodeSubmode extends Component<Signature> {
                             this.deleteFileInTree
                           }}
                           @scrollPositionKey={{this.operatorModeStateService.codePathString}}
-                          @revealFile={{this.operatorModeStateService.fileToReveal}}
                           @includeErrors={{true}}
                           @discoverEmptyDirs={{true}}
                         />

@@ -92,8 +92,6 @@ interface Signature {
     // Discover empty directories the index can't see (code submode). Off by
     // default (the file chooser skips the realm-wide crawl).
     discoverEmptyDirs?: boolean;
-    // Scroll this file into view (without selecting it) — reveal-on-create.
-    revealFile?: LocalPath;
   };
 }
 
@@ -117,13 +115,12 @@ export default class IndexedFileTree extends Component<Signature> {
         @onDirectorySelected={{this.toggleDirectory}}
         @onDeleteFile={{@onDeleteFile}}
         @scrollPositionKey={{@scrollPositionKey}}
-        @revealFile={{@revealFile}}
         @relativePath=''
         @cursorPath={{this.cursorPath}}
       />
       {{#if this.showMask}}
         <div class='mask' data-test-file-tree-mask>
-          {{#if this.fileTree.isLoading}}
+          {{#if this.fileTree.isInitialLoading}}
             <LoadingIndicator />
           {{/if}}
         </div>
@@ -175,8 +172,12 @@ export default class IndexedFileTree extends Component<Signature> {
     });
   }
 
+  // Mask only while there is nothing to show yet (the first load for the
+  // current realm). Refreshes — index events, the empty-dir crawl — keep the
+  // existing tree up and swap the new result in silently, so every file
+  // add/delete doesn't white-flash the whole tree.
   private get showMask(): boolean {
-    if (this.fileTree.isLoading) {
+    if (this.fileTree.isInitialLoading) {
       return true;
     }
     return !this.maskDismissed;
@@ -420,7 +421,6 @@ interface TreeLevelSignature {
     onDirectorySelected: (entryPath: LocalPath) => void;
     onDeleteFile?: (entryPath: LocalPath) => void;
     scrollPositionKey?: LocalPath;
-    revealFile?: LocalPath;
     relativePath: string;
     cursorPath?: string;
   };
@@ -449,11 +449,6 @@ class TreeLevel extends Component<TreeLevelSignature> {
                 (this.isSelectedFile entry.path)
                 container='file-tree'
                 key=@scrollPositionKey
-              }}
-              {{scrollIntoViewModifier
-                (this.isRevealTarget entry.path)
-                container='file-tree-reveal'
-                key=@revealFile
               }}
               class='file
                 {{if (this.isSelectedFile entry.path) "selected"}}
@@ -503,7 +498,6 @@ class TreeLevel extends Component<TreeLevelSignature> {
               @onDirectorySelected={{@onDirectorySelected}}
               @onDeleteFile={{@onDeleteFile}}
               @scrollPositionKey={{@scrollPositionKey}}
-              @revealFile={{@revealFile}}
               @relativePath={{entry.path}}
               @cursorPath={{@cursorPath}}
             />
@@ -515,7 +509,12 @@ class TreeLevel extends Component<TreeLevelSignature> {
       <div
         class='file-tree-context-menu'
         {{velcro this.menuTriggerEl placement='bottom-start' strategy='fixed'}}
-        {{onClickOutside this.closeMenu exceptSelector='.file-menu-trigger'}}
+        {{onClickOutside this.handleClickOutsideMenu capture=true}}
+        {{onClickOutside
+          this.handleClickOutsideMenu
+          eventType='contextmenu'
+          capture=true
+        }}
       >
         <Menu
           class='file-tree-context-menu-list'
@@ -685,6 +684,23 @@ class TreeLevel extends Component<TreeLevelSignature> {
     this.menuTriggerEl = undefined;
   }
 
+  // Close on any click or right-click outside the menu, except inside the
+  // owning trigger (whose own handler toggles). Scoped to this menu's trigger
+  // element — a class-based exception would also spare *other* rows' triggers,
+  // leaving two menus open at once. Capture-phase, so a trigger handler's
+  // stopPropagation can't keep a sibling menu from closing.
+  @action
+  private handleClickOutsideMenu(e: Event) {
+    if (
+      this.menuTriggerEl &&
+      e.target instanceof Node &&
+      this.menuTriggerEl.contains(e.target)
+    ) {
+      return;
+    }
+    this.closeMenu();
+  }
+
   @action
   private openFileMenu(entryPath: LocalPath, e: MouseEvent) {
     if (!this.args.onDeleteFile) {
@@ -711,15 +727,6 @@ class TreeLevel extends Component<TreeLevelSignature> {
   @action
   isSelectedFile(path: string): boolean {
     return this.args.selectedFile === path;
-  }
-
-  // Reveal-on-create: scroll this file into view (without selecting it) when it
-  // is the reveal target. Render-driven via `scrollIntoViewModifier`, so it
-  // fires the moment the just-created row renders — including after the index
-  // event re-runs the search.
-  @action
-  isRevealTarget(path: string): boolean {
-    return this.args.revealFile != null && this.args.revealFile === path;
   }
 
   @action

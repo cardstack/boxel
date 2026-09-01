@@ -180,9 +180,6 @@ export default class OperatorModeStateService extends Service {
   @tracked profileSettingsOpen = false;
   @tracked profileSettingsSection: ProfileSettingsSection | undefined;
   @tracked createListingModalPayload?: CreateListingModalPayload;
-  // The realm-relative path of a file to scroll into view in the code-submode
-  // file tree (reveal-on-create), without selecting it. See `revealFileInTree`.
-  @tracked fileToReveal?: LocalPath;
 
   // Per-card expanded-mode intent. Keyed by stack-item instance id so the
   // user's expand intent survives bury/pop cycles within a stack:
@@ -954,13 +951,15 @@ export default class OperatorModeStateService extends Service {
   private updateOpenDirsForNestedPath() {
     let localPath = this.codePathRelativeToRealm;
     if (localPath) {
-      this.expandOpenDirsForPath(localPath);
+      this.expandDirsForFile(localPath);
     }
   }
 
   // Expand every ancestor directory of a realm-relative file path so the file
-  // is reachable in the tree. Idempotent: a dir already open is left as-is.
-  private expandOpenDirsForPath(localPath: LocalPath) {
+  // is reachable in the code-submode file tree — without navigating the editor
+  // (no `codePath` change) or selecting the file. Idempotent: a dir already
+  // open is left as-is.
+  expandDirsForFile = (localPath: LocalPath) => {
     let segments = localPath.split('/').slice(0, -1).filter(Boolean);
     let accumulator: string[] = [];
 
@@ -972,15 +971,6 @@ export default class OperatorModeStateService extends Service {
         this.toggleOpenDir(dirPath);
       }
     }
-  }
-
-  // Reveal-on-create: expand the file's ancestor folders and flag it to be
-  // scrolled into view in the code-submode file tree — without navigating the
-  // editor (no `codePath` change) or selecting it. `fileToReveal` is read by
-  // `<IndexedFileTree @revealFile=…>`.
-  revealFileInTree = (localPath: LocalPath) => {
-    this.expandOpenDirsForPath(localPath);
-    this.fileToReveal = localPath;
   };
 
   get currentRealmOpenDirs() {

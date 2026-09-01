@@ -76,13 +76,24 @@ export class FileTreeFromIndexResource extends Resource<Args> {
   #includeErrors = false;
   #discoverEmptyDirs = false;
   #subscription: { realmURL: string; unsubscribe: () => void } | undefined;
+  // The realm whose files the last completed search loaded — read by
+  // `isInitialLoading` to tell a first load (nothing to show yet) from a
+  // refresh (stale entries stay up while the new result lands). Untracked on
+  // purpose: consumers recompute off the task's `isRunning` flip.
+  #loadedRealm: string | undefined;
   // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private _files = new TrackedArray<IndexedFileRow>();
   // Relative dir paths (trailing slash) discovered via DirectoryListing —
   // includes empty directories the index can't yield. Empty unless
-  // `discoverEmptyDirs` is set. Reassigned wholesale so `entries` recomputes.
-  @tracked private discoveredDirPaths: string[] = [];
+  // `discoverEmptyDirs` is set. Tagged with the realm the crawl ran against so
+  // `entries` never merges one realm's dirs into another realm's tree while a
+  // post-switch crawl is still in flight. Reassigned wholesale so `entries`
+  // recomputes.
+  @tracked private discoveredDirs: { realmURL: string; paths: string[] } = {
+    realmURL: '',
+    paths: [],
+  };
 
   constructor(owner: object) {
     super(owner);
@@ -122,19 +133,22 @@ export class FileTreeFromIndexResource extends Resource<Args> {
       return;
     }
     this.loaded = this.search.perform();
-    if (this.#discoverEmptyDirs) {
-      this.discoverDirs.perform();
-    } else {
-      this.discoveredDirPaths = [];
+    // Guarded so `modify` (which runs during render) only writes the tracked
+    // state when it actually changes — an unconditional write risks a
+    // backtracking assertion against a consumer that read `entries` earlier
+    // in the same render.
+    if (!this.#discoverEmptyDirs && this.discoveredDirs.paths.length) {
+      this.discoveredDirs = { realmURL: '', paths: [] };
     }
   }
 
   // The file search re-runs on incremental `index` events (a created/deleted
-  // card indexes and its file row appears/disappears). Directory discovery
-  // re-runs on `update` events that add or remove files — those are the only
-  // signal for an emptied directory (a deleted last file leaves the folder on
-  // disk, which the index can't see). An `updated`-only event (a source save
-  // while editing) touches neither and is ignored.
+  // card indexes and its file row appears/disappears) and chains a directory
+  // re-crawl so the dir set is always re-validated against fresh files.
+  // Directory discovery additionally re-runs on `update` events that add or
+  // remove files — dir structure is filesystem-immediate, and an out-of-band
+  // dir removal may fire no index event at all. An `updated`-only event (a
+  // source save while editing) touches neither and is ignored.
   private handleRealmEvent(event: RealmEventContent) {
     if (
       event.eventName === 'index' &&
@@ -157,6 +171,14 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     return this.search.isRunning || this.discoverDirs.isRunning;
   }
 
+  // True only while there is nothing to show yet for the current realm — the
+  // first search since mount or since a realm switch. Refreshes (index events,
+  // the dir crawl) keep the existing entries up while the new result lands, so
+  // consumers should mask on this rather than `isLoading`.
+  get isInitialLoading(): boolean {
+    return this.search.isRunning && this.#loadedRealm !== this.#realmURL;
+  }
+
   private search = restartableTask(async () => {
     let realmURL = this.#realmURL;
     if (!realmURL) {
@@ -172,8 +194,15 @@ export class FileTreeFromIndexResource extends Resource<Args> {
           hasError: Boolean(entry.meta?.hasError),
         }));
       this._files.splice(0, this._files.length, ...files);
+      this.#loadedRealm = realmURL;
     } finally {
       waiter.endAsync(token);
+    }
+    // Re-validate the directory set against the fresh file list — this is what
+    // eventually drops a wholesale-deleted directory (the `update`-event crawl
+    // may have run against stale files).
+    if (this.#discoverEmptyDirs) {
+      this.discoverDirs.perform();
     }
   });
 
@@ -184,32 +213,41 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     }
     let token = waiter.beginAsync();
     try {
-      // Seed with the non-empty dirs the index already yields (ancestors of
-      // every indexed file). The crawl then only additionally surfaces the
-      // empty subtrees.
+      // Seed the crawl frontier with the non-empty dirs the index already
+      // yields (ancestors of every indexed file) so the whole known structure
+      // lists in one parallel wave; only empty subtrees need further waves.
+      // Seeds are frontier hints, not results — a stale seed drops out.
       let known = new Set<string>();
       for (let { url } of this._files) {
         for (let dir of ancestorDirs(this.relativePath(url))) {
           known.add(dir);
         }
       }
-      this.discoveredDirPaths = await this.crawlDirs(known, realmURL);
+      let paths = await this.crawlDirs(known, realmURL);
+      this.discoveredDirs = { realmURL, paths };
     } finally {
       waiter.endAsync(token);
     }
   });
 
   // BFS from the realm root + every known dir, listing each directory's child
-  // directories. A child not already known is an empty-subtree root — enqueue
-  // it so we descend into it (and only it: every known branch is already
-  // covered). Terminates within the depth of the deepest empty chain, since
-  // listing an empty dir only ever finds more empty dirs.
+  // directories. A child not already enqueued is an empty-subtree root —
+  // enqueue it so we descend into it (and only it: every known branch is
+  // already covered). Terminates within the depth of the deepest empty chain,
+  // since listing an empty dir only ever finds more empty dirs.
+  //
+  // Returns only dirs *observed as a child in a listing response* — never the
+  // seeds themselves. Every dir on disk is observed via its listed parent
+  // (`known` carries full ancestor chains up to the listed root), while a
+  // stale seed (a dir deleted wholesale but still present in the file list the
+  // seeds came from) is never observed and so drops out.
   private async crawlDirs(
     known: Set<string>,
     realmURL: string,
   ): Promise<string[]> {
-    let all = new Set(known);
-    let frontier = ['', ...known];
+    let observed = new Set<string>();
+    let enqueued = new Set(['', ...known]);
+    let frontier = [...enqueued];
     while (frontier.length) {
       let childLists = await mapWithConcurrency(
         frontier,
@@ -219,48 +257,47 @@ export class FileTreeFromIndexResource extends Resource<Args> {
       let next: string[] = [];
       for (let children of childLists) {
         for (let child of children) {
-          if (!all.has(child)) {
-            all.add(child);
+          observed.add(child);
+          if (!enqueued.has(child)) {
+            enqueued.add(child);
             next.push(child);
           }
         }
       }
       frontier = next;
     }
-    all.delete(''); // the realm root is not a tree node
-    return [...all];
+    return [...observed];
   }
 
   // One DirectoryListing → this dir's immediate child dirs (relative, trailing
-  // slash). Boot-tolerant like DirectoryResource: a failed fetch yields no
-  // children rather than throwing.
+  // slash). Boot-tolerant like the old DirectoryResource: a failed fetch or a
+  // malformed body yields no children rather than failing the crawl.
   private async listChildDirs(
     dir: string,
     realmURL: string,
   ): Promise<string[]> {
-    let response: Response;
     try {
-      response = await this.network.authedFetch(new URL(dir, realmURL), {
+      let response = await this.network.authedFetch(new URL(dir, realmURL), {
         headers: { Accept: SupportedMimeType.DirectoryListing },
       });
+      if (!response.ok) {
+        return [];
+      }
+      let json = await response.json();
+      let relationships = (json?.data?.relationships ?? {}) as Record<
+        string,
+        { meta?: { kind?: string } }
+      >;
+      // The relationship key already carries a trailing '/' for directories
+      // (realm.ts getDirectoryListing), so `${dir}${name}` is the child's
+      // relative dir path.
+      return Object.entries(relationships)
+        .filter(([, info]) => info?.meta?.kind === 'directory')
+        .map(([name]) => `${dir}${name}`);
     } catch (e) {
-      log.error(`directory listing fetch failed for ${dir}: ${e}`);
+      log.error(`directory listing failed for ${dir}: ${e}`);
       return [];
     }
-    if (!response.ok) {
-      return [];
-    }
-    let json = await response.json();
-    let relationships = (json?.data?.relationships ?? {}) as Record<
-      string,
-      { meta?: { kind?: string } }
-    >;
-    // The relationship key already carries a trailing '/' for directories
-    // (realm.ts getDirectoryListing), so `${dir}${name}` is the child's
-    // relative dir path.
-    return Object.entries(relationships)
-      .filter(([, info]) => info?.meta?.kind === 'directory')
-      .map(([name]) => `${dir}${name}`);
   }
 
   // The file tree only needs each matched file's URL (the `entry` id) plus its
@@ -305,7 +342,9 @@ export class FileTreeFromIndexResource extends Resource<Args> {
     if (!this.#realmURL) {
       return [];
     }
-    let tree = this.buildTree(this._files, this.discoveredDirPaths);
+    let { realmURL, paths } = this.discoveredDirs;
+    let dirPaths = realmURL === this.#realmURL ? paths : [];
+    let tree = this.buildTree(this._files, dirPaths);
     return this.sortEntries(tree);
   }
 
