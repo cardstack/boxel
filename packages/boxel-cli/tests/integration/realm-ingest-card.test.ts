@@ -194,7 +194,10 @@ beforeAll(async () => {
       '--realm',
       realmHref,
     ],
-    { home, timeout: 600_000 },
+    // Strictly under the hook's own 600s budget, so an ingest that wedges is
+    // reported as a killed command rather than abandoned by the hook and
+    // left running against the realm server every later file shares.
+    { home, timeout: 570_000 },
   );
 }, 600_000);
 
@@ -252,7 +255,7 @@ describe('realm ingest-card (integration)', () => {
           '--realm',
           '@cardstack/test/',
         ],
-        { home, timeout: 120_000 },
+        { home, timeout: 110_000 },
       );
       expect(rriResult.ok, rriResult.stderr).toBe(true);
       expect(listIngested(rriDir)).toEqual(EXPECTED_INGESTED);

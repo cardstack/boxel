@@ -1178,6 +1178,12 @@ jobs:
       # tens of thousands of lines of realm-server request logging and
       # dev-stack output, so a reader that fetches the log's tail — the API,
       # and anyone scrolling — never reaches it.
+      # upload-artifact only warns on a missing file, so without this a run
+      # that dies before vitest writes the report is indistinguishable from
+      # one that passed — the same guard ci-host.yaml puts on its shards.
+      - name: Assert junit report was produced
+        if: ${{ !cancelled() }}
+        run: test -s junit/boxel-cli-integration.xml
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}
@@ -1192,10 +1198,10 @@ jobs:
           name: boxel-cli-test-dev-stack-log
           path: /tmp/server.log
           retention-days: 30
-      # A bounded tail, because the full log is the artifact above: printing
-      # all of it here is what buries the suite's summary, and the last few
-      # hundred lines are the ones that describe the stack's state when the
-      # suite stopped.
+      # A bounded tail keeps the suite's own summary near the end of the job
+      # log, where a tail read can reach it. The full log is the artifact
+      # above; these last lines describe the stack's state when the suite
+      # stopped.
       - name: Print dev stack log tail
         if: ${{ !cancelled() }}
         run: |

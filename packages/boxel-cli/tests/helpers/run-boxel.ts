@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterEach, expect } from 'vitest';
+import { afterAll, afterEach, expect } from 'vitest';
 
 /**
  * Drive the `boxel` CLI as a subprocess — its real external interface
@@ -62,9 +62,10 @@ export interface RunBoxelOptions {
   /** Text piped to the command's stdin. */
   input?: string;
   /**
-   * Kill the command after this many ms (default 60s). A command that
-   * needs longer than the enclosing test's own timeout must raise both,
-   * or vitest abandons the test while the command is still running.
+   * Kill the command after this many ms (default 60s). Keep this strictly
+   * below the enclosing test's or hook's own timeout: whichever is smaller
+   * fires first, and only this one reports which command was killed and what
+   * it had printed.
    */
   timeout?: number;
 }
@@ -110,6 +111,28 @@ interface InFlightCommand {
   startedAt: number;
   readStdout: () => string;
   readStderr: () => string;
+  /** Disarms the command's deadline and marks its result as reaped. */
+  abandon: () => void;
+}
+
+/**
+ * Signal the command *and anything it spawned*. `boxel parse` runs
+ * ember-tsc, `boxel test` launches chromium, and several commands shell out
+ * to git; signalling the command's pid alone leaves those grandchildren
+ * running — burning a core for the rest of the job, and holding the stdio
+ * pipes open so the command never reports `close`. Every command is spawned
+ * `detached`, which puts it in its own process group, so the negative pid
+ * reaches the whole tree.
+ */
+function killTree(child: ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined) {
+    return;
+  }
+  try {
+    process.kill(-child.pid, signal);
+  } catch {
+    // The group is already gone, which is the outcome we wanted.
+  }
 }
 
 const inFlight = new Set<InFlightCommand>();
@@ -134,27 +157,30 @@ function describeCommand(entry: InFlightCommand): string {
 }
 
 /**
- * Kill any command still running when a test ends, and say what it was.
+ * Kill any command still running at a test or hook boundary, and say what it
+ * was.
  *
- * vitest's default 30s `testTimeout` is shorter than this helper's 60s
- * command deadline, so a wedged command outlives the test that started it
- * and keeps writing to the realm server the *next* test is using — pushing
- * files, creating realms, or queueing index jobs behind a test that never
- * asked for any of it. Reaping at test boundaries keeps a single slow
+ * The suite's configured `testTimeout` is shorter than this helper's
+ * `DEFAULT_TIMEOUT_MS`, so vitest gives up on a wedged command before its own
+ * deadline does. The command keeps writing to the realm server the *next*
+ * test is using — pushing files, creating realms, queueing index jobs behind
+ * a test that never asked for any of it — because the whole suite shares one
+ * process and one server. Reaping at every boundary keeps a single slow
  * command from becoming a cascade of unrelated failures.
  *
- * The report matters as much as the kill: on its own, a timed-out test
- * reports only `Test timed out in 30000ms`, which names neither the command
- * that hung nor what it had printed before it did.
+ * The report matters as much as the kill: on its own, an abandoned test
+ * reports only that it timed out, naming neither the command that hung nor
+ * what it had printed before it did.
  */
-export function reapInFlightCommands(testName: string): number {
+export function reapInFlightCommands(scope: string): number {
   let survivors = [...inFlight];
   inFlight.clear();
   for (let entry of survivors) {
     console.error(
-      `[runBoxel] command outlived "${testName}"; killing it.\n${describeCommand(entry)}`,
+      `[runBoxel] command outlived ${scope}; killing it.\n${describeCommand(entry)}`,
     );
-    entry.child.kill('SIGKILL');
+    entry.abandon();
+    killTree(entry.child, 'SIGKILL');
   }
   return survivors.length;
 }
@@ -163,7 +189,21 @@ afterEach(() => {
   if (inFlight.size === 0) {
     return;
   }
-  reapInFlightCommands(expect.getState().currentTestName ?? 'unknown test');
+  reapInFlightCommands(
+    `test "${expect.getState().currentTestName ?? 'unknown test'}"`,
+  );
+});
+
+// `afterEach` never sees a command a hook started, and the hooks are where
+// the longest-running commands live: `realm ingest-card` runs from a
+// `beforeAll`, so a hook that gives up on it leaves it writing to the realm
+// server for every remaining file in the run — the suite shares one process
+// and one server under `--poolOptions.forks.singleFork`.
+afterAll(() => {
+  if (inFlight.size === 0) {
+    return;
+  }
+  reapInFlightCommands("this file's hooks");
 });
 
 export function runBoxel(
@@ -184,6 +224,9 @@ export function runBoxel(
       cwd: options.cwd,
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      // Its own process group, so `killTree` can reach whatever the command
+      // spawns.
+      detached: true,
     });
 
     let stdout = '';
@@ -199,33 +242,49 @@ export function runBoxel(
     child.stdout.on('data', (chunk) => (stdout += chunk));
     child.stderr.on('data', (chunk) => (stderr += chunk));
 
+    let timedOut = false;
+    let reaped = false;
+    let killTimer: NodeJS.Timeout | undefined;
+
+    // The deadline escalates SIGTERM to SIGKILL because `boxel realm watch`
+    // installs a SIGTERM handler of its own, and it reports the kill through
+    // `timedOut` and a stderr note so the caller reads a killed command as
+    // killed rather than as a bare null exit code.
+    let deadline = setTimeout(() => {
+      // `close` waits on the stdio pipes as well as the exit, so a command
+      // that has already exited can still be here with a grandchild holding
+      // a pipe. Killing it now, and calling it a timeout, would both be
+      // false.
+      if (child.exitCode !== null || child.signalCode !== null) {
+        return;
+      }
+      timedOut = true;
+      killTree(child, 'SIGTERM');
+      killTimer = setTimeout(() => killTree(child, 'SIGKILL'), KILL_GRACE_MS);
+    }, timeoutMs);
+
+    let disarm = () => {
+      clearTimeout(deadline);
+      if (killTimer) {
+        clearTimeout(killTimer);
+      }
+    };
+
     let entry: InFlightCommand = {
       child,
       argv: [command, ...baseArgs, ...args].join(' '),
       startedAt: Date.now(),
       readStdout: () => stdout,
       readStderr: () => stderr,
+      abandon: () => {
+        reaped = true;
+        disarm();
+      },
     };
     inFlight.add(entry);
 
-    // The deadline lives here rather than in `spawn`'s own `timeout` for
-    // two reasons: `spawn` sends SIGTERM only, and `boxel realm watch`
-    // installs a SIGTERM handler, so a command wedged inside that handler
-    // needs the SIGKILL follow-up; and the caller needs to be told the
-    // command was killed instead of inferring it from a null exit code.
-    let timedOut = false;
-    let killTimer: NodeJS.Timeout | undefined;
-    let deadline = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGTERM');
-      killTimer = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS);
-    }, timeoutMs);
-
     let settle = () => {
-      clearTimeout(deadline);
-      if (killTimer) {
-        clearTimeout(killTimer);
-      }
+      disarm();
       inFlight.delete(entry);
     };
 
@@ -237,6 +296,8 @@ export function runBoxel(
       settle();
       if (timedOut) {
         stderr += `\n[runBoxel] killed after exceeding its ${timeoutMs}ms deadline: ${entry.argv}\n`;
+      } else if (reaped) {
+        stderr += `\n[runBoxel] killed when its test ended: ${entry.argv}\n`;
       }
       resolvePromise({
         stdout,
