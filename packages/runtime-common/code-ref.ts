@@ -52,6 +52,24 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
+// The field a narrowing produces, per instance and field name. `getField` runs
+// on every field read, render and serialize, so without this the narrowed field
+// is rebuilt from scratch on each one — and a narrowing is reached far more
+// often than "an override was installed" suggests, because a resolved link
+// installs an override for its target's concrete type even when that is the
+// type the field already declared.
+//
+// Keyed by the override it was built for, so replacing an override misses and
+// rebuilds. The declared field a narrowing starts from is a property
+// descriptor's, which cannot change once the class is defined.
+let narrowedFields = new WeakMap<
+  BaseDef,
+  Map<
+    string,
+    { overrideCard: typeof BaseDef; field: Field<BaseDefConstructor> }
+  >
+>();
+
 // Pure shape predicates live in `card-document-shape.ts` so callers that
 // only need to recognize a CodeRef don't pull the transitive runtime
 // chain rooted in this file. Re-exported here for backward compat; the
@@ -338,32 +356,50 @@ export function getField<T extends BaseDef>(
             : undefined;
       }
       if (fieldOverride) {
-        let originalField = result;
-        // The override narrows which card the field resolves to. It does not
-        // restate how the field behaves, so the rest of the declaration has to
-        // survive the narrowing.
-        //
-        // Clone rather than reconstruct from a list of the options to keep.
-        // Such a list is a second place that has to know every property a
-        // field carries, and it cannot know them all: most of a field's
-        // options are constructor parameters, but the field factories assign
-        // `configuration` after construction, so it cannot travel through the
-        // constructor at all. An option the list omits is dropped with nothing
-        // to signal it, and only a consumer reading that property
-        // instance-scoped shows the loss.
-        //
-        // The clone carries the declaration whole, leaving this a statement of
-        // what a narrowing changes: the card the field resolves to, and that
-        // resolving it is polymorphic. Notably not `declaredCardThunk`, which
-        // resolves the type the field was *declared* with.
-        result = Object.assign(
-          Object.create(Object.getPrototypeOf(originalField)),
-          originalField,
-          {
-            cardThunk: () => fieldOverride,
-            isPolymorphic: true,
-          },
-        ) as Field;
+        let cacheForInstance = narrowedFields.get(instance!);
+        let cached = cacheForInstance?.get(fieldName);
+        // Falls through to the identity registration below rather than
+        // returning here: that registration is last-writer-wins across owner
+        // classes sharing an override card, so skipping it on a hit would make
+        // the winner depend on which lookups happened to miss.
+        if (cached?.overrideCard === fieldOverride) {
+          result = cached.field;
+        } else {
+          let originalField = result;
+          // The override narrows which card the field resolves to. It does not
+          // restate how the field behaves, so the rest of the declaration has to
+          // survive the narrowing.
+          //
+          // Clone rather than reconstruct from a list of the options to keep.
+          // Such a list is a second place that has to know every property a
+          // field carries, and it cannot know them all: most of a field's
+          // options are constructor parameters, but the field factories assign
+          // `configuration` after construction, so it cannot travel through the
+          // constructor at all. An option the list omits is dropped with nothing
+          // to signal it, and only a consumer reading that property
+          // instance-scoped shows the loss.
+          //
+          // The clone carries the declaration whole, leaving this a statement of
+          // what a narrowing changes: the card the field resolves to, and that
+          // resolving it is polymorphic. Notably not `declaredCardThunk`, which
+          // resolves the type the field was *declared* with.
+          result = Object.assign(
+            Object.create(Object.getPrototypeOf(originalField)),
+            originalField,
+            {
+              cardThunk: () => fieldOverride,
+              isPolymorphic: true,
+            },
+          ) as Field;
+          if (!cacheForInstance) {
+            cacheForInstance = new Map();
+            narrowedFields.set(instance!, cacheForInstance);
+          }
+          cacheForInstance.set(fieldName, {
+            overrideCard: fieldOverride,
+            field: result,
+          });
+        }
       }
       localIdentities.set(result.card, {
         type: 'fieldOf',
