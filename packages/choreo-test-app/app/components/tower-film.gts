@@ -377,7 +377,7 @@ const BEATS: Beat[] = [
     /* the film opens from as far out as the lens goes and spends the
        whole first beat arriving — a slow push from "a landscape with
        something in it" to "this building, specifically" */
-    cam: { dolly: 0.3, lookY: -1.2, ox: 0.2, pitch: 12, yaw: -46 },
+    cam: { dolly: 0.46, lookY: -1.2, ox: 0.2, pitch: 12, yaw: -46 },
     ch: 0,
     gloss: 'the keep',
     id: 'title',
@@ -404,7 +404,7 @@ const BEATS: Beat[] = [
     },
     theme: 0,
     ticks: 5,
-    toCam: { dolly: 0.64, lookY: -1.0, ox: 0.2, pitch: 13, yaw: -26 },
+    toCam: { dolly: 0.74, lookY: -1.0, ox: 0.2, pitch: 13, yaw: -26 },
   },
   {
     /* CUT to the ground itself — a worm's-eye from the foot of the
@@ -1452,7 +1452,15 @@ export default class TowerFilm extends Component<{
         }
         return;
       }
-      this.begin(false);
+      /* IDEMPOTENT, or nothing. This load path re-runs whenever the
+         modifier does (a booted flip re-renders the stage), and an
+         unconditional begin(false) here reached the already-booted
+         branch and TOGGLED THE SOUND BACK OFF — the "with sound" click
+         un-clicking itself one pass later. Only a film that has not
+         begun may be begun on its behalf. */
+      if (!this.booted) {
+        this.begin(false);
+      }
     };
     frame.addEventListener('load', onLoad);
     /* a cached iframe can be complete before the listener is attached —
