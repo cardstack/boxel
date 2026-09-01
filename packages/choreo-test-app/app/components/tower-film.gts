@@ -1,4 +1,4 @@
-import { array } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -89,6 +89,19 @@ interface Beat {
   cam: Cam;
   /** the chapter this belongs to, for the rail at the foot of the frame */
   ch: number;
+  /**
+   * CUT TO IT, rather than travel to it.
+   *
+   * A spline through every mark is the right primitive for a sweep and the
+   * wrong one for an edit: real cutting has hard cuts in it, and a lens
+   * cannot fly to a 5× close-up on an eave without the trip being the shot.
+   * A cut beat snaps the chaser onto its own pose at the instant its cue
+   * fires — which is the same instant the path crosses that waypoint, so
+   * the score and the picture still agree and nothing has been lied to.
+   * Author the beat either side of a cut as a HOLD and it reads the way an
+   * edit reads: still, cut, still.
+   */
+  cut?: boolean;
   /** the English of the kanji, set small under it */
   gloss?: string;
   id: string;
@@ -136,6 +149,11 @@ interface Beat {
   to?: [number, number, number];
   /** the pose at its tail; without one the shot holds, and a hold is a hold */
   toCam?: Cam;
+  /**
+   * Lines drawn ON the building, in world coordinates. They draw
+   * themselves on over the head of the beat and hold.
+   */
+  trace?: { pts: Pt3[]; wide?: boolean }[];
   /** weather: 0 clear, 1 rain, 2 storm, 3 snow */
   wx?: number;
 }
@@ -161,6 +179,54 @@ const CHAPTERS = [
   { n: '04', title: 'DETAIL' },
   { n: '05', title: 'COMPARISON' },
 ];
+
+const RAD = Math.PI / 180;
+
+/* ------------------------------------------------------------------ *
+ * TRACING THE BUILDING
+ *
+ * A line drawn ON the geometry rather than beside it: a polyline authored
+ * in the scene's own world coordinates, projected through the same camera
+ * that drew the tower, and stroked as SVG over the frame. It sits exactly
+ * on the eave or the batter it is describing, it moves with the lens
+ * because it is described in the world and not on the screen, and it can
+ * be drawn on — which is what turns a diagram into a piece of film.
+ *
+ * The one thing it cannot do is hide behind the building: the parent has
+ * no depth buffer, so a trace is always in front. That is the right
+ * convention anyway — an annotation is not part of the scene, and every
+ * architectural overlay ever printed sits on top of the photograph.
+ * ------------------------------------------------------------------ */
+type Pt3 = [number, number, number];
+
+/** an arc at a height, swept between two bearings — an eave, a rail, a ring */
+const ring = (y: number, r: number, a0: number, a1: number, n = 40): Pt3[] =>
+  Array.from({ length: n + 1 }, (_, i) => {
+    const a = (a0 + ((a1 - a0) * i) / n) * RAD;
+    return [Math.sin(a) * r, y, Math.cos(a) * r] as Pt3;
+  });
+
+/** the 扇の勾配 in section: the stone's own radius, sampled up its height */
+const batter = (bearing: number, n = 22): Pt3[] =>
+  Array.from({ length: n + 1 }, (_, i) => {
+    const y = (3.3 * i) / n;
+    const f = y / 3.3;
+    const r = 2.66 + (3.36 - 2.66) * Math.pow(1 - f, 1.85);
+    const a = bearing * RAD;
+    return [Math.sin(a) * r, y, Math.cos(a) * r] as Pt3;
+  });
+
+/** a plain segment between two points in the world */
+const seg = (a: Pt3, b: Pt3): Pt3[] => [a, b];
+
+/* the tower's own lines, in its own coordinates — see `ring`/`batter` */
+const RING_EAVE1 = ring(5.02, 3.32, 60, 300);
+const RING_EAVE2 = ring(7.7, 2.84, 60, 300);
+const RING_EAVE3 = ring(10.16, 2.42, 60, 300);
+const RAIL = ring(11.3, 1.84, 40, 320);
+const RIDGE = seg([0.51, 13.72, 0.51], [-0.51, 13.72, -0.51]);
+const BATTER_L = batter(128);
+const BATTER_R = batter(232);
 
 /**
  * THE SCRIPT.
@@ -361,40 +427,69 @@ const BEATS: Beat[] = [
   },
 
   /* ---------------------------------------------------------------- *
-   * 04 — DETAIL: four things worth naming, each with a line drawn to it
+   * 04 — DETAIL: cut in hard, hold, trace it, cut again
+   *
+   * This chapter is CUT rather than flown. Each shot holds still, the
+   * next one snaps to a much longer lens, and lines draw themselves onto
+   * the geometry while it holds — which is how an architecture film
+   * actually behaves, and impossible to fake with one continuous sweep.
    * ---------------------------------------------------------------- */
   {
     build: 4.4,
-    cam: { dolly: 2.4, lookY: 6.4, ox: -0.16, pitch: 4, yaw: 156 },
+    cam: { dolly: 0.8, lookY: 1.4, ox: 0.18, pitch: 12, yaw: 152 },
     ch: 3,
+    gloss: 'four things worth naming',
+    id: 'detail',
+    kanji: '細部',
+    kicker: 'LOOK CLOSER',
+    line: 'Everything from here is one building at one moment. Only the lens moves — and it moves by cutting.',
+    mode: 'plate',
+    romaji: 'SAIBU',
+    ticks: 3,
+    trace: [
+      { pts: RING_EAVE1, wide: true },
+      { pts: RING_EAVE2 },
+      { pts: BATTER_L },
+      { pts: BATTER_R },
+    ],
+  },
+  {
+    build: 4.4,
+    cam: { dolly: 4.6, lookY: 6.8, ox: -0.18, pitch: 4, yaw: 156 },
+    ch: 3,
+    cut: true,
     gloss: 'the roof-ridge fish',
     id: 'shachi',
     kanji: '鯱',
     kicker: 'ON THE RIDGE',
-    line: 'A fish with a tiger’s head, tail in the air, cast in bronze and set at both ends of the main ridge. It is a charm against fire: the story says it swallows water and spits it over the roof.',
+    line: 'A fish with a tiger’s head, tail in the air, cast in bronze at both ends of the main ridge. It is a charm against fire — the story says it swallows water and spits it over the roof.',
     mode: 'point',
     romaji: 'SHACHIHOKO',
     ticks: 4,
     to: [-0.51, 13.85, -0.51],
+    trace: [{ pts: RIDGE, wide: true }],
   },
   {
     build: 4.4,
-    cam: { dolly: 1.95, lookY: 1.2, ox: -0.16, pitch: 6, yaw: 166 },
+    cam: { dolly: 3.9, lookY: -1.4, ox: -0.18, pitch: 1, yaw: 166 },
     ch: 3,
+    cut: true,
     gloss: 'the plover gable',
     id: 'hafu',
     kanji: '千鳥破風',
     kicker: 'IN THE ROOF SLOPE',
-    line: 'The triangular dormer set into the roof. It is named for a plover, it lets light and air into a deep floor, and it gives someone a place to stand and look down — ornament that is also a firing position.',
+    line: 'The triangular dormer set into the roof, named for a plover. It lets light into a deep floor and gives someone a place to look down from — ornament that is also a firing position.',
     mode: 'point',
     romaji: 'CHIDORI-HAFU',
     ticks: 4,
     to: [1.59, 5.5, -1.59],
+    trace: [{ pts: RING_EAVE1, wide: true }],
   },
   {
     build: 4.4,
-    cam: { dolly: 2.15, lookY: 4.0, ox: -0.16, pitch: 6, yaw: 176 },
+    cam: { dolly: 4.2, lookY: 4.25, ox: -0.18, pitch: 5, yaw: 176 },
     ch: 3,
+    cut: true,
     gloss: 'the balcony rail',
     id: 'koran',
     kanji: '高欄',
@@ -402,23 +497,48 @@ const BEATS: Beat[] = [
     line: 'The railed walk around the watch storey. On a good many keeps it is a fiction — a rail on a ledge too narrow to walk — because what it is really for is to be seen from the town below.',
     mode: 'point',
     romaji: 'KŌRAN',
-    ticks: 3,
+    ticks: 4,
     to: [0.13, 11.3, -1.84],
+    trace: [{ pts: RAIL, wide: true }],
   },
   {
     build: 4.4,
-    cam: { dolly: 1.7, lookY: 0.4, ox: -0.12, pitch: 2, yaw: 188 },
+    cam: { dolly: 3.4, lookY: -5.2, ox: -0.18, pitch: -1, yaw: 184 },
+    ch: 3,
+    cut: true,
+    gloss: 'the fan’s incline',
+    id: 'ishi2',
+    kanji: '扇の勾配',
+    kicker: 'AT THE FOOT',
+    line: 'The curve is the whole argument of the base: vertical where it meets the timber, flaring where it meets the ground, so a shock runs down it into the hill instead of trying to stop at a wall.',
+    mode: 'point',
+    romaji: 'ŌGI-NO-KŌBAI',
+    ticks: 4,
+    to: [2.8, 1.6, 0.6],
+    trace: [
+      { pts: BATTER_L, wide: true },
+      { pts: BATTER_R, wide: true },
+    ],
+  },
+  {
+    build: 4.4,
+    cam: { dolly: 1.9, lookY: -1.9, ox: -0.12, pitch: 0, yaw: 190 },
     ch: 3,
     gloss: 'the eave',
     id: 'noki',
     kanji: '軒',
     kicker: 'AND THE REASON FOR ALL OF IT',
-    line: 'The eaves overhang by a metre or more, and every one of those lines you have been reading as style is first a way of keeping water off an earth, timber and plaster wall. Watch what the building is actually for.',
+    line: 'The eaves overhang by a metre and more, and every line you have been reading as style is first a way of keeping water off an earth, timber and plaster wall. Watch what the building is for.',
     mode: 'lower',
     romaji: 'NOKI',
     ticks: 5,
     to: [-0.46, 4.98, -3.29],
-    toCam: { dolly: 1.5, lookY: 1.2, ox: -0.12, pitch: 6, yaw: 198 },
+    toCam: { dolly: 1.6, lookY: -1.2, ox: -0.12, pitch: 3, yaw: 200 },
+    trace: [
+      { pts: RING_EAVE1, wide: true },
+      { pts: RING_EAVE2 },
+      { pts: RING_EAVE3 },
+    ],
     wx: 1,
   },
 
@@ -559,7 +679,6 @@ const BEATS: Beat[] = [
   },
 ];
 
-const RAD = Math.PI / 180;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 /** '#ecdcbc' → 'rgba(236,220,188,a)', for a scrim that has to be a gradient */
 const rgba = (hex: string, a: number): string => {
@@ -610,6 +729,7 @@ interface FilmApi {
   sound(on: boolean): void;
   style(i: number): number;
   styleIndex(): number;
+  sun(): { h: number; on: boolean; w: number; x: number; y: number };
   theme(i: number, instant?: boolean): void;
   time(v: number): void;
   view(): {
@@ -632,12 +752,16 @@ export default class TowerFilm extends Component<{
   /** bumping this edits the score, which is how a finite film loops */
   @tracked private lap = 0;
   @tracked private booted = false;
+  /** bumped on every jump cut; keying on it restarts the wipe */
+  @tracked private cutStamp = 0;
 
   private film?: FilmApi;
   private frameEl?: HTMLElement;
   private lineEl?: SVGLineElement;
   private dotEl?: SVGCircleElement;
+  private traceEls: SVGPolylineElement[] = [];
   private plateEl?: HTMLElement;
+  private rowEls: HTMLElement[] = [];
   private raf = 0;
   private lastTick = 0;
   /** when the current beat was entered, for the clocks it owns */
@@ -654,24 +778,51 @@ export default class TowerFilm extends Component<{
   private skyOn = 0;
   /** the time of day the furniture is currently dressed for */
   private wearing = '';
+  /** the cast-shadow offset the type is currently wearing, px */
+  private shadow = { x: 0, y: 0 };
+  private pageEl?: HTMLElement;
 
   /**
-   * `?from=N` starts the film at beat N.
+   * WHERE THE CUT STARTS — the arrow keys' one piece of state.
    *
-   * An authoring aid and not a feature, but not a hack either: a film this
-   * long is unreviewable if the only way to see the fourth chapter is to
-   * watch the first three, and cutting one is exactly the moment you need
-   * to watch it ten times. Slicing the beat list rather than seeking the
-   * run keeps the score a score — the path and the cues are both derived
-   * from this list, so a trimmed film is a smaller film, not a film with
-   * its clock lied to.
+   * A film this long is unwatchable without chapter skip, and seeking a run
+   * that carries an integrator is not honest (the chaser's pose depends on
+   * its history, which is the price Drift's doctrine names out loud). So
+   * skipping RE-CUTS instead of seeking: the beat list is sliced here, the
+   * path and the cues are both derived from that list, and the score the
+   * region sees is a different, shorter film. An edited timeline replays
+   * from its own head, which is exactly the behaviour wanted — and it is
+   * the same move Sylva's lap makes to loop.
+   *
+   * `?from=N` seeds it, so a shot can be linked to.
    */
-  get beats(): Beat[] {
+  @tracked private from = (() => {
     const q = new URLSearchParams(window.location.search).get('from');
     const n = q ? Number(q) : 0;
-    return Number.isFinite(n) && n > 0
-      ? BEATS.slice(Math.min(n, BEATS.length - 1))
-      : BEATS;
+    return Number.isFinite(n) && n > 0 ? Math.min(n, BEATS.length - 1) : 0;
+  })();
+
+  /** sound is off until asked for: nobody's first second should be音 */
+  @tracked private sound = false;
+
+  get beats(): Beat[] {
+    return this.from > 0 ? BEATS.slice(this.from) : BEATS;
+  }
+
+  /** the first beat of each chapter, in whole-film indices */
+  get chapterHeads(): number[] {
+    const heads: number[] = [];
+    BEATS.forEach((b, i) => {
+      if (heads.length === 0 || BEATS[heads[heads.length - 1]!]!.ch !== b.ch) {
+        heads.push(i);
+      }
+    });
+    return heads;
+  }
+
+  /** where we are in the WHOLE film, not the current cut */
+  get absoluteIndex(): number {
+    return this.from + this.beatIndex;
   }
 
   get beat(): Beat {
@@ -753,6 +904,8 @@ export default class TowerFilm extends Component<{
 
   private mount = modifier((el: HTMLElement) => {
     this.frameEl = el;
+    this.pageEl = el.closest('.tf-page') as HTMLElement;
+    window.addEventListener('keydown', this.key);
     const frame = el.querySelector('iframe');
     if (!frame) {
       return;
@@ -794,6 +947,7 @@ export default class TowerFilm extends Component<{
     }
     return () => {
       cancelAnimationFrame(this.raf);
+      window.removeEventListener('keydown', this.key);
       frame.removeEventListener('load', onLoad);
       document.body.classList.remove('tf-film');
       this.film = undefined;
@@ -801,15 +955,21 @@ export default class TowerFilm extends Component<{
   });
 
   private trackEls = modifier((el: SVGSVGElement) => {
-    this.lineEl = el.querySelector('line') as SVGLineElement;
+    this.lineEl = el.querySelector('line.tf-leader') as SVGLineElement;
     this.dotEl = el.querySelector('circle') as SVGCircleElement;
+    this.traceEls = [
+      ...el.querySelectorAll('polyline'),
+    ] as SVGPolylineElement[];
   });
 
   private plate = modifier((el: HTMLElement) => {
     this.plateEl = el;
+    /* the rows, nearest plane last — the big glyph is the near one */
+    this.rowEls = [...el.children] as HTMLElement[];
     return () => {
       if (this.plateEl === el) {
         this.plateEl = undefined;
+        this.rowEls = [];
       }
     };
   });
@@ -924,8 +1084,52 @@ export default class TowerFilm extends Component<{
     }
 
     this.trackPoint(film, beat, local);
+    this.traceShape(film, beat, local);
+    this.parallax(local);
+    this.follow(film);
     this.wear(film);
   };
+
+  /**
+   * TYPE THROWS ITS SHADOW WHERE THE BUILDING THROWS ITS OWN.
+   *
+   * The scene lights itself from a key whose position is a property of the
+   * hour, and the tower's cast shadow lies along the ground at whatever
+   * diagonal that produces. Type set over the frame with a shadow offset
+   * down and right — the default of every drop shadow ever shipped — is
+   * lit by a different sun than everything behind it, and the eye reads
+   * the mismatch long before it can name it. So the key's own screen
+   * position comes back from the scene and the offset is simply the
+   * direction away from it. At night, or with the sun behind the lens,
+   * there is no honest cast shadow and the type wears none.
+   */
+  private follow(film: FilmApi) {
+    const el = this.pageEl;
+    if (!el) {
+      return;
+    }
+    const s = film.sun();
+    const cx = s.w / 2;
+    const cy = s.h * 0.55;
+    const dx = cx - s.x;
+    const dy = cy - s.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const throwPx = s.on ? 3.2 : 0;
+    const nx = (dx / len) * throwPx;
+    const ny = (dy / len) * throwPx;
+    /* a whole pixel is enough to read and small enough never to smear */
+    const q = (v: number) => Math.round(v * 10) / 10;
+    if (q(nx) !== this.shadow.x || q(ny) !== this.shadow.y) {
+      this.shadow = { x: q(nx), y: q(ny) };
+      el.style.setProperty('--tf-shx', `${this.shadow.x}px`);
+      el.style.setProperty('--tf-shy', `${this.shadow.y}px`);
+      /* the same diagonal, longer, for the graphic rules */
+      el.style.setProperty(
+        '--tf-rake',
+        `${q(Math.atan2(ny, nx) * 57.2958)}deg`
+      );
+    }
+  }
 
   /**
    * THE FURNITURE WEARS THE SCENE'S PALETTE.
@@ -943,7 +1147,7 @@ export default class TowerFilm extends Component<{
       return;
     }
     this.wearing = p.time;
-    const el = this.frameEl?.closest('.tf-page') as HTMLElement | null;
+    const el = this.pageEl;
     if (!el) {
       return;
     }
@@ -956,6 +1160,93 @@ export default class TowerFilm extends Component<{
     el.style.setProperty('--tf-ink3', p.ink3);
     el.style.setProperty('--tf-accent', p.accent);
     el.style.setProperty('--tf-rule', p.rule);
+  }
+
+  /**
+   * PLANES, MOVING AT THEIR OWN RATES.
+   *
+   * The world layer parallaxes because it is genuinely out in the scene at
+   * different distances. The front layer has no depth to borrow, so it is
+   * given one: over the life of a beat each row drifts and scales on its
+   * own rate, the big glyph fastest and nearest, the small print slowest
+   * and furthest, so the type reads as a set of planes rather than a
+   * sheet. It is the oldest trick in motion graphics and it is here for
+   * the oldest reason — a still caption over a moving picture looks
+   * pasted on, and a caption that moves WITH the picture looks composited
+   * into it.
+   *
+   * It runs on the beat's own clock rather than Motion's, deliberately:
+   * the entrances belong to the score and this belongs to the shot, and
+   * putting the two on one timeline would mean the drift restarting every
+   * time a word did.
+   */
+  private parallax(local: number) {
+    const rows = this.rowEls;
+    if (!rows.length) {
+      return;
+    }
+    /* ease the whole thing in so a cut does not start mid-drift */
+    const t = smooth(Math.min(1, local * 1.15));
+    for (const [i, el] of rows.entries()) {
+      /* the glyph sits near the top of the block and should be the
+         NEAREST plane, so depth runs down the block rather than up it */
+      const depth = 1 - i / Math.max(1, rows.length - 1);
+      const dx = -14 * depth * t;
+      const dy = -9 * depth * t;
+      const sc = 1 + 0.035 * depth * t;
+      el.style.transform = `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale(${sc.toFixed(4)})`;
+    }
+  }
+
+  /**
+   * Project a world polyline into the frame and stroke it, drawing it on
+   * over the head of its beat. The dash pattern is the line's own measured
+   * length, so the draw-on is a real pen travelling the real path rather
+   * than a fade wearing a costume.
+   */
+  private traceShape(film: FilmApi, beat: Beat, local: number) {
+    const specs = beat.trace ?? [];
+    const host = this.frameEl?.getBoundingClientRect();
+    const v = film.view();
+    for (const [i, el] of this.traceEls.entries()) {
+      const spec = specs[i];
+      if (!spec || !host) {
+        el.style.opacity = '0';
+        continue;
+      }
+      const sx = host.width / v.w;
+      const sy = host.height / v.h;
+      let pts = '';
+      let len = 0;
+      let px = 0;
+      let py = 0;
+      let on = false;
+      for (const [n, p] of spec.pts.entries()) {
+        const q = film.project(p[0], p[1], p[2]);
+        const x = q.x * sx;
+        const y = q.y * sy;
+        if (q.on) {
+          on = true;
+        }
+        if (n > 0) {
+          len += Math.hypot(x - px, y - py);
+        }
+        px = x;
+        py = y;
+        pts += `${x.toFixed(1)},${y.toFixed(1)} `;
+      }
+      if (!on) {
+        el.style.opacity = '0';
+        continue;
+      }
+      /* the beat's first fifth draws the line; after that it simply is */
+      const draw = Math.min(1, Math.max(0, (local - 0.06) / 0.16));
+      el.setAttribute('points', pts.trim());
+      el.setAttribute('stroke-dasharray', String(len));
+      el.setAttribute('stroke-dashoffset', String(len * (1 - draw)));
+      el.setAttribute('stroke-width', spec.wide ? '2.6' : '1.4');
+      el.style.opacity = draw > 0 ? '1' : '0';
+    }
   }
 
   /**
@@ -1015,6 +1306,15 @@ export default class TowerFilm extends Component<{
       return;
     }
     this.beatAt = performance.now();
+    if (beat.cut) {
+      this.snap(beat.cam);
+      /* a hard cut needs a piece of punctuation or it reads as a dropped
+         frame. One wipe, in the paper the whole film is printed on, raked
+         to the same diagonal the sun throws — over in a fifth of a second,
+         which is long enough to say "that was deliberate" and too short to
+         be a transition anybody has to sit through. */
+      this.cutStamp += 1;
+    }
     if (beat.style !== undefined && film.styleIndex() !== beat.style) {
       film.style(beat.style);
       /* a new tower is built at t=0; this film always wants it finished
@@ -1075,11 +1375,109 @@ export default class TowerFilm extends Component<{
     this.playing = !this.playing;
   };
 
-  private restart = () => {
-    this.lap += 1;
+  /**
+   * SKIP A CHAPTER — by re-cutting, never by seeking.
+   *
+   * `from` moves to a chapter head, which changes the beat list, which
+   * changes the path, the cues and the sequence's name all at once. The
+   * region sees a different score and plays it from its head. Seeking the
+   * existing run would be the obvious alternative and it would be wrong:
+   * the lens is an integrator whose pose depends on where it has been, so
+   * a run dropped into the middle of itself arrives with the wrong
+   * velocity — the same reason `docs/sylva-one-world.md` calls the chaser
+   * seek-unsafe and means it.
+   */
+  private goChapter = (delta: number) => {
+    const heads = this.chapterHeads;
+    const here = this.absoluteIndex;
+    let i = heads.findIndex(
+      (h, n) => here >= h && (heads[n + 1] ?? Infinity) > here
+    );
+    if (i < 0) {
+      i = 0;
+    }
+    /* back, from more than a moment into a chapter, means this chapter's
+       head — the behaviour every transport control in the world has */
+    const restart = delta < 0 && here > heads[i]!;
+    const next = restart
+      ? i
+      : Math.max(0, Math.min(heads.length - 1, i + delta));
+    this.cutTo(heads[next]!);
+  };
+
+  private cutTo(index: number) {
+    this.from = index;
     this.beatIndex = 0;
     this.playing = true;
-    this.applyBeat(this.beats[0]!);
+    this.lap += 1;
+    this.applyBeat(BEATS[index]!, true);
+    this.snap(BEATS[index]!.cam);
+  }
+
+  private prev = () => this.goChapter(-1);
+  private next = () => this.goChapter(1);
+
+  private key = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) {
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      this.next();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      this.prev();
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      this.toggle();
+    } else if (e.key === 'm' || e.key === 'M') {
+      this.hear();
+    } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
+      this.toc();
+    }
+  };
+
+  /** the scene brought its own score — six of them, one per tower */
+  private hear = () => {
+    this.sound = !this.sound;
+    this.film?.sound(this.sound);
+  };
+
+  private restart = () => {
+    this.cutTo(0);
+  };
+
+  /** the chapter menu. The film keeps running behind it, blurred: a
+   * menu that freezes the picture makes the picture feel like a file, and
+   * this one is meant to feel like a broadcast you are stepping around in */
+  @tracked private menu = false;
+
+  private toc = () => {
+    this.menu = !this.menu;
+  };
+
+  /** every chapter, with the beat it starts at and whether we are in it */
+  get contents() {
+    const here = this.absoluteIndex;
+    return this.chapterHeads.map((head, i) => {
+      const nextHead = this.chapterHeads[i + 1] ?? BEATS.length;
+      const ch = CHAPTERS[BEATS[head]!.ch] ?? CHAPTERS[0]!;
+      return {
+        head,
+        here: here >= head && here < nextHead,
+        n: ch.n,
+        shots: nextHead - head,
+        title: ch.title,
+        /* the chapter's own running time, from the beats it owns */
+        secs:
+          BEATS.slice(head, nextHead).reduce((t, b) => t + b.ticks, 0) * TICK,
+      };
+    });
+  }
+
+  private pick = (head: number) => {
+    this.menu = false;
+    this.cutTo(head);
   };
 
   <template>
@@ -1102,11 +1500,32 @@ export default class TowerFilm extends Component<{
           aria-hidden="true"
         ></div>
 
-        {{! the tracking overlay: one line and one dot, redrawn per frame
-        against a point on the building itself }}
+        {{! THE CUT. A new element per cut, so the wipe plays from its own
+        first frame every time rather than being re-triggered. }}
+        {{#each (array this.cutStamp) key="@identity" as |c|}}
+          {{#if c}}
+            <i class="tf-wipe" aria-hidden="true"></i>
+          {{/if}}
+        {{/each}}
+
+        {{! A VIGNETTE, which is a lens and not a decoration: the scene is
+        an even wash corner to corner, and an even frame has no centre.
+        It darkens at the same diagonal the sun throws, so the corner
+        away from the light is the heavier one. }}
+        <div class="tf-vig" aria-hidden="true"></div>
+
+        {{! THE OVERLAY. The traces are polylines authored in the scene's
+        own coordinates and projected every frame, so they lie ON the
+        eave and the batter rather than near them; they draw themselves
+        on at the head of a beat. Then the callout: a leader from the
+        caption to a point on the building, and a ring on the point. }}
         <svg class="tf-track" aria-hidden="true" {{this.trackEls}}>
-          <line x1="0" y1="0" x2="0" y2="0" />
-          <circle cx="0" cy="0" r="3.5" />
+          <polyline class="tf-trace" points="" fill="none" />
+          <polyline class="tf-trace" points="" fill="none" />
+          <polyline class="tf-trace" points="" fill="none" />
+          <polyline class="tf-trace" points="" fill="none" />
+          <line class="tf-leader" x1="0" y1="0" x2="0" y2="0" />
+          <circle cx="0" cy="0" r="7" />
         </svg>
 
         {{#if this.booted}}
@@ -1250,12 +1669,79 @@ export default class TowerFilm extends Component<{
       </div>
 
       {{#unless this.embed}}
+        {{! THE DISC MENU. A film with chapters owes the viewer a way into
+        them, and the arrow keys alone are a secret. Picking one re-cuts
+        the score from that chapter's head — the same move the arrows
+        make, because a skip here is an edit and never a seek. }}
+        {{#if this.menu}}
+          <Choreo class="tf-menu" as |m|>
+            <div class="tf-menu-in" {{motion id="menu" role="sheet"}}>
+              <p class="tf-menu-head">TOWERS</p>
+              <p class="tf-menu-sub">A construction study · chapters</p>
+              <ol class="tf-menu-list">
+                {{#each this.contents as |c|}}
+                  <li>
+                    <button
+                      type="button"
+                      class="tf-menu-item {{if c.here 'is-here'}}"
+                      {{on "click" (fn this.pick c.head)}}
+                    >
+                      <span class="tf-menu-n">{{c.n}}</span>
+                      <span class="tf-menu-t">{{c.title}}</span>
+                      <span class="tf-menu-d">{{c.shots}} shots</span>
+                    </button>
+                  </li>
+                {{/each}}
+              </ol>
+              <p class="tf-menu-keys">← → chapter · space play · M sound · C
+                close</p>
+            </div>
+            <m.Tween
+              @of={{m.inserted "sheet"}}
+              @y={{array 26 0}}
+              @scale={{array 0.97 1}}
+              @opacity={{array 0 1}}
+              @duration={{0.42}}
+              @ease={{array 0.22 1 0.36 1}}
+            />
+            <m.Tween
+              @of={{m.removed "sheet"}}
+              @y={{array 0 18}}
+              @opacity={{array 1 0}}
+              @duration={{0.2}}
+              @ease="easeIn"
+            />
+          </Choreo>
+        {{/if}}
+
         <div class="tf-controls">
+          <button
+            type="button"
+            class="tf-btn tf-icon"
+            title="previous chapter"
+            {{on "click" this.prev}}
+          >←</button>
           <button
             type="button"
             class="tf-btn {{if this.playing 'is-on'}}"
             {{on "click" this.toggle}}
           >{{if this.playing "❙❙ playing" "▶ play"}}</button>
+          <button
+            type="button"
+            class="tf-btn tf-icon"
+            title="next chapter"
+            {{on "click" this.next}}
+          >→</button>
+          <button
+            type="button"
+            class="tf-btn {{if this.menu 'is-on'}}"
+            {{on "click" this.toc}}
+          >☰ chapters</button>
+          <button
+            type="button"
+            class="tf-btn {{if this.sound 'is-on'}}"
+            {{on "click" this.hear}}
+          >{{if this.sound "♪ sound" "♪ muted"}}</button>
           <button type="button" class="tf-btn" {{on "click" this.restart}}>↺
             from the top</button>
           <span class="tf-credit">Scene:
@@ -1275,7 +1761,9 @@ export default class TowerFilm extends Component<{
       .tf-page {
         /* the film's ink, replaced per chapter from the scene's own
            time-of-day palette by `wear` — these are the morning values,
-           which is also what the page opens on */
+           which is also what the page opens on. `--tf-shx/y` is the cast
+           shadow's offset, written every frame from where the scene's key
+           light actually is (see `follow`). */
         --tf-paper: #ecdcbc;
         --tf-paper-a: rgba(236, 220, 188, 0.94);
         --tf-paper-b: rgba(236, 220, 188, 0.76);
@@ -1285,6 +1773,9 @@ export default class TowerFilm extends Component<{
         --tf-ink3: #3f3520;
         --tf-accent: #a8621f;
         --tf-rule: #c2b18c;
+        --tf-shx: 2px;
+        --tf-shy: 2px;
+        --tf-rake: 35deg;
 
         position: fixed;
         inset: 0;
@@ -1309,6 +1800,47 @@ export default class TowerFilm extends Component<{
         display: block;
       }
 
+      .tf-wipe {
+        position: absolute;
+        inset: -30%;
+        z-index: 5;
+        pointer-events: none;
+        background: linear-gradient(
+          100deg,
+          transparent 0%,
+          var(--tf-paper) 34%,
+          var(--tf-paper) 66%,
+          transparent 100%
+        );
+        transform: translateX(-140%) rotate(calc(var(--tf-rake) * 0.16));
+        animation: tf-wipe 340ms cubic-bezier(0.5, 0, 0.3, 1) forwards;
+      }
+
+      @keyframes tf-wipe {
+        to {
+          transform: translateX(140%) rotate(calc(var(--tf-rake) * 0.16));
+        }
+      }
+
+      /* ---- the lens ------------------------------------------------- */
+      .tf-vig {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background: radial-gradient(
+          82% 74% at 50% 46%,
+          transparent 0%,
+          transparent 52%,
+          rgba(48, 38, 18, 0.1) 78%,
+          rgba(40, 31, 14, 0.26) 100%
+        );
+      }
+
+      /* ---- scrims: anchored to the caption, never banded across the
+         frame. A band wide enough to carry a lower third also washes out
+         whatever is standing in the middle of the shot — which on this
+         route is the building. ------------------------------------------ */
       .tf-scrim {
         position: absolute;
         inset: 0;
@@ -1317,23 +1849,18 @@ export default class TowerFilm extends Component<{
         transition: background 700ms ease;
       }
 
-      /* ANCHORED TO THE CAPTION, not banded across the frame. A band
-         wide enough to carry a lower third also washes out whatever is
-         standing in the middle of the shot — which on this route is the
-         building. So each scrim is a soft ellipse centred on the corner
-         its type occupies, and the frame's other half stays the scene's. */
       .tf-scrim-lower {
         background: radial-gradient(
-          120% 74% at 0% 108%,
+          128% 82% at 0% 112%,
           var(--tf-paper-a) 0%,
-          var(--tf-paper-b) 34%,
-          var(--tf-paper-c) 68%
+          var(--tf-paper-b) 36%,
+          var(--tf-paper-c) 72%
         );
       }
 
       .tf-scrim-title {
         background: radial-gradient(
-          106% 104% at 112% 116%,
+          112% 108% at 112% 116%,
           var(--tf-paper-a) 0%,
           var(--tf-paper-b) 34%,
           var(--tf-paper-c) 70%
@@ -1342,22 +1869,23 @@ export default class TowerFilm extends Component<{
 
       .tf-scrim-plate {
         background: radial-gradient(
-          78% 96% at 108% 50%,
+          84% 104% at 110% 50%,
           var(--tf-paper-a) 0%,
           var(--tf-paper-b) 34%,
-          var(--tf-paper-c) 70%
+          var(--tf-paper-c) 72%
         );
       }
 
       .tf-scrim-point {
         background: radial-gradient(
-          80% 84% at -8% 30%,
+          88% 92% at -10% 26%,
           var(--tf-paper-a) 0%,
-          var(--tf-paper-b) 36%,
-          var(--tf-paper-c) 72%
+          var(--tf-paper-b) 38%,
+          var(--tf-paper-c) 74%
         );
       }
 
+      /* ---- traces and callouts -------------------------------------- */
       .tf-track {
         position: absolute;
         inset: 0;
@@ -1367,19 +1895,31 @@ export default class TowerFilm extends Component<{
         z-index: 2;
       }
 
-      .tf-track line {
-        stroke: var(--tf-ink3);
-        stroke-width: 1;
+      .tf-trace {
+        stroke: var(--tf-accent);
+        stroke-linecap: round;
+        stroke-linejoin: round;
         opacity: 0;
-        transition: opacity 0.4s ease;
+        filter: drop-shadow(
+          var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.28)
+        );
+        transition: opacity 260ms ease;
+      }
+
+      .tf-leader {
+        stroke: var(--tf-ink3);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+        opacity: 0;
+        transition: opacity 400ms ease;
       }
 
       .tf-track circle {
         fill: none;
         stroke: var(--tf-accent);
-        stroke-width: 1.4;
+        stroke-width: 2.2;
         opacity: 0;
-        transition: opacity 0.4s ease;
+        transition: opacity 400ms ease;
       }
 
       /* ---- the front layer ------------------------------------------ */
@@ -1390,100 +1930,127 @@ export default class TowerFilm extends Component<{
         pointer-events: none;
         color: var(--tf-ink);
         font-family: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+        text-shadow: var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.22);
       }
 
       .tf-block {
         position: absolute;
-        max-width: min(46ch, 42vw);
+        max-width: min(40ch, 44vw);
       }
 
+      /* a kicker rides a rule that draws itself out of the type — the
+         diagonal is the sun's, so the graphic furniture rakes the same
+         way the shadows do */
       .tf-kicker {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.22em;
+        font-size: clamp(12px, 1vw, 15px);
+        font-weight: 800;
+        letter-spacing: 0.3em;
         color: var(--tf-ink3);
-        margin: 0 0 10px;
+        margin: 0 0 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .tf-kicker::after {
+        content: "";
+        flex: 1;
+        height: 2px;
+        background: var(--tf-accent);
+        transform: skewX(calc(var(--tf-rake) * -0.22));
+        transform-origin: left center;
+      }
+
+      .tf-point .tf-kicker::after,
+      .tf-lower .tf-kicker::after {
+        max-width: 120px;
       }
 
       .tf-kanji {
         font-family:
           "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif JP",
           "Songti SC", serif;
-        font-size: clamp(38px, 5.2vw, 76px);
-        line-height: 1;
-        letter-spacing: 0.06em;
-        margin: 0 0 12px;
+        font-size: clamp(56px, 8.4vw, 132px);
+        line-height: 0.94;
+        letter-spacing: 0.04em;
+        margin: 0 0 18px;
       }
 
       .tf-read {
-        margin: 0 0 14px;
+        margin: 0 0 20px;
         display: flex;
-        gap: 12px;
+        gap: 16px;
         align-items: baseline;
         flex-wrap: wrap;
       }
 
       .tf-romaji {
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.2em;
+        font-size: clamp(13px, 1.15vw, 17px);
+        font-weight: 800;
+        letter-spacing: 0.26em;
       }
 
       .tf-gloss {
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        color: var(--tf-ink2);
+        font-size: clamp(12px, 1vw, 15px);
+        letter-spacing: 0.05em;
+        color: var(--tf-ink3);
         font-style: italic;
       }
 
       .tf-line {
         margin: 0;
-        font-size: clamp(13px, 1.15vw, 16px);
-        line-height: 1.65;
+        font-size: clamp(15px, 1.4vw, 21px);
+        line-height: 1.55;
         color: var(--tf-ink3);
+        max-width: 34ch;
       }
 
-      /* the four ways a beat is set. A title is centred and low, a lower
-         third sits bottom-left, a plate is a slab in the right third, and
-         a point is a caption with a line running out of it. */
-      /* A TITLE IS NOT CENTRED HERE, and the reason is geometric rather
-         than fashionable: the subject of this film is a vertical object
-         standing in the middle of its own frame, so centred type and the
-         building compete for exactly the same pixels. The tower takes the
-         left of the frame (an off-centre frustum, not a move) and the
-         titling takes the right, ranged to the edge it sits against. */
+      /* the four ways a beat is set. A title is ranged right against the
+         frame's edge with the tower in the other half; a lower third sits
+         bottom-left; a plate is a slab in the right third; a point is a
+         caption with a leader running out of it. */
       .tf-title .tf-block {
         right: 6%;
-        bottom: 16%;
+        bottom: 15%;
         text-align: right;
-        max-width: min(42ch, 42vw);
+        max-width: min(40ch, 46vw);
       }
 
       .tf-title .tf-read {
         justify-content: flex-end;
       }
 
+      .tf-title .tf-kicker {
+        flex-direction: row-reverse;
+      }
+
+      .tf-title .tf-line {
+        margin-left: auto;
+      }
+
       .tf-title .tf-kanji {
-        font-size: clamp(52px, 7vw, 104px);
+        font-size: clamp(72px, 11vw, 190px);
       }
 
       .tf-lower .tf-block {
         left: 5.5%;
-        bottom: 12%;
+        bottom: 11%;
       }
 
       .tf-plate .tf-block {
         right: 5.5%;
         top: 50%;
         transform: translateY(-50%);
-        border-left: 0;
-        padding-left: 0;
       }
 
       .tf-point .tf-block {
-        left: 6%;
-        top: 22%;
-        max-width: min(34ch, 32vw);
+        left: 5.5%;
+        top: 18%;
+        max-width: min(30ch, 34vw);
+      }
+
+      .tf-point .tf-kanji {
+        font-size: clamp(48px, 6.6vw, 104px);
       }
 
       /* ---- the rail -------------------------------------------------- */
@@ -1494,32 +2061,132 @@ export default class TowerFilm extends Component<{
         z-index: 3;
         display: flex;
         align-items: center;
-        gap: 12px;
-        font-size: 10px;
-        font-weight: 700;
-        letter-spacing: 0.24em;
-        color: var(--tf-ink2);
+        gap: 14px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.28em;
+        color: var(--tf-ink3);
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        text-shadow: var(--tf-shx) var(--tf-shy) 0 rgba(52, 40, 16, 0.18);
+      }
+
+      .tf-rail-n {
+        font-size: 22px;
+        letter-spacing: 0.08em;
+        color: var(--tf-accent);
       }
 
       .tf-rail-bar {
         display: block;
-        width: 96px;
-        height: 1px;
+        width: 132px;
+        height: 2px;
         background: var(--tf-rule);
       }
 
       .tf-rail-bar i {
         display: block;
-        height: 1px;
+        height: 2px;
         background: var(--tf-accent);
-        transition: width 0.6s ease;
+        transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
       }
 
       .tf-rig {
         position: absolute;
         width: 0;
         height: 0;
+      }
+
+      /* ---- the disc menu --------------------------------------------- */
+      .tf-menu {
+        position: absolute;
+        inset: 0;
+        z-index: 6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(28, 22, 10, 0.44);
+        backdrop-filter: blur(3px);
+      }
+
+      .tf-menu-in {
+        background: var(--tf-paper);
+        border: 1px solid var(--tf-rule);
+        padding: 34px 40px 26px;
+        min-width: min(460px, 84vw);
+        box-shadow: 0 30px 70px rgba(30, 22, 8, 0.34);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+
+      .tf-menu-head {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.42em;
+        color: var(--tf-ink);
+      }
+
+      .tf-menu-sub {
+        margin: 4px 0 22px;
+        font-size: 12px;
+        color: var(--tf-ink2);
+        letter-spacing: 0.06em;
+      }
+
+      .tf-menu-list {
+        list-style: none;
+        margin: 0 0 18px;
+        padding: 0;
+      }
+
+      .tf-menu-item {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        border-top: 1px solid var(--tf-rule);
+        width: 100%;
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        padding: 13px 4px;
+        font: inherit;
+        color: var(--tf-ink);
+        cursor: pointer;
+        text-align: left;
+      }
+
+      .tf-menu-item:hover {
+        color: var(--tf-accent);
+      }
+
+      .tf-menu-item.is-here {
+        color: var(--tf-accent);
+        font-weight: 700;
+      }
+
+      .tf-menu-n {
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        color: var(--tf-accent);
+        min-width: 2.4em;
+      }
+
+      .tf-menu-t {
+        font-size: 17px;
+        letter-spacing: 0.16em;
+        flex: 1;
+      }
+
+      .tf-menu-d {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--tf-ink2);
+      }
+
+      .tf-menu-keys {
+        margin: 0;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        color: var(--tf-ink2);
       }
 
       /* ---- controls -------------------------------------------------- */
@@ -1545,6 +2212,12 @@ export default class TowerFilm extends Component<{
         border-radius: 999px;
         font: inherit;
         cursor: pointer;
+      }
+
+      .tf-icon {
+        padding: 6px 11px;
+        font-size: 13px;
+        line-height: 1;
       }
 
       .tf-btn.is-on {
