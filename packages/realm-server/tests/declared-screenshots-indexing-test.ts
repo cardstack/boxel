@@ -344,6 +344,33 @@ module(basename(import.meta.filename), function (hooks) {
     let firstGeneration = row!.generation;
     let heroBefore = (row!.screenshots as ScreenshotManifest).hero;
 
+    // Control: an otherwise-identical card with no maker link. Its hero and
+    // gadget's differing is what proves the capture-only render actually
+    // painted the linked card before the shot — the invalidation assertions
+    // below are meaningless for a capture the linked data never reaches
+    // (deps record the load attempt, not the paint).
+    await writeAndSettle(
+      'control.json',
+      JSON.stringify({
+        data: {
+          attributes: { name: 'Gadget' },
+          meta: {
+            adoptsFrom: { module: rri('./product'), name: 'Product' },
+          },
+        },
+      }),
+    );
+    let controlRow = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}control.json`,
+    );
+    let controlHero = (controlRow!.screenshots as ScreenshotManifest).hero;
+    assert.notStrictEqual(
+      heroBefore.objectKey,
+      controlHero.objectKey,
+      'the capture-only render painted the linked card (its hero differs from the linkless control)',
+    );
+
     // Editing the linked data must fan out to this row — the screenshot of
     // it is stale until re-captured.
     await writeAndSettle(
