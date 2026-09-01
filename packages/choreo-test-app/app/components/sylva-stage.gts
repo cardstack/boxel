@@ -772,7 +772,10 @@ export class SylvaStage extends Component<{
         dx: -spot.off[0] * (1 - eased),
         /* CSS counts y downward; the offset was written in world up */
         dy: spot.off[1] * (1 - eased),
-        s: 0.55 + 0.45 * eased,
+        /* the FULL journey: parked, the card is dot-sized — a close reads
+           as the panel disappearing INTO the marker, never as a half-size
+           slab winking out beside it */
+        s: 0.1 + 0.9 * eased,
       };
       if (shell) {
         shell.style.transform =
@@ -787,10 +790,10 @@ export class SylvaStage extends Component<{
          * travels and lets go only as it reaches the dot; the hole hides
          * on the same threshold, so nothing grey is ever left standing.
          */
-        shell.style.opacity = Math.max(
-          0,
-          Math.min(1, eased * 1.3 - 0.12)
-        ).toFixed(3);
+        /* shrink AND dissolve, together: solid while seated, and the
+           moment it leaves for the dot it starts giving up its ink too —
+           fully dissolved as it reaches the marker */
+        shell.style.opacity = Math.min(1, eased * 1.25).toFixed(3);
       }
       const show = shown || eased > 0.02;
       const m = anchor.face(show, entrance);
@@ -2196,8 +2199,8 @@ export class SylvaStage extends Component<{
         background:
           linear-gradient(
               158deg,
-              rgba(16, 34, 23, 0.93) 0%,
-              rgba(7, 15, 10, 0.88) 100%
+              rgba(16, 34, 23, 0.82) 0%,
+              rgba(7, 15, 10, 0.74) 100%
             )
             padding-box,
           conic-gradient(

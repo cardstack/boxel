@@ -3475,8 +3475,8 @@ export function createSylva(hosts: SylvaHosts): Sylva {
             Math.abs(px) > 1e-3 ? hw / Math.abs(px) : 1,
             Math.abs(py) > 1e-3 ? hh / Math.abs(py) : 1
           );
-          /* the entrance re-normalised: the shell starts life at 0.55 */
-          var grow = Math.max(0, Math.min(1, (hs - 0.55) / 0.45));
+          /* the entrance re-normalised: the shell starts life dot-sized */
+          var grow = Math.max(0, Math.min(1, (hs - 0.1) / 0.9));
           var ex = px * k,
             ey = py * k;
           var end = hp
