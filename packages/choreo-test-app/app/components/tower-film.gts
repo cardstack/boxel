@@ -1502,7 +1502,6 @@ export default class TowerFilm extends Component<{
        * little tilt moves the whole frame.
        */
       const next = beats[bi + 1];
-      const seam = !next || next.cut === true;
       const secs = b.ticks * TICK;
       const sgn = (d: number) => (d < 0 ? -1 : 1);
       const stretch = (
@@ -1510,18 +1509,29 @@ export default class TowerFilm extends Component<{
         floor: number
       ): number => {
         const head = b.cam[key];
-        const tail = drift[key];
-        const d = tail - head;
-        const nose = next ? next.cam[key] - head : d;
+        const d = drift[key] - head;
+        const nose = next ? next.cam[key] - head : 0;
         /* the direction is the beat's own, or the next shot's if the
            beat asked for nothing at all */
         const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
-        let want = Math.max(Math.abs(d), floor);
-        if (!seam) {
-          /* what is left between this tail and the next head */
-          const reach = Math.abs(nose);
-          want = Math.min(want, Math.max(Math.abs(d), reach));
-        }
+        /**
+         * NEVER TRAVEL PAST WHERE THE NEXT SHOT BEGINS. Inside a run
+         * that would make the camera arrive, back up and go again. At a
+         * CUT it is worse, and it is what chapter four was doing: the
+         * details sit eight or ten degrees apart, the floor asked for
+         * twenty-two, so every shot orbited past its successor's pose
+         * and the cut jumped BACKWARDS into it — a film that appears to
+         * be running one section behind its own captions.
+         */
+        const reach = !next
+          ? Infinity
+          : sgn(nose) === way && nose !== 0
+            ? Math.abs(nose)
+            : 0;
+        const want = Math.min(
+          Math.max(Math.abs(d), floor),
+          Math.max(Math.abs(d), reach)
+        );
         return head + way * want;
       };
       const to = {

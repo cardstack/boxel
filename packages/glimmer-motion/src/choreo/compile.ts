@@ -1482,6 +1482,11 @@ function sameCue(a: Cue, b: Cue): boolean {
     plain(a.transition) === plain(b.transition) &&
     plain(a.delivery) === plain(b.delivery) &&
     plain(a.hold) === plain(b.hold) &&
-    plain(cam(a.camera)) === plain(cam(b.camera))
+    plain(cam(a.camera)) === plain(cam(b.camera)) &&
+    // the 3D shot is part of the score, not decoration on it: two cues
+    // that agree on everything else and disagree about where the lens
+    // goes are different cues, and a run kept across that difference
+    // plays the old path under the new film
+    plain(a.camera3d) === plain(b.camera3d)
   );
 }

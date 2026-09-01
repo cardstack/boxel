@@ -802,12 +802,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     // dirty but the compiled score is the one already in flight (tween-only
     // measurement jitter): keep that run too.
+    //
+    // The TREE has to be the one in flight as well, not just the cues it
+    // compiled to. Identical cues are not proof of an identical timeline:
+    // a score that plays a slice of itself — a chapter skip that re-cuts
+    // to the head it is already inside — compiles to the same cue list at
+    // the same offsets, and keeping the run there hands the "new" film
+    // the old one's CLOCK. The score restarts on paper and carries on
+    // playing in fact: beats land early, some never land at all, and the
+    // picture runs ahead of the words that name it. An author who wants a
+    // re-execution says so by editing the tree (a fresh sequence name is
+    // the usual way, which is why the name is in the print).
     if (
       this.run &&
       !this.run.isDone() &&
       !inserted.length &&
       !pass.removed.length &&
       !compiled.gates.length &&
+      print === this.scorePrint &&
       sameScore(this.run.cues, cues)
     ) {
       for (const node of claimed) {
