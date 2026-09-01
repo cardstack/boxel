@@ -134,10 +134,7 @@ export default class PlaceOrderCommand extends Command<
     }).execute({
       cardId: listingId,
       patch: {
-        attributes: {
-          listingStatus: 'sold',
-          soldAt: now.toISOString().slice(0, 10),
-        },
+        attributes: { listingStatus: 'sold', soldAt: now.toISOString().slice(0, 10) },
       },
     });
 

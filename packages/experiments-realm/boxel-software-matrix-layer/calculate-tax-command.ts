@@ -44,7 +44,9 @@ export default class CalculateTaxCommand extends Command<
     return CalculateTaxInput;
   }
 
-  protected async run(input: CalculateTaxInput): Promise<CalculateTaxResult> {
+  protected async run(
+    input: CalculateTaxInput,
+  ): Promise<CalculateTaxResult> {
     let { taxableAmount, jurisdiction } = input;
     if (typeof taxableAmount !== 'number') {
       throw new Error('A taxable amount is required');

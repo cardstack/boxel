@@ -34,7 +34,9 @@ export default class AdvanceDealCommand extends Command<
     return AdvanceDealInput;
   }
 
-  protected async run(input: AdvanceDealInput): Promise<AdvanceDealResult> {
+  protected async run(
+    input: AdvanceDealInput,
+  ): Promise<AdvanceDealResult> {
     let { deal, toStage, realm } = input;
     if (!deal) throw new Error('A deal or opportunity is required');
     if (!toStage) throw new Error('A target stage is required');
