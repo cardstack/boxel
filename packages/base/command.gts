@@ -204,6 +204,17 @@ export class ReadBinaryFileResult extends CardDef {
   @field contentType = contains(StringField);
 }
 
+export class DownloadFileToRealmInput extends CardDef {
+  @field sourceUrl = contains(StringField); // the URL to download
+  @field realm = contains(StringField); // target realm (defaults to the writable realm)
+  @field path = contains(StringField); // destination path within the realm, e.g. "Screenshots/card.png"
+  @field useNonConflictingFilename = contains(BooleanField);
+}
+
+export class DownloadFileToRealmResult extends CardDef {
+  @field fileIdentifier = contains(StringField);
+}
+
 export class GenerateThumbnailInput extends CardDef {
   @field prompt = contains(StringField);
   @field sourceImageUrl = contains(StringField);
@@ -221,10 +232,78 @@ export class GenerateThumbnailOutput extends CardDef {
 export class ScreenshotCardInput extends CardDef {
   @field card = linksTo(CardDef);
   @field format = contains(StringField); // 'isolated' | 'embedded'
+  // The capture surface, exposed one JSON-primitive field per parameter.
+  // `run-command`'s headless input path is `new InputType(rawJson)` with no
+  // card resolution, so a non-primitive (linksTo/containsMany-of-object)
+  // input can't be fed there — the geometry is flattened into
+  // StringField/NumberField/BooleanField fields the tool reassembles into the
+  // endpoint's nested `captureSpec` (see capture-spec.ts). Every field is
+  // optional; each is part of the canonical capture identity, so a capture
+  // with any of them persists and serves under its own durable URL.
+  @field viewportWidth = contains(NumberField);
+  @field viewportHeight = contains(NumberField);
+  @field deviceScaleFactor = contains(NumberField);
+  @field fullPage = contains(BooleanField);
+  @field clipX = contains(NumberField);
+  @field clipY = contains(NumberField);
+  @field clipWidth = contains(NumberField);
+  @field clipHeight = contains(NumberField);
+}
+
+// One captured image. `url` is the durable served MediaCache URL the capture
+// persisted under — the only reference the tool returns; a re-capture rotates
+// its bytes, never the URL.
+export class ScreenshotCapture extends FieldDef {
+  @field name = contains(StringField);
+  @field url = contains(StringField);
+  @field width = contains(NumberField);
+  @field height = contains(NumberField);
 }
 
 export class ScreenshotCardOutput extends CardDef {
-  @field imageDefUrl = contains(StringField);
+  static displayName = 'Screenshot Result';
+
+  @field captures = containsMany(ScreenshotCapture);
+
+  static embedded = class Embedded extends Component<
+    typeof ScreenshotCardOutput
+  > {
+    <template>
+      <div class='screenshot-result'>
+        {{#each @model.captures as |capture|}}
+          <figure class='capture'>
+            {{#if capture.url}}
+              <img src={{capture.url}} alt={{capture.name}} />
+              <figcaption><a href={{capture.url}}>{{capture.url}}</a></figcaption>
+            {{/if}}
+          </figure>
+        {{/each}}
+      </div>
+      <style scoped>
+        .screenshot-result {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm);
+        }
+        .capture {
+          margin: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xxs);
+        }
+        .capture img {
+          max-width: 100%;
+          border: 1px solid var(--boxel-200);
+          border-radius: var(--boxel-border-radius);
+        }
+        .capture figcaption {
+          font-size: var(--boxel-font-sm);
+          word-break: break-all;
+        }
+      </style>
+    </template>
+  };
 }
 
 export class CreateInstanceInput extends CardDef {

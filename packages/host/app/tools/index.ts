@@ -21,6 +21,7 @@ import * as CreateAIAssistantRoomToolModule from './create-ai-assistant-room';
 import * as CreateAndOpenSubmissionWorkflowCard from './create-and-open-submission-workflow-card';
 import * as CreateSpecToolModule from './create-specs';
 import * as CreateSubmissionWorkflowToolModule from './create-submission-workflow';
+import * as DownloadFileToRealmToolModule from './download-file-to-realm';
 import * as EvaluateModuleToolModule from './evaluate-module';
 import * as ExecuteAtomicOperationsToolModule from './execute-atomic-operations';
 import * as FetchCardJsonToolModule from './fetch-card-json';
@@ -146,6 +147,11 @@ export function shimHostTools(virtualNetwork: VirtualNetwork) {
   );
   shimHostToolModule(virtualNetwork, 'copy-source', CopySourceToolModule);
   shimHostToolModule(virtualNetwork, 'copy-and-edit', CopyAndEditToolModule);
+  shimHostToolModule(
+    virtualNetwork,
+    'download-file-to-realm',
+    DownloadFileToRealmToolModule,
+  );
   shimHostToolModule(
     virtualNetwork,
     'create-ai-assistant-room',
@@ -466,6 +472,7 @@ export const HostToolClasses: (typeof HostBaseTool<any, any>)[] = [
   CopyCardToStackToolModule.default,
   CopyFileToRealmToolModule.default,
   CopySourceToolModule.default,
+  DownloadFileToRealmToolModule.default,
   AuthedFetchToolModule.default,
   CanReadRealmToolModule.default,
   CreateAIAssistantRoomToolModule.default,

@@ -67,7 +67,7 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
         card,
         format: this.effectiveFormat,
       });
-      this.imageDefUrl = result.imageDefUrl;
+      this.imageDefUrl = result.captures?.[0]?.url ?? null;
     } catch (error) {
       this.errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -81,9 +81,8 @@ class Isolated extends Component<typeof ScreenshotCardDemo> {
       <header>
         <h2>Screenshot Card Demo</h2>
         <p>
-          Pick a card and a format, then capture a settled PNG into the
-          card's own realm under
-          <code>Screenshots/</code>.
+          Pick a card and a format, then capture a settled PNG. The capture is
+          persisted to the media cache and its served URL is shown below.
         </p>
       </header>
 
