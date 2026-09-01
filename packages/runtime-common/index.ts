@@ -698,6 +698,18 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Host-shell token the prerender server had been told was current when this
+  // render started, and again when its response was assembled. Two different
+  // values mean the render straddled a host redeploy: the page resolved
+  // modules against a bundle the realm server may already have stopped
+  // serving. Unremarkable for a render that succeeded, and decisive for one
+  // that failed to resolve a module — that failure then describes the
+  // environment rather than the card, which is what an operator reading the
+  // error row needs to know. Lives here rather than on the response meta
+  // because `flattenPrerenderMeta` carries `diagnostics` onto the persisted
+  // row and drops every other meta key.
+  hostShellHash?: string;
+  hostShellHashAtCompletion?: string;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
