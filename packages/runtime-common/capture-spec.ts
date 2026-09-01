@@ -22,6 +22,47 @@ export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
 // viewport and must NOT be given an envelope.
 const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted'];
 
+// ---------------------------------------------------------------------------
+// Declared screenshots (`static screenshots` on CardDef/FileDef) — the name
+// grammar and format roster shared by the declaration reader in
+// packages/base/card-api and the realm's `_screenshot/…?name=` route.
+// ---------------------------------------------------------------------------
+
+// A declared screenshot's name addresses the capture in a URL, so it is
+// constrained to a charset that survives a URL path segment with no
+// percent-encoding: a leading letter or digit, then letters, digits, `-`,
+// or `_`.
+export const SCREENSHOT_NAME_MAX_LENGTH = 64;
+export const SCREENSHOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+export function isValidScreenshotName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= SCREENSHOT_NAME_MAX_LENGTH &&
+    SCREENSHOT_NAME_PATTERN.test(value)
+  );
+}
+
+// Display formats a declared screenshot may reuse via its `format` slot.
+// Distinct from the on-demand rosters above: a declared capture renders in
+// the indexing-time prerender pass, which can lay out any display format —
+// `atom` included — while `edit` and the non-visual formats are not
+// meaningful pixel sources.
+export const DECLARED_SCREENSHOT_FORMATS = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+] as const;
+export type DeclaredScreenshotFormat =
+  (typeof DECLARED_SCREENSHOT_FORMATS)[number];
+
+export function isDeclaredScreenshotFormat(
+  value: unknown,
+): value is DeclaredScreenshotFormat {
+  return (DECLARED_SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+}
+
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
@@ -69,6 +110,13 @@ export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
 export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
 // A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
 export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
+// The scale a *declared* screenshot (a `static screenshots` entry) captures
+// at when the author writes no deviceScaleFactor — retina-quality output by
+// default. Distinct from the wire-spec identity, where an absent
+// deviceScaleFactor means 1: declaration readers and the capture pass must
+// share this value so a declaration that validates clean cannot exceed the
+// physical-edge cap once the default is applied.
+export const SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR = 2;
 // The Chromium single-texture cap the viewport bounds are derived from,
 // enforced on *physical* pixels: CSS dimension × deviceScaleFactor. The CSS
 // caps alone would admit e.g. a 16384-tall viewport at 3× (~49k physical px).
