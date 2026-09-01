@@ -117,7 +117,23 @@ interface Beat {
   grade?: string;
   /** how thick the air is, 0 the hour's own and 1 as heavy as it goes */
   haze?: number;
+  /**
+   * A DESIGNED SILENCE. By default a beat with no line of its own is an
+   * L-CUT: the outgoing narration finishes across the seam and fades on
+   * its own clock, the way every editor lets a sentence land over the
+   * next shot. A beat that is ABOUT silence sets this, and the boundary
+   * fades whatever is still speaking.
+   */
+  hush?: boolean;
   id: string;
+  /**
+   * HOW THE SEAM PLAYS, for a cut beat (docs/choreo-splices.md):
+   * 'wipe' (default) — clean splice plus the raked paper flash;
+   * 'cut' — the splice alone;
+   * 'whip' — no snap: the chaser races a stiff spring across the jump,
+   * a fast smooth tween that never glides.
+   */
+  join?: 'cut' | 'whip' | 'wipe';
   /** the key term, in Japanese */
   kanji?: string;
   /** the eyebrow — where we are in the argument */
@@ -665,6 +681,7 @@ const BEATS: Beat[] = [
     build: 4.4,
     cam: { dolly: 0.54, lookY: 0.9, ox: 0, pitch: 12, yaw: 149 },
     ch: 2,
+    hush: true,
     id: 'muneage',
     mode: 'clear',
     ticks: 2,
@@ -1313,6 +1330,7 @@ export default class TowerFilm extends Component<{
    */
   get path() {
     const pts: {
+      cut?: boolean;
       dolly: number;
       look: { x: number; y: number; z: number };
       pitch: number;
@@ -1323,31 +1341,20 @@ export default class TowerFilm extends Component<{
     const beats = this.beats;
     for (const [bi, b] of beats.entries()) {
       /**
-       * THE SEAM IS STILL, BY CONSTRUCTION. "Author a hold either side
-       * of a cut" was a convention, and conventions drift: a spline that
-       * crosses a cut waypoint with velocity hands the snapped chaser a
-       * moving target from a standing start, and the mismatch reads as a
-       * bounce. So the builder enforces it — a beat BEFORE a cut spends
-       * its last tick parked on its tail pose, and a cut beat spends its
-       * first tick parked on its head. Repeated Catmull-Rom points come
-       * to rest and leave again; the motion is simply compressed into
-       * the remaining ticks, so the waypoint count — and therefore every
-       * cue's clock — is untouched.
+       * A CUT BEAT'S HEAD IS A SPLICE. The library samples each side as
+       * its own clamped shot and steps across the seam at this waypoint's
+       * own instant (docs/choreo-splices.md) — no enforced holds, no
+       * ticks spent parked, no glide across the jump. A re-cut score
+       * (chapter skip) splices its very first waypoint too, so a skip
+       * opens inside its shot instead of travelling in from wherever the
+       * last run left the lens.
        */
-      const head = b.cut ? 1 : 0;
-      const tail = beats[bi + 1]?.cut ? 1 : 0;
+      const splice = b.cut === true || (bi === 0 && this.from > 0);
       for (let k = 0; k < b.ticks; k++) {
-        const span = b.ticks - 1 - head - tail;
-        const f =
-          b.ticks === 1
-            ? 0
-            : span <= 0
-              ? k <= head
-                ? 0
-                : 1
-              : Math.min(1, Math.max(0, (k - head) / span));
+        const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
         const to = b.toCam ?? b.cam;
         pts.push({
+          cut: splice && k === 0 ? true : undefined,
           dolly: lerp(b.cam.dolly, to.dolly, f),
           look: { x: 0, y: lerp(b.cam.lookY, to.lookY, f), z: 0 },
           pitch: lerp(b.cam.pitch, to.pitch, f),
@@ -1360,7 +1367,17 @@ export default class TowerFilm extends Component<{
     return pts;
   }
 
-  /** each beat's entrance, as a delay into the one camera step */
+  /**
+   * Each beat's entrance, as a delay into the one camera step — offset
+   * one tick, because the pose-in-force seed occupies the spline's first
+   * slot: waypoint k is crossed at (k+1) slots, not k. The old uniform
+   * skew was invisible (camera and cues equally late, a constant the
+   * chaser's own lag swallowed); a SPLICE made it audible — the snap
+   * fired two seconds before the goal stepped, and the chaser spent the
+   * gap dragged back toward the old shot. Cue 0 stays at zero: the boot
+   * and every re-cut apply their head beat by hand, and its immediate
+   * re-fire has always been the first cue's job.
+   */
   get cues() {
     let t = 0;
     return this.beats.map((b, i) => {
@@ -1368,7 +1385,7 @@ export default class TowerFilm extends Component<{
       t += b.ticks * TICK;
       /* a Perform target is a NAME, and a beat's name is its place in the
          script — the index, as a string, so the cue and the array agree */
-      return { delay: at, index: String(i) };
+      return { delay: at === 0 ? 0 : at + TICK, index: String(i) };
     });
   }
 
@@ -1598,24 +1615,13 @@ export default class TowerFilm extends Component<{
   }
 
   /**
-   * THE CHASER WAITS OUT THE SEAM. A cut snaps the lens to the new pose,
-   * but the score's one spline still SWEEPS the positional jump over the
-   * seam segment — for a moment after the cut, the goal is mid-crossing,
-   * somewhere between the two shots. A chaser that keeps integrating gets
-   * dragged backward toward the old shot and hauled in again, and that
-   * round trip is the BIG bounce a hard cut wore. So a cut parks the
-   * integrator on the landed pose and releases it only once the goal has
-   * crossed the seam and settled beside it (with a deadline, so a missed
-   * convergence can never freeze the film). Together with the path
-   * builder's enforced holds, the edit is what an edit is: still, cut,
-   * still — and then the new shot leaves from rest.
+   * THE WHIP. A 'whip' join does not snap: the goal steps across the
+   * seam (the splice does that) and the chaser races it on a briefly
+   * stiff spring — a fast, smooth tween between the shots that is over
+   * in a third of a second and never reads as a glide. While it runs,
+   * the spring is ~3× its documentary stiffness; then the hand relaxes.
    */
-  private seamHold = 0;
-
-  private cutSnap(beat: Beat) {
-    this.snap(beat.cam);
-    this.seamHold = performance.now() + TICK * 1.6 * 1000;
-  }
+  private whipUntil = 0;
 
   /**
    * One critically-damped stage. The page's own chase is the second, which
@@ -1625,8 +1631,9 @@ export default class TowerFilm extends Component<{
   private chase(dt: number) {
     /* softer than it was: the lens is an operator's hand, not a servo.
        Lower stiffness filters the spline's residual sway before the
-       page's own chase filters it again. */
-    const w = 4.4;
+       page's own chase filters it again — except mid-whip, when the
+       hand is deliberately fast (see whipUntil). */
+    const w = this.whipUntil > performance.now() ? 13 : 4.4;
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
       const g = k === 'ox' ? (this.goal.ox ?? 0) : this.goal[k];
       const m = k === 'ox' ? (this.mid.ox ?? 0) : this.mid[k];
@@ -1655,25 +1662,7 @@ export default class TowerFilm extends Component<{
     );
     this.lastTick = stamp;
 
-    /* mid-seam the goal is between two shots and not to be chased; it is
-       released the moment the goal parks beside the landed pose — or at
-       the deadline, whichever comes first */
-    if (this.seamHold) {
-      const g = this.goal;
-      const n = this.now;
-      const parked =
-        Math.abs(g.yaw - n.yaw) < 0.5 &&
-        Math.abs(g.pitch - n.pitch) < 0.5 &&
-        Math.abs(g.dolly - n.dolly) < 0.02 &&
-        Math.abs(g.lookY - n.lookY) < 0.15 &&
-        Math.abs((g.ox ?? 0) - (n.ox ?? 0)) < 0.01;
-      if (parked || stamp > this.seamHold) {
-        this.seamHold = 0;
-      }
-    }
-    if (!this.seamHold) {
-      this.chase(dt);
-    }
+    this.chase(dt);
     /* a chaser lands on a millionth of a pixel rather than on zero, and an
        off-centre frustum that is never quite centred keeps the projection
        matrix rebuilt every frame for nothing — so zero means zero */
@@ -2106,13 +2095,20 @@ export default class TowerFilm extends Component<{
       film.trace(`t${i}`, { pts: spec.pts, r });
     });
     if (beat.cut) {
-      this.cutSnap(beat);
-      /* a hard cut needs a piece of punctuation or it reads as a dropped
-         frame. One wipe, in the paper the whole film is printed on, raked
-         to the same diagonal the sun throws — over in a fifth of a second,
-         which is long enough to say "that was deliberate" and too short to
-         be a transition anybody has to sit through. */
-      this.cutStamp += 1;
+      const join = beat.join ?? 'wipe';
+      if (join === 'whip') {
+        this.whipUntil = performance.now() + 360;
+      } else {
+        this.snap(beat.cam);
+        if (join === 'wipe') {
+          /* a hard cut needs a piece of punctuation or it reads as a
+             dropped frame. One wipe, in the paper the whole film is
+             printed on, raked to the sun's own diagonal — over in a
+             fifth of a second, long enough to say "that was deliberate"
+             and too short to be a transition anybody sits through. */
+          this.cutStamp += 1;
+        }
+      }
     }
     if (beat.style !== undefined && film.styleIndex() !== beat.style) {
       film.style(beat.style);
@@ -2139,8 +2135,26 @@ export default class TowerFilm extends Component<{
     if (beat.wx !== undefined) {
       film.wx(beat.wx, instant);
     }
-    this.hush();
-    this.speak(beat);
+    /**
+     * THE VOICE CROSSES ON ITS OWN CLOCK. Tracks are linked by the seam
+     * but independent across it: a beat with its own line fades the old
+     * one under (~120ms) and speaks; a beat with none is an L-CUT — the
+     * outgoing sentence finishes over the new shot and the duck lifts
+     * when it lands, exactly as an editor would lay it. A designed
+     * silence (`hush`) is the exception that asks for quiet.
+     */
+    if (beat.vo || beat.hush) {
+      this.hush();
+      this.speak(beat);
+    } else if (
+      !this.sound ||
+      !this.voice ||
+      this.voice.paused ||
+      this.voice.ended
+    ) {
+      /* nothing is actually speaking: the silent beat gets its music */
+      this.film?.duck(1);
+    }
   }
 
   private shot = (state: {
@@ -2167,7 +2181,7 @@ export default class TowerFilm extends Component<{
          tells the viewer it never meant any of it. */
       this.playing = false;
       this.ended = true;
-      this.voice?.pause();
+      this.hushVoice(200);
       this.film?.duck(0.35);
       return;
     }
@@ -2182,10 +2196,12 @@ export default class TowerFilm extends Component<{
 
   private toggle = () => {
     this.playing = !this.playing;
-    /* a paused picture with a running voice is two films; hold both */
+    /* a paused picture with a running voice is two films; hold both —
+       and let the voice down gently rather than mid-cycle */
     if (!this.playing) {
-      this.voice?.pause();
+      this.hushVoice(90);
     } else if (this.sound && this.voice?.src && !this.voice.ended) {
+      this.revive(this.voice);
       void this.voice.play().catch(() => this.film?.duck(1));
     }
   };
@@ -2227,8 +2243,9 @@ export default class TowerFilm extends Component<{
     this.playing = true;
     this.lap += 1;
     this.applyBeat(BEATS[index]!, true);
-    /* a skip is an edit like any other: land it moving */
-    this.cutSnap(BEATS[index]!);
+    /* the re-cut score opens on a spliced first waypoint, so the goal
+       steps straight to this pose; the snap lands the lens beside it */
+    this.snap(BEATS[index]!.cam);
   }
 
   private prev = () => this.goChapter(-1);
@@ -2285,6 +2302,58 @@ export default class TowerFilm extends Component<{
    */
   private voice?: HTMLAudioElement;
 
+  /**
+   * A BOUNDARY NEVER CLIPS THE VOICE — and every line has its own
+   * throat. One shared element made politeness impossible: however
+   * gently the old line was being faded, the new line's src swap
+   * guillotined it mid-word. So an interrupted line keeps its OWN
+   * element and fades there (~120ms, fast enough to read as a stop,
+   * slow enough that no waveform is cut mid-cycle) while the new line
+   * starts clean on a fresh one — the game-dialogue barge-in, which is
+   * what a chapter skip actually is. ("Stop at the next word" is the
+   * refinement this is built to take: an analyser watching for the
+   * inter-word trough before the fade — see docs/choreo-splices.md.)
+   */
+  private fades = new WeakMap<HTMLAudioElement, number>();
+
+  private fadeEl(el: HTMLAudioElement | undefined, ms = 120) {
+    if (!el || el.paused) {
+      return;
+    }
+    const prior = this.fades.get(el);
+    if (prior !== undefined) {
+      window.clearInterval(prior);
+    }
+    const v0 = el.volume;
+    const t0 = performance.now();
+    const timer = window.setInterval(() => {
+      const f = (performance.now() - t0) / ms;
+      if (f >= 1) {
+        el.volume = 0;
+        el.pause();
+        window.clearInterval(timer);
+        this.fades.delete(el);
+      } else {
+        el.volume = v0 * (1 - f);
+      }
+    }, 16);
+    this.fades.set(el, timer);
+  }
+
+  /** cancel a fade mid-flight and stand the line back up (resume) */
+  private revive(el: HTMLAudioElement) {
+    const timer = this.fades.get(el);
+    if (timer !== undefined) {
+      window.clearInterval(timer);
+      this.fades.delete(el);
+    }
+    el.volume = 1;
+  }
+
+  private hushVoice(ms = 120) {
+    this.fadeEl(this.voice, ms);
+  }
+
   private speak(beat: Beat) {
     if (!this.sound) {
       return;
@@ -2295,8 +2364,11 @@ export default class TowerFilm extends Component<{
       this.film?.duck(1);
       return;
     }
-    const el = (this.voice ??= new Audio());
-    el.pause();
+    /* barge-in: the outgoing line fades on its own element while the
+       new one starts clean on a fresh throat */
+    this.fadeEl(this.voice);
+    const el = new Audio();
+    this.voice = el;
     el.src = `${config.rootURL}towers/vo/${beat.id}.mp3`;
     el.volume = 1;
     /**
@@ -2308,7 +2380,11 @@ export default class TowerFilm extends Component<{
      * across the film, and a timed release would breathe wrong on nearly
      * every one of them.
      */
-    el.onended = () => this.film?.duck(1);
+    el.onended = () => {
+      if (this.voice === el) {
+        this.film?.duck(1);
+      }
+    };
     void el.play().then(
       () => this.film?.duck(0.1),
       () => this.film?.duck(1)
@@ -2316,7 +2392,7 @@ export default class TowerFilm extends Component<{
   }
 
   private hush() {
-    this.voice?.pause();
+    this.hushVoice();
     this.film?.duck(1);
   }
 
