@@ -343,20 +343,21 @@ export function getField<T extends BaseDef>(
       isField
     ];
     if (result !== undefined && isBaseDef(result.card)) {
-      let fieldOverride: typeof BaseDef | undefined;
-      if (opts?.untracked) {
-        fieldOverride =
-          instance && isCardInstance(instance)
-            ? instance[fieldsUntracked]?.[fieldName]
-            : undefined;
-      } else {
-        fieldOverride =
-          instance && isCardInstance(instance)
-            ? instance[fields]?.[fieldName]
-            : undefined;
-      }
-      if (fieldOverride) {
-        let cacheForInstance = narrowedFields.get(instance!);
+      // Only a card instance can carry an override, and it is also what the
+      // rebuild is cached against. Resolving that owner once means the cache
+      // cannot be reached without the guard the override lookup already
+      // depends on. Reading through `fields` rather than `fieldsUntracked`
+      // entangles the caller with card tracking, so the choice between them
+      // stays here, ahead of the cache.
+      let overrideOwner =
+        instance && isCardInstance(instance) ? instance : undefined;
+      let fieldOverride: typeof BaseDef | undefined = overrideOwner
+        ? (opts?.untracked
+            ? overrideOwner[fieldsUntracked]
+            : overrideOwner[fields])?.[fieldName]
+        : undefined;
+      if (overrideOwner && fieldOverride) {
+        let cacheForInstance = narrowedFields.get(overrideOwner);
         let cached = cacheForInstance?.get(fieldName);
         // Falls through to the identity registration below rather than
         // returning here: that registration is last-writer-wins across owner
@@ -393,7 +394,7 @@ export function getField<T extends BaseDef>(
           ) as Field;
           if (!cacheForInstance) {
             cacheForInstance = new Map();
-            narrowedFields.set(instance!, cacheForInstance);
+            narrowedFields.set(overrideOwner, cacheForInstance);
           }
           cacheForInstance.set(fieldName, {
             overrideCard: fieldOverride,

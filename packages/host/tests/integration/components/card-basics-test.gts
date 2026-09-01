@@ -3549,6 +3549,23 @@ module('Integration | card-basics', function (hooks) {
         'eager',
         'declaredCardThunk',
       ]);
+
+      // The narrowed field is cached against the override it was built for, so
+      // replacing the override has to produce a field resolving to the new
+      // one. Asserted directly rather than through a re-render, so a stale
+      // cache fails here instead of as a component that renders the previous
+      // subtype.
+      class Kitten extends Pet {
+        static displayName = 'Kitten';
+      }
+      let card = new TestCard({ [fields]: { pets: Puppy } });
+      assert.strictEqual(getField(card, 'pets')!.card, Puppy);
+      card[fields] = { pets: Kitten };
+      assert.strictEqual(
+        getField(card, 'pets')!.card,
+        Kitten,
+        'replacing the override resolves to the new subtype',
+      );
     });
 
     test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
