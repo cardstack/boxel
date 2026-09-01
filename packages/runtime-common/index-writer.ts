@@ -798,12 +798,27 @@ export class Batch {
         ? value
         : this.copiedRealmURL(sourceRealmURL, new URL(value)).href;
     let columns: string[][] | undefined;
+    let manifestCopies: {
+      sourceLedgerURL: string;
+      destLedgerURL: string;
+      manifest: ScreenshotManifest;
+    }[] = [];
     let values = sources.map((entry) => {
       let destURL = copyURL(entry.url);
       // The source's `prerendered_html` rows are a subset of its `boxel_index`
       // rows, so `copyFrom` already seeded these into `#invalidations`; add
       // defensively so the swap below promotes every overlaid HTML row.
       this.#invalidations.add(destURL);
+      if (entry.screenshots && Object.keys(entry.screenshots).length > 0) {
+        manifestCopies.push({
+          // The extensionless card-id form the MediaCache ledger keys on
+          // (matching what the prerender-html visit derives from the file
+          // URL when it persists a capture).
+          sourceLedgerURL: entry.url.replace(/\.json$/, ''),
+          destLedgerURL: destURL.replace(/\.json$/, ''),
+          manifest: entry.screenshots as ScreenshotManifest,
+        });
+      }
       entry.url = destURL;
       entry.realm_url = this.realmURL.href;
       entry.file_alias = copyURL(entry.file_alias);
@@ -842,6 +857,101 @@ export class Batch {
       ...upsertMultipleRows(
         'prerendered_html_working',
         'prerendered_html_working_pkey',
+        columns,
+        values,
+      ),
+    ]);
+    await this.copyDeclaredScreenshotLedgerRows(sourceRealmURL, manifestCopies);
+  }
+
+  // A copied manifest is only as durable as the ledger rows that refcount
+  // its objects, and those exist solely under the source realm — once the
+  // source card re-renders (superseding) or is deleted (tombstoning), GC
+  // reclaims the objects and every copied manifest dangles. Duplicate the
+  // source's `declared`-lane rows under the destination realm and rewritten
+  // source URL so the copies hold their own references. Metadata-only: the
+  // object store is content-addressed, so no bytes move. A manifest entry
+  // whose source row is already gone stays as dangling in the copy as it was
+  // in the source. Runs only when a manifest was copied, so it never touches
+  // `media_cache_ledger` on adapters that don't carry it (captures only ever
+  // happen on the Postgres side).
+  private async copyDeclaredScreenshotLedgerRows(
+    sourceRealmURL: URL,
+    copies: {
+      sourceLedgerURL: string;
+      destLedgerURL: string;
+      manifest: ScreenshotManifest;
+    }[],
+  ): Promise<void> {
+    if (copies.length === 0) {
+      return;
+    }
+    let sourceURLs = [...new Set(copies.map((c) => c.sourceLedgerURL))];
+    let sourceRows = (await this.#query([
+      `SELECT * FROM media_cache_ledger WHERE`,
+      ...every([
+        ['realm_url =', param(sourceRealmURL.href)],
+        [`lane = 'declared'`],
+        [
+          'source_url IN',
+          ...addExplicitParens(
+            separatedByCommas(sourceURLs.map((u) => [param(u)])),
+          ),
+        ],
+      ]),
+    ] as Expression)) as unknown as {
+      source_url: string;
+      capture_spec_hash: string;
+      object_key: string;
+      source_content_hash: string | null;
+      content_type: string;
+      size_bytes: string | number;
+      width: number | null;
+      height: number | null;
+    }[];
+    let byIdentity = new Map(
+      sourceRows.map((row) => [
+        `${row.source_url}\n${row.capture_spec_hash}\n${row.object_key}`,
+        row,
+      ]),
+    );
+    let now = Date.now();
+    let columns: string[][] | undefined;
+    let values: any[][] = [];
+    for (let { sourceLedgerURL, destLedgerURL, manifest } of copies) {
+      for (let entry of Object.values(manifest)) {
+        let source = byIdentity.get(
+          `${sourceLedgerURL}\n${entry.specHash}\n${entry.objectKey}`,
+        );
+        if (!source) {
+          continue;
+        }
+        let { nameExpressions, valueExpressions } = asExpressions({
+          realm_url: this.realmURL.href,
+          source_url: destLedgerURL,
+          capture_spec_hash: source.capture_spec_hash,
+          source_generation: this.generation,
+          object_key: source.object_key,
+          source_content_hash: source.source_content_hash,
+          lane: 'declared',
+          content_type: source.content_type,
+          size_bytes: source.size_bytes,
+          width: source.width,
+          height: source.height,
+          created_at: now,
+          last_accessed_at: now,
+        });
+        columns = nameExpressions;
+        values.push(valueExpressions);
+      }
+    }
+    if (!columns) {
+      return;
+    }
+    await this.#query([
+      ...upsertMultipleRows(
+        'media_cache_ledger',
+        'media_cache_ledger_pkey',
         columns,
         values,
       ),
@@ -1458,8 +1568,20 @@ export class Batch {
     url: URL,
     type: PrerenderedHtmlTable['type'],
   ): Promise<ScreenshotManifest | null> {
-    let production = await this.getPrerenderedHtmlProductionVersion(url, type);
-    return (production?.screenshots as ScreenshotManifest | null) ?? null;
+    // This runs once per instance visit, so it selects only the manifest —
+    // the row's HTML columns are large and irrelevant here.
+    let [row] = (await this.#query([
+      `SELECT screenshots FROM prerendered_html WHERE`,
+      ...every([
+        ['realm_url =', param(this.realmURL.href)],
+        any([
+          [`url =`, param(url.href)],
+          [`file_alias =`, param(url.href)],
+        ]),
+        ['type =', param(type)],
+      ]),
+    ] as Expression)) as unknown as Pick<PrerenderedHtmlTable, 'screenshots'>[];
+    return (row?.screenshots as ScreenshotManifest | null) ?? null;
   }
 
   private async getPrerenderedHtmlProductionVersion(
