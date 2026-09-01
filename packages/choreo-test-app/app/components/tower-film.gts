@@ -113,6 +113,32 @@ interface Beat {
   kanji?: string;
   /** the eyebrow — where we are in the argument */
   kicker?: string;
+  /**
+   * A LABEL THAT STANDS IN THE SCENE, not on the screen.
+   *
+   * The stage names belong to heights on the building, so they are placed
+   * at those heights, out in the world, at a fixed bearing — and they RISE
+   * to them as the stage is built, overshooting slightly and settling the
+   * way a thing with mass does. Because the bearing is fixed and the
+   * camera is orbiting, the mark crosses the frame on its own; it is
+   * correlated with the shot without being carried by it, which is the
+   * whole difference between a label in a scene and a label on a screen.
+   *
+   * Its facing LAGS the camera rather than tracking it: a hard billboard
+   * is glued to the lens and reads as an overlay, and a fixed plane goes
+   * edge-on and disappears. A damped follow does neither.
+   */
+  mark?: {
+    /** degrees round the orbit, fixed in the world */
+    bearing: number;
+    lines: string[];
+    /** distance from the tower's axis */
+    r: number;
+    /** world units tall */
+    size: number;
+    /** the height it climbs to */
+    to: number;
+  };
   /** how the front layer is set */
   mode: 'lower' | 'plate' | 'point' | 'title';
   /**
@@ -425,7 +451,7 @@ const BEATS: Beat[] = [
     },
     romaji: 'IKKOKU-ICHIJŌ-REI',
     theme: 3,
-    ticks: 4,
+    ticks: 5,
   },
 
   /* ---------------------------------------------------------------- *
@@ -451,6 +477,13 @@ const BEATS: Beat[] = [
     kanji: '石垣',
     kicker: 'STAGE ONE',
     vo: 'Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.',
+    mark: {
+      bearing: 104,
+      lines: ['石垣'],
+      r: 5,
+      size: 1.5,
+      to: 3.3,
+    },
     mode: 'lower',
     photo: {
       caption: 'Dry-laid ishigaki, Kumamoto',
@@ -475,6 +508,13 @@ const BEATS: Beat[] = [
     kanji: '柱梁',
     kicker: 'STAGE TWO',
     vo: 'Above the stone, a timber cage. Posts sit on footing stones, not in the ground. Nothing is bolted. The joints do the work.',
+    mark: {
+      bearing: 122,
+      lines: ['柱梁'],
+      r: 5,
+      size: 1.5,
+      to: 6.2,
+    },
     mode: 'lower',
     romaji: 'CHŪRYŌ',
     sun: { az: -30, el: 62 },
@@ -495,6 +535,13 @@ const BEATS: Beat[] = [
     kanji: '白壁',
     kicker: 'STAGE THREE',
     vo: 'Then it gets wrapped. Lime plaster, thick enough to be armour. White, because white does not burn.',
+    mark: {
+      bearing: 139,
+      lines: ['白壁'],
+      r: 5,
+      size: 1.5,
+      to: 8.8,
+    },
     mode: 'lower',
     romaji: 'SHIRAKABE',
     sun: { az: -8, el: 78 },
@@ -511,6 +558,13 @@ const BEATS: Beat[] = [
     kanji: '望楼',
     kicker: 'STAGE FOUR',
     vo: 'At the top, one room you can see out of. Everything below it is how you get that room into the air.',
+    mark: {
+      bearing: 154,
+      lines: ['望楼'],
+      r: 5,
+      size: 1.5,
+      to: 11.2,
+    },
     mode: 'lower',
     romaji: 'BŌRŌ',
     ticks: 5,
@@ -530,6 +584,13 @@ const BEATS: Beat[] = [
     kicker: 'STAGE FIVE',
     kanji: '瓦',
     vo: 'Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.',
+    mark: {
+      bearing: 169,
+      lines: ['瓦'],
+      r: 5,
+      size: 1.5,
+      to: 13.5,
+    },
     mode: 'lower',
     romaji: 'KAWARA',
     theme: 1,
@@ -838,7 +899,7 @@ const BEATS: Beat[] = [
       y: 7.5,
     },
     style: 0,
-    ticks: 6,
+    ticks: 7,
     toCam: { dolly: 0.6, lookY: -0.4, ox: 0.2, pitch: 16, yaw: 264 },
   },
 ];
@@ -852,6 +913,21 @@ const rgba = (hex: string, a: number): string => {
   }
   const n = parseInt(h, 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+/** perceptual luminance of a hex colour, 0 black to 1 white */
+const luminance = (hex: string): number => {
+  const h = hex.trim().replace('#', '');
+  if (h.length !== 6) {
+    return 1;
+  }
+  const n = parseInt(h, 16);
+  return (
+    (0.2126 * ((n >> 16) & 255) +
+      0.7152 * ((n >> 8) & 255) +
+      0.0722 * (n & 255)) /
+    255
+  );
 };
 
 const smooth = (t: number) => {
@@ -927,6 +1003,7 @@ export default class TowerFilm extends Component<{
   private lineEl?: SVGLineElement;
   private dotEl?: SVGCircleElement;
   private traceEls: SVGPolylineElement[] = [];
+  private tetherEl?: SVGLineElement;
   private dim?: HTMLElement;
   /** the dim's own value, chased rather than cut so it never snaps on */
   private dimNow = 0;
@@ -1172,6 +1249,7 @@ export default class TowerFilm extends Component<{
 
   private trackEls = modifier((el: SVGSVGElement) => {
     this.lineEl = el.querySelector('line.tf-leader') as SVGLineElement;
+    this.tetherEl = el.querySelector('line.tf-tether') as SVGLineElement;
     this.dotEl = el.querySelector('circle') as SVGCircleElement;
     this.traceEls = [
       ...el.querySelectorAll('polyline'),
@@ -1308,6 +1386,7 @@ export default class TowerFilm extends Component<{
       film.fade('chapter', this.skyOn);
     }
 
+    this.stageMark(film, beat, local, dt);
     this.trackPoint(film, beat, local);
     this.traceShape(film, beat, local, dt);
     this.parallax(local);
@@ -1380,10 +1459,22 @@ export default class TowerFilm extends Component<{
     el.style.setProperty('--tf-paper-a', rgba(p.paper, 0.94));
     el.style.setProperty('--tf-paper-b', rgba(p.paper, 0.76));
     el.style.setProperty('--tf-paper-c', rgba(p.paper, 0));
-    el.style.setProperty('--tf-ink', p.ink);
-    el.style.setProperty('--tf-ink2', p.ink2);
-    el.style.setProperty('--tf-ink3', p.ink3);
-    el.style.setProperty('--tf-accent', p.accent);
+    /**
+     * WHEN THE GROUND GOES DARK, THE TYPE GOES LIGHT.
+     *
+     * The scrims are mixed from the scene's own paper, so at night they
+     * are a dark wash — and dark ink on a dark wash is unreadable however
+     * carefully the scrim was tuned. Rather than hand-pick a palette per
+     * hour, the ink is DERIVED: measure the paper and invert below the
+     * threshold. One rule, right for all four hours and for any theme
+     * anybody adds later.
+     */
+    const dark = luminance(p.paper) < 0.42;
+    el.classList.toggle('is-dark', dark);
+    el.style.setProperty('--tf-ink', dark ? '#f7f0e0' : p.ink);
+    el.style.setProperty('--tf-ink2', dark ? '#bdb3a0' : p.ink2);
+    el.style.setProperty('--tf-ink3', dark ? '#e6dcc8' : p.ink3);
+    el.style.setProperty('--tf-accent', dark ? '#f0a24a' : p.accent);
     el.style.setProperty('--tf-rule', p.rule);
   }
 
@@ -1412,13 +1503,22 @@ export default class TowerFilm extends Component<{
     }
     /* ease the whole thing in so a cut does not start mid-drift */
     const t = smooth(Math.min(1, local * 1.15));
+    /**
+     * A CLOSE-UP GETS ALMOST NONE OF THIS. Parallax on the type exists to
+     * stop a caption looking pasted onto a moving picture. On a 4× detail
+     * shot the picture is barely moving and the caption is the largest
+     * thing on screen, so the same amplitude stops reading as depth and
+     * starts reading as drift. It has to scale with what the shot behind
+     * it is actually doing.
+     */
+    const amp = this.beat.mode === 'point' ? 0.28 : 1;
     for (const [i, el] of rows.entries()) {
       /* the glyph sits near the top of the block and should be the
          NEAREST plane, so depth runs down the block rather than up it */
       const depth = 1 - i / Math.max(1, rows.length - 1);
-      const dx = -14 * depth * t;
-      const dy = -9 * depth * t;
-      const sc = 1 + 0.035 * depth * t;
+      const dx = -14 * depth * t * amp;
+      const dy = -9 * depth * t * amp;
+      const sc = 1 + 0.035 * depth * t * amp;
       el.style.transform = `translate3d(${dx.toFixed(2)}px,${dy.toFixed(2)}px,0) scale(${sc.toFixed(4)})`;
     }
   }
@@ -1482,6 +1582,77 @@ export default class TowerFilm extends Component<{
     if (this.dim) {
       this.dimNow += (drew - this.dimNow) * Math.min(1, dt * 3.2);
       this.dim.style.opacity = this.dimNow.toFixed(3);
+    }
+  }
+
+  /** the mark's facing, damped behind the camera's own bearing */
+  private markFace = 0;
+
+  /**
+   * Place the stage mark: climb to its height with a settle, hold, and
+   * face the camera a beat late.
+   */
+  private stageMark(film: FilmApi, beat: Beat, local: number, dt: number) {
+    const m = beat.mark;
+    const tether = this.tetherEl;
+    if (!m) {
+      film.fade('mark', 0);
+      if (tether) {
+        tether.style.opacity = '0';
+      }
+      return;
+    }
+    /* the climb takes the first fifth of the beat and overshoots once */
+    const raw = Math.min(1, Math.max(0, (local - 0.04) / 0.2));
+    const c1 = 1.34;
+    const p = raw - 1;
+    const rise = raw >= 1 ? 1 : 1 + (c1 + 1) * p * p * p + c1 * p * p;
+    const y = m.to * rise;
+    const a = m.bearing * RAD;
+    const v = film.view();
+    /* a damped follow, and wrapped so the lag never takes the long way */
+    let d = v.az - this.markFace;
+    while (d > Math.PI) {
+      d -= Math.PI * 2;
+    }
+    while (d < -Math.PI) {
+      d += Math.PI * 2;
+    }
+    this.markFace += d * Math.min(1, dt * 1.6);
+    film.sky(
+      'mark',
+      {
+        color: '#2a2110',
+        lines: m.lines,
+        size: m.size,
+        track: 0.1,
+      },
+      {
+        opacity: Math.min(1, raw * 2.2) * 0.92,
+        ry: (this.markFace / RAD) % 360,
+        x: Math.sin(a) * m.r,
+        y,
+        z: Math.cos(a) * m.r,
+      }
+    );
+    /* AND IT IS TETHERED. A label floating beside a building names
+       nothing; a line back to the height it is describing turns it into a
+       measurement. */
+    if (tether && this.frameEl) {
+      const host = this.frameEl.getBoundingClientRect();
+      const sx = host.width / v.w;
+      const sy = host.height / v.h;
+      const from = film.project(
+        Math.sin(a) * m.r * 0.72,
+        y,
+        Math.cos(a) * m.r * 0.72
+      );
+      const to = film.project(0, y, 0);
+      tether.setAttribute('x1', String(from.x * sx));
+      tether.setAttribute('y1', String(from.y * sy));
+      tether.setAttribute('x2', String(to.x * sx));
+      tether.setAttribute('y2', String(to.y * sy));
+      tether.style.opacity = raw > 0.4 ? '0.55' : '0';
     }
   }
 
@@ -1705,9 +1876,19 @@ export default class TowerFilm extends Component<{
     const el = (this.voice ??= new Audio());
     el.pause();
     el.src = `${config.rootURL}towers/vo/${beat.id}.mp3`;
+    el.volume = 1;
+    /**
+     * THE MIX. Narration is the foreground and the scene's music is a
+     * bed, so the bed goes properly out of the way rather than politely
+     * down — to a tenth while a line runs, and back up slowly, since a
+     * duck that returns as fast as it left reads as a pump. It lifts on
+     * `ended` rather than on a timer: the reads vary by six seconds
+     * across the film, and a timed release would breathe wrong on nearly
+     * every one of them.
+     */
     el.onended = () => this.film?.duck(1);
     void el.play().then(
-      () => this.film?.duck(0.18),
+      () => this.film?.duck(0.1),
       () => this.film?.duck(1)
     );
   }
@@ -1821,6 +2002,7 @@ export default class TowerFilm extends Component<{
           <polyline class="tf-trace" points="" fill="none" />
           <polyline class="tf-trace" points="" fill="none" />
           <line class="tf-leader" x1="0" y1="0" x2="0" y2="0" />
+          <line class="tf-tether" x1="0" y1="0" x2="0" y2="0" />
           <circle cx="0" cy="0" r="7" />
         </svg>
 
@@ -1831,6 +2013,14 @@ export default class TowerFilm extends Component<{
           arrives word by word. A beat change drops the old type in one
           quick fall. All of it is score vocabulary. }}
           <Choreo class="tf-type tf-{{this.beat.mode}}" as |n|>
+            {{! the chapter's number, set enormous and nearly out of ink
+            behind the plate. It is the oldest device in editorial layout
+            and it is here for the oldest reason: a slab of type in the
+            corner of a frame needs something behind it or it reads as a
+            subtitle that has wandered. Not a plane — the host's drift
+            would move it, and the whole job of a ghost numeral is to sit
+            perfectly still while everything in front of it does not. }}
+            <span class="tf-ghost" aria-hidden="true">{{this.chapter.n}}</span>
             {{#each (array this.beat) key="id" as |b|}}
               {{! EACH ROW IS A PLANE, and the nesting is load-bearing: the
               wrapper is the plane and the host's loop drifts it, the
@@ -1847,13 +2037,20 @@ export default class TowerFilm extends Component<{
                     </p>
                   </div>
                 {{/if}}
-                {{#if b.kanji}}
-                  <div class="tf-plane is-glyph">
-                    <p class="tf-kanji" {{motion id="kanji" role="glyph"}}>
-                      {{b.kanji}}
-                    </p>
-                  </div>
-                {{/if}}
+                {{! When the beat has a MARK, the term is already standing
+                out in the scene at the height it names — so the front
+                layer does not set it a second time. Two copies of the
+                same word, one in the world and one on the glass, is the
+                doubled-logo problem in another costume. }}
+                {{#unless b.mark}}
+                  {{#if b.kanji}}
+                    <div class="tf-plane is-glyph">
+                      <p class="tf-kanji" {{motion id="kanji" role="glyph"}}>
+                        {{b.kanji}}
+                      </p>
+                    </div>
+                  {{/if}}
+                {{/unless}}
                 <div class="tf-plane">
                   <p class="tf-read" {{motion id="read" role="read"}}>
                     <span class="tf-romaji">{{b.romaji}}</span>
@@ -1893,35 +2090,41 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "kick"}}
-                @by="character"
-                @stagger={{0.014}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @opacity={{array 0 1}}
-                @duration={{0.28}}
-                @ease="easeOut"
+                @duration={{0.44}}
+                @ease={{array 0.3 0.9 0.2 1}}
               />
-              {{! the term itself gets the overshoot: characters out of the
-              centre, up and settling, which is the one moment per beat
-              the type is allowed to perform }}
+              {{! THE HERO MOMENT, and it is a mask rather than a fade: each
+              character rises out of its own baseline behind a clip that
+              opens upward, centre-out, and settles straight. The
+              overshoot is deliberately small. A springy landing is fine
+              under a wide shot and unbearable under a 4× close-up, where
+              the type is the biggest thing on screen and has nothing
+              moving behind it to absorb the motion. }}
               <n.Tween
                 @of={{n.inserted "glyph"}}
                 @by="character"
                 @order="center"
-                @stagger={{0.06}}
-                @delay={{0.14}}
+                @stagger={{0.07}}
+                @delay={{0.12}}
+                @clipPath={{array
+                  "inset(110% 0 -14% 0)"
+                  "inset(-14% 0 -14% 0)"
+                }}
                 @y={{array 34 0}}
-                @scale={{array 1.28 1}}
+                @scale={{array 1.06 1}}
                 @opacity={{array 0 1}}
-                @duration={{0.72}}
-                @ease={{array 0.24 1.42 0.4 1}}
+                @duration={{0.76}}
+                @ease={{array 0.2 1.06 0.3 1}}
               />
               <n.Tween
                 @of={{n.inserted "read"}}
-                @by="word"
-                @stagger={{0.05}}
-                @delay={{0.42}}
-                @y={{array 10 0}}
+                @delay={{0.5}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
+                @y={{array 8 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.5}}
+                @duration={{0.52}}
                 @ease={{array 0.22 1 0.36 1}}
               />
               {{! four slots, landing ACROSS the beat rather than together:
@@ -1929,43 +2132,39 @@ export default class TowerFilm extends Component<{
               instead of arriving as a wall }}
               <n.Tween
                 @of={{n.inserted "s0"}}
-                @by="word"
-                @stagger={{0.05}}
                 @delay={{0.5}}
-                @y={{array 24 0}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
+                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.5}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{0.56}}
+                @ease={{array 0.2 1 0.32 1}}
               />
               <n.Tween
                 @of={{n.inserted "s1"}}
-                @by="word"
-                @stagger={{0.05}}
                 @delay={{2.2}}
-                @y={{array 24 0}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
+                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.5}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{0.56}}
+                @ease={{array 0.2 1 0.32 1}}
               />
               <n.Tween
                 @of={{n.inserted "s2"}}
-                @by="word"
-                @stagger={{0.05}}
                 @delay={{3.9}}
-                @y={{array 24 0}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
+                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.5}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{0.56}}
+                @ease={{array 0.2 1 0.32 1}}
               />
               <n.Tween
                 @of={{n.inserted "s3"}}
-                @by="word"
-                @stagger={{0.05}}
                 @delay={{5.6}}
-                @y={{array 24 0}}
+                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
+                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.5}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{0.56}}
+                @ease={{array 0.2 1 0.32 1}}
               />
               <n.Tween
                 @of={{array
@@ -2449,6 +2648,14 @@ export default class TowerFilm extends Component<{
         transition: opacity 260ms ease;
       }
 
+      .tf-tether {
+        stroke: var(--tf-accent);
+        stroke-width: 1.4;
+        stroke-dasharray: 3 5;
+        opacity: 0;
+        transition: opacity 500ms ease;
+      }
+
       .tf-leader {
         stroke: var(--tf-mark);
         stroke-width: 1.8;
@@ -2545,6 +2752,17 @@ export default class TowerFilm extends Component<{
         flex-wrap: wrap;
       }
 
+      /* on a marked beat the reading is the largest thing in the block,
+         because the term itself is out in the scene */
+      .tf-block:not(:has(.is-glyph)) .tf-romaji {
+        font-size: clamp(17px, 1.5vw, 24px);
+        letter-spacing: 0.2em;
+      }
+
+      .tf-block:not(:has(.is-glyph)) .tf-gloss {
+        font-size: clamp(15px, 1.2vw, 19px);
+      }
+
       .tf-romaji {
         font-family: var(--tf-ui);
         font-size: clamp(12px, 1.02vw, 15px);
@@ -2624,10 +2842,81 @@ export default class TowerFilm extends Component<{
         bottom: 24%;
       }
 
+      /* THE PLATE, which is the one setting that is a designed object
+         rather than a caption. Two columns: the term set VERTICALLY down
+         the right edge, the way it would be on a museum label or a
+         hanging scroll, and the reading and the phrases in a column
+         beside it. A rule between them draws itself down as the plate
+         lands. Ranged type in a corner was never wrong exactly — it was
+         just nothing, and this chapter's beats are the ones that hold
+         longest, so they are the ones that can least afford nothing. */
       .tf-plate .tf-block {
         right: 5.5%;
         top: 50%;
         transform: translateY(-50%);
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: clamp(18px, 2vw, 34px);
+        align-items: start;
+        max-width: min(46ch, 46vw);
+      }
+
+      .tf-plate .tf-plane {
+        grid-column: 1;
+      }
+
+      .tf-plate .tf-plane.is-glyph {
+        grid-column: 2;
+        grid-row: 1 / -1;
+        border-right: 2px solid var(--tf-accent);
+        padding-right: clamp(14px, 1.5vw, 26px);
+        transform-origin: top center;
+        animation: tf-rule-down 820ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      @keyframes tf-rule-down {
+        from {
+          clip-path: inset(0 0 100% 0);
+        }
+
+        to {
+          clip-path: inset(0 0 -4% 0);
+        }
+      }
+
+      .tf-plate .tf-kanji {
+        writing-mode: vertical-rl;
+        margin: 0;
+        font-size: clamp(44px, 5.4vw, 88px);
+        letter-spacing: 0.1em;
+        line-height: 1;
+      }
+
+      .tf-plate .tf-kicker {
+        margin-bottom: 18px;
+      }
+
+      /* the ghost is only ever behind a plate — everywhere else the frame
+         is already carrying the building */
+      .tf-ghost {
+        display: none;
+      }
+
+      .tf-plate .tf-ghost {
+        display: block;
+        position: absolute;
+        right: 3%;
+        top: 50%;
+        transform: translateY(-50%);
+        font-family: var(--tf-ui);
+        font-size: clamp(180px, 30vw, 460px);
+        font-weight: 700;
+        line-height: 0.8;
+        letter-spacing: -0.04em;
+        color: var(--tf-ink);
+        opacity: 0.07;
+        pointer-events: none;
+        z-index: -1;
       }
 
       .tf-point .tf-block {
@@ -2695,6 +2984,11 @@ export default class TowerFilm extends Component<{
         font-size: 10px;
         letter-spacing: 0.06em;
         color: var(--tf-ink2);
+      }
+
+      .is-dark .tf-subs {
+        color: #1a1408;
+        background: rgba(238, 228, 204, 0.82);
       }
 
       .tf-subs {
