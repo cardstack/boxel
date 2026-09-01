@@ -7,9 +7,9 @@
       "lane": "Components & Views",
       "concept": "Tree",
       "symbol": "Tr",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Pretui",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/components/tree.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "component",
       "specExampleCount": 1,
       "specReadmeChars": 1521,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TreeDemo/task-tree\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/TreeDemo/task-tree\"]",
+      "source": "pretui, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

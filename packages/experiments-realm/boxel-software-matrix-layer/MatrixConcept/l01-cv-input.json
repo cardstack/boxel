@@ -8,7 +8,7 @@
       "concept": "Input",
       "symbol": "In",
       "implemented": true,
-      "evidenceTier": "Platform",
+      "evidenceTier": "Pretui",
       "auditStatus": "Implemented",
       "whereImplemented": "boxel-ui: components/input",
       "reference": null,
@@ -39,7 +39,8 @@
       "specExampleCount": 0,
       "specReadmeChars": 819,
       "specExampleIds": "",
-      "verifiedAt": "2026-08-24T00:00:00.000Z"
+      "verifiedAt": "2026-08-24T00:00:00.000Z",
+      "source": "pretui"
     },
     "meta": {
       "adoptsFrom": {

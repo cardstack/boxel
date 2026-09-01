@@ -7,9 +7,9 @@
       "lane": "Fields & Types",
       "concept": "Member Number",
       "symbol": "MN",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/member-number-field.gts",
       "reference": null,
       "catalogMatch": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

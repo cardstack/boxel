@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-shared, pretui"
     },
     "meta": {
       "adoptsFrom": {

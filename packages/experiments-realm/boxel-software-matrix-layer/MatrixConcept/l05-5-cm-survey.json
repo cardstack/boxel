@@ -10,14 +10,14 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: b6ac3a-survey/survey.gts",
       "reference": "catalog: b6ac3a-survey/survey.gts",
       "catalogMatch": "catalog: b6ac3a-survey/survey.gts",
       "provenance": null,
       "domainKit": "Forms",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing \u2014 extracted from catalog listing b6ac3a-survey",
+      "notes": "App 4: Club Membership & Ticketing — extracted from catalog listing b6ac3a-survey",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/survey-card",
       "specTarget": "shared block",
       "consumers": "club-membership, fitted-template, isolated-template, survey-response",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-listing, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

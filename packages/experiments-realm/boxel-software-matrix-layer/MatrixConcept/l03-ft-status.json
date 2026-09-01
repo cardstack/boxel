@@ -39,7 +39,8 @@
       "specKind": "field",
       "specExampleCount": 1,
       "specReadmeChars": 1996,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]",
+      "source": "catalog-listing, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

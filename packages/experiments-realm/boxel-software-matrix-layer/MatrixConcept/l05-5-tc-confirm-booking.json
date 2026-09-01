@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Confirm Booking",
       "symbol": "CB",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/confirm-booking.gts",
       "reference": null,
       "catalogMatch": null,
@@ -17,7 +17,7 @@
       "domainKit": "Events",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing \u2014 UI-exercised: Invited booking confirmed to Going from the app",
+      "notes": "App 4: Club Membership & Ticketing — UI-exercised: Invited booking confirmed to Going from the app",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/confirm-booking",
       "specTarget": "shared block",
       "consumers": "booking, club-membership",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

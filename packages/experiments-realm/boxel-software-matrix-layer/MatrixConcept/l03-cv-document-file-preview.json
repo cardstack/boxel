@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "base"
     },
     "meta": {
       "adoptsFrom": {

@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Plan",
       "symbol": "Pl",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: plan.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Plan",
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

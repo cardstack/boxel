@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Signatory",
       "symbol": "Si",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: signatory.gts",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

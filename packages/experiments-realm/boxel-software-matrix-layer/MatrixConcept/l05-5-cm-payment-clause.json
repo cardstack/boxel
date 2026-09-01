@@ -8,8 +8,8 @@
       "concept": "Payment Clause",
       "symbol": "PC",
       "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "evidenceTier": null,
+      "auditStatus": "Missing",
       "whereImplemented": null,
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": ""
     },
     "meta": {
       "adoptsFrom": {

@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": "QC: No example instance \u2014 an honest one needs a real brand kit built with the CompoundColor/CustomCssVariable blocks. Requesting an example before approval.",
+      "notes": "QC: No example instance — an honest one needs a real brand kit built with the CompoundColor/CustomCssVariable blocks. Requesting an example before approval.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/brand-guide-card",
       "specTarget": "base realm",
       "consumers": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "base"
     },
     "meta": {
       "adoptsFrom": {

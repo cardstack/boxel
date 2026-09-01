@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "SLA Policy",
       "symbol": "SP",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/sla-policy.gts (SlaPolicy CardDef \u2014 per-metric targets + applies() conditions)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/sla-policy.gts (SlaPolicy CardDef — per-metric targets + applies() conditions)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

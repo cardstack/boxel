@@ -8,8 +8,8 @@
       "concept": "Product",
       "symbol": "Pr",
       "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "evidenceTier": null,
+      "auditStatus": "Missing",
       "whereImplemented": null,
       "reference": "experiments: experiments-realm/product.gts | experiments: experiments-realm/ikea-product.gts",
       "catalogMatch": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": ""
     },
     "meta": {
       "adoptsFrom": {

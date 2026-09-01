@@ -7,10 +7,10 @@
       "lane": "Components & Views",
       "concept": "Table of Contents",
       "symbol": "To",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Pretui",
+      "auditStatus": "Implemented",
+      "whereImplemented": "pretui: structure-data.gts",
       "reference": "BSL v0 design records",
       "catalogMatch": null,
       "provenance": "BSL | BSL-addition",
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "pretui"
     },
     "meta": {
       "adoptsFrom": {

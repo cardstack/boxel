@@ -7,17 +7,17 @@
       "lane": "Fields & Types",
       "concept": "Loyalty Tier",
       "symbol": "LT",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/loyalty-tier-field.gts (loyaltyTierField \u2014 tier ladder factory with badge + multiplier)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/loyalty-tier-field.gts (loyaltyTierField — tier ladder factory with badge + multiplier)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing \u2014 in-use example wired via LoyaltyAccount/jason-lim | Re-crawl 2026-08-20: row was Missing while the code was already in the realm. Evidence found by lane-aware class scan + Spec cardInfo.name match.",
+      "notes": "App 4: Club Membership & Ticketing — in-use example wired via LoyaltyAccount/jason-lim | Re-crawl 2026-08-20: row was Missing while the code was already in the realm. Evidence found by lane-aware class scan + Spec cardInfo.name match.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/loyalty-tier-field",
       "specTarget": "shared block",
       "consumers": "club-membership, member, record-attendance, loyalty-dashboard, loyalty-account",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

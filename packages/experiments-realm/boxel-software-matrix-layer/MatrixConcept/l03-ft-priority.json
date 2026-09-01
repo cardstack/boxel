@@ -7,9 +7,9 @@
       "lane": "Fields & Types",
       "concept": "Priority",
       "symbol": "Pr",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/priority-field.gts (priorityField factory — generic; ticket-taxonomy.gts TicketPriorityField is a consumer)",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "field",
       "specExampleCount": 1,
       "specReadmeChars": 1671,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Ticket/1288-invoice-download\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

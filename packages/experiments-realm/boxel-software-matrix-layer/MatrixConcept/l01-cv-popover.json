@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: 19dee3-virtual-try-on-application/46f065-popover/popover.gts | catalog: 46f065-popover/popover.gts",
       "reference": "catalog: 46f065-popover/popover.gts | catalog: 19dee3-virtual-try-on-application/46f065-popover/popover.gts",
       "catalogMatch": "catalog: 46f065-popover/popover.gts | catalog: 19dee3-virtual-try-on-application/46f065-popover/popover.gts",
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-listing, pretui"
     },
     "meta": {
       "adoptsFrom": {

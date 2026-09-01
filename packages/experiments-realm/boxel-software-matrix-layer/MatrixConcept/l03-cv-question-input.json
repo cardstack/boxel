@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: b6ac3a-survey/components/question-input.gts",
       "reference": "catalog: b6ac3a-survey/components/question-input.gts",
       "catalogMatch": "catalog: b6ac3a-survey/components/question-input.gts",
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-listing, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

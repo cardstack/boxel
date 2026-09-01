@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Archive Record",
       "symbol": "AR",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/archive-record.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "command",
       "specExampleCount": 1,
       "specReadmeChars": 1164,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/sourdough-basics\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/sourdough-basics\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

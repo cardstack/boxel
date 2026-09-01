@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Account",
       "symbol": "Ac",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: account.gts",
       "reference": "experiments: experiments-realm/crm/account.gts",
       "catalogMatch": null,
       "provenance": "periodic:Account",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

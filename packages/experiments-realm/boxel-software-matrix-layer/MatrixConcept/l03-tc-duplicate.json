@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Duplicate",
       "symbol": "Du",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/duplicate.gts | experiments-realm/duplicate.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specReadmeCodeBlocks": 2,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "verifiedAt": "2026-08-26T08:27:39.000Z"
+      "verifiedAt": "2026-08-26T08:27:39.000Z",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

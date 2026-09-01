@@ -7,9 +7,9 @@
       "lane": "Components & Views",
       "concept": "Activity Feed",
       "symbol": "AF",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/feed.gts (Feed — the ticket conversation, incl. system SLA events)",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "component",
       "specExampleCount": 1,
       "specReadmeChars": 1360,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ActivityFeedDemo/acme-stream\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/ActivityFeedDemo/acme-stream\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

@@ -10,7 +10,7 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: 41e20f-wedding-table-seating-planner/components/setup-wizard.gts",
       "reference": "catalog: 41e20f-wedding-table-seating-planner/components/setup-wizard.gts",
       "catalogMatch": "catalog: 41e20f-wedding-table-seating-planner/components/setup-wizard.gts",
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-listing"
     },
     "meta": {
       "adoptsFrom": {

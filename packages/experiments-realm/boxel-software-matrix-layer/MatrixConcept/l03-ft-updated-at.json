@@ -7,9 +7,9 @@
       "lane": "Fields & Types",
       "concept": "Updated At",
       "symbol": "UA",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/updated-at-field.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "field",
       "specExampleCount": 1,
       "specReadmeChars": 1165,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/learn-electric-guitar\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/learn-electric-guitar\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

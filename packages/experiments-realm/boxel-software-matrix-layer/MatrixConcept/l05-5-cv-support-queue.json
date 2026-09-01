@@ -7,9 +7,9 @@
       "lane": "Components & Views",
       "concept": "Support Queue",
       "symbol": "SQ",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/queue.gts (Queue CardDef) + https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/queue-view.gts (QueueView) + https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/components/work-rail.gts",
       "reference": null,
       "catalogMatch": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

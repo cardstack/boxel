@@ -35,13 +35,16 @@ const LaneField = enumField(StringField, {
   displayName: 'Lane',
 });
 
+// "POC realm" is retired: a block in the matrix realm is realm code the same
+// way base code is base code, and the label was carrying an unaudited claim on
+// 61 rows that named no file at all. Tier is now a rollup of `source`.
 const EvidenceTierField = enumField(StringField, {
-  options: ['Platform', 'Catalog shared', 'Catalog listing', 'POC realm'],
+  options: ['Platform', 'Catalog shared', 'Catalog listing', 'Realm', 'Pretui'],
   displayName: 'Evidence Tier',
 });
 
 const AuditStatusField = enumField(StringField, {
-  options: ['Implemented', 'POC only', 'Extract from listing', 'Missing'],
+  options: ['Implemented', 'Extract from listing', 'Missing'],
   displayName: 'Audit Status',
 });
 
@@ -81,8 +84,10 @@ function tierClass(tier: string | undefined): string {
       return 'tier-shared';
     case 'Catalog listing':
       return 'tier-listing';
-    case 'POC realm':
-      return 'tier-poc';
+    case 'Realm':
+      return 'tier-realm';
+    case 'Pretui':
+      return 'tier-pretui';
     default:
       return 'tier-none';
   }
@@ -126,6 +131,10 @@ export class MatrixConcept extends CardDef {
   @field symbol = contains(StringField);
   @field implemented = contains(BooleanField);
   @field evidenceTier = contains(EvidenceTierField);
+  // Every tree the crawl found this concept in, comma-joined and attributed
+  // separately — the matrix realm and pretui are two sources, not one
+  // "staging", because both ship a Calendar and they are different components.
+  @field source = contains(StringField);
   @field auditStatus = contains(AuditStatusField);
   @field whereImplemented = contains(StringField);
   @field reference = contains(StringField, {
@@ -227,9 +236,13 @@ export class MatrixConcept extends CardDef {
           background: var(--tier-listing-bg, #ede9fe);
           color: var(--tier-listing-fg, #5b21b6);
         }
-        .tier-poc {
-          background: var(--tier-poc-bg, #fef3c7);
-          color: var(--tier-poc-fg, #92400e);
+        .tier-realm {
+          background: var(--tier-realm-bg, #fef3c7);
+          color: var(--tier-realm-fg, #92400e);
+        }
+        .tier-pretui {
+          background: var(--tier-pretui-bg, #cffafe);
+          color: var(--tier-pretui-fg, #155e75);
         }
         .tier-none {
           background: var(--muted, #f3f4f6);
@@ -259,9 +272,9 @@ export class MatrixConcept extends CardDef {
           }}</span>
         <span class='state-col'>
           {{#if @model.workState}}
-            <span
-              class='state {{stateClass @model.workState}}'
-            >{{displayState @model.workState}}</span>
+            <span class='state {{stateClass @model.workState}}'>{{displayState
+                @model.workState
+              }}</span>
           {{/if}}
         </span>
       </div>
@@ -334,9 +347,13 @@ export class MatrixConcept extends CardDef {
           background: var(--tier-listing-bg, #ede9fe);
           color: var(--tier-listing-fg, #5b21b6);
         }
-        .tier-poc {
-          background: var(--tier-poc-bg, #fef3c7);
-          color: var(--tier-poc-fg, #92400e);
+        .tier-realm {
+          background: var(--tier-realm-bg, #fef3c7);
+          color: var(--tier-realm-fg, #92400e);
+        }
+        .tier-pretui {
+          background: var(--tier-pretui-bg, #cffafe);
+          color: var(--tier-pretui-fg, #155e75);
         }
         .tier-none {
           background: var(--muted, #f3f4f6);
@@ -416,8 +433,11 @@ export class MatrixConcept extends CardDef {
         .tier-listing {
           --tile-edge: var(--tier-listing-fg, #5b21b6);
         }
-        .tier-poc {
-          --tile-edge: var(--tier-poc-fg, #92400e);
+        .tier-realm {
+          --tile-edge: var(--tier-realm-fg, #92400e);
+        }
+        .tier-pretui {
+          --tile-edge: var(--tier-pretui-fg, #155e75);
         }
         .tier-none {
           --tile-edge: var(--border, #e5e7eb);
@@ -690,10 +710,9 @@ export class MatrixConcept extends CardDef {
           <div class='ch-status'>
             <div class='badge-row'>
               {{#if this.hasSpec}}
-                <span
-                  class='state {{this.qualityClass}}'
-                >{{this.bucketName}}
-                  · {{this.score}}/{{this.applicable}}</span>
+                <span class='state {{this.qualityClass}}'>{{this.bucketName}}
+                  ·
+                  {{this.score}}/{{this.applicable}}</span>
               {{/if}}
               {{#if @model.workState}}
                 <span
@@ -869,9 +888,9 @@ export class MatrixConcept extends CardDef {
             {{else}}
               <section class='panel'>
                 <h2>Spec &amp; example</h2>
-                <p class='empty'>No Spec yet — the checklist on the left is
-                  the to-do list. A Spec in the shared realm whose ref
-                  resolves is what makes this concept count as done.</p>
+                <p class='empty'>No Spec yet — the checklist on the left is the
+                  to-do list. A Spec in the shared realm whose ref resolves is
+                  what makes this concept count as done.</p>
               </section>
             {{/if}}
           </div>
@@ -1180,9 +1199,13 @@ export class MatrixConcept extends CardDef {
           background: var(--tier-listing-bg, #ede9fe);
           color: var(--tier-listing-fg, #5b21b6);
         }
-        .tier-poc {
-          background: var(--tier-poc-bg, #fef3c7);
-          color: var(--tier-poc-fg, #92400e);
+        .tier-realm {
+          background: var(--tier-realm-bg, #fef3c7);
+          color: var(--tier-realm-fg, #92400e);
+        }
+        .tier-pretui {
+          background: var(--tier-pretui-bg, #cffafe);
+          color: var(--tier-pretui-fg, #155e75);
         }
         .tier-none {
           background: var(--muted, #f3f4f6);

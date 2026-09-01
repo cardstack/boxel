@@ -7,10 +7,10 @@
       "lane": "Tools & Commands",
       "concept": "Advance Deal",
       "symbol": "AD",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: advance-deal-command.ts",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

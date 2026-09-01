@@ -8,7 +8,7 @@
       "concept": "Switch",
       "symbol": "Sw",
       "implemented": true,
-      "evidenceTier": "Platform",
+      "evidenceTier": "Pretui",
       "auditStatus": "Implemented",
       "whereImplemented": "boxel-ui: boxel-ui/addon/src/components/switch/index.gts | boxel-ui: components/switch",
       "reference": null,
@@ -39,7 +39,8 @@
       "specExampleCount": 0,
       "specReadmeChars": 746,
       "specExampleIds": "",
-      "verifiedAt": "2026-08-24T00:00:00.000Z"
+      "verifiedAt": "2026-08-24T00:00:00.000Z",
+      "source": "pretui"
     },
     "meta": {
       "adoptsFrom": {

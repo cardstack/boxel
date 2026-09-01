@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Candidate",
       "symbol": "Ca",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/candidate.gts (Candidate CardDef) \u2014 ATS pipeline card",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/candidate.gts (Candidate CardDef) — ATS pipeline card",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

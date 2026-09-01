@@ -39,7 +39,8 @@
       "specExampleCount": 0,
       "specReadmeChars": 1148,
       "specExampleIds": "",
-      "verifiedAt": "2026-08-24T00:00:00.000Z"
+      "verifiedAt": "2026-08-24T00:00:00.000Z",
+      "source": "base"
     },
     "meta": {
       "adoptsFrom": {

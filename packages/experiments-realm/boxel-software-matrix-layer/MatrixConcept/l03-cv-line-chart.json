@@ -10,14 +10,14 @@
       "implemented": false,
       "evidenceTier": "Catalog listing",
       "auditStatus": "Extract from listing",
-      "whereImplemented": null,
+      "whereImplemented": "catalog: 04868f-mortgage-calculator/components/line-chart.gts",
       "reference": "catalog: 04868f-mortgage-calculator/components/line-chart.gts | catalog: boxel-surface-demo/mortgage-surface-demo/components/line-chart.gts",
       "catalogMatch": "catalog: 04868f-mortgage-calculator/components/line-chart.gts | catalog: boxel-surface-demo/mortgage-surface-demo/components/line-chart.gts",
       "provenance": "periodic:Chart",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/line-chart.gts, dependency-free SVG, POC tier",
+      "notes": "v1 · Built — experiments-realm/line-chart.gts, dependency-free SVG, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/line-chart",
       "specTarget": "shared block",
       "consumers": "metrics-demo, revenue-os",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-listing, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

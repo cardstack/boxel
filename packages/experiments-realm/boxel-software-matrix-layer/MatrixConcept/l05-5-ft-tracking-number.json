@@ -7,10 +7,10 @@
       "lane": "Fields & Types",
       "concept": "Tracking Number",
       "symbol": "TN",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/tracking-number.gts (TrackingNumberField \u2014 carrier tracking number)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/tracking-number.gts (TrackingNumberField — carrier tracking number)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

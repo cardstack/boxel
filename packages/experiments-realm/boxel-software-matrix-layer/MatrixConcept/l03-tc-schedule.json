@@ -7,10 +7,10 @@
       "lane": "Tools & Commands",
       "concept": "Schedule",
       "symbol": "Sc",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/schedule.gts (Schedule CardDef \u2014 weekly business hours + holidays; utils/sla.ts does the arithmetic against it)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/schedule.gts (Schedule CardDef — weekly business hours + holidays; utils/sla.ts does the arithmetic against it)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Schedule | BSL",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

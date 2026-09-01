@@ -7,17 +7,17 @@
       "lane": "Cards & Models",
       "concept": "Deal",
       "symbol": "De",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: deal.gts",
       "reference": "experiments: experiments-realm/crm/deal.gts",
       "catalogMatch": null,
       "provenance": "periodic:Deal",
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
+      "notes": "v1 · Built — experiments-realm/deal.gts, literal adoption of Opportunity. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/deal",
       "specTarget": "shared block",
       "consumers": "revenue-os",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

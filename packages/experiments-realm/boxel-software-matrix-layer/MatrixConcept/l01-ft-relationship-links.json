@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 3,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "runtime-common"
     },
     "meta": {
       "adoptsFrom": {

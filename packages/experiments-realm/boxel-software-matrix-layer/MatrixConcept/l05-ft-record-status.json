@@ -7,9 +7,9 @@
       "lane": "Fields & Types",
       "concept": "Record Status",
       "symbol": "RS",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/record-status-field.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "field",
       "specExampleCount": 1,
       "specReadmeChars": 1394,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/watercolor-mornings\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/watercolor-mornings\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

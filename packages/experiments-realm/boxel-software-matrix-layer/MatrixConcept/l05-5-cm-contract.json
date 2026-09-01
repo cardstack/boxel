@@ -7,17 +7,17 @@
       "lane": "Cards & Models",
       "concept": "Contract",
       "symbol": "Co",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: contract.gts",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": null,
       "domainKit": "Legal",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/contract.gts; signedAt event fact + daysToExpiry; unblocked Order.contract, Subscription.contract and the Close Won contract step. POC tier",
+      "notes": "v1.1 · Built — experiments-realm/contract.gts; signedAt event fact + daysToExpiry; unblocked Order.contract, Subscription.contract and the Close Won contract step. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contract",
       "specTarget": "shared block",
       "consumers": "close-won, order, subscription",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

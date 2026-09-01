@@ -7,17 +7,17 @@
       "lane": "Cards & Models",
       "concept": "User",
       "symbol": "Us",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: user.gts",
       "reference": "experiments: experiments-realm/user.gts",
       "catalogMatch": null,
       "provenance": "periodic:User",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/user.gts, extended by Teammate. POC tier",
+      "notes": "v1 · Built — experiments-realm/user.gts, extended by Teammate. POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/user",
       "specTarget": "shared block",
       "consumers": "account, activity, invoice, opportunity",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

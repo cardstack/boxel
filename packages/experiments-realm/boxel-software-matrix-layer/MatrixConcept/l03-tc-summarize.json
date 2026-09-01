@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Summarize",
       "symbol": "Su",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/summarize.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "command",
       "specExampleCount": 1,
       "specReadmeChars": 1106,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Note/template-row-discrepancy\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Note/template-row-discrepancy\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Filter",
       "symbol": "Fi",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/utils/filter.ts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "command",
       "specExampleCount": 0,
       "specReadmeChars": 1279,
-      "specExampleIds": null
+      "specExampleIds": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

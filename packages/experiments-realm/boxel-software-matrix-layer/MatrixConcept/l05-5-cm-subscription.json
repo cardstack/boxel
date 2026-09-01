@@ -7,9 +7,9 @@
       "lane": "Cards & Models",
       "concept": "Subscription",
       "symbol": "Su",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/subscription.gts | experiments-realm/subscription.gts",
       "reference": null,
       "catalogMatch": null,
@@ -17,7 +17,7 @@
       "domainKit": "Commerce",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/subscription.gts, computed renewalDate, POC tier",
+      "notes": "v1 · Built — experiments-realm/subscription.gts, computed renewalDate, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/subscription",
       "specTarget": "shared block",
       "consumers": "account-metrics, close-won, invoice, revenue-os, subscriber",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

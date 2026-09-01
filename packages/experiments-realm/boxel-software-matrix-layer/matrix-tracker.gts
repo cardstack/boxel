@@ -340,7 +340,8 @@ export class MatrixTracker extends CardDef {
         'Platform',
         'Catalog shared',
         'Catalog listing',
-        'POC realm',
+        'Realm',
+        'Pretui',
         'No evidence',
       ];
     }

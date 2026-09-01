@@ -8,8 +8,8 @@
       "concept": "Video Poster Metadata",
       "symbol": "VP",
       "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "evidenceTier": null,
+      "auditStatus": "Missing",
       "whereImplemented": null,
       "reference": "chris/filedef-developer-handoff realm (app.boxel.ai)",
       "catalogMatch": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": ""
     },
     "meta": {
       "adoptsFrom": {

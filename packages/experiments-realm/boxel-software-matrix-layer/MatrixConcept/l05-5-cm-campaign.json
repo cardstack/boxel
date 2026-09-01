@@ -7,17 +7,17 @@
       "lane": "Cards & Models",
       "concept": "Campaign",
       "symbol": "Ca",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: campaign.gts",
       "reference": "institutional-meerkat/legal + audited kit realms",
       "catalogMatch": null,
       "provenance": "periodic:Campaign",
       "domainKit": "Sales & Marketing",
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1.1 \u00b7 Built \u2014 experiments-realm/campaign.gts; budget/spend with computed budgetUsedPercent + isOverBudget; attribution via Lead.campaign (lead points at campaign, counts are queries). POC tier | content-calendar declares ContentBundle.campaign but its fixtures leave it null, so this is a declared-not-exercised link rather than a second-consumer proof.",
+      "notes": "v1.1 · Built — experiments-realm/campaign.gts; budget/spend with computed budgetUsedPercent + isOverBudget; attribution via Lead.campaign (lead points at campaign, counts are queries). POC tier | content-calendar declares ContentBundle.campaign but its fixtures leave it null, so this is a declared-not-exercised link rather than a second-consumer proof.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/campaign",
       "specTarget": "shared block",
       "consumers": "lead",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

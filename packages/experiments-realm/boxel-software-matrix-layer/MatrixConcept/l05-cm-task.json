@@ -7,10 +7,10 @@
       "lane": "Cards & Models",
       "concept": "Task",
       "symbol": "Ta",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "experiments-realm/crm/task.gts | experiments-realm/task.gts",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: task.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Task",
@@ -39,7 +39,8 @@
       "specKind": "card",
       "specExampleCount": 1,
       "specReadmeChars": 1588,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Task/ship-stage-1b-card-blocks\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Task/ship-stage-1b-card-blocks\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

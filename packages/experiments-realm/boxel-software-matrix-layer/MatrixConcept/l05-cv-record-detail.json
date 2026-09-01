@@ -7,10 +7,10 @@
       "lane": "Components & Views",
       "concept": "Record Detail",
       "symbol": "RD",
-      "implemented": false,
-      "evidenceTier": null,
-      "auditStatus": "Missing",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Pretui",
+      "auditStatus": "Implemented",
+      "whereImplemented": "pretui: forms-record.gts",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Detail",
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "pretui"
     },
     "meta": {
       "adoptsFrom": {

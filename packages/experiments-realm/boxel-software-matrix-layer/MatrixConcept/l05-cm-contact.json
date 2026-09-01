@@ -7,17 +7,17 @@
       "lane": "Cards & Models",
       "concept": "Contact",
       "symbol": "Co",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": null,
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "realm: contact.gts",
       "reference": "experiments: experiments-realm/contact-card.gts | experiments: experiments-realm/crm/contact.gts",
       "catalogMatch": null,
       "provenance": "periodic:Contact",
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block | App 4 stage-2 finding: role enum (decision maker/champion/\u2026) and account link are CRM-specific; fans consumed Contact with those fields empty. Consider extracting the CRM specifics to an extending card so the base Contact is a plain person. | content-calendar consumes Contact via a Freelancer subtype (specialties + rateNote) and leaves role and account empty \u2014 the App 4 CRM-specifics finding repeating on a second consumer, which strengthens the case for extracting the CRM fields to an extending card.",
+      "notes": "v1 · Built — experiments-realm/contact.gts, POC tier. Existing POC-tier evidence is the old crm/ demo card, not this block | App 4 stage-2 finding: role enum (decision maker/champion/…) and account link are CRM-specific; fans consumed Contact with those fields empty. Consider extracting the CRM specifics to an extending card so the base Contact is a plain person. | content-calendar consumes Contact via a Freelancer subtype (specialties + rateNote) and leaves role and account empty — the App 4 CRM-specifics finding repeating on a second consumer, which strengthens the case for extracting the CRM fields to an extending card.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/contact",
       "specTarget": "shared block",
       "consumers": "booking, content-calendar, convert-lead, deal, loyalty-account, revenue-os, subscriber",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

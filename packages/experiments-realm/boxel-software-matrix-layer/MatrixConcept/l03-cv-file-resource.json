@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": null,
       "workState": null,
-      "notes": "QC: Contract documented but no live example \u2014 needs a file fixture pass.",
+      "notes": "QC: Contract documented but no live example — needs a file fixture pass.",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/file-resource",
       "specTarget": "base realm",
       "consumers": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "base"
     },
     "meta": {
       "adoptsFrom": {

@@ -8,8 +8,8 @@
       "concept": "Map",
       "symbol": "Ma",
       "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "evidenceTier": null,
+      "auditStatus": "Missing",
       "whereImplemented": "experiments-realm/map.gts",
       "reference": null,
       "catalogMatch": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": ""
     },
     "meta": {
       "adoptsFrom": {

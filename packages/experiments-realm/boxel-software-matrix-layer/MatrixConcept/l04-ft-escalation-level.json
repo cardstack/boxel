@@ -7,10 +7,10 @@
       "lane": "Fields & Types",
       "concept": "Escalation Level",
       "symbol": "EL",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/support-agent.gts (AgentTierField L1/L2/L3 \u2014 the tier ladder EscalateTicketCommand moves a ticket up; also carried by Queue)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/support-agent.gts (AgentTierField L1/L2/L3 — the tier ladder EscalateTicketCommand moves a ticket up; also carried by Queue)",
       "reference": null,
       "catalogMatch": null,
       "provenance": null,
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

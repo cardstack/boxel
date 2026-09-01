@@ -8,7 +8,7 @@
       "concept": "Catalog Listing",
       "symbol": "CL",
       "implemented": true,
-      "evidenceTier": "Platform",
+      "evidenceTier": "Catalog shared",
       "auditStatus": "Implemented",
       "whereImplemented": "catalog: catalog-app/listing/listing.gts",
       "reference": null,
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "catalog-shared"
     },
     "meta": {
       "adoptsFrom": {

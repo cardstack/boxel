@@ -7,9 +7,9 @@
       "lane": "Cards & Models",
       "concept": "Person",
       "symbol": "Pe",
-      "implemented": true,
-      "evidenceTier": "Platform",
-      "auditStatus": "Implemented",
+      "implemented": false,
+      "evidenceTier": "Catalog listing",
+      "auditStatus": "Extract from listing",
       "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/person-base",
       "reference": "",
       "catalogMatch": "",
@@ -39,7 +39,8 @@
       "specKind": null,
       "specExampleCount": null,
       "specReadmeChars": null,
-      "specExampleIds": null
+      "specExampleIds": null,
+      "source": "catalog-listing"
     },
     "meta": {
       "adoptsFrom": {

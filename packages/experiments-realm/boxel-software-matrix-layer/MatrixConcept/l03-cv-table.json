@@ -7,9 +7,9 @@
       "lane": "Components & Views",
       "concept": "Table",
       "symbol": "Ta",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Pretui",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/table.gts | experiments-realm/table.gts",
       "reference": null,
       "catalogMatch": null,
@@ -17,7 +17,7 @@
       "domainKit": null,
       "owner": "richard",
       "workState": "Done",
-      "notes": "v1 \u00b7 Built \u2014 experiments-realm/table.gts, POC tier",
+      "notes": "v1 · Built — experiments-realm/table.gts, POC tier",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/table",
       "specTarget": "shared block",
       "consumers": "order-fulfilment-app, revenue-os, table-demo",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "pretui, matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

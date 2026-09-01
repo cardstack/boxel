@@ -7,9 +7,9 @@
       "lane": "Cards & Models",
       "concept": "Activity",
       "symbol": "Ac",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/activity.gts | experiments-realm/boxel-software-matrix-layer/activity.gts | experiments-realm/local-inherit.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specReadmeCodeBlocks": 1,
       "specFileExampleCount": 0,
       "specUsageRef": null,
-      "verifiedAt": "2026-08-26T07:38:42.000Z"
+      "verifiedAt": "2026-08-26T07:38:42.000Z",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

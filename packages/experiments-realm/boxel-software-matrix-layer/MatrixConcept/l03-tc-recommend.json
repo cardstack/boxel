@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Recommend",
       "symbol": "Re",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/recommend.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "command",
       "specExampleCount": 1,
       "specReadmeChars": 1184,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/learn-electric-guitar\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Quest/learn-electric-guitar\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

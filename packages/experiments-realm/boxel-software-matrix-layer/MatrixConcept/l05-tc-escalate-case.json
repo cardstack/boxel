@@ -7,10 +7,10 @@
       "lane": "Tools & Commands",
       "concept": "Escalate Case",
       "symbol": "EC",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/escalate-ticket-command.gts (EscalateTicketCommand \u2014 moves queue + records the reason)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/escalate-ticket-command.gts (EscalateTicketCommand — moves queue + records the reason)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Escalate",
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

@@ -7,10 +7,10 @@
       "lane": "Tools & Commands",
       "concept": "Assign",
       "symbol": "As",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
-      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/auto-assign-ticket-command.gts (AutoAssignTicketCommand \u2014 skill/tier match)",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
+      "whereImplemented": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/commands/auto-assign-ticket-command.gts (AutoAssignTicketCommand — skill/tier match)",
       "reference": null,
       "catalogMatch": null,
       "provenance": "periodic:Assign",
@@ -34,7 +34,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

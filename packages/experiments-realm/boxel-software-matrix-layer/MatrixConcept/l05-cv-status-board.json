@@ -7,9 +7,9 @@
       "lane": "Components & Views",
       "concept": "Status Board",
       "symbol": "SB",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/components/status-board.gts",
       "reference": null,
       "catalogMatch": null,
@@ -39,7 +39,8 @@
       "specKind": "component",
       "specExampleCount": 1,
       "specReadmeChars": 1464,
-      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/StatusBoardDemo/task-board\"]"
+      "specExampleIds": "[\"https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/StatusBoardDemo/task-board\"]",
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {

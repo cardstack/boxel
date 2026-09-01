@@ -7,9 +7,9 @@
       "lane": "Tools & Commands",
       "concept": "Credit Points",
       "symbol": "CP",
-      "implemented": false,
-      "evidenceTier": "POC realm",
-      "auditStatus": "POC only",
+      "implemented": true,
+      "evidenceTier": "Realm",
+      "auditStatus": "Implemented",
       "whereImplemented": "experiments-realm/boxel-software-matrix-layer/credit-points.gts",
       "reference": null,
       "catalogMatch": null,
@@ -17,7 +17,7 @@
       "domainKit": "Loyalty",
       "owner": "richard",
       "workState": "Done",
-      "notes": "App 4: Club Membership & Ticketing \u2014 UI-exercised via RecordAttendance (check-in +100 to Gold member, live balance/ledger update verified)",
+      "notes": "App 4: Club Membership & Ticketing — UI-exercised via RecordAttendance (check-in +100 to Gold member, live balance/ledger update verified)",
       "sharedSpec": "https://realms-staging.stack.cards/richard.tan1/boxel-software-matrix-layer/Spec/credit-points",
       "specTarget": "shared block",
       "consumers": "record-attendance",
@@ -38,7 +38,8 @@
       "aliasOf": null,
       "specReadmeCodeBlocks": 0,
       "specFileExampleCount": 0,
-      "specUsageRef": null
+      "specUsageRef": null,
+      "source": "matrix-realm"
     },
     "meta": {
       "adoptsFrom": {
