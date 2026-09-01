@@ -4517,6 +4517,19 @@ export default class TowerFilm extends Component<{
         display: none;
       }
 
+      /* THE FILM ESCAPES THE APP'S PAGE CONTAINER. `.page` centres a
+         measured column with gutters and a top offset — right for every
+         demo page, and a pink-tinted mat around a film that owns its
+         frame. Both film bodies flatten it; the film's own layout is the
+         page. (This mattered only once tf-page left position: fixed —
+         fixed elements never felt the container.) */
+      body.tf-film .page,
+      body.tf-embedded .page {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+      }
+
       /* the transport waits outside while the front door is open; it
          keeps its height so the frame does not reflow when it returns */
       .tf-controls.is-away {
