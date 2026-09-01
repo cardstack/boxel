@@ -411,7 +411,7 @@ const BEATS: Beat[] = [
        stone, the lens as low as the rig goes, aimed up the whole height.
        The line says the castle is the ground, so the shot stands ON it,
        and the tower is tall because you are finally under it. */
-    cam: { dolly: 1.55, lookY: 4.6, ox: -0.1, pitch: 0, yaw: -18 },
+    cam: { dolly: 2.2, lookY: 5.2, ox: -0.1, pitch: -3, yaw: -18 },
     ch: 0,
     cut: true,
     gloss: 'castle',
@@ -423,7 +423,7 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'SHIRO',
     ticks: 5,
-    toCam: { dolly: 1.3, lookY: 5.4, ox: -0.1, pitch: 2, yaw: -4 },
+    toCam: { dolly: 1.85, lookY: 5.7, ox: -0.1, pitch: -3, yaw: -5 },
   },
   {
     cam: { dolly: 0.72, lookY: 1.0, ox: 0.16, pitch: 8, yaw: 2 },
@@ -892,7 +892,6 @@ const BEATS: Beat[] = [
     romaji: 'BǍOTǍ',
     style: 1,
     ticks: 5,
-    wx: 3,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 226 },
@@ -904,11 +903,9 @@ const BEATS: Beat[] = [
     kicker: 'VIETNAM',
     vo: 'Vietnam. A masonry body, thin tiled eaves. You are not meant to climb it. A reliquary that reads as a tower.',
     mode: 'lower',
-    haze: 0.55,
     romaji: 'THÁP',
     style: 2,
     ticks: 5,
-    wx: 0,
   },
   {
     cam: { dolly: 0.66, lookY: 1.8, ox: -0.1, pitch: 10, yaw: 233 },
@@ -922,7 +919,6 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'PRANG',
     style: 3,
-    theme: 1,
     ticks: 4,
   },
   {
@@ -937,7 +933,6 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'PRASAT',
     style: 4,
-    theme: 2,
     ticks: 5,
   },
   {
@@ -956,7 +951,6 @@ const BEATS: Beat[] = [
     mode: 'lower',
     romaji: 'CAMİ',
     style: 5,
-    theme: 0,
     ticks: 5,
   },
 
@@ -1338,8 +1332,28 @@ export default class TowerFilm extends Component<{
     });
   }
 
-  get railStyle(): string {
-    return `width:${Math.round(((this.beatIndex + 1) / this.beats.length) * 100)}%`;
+  /**
+   * THE TRANSPORT — a broadcast bar, not a thermometer. One segment per
+   * chapter, sized by the chapter's actual running time, filled by
+   * WHOLE-film progress (the old bar measured the current cut, so a
+   * skip made it lie), and clickable: the segments are the same re-cut
+   * the menu and the arrows perform.
+   */
+  get transport() {
+    const here = this.absoluteIndex;
+    return this.contents.map((c) => {
+      const done = here >= c.head + c.shots;
+      const fill = done
+        ? 100
+        : here < c.head
+          ? 0
+          : Math.round(((here - c.head + 1) / c.shots) * 100);
+      return {
+        ...c,
+        fillStyle: `width:${fill}%`,
+        flexStyle: `flex:${c.secs}`,
+      };
+    });
   }
 
   /**
@@ -1367,6 +1381,18 @@ export default class TowerFilm extends Component<{
     return [0, 1, 2, 3].map((i) =>
       n <= 1 ? first : first + (Math.min(i, n - 1) * (last - first)) / (n - 1)
     );
+  }
+
+  /**
+   * Thai and Khmer are not kanji: their ascenders, vowel marks and
+   * subscripts stand far outside a CJK-tuned glyph box, so at the kanji
+   * size they collide with the kicker above and the reading below. Tall
+   * scripts take a reduced setting with real leading.
+   */
+  get glyphTone(): string {
+    return /[฀-๿ក-៿]/.test(this.beat.kanji ?? '')
+      ? 'is-tall'
+      : '';
   }
 
   /** the lineup's current kanji; empty between lineups */
@@ -1565,6 +1591,9 @@ export default class TowerFilm extends Component<{
           film.style(c.style);
         }
         film.time(4.4);
+        /* each stamp lands with the scene's own construction hit; the
+           final one — the film's subject — gets the bell */
+        film.ping(step < beat.cycle.length - 1 ? 0 : 99);
       }
     }
 
@@ -1656,10 +1685,39 @@ export default class TowerFilm extends Component<{
    */
   private wear(film: FilmApi) {
     const p = film.palette();
-    if (!p.time || p.time === this.wearing) {
+    if (!p.time) {
       return;
     }
-    this.wearing = p.time;
+    /**
+     * THE INK IS JUDGED AGAINST WHAT IS ACTUALLY ON SCREEN. The paper
+     * alone lied: a noon paper under a heavy grade, a dim, and thick
+     * haze is a DARK frame wearing a light theme, and dark ink on it
+     * disappears. So the measured luminance is discounted by the
+     * grade's own brightness, by whether this beat runs the dim, and
+     * by its haze — and the type flips to light whenever the frame it
+     * sits on has genuinely gone dark, not merely when the clock says
+     * night.
+     */
+    const GB: Record<string, number> = {
+      amber: 1.08,
+      chalk: 1.27,
+      ink: 1.0,
+      iron: 0.9,
+      plate: 1.09,
+    };
+    const beat = this.beat;
+    const dimmed = beat.trace || beat.to ? 0.74 : 1;
+    const eff =
+      luminance(p.paper) *
+      (GB[this.grade] ?? 1) *
+      dimmed *
+      (1 - 0.25 * (beat.haze ?? 0));
+    const dark = eff < 0.42;
+    const sig = `${p.time}${dark ? '#d' : '#l'}`;
+    if (sig === this.wearing) {
+      return;
+    }
+    this.wearing = sig;
     const el = this.pageEl;
     if (!el) {
       return;
@@ -1674,11 +1732,10 @@ export default class TowerFilm extends Component<{
      * The scrims are mixed from the scene's own paper, so at night they
      * are a dark wash — and dark ink on a dark wash is unreadable however
      * carefully the scrim was tuned. Rather than hand-pick a palette per
-     * hour, the ink is DERIVED: measure the paper and invert below the
-     * threshold. One rule, right for all four hours and for any theme
-     * anybody adds later.
+     * hour, the ink is DERIVED — from the frame's effective luminance,
+     * computed above. One rule, right for all four hours, every grade,
+     * and any theme anybody adds later.
      */
-    const dark = luminance(p.paper) < 0.42;
     el.classList.toggle('is-dark', dark);
     el.style.setProperty('--tf-ink', dark ? '#f7f0e0' : p.ink);
     el.style.setProperty('--tf-ink2', dark ? '#bdb3a0' : p.ink2);
@@ -2340,7 +2397,10 @@ export default class TowerFilm extends Component<{
                 {{#unless b.mark}}
                   {{#if b.kanji}}
                     <div class="tf-plane is-glyph">
-                      <p class="tf-kanji" {{motion id="kanji" role="glyph"}}>
+                      <p
+                        class="tf-kanji {{this.glyphTone}}"
+                        {{motion id="kanji" role="glyph"}}
+                      >
                         {{b.kanji}}
                       </p>
                     </div>
@@ -2389,16 +2449,14 @@ export default class TowerFilm extends Component<{
                   (n.removed "read")
                 }}
                 @opacity={{array 1 0}}
-                @y={{array 0 -14}}
-                @duration={{0.2}}
+                @duration={{0.3}}
                 @ease="easeIn"
               />
               <n.Tween
                 @of={{n.inserted "kick"}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
                 @opacity={{array 0 1}}
-                @duration={{0.44}}
-                @ease={{array 0.3 0.9 0.2 1}}
+                @duration={{0.6}}
+                @ease="easeOut"
               />
               {{! THE HERO MOMENT, and it is a mask rather than a fade: each
               character rises out of its own baseline behind a clip that
@@ -2411,25 +2469,18 @@ export default class TowerFilm extends Component<{
                 @of={{n.inserted "glyph"}}
                 @by="character"
                 @order="center"
-                @stagger={{0.07}}
+                @stagger={{0.09}}
                 @delay={{0.12}}
-                @clipPath={{array
-                  "inset(110% 0 -14% 0)"
-                  "inset(-14% 0 -14% 0)"
-                }}
-                @y={{array 34 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.76}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{1.0}}
+                @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "read"}}
                 @delay={{0.5}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
-                @y={{array 8 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.52}}
-                @ease={{array 0.22 1 0.36 1}}
+                @duration={{0.7}}
+                @ease="easeOut"
               />
               {{! four slots, landing ACROSS the beat rather than together —
               and paced against the measured read (see `sayAt`), so the
@@ -2438,38 +2489,30 @@ export default class TowerFilm extends Component<{
               <n.Tween
                 @of={{n.inserted "s0"}}
                 @delay={{get this.sayAt 0}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
-                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.56}}
-                @ease={{array 0.2 1 0.32 1}}
+                @duration={{0.8}}
+                @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s1"}}
                 @delay={{get this.sayAt 1}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
-                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.56}}
-                @ease={{array 0.2 1 0.32 1}}
+                @duration={{0.8}}
+                @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s2"}}
                 @delay={{get this.sayAt 2}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
-                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.56}}
-                @ease={{array 0.2 1 0.32 1}}
+                @duration={{0.8}}
+                @ease="easeOut"
               />
               <n.Tween
                 @of={{n.inserted "s3"}}
                 @delay={{get this.sayAt 3}}
-                @clipPath={{array "inset(0 100% 0 0)" "inset(0 -2% 0 0)"}}
-                @y={{array 16 0}}
                 @opacity={{array 0 1}}
-                @duration={{0.56}}
-                @ease={{array 0.2 1 0.32 1}}
+                @duration={{0.8}}
+                @ease="easeOut"
               />
               <n.Tween
                 @of={{array
@@ -2479,8 +2522,7 @@ export default class TowerFilm extends Component<{
                   (n.removed "s3")
                 }}
                 @opacity={{array 1 0}}
-                @y={{array 0 -16}}
-                @duration={{0.2}}
+                @duration={{0.3}}
                 @ease="easeIn"
               />
             </n.Parallel>
@@ -2534,11 +2576,22 @@ export default class TowerFilm extends Component<{
             <p class="tf-subs">{{this.beat.vo}}</p>
           {{/if}}
 
-          {{! the chapter rail: where we are in the argument }}
-          <div class="tf-rail" aria-hidden="true">
+          {{! the transport: one segment per chapter, filled by the whole
+          film's progress, and each segment is a door into its chapter }}
+          <div class="tf-rail">
             <span class="tf-rail-n">{{this.chapter.n}}</span>
             <span class="tf-rail-t">{{this.chapter.title}}</span>
-            <span class="tf-rail-bar"><i style={{this.railStyle}}></i></span>
+            <span class="tf-rail-segs">
+              {{#each this.transport as |c|}}
+                <button
+                  type="button"
+                  class="tf-rail-seg {{if c.here 'is-here'}}"
+                  style={{c.flexStyle}}
+                  title="{{c.n}} {{c.title}}"
+                  {{on "click" (fn this.pick c.head)}}
+                ><i style={{c.fillStyle}}></i></button>
+              {{/each}}
+            </span>
           </div>
         {{/if}}
 
@@ -2582,13 +2635,23 @@ export default class TowerFilm extends Component<{
         {{! THE GATE. The film is narrated, so the front door asks — and
         the click that answers is the same gesture autoplay policy wants.
         The scene stands behind it, already seated on the opening frame. }}
+        {{! FRONT MATTER. The gate runs the title package: a rule draws
+        down like a hanging scroll, the kanji settle out of a blur one
+        after the other, the wordmark tracks IN from letterspaced air,
+        and the seal stamps last — the same seal-red the lineup stamps
+        with, so the film opens and closes in one visual language. }}
         {{#if this.gate}}
           <div class="tf-gate">
-            <div class="tf-gate-in">
-              <p class="tf-gate-k">天守</p>
-              <p class="tf-gate-t">TOWERS</p>
-              <p class="tf-gate-s">A construction study · {{this.runtime}}</p>
-              <div class="tf-gate-row">
+            <div class="tf-gate-in tf-matter">
+              <i class="tf-mg-rule" aria-hidden="true"></i>
+              <p class="tf-gate-k"><span class="tf-mg-g1">天</span><span
+                  class="tf-mg-g2"
+                >守</span></p>
+              <p class="tf-gate-t tf-mg-mark">TOWERS</p>
+              <p class="tf-gate-s tf-mg-sub">A construction study ·
+                {{this.runtime}}</p>
+              <span class="tf-mg-seal" aria-hidden="true">普請</span>
+              <div class="tf-gate-row tf-mg-row">
                 <button
                   type="button"
                   class="tf-go"
@@ -2611,11 +2674,21 @@ export default class TowerFilm extends Component<{
         its own ending; watching again is the viewer's choice. }}
         {{#if this.ended}}
           <Choreo class="tf-end" as |m|>
-            <div class="tf-end-in" {{motion id="end" role="card"}}>
-              <p class="tf-end-k">終</p>
-              <p class="tf-end-t">TOWERS</p>
-              <p class="tf-end-s">A construction study</p>
-              <div class="tf-gate-row">
+            {{! BACK MATTER — the same package, run in reverse order of
+            importance: the end glyph, the mark, then the credits a
+            finished film owes. }}
+            <div class="tf-end-in tf-matter" {{motion id="end" role="card"}}>
+              <i class="tf-mg-rule" aria-hidden="true"></i>
+              <p class="tf-end-k"><span class="tf-mg-g1">終</span></p>
+              <p class="tf-end-t tf-mg-mark">TOWERS</p>
+              <p class="tf-end-s tf-mg-sub">A construction study</p>
+              <span class="tf-mg-seal" aria-hidden="true">天守</span>
+              <p class="tf-mg-credits">
+                <span>Scene — threeui · Meng To</span>
+                <span>Voice — Calvin · ElevenLabs</span>
+                <span>Cut by a score · Choreo</span>
+              </p>
+              <div class="tf-gate-row tf-mg-row">
                 <button
                   type="button"
                   class="tf-go"
@@ -2850,19 +2923,19 @@ export default class TowerFilm extends Component<{
          DETAIL is rich and close; COMPARISON is a museum plate, flat and
          even, because a comparison that flatters one subject is not one. */
       .is-grade-amber {
-        --tf-lut: saturate(1.06) contrast(1.02) brightness(1.08);
+        --tf-lut: saturate(0.97) contrast(1) brightness(1.18);
         --tf-warm: #ffbe6a;
         --tf-cool: #2c4a6b;
-        --tf-grade-a: 0.5;
-        --tf-vig-a: 0.9;
+        --tf-grade-a: 0.32;
+        --tf-vig-a: 0.5;
       }
 
       .is-grade-iron {
-        --tf-lut: saturate(0.58) contrast(1.2) brightness(0.97) sepia(0.14);
+        --tf-lut: saturate(0.7) contrast(1.06) brightness(1.12) sepia(0.08);
         --tf-warm: #d8c39a;
         --tf-cool: #1d2f45;
-        --tf-grade-a: 0.78;
-        --tf-vig-a: 1.15;
+        --tf-grade-a: 0.52;
+        --tf-vig-a: 0.65;
       }
 
       /* MIDDAY, and it is meant to be the brightest thing in the film.
@@ -2873,27 +2946,27 @@ export default class TowerFilm extends Component<{
          chapters that are deliberately heavier. Contrast between
          chapters is a bigger effect than contrast inside one. */
       .is-grade-chalk {
-        --tf-lut: saturate(0.9) contrast(1.05) brightness(1.27);
+        --tf-lut: saturate(0.92) contrast(1) brightness(1.34);
         --tf-warm: #fffdf4;
         --tf-cool: #6f92a6;
         --tf-grade-a: 0.3;
-        --tf-vig-a: 0.4;
+        --tf-vig-a: 0.22;
       }
 
       .is-grade-ink {
-        --tf-lut: saturate(1.16) contrast(1.16) brightness(1.0);
+        --tf-lut: saturate(1.01) contrast(1.04) brightness(1.15);
         --tf-warm: #ffab52;
         --tf-cool: #17222f;
-        --tf-grade-a: 0.7;
-        --tf-vig-a: 1.2;
+        --tf-grade-a: 0.44;
+        --tf-vig-a: 0.68;
       }
 
       .is-grade-plate {
-        --tf-lut: saturate(0.94) contrast(1.01) brightness(1.09);
+        --tf-lut: saturate(0.9) contrast(0.99) brightness(1.18);
         --tf-warm: #f0e2c4;
         --tf-cool: #55564a;
-        --tf-grade-a: 0.28;
-        --tf-vig-a: 0.62;
+        --tf-grade-a: 0.2;
+        --tf-vig-a: 0.36;
       }
 
       .tf-wipe {
@@ -2993,8 +3066,8 @@ export default class TowerFilm extends Component<{
         opacity: 0;
         background: radial-gradient(
           76% 66% at 50% 48%,
-          rgba(24, 18, 8, 0.24) 0%,
-          rgba(24, 18, 8, 0.46) 100%
+          rgba(24, 18, 8, 0.16) 0%,
+          rgba(24, 18, 8, 0.34) 100%
         );
       }
 
@@ -3173,6 +3246,13 @@ export default class TowerFilm extends Component<{
 
       .tf-say:last-child {
         margin-bottom: 0;
+      }
+
+      /* tall scripts (Thai, Khmer) at kanji size collide with their
+         neighbours; scale the whole set box and give the marks headroom */
+      .tf-kanji.is-tall {
+        zoom: 0.58;
+        line-height: 1.5;
       }
 
       /* ---- lines that DO what they SAY ------------------------------ *
@@ -3472,18 +3552,50 @@ export default class TowerFilm extends Component<{
         color: var(--tf-accent);
       }
 
-      .tf-rail-bar {
-        display: block;
-        width: 132px;
-        height: 2px;
+      .tf-rail-segs {
+        display: flex;
+        gap: 5px;
+        width: 240px;
+      }
+
+      /* each segment is a 13px-tall click target drawing a hairline
+         track with its fill on top; the current chapter's bar thickens */
+      .tf-rail-seg {
+        appearance: none;
+        position: relative;
+        border: 0;
+        height: 13px;
+        padding: 0;
+        background: transparent;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+
+      .tf-rail-seg::after {
+        content: '';
+        position: absolute;
+        inset: 5px 0 auto;
+        height: 3px;
         background: var(--tf-rule);
       }
 
-      .tf-rail-bar i {
-        display: block;
-        height: 2px;
+      .tf-rail-seg i {
+        position: absolute;
+        left: 0;
+        top: 5px;
+        height: 3px;
+        z-index: 1;
         background: var(--tf-accent);
         transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+
+      .tf-rail-seg.is-here i {
+        top: 4px;
+        height: 5px;
+      }
+
+      .tf-rail-seg:hover::after {
+        background: var(--tf-ink2);
       }
 
       .tf-rig {
@@ -3729,6 +3841,153 @@ export default class TowerFilm extends Component<{
 
       .tf-go.is-quiet:hover {
         border-color: #f2e9d2;
+      }
+
+      /* ---- the title package ---------------------------------------- *
+         One motion system for front and back matter, staged like a
+         broadcast title: rule, glyphs, mark, sub, seal, controls. All
+         CSS — these screens live outside the score on purpose, since
+         both exist precisely when the film is not running. */
+      .tf-matter {
+        position: relative;
+      }
+
+      .tf-mg-rule {
+        display: block;
+        width: 1px;
+        height: 56px;
+        margin: 0 auto 18px;
+        background: rgba(247, 240, 224, 0.65);
+        transform-origin: 50% 0;
+        animation: tf-mg-rule 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+
+      @keyframes tf-mg-rule {
+        0% {
+          transform: scaleY(0);
+        }
+
+        100% {
+          transform: scaleY(1);
+        }
+      }
+
+      .tf-mg-g1,
+      .tf-mg-g2 {
+        display: inline-block;
+        animation: tf-mg-glyph 1300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 350ms;
+      }
+
+      .tf-mg-g2 {
+        animation-delay: 650ms;
+      }
+
+      @keyframes tf-mg-glyph {
+        0% {
+          opacity: 0;
+          filter: blur(16px);
+          transform: translateY(10px);
+        }
+
+        100% {
+          opacity: 1;
+          filter: blur(0);
+          transform: translateY(0);
+        }
+      }
+
+      /* the wordmark tracks IN — from letterspaced air to its set width,
+         the oldest move in broadcast titles because nothing else says
+         "this is the name" as quietly */
+      .tf-mg-mark {
+        animation: tf-mg-track 1400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: 1050ms;
+      }
+
+      @keyframes tf-mg-track {
+        0% {
+          opacity: 0;
+          letter-spacing: 1.1em;
+        }
+
+        100% {
+          opacity: 1;
+          letter-spacing: 0.5em;
+        }
+      }
+
+      .tf-mg-sub {
+        animation: tf-mg-fade 800ms ease-out both;
+        animation-delay: 1650ms;
+      }
+
+      .tf-mg-row {
+        animation: tf-mg-fade 800ms ease-out both;
+        animation-delay: 2250ms;
+      }
+
+      .tf-mg-credits {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin: 0 0 22px;
+        font-size: 11px;
+        letter-spacing: 0.14em;
+        color: rgba(247, 240, 224, 0.6);
+        animation: tf-mg-fade 900ms ease-out both;
+        animation-delay: 2050ms;
+      }
+
+      @keyframes tf-mg-fade {
+        0% {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* the seal: the lineup's stamp, miniature — it lands hard and
+         late, canted the way a hand cants it */
+      .tf-mg-seal {
+        position: absolute;
+        top: 8px;
+        right: -34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 58px;
+        writing-mode: vertical-rl;
+        font-family: var(--tf-display);
+        font-size: 19px;
+        letter-spacing: 0.14em;
+        color: #f7f0e0;
+        background: var(--tf-mark);
+        border-radius: 3px;
+        animation: tf-mg-seal 500ms cubic-bezier(0.16, 1.2, 0.3, 1) both;
+        animation-delay: 1900ms;
+      }
+
+      @keyframes tf-mg-seal {
+        0% {
+          opacity: 0;
+          transform: rotate(-4deg) scale(1.6);
+        }
+
+        30% {
+          opacity: 1;
+          transform: rotate(-4deg) scale(0.97);
+        }
+
+        100% {
+          opacity: 0.94;
+          transform: rotate(-4deg) scale(1);
+        }
       }
 
       /* ---- the end card ---------------------------------------------- */
