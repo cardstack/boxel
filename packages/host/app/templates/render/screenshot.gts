@@ -107,7 +107,9 @@ class RenderScreenshotTemplate extends Component<Signature> {
     {{! The `data-render-envelope` attribute reuses the capture engine's
         applied-size wait (the deterministic signal that this box has laid
         out at the declared size); `data-render-screenshot` names the slot
-        for the engine's stale-render guard. }}
+        so that wait matches only this slot's envelope — the engine's guard
+        against capturing a prior slot's still-mounted box when consecutive
+        slots declare the same dimensions. }}
     <div
       data-render-envelope
       data-render-screenshot={{@model.name}}

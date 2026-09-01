@@ -1,6 +1,7 @@
 import {
   cleanCapturedHTML,
   declaredCaptureSpecHash,
+  shouldCarryForwardDeclaredEntry,
   delay,
   logger,
   SCREENSHOT_DEFAULT_BACKGROUND,
@@ -1457,16 +1458,30 @@ async function detectTerminalPrerenderError(
 // to the DOM. The parent render status stays 'ready' across an envelope
 // change, so waitForPrerenderSettle alone can't distinguish the new box from
 // the old one.
+// When `slotName` is given, only an envelope whose `data-render-screenshot`
+// names that slot satisfies the wait — the stale-render guard for
+// consecutive render-based captures whose declared boxes coincide (the box
+// dimensions alone can't tell slot A's settled render from slot B's).
 async function waitForEnvelopeBox(
   page: Page,
   envelope: { width: number; height: number },
   opts?: CaptureOptions,
+  slotName?: string,
 ): Promise<void> {
   await page.waitForFunction(
-    (w: number, h: number) => {
-      let el = document.querySelector(
+    (w: number, h: number, name: string | null) => {
+      let el: HTMLElement | null = null;
+      for (let candidate of document.querySelectorAll<HTMLElement>(
         '[data-render-envelope]',
-      ) as HTMLElement | null;
+      )) {
+        if (
+          name === null ||
+          candidate.getAttribute('data-render-screenshot') === name
+        ) {
+          el = candidate;
+          break;
+        }
+      }
       if (!el) {
         return false;
       }
@@ -1475,6 +1490,7 @@ async function waitForEnvelopeBox(
     { timeout: effectiveRouteWaitTimeoutMs(opts) },
     envelope.width,
     envelope.height,
+    slotName ?? null,
   );
 }
 
@@ -1854,7 +1870,7 @@ async function captureRenderBasedEntry(
   await transitionTo(page, 'render.screenshot', name);
   await waitForRoutePathSuffix(page, `/screenshot/${name}`, opts);
   await waitForPrerenderSettle(page);
-  await waitForEnvelopeBox(page, box, opts);
+  await waitForEnvelopeBox(page, box, opts, name);
   let terminal = await detectTerminalPrerenderError(page);
   if (terminal) {
     return renderCaptureToError(
@@ -1942,17 +1958,14 @@ export async function captureDeclaredScreenshots(
       background: payload.background ?? SCREENSHOT_DEFAULT_BACKGROUND,
       keyBy: payload.keyBy ?? 'generation',
     };
-    let prior = args.priorManifest?.[name];
     if (
-      resolved.keyBy === 'file-content' &&
-      args.contentHash &&
-      prior &&
-      prior.specHash === specHash &&
-      prior.sourceContentHash === args.contentHash
+      shouldCarryForwardDeclaredEntry({
+        keyBy: resolved.keyBy,
+        specHash,
+        prior: args.priorManifest?.[name],
+        contentHash: args.contentHash,
+      })
     ) {
-      // Same capture identity over the same source bytes: carry the prior
-      // entry forward without re-rendering — a generation advance alone (a
-      // title edit, say) must not re-decode large media.
       entries.push({
         name,
         specHash,

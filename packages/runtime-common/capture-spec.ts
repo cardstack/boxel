@@ -789,6 +789,31 @@ export interface ScreenshotManifestEntry {
 
 export type ScreenshotManifest = Record<string, ScreenshotManifestEntry>;
 
+// The engine-side carry-forward decision for one declared slot: a
+// `file-content`-keyed entry whose capture identity (spec hash) and source
+// bytes (content hash) both match the prior manifest's is reused without
+// re-rendering — a generation advance alone (a dependency edit, say) must
+// not re-decode large media. Everything else re-captures.
+export function shouldCarryForwardDeclaredEntry({
+  keyBy,
+  specHash,
+  prior,
+  contentHash,
+}: {
+  keyBy: 'generation' | 'file-content';
+  specHash: string;
+  prior: ScreenshotManifestEntry | undefined;
+  contentHash: string | null | undefined;
+}): boolean {
+  return (
+    keyBy === 'file-content' &&
+    !!contentHash &&
+    !!prior &&
+    prior.specHash === specHash &&
+    prior.sourceContentHash === contentHash
+  );
+}
+
 // The durable served URL for one capture of one instance: the platform's
 // only public screenshot URL form. A re-capture changes what this URL
 // serves, never the URL itself.

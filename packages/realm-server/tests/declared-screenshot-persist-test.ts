@@ -12,6 +12,7 @@ import {
   declaredCaptureSpecHash,
   logger,
   query,
+  shouldCarryForwardDeclaredEntry,
   type ScreenshotManifest,
 } from '@cardstack/runtime-common';
 import { persistDeclaredScreenshots } from '@cardstack/runtime-common/index-runner/prerender-html-visit';
@@ -262,5 +263,95 @@ module(basename(import.meta.filename), function (hooks) {
     let { manifest, errors } = await persist({ result: undefined });
     assert.strictEqual(manifest, null);
     assert.deepEqual(errors, []);
+  });
+
+  // The engine-side carry-forward decision (`captureDeclaredScreenshots`
+  // consults this before rendering a slot). Pinned as a unit because the
+  // eager pass cannot yet reach it end-to-end: capture runs only for `.json`
+  // card instances, and `keyBy: 'file-content'` is only legal on file-backed
+  // defs, whose files don't capture in this pass yet.
+  module('shouldCarryForwardDeclaredEntry', function () {
+    const specHash = 'a'.repeat(64);
+    const priorEntry = {
+      specHash,
+      objectKey: 'f'.repeat(64),
+      contentType: 'image/png',
+      width: 400,
+      height: 300,
+      deviceScaleFactor: 2,
+      sourceContentHash: 'abc123',
+    };
+
+    test('carries forward when spec hash and content hash both match the prior entry', function (assert) {
+      assert.true(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash,
+          prior: priorEntry,
+          contentHash: 'abc123',
+        }),
+      );
+    });
+
+    test('a generation-keyed slot always re-captures', function (assert) {
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'generation',
+          specHash,
+          prior: priorEntry,
+          contentHash: 'abc123',
+        }),
+      );
+    });
+
+    test('a spec change re-captures', function (assert) {
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash: 'b'.repeat(64),
+          prior: priorEntry,
+          contentHash: 'abc123',
+        }),
+      );
+    });
+
+    test('a source-content change re-captures', function (assert) {
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash,
+          prior: priorEntry,
+          contentHash: 'def456',
+        }),
+      );
+    });
+
+    test('no prior entry or no content hash re-captures', function (assert) {
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash,
+          prior: undefined,
+          contentHash: 'abc123',
+        }),
+      );
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash,
+          prior: priorEntry,
+          contentHash: undefined,
+        }),
+      );
+      assert.false(
+        shouldCarryForwardDeclaredEntry({
+          keyBy: 'file-content',
+          specHash,
+          prior: { ...priorEntry, sourceContentHash: undefined },
+          contentHash: 'abc123',
+        }),
+        'a prior entry that recorded no source hash never matches',
+      );
+    });
   });
 });

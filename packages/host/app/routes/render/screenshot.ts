@@ -28,7 +28,7 @@ export interface Model {
 export default class RenderScreenshotRoute extends Route<Model> {
   @service declare private cardService: CardService;
 
-  beforeModel(transition: Transition) {
+  async beforeModel(transition: Transition) {
     let parentModel = this.modelFor('render') as ParentModel | undefined;
     // the global use below is to support in-browser rendering, where we
     // actually don't have the ability to lookup the parent route using
@@ -36,6 +36,10 @@ export default class RenderScreenshotRoute extends Route<Model> {
     let renderModel =
       parentModel ??
       ((globalThis as any).__renderModel as ParentModel | undefined);
+    // Like the sibling render routes, wait for the parent model to settle
+    // before judging `instance` — a navigation that lands before settle
+    // should wait, not abort.
+    await renderModel?.readyPromise;
     if (!renderModel?.instance) {
       // the lack of an instance is dealt with in the parent route
       transition.abort();
