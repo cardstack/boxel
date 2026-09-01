@@ -86,8 +86,17 @@ export default class NetworkService extends Service {
       string,
       string
     >;
-    for (let { prefix, alias } of PREFIX_REALMS) {
-      let servedAt = prefixRealmURLs[prefix];
+    let configuredURLs = config as unknown as Record<string, string>;
+    for (let { prefix, alias, hostConfigKey } of PREFIX_REALMS) {
+      // The map is authoritative, and the realm-list property is a floor: a
+      // config assembled without the map — an older bundle, a serving path
+      // that does not carry it — must still register the prefixes it can name,
+      // because a realm whose prefix goes unregistered cannot resolve a module
+      // at all. Reading the property here does not widen what any other
+      // consumer sees, since nothing is written back: a realm the environment
+      // has trimmed from its lists simply has no floor, and takes its prefix
+      // from the map alone.
+      let servedAt = prefixRealmURLs[prefix] ?? configuredURLs[hostConfigKey];
       if (typeof servedAt !== 'string' || servedAt === '') {
         continue;
       }
