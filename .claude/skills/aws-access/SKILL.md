@@ -144,7 +144,23 @@ Two operational notes when fanning these out:
 
 The staging/prod boxel Postgres instances are **private** (`PubliclyAccessible: false`) and live inside the cardstack VPC. They are not directly reachable from a developer laptop. The only path Claude uses is SSM port-forwarding through the realm-server ECS task, authenticated as the read-only `claude_readonly_user` DB user.
 
-### Path A — SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
+### Path A (preferred) — `scripts/claude-db.sh`
+
+One command, and the whole port-forward dance is inside it:
+
+```sh
+scripts/claude-db.sh staging -c "SELECT count(*) FROM boxel_index"
+scripts/claude-db.sh prod    -f query.sql
+scripts/claude-db.sh staging -c "SELECT 1" -- -P format=aligned   # psql args after --
+```
+
+Use this rather than driving the steps by hand. Assembling the connection across several commands is where a credential ends up somewhere it shouldn't — the script reads the password from SSM straight into the psql invocation, so it is never written to disk and never printed. It also connects only as `${CLAUDE_DB_USER}`, verifies it actually did and that the user is in `readonly_role` before running your statement, refuses anything that isn't read-only, and tears the tunnel down on every exit path.
+
+**Never** materialize the password some other way to get around a tooling problem — no `~/.pgpass`, no temp file, no `export` into a file that outlives the command. If this script cannot do what you need, extend it.
+
+The manual sequence below is the reference for what the script does, and for the cases it does not cover (the EFS browser, ad-hoc ports).
+
+### Path B — the same thing by hand: SSM port-forward → psql on localhost as the `claude_readonly_user` DB user
 
 > All `aws --profile claude-<env> ...` commands below run as the `boxel-claude-readonly` role, not as your user. The procedural commands look the same as before — only the credentials underneath differ.
 
@@ -532,4 +548,4 @@ aws --profile claude-staging elbv2 describe-load-balancer-attributes \
 ## Future skill / scripting room
 
 - The script writes `claude_session_expiration` so a future iteration can auto-refresh by prompting Claude Code for a fresh MFA token. Today, refresh is fully manual.
-- A nice next step is a `query-staging-db.sh` wrapper that hides the SSM port-forward dance — taking SQL on stdin and printing only the result rows. The pieces are all here; not built yet.
+- `scripts/claude-db.sh` now covers the DB path (see Path A). The EFS browser still wants the same treatment — it repeats the task-lookup and tunnel steps with a different service and port.
