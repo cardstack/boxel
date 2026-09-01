@@ -1,8 +1,7 @@
 import type Koa from 'koa';
 import { resolve, join } from 'path';
-import { writeFileSync } from 'fs';
 import fsExtra from 'fs-extra';
-const { ensureDirSync, writeJSONSync } = fsExtra;
+const { ensureDirSync, writeFileSync, writeJSONSync } = fsExtra;
 import * as Sentry from '@sentry/node';
 import type {
   DBAdapter,
