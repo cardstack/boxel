@@ -1810,7 +1810,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
         instance,
         this,
         dependencyTrackingContext,
-      )!;
+      );
       // Resource-level failure: `ensureQueryFieldSearchResource` plants a
       // single whole-field sentinel in the bucket (the search fails as a
       // unit, not per element). The empty array hands callers a usable
@@ -1819,7 +1819,7 @@ class LinksToMany<FieldT extends LinkableDefConstructor> implements Field<
       if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
         return this.emptyValue(instance) as BaseInstanceType<FieldT>;
       }
-      let records = searchResource.instances ?? ([] as any[]);
+      let records = searchResource?.instances ?? ([] as any[]);
       trackRuntimeRelationshipDependencies(
         records,
         this.card,

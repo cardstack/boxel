@@ -165,6 +165,20 @@ export function ensureQueryFieldSearchResource(
   let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
   let isLive = !inPrerender;
 
+  // Nothing to build a resource around yet, so build none. The alternative —
+  // creating one and declining to cache it — repeats every side effect of
+  // creation on every read: a fresh resource bound to the instance's lifetime,
+  // a re-armed load barrier (the reuse path above documents that re-arm as the
+  // feedback loop that saturates the render thread), and a loading-signal bump
+  // whose own invalidation brings the reader back here. The thunk consumes
+  // nothing tracked either way, so recovery depends on a later read regardless.
+  if (!args()) {
+    log.info(
+      `ensureQueryFieldSearchResource: query not yet resolvable for field=${field.name}; deferring to a later read`,
+    );
+    return undefined;
+  }
+
   log.info(
     `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; source=${trackingContext.source ?? 'unknown'}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
@@ -196,13 +210,7 @@ export function ensureQueryFieldSearchResource(
         : undefined,
     },
   );
-  // A resource built while the query was unresolvable holds a thunk that read
-  // no tracked state, so nothing will ever invalidate it into rebuilding. Hand
-  // it back for this read but keep it out of the cache, so the next read builds
-  // one against whatever context has since arrived.
-  if (args()) {
-    fieldState.searchResource = searchResource;
-  }
+  fieldState.searchResource = searchResource;
   trackQueryFieldLoads(store, field.name, fieldState);
   surfaceSearchResourceErrorState(fieldState, instance, field, searchResource);
   // Bridge `getRelationshipMembershipState(...).isLoading` to this freshly-created resource:
