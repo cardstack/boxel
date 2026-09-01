@@ -487,7 +487,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
   test('can create local instance in stack (in readonly remote realm, card-def from readonly realm)', async function (assert) {
     removeRecentCards();
     setRecentCards([
-      [`${baseRealm.url}Skill/catalog-listing`],
+      [`${baseRealm.url}Theme/boxel-brand-guide`],
       [`${baseRealm.url}cards/skill`], // spec instance
       [`${baseRealm.url}index`],
     ]);
@@ -504,7 +504,7 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
       .exists();
     assert
       .dom(
-        '[data-test-boxel-menu-item]:nth-of-type(2) [data-test-boxel-menu-item-text="Skill"]',
+        '[data-test-boxel-menu-item]:nth-of-type(2) [data-test-boxel-menu-item-text="Brand Guide"]',
       )
       .exists();
 
@@ -514,8 +514,8 @@ module('Acceptance | interact submode | create-file tests', function (hooks) {
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 2 });
 
     await click('[data-test-new-file-button]');
-    await click(`[data-test-boxel-menu-item-text="Skill"]`);
-    await assertCardCreated(assert, 'Skill', userRealm, 0, 2);
+    await click(`[data-test-boxel-menu-item-text="Brand Guide"]`);
+    await assertCardCreated(assert, 'Brand Guide', userRealm, 0, 2);
     assert.dom(`[data-test-stack-card-index]`).exists({ count: 3 });
   });
 

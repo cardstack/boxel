@@ -222,10 +222,6 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      // TODO: enabledSkillCards can have references to skills whose URL
-      // does not exist anymore (i.e. skill has been deleted or renamed). In
-      // this case we should probably remove/update the reference from the skillConfig.
-      // CS-8776
       try {
         await this.loadSkills(this.matrixRoom.skillsConfig.enabledSkillCards);
       } catch (e) {
@@ -691,9 +687,14 @@ export class RoomResource extends Resource<Args> {
     }
   }
 
-  private async loadSkills(skillCardFileDefs: SerializedFile[]) {
-    let skillIds: string[] = [];
-    for (let skillCardFileDef of skillCardFileDefs) {
+  // Resolves the id of a skill the room has enabled, or `undefined` when the
+  // skill no longer loads. An old room can point at a skill that has since
+  // been deleted or renamed, so a skill that fails to load must not stop the
+  // other skills in the room from loading.
+  private async loadEnabledSkill(
+    skillCardFileDef: SerializedFile,
+  ): Promise<string | undefined> {
+    try {
       if (isMarkdownSkillId(skillCardFileDef.sourceUrl)) {
         // A skill markdown file loads as a file-meta resource (not a card doc
         // downloaded from Matrix). Keep its instance in the store so the menu
@@ -702,16 +703,26 @@ export class RoomResource extends Resource<Args> {
           this.store,
           skillCardFileDef.sourceUrl,
         );
-        if (source) {
-          skillIds.push(skillCardFileDef.sourceUrl);
-        }
-      } else {
-        let cardDoc =
-          await this.matrixService.downloadCardFileDef(skillCardFileDef);
-        let skill = await this.loadSkill(cardDoc);
-        if (skill?.id) {
-          skillIds.push(skill.id);
-        }
+        return source ? skillCardFileDef.sourceUrl : undefined;
+      }
+      let cardDoc =
+        await this.matrixService.downloadCardFileDef(skillCardFileDef);
+      let skill = await this.loadSkill(cardDoc);
+      return skill?.id;
+    } catch (e) {
+      console.warn(
+        `Failed to load skill ${skillCardFileDef.sourceUrl} for room ${this.roomId}: ${e}`,
+      );
+      return undefined;
+    }
+  }
+
+  private async loadSkills(skillCardFileDefs: SerializedFile[]) {
+    let skillIds: string[] = [];
+    for (let skillCardFileDef of skillCardFileDefs) {
+      let skillId = await this.loadEnabledSkill(skillCardFileDef);
+      if (skillId) {
+        skillIds.push(skillId);
       }
     }
     let oldReferences = [...(this.#skillIds ?? [])];
