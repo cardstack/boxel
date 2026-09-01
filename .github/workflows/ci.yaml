@@ -1207,6 +1207,39 @@ jobs:
         run: |
           echo "Full log is the boxel-cli-test-dev-stack-log artifact; tail follows."
           tail -n 500 /tmp/server.log
+      # Last step in the job, so the failing test names are the last thing in
+      # the log. The artifact holds the full report, but downloading it takes
+      # a browser: this keeps the diagnosis reachable by anything that can
+      # only read the log, which is how CI failures usually get triaged.
+      - name: Print failing tests
+        if: ${{ failure() }}
+        run: |
+          python3 - "${{ github.workspace }}/junit/boxel-cli-integration.xml" <<'PY'
+          import os, sys, xml.etree.ElementTree as ET
+
+          path = sys.argv[1]
+          if not os.path.exists(path):
+              print(f'No junit report at {path}; the suite died before writing one.')
+              raise SystemExit(0)
+          print('=== failing tests (full report: boxel-cli-test-report artifact) ===')
+          found = False
+          for case in ET.parse(path).getroot().iter('testcase'):
+              for problem in list(case.iter('failure')) + list(case.iter('error')):
+                  found = True
+                  print(f"\n{case.get('classname')} > {case.get('name')}")
+                  print(f"  {problem.get('message', '(no message)')}")
+                  body = (problem.text or '').strip()
+                  if body:
+                      print('  ' + '\n  '.join(body.splitlines()[:40]))
+              for err in case.iter('system-err'):
+                  body = (err.text or '').strip()
+                  if 'runBoxel' in body:
+                      print(f"\n{case.get('classname')} > {case.get('name')} (harness)")
+                      print('  ' + '\n  '.join(body.splitlines()[:40]))
+          if not found:
+              print('No failing testcase in the report — the suite failed outside')
+              print('any test or hook (a crashed worker, a non-zero exit).')
+          PY
 
   deploy:
     name: Deploy boxel to staging
