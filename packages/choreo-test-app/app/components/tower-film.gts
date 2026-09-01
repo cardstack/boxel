@@ -1569,9 +1569,7 @@ export default class TowerFilm extends Component<{
     /* a film owns the whole frame: the app's bar and footer step out
        entirely rather than fading, because unlike Sylva's theater there
        is no lockup here that wants to stay superimposed */
-    if (!this.embed) {
-      document.body.classList.add('tf-film');
-    }
+    document.body.classList.add(this.embed ? 'tf-embedded' : 'tf-film');
     /* only ever gate a film that has not begun: a dev-mode template swap
        re-runs this modifier on the SAME instance, and resurrecting the
        door over a running film left its buttons answering to a guard
@@ -1664,7 +1662,7 @@ export default class TowerFilm extends Component<{
       window.clearTimeout(bootTimer);
       window.removeEventListener('keydown', this.key);
       frame.removeEventListener('load', onLoad);
-      document.body.classList.remove('tf-film');
+      document.body.classList.remove('tf-film', 'tf-embedded');
       this.film = undefined;
     };
   });
@@ -3276,8 +3274,10 @@ export default class TowerFilm extends Component<{
         {{/if}}
       </div>
 
-      {{#unless this.embed}}
-        {{! THE DISC MENU. A film with chapters owes the viewer a way into
+      {{! the menu and the transport belong to the film, embedded or not —
+      only the door back to the demo page and the dive below are the
+      full page's own }}
+      {{! THE DISC MENU. A film with chapters owes the viewer a way into
         them, and the arrow keys alone are a secret. Picking one re-cuts
         the score from that chapter's head — the same move the arrows
         make, because a skip here is an edit and never a seek. }}
@@ -3358,11 +3358,13 @@ export default class TowerFilm extends Component<{
           >CC</button>
           <button type="button" class="tf-btn" {{on "click" this.restart}}>↺
             from the top</button>
-          <LinkTo
-            @route="demo"
-            @model="towers"
-            class="tf-btn"
-          >⛶ How This Is Built</LinkTo>
+          {{#unless this.embed}}
+            <LinkTo
+              @route="demo"
+              @model="towers"
+              class="tf-btn"
+            >⛶ How This Is Built</LinkTo>
+          {{/unless}}
           <span class="tf-credit">Scene:
             <a
               href="https://threeui.com/browse"
@@ -3377,10 +3379,11 @@ export default class TowerFilm extends Component<{
         {{! THE CUTTING ROOM — the wall plate under the exhibit, set in
         the house dive template like every other demo's deep dive. The
         film hands it one thing: the live junction trigger. }}
-        <div id="cutting-room" class="tf-notes">
-          <TowersNotes @preview={{this.previewJoin}} />
-        </div>
-      {{/unless}}
+        {{#unless this.embed}}
+          <div id="cutting-room" class="tf-notes">
+            <TowersNotes @preview={{this.previewJoin}} />
+          </div>
+        {{/unless}}
     </div>
 
     <style>
@@ -4507,13 +4510,11 @@ export default class TowerFilm extends Component<{
         color: #96551b;
       }
 
-      .is-embed .tf-controls {
+      /* embedded, the iframe wraps the film AND its transport directly;
+         the app's own chrome inside the iframe stands down instead */
+      body.tf-embedded .topbar,
+      body.tf-embedded .footer {
         display: none;
-      }
-
-      /* embedded, the film fills its iframe edge to edge */
-      .is-embed .tf-stage {
-        height: 100svh;
       }
 
       /* the transport waits outside while the front door is open; it
