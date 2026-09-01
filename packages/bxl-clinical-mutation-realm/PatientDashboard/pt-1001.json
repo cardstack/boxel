@@ -1,0 +1,197 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "resourceId": "patient-record:pt-1001",
+      "patientId": "PT-1001",
+      "firstName": "Margaret",
+      "lastName": "Okonkwo",
+      "dob": "1962-03-14",
+      "gender": "Female",
+      "bloodType": "A+",
+      "admissionDate": "2026-07-26",
+      "dischargeDate": null,
+      "status": "admitted",
+      "ward": "Cardiology",
+      "room": "6B-14",
+      "diagnosis": "Atrial fibrillation",
+      "severity": "Moderate",
+      "allergies": "Penicillin",
+      "careSummary": "Rate control is improving. Continue telemetry, anticoagulation monitoring, and assisted ambulation twice daily.",
+      "dischargeSummaryDraft": null,
+      "visitingStartHour": 9,
+      "visitingEndHour": 20,
+      "vitals": {
+        "bpSystolic": 138,
+        "bpDiastolic": 88,
+        "heartRate": 94,
+        "tempC": 37.1,
+        "oxygenSaturation": 97,
+        "weightKg": 72.4
+      },
+      "billing": {
+        "roomCharge": 6300,
+        "procedures": 4200,
+        "pharmacy": 310
+      },
+      "medications": [
+        {
+          "name": "Metoprolol",
+          "doseMg": 50,
+          "frequency": "Twice daily",
+          "startDate": "2026-07-26",
+          "lastDoseAt": "Today · 08:00",
+          "nextDoseAt": "Today · 20:00",
+          "lastDoseStatus": "Administered"
+        },
+        {
+          "name": "Warfarin",
+          "doseMg": 5,
+          "frequency": "Once daily",
+          "startDate": "2026-07-27",
+          "lastDoseAt": "Yesterday · 18:00",
+          "nextDoseAt": "Today · 18:00",
+          "lastDoseStatus": "Administered"
+        }
+      ],
+      "caretakerInstructions": [
+        {
+          "activity": "Meals",
+          "status": "Heart-healthy",
+          "instruction": "Low-sodium menu; avoid grapefruit with current medications.",
+          "schedule": "Lunch 12:30 · Dinner 17:45"
+        },
+        {
+          "activity": "Feeding",
+          "status": "Independent",
+          "instruction": "Set up tray within reach; patient feeds herself.",
+          "schedule": "Check intake after each meal"
+        },
+        {
+          "activity": "Bathroom",
+          "status": "Assist ×1",
+          "instruction": "Call bell before standing; supervise transfer to bathroom.",
+          "schedule": "Offer every 3 hours"
+        },
+        {
+          "activity": "Mobility",
+          "status": "Supervised",
+          "instruction": "Short hallway walk with gait belt if dizziness-free.",
+          "schedule": "Twice daily"
+        }
+      ],
+      "careContacts": [
+        {
+          "relationship": "Son",
+          "authorization": "Bedside updates and discharge coordination",
+          "personLabel": "Devon Okonkwo"
+        }
+      ],
+      "internalNotes": [
+        {
+          "authoredAt": "2026-07-30 07:55",
+          "author": "Jordan Blake, RN",
+          "category": "Shift handoff",
+          "text": "Patient reported brief dizziness after morning transfer. Symptoms resolved while seated; attending notified."
+        },
+        {
+          "authoredAt": "2026-07-29 16:20",
+          "author": "Dr. Aisha Tahir",
+          "category": "Care plan",
+          "text": "If rate remains controlled through tomorrow morning, begin discharge planning with anticoagulation follow-up."
+        }
+      ],
+      "auditTrail": [
+        {
+          "occurredAt": "2026-07-30 08:42",
+          "actor": "Jordan Blake, RN",
+          "action": "Recorded morning vitals"
+        },
+        {
+          "occurredAt": "2026-07-29 16:21",
+          "actor": "Dr. Aisha Tahir",
+          "action": "Updated care plan"
+        }
+      ],
+      "cardInfo": {
+        "name": "Margaret Okonkwo · PT-1001",
+        "summary": "Admitted cardiology record with nested care-team membership.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "policy": {
+        "links": {
+          "self": "../ClinicalAccessPolicy/main"
+        }
+      },
+      "facility": {
+        "links": {
+          "self": "../HospitalFacility/northstar"
+        }
+      },
+      "patient": {
+        "links": {
+          "self": "../Principal/margaret-okonkwo"
+        }
+      },
+      "attending": {
+        "links": {
+          "self": "../Principal/aisha-tahir"
+        }
+      },
+      "careTeam": {
+        "links": {
+          "self": "../Principal/cardiac-care-team"
+        }
+      },
+      "pharmacyTeam": {
+        "links": {
+          "self": "../Principal/pharmacy-team"
+        }
+      },
+      "billingTeam": {
+        "links": {
+          "self": "../Principal/billing-team"
+        }
+      },
+      "family": {
+        "links": {
+          "self": "../Principal/family-pt-1001"
+        }
+      },
+      "suspended.0": {
+        "links": {
+          "self": "../Principal/casey-ward"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/night-shift"
+        }
+      },
+      "consultingClinicians.0": {
+        "links": {
+          "self": "../Principal/elena-ruiz"
+        }
+      },
+      "consultingClinicians.1": {
+        "links": {
+          "self": "../Principal/theo-martin"
+        }
+      },
+      "careContacts.0.person": {
+        "links": {
+          "self": "../Principal/devon-okonkwo"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-dashboard",
+        "name": "PatientDashboard"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:cardiac-night",
+      "displayName": "Cardiac night team",
+      "jobTitle": "Nested clinical team",
+      "principalType": "team",
+      "department": "Cardiology",
+      "cardInfo": {
+        "name": "Cardiac night team",
+        "summary": "Nested userset containing two nurses",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./jordan-blake" } },
+      "members.1": { "links": { "self": "./casey-ward" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

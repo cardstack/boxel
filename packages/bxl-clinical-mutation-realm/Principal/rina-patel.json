@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:rina-patel",
+      "displayName": "Rina Patel",
+      "jobTitle": "Hospital administrator",
+      "principalType": "person",
+      "department": "Administration",
+      "cardInfo": {
+        "name": "Rina Patel",
+        "summary": "Policy-sourced hospital administrator",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

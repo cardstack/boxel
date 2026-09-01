@@ -44,14 +44,15 @@ registered RRI.
 5. Canonicalize with `fileSerialization` and write the file.
 6. Return the indexed card document.
 
-## Local Tessar harness
+## Local clinical harness
 
-The extracted `sample-screens-chris-tessar-admin` zip is mounted from
-`packages/screens-realm` at `https://localhost:4251/tessar-admin/` (see
-`docs/bxl-mutate-tessar-notes.md`). Send programs with:
+The synthetic BXL Clinical Access sample is cloned into
+`packages/bxl-clinical-mutation-realm` and mounted at
+`https://localhost:4251/bxl-clinical-mutation/` (see
+`docs/bxl-mutate-clinical-notes.md`). Send programs with:
 
 ```
-mise exec -- node packages/realm-server/scripts/tessar-mutate.ts /Staff/ms-green 'Name = "Ms. Greene";'
+mise exec -- node packages/realm-server/scripts/clinical-mutate.ts /PatientDashboard/pt-1001 '.vitals.heartRate = 112;' --syntax solidified
 ```
 
 ## Tests

@@ -241,7 +241,7 @@ import {
   fetchSessionRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
-import { userExists } from './db-queries/user-queries.ts';
+import { getOrCreateUser } from './db-queries/user-queries.ts';
 import {
   analyzeRealmPublishability,
   type PublishabilityViolation,
@@ -1348,11 +1348,11 @@ export class Realm {
 
     if (!sessionRoom) {
       await this.#matrixClient.login();
-      let userExistsInDB = await userExists(this.#dbAdapter, matrixUserId);
-      if (!userExistsInDB) {
-        // TODO: should we create it if it doesn't exist?
-        return undefined;
-      }
+      // A realm-specific /_session can be the first authenticated request in
+      // a fresh database. Create the user row here just like the server-level
+      // session endpoint does; otherwise no session_room_id is persisted and
+      // foreground Matrix invalidations have no delivery target.
+      await getOrCreateUser(this.#dbAdapter, matrixUserId);
       sessionRoom = await this.#matrixClient.createDM(matrixUserId);
       await upsertSessionRoom(this.#dbAdapter, matrixUserId, sessionRoom);
     }
@@ -1777,6 +1777,18 @@ export class Realm {
       priority: userInitiatedPriority,
       invalidationMode: 'direct',
     });
+
+    // A direct indexing visit can legitimately report no recursive
+    // invalidations even though it replaced the explicitly requested root in
+    // boxel_index. Interactive callers still need that root in the foreground
+    // Matrix event so an already-rendered card reloads. Dependents continue to
+    // come exclusively from the deferred recursive job below.
+    foreground.invalidations = [
+      ...new Set([
+        ...foreground.invalidations,
+        ...urls.map((url) => url.href.replace(/\.json$/, '')),
+      ]),
+    ];
 
     let { settled } = await this.enqueueIndexUpdateAndCollectInvalidations(
       urls,
@@ -5907,8 +5919,12 @@ export class Realm {
             syntax,
             programId,
             targetId: instanceURL,
+            // JSON:API relationship links in Card source are relative to the
+            // containing Card document, not to the realm root. Project them
+            // as canonical loaded-Card IDs so relationship selectors can
+            // find, remove, and move existing links.
             resolveReference: (reference: string) =>
-              this.#resolveRealmRelativeHref(reference).href.replace(
+              new URL(this.#resolveAtomicHref(reference), url).href.replace(
                 /\.json$/,
                 '',
               ),
@@ -5950,7 +5966,12 @@ export class Realm {
       // for its recursive invalidation closure: a highly connected card can
       // fan out to much of a realm even though this write changed one file.
       let [{ lastModified, created }] = await this._batchWriteUnlocked(files, {
-        clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
+        // `_mutate` is a DML/command endpoint, not an optimistic Card API
+        // edit. The initiating client has no local card-model update to keep,
+        // so it must receive the Matrix invalidation and reload the changed
+        // card. A future optimistic Card API mutation path can pass its
+        // client request ID and suppress its own echo there.
+        clientRequestId: null,
         waitForIndex: false,
       });
       return createResponse({

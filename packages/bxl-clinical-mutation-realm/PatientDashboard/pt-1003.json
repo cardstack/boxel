@@ -1,0 +1,108 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "resourceId": "patient-record:pt-1003",
+      "patientId": "PT-1003",
+      "firstName": "Priya",
+      "lastName": "Ramaswamy",
+      "dob": "1971-02-09",
+      "gender": "Female",
+      "bloodType": "O+",
+      "admissionDate": "2026-07-18",
+      "dischargeDate": "2026-07-19",
+      "status": "discharged",
+      "ward": "Outpatient surgery",
+      "room": "OP-12",
+      "diagnosis": "Routine cataract surgery",
+      "severity": "Low",
+      "allergies": "Latex",
+      "careSummary": "Procedure completed without complication. Continue post-operative drops and scheduled ophthalmology follow-up.",
+      "visitingStartHour": 8,
+      "visitingEndHour": 18,
+      "vitals": {
+        "bpSystolic": 124,
+        "bpDiastolic": 78,
+        "heartRate": 72,
+        "tempC": 36.8,
+        "oxygenSaturation": 99,
+        "weightKg": 64.2
+      },
+      "billing": { "roomCharge": 820, "procedures": 4800, "pharmacy": 95 },
+      "medications": [
+        {
+          "name": "Prednisolone acetate",
+          "doseMg": 1,
+          "frequency": "Four times daily",
+          "startDate": "2026-07-19",
+          "lastDoseAt": "Today · 12:00",
+          "nextDoseAt": "Today · 16:00",
+          "lastDoseStatus": "Patient confirmed"
+        }
+      ],
+      "caretakerInstructions": [
+        {
+          "activity": "Meals",
+          "status": "Regular diet",
+          "instruction": "Light meal recommended after procedure; encourage fluids.",
+          "schedule": "As tolerated"
+        },
+        {
+          "activity": "Feeding",
+          "status": "Independent",
+          "instruction": "No feeding assistance required.",
+          "schedule": "Normal routine"
+        },
+        {
+          "activity": "Bathroom",
+          "status": "Standby",
+          "instruction": "Family should stay nearby during the first 24 hours after sedation.",
+          "schedule": "As needed"
+        },
+        {
+          "activity": "Mobility",
+          "status": "Limited",
+          "instruction": "Avoid bending and heavy lifting; assist on stairs.",
+          "schedule": "For 48 hours"
+        }
+      ],
+      "internalNotes": [
+        {
+          "authoredAt": "2026-07-19 14:30",
+          "author": "Dr. Aisha Tahir",
+          "category": "Discharge",
+          "text": "Discharge instructions reviewed; patient demonstrated correct eye-drop technique."
+        }
+      ],
+      "auditTrail": [
+        {
+          "occurredAt": "2026-07-19 14:42",
+          "actor": "Dr. Aisha Tahir",
+          "action": "Completed discharge summary"
+        }
+      ],
+      "cardInfo": {
+        "name": "Priya Ramaswamy · PT-1003",
+        "summary": "Discharged record proving resource-state predicates remove mutation CTAs.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "policy": { "links": { "self": "../ClinicalAccessPolicy/main" } },
+      "facility": { "links": { "self": "../HospitalFacility/northstar" } },
+      "patient": { "links": { "self": "../Principal/priya-ramaswamy" } },
+      "attending": { "links": { "self": "../Principal/aisha-tahir" } },
+      "pharmacyTeam": { "links": { "self": "../Principal/pharmacy-team" } },
+      "billingTeam": { "links": { "self": "../Principal/billing-team" } },
+      "family": { "links": { "self": "../Principal/family-pt-1003" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../patient-dashboard",
+        "name": "PatientDashboard"
+      }
+    }
+  }
+}

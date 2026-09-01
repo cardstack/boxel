@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:owen-grant",
+      "displayName": "Owen Grant",
+      "jobTitle": "Billing specialist",
+      "principalType": "person",
+      "department": "Revenue cycle",
+      "cardInfo": {
+        "name": "Owen Grant",
+        "summary": "Billing-team member",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

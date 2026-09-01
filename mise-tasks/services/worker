@@ -63,8 +63,8 @@ NODE_ENV=development \
   --fromUrl='@cardstack/openrouter/' \
   --toUrl="${REALM_BASE_URL}/openrouter/" \
   \
-  --fromUrl="${REALM_BASE_URL}/tessar-admin/" \
-  --toUrl="${REALM_BASE_URL}/tessar-admin/" \
+  --fromUrl="${REALM_BASE_URL}/bxl-clinical-mutation/" \
+  --toUrl="${REALM_BASE_URL}/bxl-clinical-mutation/" \
   \
   --fromUrl="${SOFTWARE_FACTORY_REALM_URL}" \
   --toUrl="${SOFTWARE_FACTORY_REALM_URL}" \

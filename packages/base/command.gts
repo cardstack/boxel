@@ -728,6 +728,8 @@ export class AuthedFetchInput extends CardDef {
   @field url = contains(StringField);
   @field method = contains(StringField);
   @field acceptHeader = contains(StringField);
+  @field contentType = contains(StringField);
+  @field requestBody = contains(StringField);
 }
 
 export class AuthedFetchResult extends CardDef {

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:jordan-blake",
+      "displayName": "Jordan Blake, RN",
+      "jobTitle": "Cardiac night nurse",
+      "principalType": "person",
+      "department": "Cardiology",
+      "cardInfo": {
+        "name": "Jordan Blake, RN",
+        "summary": "Nested care-team member",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

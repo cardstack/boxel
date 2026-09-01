@@ -17,6 +17,7 @@ traefik/dynamic/*.yml
 # files (e.g. `<slug>-host.yml`, `<slug>-realm-server.yml`) stay ignored.
 !traefik/dynamic/tls.yml
 .mise.local.toml
+.pnpm-store/
 packages/openrouter-realm/OpenRouterModel/
 packages/host/dist
 packages/observability/templates/env-vars.env

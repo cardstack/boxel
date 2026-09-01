@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:aisha-tahir",
+      "displayName": "Dr. Aisha Tahir",
+      "jobTitle": "Attending cardiologist",
+      "principalType": "person",
+      "department": "Cardiology",
+      "cardInfo": {
+        "name": "Dr. Aisha Tahir",
+        "summary": "Attending cardiologist",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "patient:priya-ramaswamy",
+      "displayName": "Priya Ramaswamy",
+      "jobTitle": "Patient",
+      "principalType": "patient",
+      "department": "",
+      "cardInfo": {
+        "name": "Priya Ramaswamy",
+        "summary": "Patient self-access principal",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "purpose": "A synthetic hospital showcase for BXL authorization and surgical JSON-source mutation over contained and linked clinical data.",
+      "cardInfo": {
+        "name": "BXL Clinical Access",
+        "summary": "Patient dashboards projected from synchronous BXL capability decisions.",
+        "notes": "All people and records are synthetic.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "mutationScenarios.0": {
+        "links": {
+          "self": "./ClinicalMutationWorkbench/main"
+        }
+      },
+      "entryPoints.0": {
+        "links": {
+          "self": "./PatientDashboard/pt-1001"
+        }
+      },
+      "entryPoints.1": {
+        "links": {
+          "self": "./PatientDashboard/pt-1002"
+        }
+      },
+      "entryPoints.2": {
+        "links": {
+          "self": "./PatientDashboard/pt-1003"
+        }
+      },
+      "entryPoints.3": {
+        "links": {
+          "self": "./ClinicalAccessPolicy/main"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./Theme/night-shift"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./workspace",
+        "name": "Workspace"
+      }
+    }
+  }
+}

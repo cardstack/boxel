@@ -1,0 +1,82 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "policyId": "clinical-access-v1",
+      "viewIdentityRule": "Seat.Patient or Seat.Family or Seat.Attending or Seat.CareTeam or Seat.PharmacyTeam or Seat.BillingTeam or Seat.PrivacyOfficer or Seat.Administrator or Capability.EmergencyRead",
+      "viewClinicalRule": "Seat.Patient or Seat.Attending or Seat.CareTeam or Seat.PrivacyOfficer or Seat.Administrator or Capability.EmergencyRead",
+      "viewMedicationsRule": "Seat.Patient or Seat.Attending or Seat.CareTeam or Seat.PharmacyTeam or Capability.EmergencyRead",
+      "viewNotesRule": "Seat.Attending or Seat.CareTeam or Capability.EmergencyRead",
+      "viewBillingRule": "Seat.Patient or Seat.BillingTeam or Seat.PrivacyOfficer or Seat.Administrator",
+      "viewAuditRule": "Seat.PrivacyOfficer or Seat.Administrator",
+      "editCarePlanRule": "(Seat.Attending or Seat.CareTeam) and Resource.Status == \"admitted\"",
+      "orderMedicationRule": "(Seat.Attending or Seat.PharmacyTeam) and Resource.Status == \"admitted\"",
+      "beginDischargeRule": "Seat.Attending and Resource.Status == \"admitted\"",
+      "coordinateCareRule": "(Seat.Attending or Seat.CareTeam) and Capability.ViewClinicalSummary and Resource.Status == \"admitted\" and Resource.Severity != \"Low\"",
+      "highAcuityReviewRule": "(Seat.Attending or Seat.CareTeam or Seat.PrivacyOfficer or Seat.Administrator or Capability.EmergencyRead) and Resource.Severity == \"Critical\"",
+      "approveReleaseRule": "(Seat.PrivacyOfficer or Seat.Administrator) and Capability.ViewAuditTrail and Input.IncidentTicket != null",
+      "visitDuringHoursRule": "Seat.Family and Input.LocalHour >= Resource.VisitingStartHour and Input.LocalHour < Resource.VisitingEndHour",
+      "familyMedicationRule": "Seat.Family and Capability.VisitDuringHours",
+      "caretakerInstructionsRule": "Seat.Patient or Seat.Attending or Seat.CareTeam or (Seat.Family and Capability.VisitDuringHours)",
+      "emergencyReadRule": "Seat.EmergencyClinician and Input.BreakGlass == true and Input.IncidentTicket != null",
+      "suspendedRefusalRule": "Seat.Suspended",
+      "cardInfo": {
+        "name": "Clinical access policy",
+        "summary": "Editable BXL statements and membership for the patient-access showcase.",
+        "notes": "The kernel returns capability decisions only. Dashboard projection and command execution remain separate.",
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "administrators.0": { "links": { "self": "../Principal/rina-patel" } },
+      "privacyOfficers.0": { "links": { "self": "../Principal/nia-okafor" } },
+      "emergencyClinicians.0": {
+        "links": { "self": "../Principal/theo-martin" }
+      },
+      "facilityStaff.0": { "links": { "self": "../Principal/aisha-tahir" } },
+      "facilityStaff.1": { "links": { "self": "../Principal/jordan-blake" } },
+      "facilityStaff.2": { "links": { "self": "../Principal/casey-ward" } },
+      "facilityStaff.3": { "links": { "self": "../Principal/elena-ruiz" } },
+      "facilityStaff.4": { "links": { "self": "../Principal/owen-grant" } },
+      "facilityStaff.5": { "links": { "self": "../Principal/nia-okafor" } },
+      "facilityStaff.6": { "links": { "self": "../Principal/rina-patel" } },
+      "facilityStaff.7": { "links": { "self": "../Principal/theo-martin" } },
+      "facilityStaff.8": { "links": { "self": "../Principal/cameron-price" } },
+      "facilityStaff.9": { "links": { "self": "../Principal/amara-shah" } },
+      "directory.0": { "links": { "self": "../Principal/aisha-tahir" } },
+      "directory.1": { "links": { "self": "../Principal/jordan-blake" } },
+      "directory.2": { "links": { "self": "../Principal/elena-ruiz" } },
+      "directory.3": { "links": { "self": "../Principal/owen-grant" } },
+      "directory.4": { "links": { "self": "../Principal/nia-okafor" } },
+      "directory.5": { "links": { "self": "../Principal/rina-patel" } },
+      "directory.6": { "links": { "self": "../Principal/theo-martin" } },
+      "directory.7": { "links": { "self": "../Principal/casey-ward" } },
+      "directory.8": { "links": { "self": "../Principal/cameron-price" } },
+      "directory.9": { "links": { "self": "../Principal/amara-shah" } },
+      "directory.10": { "links": { "self": "../Principal/margaret-okonkwo" } },
+      "directory.11": { "links": { "self": "../Principal/warner-cohen" } },
+      "directory.12": { "links": { "self": "../Principal/priya-ramaswamy" } },
+      "directory.13": { "links": { "self": "../Principal/morgan-lee" } },
+      "directory.14": {
+        "links": { "self": "../Principal/cardiac-night-team" }
+      },
+      "directory.15": { "links": { "self": "../Principal/cardiac-care-team" } },
+      "directory.16": { "links": { "self": "../Principal/icu-care-team" } },
+      "directory.17": { "links": { "self": "../Principal/pharmacy-team" } },
+      "directory.18": { "links": { "self": "../Principal/billing-team" } },
+      "directory.19": { "links": { "self": "../Principal/devon-okonkwo" } },
+      "directory.20": { "links": { "self": "../Principal/sara-cohen" } },
+      "directory.21": { "links": { "self": "../Principal/arjun-ramaswamy" } },
+      "directory.22": { "links": { "self": "../Principal/family-pt-1001" } },
+      "directory.23": { "links": { "self": "../Principal/family-pt-1002" } },
+      "directory.24": { "links": { "self": "../Principal/family-pt-1003" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinical-access-policy",
+        "name": "ClinicalAccessPolicy"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Responding to distress after breaking news",
+      "kind": "Care-plan module",
+      "rationale": "A reusable, trauma-informed response created for patients who become distressed after a major news event.",
+      "response": "Acknowledge the event, assess immediate distress, offer a quiet setting, and escalate to the behavioral-health team when indicated.",
+      "cardInfo": {
+        "name": "Responding to distress after breaking news",
+        "summary": "Synthetic reusable care-plan module.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "../clinical-resource",
+        "name": "ClinicalResource"
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "person:cameron-price",
+      "displayName": "Cameron Price",
+      "jobTitle": "Facilities coordinator",
+      "principalType": "person",
+      "department": "Operations",
+      "cardInfo": {
+        "name": "Cameron Price",
+        "summary": "Facility staff without patient-specific clinical access",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

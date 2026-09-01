@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "guest:morgan-lee",
+      "displayName": "Morgan Lee",
+      "jobTitle": "External consultant",
+      "principalType": "guest",
+      "department": "External",
+      "cardInfo": {
+        "name": "Morgan Lee",
+        "summary": "Guest audience for request-access behavior",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "team:family-pt-1001",
+      "displayName": "Margaret Okonkwo family",
+      "jobTitle": "Patient-specific family userset",
+      "principalType": "team",
+      "department": "Family access",
+      "cardInfo": {
+        "name": "Margaret Okonkwo family",
+        "summary": "Approved family userset isolated to PT-1001",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "members.0": { "links": { "self": "./devon-okonkwo" } },
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "partyId": "family:sara-cohen",
+      "displayName": "Sara Cohen",
+      "jobTitle": "Approved family caregiver",
+      "principalType": "family",
+      "department": "Family access",
+      "cardInfo": {
+        "name": "Sara Cohen",
+        "summary": "Approved family member for Warner Cohen",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": { "links": { "self": "../Theme/night-shift" } }
+    },
+    "meta": { "adoptsFrom": { "module": "../principal", "name": "Principal" } }
+  }
+}
