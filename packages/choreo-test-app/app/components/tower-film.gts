@@ -1415,7 +1415,11 @@ export default class TowerFilm extends Component<{
     if (!this.embed) {
       document.body.classList.add('tf-film');
     }
-    this.gate = !this.embed && this.from === 0;
+    /* only ever gate a film that has not begun: a dev-mode template swap
+       re-runs this modifier on the SAME instance, and resurrecting the
+       door over a running film left its buttons answering to a guard
+       that told them the film had already started — because it had */
+    this.gate = !this.embed && this.from === 0 && !this.booted;
     const onLoad = () => {
       const w = (frame as HTMLIFrameElement).contentWindow as unknown as {
         __film?: FilmApi;
@@ -2226,6 +2230,12 @@ export default class TowerFilm extends Component<{
   /** through the gate — on the click the audio policy was waiting for */
   private begin = (withSound: boolean) => {
     if (this.booted) {
+      /* a gate over a film already running is a stale door, not a
+         request to boot twice — step aside and honour the sound choice */
+      this.gate = false;
+      if (withSound !== this.sound) {
+        this.hear();
+      }
       return;
     }
     if (!this.film) {
@@ -2934,18 +2944,18 @@ export default class TowerFilm extends Component<{
          DETAIL is rich and close; COMPARISON is a museum plate, flat and
          even, because a comparison that flatters one subject is not one. */
       .is-grade-amber {
-        --tf-lut: saturate(0.97) contrast(1) brightness(1.18);
-        --tf-warm: #ffbe6a;
-        --tf-cool: #2c4a6b;
-        --tf-grade-a: 0.32;
+        --tf-lut: saturate(0.9) contrast(0.94) brightness(1.2);
+        --tf-warm: #ffd9a8;
+        --tf-cool: #b9c8e6;
+        --tf-grade-a: 0.3;
         --tf-vig-a: 0.5;
       }
 
       .is-grade-iron {
-        --tf-lut: saturate(0.7) contrast(1.06) brightness(1.12) sepia(0.08);
-        --tf-warm: #d8c39a;
-        --tf-cool: #1d2f45;
-        --tf-grade-a: 0.52;
+        --tf-lut: saturate(0.72) contrast(0.98) brightness(1.12) sepia(0.1);
+        --tf-warm: #e8d9c2;
+        --tf-cool: #9fb0c8;
+        --tf-grade-a: 0.4;
         --tf-vig-a: 0.65;
       }
 
@@ -2957,26 +2967,26 @@ export default class TowerFilm extends Component<{
          chapters that are deliberately heavier. Contrast between
          chapters is a bigger effect than contrast inside one. */
       .is-grade-chalk {
-        --tf-lut: saturate(0.92) contrast(1) brightness(1.34);
-        --tf-warm: #fffdf4;
-        --tf-cool: #6f92a6;
-        --tf-grade-a: 0.3;
+        --tf-lut: saturate(0.88) contrast(0.96) brightness(1.34);
+        --tf-warm: #fffdf6;
+        --tf-cool: #cfdde8;
+        --tf-grade-a: 0.2;
         --tf-vig-a: 0.22;
       }
 
       .is-grade-ink {
-        --tf-lut: saturate(1.01) contrast(1.04) brightness(1.15);
-        --tf-warm: #ffab52;
-        --tf-cool: #17222f;
-        --tf-grade-a: 0.44;
+        --tf-lut: saturate(0.98) contrast(1) brightness(1.16);
+        --tf-warm: #ffc9a1;
+        --tf-cool: #8fa0c9;
+        --tf-grade-a: 0.32;
         --tf-vig-a: 0.68;
       }
 
       .is-grade-plate {
-        --tf-lut: saturate(0.9) contrast(0.99) brightness(1.18);
-        --tf-warm: #f0e2c4;
-        --tf-cool: #55564a;
-        --tf-grade-a: 0.2;
+        --tf-lut: saturate(0.86) contrast(0.95) brightness(1.2);
+        --tf-warm: #f6e8d2;
+        --tf-cool: #c3c8bd;
+        --tf-grade-a: 0.18;
         --tf-vig-a: 0.36;
       }
 
