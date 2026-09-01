@@ -14,7 +14,13 @@ export interface QualityCheck {
 }
 
 export type CheckState = 'pass' | 'fail' | 'na';
-export type QualityBucket = 'gold' | 'solid' | 'adequate' | 'thin' | 'none' | 'out';
+export type QualityBucket =
+  | 'gold'
+  | 'solid'
+  | 'adequate'
+  | 'thin'
+  | 'none'
+  | 'out';
 export type ConceptKind =
   | 'field'
   | 'card'
@@ -221,4 +227,35 @@ export function bucketLabel(b: QualityBucket): string {
 
 export function bucketColor(b: QualityBucket): string {
   return BUCKETS.find((x) => x.key === b)?.color ?? '#e5e7eb';
+}
+
+// Where a concept sits on the road to Gold. The bucket answers "how good is
+// the Spec"; the stage answers "what is the next move", which is what a
+// planning export is read for. Numbered so a spreadsheet sorts them in order.
+export type ConceptStage =
+  | '0-out-of-scope'
+  | '1-no-code'
+  | '2-code-no-spec'
+  | '3-spec-thin'
+  | '4-one-check-off'
+  | '5-done';
+
+export function conceptStage(c: MatrixConcept): ConceptStage {
+  if (!isInScope(c)) return '0-out-of-scope';
+  if (!c.evidenceTier) return '1-no-code';
+  if (!c.sharedSpec) return '2-code-no-spec';
+  switch (qualityBucket(c)) {
+    case 'gold':
+      return '5-done';
+    case 'solid':
+      return '4-one-check-off';
+    default:
+      return '3-spec-thin';
+  }
+}
+
+export function failingChecks(c: MatrixConcept): string[] {
+  return qualityChecks(c)
+    .filter((x) => x.state === 'fail')
+    .map((x) => x.key);
 }

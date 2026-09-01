@@ -38,9 +38,12 @@ import {
   isInScope,
   bucketLabel,
   consumerList,
+  conceptStage,
+  failingChecks,
   BUCKETS,
   type QualityBucket,
 } from './spec-quality';
+import { ExportButton, type ExportColumn } from './export';
 
 // The wall and the availability drills speak spec-state: what evidences a
 // concept right now — a verified Spec, catalog code, platform code, nothing.
@@ -392,6 +395,99 @@ export class MatrixTracker extends CardDef {
       }));
     }
 
+    // The export is of what you are looking at — every filter and the search
+    // narrow it — so a planning question is asked in the UI and answered in
+    // the file, without a second tool that has to re-derive the rubric.
+    exportColumns: ExportColumn<MatrixConcept>[] = [
+      { key: 'layer', label: 'Layer', value: (c) => c.layer },
+      { key: 'layerName', label: 'Layer Name', value: (c) => c.layerName },
+      { key: 'lane', label: 'Lane', value: (c) => c.lane },
+      { key: 'concept', label: 'Concept', value: (c) => c.concept },
+      { key: 'symbol', label: 'Symbol', value: (c) => c.symbol },
+      { key: 'stage', label: 'Stage', value: (c) => conceptStage(c) },
+      {
+        key: 'quality',
+        label: 'Quality',
+        value: (c) => bucketLabel(qualityBucket(c)),
+      },
+      {
+        key: 'score',
+        label: 'Score',
+        value: (c) =>
+          c.sharedSpec ? `${qualityScore(c)}/${qualityApplicable(c)}` : '',
+      },
+      {
+        key: 'missing',
+        label: 'Missing Checks',
+        value: (c) => failingChecks(c).join(' '),
+      },
+      { key: 'conceptKind', label: 'Kind', value: (c) => c.conceptKind },
+      { key: 'scope', label: 'Scope', value: (c) => c.scope },
+      {
+        key: 'evidenceTier',
+        label: 'Evidence Tier',
+        value: (c) => c.evidenceTier,
+      },
+      {
+        key: 'auditStatus',
+        label: 'Audit Status',
+        value: (c) => c.auditStatus,
+      },
+      {
+        key: 'consumerCount',
+        label: 'Consumers',
+        value: (c) => consumerList(c).length,
+      },
+      { key: 'consumers', label: 'Consumer List', value: (c) => c.consumers },
+      {
+        key: 'specExampleCount',
+        label: 'Spec Examples',
+        value: (c) => c.specExampleCount,
+      },
+      {
+        key: 'specFileExampleCount',
+        label: 'Spec File Examples',
+        value: (c) => c.specFileExampleCount,
+      },
+      {
+        key: 'specReadmeCodeBlocks',
+        label: 'ReadMe Code Blocks',
+        value: (c) => c.specReadmeCodeBlocks,
+      },
+      {
+        key: 'specReadmeChars',
+        label: 'ReadMe Chars',
+        value: (c) => c.specReadmeChars,
+      },
+      { key: 'specUsageRef', label: 'Usage Ref', value: (c) => c.specUsageRef },
+      { key: 'specKind', label: 'Spec Kind', value: (c) => c.specKind },
+      { key: 'sharedSpec', label: 'Shared Spec', value: (c) => c.sharedSpec },
+      {
+        key: 'whereImplemented',
+        label: 'Where Implemented',
+        value: (c) => c.whereImplemented,
+      },
+      {
+        key: 'catalogMatch',
+        label: 'Catalog Match',
+        value: (c) => c.catalogMatch,
+      },
+      { key: 'domainKit', label: 'Domain Kit', value: (c) => c.domainKit },
+      { key: 'owner', label: 'Owner', value: (c) => c.owner },
+      { key: 'workState', label: 'Work State', value: (c) => c.workState },
+      { key: 'notes', label: 'Notes', value: (c) => c.notes },
+    ];
+
+    get exportFilename() {
+      let parts = ['matrix'];
+      if (this.layerFilter !== ALL) parts.push(`l${this.layerFilter}`);
+      if (this.laneFilter !== ALL)
+        parts.push(this.laneFilter.replace(/[^a-z0-9]+/gi, '-').toLowerCase());
+      if (this.bucketFilter !== ALL) parts.push(this.bucketFilter);
+      if (this.specStateFilter !== ALL) parts.push(this.specStateFilter);
+      return parts.join('-');
+    }
+
     private get isInteractive() {
       return Boolean((this.args as any).viewCard);
     }
@@ -483,7 +579,8 @@ export class MatrixTracker extends CardDef {
             <h1>{{@model.cardTitle}}</h1>
           </div>
           <p class='sub'>{{this.blockTotal}}
-            blocks of {{this.total}}
+            blocks of
+            {{this.total}}
             matrix rows ({{this.outOfScopeCount}}
             out of scope) · a block counts as done when a Spec in this realm
             resolves to shared code — quality is a per-kind checklist, no
@@ -506,332 +603,336 @@ export class MatrixTracker extends CardDef {
         {{/if}}
 
         {{#if this.showOverview}}
-        <section class='stat-band'>
-          <button
-            type='button'
-            class='stat-cell'
-            {{on 'click' this.drillAll}}
-          >
-            <Stat
-              @label='Matrix'
-              @value={{this.total}}
-              @hint='{{this.blockTotal}} blocks · {{this.outOfScopeCount}} out of scope'
-            />
-          </button>
-          <button
-            type='button'
-            class='stat-cell'
-            {{on 'click' this.drillVerified}}
-          >
-            <Stat
-              @label='Spec-verified'
-              @value={{this.specVerifiedCount}}
-              @hint='of {{this.blockTotal}} blocks'
-            />
-          </button>
-          <button
-            type='button'
-            class='stat-cell'
-            {{on 'click' this.drillConsumed}}
-          >
-            <Stat
-              @label='Consumed'
-              @value={{this.consumedCount}}
-              @hint='blocks with ≥1 consumer'
-            />
-          </button>
-          <button
-            type='button'
-            class='stat-cell'
-            {{on 'click' this.drillConsumed}}
-          >
-            <Stat
-              @label='Reused'
-              @value={{this.reusedCount}}
-              @hint='two-consumer rule met'
-            />
-          </button>
-          <button
-            type='button'
-            class='stat-cell'
-            {{on 'click' (fn this.drillBucket 'gold')}}
-          >
-            <Stat
-              @label='Gold specs'
-              @value={{this.goldCount}}
-              @hint='all 6 checks pass'
-            />
-          </button>
-          {{#if this.recentlyVerified.length}}
-            <div class='stat-cell stat-static'>
-              <Stat
-                @label='Verified · 30d'
-                @value={{this.recentlyVerified.length}}
-                @hint='since the last crawl rounds'
-              />
-            </div>
-          {{/if}}
-        </section>
-
-        {{#if this.latestReport}}
-          <section class='panel report-panel'>
-            <h2>Latest crawl round</h2>
+          <section class='stat-band'>
             <button
               type='button'
-              class='report-body'
-              title='Open the full report'
-              {{on 'click' (fn this.openCard this.latestReport)}}
+              class='stat-cell'
+              {{on 'click' this.drillAll}}
             >
-              {{#let (this.cardComponent this.latestReport) as |R|}}
-                <R @format='embedded' />
-              {{/let}}
+              <Stat
+                @label='Matrix'
+                @value={{this.total}}
+                @hint='{{this.blockTotal}} blocks · {{this.outOfScopeCount}} out of scope'
+              />
             </button>
+            <button
+              type='button'
+              class='stat-cell'
+              {{on 'click' this.drillVerified}}
+            >
+              <Stat
+                @label='Spec-verified'
+                @value={{this.specVerifiedCount}}
+                @hint='of {{this.blockTotal}} blocks'
+              />
+            </button>
+            <button
+              type='button'
+              class='stat-cell'
+              {{on 'click' this.drillConsumed}}
+            >
+              <Stat
+                @label='Consumed'
+                @value={{this.consumedCount}}
+                @hint='blocks with ≥1 consumer'
+              />
+            </button>
+            <button
+              type='button'
+              class='stat-cell'
+              {{on 'click' this.drillConsumed}}
+            >
+              <Stat
+                @label='Reused'
+                @value={{this.reusedCount}}
+                @hint='two-consumer rule met'
+              />
+            </button>
+            <button
+              type='button'
+              class='stat-cell'
+              {{on 'click' (fn this.drillBucket 'gold')}}
+            >
+              <Stat
+                @label='Gold specs'
+                @value={{this.goldCount}}
+                @hint='all 6 checks pass'
+              />
+            </button>
+            {{#if this.recentlyVerified.length}}
+              <div class='stat-cell stat-static'>
+                <Stat
+                  @label='Verified · 30d'
+                  @value={{this.recentlyVerified.length}}
+                  @hint='since the last crawl rounds'
+                />
+              </div>
+            {{/if}}
           </section>
-        {{/if}}
 
-        {{#if this.hasBlockers}}
-          <section class='panel blockers-panel'>
-            <h2>Known blockers</h2>
-            <div class='blocker-list'>
-              {{#each this.openBlockers as |b|}}
-                <button
-                  type='button'
-                  class='blocker-item'
-                  {{on 'click' (fn this.openCard b)}}
-                >
-                  {{#let (this.cardComponent b) as |B|}}
-                    <B @format='embedded' />
-                  {{/let}}
-                </button>
+          {{#if this.latestReport}}
+            <section class='panel report-panel'>
+              <h2>Latest crawl round</h2>
+              <button
+                type='button'
+                class='report-body'
+                title='Open the full report'
+                {{on 'click' (fn this.openCard this.latestReport)}}
+              >
+                {{#let (this.cardComponent this.latestReport) as |R|}}
+                  <R @format='embedded' />
+                {{/let}}
+              </button>
+            </section>
+          {{/if}}
+
+          {{#if this.hasBlockers}}
+            <section class='panel blockers-panel'>
+              <h2>Known blockers</h2>
+              <div class='blocker-list'>
+                {{#each this.openBlockers as |b|}}
+                  <button
+                    type='button'
+                    class='blocker-item'
+                    {{on 'click' (fn this.openCard b)}}
+                  >
+                    {{#let (this.cardComponent b) as |B|}}
+                      <B @format='embedded' />
+                    {{/let}}
+                  </button>
+                {{/each}}
+                {{#each this.blockedConcepts as |c|}}
+                  <button
+                    type='button'
+                    class='blocked-concept'
+                    {{on 'click' (fn this.openCard c)}}
+                  >
+                    <span class='cell-symbol'>{{c.symbol}}</span>
+                    <span class='blocked-name'>{{c.concept}}</span>
+                    <span class='blocked-note'>{{if
+                        c.notes
+                        c.notes
+                        'Blocked — no reason recorded'
+                      }}</span>
+                  </button>
+                {{/each}}
+              </div>
+            </section>
+          {{/if}}
+
+          <section class='panel wall-panel'>
+            <h2>The matrix — every concept, its evidence right now</h2>
+            <div class='wall'>
+              {{#each this.layerBands as |band|}}
+                <div class='band'>
+                  <button
+                    type='button'
+                    class='band-head'
+                    title='Show layer {{band.layer}} in the grid'
+                    {{on 'click' (fn this.drillLayer band.layer)}}
+                  >
+                    <span class='band-id'>{{band.layer}}</span>
+                    <span class='band-name'>{{band.layerName}}</span>
+                    <span class='band-count'>{{band.verified}}/{{band.total}}
+                      verified ·
+                      {{band.coded}}
+                      coded</span>
+                    <div class='band-bar'>
+                      <div class='bar-code' style={{band.codedStyle}}></div>
+                      <div
+                        class='bar-verified'
+                        style={{band.verifiedStyle}}
+                      ></div>
+                    </div>
+                  </button>
+                  <div class='band-cells'>
+                    {{#each band.cells as |cell|}}
+                      <button
+                        type='button'
+                        class='cell {{cell.cls}}'
+                        title={{cell.hint}}
+                        {{on 'click' (fn this.openCard cell.card)}}
+                      ></button>
+                    {{/each}}
+                  </div>
+                </div>
               {{/each}}
-              {{#each this.blockedConcepts as |c|}}
+            </div>
+            <div class='legend'>
+              {{#each this.wallLegend as |item|}}
                 <button
                   type='button'
-                  class='blocked-concept'
-                  {{on 'click' (fn this.openCard c)}}
+                  class='legend-item'
+                  {{on 'click' (fn this.drillSpecState item.key)}}
                 >
-                  <span class='cell-symbol'>{{c.symbol}}</span>
-                  <span class='blocked-name'>{{c.concept}}</span>
-                  <span class='blocked-note'>{{if
-                      c.notes
-                      c.notes
-                      'Blocked — no reason recorded'
-                    }}</span>
+                  <span class='legend-dot' style={{item.dotStyle}}></span>
+                  {{item.label}}
                 </button>
               {{/each}}
             </div>
           </section>
-        {{/if}}
 
-        <section class='panel wall-panel'>
-          <h2>The matrix — every concept, its evidence right now</h2>
-          <div class='wall'>
-            {{#each this.layerBands as |band|}}
-              <div class='band'>
-                <button
-                  type='button'
-                  class='band-head'
-                  title='Show layer {{band.layer}} in the grid'
-                  {{on 'click' (fn this.drillLayer band.layer)}}
-                >
-                  <span class='band-id'>{{band.layer}}</span>
-                  <span class='band-name'>{{band.layerName}}</span>
-                  <span class='band-count'>{{band.verified}}/{{band.total}}
-                    verified · {{band.coded}} coded</span>
-                  <div class='band-bar'>
-                    <div class='bar-code' style={{band.codedStyle}}></div>
-                    <div
-                      class='bar-verified'
-                      style={{band.verifiedStyle}}
-                    ></div>
-                  </div>
-                </button>
-                <div class='band-cells'>
-                  {{#each band.cells as |cell|}}
-                    <button
-                      type='button'
-                      class='cell {{cell.cls}}'
-                      title={{cell.hint}}
-                      {{on 'click' (fn this.openCard cell.card)}}
-                    ></button>
-                  {{/each}}
-                </div>
+          <section class='two-col'>
+            <div class='panel'>
+              <h2>Spec quality — per-kind checks, computed live</h2>
+              <div class='state-list'>
+                {{#each this.qualityRows as |row|}}
+                  <button
+                    type='button'
+                    class='state-row'
+                    {{on 'click' (fn this.drillBucket row.value)}}
+                  >
+                    <span class='state-name'>
+                      <span class='legend-dot' style={{row.dotStyle}}></span>
+                      {{row.label}}
+                    </span>
+                    <span class='state-count'>{{row.count}}
+                      <span class='chev'>›</span></span>
+                  </button>
+                {{/each}}
               </div>
-            {{/each}}
-          </div>
-          <div class='legend'>
-            {{#each this.wallLegend as |item|}}
-              <button
-                type='button'
-                class='legend-item'
-                {{on 'click' (fn this.drillSpecState item.key)}}
-              >
-                <span class='legend-dot' style={{item.dotStyle}}></span>
-                {{item.label}}
-              </button>
-            {{/each}}
-          </div>
-        </section>
+              <p class='tier-note'>Gold = every check that applies to the
+                concept's kind passes. A file def is shown by an attached file
+                and a command by a call in its readMe, so their denominators
+                differ — the chip carries both numbers. The prose bar is set by
+                the exemplars in spec-quality-standard.md.</p>
+            </div>
 
-        <section class='two-col'>
-          <div class='panel'>
-            <h2>Spec quality — per-kind checks, computed live</h2>
-            <div class='state-list'>
-              {{#each this.qualityRows as |row|}}
+            <div class='panel'>
+              <h2>Next best actions</h2>
+              <div class='state-list'>
                 <button
                   type='button'
                   class='state-row'
-                  {{on 'click' (fn this.drillBucket row.value)}}
+                  {{on 'click' (fn this.drillSpecState 'catalog')}}
                 >
-                  <span class='state-name'>
-                    <span class='legend-dot' style={{row.dotStyle}}></span>
-                    {{row.label}}
-                  </span>
-                  <span class='state-count'>{{row.count}}
+                  <span class='state-name'>Catalog code without a Spec — cheap
+                    wins</span>
+                  <span class='state-count'>{{this.catalogAvailable.length}}
                     <span class='chev'>›</span></span>
                 </button>
-              {{/each}}
+                <button
+                  type='button'
+                  class='state-row'
+                  {{on 'click' (fn this.drillSpecState 'platform')}}
+                >
+                  <span class='state-name'>Platform code without a Spec</span>
+                  <span class='state-count'>{{this.platformAvailable.length}}
+                    <span class='chev'>›</span></span>
+                </button>
+                <button
+                  type='button'
+                  class='state-row'
+                  {{on 'click' (fn this.drillBucket 'thin')}}
+                >
+                  <span class='state-name'>Thin specs to lift (3+ checks short)</span>
+                  <span class='state-count'>{{this.thinCount}}
+                    <span class='chev'>›</span></span>
+                </button>
+              </div>
+              <p class='tier-note'>{{this.missingExampleCount}}
+                verified specs still fail their kind's example check — a fixture
+                for a field or card, an attached file for a file def, a call in
+                the readMe for a command.</p>
             </div>
-            <p class='tier-note'>Gold = every check that applies to the
-              concept's kind passes. A file def is shown by an attached file
-              and a command by a call in its readMe, so their denominators
-              differ — the chip carries both numbers. The prose bar is set by
-              the exemplars in spec-quality-standard.md.</p>
-          </div>
-
-          <div class='panel'>
-            <h2>Next best actions</h2>
-            <div class='state-list'>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillSpecState 'catalog')}}
-              >
-                <span class='state-name'>Catalog code without a Spec — cheap
-                  wins</span>
-                <span
-                  class='state-count'
-                >{{this.catalogAvailable.length}}
-                  <span class='chev'>›</span></span>
-              </button>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillSpecState 'platform')}}
-              >
-                <span class='state-name'>Platform code without a Spec</span>
-                <span
-                  class='state-count'
-                >{{this.platformAvailable.length}}
-                  <span class='chev'>›</span></span>
-              </button>
-              <button
-                type='button'
-                class='state-row'
-                {{on 'click' (fn this.drillBucket 'thin')}}
-              >
-                <span class='state-name'>Thin specs to lift (3+ checks
-                  short)</span>
-                <span class='state-count'>{{this.thinCount}}
-                  <span class='chev'>›</span></span>
-              </button>
-            </div>
-            <p class='tier-note'>{{this.missingExampleCount}}
-              verified specs still fail their kind's example check — a
-              fixture for a field or card, an attached file for a file def, a
-              call in the readMe for a command.</p>
-          </div>
-        </section>
+          </section>
 
         {{/if}}
 
         {{#if this.showConcepts}}
-        <section class='panel grid-panel' id='matrix-concept-grid'>
-          <div class='table-head'>
-            <h2>Concepts</h2>
-            <span class='count'>{{this.filtered.length}} shown</span>
-          </div>
-          <FilterChips
-            @options={{this.bucketChips}}
-            @value={{this.bucketFilter}}
-            @onValueChange={{this.setBucket}}
-          />
-          <div class='filters'>
-            <select aria-label='Layer' {{on 'change' this.setLayer}}>
-              <option value='all' selected={{eq this.layerFilter 'all'}}>All
-                layers</option>
-              {{#each this.layerOptions as |opt|}}
-                <option
-                  value={{opt}}
-                  selected={{eq this.layerFilter opt}}
-                >Layer {{opt}}</option>
-              {{/each}}
-            </select>
-            <select aria-label='Lane' {{on 'change' this.setLane}}>
-              <option value='all' selected={{eq this.laneFilter 'all'}}>All
-                lanes</option>
-              {{#each this.laneOptions as |opt|}}
-                <option
-                  value={{opt}}
-                  selected={{eq this.laneFilter opt}}
-                >{{opt}}</option>
-              {{/each}}
-            </select>
-            <select aria-label='Evidence tier' {{on 'change' this.setTier}}>
-              <option value='all' selected={{eq this.tierFilter 'all'}}>All
-                tiers</option>
-              {{#each this.tierOptions as |opt|}}
-                <option
-                  value={{opt}}
-                  selected={{eq this.tierFilter opt}}
-                >{{opt}}</option>
-              {{/each}}
-            </select>
-            <SearchInput
-              class='search'
-              @value={{this.query}}
-              @placeholder='Search concept, symbol, provenance…'
-              @onInput={{this.setQuery}}
-            />
-            {{#if this.activeSpecState}}
-              <button
-                type='button'
-                class='active-chip'
-                {{on 'click' this.clearSpecState}}
-              >{{this.activeSpecState.label}} ✕</button>
-            {{/if}}
-          </div>
-          {{#if this.filtered.length}}
-            <div class='grid-scroll'>
-              <DataGrid
-                @columns={{gridColumns}}
-                @rows={{this.gridRows}}
-                @rowKey='symbol'
-              >
-                <:cell as |row column|>
-                  {{#if (eq column.key 'concept')}}
-                    <button
-                      type='button'
-                      class='concept-link'
-                      {{on 'click' (fn this.openCard (getCardOf row))}}
-                    >{{row.concept}}</button>
-                  {{else if (eq column.key 'score')}}
-                    <span class='q-chip q-{{row.qkey}}'>{{row.quality}}
-                      {{#if (isScored row.score)}}·
-                        {{row.scoreLabel}}{{/if}}</span>
-                  {{else}}
-                    {{get row column.key}}
-                  {{/if}}
-                </:cell>
-              </DataGrid>
+          <section class='panel grid-panel' id='matrix-concept-grid'>
+            <div class='table-head'>
+              <h2>Concepts</h2>
+              <span class='count'>{{this.filtered.length}} shown</span>
+              <ExportButton
+                class='export'
+                @rows={{this.filtered}}
+                @columns={{this.exportColumns}}
+                @filename={{this.exportFilename}}
+                @label='Export CSV'
+              />
             </div>
-          {{else}}
-            <EmptyState
-              @title='No concepts match'
-              @message='Clear a filter or the search to widen the view'
+            <FilterChips
+              @options={{this.bucketChips}}
+              @value={{this.bucketFilter}}
+              @onValueChange={{this.setBucket}}
             />
-          {{/if}}
-        </section>
+            <div class='filters'>
+              <select aria-label='Layer' {{on 'change' this.setLayer}}>
+                <option value='all' selected={{eq this.layerFilter 'all'}}>All
+                  layers</option>
+                {{#each this.layerOptions as |opt|}}
+                  <option
+                    value={{opt}}
+                    selected={{eq this.layerFilter opt}}
+                  >Layer {{opt}}</option>
+                {{/each}}
+              </select>
+              <select aria-label='Lane' {{on 'change' this.setLane}}>
+                <option value='all' selected={{eq this.laneFilter 'all'}}>All
+                  lanes</option>
+                {{#each this.laneOptions as |opt|}}
+                  <option
+                    value={{opt}}
+                    selected={{eq this.laneFilter opt}}
+                  >{{opt}}</option>
+                {{/each}}
+              </select>
+              <select aria-label='Evidence tier' {{on 'change' this.setTier}}>
+                <option value='all' selected={{eq this.tierFilter 'all'}}>All
+                  tiers</option>
+                {{#each this.tierOptions as |opt|}}
+                  <option
+                    value={{opt}}
+                    selected={{eq this.tierFilter opt}}
+                  >{{opt}}</option>
+                {{/each}}
+              </select>
+              <SearchInput
+                class='search'
+                @value={{this.query}}
+                @placeholder='Search concept, symbol, provenance…'
+                @onInput={{this.setQuery}}
+              />
+              {{#if this.activeSpecState}}
+                <button
+                  type='button'
+                  class='active-chip'
+                  {{on 'click' this.clearSpecState}}
+                >{{this.activeSpecState.label}} ✕</button>
+              {{/if}}
+            </div>
+            {{#if this.filtered.length}}
+              <div class='grid-scroll'>
+                <DataGrid
+                  @columns={{gridColumns}}
+                  @rows={{this.gridRows}}
+                  @rowKey='symbol'
+                >
+                  <:cell as |row column|>
+                    {{#if (eq column.key 'concept')}}
+                      <button
+                        type='button'
+                        class='concept-link'
+                        {{on 'click' (fn this.openCard (getCardOf row))}}
+                      >{{row.concept}}</button>
+                    {{else if (eq column.key 'score')}}
+                      <span class='q-chip q-{{row.qkey}}'>{{row.quality}}
+                        {{#if (isScored row.score)}}·
+                          {{row.scoreLabel}}{{/if}}</span>
+                    {{else}}
+                      {{get row column.key}}
+                    {{/if}}
+                  </:cell>
+                </DataGrid>
+              </div>
+            {{else}}
+              <EmptyState
+                @title='No concepts match'
+                @message='Clear a filter or the search to widen the view'
+              />
+            {{/if}}
+          </section>
         {{/if}}
       </article>
       <style scoped>
@@ -1164,13 +1265,17 @@ export class MatrixTracker extends CardDef {
         }
         .table-head {
           display: flex;
-          align-items: baseline;
-          justify-content: space-between;
+          align-items: center;
+          gap: 0.5rem;
         }
         .count {
+          margin-right: auto;
           font-size: 0.75rem;
           color: var(--muted-foreground, #6b7280);
           font-variant-numeric: tabular-nums;
+        }
+        .export {
+          flex: none;
         }
         .filters {
           display: flex;
@@ -1288,4 +1393,3 @@ function getCardOf(row: Row): CardDef {
 function isScored(score: number): boolean {
   return score >= 0;
 }
-
