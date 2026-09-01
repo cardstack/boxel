@@ -774,12 +774,21 @@ export function relationshipStateForEntry<T extends CardDef>(
 //   - `isLoading: false, isLoaded: true`   — membership is settled (possibly `[]`).
 //
 // `isLoaded` alone is not enough to trust a rollup, because a settled
-// membership can still be a prefix. A query-backed field resolves through a
-// page-bounded search, so a query matching more instances than the ceiling
-// allows settles holding the first page of them. `totalMatchCount` is what the
-// query actually matches and `isPartial` says membership falls short of it —
-// so a rollup that must be exact checks `isPartial` before reducing, and a
-// count-shaped one reads `totalMatchCount` and never touches the rows:
+// membership can still be short of the match set. Two ways it gets there: a
+// query-backed field resolves through a page-bounded search, so a query
+// matching more instances than the page allows settles holding the first page
+// of them; and a field spanning several realms keeps the rows from the realms
+// that answered when one of them fails. `isPartial` covers both — it is the
+// check a rollup that must be exact makes before reducing.
+//
+// `totalMatchCount` then says how short. A number is the count the query
+// matches, so the shortfall is exactly that count minus the rows. `undefined`
+// is unknown rather than zero: nothing has resolved the field, or a realm
+// failed and took its share of the count with it. So `isPartial` without a
+// count means rows are missing and the gap is not measurable.
+//
+// A count-shaped rollup sidesteps all of it by reading `totalMatchCount` and
+// never touching the rows:
 //
 //   @field activityCount = contains(NumberField, {
 //     computeVia: function (this: Classroom) {
@@ -804,9 +813,14 @@ export interface RelationshipStatus<T extends CardDef = CardDef> {
   // membership carries. `undefined` for a declared link, and for a query-backed
   // field until its search has reported one.
   totalMatchCount: number | undefined;
-  // Membership is a bounded prefix of the match set, so reducing over it
-  // undercounts. Never true while the count is unknown or membership is still
-  // unresolved — this claims a shortfall, it does not hedge about one.
+  // Membership is not the whole match set, so reducing over it undercounts.
+  // True two ways: the count is known and exceeds the rows, or the count is
+  // unknowable because a realm the query targets failed — that realm's
+  // instances are missing and its share of the count went with them. Read
+  // `totalMatchCount` to tell them apart: present means the shortfall is
+  // measurable, absent means only that there is one. Stays false while
+  // membership is unresolved, and for a singular query-backed field, whose one
+  // slot is the field working as declared.
   isPartial: boolean;
 }
 
@@ -829,6 +843,10 @@ export interface RelationshipProbeResult<T extends CardDef = CardDef> {
   // search resource holds the match count and the server's own result set in
   // the same terms. Ignored for declared fields.
   queryIsPartial?: boolean;
+  // Whether a realm the query targets failed to answer. Such a realm
+  // contributes no rows and no count, so membership is short and the shortfall
+  // is not measurable. Ignored for declared fields.
+  queryHasUnreachableRealms?: boolean;
 }
 type RelationshipProbe = (
   instance: CardDef,
@@ -885,7 +903,8 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
         : resolved;
     // A singular field reports neither: its query is forced to `page.size = 1`
     // and it surfaces the first match by design, so a total above one describes
-    // the query rather than a shortfall in the field.
+    // the query rather than a shortfall in the field — and a realm that failed
+    // leaves it holding the same one slot it was declared to hold.
     let isSingular = field.fieldType === 'linksTo';
     let totalMatchCount = isSingular ? undefined : probe?.queryTotalMatchCount;
     return {
@@ -893,15 +912,21 @@ export function getRelationshipMembershipState<T extends CardDef = CardDef>(
       isLoaded: !isLoading && membership !== undefined,
       membership,
       totalMatchCount,
-      // Taken from the probe rather than compared against `membership` here.
-      // The comparison has to happen where the match count and the server's own
-      // result set sit together; `membership` is that set after reconciliation
-      // against local Store state, so measuring against it would call a field
-      // partial because the user edited one of its cards out of the filter.
+      // Two questions, asked in the order the evidence allows. A known count
+      // is compared in the search resource, not here: `membership` is the
+      // server's result set after reconciliation against local Store state, so
+      // measuring against it would call a field partial because the user
+      // edited one of its cards out of the filter. Where no count survives,
+      // the comparison is impossible and an unreachable realm answers instead
+      // — rows are missing, just not countably. A known count supersedes an
+      // earlier realm failure, because it describes the set the field holds
+      // now.
       isPartial:
-        !isSingular && membership !== undefined
-          ? Boolean(probe?.queryIsPartial)
-          : false,
+        isSingular || membership === undefined
+          ? false
+          : totalMatchCount != null
+            ? Boolean(probe?.queryIsPartial)
+            : Boolean(probe?.queryHasUnreachableRealms),
     };
   }
 
