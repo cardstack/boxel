@@ -13,6 +13,7 @@ import {
   SearchBoundError,
   MAX_SEARCH_PAGE_SIZE,
   SERVER_MAX_SEARCH_PAGE_SIZE,
+  SERVER_ABSOLUTE_MAX_PAGE_SIZE,
   MAX_REALMS_PER_SEARCH_REQUEST,
   type Query,
 } from '@cardstack/runtime-common';
@@ -144,16 +145,36 @@ module(basename(import.meta.filename), function (hooks) {
       assert.deepEqual(bounded.page, { size: SERVER_MAX_SEARCH_PAGE_SIZE });
     });
 
-    test('an explicit page over the server ceiling is rejected with a 400', function (assert) {
+    test('an explicit page over the default is honored up to the absolute maximum', function (assert) {
+      // Naming a size is the opt-in: the caller asked for that cost knowingly,
+      // where a caller that named nothing gets the default. This is what lets a
+      // query-backed field declare the page it needs.
+      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1 } } as Query;
+      assert.strictEqual(applyServerSearchPageBound(query), query);
+      let atMax = { page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE } } as Query;
+      assert.strictEqual(applyServerSearchPageBound(atMax), atMax);
+    });
+
+    test('an explicit page over the absolute maximum is rejected with a 400', function (assert) {
       try {
         applyServerSearchPageBound({
-          page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1 },
+          page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1 },
         } as Query);
         assert.ok(false, 'expected a SearchBoundError');
       } catch (e) {
         assert.true(e instanceof SearchBoundError);
         assert.strictEqual((e as SearchBoundError).status, 400);
       }
+    });
+
+    test('the absolute maximum is at least the default', function (assert) {
+      // Opt-in territory can be empty but never inverted: an env override that
+      // put the maximum below the default would make the size a non-paginating
+      // caller is clamped to itself rejectable.
+      assert.true(
+        SERVER_ABSOLUTE_MAX_PAGE_SIZE >= SERVER_MAX_SEARCH_PAGE_SIZE,
+        'the rejection threshold never sits below the mandatory default',
+      );
     });
 
     test('a page allowed by the server ceiling can still exceed the card cap', function (assert) {
@@ -172,41 +193,83 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('the override lowers the effective server ceiling independently', function (assert) {
-      setSearchBoundsForTests({ serverMaxPageSize: 3 });
+    test('the overrides move the default and the maximum independently', function (assert) {
+      setSearchBoundsForTests({
+        serverMaxPageSize: 3,
+        serverAbsoluteMaxPageSize: 8,
+      });
+      let clamped = applyServerSearchPageBound({} as Query);
+      assert.deepEqual(
+        clamped.page,
+        { size: 3 },
+        'a query naming no page takes the default',
+      );
+      let optedIn = { page: { size: 8 } } as Query;
+      assert.strictEqual(
+        applyServerSearchPageBound(optedIn),
+        optedIn,
+        'a query naming a size within the maximum keeps it',
+      );
       assert.throws(
-        () => applyServerSearchPageBound({ page: { size: 4 } } as Query),
+        () => applyServerSearchPageBound({ page: { size: 9 } } as Query),
+        (e: Error) => e instanceof SearchBoundError,
+        'and is rejected past the maximum',
+      );
+    });
+
+    test('collapsing the two overrides restores a single threshold', function (assert) {
+      // The card `@context` cap is this shape permanently: untrusted card code
+      // does not get to opt into a larger page by naming one.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 5,
+        serverAbsoluteMaxPageSize: 5,
+      });
+      assert.throws(
+        () => applyServerSearchPageBound({ page: { size: 6 } } as Query),
         (e: Error) => e instanceof SearchBoundError,
       );
-      let clamped = applyServerSearchPageBound({} as Query);
-      assert.deepEqual(clamped.page, { size: 3 });
+      assert.deepEqual(applyServerSearchPageBound({} as Query).page, {
+        size: 5,
+      });
     });
   });
 
   module('applyQueryFieldPageBound', function () {
-    test('an absent page is clamped to the server ceiling', function (assert) {
+    test('a field declaring no page takes the default ceiling', function (assert) {
       let bounded = applyQueryFieldPageBound({ filter: { eq: {} } } as Query);
       assert.deepEqual(bounded.page, { size: SERVER_MAX_SEARCH_PAGE_SIZE });
     });
 
-    test('a page at or under the ceiling passes through unchanged', function (assert) {
+    test('a page at or under the default passes through unchanged', function (assert) {
       let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE } } as Query;
       assert.strictEqual(applyQueryFieldPageBound(query), query);
       let smaller = { page: { size: 1, number: 0 } } as Query;
       assert.strictEqual(applyQueryFieldPageBound(smaller), smaller);
     });
 
-    test('an over-ceiling page is clamped rather than rejected', function (assert) {
-      // The endpoint bounds answer a request, so rejecting one costs the
+    test('a declared page over the default is honored — the opt-in', function (assert) {
+      // The whole point of declaring a page on a query field: the field says it
+      // needs more than the default and gets it, rather than being silently
+      // held to the ceiling it was trying to escape.
+      let query = {
+        page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1, number: 0 },
+      } as Query;
+      assert.strictEqual(applyQueryFieldPageBound(query), query);
+      let atMax = { page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE } } as Query;
+      assert.strictEqual(applyQueryFieldPageBound(atMax), atMax);
+    });
+
+    test('a declared page over the absolute maximum is clamped, not rejected', function (assert) {
+      // The endpoint bounds answer one request, so rejecting one costs the
       // caller that request. A field's page.size is authored once and read on
       // every index of every instance of that card, so the same rejection
       // would make the card unindexable — the shortfall is reported through
       // the relationship's match total instead.
       let bounded = applyQueryFieldPageBound({
-        page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 1, number: 2 },
+        page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 1, number: 2 },
       } as Query);
       assert.deepEqual(bounded.page, {
-        size: SERVER_MAX_SEARCH_PAGE_SIZE,
+        size: SERVER_ABSOLUTE_MAX_PAGE_SIZE,
         number: 2,
       });
     });
@@ -225,20 +288,36 @@ module(basename(import.meta.filename), function (hooks) {
     });
 
     test('the input query is left unmutated', function (assert) {
-      let query = { page: { size: SERVER_MAX_SEARCH_PAGE_SIZE + 10 } } as Query;
+      let query = {
+        page: { size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 10 },
+      } as Query;
       applyQueryFieldPageBound(query);
       assert.deepEqual(query.page, {
-        size: SERVER_MAX_SEARCH_PAGE_SIZE + 10,
+        size: SERVER_ABSOLUTE_MAX_PAGE_SIZE + 10,
       });
     });
 
-    test('the override lowers the effective ceiling', function (assert) {
-      setSearchBoundsForTests({ serverMaxPageSize: 3 });
+    test('the overrides move the default and the clamp independently', function (assert) {
+      setSearchBoundsForTests({
+        serverMaxPageSize: 3,
+        serverAbsoluteMaxPageSize: 8,
+      });
       assert.deepEqual(
-        applyQueryFieldPageBound({ page: { size: 4 } } as Query).page,
+        applyQueryFieldPageBound({} as Query).page,
         { size: 3 },
+        'a field declaring no page takes the default',
       );
-      assert.deepEqual(applyQueryFieldPageBound({} as Query).page, { size: 3 });
+      let optedIn = { page: { size: 8 } } as Query;
+      assert.strictEqual(
+        applyQueryFieldPageBound(optedIn),
+        optedIn,
+        'a field declaring a size within the maximum keeps it',
+      );
+      assert.deepEqual(
+        applyQueryFieldPageBound({ page: { size: 9 } } as Query).page,
+        { size: 8 },
+        'and is clamped to the maximum past it',
+      );
     });
   });
 

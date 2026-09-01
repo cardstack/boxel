@@ -15,13 +15,17 @@ import type { SearchEntryFieldset } from './search-entry.ts';
 // is enforced client-side on the card `@context` surface, and a bound that must
 // hold for every caller is enforced server-side.
 //
-//   - Page size — two ceilings. The card `@context` cap (MAX_SEARCH_PAGE_SIZE)
-//     is enforced client-side, so a card gets a small page while the host can
-//     page larger. The server ceiling (SERVER_MAX_SEARCH_PAGE_SIZE, higher) is
-//     enforced server-side on every item-leg request — the host, and any card
-//     that skips the client cap, included — so the result set the server
-//     assembles and serializes is always bounded. The true match count still
-//     rides `meta.page.total`, so a caller can paginate.
+//   - Page size — a client cap plus two server thresholds, because a request
+//     that says nothing about paging and one that deliberately asks for a large
+//     page are different acts. The card `@context` cap (MAX_SEARCH_PAGE_SIZE) is
+//     enforced client-side, so a card gets a small page while the host can page
+//     larger. Server-side, SERVER_MAX_SEARCH_PAGE_SIZE is the default a request
+//     with no page is clamped to (mandatory pagination — a non-paginating caller
+//     gets the first page, not every row), and SERVER_ABSOLUTE_MAX_PAGE_SIZE is
+//     the ceiling an explicit page is rejected above. A caller between the two
+//     has opted in: it named a size, so it is asking for that cost knowingly,
+//     and the result set is still bounded. The true match count rides
+//     `meta.page.total` either way, so a caller can paginate instead.
 //   - Realms fan-out (MAX_REALMS_PER_SEARCH_REQUEST) and concurrency
 //     (SEARCH_CONCURRENCY_CAP) — client-side only, on the card `@context`
 //     surface: the host federates widely and runs its own searches freely.
@@ -33,6 +37,7 @@ import type { SearchEntryFieldset } from './search-entry.ts';
 
 const DEFAULT_MAX_SEARCH_PAGE_SIZE = 100;
 const DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE = 500;
+const DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE = 2_000;
 const DEFAULT_MAX_REALMS_PER_SEARCH_REQUEST = 2;
 const DEFAULT_SEARCH_TIME_BUDGET_MS = 30_000;
 const DEFAULT_SEARCH_CONCURRENCY_CAP = 2;
@@ -69,17 +74,32 @@ export const MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   MIN_PAGE_SIZE,
 );
 
-// The server-side hard page ceiling, enforced on every item-leg request
-// regardless of caller (the trusted host and any card that skips the client cap
-// included). Higher than the card `@context` cap — the host may legitimately
-// page larger — but no request may make the server assemble/serialize an
-// unbounded page. Same shape as the card cap: an explicit page above it is
-// rejected; an absent page is clamped to it (the true total rides
-// `meta.page.total`, so a caller can still paginate).
+// The default page a server-side item-leg request gets when it asks for no
+// particular one, enforced regardless of caller (the trusted host and any card
+// that skips the client cap included). Higher than the card `@context` cap — the
+// host may legitimately page larger — and the reason a non-paginating caller
+// gets a first page rather than every row. It is not the rejection threshold:
+// a caller that names a larger size has opted into that cost, and is held to
+// SERVER_ABSOLUTE_MAX_PAGE_SIZE instead.
 export const SERVER_MAX_SEARCH_PAGE_SIZE = parsePositiveInt(
   env.SERVER_MAX_SEARCH_PAGE_SIZE,
   DEFAULT_SERVER_MAX_SEARCH_PAGE_SIZE,
   MIN_PAGE_SIZE,
+);
+
+// The size no item-leg request may exceed, however deliberately it asks. This
+// is the bound that keeps the server from assembling and serializing an
+// unbounded page; everything between it and the default above is opt-in
+// territory, reachable only by naming a size. Kept at or above the default, so
+// an env override that inverts the two cannot make the default itself
+// rejectable.
+export const SERVER_ABSOLUTE_MAX_PAGE_SIZE = Math.max(
+  SERVER_MAX_SEARCH_PAGE_SIZE,
+  parsePositiveInt(
+    env.SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+    DEFAULT_SERVER_ABSOLUTE_MAX_PAGE_SIZE,
+    MIN_PAGE_SIZE,
+  ),
 );
 
 // Max realms a single federated item-leg request may fan out to.
@@ -112,12 +132,14 @@ export const SEARCH_CONCURRENCY_CAP = parsePositiveInt(
 // waiting out the real time budget. Mirrors `setSearchTimingSinkForTests`.
 let maxPageSize = MAX_SEARCH_PAGE_SIZE;
 let serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
+let serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
 let maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
 let timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 
 export function setSearchBoundsForTests(overrides: {
   maxPageSize?: number;
   serverMaxPageSize?: number;
+  serverAbsoluteMaxPageSize?: number;
   maxRealmsPerRequest?: number;
   timeBudgetMs?: number;
 }): void {
@@ -126,6 +148,9 @@ export function setSearchBoundsForTests(overrides: {
   }
   if (overrides.serverMaxPageSize !== undefined) {
     serverMaxPageSize = overrides.serverMaxPageSize;
+  }
+  if (overrides.serverAbsoluteMaxPageSize !== undefined) {
+    serverAbsoluteMaxPageSize = overrides.serverAbsoluteMaxPageSize;
   }
   if (overrides.maxRealmsPerRequest !== undefined) {
     maxRealmsPerRequest = overrides.maxRealmsPerRequest;
@@ -138,6 +163,7 @@ export function setSearchBoundsForTests(overrides: {
 export function resetSearchBoundsForTests(): void {
   maxPageSize = MAX_SEARCH_PAGE_SIZE;
   serverMaxPageSize = SERVER_MAX_SEARCH_PAGE_SIZE;
+  serverAbsoluteMaxPageSize = SERVER_ABSOLUTE_MAX_PAGE_SIZE;
   maxRealmsPerRequest = MAX_REALMS_PER_SEARCH_REQUEST;
   timeBudgetMs = SEARCH_TIME_BUDGET_MS;
 }
@@ -182,24 +208,26 @@ export function assertRealmsBound(realms: string[]): void {
   }
 }
 
-// Enforce mandatory pagination on an item-leg query against `max`. An explicit
-// page.size over `max` is rejected (the caller asked for more than allowed); an
-// absent page is clamped to `max` so a non-paginating caller gets the first
-// page rather than every row. Returns the (possibly clamped) query without
-// mutating input.
-function boundPageSize(query: Query, max: number): Query {
+// Enforce mandatory pagination on an item-leg query. `dflt` is the size a
+// query that names none is clamped to, so a non-paginating caller gets the
+// first page rather than every row. `max` is the size an explicit page is
+// rejected above; between the two, a caller that named a size gets it, having
+// asked for that cost knowingly. Passing the same number for both collapses to
+// one threshold, which is what the card `@context` cap wants. Returns the
+// (possibly clamped) query without mutating input.
+function boundPageSize(query: Query, dflt: number, max: number): Query {
   let page = query.page;
   if (page == null) {
-    // No page at all: apply the mandatory cap so the result set is bounded.
-    return { ...query, page: { size: max } } as Query;
+    // No page at all: apply the mandatory default so the result set is bounded.
+    return { ...query, page: { size: dflt } } as Query;
   }
   let size = Number((page as { size?: unknown }).size);
   if (!Number.isFinite(size) || size < 1) {
     // A page object with a missing / non-numeric / non-positive size can't
     // bound the result set — and would compile to `LIMIT undefined` / a
-    // negative limit — so treat it like an absent page and clamp to the cap
-    // rather than let it through unbounded.
-    return { ...query, page: { ...page, size: max } } as Query;
+    // negative limit — so treat it like an absent page and clamp to the
+    // default rather than let it through unbounded.
+    return { ...query, page: { ...page, size: dflt } } as Query;
   }
   if (size > max) {
     throw new SearchBoundError(
@@ -211,39 +239,54 @@ function boundPageSize(query: Query, max: number): Query {
 }
 
 // The card `@context` page cap, enforced client-side on card-initiated
-// item-leg searches (see host StoreService).
+// item-leg searches (see host StoreService). One threshold, not two: untrusted
+// card code doesn't get to opt into a larger page by asking for one.
 export function applySearchPageBound(query: Query): Query {
-  return boundPageSize(query, maxPageSize);
+  return boundPageSize(query, maxPageSize, maxPageSize);
 }
 
-// The server-side hard page ceiling, enforced on every item-leg request the
-// server handles regardless of caller. Higher than the card `@context` cap; the
-// backstop that bounds what the server assembles/serializes even when the
-// client cap was skipped.
+// The server-side page bounds, enforced on every item-leg request the server
+// handles regardless of caller. A request naming no page is clamped to the
+// default (higher than the card `@context` cap — the host may legitimately page
+// larger); one naming a size is honored up to the absolute maximum and rejected
+// above it. The pair is what lets a caller with a reason — a query-backed field
+// declaring the page it needs — ask for more than the default while still
+// leaving the server's own work bounded.
 export function applyServerSearchPageBound(query: Query): Query {
-  return boundPageSize(query, serverMaxPageSize);
+  return boundPageSize(query, serverMaxPageSize, serverAbsoluteMaxPageSize);
 }
 
-// The ceiling for a query-backed relationship's own expansion pass, which the
+// The bounds for a query-backed relationship's own expansion pass, which the
 // indexer runs in-process rather than over HTTP. Neither endpoint bound reaches
-// that pass, so it took the same page ceiling as everything else here — the
-// same number the field's cross-realm leg already came back clamped to, so one
-// ceiling now holds wherever the field resolves.
+// that pass, so it applies the same pair here and the field is bounded the same
+// way wherever it resolves — in the indexer, through a peer realm's `_search`,
+// or on the client's live refresh.
 //
-// It clamps where the endpoint bounds reject. A field's `page.size` is authored
-// once and read on every index of every instance of that card, so rejecting an
-// over-ceiling one would turn the whole card into an index error rather than
-// answer the request that asked for too much. Clamping is safe here because
-// the truncation is reported: the true match count rides `meta.total` on the
+// A field that declares no page gets the default, which is the ceiling the
+// author is told about and the one `isPartial` reports against. A field that
+// declares one has opted into that size: it is honored, which is what makes the
+// declared page a real lever rather than a suggestion the ceiling overrules.
+//
+// Where the endpoint rejects an over-maximum page, this clamps. A field's
+// `page.size` is authored once and read on every index of every instance of
+// that card, so rejecting it would make the card unindexable rather than fail
+// the one request that asked for too much. Clamping is safe because the
+// shortfall is reported: the true match count rides `meta.total` on the
 // relationship, and `getRelationshipMembershipState` reads it back as
 // `isPartial`.
 export function applyQueryFieldPageBound(query: Query): Query {
   let page = query.page;
   let size = Number((page as { size?: unknown } | undefined)?.size);
-  if (Number.isFinite(size) && size >= 1 && size <= serverMaxPageSize) {
-    return query;
+  if (!Number.isFinite(size) || size < 1) {
+    return { ...query, page: { ...(page ?? {}), size: serverMaxPageSize } };
   }
-  return { ...query, page: { ...(page ?? {}), size: serverMaxPageSize } };
+  if (size > serverAbsoluteMaxPageSize) {
+    return {
+      ...query,
+      page: { ...(page ?? {}), size: serverAbsoluteMaxPageSize },
+    };
+  }
+  return query;
 }
 
 // Run an item-leg search under the wall-clock budget. The runner receives an
