@@ -253,6 +253,11 @@ export CLAUDE_USER=$(aws --profile $PROFILE ssm get-parameter \
 #    `lsof`, not `ss`: `ss` is Linux-only, and a missing command's failure
 #    disappears into the pipe, so on macOS every port would read as free and
 #    the guard would wave through exactly the case it exists to catch.
+#    Steps 4-6 live inside the `else` because that is the only construction
+#    that actually withholds them. Aborting on a missing pid does not: a
+#    parameter-expansion guard (`${TUNNEL_PID:?…}`) exits a non-interactive
+#    shell only, so pasted at a prompt it prints its message and runs the next
+#    line anyway — the same hole a `return` here would have.
 if lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1; then
   echo "port $LOCAL_PORT is already bound — pick another, and find out what is holding it"
 else
@@ -261,32 +266,27 @@ else
     --document-name AWS-StartPortForwardingSessionToRemoteHost \
     --parameters "{\"portNumber\":[\"5432\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$RDS_HOST\"]}" &
   TUNNEL_PID=$!
+
+  # 4) Run queries against localhost. The password is fetched here, on the
+  #    command that uses it, and exists only for the life of that command —
+  #    no variable that outlives it, nothing on disk, nothing for another
+  #    process to inherit.
+  PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
+    --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
+    --query 'Parameter.Value' --output text) \
+    psql -h localhost -p $LOCAL_PORT -A -t -c "<SQL>"
+
+  # 5) Tear down. `kill $TUNNEL_PID` alone is NOT enough — see below. The pid
+  #    is this run's, assigned four lines up, so it can never be a leftover
+  #    from an earlier attempt.
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
+  unset TUNNEL_PID CLAUDE_USER PGDATABASE   # no CLAUDE_PASSWORD to unset — see step 4
+
+  # 6) Verify the port is released. If it is still listening, the plugin
+  #    survived and you have left an open forward into a deployed database.
+  lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
 fi
-
-# 4) Run queries against localhost. The password is fetched here, on the
-#    command that uses it, and exists only for the life of that command —
-#    no variable that outlives it, nothing on disk, nothing for another
-#    process to inherit.
-#
-#    Gated on TUNNEL_PID: step 3 refusing only skips opening a tunnel, it does
-#    not stop this block, and `psql -p $LOCAL_PORT` would then connect to
-#    whatever already holds the port — the stale forward two headings down.
-#    The `:?` aborts instead, and also catches a re-run where TUNNEL_PID is a
-#    recycled pid from an earlier attempt.
-: "${TUNNEL_PID:?step 3 opened no tunnel — do not query}"
-PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
-  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
-  --query 'Parameter.Value' --output text) \
-  psql -h localhost -p $LOCAL_PORT -A -t -c "<SQL>"
-
-# 5) Tear down. `kill $TUNNEL_PID` alone is NOT enough — see below.
-kill $TUNNEL_PID
-pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
-unset TUNNEL_PID CLAUDE_USER PGDATABASE   # no CLAUDE_PASSWORD to unset — see step 4
-
-# 6) Verify the port is released. If it is still listening, the plugin
-#    survived and you have left an open forward into a deployed database.
-lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
 ```
 
 Notes:
