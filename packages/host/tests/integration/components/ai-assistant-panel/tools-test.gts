@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn } from '@ember/test-helpers';
+import { waitFor, click, fillIn, find } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -8,8 +8,10 @@ import { module, skip, test } from 'qunit';
 
 import {
   buildToolFunctionNameFromResolvedRef,
+  isCardInstance,
   skillCardRef,
 } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
@@ -17,6 +19,7 @@ import {
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
   APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1238,6 +1241,148 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await percySnapshot(assert); // can preview code in ViewCode panel
   });
 
+  test('"Hide Info" collapses the code area even after the message re-mounts while expanded', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'hide-info-height',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          }),
+        },
+      ],
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+
+    // Expand the code area.
+    await click('[data-test-view-code-button]');
+    await waitFor('[data-test-editor]');
+
+    // Re-mount the tool-call message while its code area is open: close and
+    // reopen the AI assistant panel. The expanded/collapsed flag lives in the
+    // room resource and survives the remount, so the code area comes back open
+    // and the height-stamping modifier installs with the editor present —
+    // reproducing the condition under which "Hide Info" used to leave an empty
+    // expanded-height block.
+    await click('[data-test-close-ai-assistant]');
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-editor]');
+    await settled();
+
+    // Collapse via "Hide Info".
+    await click('[data-test-view-code-button]');
+    assert
+      .dom('[data-test-editor]')
+      .doesNotExist('code editor is removed after Hide Info');
+
+    let codeBlockSelector =
+      '[data-test-tool-call-id="hide-info-height"] [data-test-tool-code-block]';
+    assert.dom(codeBlockSelector).exists('tool code block element exists');
+    let codeBlock = find(codeBlockSelector) as HTMLElement;
+    assert.strictEqual(
+      codeBlock.style.height,
+      '',
+      'no inline height is left behind so the block collapses to its header-only height',
+    );
+  });
+
+  test('expanding a tall tool call does not leave an empty gap below the code', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+
+    // A payload with enough lines that the rendered code exceeds the editor's
+    // 250px max-height cap, so the editor scrolls internally rather than
+    // growing to its full content height.
+    let attributes = Object.fromEntries(
+      Array.from({ length: 30 }, (_, i) => [`field${i}`, `value ${i}`]),
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Applying a large patch',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'tall-tool-call',
+          name: 'patchCardInstance',
+          arguments: JSON.stringify({
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: { attributes },
+            },
+          }),
+        },
+      ],
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+
+    await click('[data-test-view-code-button]');
+    await waitFor('[data-test-editor]');
+    await settled();
+
+    let codeBlockSelector =
+      '[data-test-tool-call-id="tall-tool-call"] [data-test-tool-code-block]';
+    assert.dom(codeBlockSelector).exists('tool code block element exists');
+    let codeBlock = find(codeBlockSelector) as HTMLElement;
+
+    // With no stamped inline height the section sizes to its content, so its
+    // height should not exceed the sum of its rendered children. A stamp based
+    // on Monaco's uncapped content height would make the section taller than
+    // the capped editor, leaving an empty gap below the code.
+    assert.strictEqual(
+      codeBlock.style.height,
+      '',
+      'no inline height is stamped when the code is expanded',
+    );
+    let childrenHeight = [...codeBlock.children].reduce(
+      (sum, child) => sum + (child as HTMLElement).offsetHeight,
+      0,
+    );
+    assert.ok(
+      codeBlock.offsetHeight <= childrenHeight + 4,
+      `expanded code block height (${codeBlock.offsetHeight}px) should not exceed its rendered children (${childrenHeight}px)`,
+    );
+  });
+
   test('when command in a message with continuations is done streaming, apply button is shown in ready state', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -2273,5 +2418,180 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .exists(
         'manual approval bar still renders for commands that need user approval',
       );
+  });
+
+  // A tool that returns the target card itself (show-card, get-card, ...)
+  // stores a snapshot of that card in the room. The snapshot carries the live
+  // card's id, so the store must not adopt it: one instance per id means the
+  // snapshot would replace the live instance and its autosave would write the
+  // stale state back over the newer file.
+  function simulateShowCardResult(
+    roomId: string,
+    snapshotFirstName: string,
+    cardId = `${testRealmURL}Person/fadhlan`,
+  ) {
+    let snapshotUrl = 'mxc://mock-server/fadhlan-snapshot';
+    let matrixService = getService('matrix-service');
+    let originalDownload =
+      matrixService.downloadCardFileDef.bind(matrixService);
+    matrixService.downloadCardFileDef = async (serializedFile) => {
+      if (serializedFile.url !== snapshotUrl) {
+        return originalDownload(serializedFile);
+      }
+      return {
+        data: {
+          id: cardId,
+          type: 'card',
+          attributes: { firstName: snapshotFirstName },
+          meta: {
+            adoptsFrom: { module: `${testRealmURL}person`, name: 'Person' },
+          },
+        },
+      } as unknown as LooseSingleCardDocument;
+    };
+    let commandRequestId = 'show-card-request-id';
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Showing the card',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: commandRequestId,
+          name: 'showCard',
+          arguments: JSON.stringify({
+            attributes: { cardId },
+          }),
+        },
+      ],
+    });
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId,
+        'm.relates_to': {
+          rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          key: 'applied',
+          event_id: 'bot-message-event-id',
+        },
+        data: {
+          card: {
+            url: snapshotUrl,
+            sourceUrl: cardId,
+            name: 'Fadhlan',
+            contentType: 'application/vnd.card+json',
+          },
+        },
+      },
+      { type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE },
+    );
+  }
+
+  test<TestContextWithSave>('rendering a tool result that snapshots a card already in the store leaves the live instance untouched', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await waitFor('[data-test-person="Fadhlan"]');
+    let savedFirstNames: string[] = [];
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      savedFirstNames.push(json.data.attributes?.firstName);
+    });
+
+    simulateShowCardResult(roomId, 'Stale');
+
+    await waitFor('[data-test-boxel-tool-call-result]');
+    await settled();
+
+    assert
+      .dom('[data-test-person]')
+      .hasText('Fadhlan', 'the card in the stack still shows the live data');
+    let store = getService('store');
+    let live = store.peek(`${testRealmURL}Person/fadhlan`) as
+      | { firstName?: string }
+      | undefined;
+    assert.strictEqual(
+      live?.firstName,
+      'Fadhlan',
+      'the resident instance keeps its live fields',
+    );
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText('Fadhlan', 'the tool result renders the live card');
+    assert.deepEqual(
+      savedFirstNames,
+      [],
+      'rendering the tool result does not save anything',
+    );
+
+    // Mutating the resident instance must show up in the tool result, which
+    // pins that the result renders the store's instance and not a copy, and
+    // the autosave that follows must carry the live value, not the snapshot.
+    live!.firstName = 'Fadhlan Updated';
+    await settled();
+
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText(
+        'Fadhlan Updated',
+        'the tool result follows the resident instance',
+      );
+    assert.deepEqual(
+      savedFirstNames,
+      ['Fadhlan Updated'],
+      'the autosave writes the live value',
+    );
+  });
+
+  test<TestContextWithSave>('rendering a tool result that snapshots a card not yet in the store loads the live card instead of the snapshot', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    this.onSave(() => {
+      assert.ok(false, 'rendering a tool result must not trigger a save');
+    });
+
+    simulateShowCardResult(roomId, 'Stale');
+
+    await waitFor('[data-test-boxel-tool-call-result]');
+    await settled();
+
+    let store = getService('store');
+    let live = store.peek(`${testRealmURL}Person/fadhlan`) as
+      | { firstName?: string }
+      | undefined;
+    assert.strictEqual(
+      live?.firstName,
+      'Fadhlan',
+      'the store holds the live card, not the room snapshot',
+    );
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText('Fadhlan', 'the tool result renders the live card');
+  });
+
+  test<TestContextWithSave>('rendering a tool result whose live card no longer exists renders the snapshot without installing it under the card id', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    this.onSave(() => {
+      assert.ok(false, 'rendering a tool result must not trigger a save');
+    });
+    let deletedId = `${testRealmURL}Person/deleted`;
+
+    simulateShowCardResult(roomId, 'Snapshot', deletedId);
+
+    await waitFor('[data-test-boxel-tool-call-result]');
+    await settled();
+
+    assert
+      .dom('[data-test-boxel-tool-call-result]')
+      .containsText(
+        'Snapshot',
+        'the tool result falls back to rendering the snapshot',
+      );
+    let store = getService('store');
+    assert.false(
+      isCardInstance(store.peek(deletedId)),
+      'the snapshot is not installed in the store under the realm id',
+    );
   });
 });

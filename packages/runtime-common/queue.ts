@@ -39,6 +39,14 @@ import type { Deferred } from './deferred.ts';
 // serving all user-initiated work — both render tiers and user indexing — and
 // never system-tier jobs; the all-priority pool floors at
 // `systemInitiatedPrerenderHtmlPriority` (0) and serves everything.
+//
+// One realm escapes the system tier. An index of the base realm — the realm
+// every card in the system imports from — is enqueued at the user-initiated
+// tier even when the system initiated it, because a system-tier job can only
+// be claimed by the all-priority pool and so has no way past a backlog there,
+// and a stale or errored base index breaks reads on every realm rather than
+// one. See `systemInitiatedIndexPriority` in jobs/indexing.ts for why base and
+// nothing else.
 export const userInitiatedPriority = 10;
 export const userInitiatedPrerenderHtmlPriority = 9;
 export const systemInitiatedPriority = 1;

@@ -35,7 +35,7 @@ export interface CanonicalizedFilter {
 // through a re-exporting module (e.g. `file-api`'s FileDef, re-exported from
 // `card-api`) only matches once both sides agree on the canonical spelling.
 // URL-form tolerance (RRI / real-URL / virtual-alias) is separate and stays
-// in `internalKeysFor`; this handles the module-identity half.
+// in `internalKeyFor`; this handles the module-identity half.
 export async function canonicalizeFilterRefs(
   filter: Filter,
   resolve: CanonicalRefResolver,

@@ -22,6 +22,47 @@ export function isScreenshotFormat(value: unknown): value is ScreenshotFormat {
 // viewport and must NOT be given an envelope.
 const ENVELOPE_FORMATS: readonly ScreenshotFormat[] = ['fitted'];
 
+// ---------------------------------------------------------------------------
+// Declared screenshots (`static screenshots` on CardDef/FileDef) — the name
+// grammar and format roster shared by the declaration reader in
+// packages/base/card-api and the realm's `_screenshot/…?name=` route.
+// ---------------------------------------------------------------------------
+
+// A declared screenshot's name addresses the capture in a URL, so it is
+// constrained to a charset that survives a URL path segment with no
+// percent-encoding: a leading letter or digit, then letters, digits, `-`,
+// or `_`.
+export const SCREENSHOT_NAME_MAX_LENGTH = 64;
+export const SCREENSHOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+export function isValidScreenshotName(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length <= SCREENSHOT_NAME_MAX_LENGTH &&
+    SCREENSHOT_NAME_PATTERN.test(value)
+  );
+}
+
+// Display formats a declared screenshot may reuse via its `format` slot.
+// Distinct from the on-demand rosters above: a declared capture renders in
+// the indexing-time prerender pass, which can lay out any display format —
+// `atom` included — while `edit` and the non-visual formats are not
+// meaningful pixel sources.
+export const DECLARED_SCREENSHOT_FORMATS = [
+  'isolated',
+  'embedded',
+  'fitted',
+  'atom',
+] as const;
+export type DeclaredScreenshotFormat =
+  (typeof DECLARED_SCREENSHOT_FORMATS)[number];
+
+export function isDeclaredScreenshotFormat(
+  value: unknown,
+): value is DeclaredScreenshotFormat {
+  return (DECLARED_SCREENSHOT_FORMATS as readonly unknown[]).includes(value);
+}
+
 // The capture spec: every way a screenshot capture can be parameterized,
 // shared by the POST /_screenshot-card body and the GET `_screenshot/` URL
 // DSL so the two surfaces validate identically and one capture satisfies
@@ -95,6 +136,13 @@ export const SCREENSHOT_MAX_VIEWPORT_WIDTH = 4096;
 export const SCREENSHOT_MAX_VIEWPORT_HEIGHT = 16384;
 // A 3× scale already covers retina/hi-dpi; higher just multiplies pixel cost.
 export const SCREENSHOT_MAX_DEVICE_SCALE_FACTOR = 3;
+// The scale a *declared* screenshot (a `static screenshots` entry) captures
+// at when the author writes no deviceScaleFactor — retina-quality output by
+// default. Distinct from the wire-spec identity, where an absent
+// deviceScaleFactor means 1: declaration readers and the capture pass must
+// share this value so a declaration that validates clean cannot exceed the
+// physical-edge cap once the default is applied.
+export const SCREENSHOT_DEFAULT_DEVICE_SCALE_FACTOR = 2;
 // The Chromium single-texture cap the viewport bounds are derived from,
 // enforced on *physical* pixels: CSS dimension × deviceScaleFactor. The CSS
 // caps alone would admit e.g. a 16384-tall viewport at 3× (~49k physical px).
@@ -116,6 +164,12 @@ export const SCREENSHOT_MAX_PHYSICAL_EDGE_PX = 16384;
 // a batch resume instead of discard.
 export const SCREENSHOT_MAX_CAPTURES = 12;
 
+// A `target` is a CSS selector, not an arbitrary program: bound its length so a
+// pathological selector can't be smuggled through. It needs no XPath guard —
+// the capture path runs it through `document.querySelector`, which executes
+// only CSS.
+export const SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH = 1024;
+
 // Result of validating a raw `captureSpec` value. On success `captureSpec`
 // is the normalized spec — null when the value was absent or carried no
 // overrides (default-valued fields are elided), so `null` exactly means
@@ -132,6 +186,7 @@ const CAPTURE_SPEC_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
   'envelope',
   'captures',
 ]);
@@ -141,6 +196,7 @@ const CAPTURE_ENTRY_FIELDS = new Set([
   'deviceScaleFactor',
   'fullPage',
   'clip',
+  'target',
   'envelope',
 ]);
 const CAPTURE_SPEC_VIEWPORT_FIELDS = new Set(['width', 'height']);
@@ -284,6 +340,29 @@ function parseOverrideFields(
     }
   }
 
+  if (raw.target !== undefined) {
+    let target = raw.target;
+    // `target: null` is an explicit unset, mirroring `clip: null` — the only
+    // way a batch entry drops a batch-wide target default. It elides after the
+    // merge, so a normalized spec never carries null.
+    if (target === null) {
+      overrides.target = null;
+    } else if (typeof target !== 'string' || target.trim().length === 0) {
+      return { error: `${path}.target must be a non-empty string` };
+    } else if (target.length > SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH) {
+      return {
+        error: `${path}.target must be at most ${SCREENSHOT_MAX_TARGET_SELECTOR_LENGTH} characters`,
+      };
+    } else {
+      // No XPath guard: the capture path passes `target` to `page.$`
+      // (`document.querySelector`), which can only execute CSS, so an
+      // XPath-shaped string already dead-ends as a named "invalid selector"
+      // capture error. A syntactic `//` check would instead reject valid CSS
+      // whose attribute value happens to contain `//` (e.g. `a[href="https://…"]`).
+      overrides.target = target;
+    }
+  }
+
   if (raw.envelope !== undefined) {
     let envelope = raw.envelope;
     if (!isPlainObject(envelope)) {
@@ -330,6 +409,16 @@ function checkMergedOverrides(
 ): string | undefined {
   if (spec.fullPage && spec.clip) {
     return `${path} cannot set both fullPage and clip`;
+  }
+
+  // A `target` is an element-handle screenshot: it crops to one element and
+  // honors neither a region clip nor a full-page capture, so combining them is
+  // a contradiction rather than a composition.
+  if (spec.target && spec.clip) {
+    return `${path} cannot set both target and clip`;
+  }
+  if (spec.target && spec.fullPage) {
+    return `${path} cannot set both target and fullPage`;
   }
 
   // Envelope formats lay out in a parent-owned box, so an envelope is
@@ -432,6 +521,9 @@ function elideDefaults(
   if (spec.clip) {
     out.clip = spec.clip;
   }
+  if (spec.target) {
+    out.target = spec.target;
+  }
   if (spec.envelope) {
     out.envelope = spec.envelope;
   }
@@ -462,6 +554,11 @@ function mergeOverrides(
   let clip = entry.clip !== undefined ? entry.clip : base.clip;
   if (clip) {
     merged.clip = clip;
+  }
+  // Same "explicit-wins, null-unsets" rule as clip.
+  let target = entry.target !== undefined ? entry.target : base.target;
+  if (target) {
+    merged.target = target;
   }
   let envelope = entry.envelope ?? base.envelope;
   if (envelope) {
@@ -513,7 +610,7 @@ export function parseScreenshotCaptureSpec(
     if (crossError !== undefined) {
       return { error: crossError };
     }
-    let spec = elideDefaults(singular.overrides);
+    let spec: ScreenshotCaptureSpec = elideDefaults(singular.overrides);
     // A spec whose every field matched an engine default normalizes to null:
     // it means the canonical capture, and null is what consumers key that
     // classification on.

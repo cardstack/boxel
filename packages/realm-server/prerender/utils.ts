@@ -44,7 +44,7 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { probePageResponsive } from './page-responsiveness.ts';
 
-import type { CDPSession, Page } from 'puppeteer';
+import type { CDPSession, ElementHandle, Page } from 'puppeteer';
 
 const log = logger('prerenderer');
 
@@ -1333,10 +1333,18 @@ function normalizeCaptureEntries(
   if (captureSpec?.captures && captureSpec.captures.length > 0) {
     return captureSpec.captures;
   }
-  let { viewport, deviceScaleFactor, fullPage, clip, envelope } =
+  let { viewport, deviceScaleFactor, fullPage, clip, target, envelope } =
     captureSpec ?? {};
   return [
-    { name: 'default', viewport, deviceScaleFactor, fullPage, clip, envelope },
+    {
+      name: 'default',
+      viewport,
+      deviceScaleFactor,
+      fullPage,
+      clip,
+      target,
+      envelope,
+    },
   ];
 }
 
@@ -1483,6 +1491,52 @@ async function captureOneEntry(
   entry: ScreenshotCaptureEntry,
   deviceScaleFactor: number,
 ): Promise<ScreenshotCaptureItem | RenderError> {
+  // A `target` is an element-handle screenshot, a capture call distinct from
+  // the page-level one below: it crops to the first match's box and honors no
+  // clip/fullPage (rejected above). `page.$` runs the selector through
+  // `document.querySelector`, so a selector that matches nothing, or is not a
+  // valid CSS selector (including an XPath-shaped string, which querySelector
+  // cannot execute), is a capture error naming the selector rather than an
+  // uncaught throw or a wrong crop.
+  if (entry.target) {
+    let handle: ElementHandle<Element> | null;
+    try {
+      handle = await page.$(entry.target);
+    } catch (err) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target selector is invalid: ${entry.target}`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (!handle) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" target matched no element: ${entry.target}`,
+        { title: 'Screenshot target not found' },
+      );
+    }
+    try {
+      let base64 = (await handle.screenshot({
+        encoding: 'base64',
+        type: 'png',
+      })) as string;
+      // The element screenshot's extent is Chromium's, not ours to predict, so
+      // the reported CSS dims come from the PNG's IHDR (physical px at bytes
+      // 16..23) divided back by the scale in effect — report and bytes cannot
+      // disagree.
+      let header = Buffer.from(base64.slice(0, 48), 'base64');
+      return {
+        name: entry.name,
+        base64,
+        width: Math.round(header.readUInt32BE(16) / deviceScaleFactor),
+        height: Math.round(header.readUInt32BE(20) / deviceScaleFactor),
+        deviceScaleFactor,
+      };
+    } finally {
+      await handle.dispose();
+    }
+  }
   // Reported CSS dimensions of the capture. `fullPage` reports the captured
   // document (derived from the PNG itself below, so report and bytes cannot
   // disagree); `clip` reports its own region; otherwise the viewport. Device
@@ -1556,15 +1610,30 @@ export async function captureScreenshot(
     }`,
   );
 
-  // Defensive: `fullPage` and `clip` are mutually exclusive (Puppeteer ignores
-  // clip under fullPage). The shared capture-spec parse already 400s this on
-  // both request surfaces, but a direct prerender-server caller could still
-  // send it — fail cleanly rather than return a silently-wrong screenshot.
+  // Defensive: `fullPage`, `clip`, and `target` are mutually exclusive — a
+  // fullPage capture ignores a clip, and an element (`target`) screenshot
+  // honors neither. The shared capture-spec parse already 400s these on both
+  // request surfaces, but a direct prerender-server caller could still send one
+  // — fail cleanly rather than return a silently-wrong screenshot.
   for (let entry of entries) {
     if (entry.fullPage && entry.clip) {
       return buildInvalidRenderResponseError(
         page,
         `capture "${entry.name}" cannot set both fullPage and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.clip) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and clip`,
+        { title: 'Invalid screenshot capture spec' },
+      );
+    }
+    if (entry.target && entry.fullPage) {
+      return buildInvalidRenderResponseError(
+        page,
+        `capture "${entry.name}" cannot set both target and fullPage`,
         { title: 'Invalid screenshot capture spec' },
       );
     }

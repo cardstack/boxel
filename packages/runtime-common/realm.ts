@@ -77,6 +77,7 @@ import {
 import {
   systemError,
   notFound,
+  notIndexedYet,
   notAcceptable,
   methodNotAllowed,
   badRequest,
@@ -132,6 +133,7 @@ import {
   systemInitiatedPriority,
   userIdFromUsername,
   isCardDocumentString,
+  isSingleCardDocument,
   isBrowserTestEnv,
   unresolveResourceInstanceURLs,
   fileMetaTimestamps,
@@ -215,6 +217,7 @@ import type {
 
 import { RealmAuthDataSource } from './realm-auth-data-source.ts';
 import { AliasCache } from './cache/alias-cache.ts';
+import { DirectoryViewRefresher } from './directory-view-refresher.ts';
 import { fetcher } from './fetcher.ts';
 import { RealmIndexQueryEngine } from './realm-index-query-engine.ts';
 import { RealmIndexUpdater } from './realm-index-updater.ts';
@@ -914,6 +917,11 @@ export class Realm {
   #definitionLookup: DefinitionLookup;
   #copiedFromRealm: URL | undefined;
   #sourceCache = new AliasCache<SourceCacheEntry>();
+  #directoryViewRefresher = new DirectoryViewRefresher(async (directory) => {
+    for await (let _entry of this.#adapter.readdir(directory)) {
+      // draining the listing is the whole effect; the entries are not used
+    }
+  });
   // Per-path generation counters for #sourceCache — the source-read analogue
   // of #transpiledModuleCacheGenerations below. getSourceOrRedirect reads
   // bytes from disk under an `await` (getFileWithFallbacks + materializeFileRef)
@@ -1987,6 +1995,14 @@ export class Realm {
     if (hasExecutableExtension(path)) {
       this.#dropTranspiledModuleEntry(path);
     }
+  }
+
+  // Refresh this instance's filesystem view of the directories that hold
+  // `path`, after a peer instance wrote or deleted that path. See
+  // DirectoryViewRefresher for why a shared-filesystem peer needs this and how
+  // repeated requests for one directory are coalesced.
+  refreshDirectoryView(path: LocalPath): Promise<void> {
+    return this.#directoryViewRefresher.refresh(path);
   }
 
   // CS-11028: shared drop helper for any in-process site that invalidates a
@@ -4410,6 +4426,21 @@ export class Realm {
         serveMs: Date.now() - serveStart,
       });
       return response;
+    } catch (e: any) {
+      // A job that throws (the queue rejected it: a prerender that exhausted
+      // its retries, a reservation-lease timeout) rejects `job.done` and
+      // lands here — without this emit, the pipeline's hard-failure class
+      // would read on the telemetry board as missing request volume instead
+      // of a rise in `error`.
+      this.emitScreenshotServePerf(entryKey, perf, 'error', {
+        ...stagePerf,
+        jobWaitMs: Date.now() - jobWaitStart,
+      });
+      return systemError({
+        requestContext,
+        message: `screenshot capture failed for ${entryKey.sourceURL}`,
+        additionalError: e instanceof Error ? e : new Error(String(e)),
+      });
     } finally {
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
@@ -5173,6 +5204,47 @@ export class Realm {
       return false;
     }
     return await this.#adapter.exists(localPath);
+  }
+
+  // The index has no row for `localPath`, so there is no card document to
+  // serve. Which 404 that is depends on the source file: a write lands on the
+  // realm's file system first and is indexed after, so a card whose `.json` is
+  // already on disk is one this realm has not caught up with rather than one
+  // that does not exist. `notIndexedYet` says so, letting a caller hold a
+  // placeholder until the realm broadcasts the index event for it. A read
+  // served by the replica that took the write rarely gets here — that path
+  // drains its own in-flight indexing first — but a read served by any other
+  // replica has no such handle on the write.
+  private async missingInstanceResponse(
+    request: Request,
+    requestContext: RequestContext,
+    localPath: LocalPath,
+  ): Promise<Response> {
+    let sourcePath = `${localPath}.json` as LocalPath;
+    if (await this.isIgnored(this.paths.fileURL(sourcePath))) {
+      // An ignored path is never visited, so no amount of waiting produces an
+      // index row for it.
+      return notFound(request, requestContext);
+    }
+    let source = await this.readFileAsText(sourcePath);
+    if (!source) {
+      return notFound(request, requestContext);
+    }
+    // The marker promises an index row is coming, so it has to match what the
+    // indexer will actually make one for: a `.json` whose `data` is a single
+    // card resource. A collection document (which `isCardDocumentString` also
+    // accepts) never becomes an instance row, and neither does anything else
+    // — those are genuinely not cards, not cards in waiting.
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(source.content);
+    } catch {
+      return notFound(request, requestContext);
+    }
+    if (!isSingleCardDocument(parsed)) {
+      return notFound(request, requestContext);
+    }
+    return notIndexedYet(request, requestContext);
   }
 
   private async fileMetaDocument(
@@ -6020,7 +6092,11 @@ export class Realm {
             );
             return fileMeta ?? notFound(request, requestContext);
           } else {
-            return notFound(request, requestContext);
+            return await this.missingInstanceResponse(
+              request,
+              requestContext,
+              localPath,
+            );
           }
         }
         if (
@@ -6070,7 +6146,11 @@ export class Realm {
           );
           return fileMeta ?? notFound(request, requestContext);
         } else {
-          return notFound(request, requestContext);
+          return await this.missingInstanceResponse(
+            request,
+            requestContext,
+            localPath,
+          );
         }
       }
       if (maybeError.type === 'error') {

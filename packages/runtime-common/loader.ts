@@ -8,7 +8,6 @@ import {
   iconNotFoundMessage,
   stringifyErrorForLog,
 } from './error.ts';
-import { flatMap } from 'lodash-es';
 import {
   shouldTrackRuntimeModuleGraph,
   trackRuntimeModuleDependency,
@@ -45,19 +44,6 @@ type RegisteredWithDepsModule = {
   implementation: Function;
 };
 
-// Import edges that were still completing when a module's dependency list was
-// frozen — recorded apart from `consumedModules`, which holds only the edges
-// that had resolved by then.
-//
-// The two readers want different halves, deliberately. Eviction reads both,
-// through `directModuleDependencies`: an edge that was still completing is an
-// import, and a module holding another's exports goes stale with it.
-// Dependency tracking — `getConsumedModules` and
-// `collectKnownModuleDependencies` — reads only `consumedModules`, because
-// that set is what the index records module dependencies from, and widening
-// it widens invalidation fan-out across indexing.
-type CompletingDependencies = { completingDependencies: string[] };
-
 type PreparingModule = {
   // this state represents the *synchronous* window of time where this
   // module's dependencies are moving from registered to preparing to
@@ -68,19 +54,19 @@ type PreparingModule = {
   implementation: Function;
   moduleInstance: object;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type EvaluatedModule = {
   state: 'evaluated';
   moduleInstance: object;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type BrokenModule = {
   state: 'broken';
   exception: any;
   consumedModules: Set<string>;
-} & CompletingDependencies;
+};
 
 type Module =
   | FetchingModule
@@ -432,7 +418,6 @@ export class Loader {
       state: 'evaluated',
       moduleInstance: module,
       consumedModules: new Set(),
-      completingDependencies: [],
     });
   }
 
@@ -539,15 +524,13 @@ export class Loader {
 
   // The modules a cached module imports, in whatever state it is in. The
   // registered states carry their dependency list; the states past them carry
-  // it split in two, because `consumedModules` — the set the dependency
-  // tracker reads — holds only the edges that had resolved when the list was
-  // frozen. A module still fetching has named nothing yet.
+  // it as `consumedModules`. A module still fetching has named nothing yet.
   private directModuleDependencies(module: Module): string[] {
     switch (module.state) {
       case 'evaluated':
       case 'preparing':
       case 'broken':
-        return [...module.consumedModules, ...module.completingDependencies];
+        return [...module.consumedModules];
       case 'registered':
         return module.dependencyList.flatMap((entry) =>
           entry.type === 'dep' ? [entry.moduleURL.href] : [],
@@ -603,8 +586,20 @@ export class Loader {
         }
         module = this.getModule(href);
       }
-      if (module?.state === 'evaluated' || module?.state === 'broken') {
-        for (let consumedModule of module.consumedModules) {
+      // Every state a module can be holding past `fetching` names the modules
+      // it imports — the registered states in their dependency list, the states
+      // past them in `consumedModules` — so every one of them has edges to
+      // descend. Stopping at the two terminal states instead would truncate the
+      // walk at exactly the modules an import failure leaves behind: a module
+      // whose own import threw is `broken` and reports its edges, but the
+      // siblings that import threw *past* are stranded in a registered state,
+      // and dropping their subtrees is what leaves a failed module indexed
+      // without the dependency that broke it. Editing that dependency would
+      // then never invalidate it. `directModuleDependencies` reads the same
+      // per-state shapes `collectKnownModuleDependencies` does, so the two
+      // walks describe one loader the same way at any instant.
+      if (module) {
+        for (let consumedModule of this.directModuleDependencies(module)) {
           await walk(consumedModule, resolveHref(consumedModule));
         }
       }
@@ -843,34 +838,17 @@ export class Loader {
         continue;
       }
 
-      switch (module.state) {
-        case 'evaluated':
-        case 'preparing':
-        case 'broken':
-          for (let consumed of module.consumedModules) {
-            pending.push(consumed);
-          }
-          break;
-        case 'registered':
-          for (let entry of module.dependencyList) {
-            if (entry.type === 'dep') {
-              pending.push(entry.moduleURL.href);
-            }
-          }
-          break;
-        case 'registered-completing-deps':
-        case 'registered-with-deps':
-          for (let entry of module.dependencies) {
-            if (entry.type === 'dep' || entry.type === 'completing-dep') {
-              pending.push(entry.moduleURL.href);
-            }
-          }
-          break;
-        case 'fetching':
-          complete = false;
-          break;
-        default:
-          throw assertNever(module);
+      // Which entries of which state count as an edge is `directModuleDependencies`'s
+      // to answer, so this walk, `getConsumedModules` and `invalidateModule` cannot
+      // come to disagree about what a module imports — they answer the same question
+      // and are asserted against each other. Completeness is the one thing this walk
+      // needs on top: a module still fetching has named nothing yet, so a set
+      // collected over it is partial and must not be memoized.
+      if (module.state === 'fetching') {
+        complete = false;
+      }
+      for (let dependency of this.directModuleDependencies(module)) {
+        pending.push(dependency);
       }
     }
 
@@ -886,6 +864,12 @@ export class Loader {
       | 'registered-completing-deps'
       | 'registered-with-deps'
       | 'evaluated',
+    // The modules whose own advance to each state is in flight further up this
+    // recursion, so a dep that lands back on one of them is a cycle edge rather
+    // than work to do. Held as cache keys, the same form `getModule` looks a
+    // module up under, so an ancestor reached by a different spelling of itself
+    // — extensionless against `.js`, an alias against the real URL — is still
+    // recognized as the ancestor it is.
     stack: {
       'registered-completing-deps': string[];
       'registered-with-deps': string[];
@@ -916,14 +900,43 @@ export class Loader {
             }
             let depModule = this.getModule(entry.moduleURL.href);
             if (!isEvaluatable(depModule)) {
-              // we always only await the first dep that actually needs work and
-              // then break back to the top-level state machine, so that we'll
-              // be working from the latest state.
+              // A dep short of evaluatable is either a cycle edge back into a
+              // walk already in flight, or work to do. Being on the stack is
+              // not enough to make it the former: an ancestor is only safe to
+              // record and leave to its own walk once it has registered, because
+              // registering is what gives it a dependency list of its own. An
+              // ancestor with no entry — or one still fetching, its caches
+              // discarded by a realm-mapping change while this walk was
+              // suspended — has named nothing yet, so it is work like any other
+              // dep, and re-entering the state machine is what re-establishes
+              // it.
+              //
+              // What bounds that recursion is the cache clear itself, not the
+              // graph. A clear landing inside the re-fetch trips the generation
+              // check in `fetchModule`, which abandons the response without
+              // registering, so the level retries and finds the ancestor gone
+              // again — one extra level per clear that lands inside a single
+              // walk, and one more unit of work for every level, since each
+              // copies and rescans the stack. Only adding or removing a realm
+              // mapping fires a clear, which happens as a realm is registered or
+              // torn down — rare, discrete events, and reachable on a process
+              // already serving, since creating a realm can remap it — so a walk
+              // normally spans zero of them; a walk racing an unbounded stream
+              // of them descends without a bound.
               if (
-                !stack['registered-completing-deps'].includes(
-                  entry.moduleURL.href,
+                isRegistered(depModule) &&
+                stack['registered-completing-deps'].includes(
+                  this.moduleCacheKey(entry.moduleURL.href),
                 )
               ) {
+                maybeReadyDeps.push({
+                  type: 'completing-dep',
+                  moduleURL: entry.moduleURL,
+                });
+              } else {
+                // we always only await the first dep that actually needs work and
+                // then break back to the top-level state machine, so that we'll
+                // be working from the latest state.
                 await this.advanceToState(
                   entry.moduleURL,
                   'registered-completing-deps',
@@ -932,17 +945,12 @@ export class Loader {
                     ...{
                       'registered-completing-deps': [
                         ...stack['registered-completing-deps'],
-                        resolvedURL.href,
+                        this.moduleCacheKey(resolvedURL.href),
                       ],
                     },
                   },
                 );
                 break outer_switch;
-              } else if (isRegistered(depModule)) {
-                maybeReadyDeps.push({
-                  type: 'completing-dep',
-                  moduleURL: entry.moduleURL,
-                });
               }
             } else if (depModule.state === 'registered-completing-deps') {
               maybeReadyDeps.push({
@@ -956,6 +964,11 @@ export class Loader {
               });
             }
           }
+          this.assertEveryDepRecorded(
+            resolvedURL.href,
+            maybeReadyDeps,
+            module.dependencyList,
+          );
           this.setModule(resolvedURL.href, {
             state: 'registered-completing-deps',
             implementation: module.implementation,
@@ -1004,7 +1017,7 @@ export class Loader {
                     ...{
                       'registered-completing-deps': [
                         ...stack['registered-completing-deps'],
-                        resolvedURL.href,
+                        this.moduleCacheKey(resolvedURL.href),
                       ],
                     },
                   },
@@ -1013,7 +1026,9 @@ export class Loader {
               }
               case 'registered-completing-deps': {
                 if (
-                  !stack['registered-with-deps'].includes(entry.moduleURL.href)
+                  !stack['registered-with-deps'].includes(
+                    this.moduleCacheKey(entry.moduleURL.href),
+                  )
                 ) {
                   await this.advanceToState(
                     entry.moduleURL,
@@ -1023,18 +1038,32 @@ export class Loader {
                       ...{
                         'registered-with-deps': [
                           ...stack['registered-with-deps'],
-                          resolvedURL.href,
+                          this.moduleCacheKey(resolvedURL.href),
                         ],
                       },
                     },
                   );
                   break outer_switch;
                 } else {
-                  // the dep module is actually evaluatable now--we only got
-                  // here because we were already in the process of trying to
-                  // move the state of the dep to 'registered-with-deps'
+                  // A dep already being advanced to 'registered-with-deps'
+                  // further up this recursion is a cycle edge: the walk holding
+                  // it cannot finish until this one returns, so recursing into
+                  // it would not terminate, and it is recorded rather than
+                  // waited for.
+                  //
+                  // Which of the two types it is recorded as is documentary at
+                  // this state and nothing more. Every reader of a
+                  // 'registered-with-deps' module's dependency list — `evaluate`,
+                  // `directModuleDependencies`, `findIncompleteDependency` —
+                  // accepts both alike; the one place that branches on `dep`
+                  // reads the previous state's list, not this one. So this
+                  // records what is true, that the dep is still completing, but
+                  // nothing downstream is stopped by it: what actually keeps a
+                  // module from binding a dep that never finished is
+                  // `findIncompleteDependency` below. Removing that check does
+                  // not become safe by leaving this type in place.
                   readyDeps.push({
-                    type: 'dep',
+                    type: 'completing-dep',
                     moduleURL: entry.moduleURL,
                   });
                 }
@@ -1047,6 +1076,11 @@ export class Loader {
                 });
             }
           }
+          this.assertEveryDepRecorded(
+            resolvedURL.href,
+            readyDeps,
+            module.dependencies,
+          );
           this.setModule(resolvedURL.href, {
             state: 'registered-with-deps',
             implementation: module.implementation,
@@ -1055,12 +1089,53 @@ export class Loader {
           break;
         }
 
-        case 'registered-with-deps':
+        case 'registered-with-deps': {
           if (targetState === 'registered-with-deps') {
             return;
           }
+          // `evaluate` descends the whole dependency closure in one synchronous
+          // pass, so every module in it has to be past 'registered' before the
+          // first factory runs; finding one that is not, it can only throw, and
+          // the module it was evaluating is cached `broken` for the life of the
+          // loader. Reaching 'registered-with-deps' does not establish that on
+          // its own: a cycle completes one participant at a time, and each is
+          // committed holding cycle edges whose targets are still completing.
+          // A single walk closes that gap before returning, but the module is
+          // in the map the whole time, so a concurrent import root that resumes
+          // mid-cycle finds it in a state that normally licenses evaluation.
+          // Advancing what the closure is still missing is what makes it true.
+          //
+          // Absent a cache clear that converges: each pass leaves one more
+          // module past 'registered' and nothing walks it back. A realm-mapping
+          // change discards the module caches, which is what takes a state
+          // backwards, and costs another pass round this loop the same way it
+          // costs the 'registered' arm above another level of recursion — the
+          // bound is the clear rate rather than the graph. A clear landing on
+          // every fetch never reaches here at all: the walk stalls in
+          // `case undefined` re-fetching a module that is discarded again
+          // before it can register.
+          let incompleteDependency = this.findIncompleteDependency(
+            resolvedURL.href,
+          );
+          if (incompleteDependency) {
+            await this.advanceToState(
+              incompleteDependency,
+              'registered-completing-deps',
+              {
+                ...stack,
+                ...{
+                  'registered-completing-deps': [
+                    ...stack['registered-completing-deps'],
+                    this.moduleCacheKey(resolvedURL.href),
+                  ],
+                },
+              },
+            );
+            break;
+          }
           this.evaluate(resolvedURL.href, module);
           break;
+        }
         case 'broken':
           return;
         case 'evaluated':
@@ -1069,6 +1144,85 @@ export class Loader {
         default:
           throw assertNever(module);
       }
+    }
+  }
+
+  // Some module in `moduleIdentifier`'s dependency closure that `evaluate`
+  // would refuse, or undefined when the closure is ready. Which one is not
+  // defined: the traversal is depth-first over a stack, so it reaches siblings
+  // in the reverse of the order `evaluate` binds them. Nothing depends on that
+  // — the caller advances whatever comes back and re-enters, so any incomplete
+  // module in the closure is an equally good answer and the loop is what makes
+  // the search exhaustive.
+  //
+  // Where it stops is load-bearing, and matches `evaluate`: a module already
+  // evaluated, preparing, or broken is answered from its own entry without its
+  // dependencies being read, so what lies beyond one cannot fail this pass
+  // either.
+  //
+  // Scoped to one module's closure rather than memoized across the loader
+  // because completeness is a property of an instant: a module reached through
+  // a cycle mid-completion is incomplete now and complete a moment later, and a
+  // remembered answer would outlive the state it described. The walk is bounded
+  // by the states it descends through, which a module leaves permanently, so
+  // the cost falls away as the graph evaluates rather than repeating per
+  // import.
+  private findIncompleteDependency(moduleIdentifier: string): URL | undefined {
+    let seen = new Set<string>();
+    let pending: URL[] = [];
+    // Only the registered states hold a dependency list to descend. The states
+    // past them are where `evaluate` stops reading, and a module short of them
+    // is the answer rather than something to descend into.
+    let pushDependencies = (module: Module | undefined) => {
+      if (
+        module?.state === 'registered-completing-deps' ||
+        module?.state === 'registered-with-deps'
+      ) {
+        for (let entry of module.dependencies) {
+          if (entry.type === 'dep' || entry.type === 'completing-dep') {
+            pending.push(entry.moduleURL);
+          }
+        }
+      }
+    };
+    pushDependencies(this.getModule(moduleIdentifier));
+    while (pending.length > 0) {
+      let moduleURL = pending.pop()!;
+      // Keyed the way `getModule` files a module, so a module reached by a
+      // second spelling of itself is recognized as one already seen.
+      let key = this.moduleCacheKey(moduleURL.href);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      let module = this.getModule(moduleURL.href);
+      if (!isEvaluatable(module)) {
+        return moduleURL;
+      }
+      pushDependencies(module);
+    }
+    return undefined;
+  }
+
+  // `evaluate` binds a module's factory arguments positionally from the
+  // dependency list the registered-state transitions build, so a list that
+  // comes out shorter than the one the module declared does not fail where the
+  // entry was lost: the arguments after the gap shift down, and the factory is
+  // handed either the wrong module or nothing at all. Both transitions rebuild
+  // the list entry by entry and reach the commit only by running the loop to
+  // completion — every path that has work to do leaves through
+  // `break outer_switch` with nothing committed — so a length mismatch is a
+  // dropped edge and can be nothing else. Raising here names the module that
+  // dropped it instead of leaving a mis-bound factory to fail somewhere else.
+  private assertEveryDepRecorded(
+    moduleIdentifier: string,
+    recorded: EvaluatableDep[],
+    declared: (UnregisteredDep | EvaluatableDep)[],
+  ) {
+    if (recorded.length !== declared.length) {
+      throw new Error(
+        `bug: dependency list for ${moduleIdentifier} recorded ${recorded.length} of the ${declared.length} dependencies it declares`,
+      );
     }
   }
 
@@ -1326,7 +1480,6 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: loaded.module,
         consumedModules: new Set(),
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       return;
@@ -1341,7 +1494,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
@@ -1397,7 +1549,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
-        completingDependencies: [],
       });
       module.deferred.fulfill();
       throw exception;
@@ -1424,18 +1575,23 @@ export class Loader {
 
     let privateModuleInstance = Object.create(null);
     let moduleProxy = this.readOnlyProxy(privateModuleInstance);
+    // Both edge types are imports. A `completing-dep` only records that the
+    // dep had not finished completing when this module's dependency list was
+    // frozen — a module reached while a concurrent import root is suspended
+    // can hold its whole import list that way, cycle edges and ordinary ones
+    // alike. This is the last place those edges are written down, because the
+    // distinction is dropped as the module leaves the registered states, and
+    // both readers of `consumedModules` need every import: eviction so a
+    // module does not outlive something whose exports it holds, and the index
+    // so an edit to an imported module invalidates what imported it. This set
+    // is also what indexing invalidation fans out over, which is the cost of
+    // anything added to it: it holds imports, and nothing that is not one.
     let consumedModules = new Set(
-      flatMap(module.dependencies, (dep) =>
-        dep.type === 'dep' ? [dep.moduleURL.href] : [],
+      module.dependencies.flatMap((dep) =>
+        dep.type === 'dep' || dep.type === 'completing-dep'
+          ? [dep.moduleURL.href]
+          : [],
       ),
-    );
-    // A dependency that was still completing when this module's list was
-    // frozen is an import all the same, and this is the last place it is
-    // written down: the entry is dropped as the module leaves the registered
-    // states. Invalidation reads it, so a module does not survive the
-    // eviction of something whose exports it holds.
-    let completingDependencies = flatMap(module.dependencies, (dep) =>
-      dep.type === 'completing-dep' ? [dep.moduleURL.href] : [],
     );
 
     this.setModule(moduleIdentifier, {
@@ -1443,7 +1599,6 @@ export class Loader {
       implementation: module.implementation,
       moduleInstance: moduleProxy,
       consumedModules,
-      completingDependencies,
     });
 
     try {
@@ -1508,7 +1663,6 @@ export class Loader {
         state: 'evaluated',
         moduleInstance: moduleProxy,
         consumedModules,
-        completingDependencies,
       });
       return moduleProxy;
     } catch (exception) {
@@ -1516,7 +1670,6 @@ export class Loader {
         state: 'broken',
         exception,
         consumedModules,
-        completingDependencies,
       });
       throw exception;
     }

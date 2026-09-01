@@ -10,13 +10,14 @@ import {
 } from '../lib/realm-file-changes-listener.ts';
 
 // Minimal fake `Realm` — the listener calls `.url` (via lookup),
-// `.invalidateCache(path)` for per-path payloads, and `.clearLocalSourceCaches()`
-// for wildcard payloads (CS-11156). Stub both; tests pick whichever they
-// care about.
+// `.invalidateCache(path)` plus `.refreshDirectoryView(path)` for per-path
+// payloads, and `.clearLocalSourceCaches()` for wildcard payloads.
+// Stub all three; tests pick whichever they care about.
 function makeFakeRealm(
   url: string,
   hooks: {
     onInvalidate?: (path: string) => void;
+    onRefreshDirectory?: (path: string) => void;
     onClearAll?: () => void;
   },
 ): Realm {
@@ -24,6 +25,9 @@ function makeFakeRealm(
     url,
     invalidateCache(path: string) {
       hooks.onInvalidate?.(path);
+    },
+    async refreshDirectoryView(path: string) {
+      hooks.onRefreshDirectory?.(path);
     },
     clearLocalSourceCaches() {
       hooks.onClearAll?.();
@@ -103,9 +107,11 @@ module(basename(import.meta.filename), function () {
   module('RealmFileChangesListener (dispatch)', function () {
     test('handleNotification forwards to the mounted realm', function (assert) {
       const invalidations: Array<{ url: string; path: string }> = [];
+      const refreshedDirectories: string[] = [];
       const realmA = makeFakeRealm('http://x.test/a/', {
         onInvalidate: (path) =>
           invalidations.push({ url: 'http://x.test/a/', path }),
+        onRefreshDirectory: (path) => refreshedDirectories.push(path),
       });
       const listener = new RealmFileChangesListener({
         dbAdapter: {} as unknown as PgAdapter,
@@ -118,13 +124,45 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(invalidations, [
         { url: 'http://x.test/a/', path: 'cards/foo.gts' },
       ]);
+      assert.deepEqual(
+        refreshedDirectories,
+        ['cards/foo.gts'],
+        'the peer re-lists the directory holding the written path',
+      );
+    });
+
+    test('handleNotification keeps going when refreshDirectoryView rejects', async function (assert) {
+      const invalidations: string[] = [];
+      const realmA = {
+        url: 'http://x.test/a/',
+        invalidateCache(path: string) {
+          invalidations.push(path);
+        },
+        async refreshDirectoryView() {
+          throw new Error('EIO');
+        },
+        clearLocalSourceCaches() {},
+      } as unknown as Realm;
+      const listener = new RealmFileChangesListener({
+        dbAdapter: {} as unknown as PgAdapter,
+        lookupMountedRealm: (url) =>
+          url === 'http://x.test/a/' ? realmA : undefined,
+      });
+
+      listener.handleNotification('http://x.test/a/:cards/foo.gts');
+      // let the rejected promise settle; an unhandled rejection would fail the run
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      assert.deepEqual(invalidations, ['cards/foo.gts']);
     });
 
     test('handleNotification with wildcard payload calls clearLocalSourceCaches and not invalidateCache (CS-11156)', function (assert) {
       const invalidations: string[] = [];
+      const refreshedDirectories: string[] = [];
       const clearAllCount = { value: 0 };
       const realmA = makeFakeRealm('http://x.test/a/', {
         onInvalidate: (path) => invalidations.push(path),
+        onRefreshDirectory: (path) => refreshedDirectories.push(path),
         onClearAll: () => clearAllCount.value++,
       });
       const listener = new RealmFileChangesListener({
@@ -144,6 +182,11 @@ module(basename(import.meta.filename), function () {
         invalidations,
         [],
         'invalidateCache not called for wildcard payload',
+      );
+      assert.deepEqual(
+        refreshedDirectories,
+        [],
+        'refreshDirectoryView not called for wildcard payload',
       );
     });
 

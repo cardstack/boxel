@@ -350,7 +350,14 @@ export default function handleScreenshotCard({
             dbAdapter,
           });
           if (response) {
-            emitRequestPerf('hit', { serveMs: Date.now() - serveStart });
+            emitRequestPerf('hit', {
+              serveMs: Date.now() - serveStart,
+              // The row's own lane, not this surface's: the GET surface
+              // reports hits the same way, and `findMediaCacheEntry` doesn't
+              // filter on lane, so a `declared`-lane row must read as
+              // `declared` from both.
+              lane: entry.lane,
+            });
             return await setContextResponse(ctxt, response);
           }
           // The entry's object was reclaimed between the ledger read and
@@ -395,6 +402,18 @@ export default function handleScreenshotCard({
             timeoutHandle.unref?.();
           }),
         ]);
+      } catch (error) {
+        // A rejected job (`job.done` rejects when the task throws: a
+        // prerender that exhausted its retries, a reservation-lease timeout)
+        // must still emit — otherwise the hard-failure class reads as
+        // missing request volume instead of a rise in `error`. The outer
+        // catch still answers the 500.
+        emitRequestPerf('error', {
+          enqueueMs,
+          jobWaitMs: Date.now() - jobWaitStart,
+          jobId: job.id,
+        });
+        throw error;
       } finally {
         if (timeoutHandle) {
           clearTimeout(timeoutHandle);

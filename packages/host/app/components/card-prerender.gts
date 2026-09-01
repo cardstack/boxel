@@ -16,7 +16,7 @@ import { didCancel, enqueueTask } from 'ember-concurrency';
 import {
   baseRef,
   CardError,
-  internalKeysFor,
+  internalKeyFor,
   SupportedMimeType,
   type CardErrorsJSONAPI,
   type LooseSingleCardDocument,
@@ -772,12 +772,14 @@ export default class CardPrerender extends Component {
       // has no meaningful fitted/embedded template, so rendering that level is
       // pure index bloat. Skip it; the ancestor renderings cover the concrete
       // card types through CardDef.
-      let baseDefKeys = new Set(
-        internalKeysFor(baseRef, undefined, this.network.virtualNetwork),
+      let baseDefKey = internalKeyFor(
+        baseRef,
+        undefined,
+        this.network.virtualNetwork,
       );
       let ancestors: Record<string, string> = {};
       for (let i = 0; i < types.length; i++) {
-        if (baseDefKeys.has(types[i])) {
+        if (types[i] === baseDefKey) {
           continue;
         }
         let res = await this.renderHTML.perform(url, format, i, renderOptions);

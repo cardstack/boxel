@@ -27,7 +27,7 @@ export interface FilePreviewSignature {
     model: FileViewModel;
     // Which shell is rendering: `fitted` is the budgeted collection cell,
     // `embedded` and `isolated` may show complete content.
-    mode: FileFormat;
+    format: FileFormat;
     // The host format component's `@fields`, so a family renderer can delegate
     // to a declared field's own component (a MarkdownField viewer, say) rather
     // than re-implementing its rendering.
@@ -43,20 +43,20 @@ export type FilePreviewComponent = ComponentLike<FilePreviewSignature>;
 // AudioPreview): just the file's content, none of the shell chrome — no file
 // bar, no inspector, no Download/Copy-link. `model` is the FileDef instance
 // itself in the common case (the component projects it through
-// `fileViewModel`), or a prebuilt FileViewModel (what the shells pass). `mode`
+// `fileViewModel`), or a prebuilt FileViewModel (what the shells pass). `format`
 // defaults to 'embedded', the complete-content rendition; 'fitted' selects the
 // budgeted snippet a collection cell draws. A prebuilt view model must have
-// been projected at the same format passed as `mode`: the fitted budgets are
+// been projected at the same format passed as `format`: the fitted budgets are
 // applied at projection time, so a complete-content projection rendered at
 // 'fitted' would feed the whole file to the snippet branch. A consumer that
-// varies `mode` should pass the instance and let the component re-project.
+// varies `format` should pass the instance and let the component re-project.
 // These components render content
 // only — the loading/failure/staleness panes are `FilePreviewStage`'s job
 // inside the shells, so an embedding author owns those states.
 export interface ContentPreviewSignature {
   Args: {
     model: FileViewModel | FileModelLike | undefined | null;
-    mode?: FileFormat;
+    format?: FileFormat;
     fields?: Record<string, any>;
   };
   Element: HTMLElement;
@@ -102,7 +102,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
   // longer has.
   get useThumbnail() {
     return (
-      this.args.mode === 'fitted' &&
+      this.args.format === 'fitted' &&
       Boolean(this.model?.thumbnailUrl) &&
       !this.model?.thumbnailStale
     );
@@ -128,14 +128,14 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
   // fitted cell stays a bare glyph so it never competes with the metadata strip
   // the fitted shell draws beside it.
   get showGenericDetail() {
-    return this.args.mode === 'embedded' || this.args.mode === 'isolated';
+    return this.args.format === 'embedded' || this.args.format === 'isolated';
   }
 
   // Embedded is the only reading format whose shell offers no download of its
   // own, so the fallback pane carries the affordance there. The isolated shell
   // already exposes Download and Copy link in its header.
   get showGenericDownload() {
-    return this.args.mode === 'embedded' && Boolean(this.model?.url);
+    return this.args.format === 'embedded' && Boolean(this.model?.url);
   }
 
   get genericIconSize() {
@@ -145,7 +145,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
   <template>
     <div
       class='stage'
-      data-mode={{@mode}}
+      data-mode={{@format}}
       data-file-state={{this.state}}
       data-test-file-preview-stage
       ...attributes
@@ -159,7 +159,7 @@ export class FilePreviewStage extends GlimmerComponent<StageSignature> {
         />
       {{else if this.showReal}}
         {{#if @preview}}
-          <@preview @model={{@model}} @mode={{@mode}} @fields={{@fields}} />
+          <@preview @model={{@model}} @format={{@format}} @fields={{@fields}} />
         {{else}}
           <div class='generic-pane' data-test-file-no-preview>
             <this.icon

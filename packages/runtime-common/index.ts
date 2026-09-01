@@ -367,8 +367,10 @@ export interface RenderTimeoutDiagnostics {
   // Screenshot-capture renders only: the components of `renderElapsedMs`,
   // measured inside `captureScreenshot`. Navigation (route transition +
   // path settle), the prerender settle wait, the image/font paint wait, and
-  // the CDP screenshot call. Their sum is slightly under `renderElapsedMs`;
-  // the residual is the terminal-error probe and dimension reads.
+  // the capture loop — the lone `page.screenshot` for a singular capture, or
+  // each entry's viewport switch + screenshot for a batch. Their sum is
+  // slightly under `renderElapsedMs`; the residual is the terminal-error
+  // probe and dimension reads.
   screenshotNavMs?: number;
   screenshotSettleMs?: number;
   screenshotImagePaintMs?: number;
@@ -707,6 +709,18 @@ export interface Diagnostics
   extends RenderTimeoutDiagnostics, PrerenderMetaDiagnostics {
   invalidationId?: string;
   indexedAt?: number;
+  // Host-shell token the prerender server had been told was current when this
+  // render started, and again when its response was assembled. Two different
+  // values mean the render straddled a host redeploy: the page resolved
+  // modules against a bundle the realm server may already have stopped
+  // serving. Unremarkable for a render that succeeded, and decisive for one
+  // that failed to resolve a module — that failure then describes the
+  // environment rather than the card, which is what an operator reading the
+  // error row needs to know. Lives here rather than on the response meta
+  // because `flattenPrerenderMeta` carries `diagnostics` onto the persisted
+  // row and drops every other meta key.
+  hostShellHash?: string;
+  hostShellHashAtCompletion?: string;
   // A row is produced by two prerender visits (index + prerender-html),
   // each its own HTTP request. `requestId` always carries the index visit's
   // id and this always carries the prerender-html visit's, whichever table
@@ -946,6 +960,15 @@ export type ScreenshotCaptureOverrides = {
   // only "back to no clip" spelling an object-valued field has); it elides
   // away after the merge, so a normalized spec never carries null.
   clip?: { x: number; y: number; width: number; height: number } | null;
+  // CSS selector for a single element to capture — an element-handle
+  // screenshot of the first match, tightly cropped to its box. Mutually
+  // exclusive with `clip` and `fullPage` (an element screenshot honors
+  // neither). The selector is bounded in length; the capture path resolves it
+  // with `document.querySelector`, so a non-CSS (e.g. XPath-shaped) string is a
+  // named capture error rather than a wrong crop. A batch entry may set
+  // `target: null` to drop a batch-wide target default, the same "back to no
+  // target" spelling `clip` has; it elides away after the merge.
+  target?: string | null;
   // Fixed-size parent box (CSS px) the card renders into. `fitted` fills a
   // parent-owned box rather than the viewport, so it needs this to lay out
   // and fire its `@container fitted-card` queries. Required for fitted
@@ -1128,6 +1151,7 @@ import { Loader } from './loader.ts';
 export * from './frontmatter-parse.ts';
 export * from './http-range.ts';
 export * from './paths.ts';
+export * from './directory-view-refresher.ts';
 export * from './realm-client.ts';
 export * from './realm-operations.ts';
 export * from './published-realm-url.ts';
@@ -1635,15 +1659,17 @@ export function hasCardExtension(path: string): boolean {
   return false;
 }
 
+// Trimming preserves the form of what it is given: an identifier stays an
+// identifier, and a plain string — a URL href, say — stays a plain string
+// rather than acquiring a brand it does not warrant.
 export function trimExecutableExtension(
   input: RealmResourceIdentifier,
-): RealmResourceIdentifier {
+): RealmResourceIdentifier;
+export function trimExecutableExtension(input: string): string;
+export function trimExecutableExtension(input: string): string {
   for (let extension of executableExtensions) {
     if (input.endsWith(extension)) {
-      return input.replace(
-        new RegExp(`\\${extension}$`),
-        '',
-      ) as RealmResourceIdentifier;
+      return input.replace(new RegExp(`\\${extension}$`), '');
     }
   }
   return input;
@@ -1667,36 +1693,6 @@ export function internalKeyFor(
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/ancestor`;
     case 'fieldOf':
       return `${internalKeyFor(ref.card, relativeTo, virtualNetwork)}/fields/${ref.field}`;
-  }
-}
-
-// Like `internalKeyFor`, but returns every equivalent spelling of the key —
-// the RRI-prefix, real-URL, and virtual-alias forms. Type predicates compare
-// a single stored `types` value against a key; index rows written before
-// references were canonicalized to RRI may hold the alias or real-URL form,
-// so matching all spellings keeps base-typed cards/files findable until the
-// persisted data is migrated or reindexed.
-export function internalKeysFor(
-  ref: CodeRef,
-  relativeTo: RealmResourceIdentifier | URL | undefined,
-  virtualNetwork: VirtualNetwork,
-): string[] {
-  if (!('type' in ref)) {
-    let resolved = virtualNetwork.resolveURL(ref.module, relativeTo).href;
-    let module: string = trimExecutableExtension(rri(resolved));
-    return virtualNetwork
-      .equivalentURLForms(module)
-      .map((form) => `${form}/${ref.name}`);
-  }
-  switch (ref.type) {
-    case 'ancestorOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/ancestor`,
-      );
-    case 'fieldOf':
-      return internalKeysFor(ref.card, relativeTo, virtualNetwork).map(
-        (key) => `${key}/fields/${ref.field}`,
-      );
   }
 }
 

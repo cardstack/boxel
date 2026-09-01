@@ -112,6 +112,9 @@ files with boxel.kind: skill frontmatter.`;
       let slug = this.slugForSkill(skill, usedSlugs);
       usedSlugs.add(slug);
 
+      // `realmUrl` is a realm identifier. No form guard, and reachability by a
+      // prefix form is unverified.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
       let url = new URL(`skills/${slug}/SKILL.md`, realmUrl);
 
       if (!input.overwrite && (await this.fileExists(url))) {

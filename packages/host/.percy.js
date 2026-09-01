@@ -12,6 +12,32 @@ module.exports = {
   discovery: {
     'disallowed-hostnames': ['fonts.googleapis.com', 'fonts.gstatic.com'],
     /*
+     * Realm fixtures declare background and icon images on these hosts. Left
+     * unlisted, Percy treats each as an un-capturable remote resource: it
+     * fetches the asset, spends a round trip on `percy.io/domain-validator-
+     * worker/validate` deciding whether it may keep it, then discards it and
+     * lets the renderer fetch the URL live instead. That is paid per snapshot
+     * — `disable-cache` below means the discovery browser never reuses an
+     * earlier fetch — and it is not cheap: one run spent 16.9s over 70 such
+     * fetches, with single assets costing 2-5s each. The workspace chooser
+     * renders a tile per workspace, so it pays that several times over and
+     * pushed past the upload budget in `tests/helpers/percy-snapshot.ts`,
+     * losing the snapshot entirely.
+     *
+     * Listing them here lets Percy capture the assets as ordinary snapshot
+     * resources, deduplicated by content hash across the build, so the cost
+     * is paid once rather than per snapshot. It also removes a live
+     * third-party fetch from render time, which is the same determinism
+     * argument the font hostnames above are blocked for — the difference is
+     * that these images are load-bearing for what the snapshot looks like,
+     * so they have to be captured rather than dropped.
+     */
+    'allowed-hostnames': [
+      'i.postimg.cc',
+      'boxel-images.boxel.ai',
+      'boxel-assets-store.s3.us-east-1.amazonaws.com',
+    ],
+    /*
      * The discovery browser is reused across a shard's snapshots, and
      * Chrome's own HTTP cache satisfies repeat font requests without them
      * ever reaching Percy's proxy — so only the shard's first snapshot got
@@ -21,6 +47,37 @@ module.exports = {
      * response cache still prevents refetching from the test server.
      */
     'disable-cache': true,
+    /*
+     * Percy opens this many asset-discovery browsers at once. Its default is
+     * 10, which on a 4-core runner already shared with the test browser, the
+     * realm server, its workers, the prerenderer and postgres is a 2.5x
+     * oversubscription — and Percy notices only after the fact.
+     *
+     * Its adjustment loop halves concurrency whenever CPU or memory passes
+     * 80%, and adds 2 whenever both drop under 50%, bounded by the value set
+     * here. Starting at 10 that produces a cycle rather than a settling
+     * point: one run logged 62 downscales stepping 10 -> 5 -> 2 -> 1, then
+     * climbing back to repeat it, with CPU pinned at 100%. Each pass churns
+     * browser pages, which costs the CPU the loop is reacting to.
+     *
+     * The cost lands on snapshots. Discovery starved of CPU queues, and the
+     * upload budget in tests/helpers/percy-snapshot.ts expires, so the
+     * snapshot is abandoned and never reaches the CLI. That is silent — the
+     * shard stays green — and the tally in ci-host.yaml is what surfaces it.
+     * Seven builds lost 22 snapshots between them over three days, including
+     * two consecutive `main` builds that the loss gate then rejected rather
+     * than let become baselines.
+     *
+     * A ceiling of 2 leaves the loop room to drop to 1 under pressure and
+     * come back, without the climb to 10 that starts the cycle again.
+     *
+     * This is a hypothesis about a bottleneck, not a proven fix: the claim is
+     * that steady low concurrency beats oversubscription plus thrash when CPU
+     * is the constraint. The measurement is the same tally — `lost` in the
+     * finalize job's totals should stay at 0. If loss continues, the next
+     * things to try are the shard count and the 25s budget itself.
+     */
+    concurrency: 2,
   },
   snapshot: {
     widths: [1280],

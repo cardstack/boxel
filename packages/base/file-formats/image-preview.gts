@@ -17,8 +17,8 @@ import {
 } from './file-view-model';
 
 export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
-  get mode(): FileFormat {
-    return this.args.mode ?? 'embedded';
+  get format(): FileFormat {
+    return this.args.format ?? 'embedded';
   }
 
   // `@model` is the FileDef instance in the content-only case and a prebuilt
@@ -26,7 +26,7 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
   // shared projection.
   @cached
   get model(): FileViewModel {
-    return ensureFileViewModel(this.args.model, this.mode);
+    return ensureFileViewModel(this.args.model, this.format);
   }
 
   // A vector scales crisply at any size and is as likely to be a diagram as a
@@ -46,7 +46,7 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
     if (this.isSvg) {
       return 'contain';
     }
-    if (this.mode === 'fitted') {
+    if (this.format === 'fitted') {
       return letterboxImage(this.model.previewKind, this.model.aspectRatio)
         ? 'contain'
         : 'cover';
@@ -57,11 +57,11 @@ export class ImagePreview extends GlimmerComponent<ContentPreviewSignature> {
   // The fitted strip already announces the file name, so the cell's pixels are
   // decorative there; the reading formats describe the image themselves.
   get alt() {
-    return this.mode === 'fitted' ? '' : (this.model.name ?? '');
+    return this.format === 'fitted' ? '' : (this.model.name ?? '');
   }
 
   get loading(): 'eager' | 'lazy' {
-    return this.mode === 'fitted' ? 'lazy' : 'eager';
+    return this.format === 'fitted' ? 'lazy' : 'eager';
   }
 
   <template>

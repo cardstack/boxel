@@ -51,7 +51,7 @@ function truncateExcerpt(text: string): string {
 class TextPreview extends GlimmerComponent<FilePreviewSignature> {
   get content(): string {
     let model = this.args.model;
-    if (this.args.mode === 'fitted') {
+    if (this.args.format === 'fitted') {
       // `contentPreview` is truncated to the fitted character/line budget in
       // `fileViewModel`, so a cell can never be handed the whole file.
       return model?.contentPreview ?? '';
@@ -64,11 +64,11 @@ class TextPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get truncated(): boolean {
-    return this.args.mode === 'fitted' && Boolean(this.args.model?.previewTruncated);
+    return this.args.format === 'fitted' && Boolean(this.args.model?.previewTruncated);
   }
 
   <template>
-    <div class='text-preview' data-mode={{@mode}} data-test-text-preview>
+    <div class='text-preview' data-mode={{@format}} data-test-text-preview>
       {{#if this.hasContent}}
         <pre class='text-preview__body'>{{this.content}}</pre>
         {{#if this.truncated}}

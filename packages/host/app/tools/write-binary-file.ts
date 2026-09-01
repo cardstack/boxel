@@ -68,6 +68,9 @@ export default class WriteBinaryFileTool extends HostBaseTool<
       path = path.slice(1);
     }
 
+    // `realm` comes from `realmOf`, which answers with a realm identifier.
+    // No form guard, and reachability by a prefix form is unverified.
+    // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
     let url = new URL(path, realm);
     let finalUrl = url;
 

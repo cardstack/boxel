@@ -69,7 +69,7 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   }
 
   get isFitted() {
-    return this.args.mode === 'fitted';
+    return this.args.format === 'fitted';
   }
 
   get sourceUrl() {
@@ -170,7 +170,7 @@ export class HtmlPreview extends GlimmerComponent<FilePreviewSignature> {
   };
 
   <template>
-    <div class='html-preview' data-mode={{@mode}} data-test-html-preview>
+    <div class='html-preview' data-mode={{@format}} data-test-html-preview>
       {{#if this.isFitted}}
         <div class='summary' data-test-html-summary>
           {{#if this.summaryTitle}}

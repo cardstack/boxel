@@ -82,6 +82,7 @@ export default function handleRunCommand({
           runAs: userId,
           command,
           commandInput: commandInput ?? null,
+          dedupeKey: null,
         },
         queue,
         dbAdapter,

@@ -260,8 +260,9 @@ class IndexComponent extends Component {
       </CardContainer>
     </div>
     <style scoped>
-      .boxel-freestyle-guide input:not(.boxel-input):not([type='checkbox']),
-      .boxel-freestyle-guide select:not(.boxel-select) {
+      .boxel-freestyle-guide
+        :deep(input:not(.boxel-input):not([type='checkbox'])),
+      .boxel-freestyle-guide :deep(select:not(.boxel-select)) {
         max-width: 100%;
         background-color: var(--background);
         color: var(--foreground);
@@ -269,12 +270,15 @@ class IndexComponent extends Component {
         border-radius: var(--boxel-border-radius-sm);
       }
       .boxel-freestyle-guide
-        input:not(.boxel-input):not([type='checkbox'])::placeholder {
+        :deep(input:not(.boxel-input):not([type='checkbox'])::placeholder) {
         color: var(--muted-foreground);
       }
       .boxel-freestyle-guide
-        input:not(.boxel-input):not([type='checkbox']):focus:focus-visible,
-      .boxel-freestyle-guide select:not(.boxel-select):focus:focus-visible {
+        :deep(
+          input:not(.boxel-input):not([type='checkbox']):focus:focus-visible
+        ),
+      .boxel-freestyle-guide
+        :deep(select:not(.boxel-select):focus:focus-visible) {
         outline: 1px solid var(--ring);
       }
       .boxel-freestyle-mode-wrapper {
@@ -340,11 +344,11 @@ class IndexComponent extends Component {
         background-color: var(--card);
         color: var(--card-foreground);
       }
-      .FreestyleUsage {
-        --radius: var(--theme-radius);
+      :deep(.FreestyleUsage) {
+        --radius: var(--theme-radius, var(--boxel-border-radius));
         --border-color: var(--border);
       }
-      .FreestyleGuide-header {
+      :deep(.FreestyleGuide-header) {
         position: relative;
         padding: var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-lg);
         background-image: linear-gradient(
@@ -356,12 +360,13 @@ class IndexComponent extends Component {
         border-bottom: 1px solid
           color-mix(in oklab, var(--border) 60%, transparent);
       }
-      .FreestyleGuide-title {
+      :deep(.FreestyleGuide-title) {
         margin: 0;
         font-size: 1.75rem;
+        font-weight: 600;
         line-height: 1.15;
       }
-      .FreestyleGuide-subtitle {
+      :deep(.FreestyleGuide-subtitle) {
         margin-top: var(--boxel-sp-4xs);
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
@@ -369,16 +374,16 @@ class IndexComponent extends Component {
         text-transform: uppercase;
         color: color-mix(in oklab, var(--foreground) 60%, transparent);
       }
-      .FreestyleGuide-body {
+      :deep(.FreestyleGuide-body) {
         background-color: inherit;
       }
-      .FreestyleGuide-nav {
+      :deep(.FreestyleGuide-nav) {
         background-color: var(--sidebar);
         color: var(--sidebar-foreground);
         border-right-color: var(--sidebar-border);
         z-index: 1;
       }
-      .FreestyleGuide-content {
+      :deep(.FreestyleGuide-content) {
         /* As a flex: 1 child its default min-width: auto lets wide content
            (tables, code blocks) push the column past the space the row
            gives it; never let it grow beyond that. */
@@ -394,16 +399,16 @@ class IndexComponent extends Component {
       @media (max-width: 599px) {
         /* Standard modal-drawer scroll lock: only bites while the drawer is
            open, since the nav is removed from the DOM when closed. */
-        body:has(.FreestyleGuide-nav) {
+        :deep(body:has(.FreestyleGuide-nav)) {
           overflow: hidden;
         }
-        .FreestyleGuide-header {
+        :deep(.FreestyleGuide-header) {
           padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp-sm);
         }
-        .FreestyleGuide-title {
+        :deep(.FreestyleGuide-title) {
           font-size: 20px;
         }
-        .FreestyleGuide-subtitle {
+        :deep(.FreestyleGuide-subtitle) {
           font-size: 10px;
         }
         .theme-field {
@@ -414,7 +419,7 @@ class IndexComponent extends Component {
            on the wrong side of the themed container's stacking context.
            Taps land on .FreestyleGuide-body, outside the nav, which the
            delegated click handler treats as dismissal. */
-        .FreestyleGuide-body:has(.FreestyleGuide-nav)::before {
+        :deep(.FreestyleGuide-body:has(.FreestyleGuide-nav))::before {
           content: '';
           position: fixed;
           inset: 0;
@@ -426,7 +431,7 @@ class IndexComponent extends Component {
           );
           animation: freestyle-backdrop-fade-in 200ms ease;
         }
-        .FreestyleGuide-nav {
+        :deep(.FreestyleGuide-nav) {
           position: fixed;
           inset: 0 auto 0 0;
           width: var(--boxel-xs-container);
@@ -437,13 +442,13 @@ class IndexComponent extends Component {
           z-index: 3;
           animation: freestyle-nav-slide-in 200ms ease;
         }
-        .FreestyleGuide-content {
+        :deep(.FreestyleGuide-content) {
           flex: 1;
           min-height: 0;
           margin-top: 0;
         }
-        .FreestyleUsage-apiTable,
-        .FreestyleUsage-cssVarsTable {
+        :deep(.FreestyleUsage-apiTable),
+        :deep(.FreestyleUsage-cssVarsTable) {
           display: block;
           overflow-x: auto;
         }
@@ -458,19 +463,29 @@ class IndexComponent extends Component {
           opacity: 0;
         }
       }
-      .FreestyleMenu-itemLink,
-      .FreestyleMenu-submenuItemLink {
+      :deep(.FreestyleMenu-item.is-expanded) {
+        background-color: color-mix(
+          in oklab,
+          var(--sidebar-foreground) 10%,
+          transparent
+        );
+      }
+      :deep(.FreestyleMenu-itemLink),
+      :deep(.FreestyleMenu-submenuItemLink) {
+        display: block;
         color: inherit;
       }
-      .FreestyleMenu-itemLink.active,
-      .FreestyleMenu-submenuItemLink.active,
-      .FreestyleMenu-submenuItem.is-active > .FreestyleMenu-submenuItemLink {
+      :deep(.FreestyleMenu-itemLink.active),
+      :deep(.FreestyleMenu-submenuItemLink.active),
+      :deep(
+        .FreestyleMenu-submenuItem.is-active > .FreestyleMenu-submenuItemLink
+      ) {
         background-color: var(--sidebar-foreground);
         color: var(--sidebar);
         font-weight: normal;
       }
-      .FreestyleMenu-itemLink:hover,
-      .FreestyleMenu-submenuItemLink:hover {
+      :deep(.FreestyleMenu-itemLink:hover),
+      :deep(.FreestyleMenu-submenuItemLink:hover) {
         background-color: color-mix(
           in oklab,
           var(--sidebar-foreground) 10%,
@@ -478,10 +493,12 @@ class IndexComponent extends Component {
         );
         color: var(--sidebar-foreground);
       }
-      .FreestyleMenu-itemLink.active:hover,
-      .FreestyleMenu-submenuItemLink.active:hover,
-      .FreestyleMenu-submenuItem.is-active
-        > .FreestyleMenu-submenuItemLink:hover {
+      :deep(.FreestyleMenu-itemLink.active:hover),
+      :deep(.FreestyleMenu-submenuItemLink.active:hover),
+      :deep(
+        .FreestyleMenu-submenuItem.is-active
+          > .FreestyleMenu-submenuItemLink:hover
+      ) {
         background-color: color-mix(
           in oklab,
           var(--sidebar-foreground) 80%,
@@ -489,22 +506,18 @@ class IndexComponent extends Component {
         );
         color: var(--sidebar);
       }
-      .FreestyleUsage + .FreestyleUsage {
+      :deep(.FreestyleUsage + .FreestyleUsage) {
         border-top: 1px solid var(--border);
       }
-      .FreestyleUsage:last-child {
+      :deep(.FreestyleUsage:last-child) {
         border-bottom: unset;
       }
-      .FreestyleUsageCssVar-name {
+      :deep(.FreestyleUsageCssVar-name) {
         width: 40%;
       }
-      .FreestyleGuide-title,
-      .FreestyleUsage-name {
-        font-weight: 600;
-      }
-      .FreestyleSection-name {
+      :deep(.FreestyleSection-name) {
         max-width: 100%;
-        margin-bottom: var(--boxel-sp);
+        padding-inline: var(--boxel-sp);
         padding-bottom: var(--boxel-sp-xs);
         font-size: 1.375rem;
         font-weight: 600;
@@ -512,69 +525,73 @@ class IndexComponent extends Component {
         border-bottom: 1px solid
           color-mix(in oklab, var(--border) 60%, transparent);
       }
-      .FreestyleSubsection-name {
+      :deep(.FreestyleSubsection-name) {
+        padding-bottom: 0;
+        padding-inline: var(--boxel-sp);
         font-family: var(--font-mono);
         font-size: 1.0625rem;
         font-weight: 600;
         line-height: 1.3;
       }
-      .FreestyleUsage-name {
-        margin-block: var(--boxel-sp-lg);
+      :deep(.FreestyleUsage-name) {
+        margin-block: var(--boxel-sp);
+        color: var(--foreground);
         font-size: 1.0625rem;
+        font-weight: 600;
         line-height: 1.3;
       }
-      .FreestyleUsage-name {
-        color: var(--foreground);
-      }
-      .FreestyleUsage-description {
+      :deep(.FreestyleUsage-description) {
         line-height: 1.55;
         color: color-mix(in oklab, var(--foreground) 75%, transparent);
         font-size: var(--boxel-font-size-sm);
       }
-      .FreestyleUsage-preview {
+      :deep(.FreestyleUsage-description > * + *) {
+        margin-top: var(--boxel-sp);
+      }
+      :deep(.FreestyleUsage-preview) {
         --radius: var(--theme-radius, var(--boxel-border-radius));
         color: var(--foreground, var(--boxel-dark));
         background-color: var(--background, var(--boxel-light));
         border-radius: var(--boxel-border-radius-xs);
         overflow: hidden;
       }
-      .FreestyleUsage-preview:after {
+      :deep(.FreestyleUsage-preview)::after {
         background: var(--secondary);
         color: var(--secondary-foreground);
       }
-      .FreestyleUsage-apiTable tr:nth-child(even),
-      .FreestyleUsage-cssVarsTable tr:nth-child(even) {
+      :deep(.FreestyleUsage-apiTable tr:nth-child(even)),
+      :deep(.FreestyleUsage-cssVarsTable tr:nth-child(even)) {
         background-color: color-mix(in oklab, var(--border) 30%, transparent);
       }
-      .FreestyleUsage-apiTable tr,
-      .FreestyleUsage-cssVarsTable tr {
+      :deep(.FreestyleUsage-apiTable tr),
+      :deep(.FreestyleUsage-cssVarsTable tr) {
         border-bottom-color: color-mix(
           in oklab,
           var(--border) 50%,
           transparent
         );
       }
-      .u-codePill {
+      :deep(.u-codePill) {
         background-color: var(--muted);
         color: var(--muted-foreground);
         font-family: var(--font-mono);
       }
-      .FreestyleUsage-sourceContainer,
-      .FreestyleUsage-apiTable,
-      .FreestyleUsage-cssVarsTable {
+      :deep(.FreestyleUsage-sourceContainer),
+      :deep(.FreestyleUsage-apiTable),
+      :deep(.FreestyleUsage-cssVarsTable) {
         margin-inline: unset;
       }
-      .FreestyleGuide-ctaIcon {
+      :deep(.FreestyleGuide-ctaIcon) {
         fill: var(--foreground);
       }
-      .FreestyleGuide-aside {
+      :deep(.FreestyleGuide-aside) {
         z-index: 3;
       }
-      .FreestyleUsageControls {
+      :deep(.FreestyleUsageControls) {
         background: var(--popover);
         color: var(--popover-foreground);
       }
-      .FreestyleUsageControls-itemControl {
+      :deep(.FreestyleUsageControls-itemControl) {
         max-width: 100%;
       }
     </style>

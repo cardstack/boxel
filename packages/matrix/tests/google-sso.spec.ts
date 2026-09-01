@@ -78,9 +78,9 @@ test.describe('Google sign-in (mock OIDC)', () => {
   test('a returning user with a matching verified email is linked to their existing account', async ({
     page,
   }) => {
-    // The Google button only renders when the flag is on (host dev build) AND
-    // Synapse advertises the oidc-google IdP, so signing in through it already
-    // exercises the login-flow detection.
+    // The Google button only renders when Synapse advertises the oidc-google
+    // IdP in its login flows, so signing in through it already exercises the
+    // login-flow detection.
     await signInWithGoogle(page, {
       sub: subjectFor(username),
       email: userEmail,

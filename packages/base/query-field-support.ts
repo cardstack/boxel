@@ -165,8 +165,22 @@ export function ensureQueryFieldSearchResource(
   let inPrerender = Boolean((globalThis as any).__boxelRenderContext);
   let isLive = !inPrerender;
 
+  // Nothing to build a resource around yet, so build none. The alternative —
+  // creating one and declining to cache it — repeats every side effect of
+  // creation on every read: a fresh resource bound to the instance's lifetime,
+  // a re-armed load barrier (the reuse path above documents that re-arm as the
+  // feedback loop that saturates the render thread), and a loading-signal bump
+  // whose own invalidation brings the reader back here. The thunk consumes
+  // nothing tracked either way, so recovery depends on a later read regardless.
+  if (!args()) {
+    log.info(
+      `ensureQueryFieldSearchResource: query not yet resolvable for field=${field.name}; deferring to a later read`,
+    );
+    return undefined;
+  }
+
   log.info(
-    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
+    `ensureQueryFieldSearchResource: creating resource; field=${field.name}; isLive=${isLive}; source=${trackingContext.source ?? 'unknown'}; seedRecord=${seedRecords?.length ?? 0} realms derivation starting`,
   );
   searchResource = store.getSearchResource(
     instance,
@@ -205,6 +219,61 @@ export function ensureQueryFieldSearchResource(
   bumpFieldLoadingSignal(instance, field.name);
 
   return searchResource;
+}
+
+// Resolve a query-backed relationship as its owner deserializes, so the field's
+// membership — and every `computeVia` reducing over it — is current without a
+// template having to read the field first. The seed captured from the owner's
+// document answers immediately, and the resource arms its realm-event
+// subscription so later writes to matching cards refresh it.
+//
+// Two opt-outs. A store that must render as a pure function of the document it
+// was handed reports `resolvesQueryFieldsEagerly: false`, which keeps indexing
+// and prerender resolving lazily through the field getter exactly as they do
+// without this call. A field whose query is expensive or rarely read declares
+// `eager: false` and resolves on first access instead.
+//
+// Failure degrades to the lazy path rather than propagating: this runs for
+// every query field on every deserialized card, including cards nothing will
+// ever render, so a resource that can't be built must not take the owner's
+// deserialization down with it. The field getter builds the resource again on
+// first read, where the same failure surfaces to the render that depends on it.
+export function resolveQueryFieldEagerly(
+  store: CardStore,
+  instance: BaseDef,
+  field: Field,
+): void {
+  if (!field.queryDefinition || field.eager === false) {
+    return;
+  }
+  if (!store?.resolvesQueryFieldsEagerly) {
+    return;
+  }
+  // The owner's realm is what a query interpolates against, and it is not
+  // always assigned by the time its own deserialization finishes — a contained
+  // FieldDef receives it from its parent afterwards, and a card created without
+  // an id has no `meta` to carry it. Resolving now would build a resource
+  // around an unresolvable query, and because that path reads no tracked state
+  // the resource would never re-derive one. Leave the field to the getter,
+  // which runs once the realm is known.
+  if (!(instance as any)[realmURLSymbol]) {
+    return;
+  }
+  // A render context decides `isLive` for the resource's whole lifetime, and
+  // index renders interleave with an interactive app's own loads. Creating the
+  // resource here could hand a live card a non-live resource that never
+  // subscribes, so let the getter create it in the context that reads it.
+  if ((globalThis as any).__boxelRenderContext) {
+    return;
+  }
+  try {
+    ensureQueryFieldSearchResource(store, instance, field);
+  } catch (err) {
+    log.warn(
+      `eager resolution of query field ${field.name} failed; deferring to first read`,
+      err,
+    );
+  }
 }
 
 // Peek at the search resource already created for a query field, without
