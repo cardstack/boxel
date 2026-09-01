@@ -18,7 +18,8 @@
     "motion": "^13.1.1",
     "motion-dom": "^13.1.1",
     "motion-utils": "^13.0.0",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "three-149": "npm:three@0.149.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",

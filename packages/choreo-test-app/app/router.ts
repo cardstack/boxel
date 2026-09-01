@@ -11,5 +11,7 @@ Router.map(function () {
   this.route('mockup-glb', { path: '/_mockup-glb' });
   // Own URLs, declared before /:demo_id so Ember does not eat them as ids.
   this.route('crossing-stress');
+  // A spike, not a demo: no catalog entry, no gallery card. See sylva-stage.
+  this.route('sylva', { path: '/_sylva' });
   this.route('demo', { path: '/:demo_id' });
 });
