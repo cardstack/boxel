@@ -4010,6 +4010,14 @@ registerRelationshipProbe((instance, field) => {
       // whenever a card was edited out of the filter locally.
       queryTotalMatchCount = resource.totalMatchCount;
       queryIsPartial = resource.isPartial;
+      // Unless the search lost a realm. The count then covers only the realms
+      // that answered — a floor rather than the match count — so it is withheld
+      // and the shortfall is reported without one, the same answer the
+      // indexer's own leg gives for the same situation.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+        queryTotalMatchCount = undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
     return {
