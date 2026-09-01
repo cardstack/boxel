@@ -2,12 +2,15 @@
 import { v4 as uuidv4 } from '@lukeed/uuid';
 
 import {
+  delay,
   flattenPrerenderHtmlVisitMeta,
   hasCardExtension,
   isBrowserTestEnv,
   isCardResource,
   jobIdentity,
   logger,
+  param,
+  query,
   modulesConsumedInMeta,
   RealmPaths,
   type Batch,
@@ -42,6 +45,12 @@ import {
 } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { canonicalURL } from './dependency-url.ts';
+
+// Ceiling on holding a prerender-html job's visits for its spawning pass's
+// commit. Incremental commits land in well under a second of the enqueue; a
+// from-scratch pass can hold this for its whole remaining runtime, so the
+// ceiling sits at the same scale as the passes themselves.
+const SPAWNING_GENERATION_WAIT_MS = 10 * 60_000;
 import { uniqueDeps } from './dependency-collections.ts';
 import {
   preWarmModulesTable,
@@ -265,6 +274,46 @@ export async function runPrerenderHtmlPass({
       );
     }
     preWarmMs = Date.now() - preWarmStart;
+  }
+
+  // Hold the visits until the spawning pass's generation is committed. A
+  // visit's own card + source come from the reader, but anything its renders
+  // load lazily — a linked card only a capture-only screenshot component
+  // reads is the canonical case — is served from `boxel_index`, which the
+  // spawning pass swaps only at its commit. This job is enqueued as soon as
+  // the invalidation set is known (deliberately, so queue latency and the
+  // module pre-warm above overlap the tail of the index pass), so ungated
+  // visits can read pre-edit documents and persist superseded linked data
+  // under the new generation. The wait is bounded: a spawning pass that dies
+  // before commit never advances the watermark, and production then still
+  // serves exactly what these renders would read — proceeding renders a
+  // consistent state, and the eventual re-index re-renders these rows.
+  if (dbAdapter) {
+    let gateStart = Date.now();
+    let committed = false;
+    while (Date.now() - gateStart < SPAWNING_GENERATION_WAIT_MS) {
+      let [row] = (await query(dbAdapter, [
+        'SELECT current_generation FROM realm_generations WHERE realm_url =',
+        param(realmURL.href),
+      ])) as { current_generation: number | string }[];
+      if (row != null && Number(row.current_generation) >= generation) {
+        committed = true;
+        break;
+      }
+      await delay(250);
+    }
+    let gateMs = Date.now() - gateStart;
+    if (committed) {
+      if (gateMs > 1000) {
+        perfLog.debug(
+          `${jobTag} spawning-generation gate held the visits ${gateMs} ms`,
+        );
+      }
+    } else {
+      log.warn(
+        `${jobTag} spawning generation ${generation} was not committed within ${SPAWNING_GENERATION_WAIT_MS} ms; rendering against the committed index`,
+      );
+    }
   }
 
   // One batched read of every rendered URL's content hash/size so the
