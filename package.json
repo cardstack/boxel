@@ -22,7 +22,8 @@
     "prepare-worktree-types": "pnpm --filter @cardstack/boxel-icons build && pnpm --filter @cardstack/boxel-ui build",
     "prepare": "husky",
     "lint:protocol-closure": "node ./scripts/check-protocol-import-closure.mts",
-    "lint:tier-registry": "node ./scripts/check-execution-tier-registry.mts"
+    "lint:tier-registry": "node ./scripts/check-execution-tier-registry.mts",
+    "lint:cross-artifact-imports": "node ./scripts/check-cross-artifact-imports.mts"
   },
   "devDependencies": {
     "@actions/core": "catalog:",

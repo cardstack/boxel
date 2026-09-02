@@ -34,6 +34,10 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # The cross-artifact check compares this change against its merge
+          # base, which a depth-1 checkout cannot reach.
+          fetch-depth: 0
       - uses: ./.github/actions/init
 
       - name: Type-check repo-root scripts
@@ -55,6 +59,16 @@ jobs:
       - name: Check the execution protocol's runtime import closure
         if: ${{ !cancelled() }}
         run: pnpm run lint:protocol-closure
+      - name: Check for a boxel-ui export imported from packages/base
+        # boxel-ui compiles into the host bundle and base ships as realm
+        # source, so a commit adding an export and its import together cannot
+        # deploy atomically: during the overlap the new source renders against
+        # a bundle without the name, throws `has no exported member`, and the
+        # indexer caches that as the card's content. Two ~70-minute outages
+        # (CS-12669) came from this shape, and a third instance shipped
+        # unnoticed. Needs the base branch present to diff against.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint:cross-artifact-imports
       - name: Check every execution tier is registered for record parity
         # RP-14.4: the parity harness compares the tiers it is handed, so an
         # adapter nobody registered is not a failing comparison but an absent
