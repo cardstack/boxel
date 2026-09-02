@@ -144,6 +144,13 @@ interface Beat {
   haze?: number;
 
   /**
+   * A BACKLIGHT, standing opposite the lens. For the night beats: a
+   * dark building against a dark sky is a rectangle of nothing, and
+   * every night exterior ever shot cheats exactly this way.
+   */
+  rim?: number;
+
+  /**
    * HOW HARD IT RAINS, over and above the weather preset. The scene's
    * rain is mixed for its own wide landing shot and all but vanishes on
    * a long lens — and a beat whose whole argument is that the roof
@@ -607,6 +614,9 @@ const BEATS: Beat[] = [
       credit: 'photograph',
       src: 'himeji.webp',
     },
+    /* the edict is the film's one night shot: without a light behind
+       it the keep is a silhouette of nothing */
+    rim: 1.15,
     romaji: 'IKKOKU-ICHIJŌ-REI',
     theme: 3,
     ticks: 5,
@@ -1286,6 +1296,9 @@ interface FilmApi {
 
   /** scale the rain field the weather preset draws; null hands it back */
   rain(k: number | null): void;
+
+  /** the backlight: intensity, and whether it stands opposite the lens */
+  rim(k: number | null, back?: boolean): void;
 }
 
 export default class TowerFilm extends Component<{
@@ -2792,24 +2805,31 @@ export default class TowerFilm extends Component<{
            smaller than the sky word: this one names a part rather than
            the chapter, so it stands at the height of the thing it names
            and keeps climbing with it. */
-        color: 'rgba(255,251,243,0.16)',
+        /* BIGGER, FAINTER, AND IN THE SAME PLACE EVERY TIME. A word
+           that lands somewhere new each beat is a caption chasing the
+           building; one that always stands in the same spot behind it
+           becomes a fixture of the film — you stop reading it as an
+           annotation and start reading it as the name of what you are
+           watching. Big enough to be architecture, faint enough that
+           the timber crossing it always wins. */
+        color: 'rgba(255,251,243,0.07)',
         fill: true,
         lines: m.lines,
-        shadow: 'rgba(30,22,10,0.42)',
-        shadowBlur: 0.1,
-        size: m.size * 1.55,
-        stroke: 'rgba(255,253,247,0.86)',
-        strokeW: 0.016,
+        shadow: 'rgba(30,22,10,0.3)',
+        shadowBlur: 0.12,
+        size: m.size * 2.7,
+        stroke: 'rgba(255,253,247,0.45)',
+        strokeW: 0.011,
         track: 0.12,
       },
       {
-        opacity: Math.min(1, raw * 2.2) * 0.86,
+        opacity: Math.min(1, raw * 2.2) * 0.62,
         ry: (this.markFace / RAD) % 360,
-        /* planted behind the subject (markAt), and still travelling
-           upward through the whole beat — the word rises with the stage
-           it names instead of arriving and parking */
+        /* planted behind the subject (markAt), at ONE height for the
+           whole chapter, with a breath of upward drift — enough that it
+           is alive, not enough that it is going anywhere */
         x: this.markAt.x,
-        y: y + local * 1.4,
+        y: 9.4 + local * 0.9,
         z: this.markAt.z,
       }
     );
@@ -3079,6 +3099,7 @@ export default class TowerFilm extends Component<{
     /* the weather preset draws rain for the page's own wide shot; a beat
        that is ABOUT the rain asks for more of it (Beat.rain) */
     film.rain(beat.rain ?? null);
+    film.rim(beat.rim ?? null, true);
   }
 
   private shot = (state: {
