@@ -153,9 +153,30 @@ and its neighbours. None are built yet.
    `?embed`, `__film.perf()`, `__film.quality(k)`. A demo that can be
    driven, measured and pinned from the console is a demo an agent can
    keep honest.
+7. **A run's first cue must not re-run the head.** A cut applies its
+   head beat so the picture is right before the run exists; the run's
+   first `c.Perform` at delay 0 then names the same beat a pass later.
+   The host guards it with a lap stamp. The region could offer a
+   `@primed` (or deliver the head cue synchronously on the pass that
+   compiles the run) so the pattern is not rediscovered per film.
+8. **A transport contract.** Pause has three clocks to hold — the run,
+   the host's per-frame drives, the picture's own loop — and resume has
+   one offset to apply. `run.pause()` / `run.play()` cover the first;
+   the other two are a host convention. A `@paused` on the region that
+   holds its run AND reports the held span would let hosts shift their
+   own clocks from one number.
+9. **Never animate a mask.** The wipe stuttered for weeks because it
+   animated `mask-position` over a full-resolution still. A masked
+   sheet moved by `transform` with its content counter-moved is the
+   composited form; a library wipe step should ship that shape.
 
 ## Open
 
+- Watch the title-to-ground wipe with the compositor sweep and the
+  once-per-cut head beat; judge whether the 1.15 s sweep still reads as
+  a statement or wants the older 0.9 s.
+- The clock reads two seconds behind the cue (`delay: at + TICK`): the
+  title shows 0:08 while the cut lands at 0:10.
 - Listen. The level trim and the rise-in were set from measurements, not
   ears; the duck's return (slow, on `ended`) may still pump under a short
   line followed by a long gap.

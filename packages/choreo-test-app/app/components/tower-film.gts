@@ -4,7 +4,13 @@ import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
-import { at, Choreo, motion, type PerformCommand } from 'glimmer-motion';
+import {
+  at,
+  Choreo,
+  type ChoreoRun,
+  motion,
+  type PerformCommand,
+} from 'glimmer-motion';
 import TowersNotes from 'test-app/components/notes/towers';
 import config from 'test-app/config/environment';
 
@@ -174,6 +180,9 @@ interface Beat {
   hold?: boolean | 'top';
   /** times of day to walk across the beat, evenly (page theme indices) */
   hours?: number[];
+  /** the share of the beat the hours walk across (default 1): with 0.7
+   *  the last hour arrives at 70% and holds for the rest */
+  hoursOver?: number;
   /**
    * A DESIGNED SILENCE. By default a beat with no line of its own is an
    * L-CUT: the outgoing narration finishes across the seam and fades on
@@ -296,6 +305,8 @@ interface Beat {
    * because a fifth is a slide.
    */
   says?: string[];
+  /** seconds of stillness before a build clock starts moving */
+  settle?: number;
   /** type standing out in the world, behind the building */
   sky?: {
     /**
@@ -359,6 +370,8 @@ interface Beat {
   /** settled snow and a pinned blizzard, on the shot's clock; null clears */
   winter?: null | { gust: number; pack: number };
   wx?: number;
+  /** the weather changes at the beat's head even on a flight (no thaw) */
+  wxCut?: boolean;
 }
 
 /**
@@ -430,6 +443,21 @@ const GRADES: Record<string, FilmGrade> = {
     warm: hex('#e8d9c2'),
     cool: hex('#9fb0c8'),
     gradeA: 0.4,
+    vigA: 0,
+  },
+  /* THE NIGHT. The chapter grades all lift the picture a little, which
+     is right for daylight and wrong for the one night shot: a night that
+     has been lifted is dusk. This one pulls the black down, cools the
+     shadows and leaves the rim light to do the drawing. */
+  night: {
+    sat: 0.78,
+    con: 1.12,
+    bri: 0.7,
+    sep: 0,
+    hue: 0,
+    warm: hex('#c9c2b4'),
+    cool: hex('#6f7f9e'),
+    gradeA: 0.6,
     vigA: 0,
   },
   chalk: {
@@ -568,7 +596,7 @@ const GRADES: Record<string, FilmGrade> = {
  * boot and shown in the corner under `?debug`, so "is my page current?"
  * is a glance rather than a theory.
  */
-const BUILD = 'cut-10 · a player, a mixer, six climates, and the fork';
+const BUILD = 'cut-11 · the bar learns to listen';
 
 /**
  * `?awake` keeps the loops running in a document that reports itself
@@ -747,7 +775,7 @@ const BEATS: Beat[] = [
     /* the film opens from as far out as the lens goes and spends the
        whole first beat arriving — a slow push from "a landscape with
        something in it" to "this building, specifically" */
-    cam: { dolly: 0.46, lookY: -1.2, ox: 0.3, pitch: 12, yaw: -46 },
+    cam: { dolly: 0.5, lookY: -1.2, ox: 0.3, pitch: 12, yaw: -46 },
     ch: 0,
     gloss: 'the keep',
     id: 'title',
@@ -773,8 +801,12 @@ const BEATS: Beat[] = [
       y: 7.5,
     },
     theme: 0,
-    ticks: 5,
-    toCam: { dolly: 0.74, lookY: -1.0, ox: 0.2, pitch: 13, yaw: -26 },
+    /* four ticks: the line is six seconds and the cut to the ground
+       should land on its last word, not after a breath of dead air */
+    ticks: 4,
+    /* and the push ARRIVES: the beat ends on the building, not on a
+       field with a building in it */
+    toCam: { dolly: 0.98, lookY: -0.3, ox: 0.2, pitch: 13, yaw: -26 },
   },
   {
     /* CUT to the ground itself — a worm's-eye from the foot of the
@@ -899,7 +931,9 @@ const BEATS: Beat[] = [
       src: 'himeji.webp',
     },
     /* the edict is the film's one night shot: without a light behind
-       it the keep is a silhouette of nothing */
+       it the keep is a silhouette of nothing — and it wears the night
+       grade, since the chapter's own would lift it back to dusk */
+    grade: 'night',
     rim: 1.15,
     romaji: 'IKKOKU-ICHIJŌ-REI',
     theme: 3,
@@ -919,12 +953,14 @@ const BEATS: Beat[] = [
     build: [0, 1.07],
     cam: { dolly: 1.24, lookY: -4.4, ox: -0.12, pitch: -1, yaw: 72 },
     ch: 2,
-    /* out of the edict's night into the building morning — swept, not
-       cut: the night lifts across the flight (Beat.lead). The standing
-       keep is then WIPED off the field, because the next four minutes
-       are about putting one up and it cannot already be there. */
-    join: 'wipe',
-    lead: 2,
+    /* out of the edict's night into the building morning under a DIP:
+       the standing keep has to leave the field before the next four
+       minutes put one up, and a building cannot be wiped away in the
+       open — the black takes it, and the morning is already there when
+       the black lifts. A cut under the dip, so the lens is seated on
+       the stone before anything is seen. */
+    cut: true,
+    join: 'dip',
     gloss: 'the stone base',
     haze: 0.42,
     id: 'ishigaki',
@@ -1082,6 +1118,10 @@ const BEATS: Beat[] = [
     ch: 2,
     /* the breath is entered on a dissolve, not a step */
     cut: true,
+    /* graded like the chapter that follows: the carpenters leave in
+       the same late warmth the close-ups are cut in, so the seam into
+       04 changes the lens and nothing else */
+    grade: 'ink',
     id: 'muneage',
     join: 'blend',
     mode: 'clear',
@@ -1110,7 +1150,9 @@ const BEATS: Beat[] = [
     says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
-    toCam: { dolly: 0.84, lookY: 1.5, ox: 0.18, pitch: 14, yaw: 158 },
+    /* and the lens does move: a medium push up to the roof across the
+       beat, so the cut to the ridge fish lands where the eye already is */
+    toCam: { dolly: 1.55, lookY: 4.6, ox: 0.12, pitch: 15, yaw: 158 },
     vo: 'Same building. Same afternoon. From here, only the lens moves.',
     mode: 'plate',
     romaji: 'SAIBU',
@@ -1287,6 +1329,9 @@ const BEATS: Beat[] = [
     gloss: 'comparison',
     haze: 0.12,
     id: 'hikaku',
+    /* the comparison is a clear day: the rain stops at the plate, it
+       does not thaw across the flight into it */
+    wxCut: true,
     says: ['Six towers', 'One problem', 'Height, from what you have'],
     kanji: '比較',
     kicker: 'ONE PROBLEM',
@@ -1350,7 +1395,7 @@ const BEATS: Beat[] = [
     toCam: { dolly: 0.689, lookY: -2.8, ox: -0.22, pitch: 3, yaw: 214 },
     /* the north: it is snowing, the ground has taken it, and the wind is
        up enough to streak the flakes — cold on the first frame */
-    winter: { gust: 0.55, pack: 0.8 },
+    winter: { gust: 0.55, pack: 1 },
     wx: 3,
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
@@ -1398,7 +1443,8 @@ const BEATS: Beat[] = [
     hold: true,
     id: 'c-th',
     toCam: { dolly: 1.05, lookY: 3.6, ox: -0.15, pitch: 14, yaw: 300 },
-    join: 'blend',
+    /* the slow one: a prang arrives, it is not cut to */
+    join: 'melt',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
     kicker: 'THAILAND',
@@ -1418,7 +1464,7 @@ const BEATS: Beat[] = [
     /* the prasat reads from eye level or below — its terraces and the
        redented corners are the point, and from above it is a heap. Both
        ends of the move stay at or under the horizon. */
-    cam: { dolly: 0.74, lookY: -3.4, ox: -0.21, pitch: -4, yaw: 290 },
+    cam: { dolly: 0.74, lookY: -3.4, ox: -0.21, pitch: -4, yaw: 278 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
@@ -1427,7 +1473,9 @@ const BEATS: Beat[] = [
     mix: { wx: 0 },
     hold: true,
     id: 'c-kh',
-    toCam: { dolly: 0.8, lookY: -1.6, ox: -0.17, pitch: -1, yaw: 296 },
+    /* and it goes round: the redented corners and the other face are
+       the point, so the move is an orbit, not a step */
+    toCam: { dolly: 0.8, lookY: -1.6, ox: -0.17, pitch: -1, yaw: 326 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1487,12 +1535,17 @@ const BEATS: Beat[] = [
     bare: true,
     hold: 'top',
     hours: [0, 1, 2, 3],
+    /* the day runs out early and the night holds: dusk lands at half the
+       beat, night at three-quarters, and the last stones come down in it */
+    hoursOver: 0.72,
     id: 'kaitai',
     join: 'blend',
     kanji: '解体',
     kicker: 'AND BACK DOWN',
     mode: 'lower',
     romaji: 'KAITAI',
+    /* a second standing still before the first tile moves */
+    settle: 1,
     says: [
       'Tile, plaster, timber',
       'Stone last',
@@ -1554,6 +1607,8 @@ interface FilmApi {
   grade(g: FilmGrade, instant?: boolean): void;
   haze(v: null | number): void;
   height(): number;
+  /** hold the page's own clock: weather, grass, build, lens — the picture stands */
+  hold(v: boolean): void;
   /** nothing on screen will change: stop drawing it */
   idle(v: boolean): void;
   light(p: null | { az?: number; el?: number }): void;
@@ -1638,6 +1693,8 @@ interface FilmApi {
   voicePrime(url: string): void;
   /** fade the running line out over `ms` and lift the duck */
   voiceStop(ms?: number): void;
+  /** the master fader, 0..1, under the mix and the mute */
+  volume(v: number): void;
   /** settled snow (`pack`) and a pinned blizzard (`gust`), 0..1; null clears */
   winter(w: null | { gust: number; pack: number }): void;
   wx(i: number, instant?: boolean): void;
@@ -1784,6 +1841,38 @@ export default class TowerFilm extends Component<{
   @tracked private idle = false;
   /** the fraction the hand is holding while scrubbing, else null */
   @tracked private scrubAt: number | null = null;
+  /** the fraction under a resting pointer on the bar, else null */
+  @tracked private hoverAt: number | null = null;
+  /** the master fader, 0..1, remembered across visits */
+  @tracked private vol = TowerFilm.savedVol();
+  /** the centre-screen glyph that confirms a play or a pause */
+  @tracked private burst: '' | 'play' | 'pause' = '';
+  private scrubEl?: HTMLElement;
+  /** the viewer's pause: the run, the page and the beat clock all hold */
+  @tracked private paused = false;
+  private pausedAt = 0;
+  /** the lap whose head beat the cut itself already applied */
+  private primedLap = -1;
+  private ctx?: { run: ChoreoRun | null };
+  /** the score's context, kept so the transport can hold its run */
+  private keep = modifier((_el: Element, [c]: [{ run: ChoreoRun | null }]) => {
+    this.ctx = c;
+    return () => {
+      if (this.ctx === c) {
+        this.ctx = undefined;
+      }
+    };
+  });
+  /** rolling AND not held by the viewer: what the play button shows */
+  get live(): boolean {
+    return this.playing && !this.paused;
+  }
+  /** equality, as a helper the template can call */
+  private is = (a: unknown, b: unknown) => a === b;
+  get volStyle(): string {
+    return `--tf-vol:${this.vol.toFixed(2)}`;
+  }
+  private shownPct = -1;
   @tracked private clock = '0:00';
   @tracked private full = false;
   private idleTimer = 0;
@@ -1834,19 +1923,111 @@ export default class TowerFilm extends Component<{
     return TowerFilm.mmss(this.totalSecs);
   }
 
-  /** what the hand is pointing at while it drags: the shot it will cut to */
-  get scrubLabel(): string {
-    if (this.scrubAt === null) {
-      return '';
+  /**
+   * What the hand is pointing at — resting on the bar or dragging it:
+   * the chapter under it and the time, on two lines, the way every
+   * player's hover bubble does. A drag wins over a hover.
+   */
+  get tip(): { ch: string; t: string } | null {
+    const at = this.scrubAt ?? this.hoverAt;
+    if (at === null) {
+      return null;
     }
-    const want = this.scrubAt * this.totalSecs;
+    const want = at * this.totalSecs;
     let i = 0;
     while (i + 1 < BEATS.length && this.secsBefore(i + 1) <= want) {
       i += 1;
     }
     const ch = CHAPTERS[BEATS[i]!.ch] ?? CHAPTERS[0]!;
-    return `${ch.n} ${ch.title} · ${TowerFilm.mmss(want)}`;
+    return { ch: `${ch.n} ${ch.title}`, t: TowerFilm.mmss(want) };
   }
+
+  private static savedVol(): number {
+    try {
+      const v = Number(window.localStorage.getItem('tf-vol'));
+      return Number.isFinite(v) && v > 0 && v <= 1 ? v : 1;
+    } catch {
+      return 1;
+    }
+  }
+
+  /** sound on, and the fader up: the speaker glyph's three states */
+  get loud(): 'off' | 'low' | 'high' {
+    if (!this.sound || this.vol <= 0) {
+      return 'off';
+    }
+    return this.vol < 0.5 ? 'low' : 'high';
+  }
+
+  /**
+   * THE FADER. Dragging it up while muted unmutes, because that is what
+   * the hand means; the value is the page's master gain, under the mix
+   * and the mute, and it is remembered for the next visit.
+   */
+  private fade = (e: Event) => {
+    const v = Number((e.target as HTMLInputElement).value);
+    this.vol = v;
+    this.film?.volume(v);
+    try {
+      window.localStorage.setItem('tf-vol', v.toFixed(2));
+    } catch {
+      /* private mode: the fader just does not remember */
+    }
+    if (v > 0 && !this.sound) {
+      this.hear();
+    }
+  };
+
+  /** the glyph that flashes in the middle of the picture on play/pause */
+  private pop(kind: 'play' | 'pause') {
+    if (this.gate || this.ended) {
+      return;
+    }
+    this.burst = '';
+    requestAnimationFrame(() => {
+      this.burst = kind;
+    });
+  }
+
+  private burstDone = () => {
+    this.burst = '';
+  };
+
+  get burstPlay(): boolean {
+    return this.burst === 'play';
+  }
+
+  /**
+   * A tap on the picture is play/pause and two taps are full screen —
+   * the grammar of every player since the first one. The controls, the
+   * door, the end card and the menu keep their own clicks.
+   */
+  private static onGlass(e: Event): boolean {
+    const t = e.target as Element | null;
+    return !t?.closest('button, a, input, .tf-player, .tf-menu, .tf-gate');
+  }
+
+  private tap = (e: Event) => {
+    if (this.gate || this.ended || this.menu || !TowerFilm.onGlass(e)) {
+      return;
+    }
+    this.toggle();
+  };
+
+  private tapTwice = (e: Event) => {
+    if (this.gate || this.ended || this.menu || !TowerFilm.onGlass(e)) {
+      return;
+    }
+    this.screen();
+  };
+
+  /** the bar's own element, for the slider's live value */
+  private slider = modifier((el: HTMLElement) => {
+    this.scrubEl = el;
+    return () => {
+      this.scrubEl = undefined;
+    };
+  });
 
   private wake = () => {
     if (this.idle) {
@@ -1855,7 +2036,7 @@ export default class TowerFilm extends Component<{
     window.clearTimeout(this.idleTimer);
     this.idleTimer = window.setTimeout(() => {
       /* never hide the controls out from under a hand that is using them */
-      if (this.scrubAt === null && !this.menu && this.playing) {
+      if (this.scrubAt === null && !this.menu && this.live) {
         this.idle = true;
       }
     }, 2600);
@@ -1866,15 +2047,42 @@ export default class TowerFilm extends Component<{
     return Math.max(0, Math.min(1, (e.clientX - el.left) / el.width));
   }
 
+  /**
+   * The bubble and the ghost fill follow the pointer, not the playhead:
+   * the bubble's x in pixels (held off the edges so it never clips) and
+   * the hover fraction, both as properties, both without a re-render.
+   */
+  private point(e: PointerEvent) {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = Math.max(0, Math.min(r.width, e.clientX - r.left));
+    const at = r.width > 0 ? x / r.width : 0;
+    const pad = Math.min(56, r.width / 2);
+    const st = this.pageEl?.style;
+    st?.setProperty(
+      '--tf-tipx',
+      Math.max(pad, Math.min(r.width - pad, x)).toFixed(1)
+    );
+    st?.setProperty('--tf-hov', at.toFixed(5));
+    return at;
+  }
+
   private scrubDown = (e: PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    this.scrubAt = this.scrubFrom(e);
+    this.scrubAt = this.point(e);
   };
 
   private scrubMove = (e: PointerEvent) => {
+    const at = this.point(e);
     if (this.scrubAt !== null) {
-      this.scrubAt = this.scrubFrom(e);
+      this.scrubAt = at;
+    } else if (e.pointerType !== 'touch') {
+      this.hoverAt = at;
     }
+  };
+
+  private scrubLeave = () => {
+    this.hoverAt = null;
+    this.pageEl?.style.setProperty('--tf-hov', '0');
   };
 
   /**
@@ -1888,6 +2096,8 @@ export default class TowerFilm extends Component<{
   private scrubUp = (e: PointerEvent) => {
     const at = this.scrubAt ?? this.scrubFrom(e);
     this.scrubAt = null;
+    this.hoverAt = null;
+    this.pageEl?.style.setProperty('--tf-hov', '0');
     const want = at * this.totalSecs;
     let i = 0;
     while (i + 1 < BEATS.length && this.secsBefore(i + 1) <= want) {
@@ -2065,7 +2275,7 @@ export default class TowerFilm extends Component<{
   get embed(): boolean {
     /* the demo page mounts the theater route in an iframe with ?embed —
        Sylva's pattern: the gate, the transport and the dive stand down
-       and the film begins muted */
+       and the film begins with sound */
     return (
       (this.args.embed ?? false) || /[?&]embed\b/.test(window.location.search)
     );
@@ -2521,6 +2731,7 @@ export default class TowerFilm extends Component<{
         return;
       }
       this.film = w.__film;
+      this.film.volume(this.vol);
       /* a RUNNING film needs nothing from the door. This path re-fires
          whenever the modifier re-installs (it reads tracked state), and
          re-seating here yanked the lens back to the cut's head. */
@@ -2580,8 +2791,12 @@ export default class TowerFilm extends Component<{
        * asked — which is how the poster's own circuit got two seconds
        * and then vanished.
        */
+      /* ...and it starts WITH sound: the mix is part of the film, and a
+         frame with no transport has no way to turn it on. Where the
+         browser withholds audio until a gesture, the graph simply waits
+         for one; the picture does not. */
       if (!this.booted && (this.embed || this.from > 0)) {
-        this.begin(false);
+        this.begin(true);
       }
     };
     frame.addEventListener('load', onLoad);
@@ -2853,6 +3068,11 @@ export default class TowerFilm extends Component<{
       film.idle(false);
       this.idled = false;
     }
+    /* held by the viewer: nothing advances, nothing is written */
+    if (this.paused) {
+      this.lastTick = stamp;
+      return;
+    }
     const dt = Math.min(
       0.08,
       this.lastTick ? (stamp - this.lastTick) / 1000 : 0
@@ -3024,6 +3244,11 @@ export default class TowerFilm extends Component<{
     if (this.trackW > 0) {
       this.pageEl?.style.setProperty('--tf-hpx', this.headPx(prog).toFixed(1));
     }
+    const pct = Math.round(prog * 100);
+    if (pct !== this.shownPct) {
+      this.shownPct = pct;
+      this.scrubEl?.setAttribute('aria-valuenow', String(pct));
+    }
     const sec = Math.floor(at);
     if (sec !== this.shownSec) {
       this.shownSec = sec;
@@ -3046,7 +3271,14 @@ export default class TowerFilm extends Component<{
        driving the last beat's clock, or a restart finds the tower still
        down behind the door */
     if (Array.isArray(beat.build) && this.rolling) {
-      film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
+      /* a settle: the shot is seen standing before the first stone moves */
+      const hold = beat.settle ?? 0;
+      const span0 = beat.ticks * TICK;
+      const bl = Math.max(
+        0,
+        Math.min(1, ((stamp - this.beatAt) / 1000 - hold) / (span0 - hold))
+      );
+      film.time(lerp(beat.build[0], beat.build[1], smooth(bl)));
     }
     /**
      * The corner empties half a second before the beat changes — and
@@ -3074,25 +3306,45 @@ export default class TowerFilm extends Component<{
     const since = (stamp - this.beatAt) / 1000;
     const wait = this.typeAt[0]! - 0.05;
     const enter = smooth(Math.max(0, Math.min(1, (since - wait) / 0.4)));
-    const tailA = this.ended || last ? 1 : smooth(Math.min(1, left / 1.0));
+    /* the last beat's type goes out over its final stretch and is gone
+       under the end card, rather than standing beneath it */
+    const tailA = this.ended
+      ? 0
+      : last
+        ? smooth(Math.min(1, left / 1.6))
+        : smooth(Math.min(1, left / 1.0));
     const typeA = Math.min(enter, tailA);
     this.pageEl?.style.setProperty('--tf-type-a', typeA.toFixed(3));
     if (this.plateEl) {
       this.plateEl.style.opacity = typeA.toFixed(3);
     }
+    /* THE TITLE HANDS THE FRAME TO THE BUILDING. The opening card is
+       type-first — the study's name at poster size while the lens is
+       still far out — and as the push arrives on the tower the plate
+       settles to the size every other beat's type is set at. One
+       property, eased, held for the first breath. */
+    const titleK =
+      beat.mode === 'title'
+        ? smooth(
+            Math.max(0, Math.min(1, (since - 1.0) / Math.max(0.5, span - 1.4)))
+          )
+        : 1;
+    this.pageEl?.style.setProperty('--tf-title-k', titleK.toFixed(3));
     /* THE HOURS OF A BEAT: a beat can walk the page's times of day across
        its length — the ending goes morning, noon, dusk, night as the
        tower comes down, and stays in the night */
     if (beat.hours?.length && this.rolling) {
+      const over = beat.hoursOver ?? 1;
+      const hl = Math.min(1, local / over);
       const step = Math.min(
         beat.hours.length - 1,
-        Math.floor(local * beat.hours.length)
+        Math.floor(hl * beat.hours.length)
       );
       if (step !== this.hourStep) {
         this.hourStep = step;
         /* each hour blends across its whole share of the beat, so the
            day turns rather than steps */
-        film.themeDur((beat.ticks * TICK) / beat.hours.length);
+        film.themeDur((beat.ticks * TICK * over) / beat.hours.length);
         film.theme(beat.hours[step]!, false);
       }
     }
@@ -3216,7 +3468,7 @@ export default class TowerFilm extends Component<{
     }
 
     this.stageMark(film, beat, local, dt);
-    this.trackPoint(film, beat, local);
+    this.trackPoint(film, beat, local, typeA);
     this.traceShape(film, beat, local, dt);
     this.parallax(local);
     this.follow(film);
@@ -3608,7 +3860,7 @@ export default class TowerFilm extends Component<{
    * building, redrawn every frame, so the label is attached to the thing
    * rather than merely near it.
    */
-  private trackPoint(film: FilmApi, beat: Beat, local: number) {
+  private trackPoint(film: FilmApi, beat: Beat, local: number, typeA: number) {
     const line = this.lineEl;
     const dot = this.dotEl;
     if (!line || !dot) {
@@ -3640,7 +3892,10 @@ export default class TowerFilm extends Component<{
     const cy = box.top - host.top + box.height / 2;
     const x1 = x2 > cx ? box.right - host.left : box.left - host.left;
     const y1 = cy;
-    const on = p.on && local > 0.12 ? 1 : 0;
+    /* the line belongs to the caption: it fades with the type, so a
+       chapter flight after the beat does not leave a rule hanging in the
+       air over a caption that has already gone */
+    const on = p.on && local > 0.12 ? typeA : 0;
     line.setAttribute('x1', String(x1));
     line.setAttribute('y1', String(y1));
     line.setAttribute('x2', String(x2));
@@ -3920,7 +4175,7 @@ export default class TowerFilm extends Component<{
     this.hazeBase = beat.haze ?? null;
     film.haze(this.hazeBase);
     if (beat.wx !== undefined) {
-      film.wx(beat.wx, hard);
+      film.wx(beat.wx, hard || !!beat.wxCut);
     }
     if (beat.winter !== undefined) {
       film.winter(beat.winter);
@@ -4012,6 +4267,16 @@ export default class TowerFilm extends Component<{
     }
     if (command.action === 'beat') {
       const i = Number(command.target);
+      /* THE HEAD BEAT IS APPLIED ONCE. A cut applies its beat itself, so
+         the picture is right before the run exists; the run's first cue
+         then names the same beat a pass later. Applying it again ran
+         the join twice — and the second wipe snapshotted a lens that
+         had already moved, so the sweep revealed the shot it covered. */
+      if (i === 0 && this.primedLap === this.lap) {
+        this.primedLap = -1;
+        this.beatIndex = 0;
+        return;
+      }
       if (Number.isFinite(i) && this.beats[i]) {
         this.beatIndex = i;
         this.applyBeat(this.beats[i]!);
@@ -4019,12 +4284,40 @@ export default class TowerFilm extends Component<{
     }
   };
 
+  /**
+   * PAUSE MEANS EVERYTHING STOPS. The score's run holds where it is (the
+   * lens included), the page's own clock holds (grass, weather, the
+   * build, the day), the audio graph suspends, and the beat clock is
+   * shifted forward by the length of the hold on resume so the hours,
+   * the build and the type pick up exactly where they stood. Tearing the
+   * Sequence down was the old pause, and it re-ran the chapter on play.
+   */
   private toggle = () => {
-    this.playing = !this.playing;
-    /* a paused picture with a running voice is two films; hold both —
-       and let the voice down gently rather than mid-cycle */
-    this.film?.pause(!this.playing);
+    if (!this.playing) {
+      return;
+    }
+    this.paused = !this.paused;
+    this.pop(this.paused ? 'pause' : 'play');
+    const run = this.ctx?.run;
+    if (this.paused) {
+      this.pausedAt = performance.now();
+      run?.pause();
+    } else {
+      this.beatAt += performance.now() - this.pausedAt;
+      run?.play();
+    }
+    this.film?.hold(this.paused);
+    this.film?.pause(this.paused);
   };
+
+  /** any re-cut or restart clears a hold: the new run starts rolling */
+  private unhold() {
+    if (this.paused) {
+      this.paused = false;
+      this.film?.hold(false);
+      this.film?.pause(false);
+    }
+  }
 
   /**
    * SKIP A CHAPTER — by re-cutting, never by seeking.
@@ -4057,11 +4350,13 @@ export default class TowerFilm extends Component<{
   };
 
   private cutTo(index: number, hard = false) {
+    this.unhold();
     this.from = index;
     this.beatIndex = 0;
     this.ended = false;
     this.playing = true;
     this.lap += 1;
+    this.primedLap = this.lap;
     this.settleAir(index);
     this.applyBeat(BEATS[index]!, true);
     /* the re-cut score opens on a spliced first waypoint, so the goal
@@ -4114,9 +4409,18 @@ export default class TowerFilm extends Component<{
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       this.prev();
-    } else if (e.key === ' ') {
+    } else if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
       e.preventDefault();
       this.toggle();
+    } else if (e.key === 'f' || e.key === 'F') {
+      this.screen();
+    } else if (e.key >= '1' && e.key <= '9') {
+      const head = this.chapterHeads[Number(e.key) - 1];
+      if (head !== undefined) {
+        this.pick(head);
+      }
+    } else if (e.key === '0' || e.key === 'Home') {
+      this.restart();
     } else if (e.key === 'm' || e.key === 'M') {
       this.hear();
     } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
@@ -4318,6 +4622,7 @@ export default class TowerFilm extends Component<{
    */
   private restart = () => {
     const film = this.film;
+    this.unhold();
     this.freeze = '';
     this.film?.voiceStop(120);
     this.playing = false;
@@ -4383,10 +4688,11 @@ export default class TowerFilm extends Component<{
       cancelAnimationFrame(this.posterRaf);
       this.posterRaf = undefined;
     }
-    if (withSound) {
-      this.sound = true;
-      this.film.sound(true);
-    }
+    /* the door's choice is the page's state too — a muted begin that
+       leaves the page's own switch on plays every hit and bed under a
+       viewer who asked for silence */
+    this.sound = withSound;
+    this.film.sound(withSound);
     this.settleAir(this.from);
     this.applyBeat(this.beats[0]!, true);
     /* ...and the sky comes with it, NOT instantly: the evening of the
@@ -4416,6 +4722,12 @@ export default class TowerFilm extends Component<{
         this.beats[0]!.ticks * TICK
       );
     }
+    /* THE DOOR STARTS THE SCORE. `playing` gates the Sequence, and a
+       restart leaves it false so the run ends with the door going up —
+       so the door has to turn it back on, or the second viewing stands
+       at its first pose forever with a play button that cannot help. */
+    this.playing = true;
+    this.paused = false;
     this.booted = true;
     this.wake();
     this.lastTick = performance.now();
@@ -4432,6 +4744,7 @@ export default class TowerFilm extends Component<{
      */
     window.setTimeout(() => {
       this.lap += 1;
+      this.primedLap = this.lap;
       this.rolling = true;
     }, 0);
   };
@@ -4505,10 +4818,14 @@ export default class TowerFilm extends Component<{
   };
 
   <template>
-    <div class="tf-page {{if this.embed 'is-embed'}}">
+    <div
+      class="tf-page {{if this.embed 'is-embed'}} {{if this.idle 'is-idle'}}"
+    >
       <div
         class="tf-stage is-grade-{{this.grade}} {{if this.subsOn 'has-subs'}}"
         {{this.mount}}
+        {{on "click" this.tap}}
+        {{on "dblclick" this.tapTwice}}
       >
         {{! the live picture's own wrapper, so a rack-defocus can blur
         the scene without touching the grade riding the iframe itself }}
@@ -4540,13 +4857,9 @@ export default class TowerFilm extends Component<{
         {{#each (array this.cutStamp) key="@identity" as |c|}}
           {{#if c}}
             {{#if this.freeze}}
-              <img
-                class="tf-swipe"
-                src={{this.freeze}}
-                alt=""
-                aria-hidden="true"
-                {{this.retire}}
-              />
+              <div class="tf-swipe" aria-hidden="true" {{this.retire}}>
+                <img src={{this.freeze}} alt="" />
+              </div>
             {{/if}}
           {{/if}}
         {{/each}}
@@ -4983,7 +5296,12 @@ export default class TowerFilm extends Component<{
             @camera3dFrom={{this.openPose}}
             as |c|
           >
-            <i class="tf-rig" {{motion id="rig"}} aria-hidden="true"></i>
+            <i
+              class="tf-rig"
+              {{motion id="rig"}}
+              {{this.keep c}}
+              aria-hidden="true"
+            ></i>
             {{#if this.playing}}
               <c.Sequence @name={{this.filmName}}>
                 <c.Camera3D
@@ -5037,18 +5355,26 @@ export default class TowerFilm extends Component<{
               <p class="tf-gate-t tf-mg-mark">TOWERS</p>
               <p class="tf-gate-s tf-mg-sub">A construction study ·
                 {{this.runtime}}</p>
+              {{! the claim, on the door: nothing here is a file. One quiet
+                sentence in the film's own serif, and a whisper of caps
+                under it — a title card, not a spec sheet }}
+              <p class="tf-gate-live">Live composite: a three.js scene, motion
+                graphics and a mixed score, rendered in the browser at the
+                moment of viewing. No video file exists.</p>
+              <p class="tf-gate-live-k">Generated with AI · Directed by Chris
+                Tse · 2026</p>
               <span class="tf-mg-seal" aria-hidden="true">普請</span>
               <div class="tf-gate-row tf-mg-row">
                 <button
                   type="button"
                   class="tf-go"
                   {{on "click" this.beginSound}}
-                >▶ Begin — with sound</button>
+                >▶ Begin with sound</button>
                 <button
                   type="button"
                   class="tf-go is-quiet"
                   {{on "click" this.beginMute}}
-                >begin muted</button>
+                >Begin muted</button>
               </div>
             </div>
             {{! the index: five chapters in a strip along the foot, the
@@ -5078,9 +5404,12 @@ export default class TowerFilm extends Component<{
               <p class="tf-end-s tf-mg-sub">A construction study</p>
               <span class="tf-mg-seal" aria-hidden="true">天守</span>
               <p class="tf-mg-credits">
+                <span>Picture — rendered live in your browser · no video file</span>
+                <span>Made entirely with AI · directed by a human</span>
+                <span>Director — Chris Tse</span>
+                <span>Motion engine — Choreo by Cardstack</span>
                 <span>Scene — threeui · Meng To</span>
                 <span>Voice — Calvin · ElevenLabs</span>
-                <span>Cut by a score · Choreo</span>
               </p>
               <div class="tf-gate-row tf-mg-row">
                 <button type="button" class="tf-go" {{on "click" this.replay}}>↺
@@ -5137,8 +5466,8 @@ export default class TowerFilm extends Component<{
                 </li>
               {{/each}}
             </ol>
-            <p class="tf-menu-keys">← → chapter · space play · M sound · V
-              captions · C close</p>
+            <p class="tf-menu-keys">space / K play · ← → chapter · 1–5 chapter ·
+              M sound · F full screen · V captions · 0 title screen · C close</p>
           </div>
           <m.Tween
             @of={{m.inserted "sheet"}}
@@ -5158,6 +5487,20 @@ export default class TowerFilm extends Component<{
         </Choreo>
       {{/if}}
 
+      {{! the confirmation glyph: a play or a pause, once, in the middle
+        of the picture, gone in half a second }}
+      {{#if this.burst}}
+        <div class="tf-burst" {{on "animationend" this.burstDone}}>
+          {{#if this.burstPlay}}
+            <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+          {{else}}
+            <svg viewBox="0 0 24 24"><path
+                d="M7 5h4v14H7zM13 5h4v14h-4z"
+              /></svg>
+          {{/if}}
+        </div>
+      {{/if}}
+
       {{! THE PLAYER, floating on the picture. The playhead is
         chaptered, scrubbable and honest: the film cannot seek, so the
         drag reads as time and the release RE-CUTS from the shot under
@@ -5173,20 +5516,23 @@ export default class TowerFilm extends Component<{
         class="tf-player {{if this.idle 'is-idle'}} {{if this.gate 'is-away'}}"
       >
         <div
-          class="tf-scrub"
+          class="tf-scrub {{if this.scrubAt 'is-live'}}"
           role="slider"
           aria-label="playhead"
           aria-valuemin="0"
           aria-valuemax="100"
           aria-valuenow="0"
           tabindex="0"
+          {{this.slider}}
           {{on "pointerdown" this.scrubDown}}
           {{on "pointermove" this.scrubMove}}
           {{on "pointerup" this.scrubUp}}
+          {{on "pointerleave" this.scrubLeave}}
         >
           <span class="tf-scrub-track" {{this.trackWrap}}>
             {{#each this.playbar as |c|}}
-              <span class="tf-scrub-ch" style={{c.style}} title={{c.title}}>
+              <span class="tf-scrub-ch" style={{c.style}}>
+                <em></em>
                 <i></i>
               </span>
             {{/each}}
@@ -5194,8 +5540,11 @@ export default class TowerFilm extends Component<{
               fill's own end, computed from the same chapter fractions and
               the track's measured width, never a second formula }}
             <span class="tf-scrub-head"></span>
-            {{#if this.scrubAt}}
-              <span class="tf-scrub-tip">{{this.scrubLabel}}</span>
+            {{#if this.tip}}
+              <span class="tf-scrub-tip">
+                <small>{{this.tip.ch}}</small>
+                <b>{{this.tip.t}}</b>
+              </span>
             {{/if}}
           </span>
         </div>
@@ -5204,10 +5553,11 @@ export default class TowerFilm extends Component<{
           <button
             type="button"
             class="tf-ic"
-            title={{if this.playing "pause" "play"}}
+            aria-label={{if this.live "pause" "play"}}
+            data-tip={{if this.live "Pause (k)" "Play (k)"}}
             {{on "click" this.toggle}}
           >
-            {{#if this.playing}}
+            {{#if this.live}}
               <svg viewBox="0 0 24 24"><path
                   d="M7 5h4v14H7zM13 5h4v14h-4z"
                 /></svg>
@@ -5218,7 +5568,8 @@ export default class TowerFilm extends Component<{
           <button
             type="button"
             class="tf-ic"
-            title="previous chapter"
+            aria-label="previous chapter"
+            data-tip="Previous chapter (←)"
             {{on "click" this.prev}}
           >
             <svg viewBox="0 0 24 24"><path
@@ -5228,35 +5579,67 @@ export default class TowerFilm extends Component<{
           <button
             type="button"
             class="tf-ic"
-            title="next chapter"
+            aria-label="next chapter"
+            data-tip="Next chapter (→)"
             {{on "click" this.next}}
           >
             <svg viewBox="0 0 24 24"><path
                 d="M16 6h2v12h-2zM6 6l9 6-9 6z"
               /></svg>
           </button>
-          <button
-            type="button"
-            class="tf-ic"
-            title={{if this.sound "mute" "sound"}}
-            {{on "click" this.hear}}
-          >
-            {{#if this.sound}}
-              <svg viewBox="0 0 24 24"><path
-                  d="M4 9v6h4l5 4V5L8 9zm11.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2zm-2-7.6v2.1a5.6 5.6 0 0 1 0 11v2.1a7.7 7.7 0 0 0 0-15.2z"
-                /></svg>
-            {{else}}
-              <svg viewBox="0 0 24 24"><path
-                  d="M4 9v6h4l5 4V5L8 9zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"
-                /></svg>
-            {{/if}}
-          </button>
+          {{! the speaker and, on a hover, the fader beside it }}
+          <span class="tf-vol">
+            <button
+              type="button"
+              class="tf-ic"
+              aria-label={{if this.sound "mute" "sound"}}
+              data-tip={{if this.sound "Mute (m)" "Unmute (m)"}}
+              {{on "click" this.hear}}
+            >
+              {{#if (this.is this.loud "high")}}
+                <svg viewBox="0 0 24 24"><path
+                    d="M4 9v6h4l5 4V5L8 9zm11.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2zm-2-7.6v2.1a5.6 5.6 0 0 1 0 11v2.1a7.7 7.7 0 0 0 0-15.2z"
+                  /></svg>
+              {{else if (this.is this.loud "low")}}
+                <svg viewBox="0 0 24 24"><path
+                    d="M4 9v6h4l5 4V5L8 9zm11.5 3a3.5 3.5 0 0 0-2-3.2v6.4a3.5 3.5 0 0 0 2-3.2z"
+                  /></svg>
+              {{else}}
+                <svg viewBox="0 0 24 24"><path
+                    d="M4 9v6h4l5 4V5L8 9zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"
+                  /></svg>
+              {{/if}}
+            </button>
+            <input
+              class="tf-vol-range"
+              type="range"
+              min="0"
+              max="1"
+              step="0.02"
+              value={{this.vol}}
+              aria-label="volume"
+              style={{this.volStyle}}
+              {{on "input" this.fade}}
+            />
+          </span>
           <span class="tf-time">
             <b>{{this.clock}}</b>
             <i>/</i>
             {{this.duration}}
-            <em>· {{this.chapter.n}} {{this.chapter.title}}</em>
           </span>
+          <button
+            type="button"
+            class="tf-chap"
+            data-tip="Chapters (c)"
+            {{on "click" this.toc}}
+          >
+            <span>·</span>
+            {{this.chapter.n}}
+            {{this.chapter.title}}
+            <svg viewBox="0 0 24 24"><path
+                d="M8.6 6 7.2 7.4 11.8 12l-4.6 4.6L8.6 18l6-6z"
+              /></svg>
+          </button>
           <span class="tf-spacer"></span>
           {{#if this.debug}}
             <span class="tf-build">{{this.build}}</span>
@@ -5264,28 +5647,23 @@ export default class TowerFilm extends Component<{
           <button
             type="button"
             class="tf-ic tf-ic-cc {{if this.subsOn 'is-on'}}"
-            title="captions"
+            aria-label="captions"
+            data-tip="Captions (v)"
             {{on "click" this.cc}}
           >CC</button>
+          {{! the way back to the door, with its name on it: a title screen
+            is a place, not a loop }}
           <button
             type="button"
-            class="tf-ic {{if this.menu 'is-on'}}"
-            title="chapters"
-            {{on "click" this.toc}}
-          >
-            <svg viewBox="0 0 24 24"><path
-                d="M4 6h16v2H4zm0 5h16v2H4zm0 5h10v2H4z"
-              /></svg>
-          </button>
-          <button
-            type="button"
-            class="tf-ic"
-            title="from the top"
+            class="tf-word"
+            data-tip="Back to the title screen (0)"
             {{on "click" this.restart}}
           >
+            {{! a title card, not a loop: the glyph is the card itself }}
             <svg viewBox="0 0 24 24"><path
-                d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"
+                d="M3 5h18v14H3zm2 2v10h14V7zm3 3h8v1.6H8zm0 3.4h5V15H8z"
               /></svg>
+            Title screen
           </button>
           {{#unless this.embed}}
             <LinkTo @route="demo" @model="towers" class="tf-link">How This Is
@@ -5293,8 +5671,9 @@ export default class TowerFilm extends Component<{
           {{/unless}}
           <button
             type="button"
-            class="tf-ic"
-            title={{if this.full "exit fullscreen" "fullscreen"}}
+            class="tf-ic tf-ic-last"
+            aria-label={{if this.full "exit fullscreen" "fullscreen"}}
+            data-tip={{if this.full "Exit full screen (f)" "Full screen (f)"}}
             {{on "click" this.screen}}
           >
             {{#if this.full}}
@@ -5447,6 +5826,16 @@ export default class TowerFilm extends Component<{
         --tf-vig-a: 0.65;
       }
 
+      /* THE NIGHT: the one grade that pulls the picture DOWN. Every other
+         grade lifts, which is right for daylight; a lifted night is dusk. */
+      .is-grade-night {
+        --tf-lut: saturate(0.76) contrast(1.14) brightness(0.66);
+        --tf-warm: #c9c2b4;
+        --tf-cool: #6f7f9e;
+        --tf-grade-a: 0.6;
+        --tf-vig-a: 0;
+      }
+
       /* MIDDAY, and it is meant to be the brightest thing in the film.
          The construction chapter is the one that has to read as
          information — you are watching a building get assembled — so it
@@ -5549,41 +5938,60 @@ export default class TowerFilm extends Component<{
       /* the outgoing frame, swept off along the sun's diagonal behind a
          FEATHERED edge — a mask, not a clip, because a wipe with a hard
          edge is a screen transition and a wipe with a soft one is film */
+      /* THE SWEEP IS TWO TRANSFORMS, NOT A MASK MOVING. Sliding
+         mask-position repaints a full-resolution still every frame and
+         the wipe stutters — which is what a wipe must never do. So the
+         mask stays put on a sheet three frames wide, the SHEET slides
+         across the picture, and the still inside slides back by the same
+         amount so it never moves on screen. Both are transforms: the
+         compositor rasterises the masked sheet once and only translates. */
       .tf-swipe {
         position: absolute;
-        inset: 0;
+        left: 0;
+        top: 0;
+        width: 300%;
+        height: 300%;
         z-index: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
         pointer-events: none;
+        will-change: transform, opacity;
         mask-image: linear-gradient(
           calc(var(--tf-rake, 35deg) + 72deg),
           #000 44%,
           transparent 56%
         );
-        mask-size: 300% 300%;
+        mask-size: 100% 100%;
         mask-repeat: no-repeat;
         -webkit-mask-image: linear-gradient(
           calc(var(--tf-rake, 35deg) + 72deg),
           #000 44%,
           transparent 56%
         );
-        -webkit-mask-size: 300% 300%;
+        -webkit-mask-size: 100% 100%;
         -webkit-mask-repeat: no-repeat;
         /* Star Wars speed: a wipe is a STATEMENT, and at two-thirds of a
            second it reads as a glitch rather than a decision */
         animation: tf-swipe 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
       }
 
-      /* the sweep is the mask; the last breath of opacity is a SEAL. A
+      .tf-swipe img {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 33.3334%;
+        height: 33.3334%;
+        object-fit: cover;
+        display: block;
+        will-change: transform;
+        animation: tf-swipe-hold 1150ms cubic-bezier(0.42, 0, 0.28, 1) forwards;
+      }
+
+      /* the sweep is the sheet; the last breath of opacity is a SEAL. A
          mask that ends up not covering what you assumed leaves the
          still on screen forever, and a wipe that fails should fail to
          nothing rather than to a photograph of the last shot. */
       @keyframes tf-swipe {
         0% {
-          mask-position: 0% 0%;
-          -webkit-mask-position: 0% 0%;
+          transform: translate3d(0, 0, 0);
           opacity: 1;
         }
 
@@ -5592,9 +6000,18 @@ export default class TowerFilm extends Component<{
         }
 
         100% {
-          mask-position: 100% 100%;
-          -webkit-mask-position: 100% 100%;
+          transform: translate3d(-66.6667%, -66.6667%, 0);
           opacity: 0;
+        }
+      }
+
+      @keyframes tf-swipe-hold {
+        0% {
+          transform: translate3d(0, 0, 0);
+        }
+
+        100% {
+          transform: translate3d(200%, 200%, 0);
         }
       }
 
@@ -6176,7 +6593,44 @@ export default class TowerFilm extends Component<{
         right: 6%;
         bottom: 15%;
         text-align: right;
-        max-width: min(40ch, 46vw);
+        max-width: min(44ch, 50vw);
+        /* poster size at the start, the house size once the lens has
+           arrived: the same lean as every block, times the title's own
+           scale, from the corner it hangs from */
+        transform-origin: 100% 100%;
+        transform: translate3d(
+            calc(var(--tf-lx, 0) * -9px),
+            calc(var(--tf-ly, 0) * -5px),
+            0
+          )
+          scale(calc(1.42 - 0.42 * var(--tf-title-k, 1)));
+      }
+
+      /* the opening's hierarchy: the name, then its reading, then the
+         cues a step back in the ink — a poster, not a paragraph */
+      .is-title .tf-kanji {
+        margin-bottom: 26px;
+      }
+
+      .is-title .tf-read {
+        margin-bottom: 28px;
+        gap: 18px;
+      }
+
+      .is-title .tf-romaji {
+        font-size: clamp(15px, 1.3vw, 23px);
+        letter-spacing: 0.3em;
+      }
+
+      .is-title .tf-gloss {
+        font-size: clamp(15px, 1.25vw, 22px);
+      }
+
+      .is-title .tf-say {
+        max-width: 30ch;
+        margin-bottom: 6px;
+        color: var(--tf-ink2);
+        font-size: clamp(19px, 1.95vw, 34px);
       }
 
       .is-title .tf-read {
@@ -6242,13 +6696,16 @@ export default class TowerFilm extends Component<{
         animation: tf-rule-down 820ms 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
       }
 
+      /* the mask draws the rule DOWN; it must never clip sideways — the
+         glyph plane leans with the pointer, and a mask flush with the box
+         shaved the leaned strokes off the left edge as a hairline */
       @keyframes tf-rule-down {
         from {
-          clip-path: inset(0 0 100% 0);
+          clip-path: inset(0 -40px 100% -40px);
         }
 
         to {
-          clip-path: inset(0 0 -4% 0);
+          clip-path: inset(0 -40px -4% -40px);
         }
       }
 
@@ -6405,7 +6862,17 @@ export default class TowerFilm extends Component<{
         left: 50%;
         bottom: 3%;
         transform: translateX(-50%);
-        z-index: 5;
+        z-index: 6;
+        transition: bottom 360ms ease;
+      }
+
+      /* while the transport is up the caption sits above it, and drops
+         back to the foot of the frame when the bar leaves */
+      .tf-page:not(.is-idle) .tf-subs {
+        bottom: 104px;
+      }
+
+      .tf-subs {
         margin: 0;
         max-width: 66ch;
         text-align: center;
@@ -6689,6 +7156,25 @@ export default class TowerFilm extends Component<{
         position: relative;
         overflow: hidden;
         background: rgba(255, 255, 255, 0.28);
+        transition: transform 120ms ease;
+      }
+
+      /* the chapter under the pointer stands up a little, the way the
+         hovered chapter on every chaptered bar does */
+      .tf-scrub:hover .tf-scrub-ch:hover {
+        transform: scaleY(1.7);
+      }
+
+      /* the ghost: a pale fill to wherever the pointer is resting, so
+         the eye reads the cut it would make before the hand makes it */
+      .tf-scrub-ch em {
+        position: absolute;
+        inset: 0 auto 0 0;
+        display: block;
+        background: rgba(255, 255, 255, 0.34);
+        width: calc(
+          clamp(0, (var(--tf-hov, 0) - var(--s0)) / var(--sl), 1) * 100%
+        );
       }
 
       /* each chapter fills with the part of the whole-film playhead that
@@ -6728,15 +7214,30 @@ export default class TowerFilm extends Component<{
       .tf-scrub-tip {
         position: absolute;
         bottom: 18px;
-        left: calc(var(--tf-hpx, 0) * 1px);
+        left: calc(var(--tf-tipx, 0) * 1px);
         transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
         white-space: nowrap;
         background: rgba(12, 9, 4, 0.92);
         color: #fff;
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        padding: 6px 10px;
+        padding: 7px 11px 6px;
         border-radius: 4px;
+        pointer-events: none;
+      }
+
+      .tf-scrub-tip small {
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(255, 255, 255, 0.72);
+      }
+
+      .tf-scrub-tip b {
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
       }
 
       .tf-controls {
@@ -6780,6 +7281,189 @@ export default class TowerFilm extends Component<{
         background: rgba(255, 255, 255, 0.14);
         opacity: 1;
         outline: none;
+      }
+
+      /* the label above a button — the name and its key — in the bar's
+         own bubble rather than the browser's slow yellow one */
+      [data-tip] {
+        position: relative;
+      }
+
+      [data-tip]::before {
+        content: attr(data-tip);
+        position: absolute;
+        bottom: calc(100% + 10px);
+        left: 50%;
+        transform: translate(-50%, 4px);
+        white-space: nowrap;
+        background: rgba(12, 9, 4, 0.92);
+        color: #fff;
+        font-family: var(--tf-ui);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        padding: 6px 10px;
+        border-radius: 4px;
+        opacity: 0;
+        pointer-events: none;
+        transition:
+          opacity 120ms ease 200ms,
+          transform 120ms ease 200ms;
+      }
+
+      [data-tip]:hover::before,
+      [data-tip]:focus-visible::before {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      /* the last button's bubble hugs the right edge instead of the
+         button's centre, so it never leaves the viewport */
+      .tf-ic-last::before {
+        left: auto;
+        right: 0;
+        transform: translate(0, 4px);
+      }
+
+      .tf-ic-last:hover::before,
+      .tf-ic-last:focus-visible::before {
+        transform: translate(0, 0);
+      }
+
+      /* the speaker and its fader: the fader is folded away until the
+         pointer is on the speaker, then slides out beside it */
+      .tf-vol {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .tf-vol-range {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 0;
+        height: 3px;
+        margin: 0;
+        opacity: 0;
+        border-radius: 2px;
+        background: linear-gradient(
+          to right,
+          #fff calc(var(--tf-vol, 1) * 100%),
+          rgba(255, 255, 255, 0.3) 0
+        );
+        cursor: pointer;
+        outline: none;
+        transition:
+          width 200ms ease,
+          margin 200ms ease,
+          opacity 200ms ease;
+      }
+
+      .tf-vol:hover .tf-vol-range,
+      .tf-vol:focus-within .tf-vol-range {
+        width: 64px;
+        margin: 0 12px 0 4px;
+        opacity: 1;
+      }
+
+      .tf-vol-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #fff;
+        border: 0;
+      }
+
+      .tf-vol-range::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #fff;
+        border: 0;
+      }
+
+      /* the chapter's name, beside the clock, is the way into the list */
+      .tf-chap {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.78);
+        font: inherit;
+        font-size: 12.5px;
+        letter-spacing: 0.04em;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 32px;
+        padding: 0 6px 0 2px;
+        border-radius: 4px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: color 120ms ease;
+      }
+
+      .tf-chap span {
+        opacity: 0.6;
+        padding-right: 1px;
+      }
+
+      .tf-chap svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+        opacity: 0.7;
+        transition: transform 160ms ease;
+      }
+
+      .tf-chap:hover,
+      .tf-chap:focus-visible {
+        color: #fff;
+        outline: none;
+      }
+
+      .tf-chap:hover svg {
+        transform: translateX(2px);
+      }
+
+      /* the confirmation glyph, fixed at the middle of the picture */
+      .tf-burst {
+        position: fixed;
+        left: 50%;
+        top: 50%;
+        width: 88px;
+        height: 88px;
+        margin: -44px 0 0 -44px;
+        border-radius: 50%;
+        background: rgba(12, 9, 4, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        z-index: 4;
+        animation: tf-burst 560ms ease-out forwards;
+      }
+
+      .tf-burst svg {
+        width: 42px;
+        height: 42px;
+        fill: #fff;
+      }
+
+      @keyframes tf-burst {
+        from {
+          opacity: 1;
+          transform: scale(0.72);
+        }
+        to {
+          opacity: 0;
+          transform: scale(1.5);
+        }
+      }
+
+      /* the hand that stopped moving takes its pointer with it */
+      .tf-page.is-idle {
+        cursor: none;
       }
 
       /* CC is a word, set as a badge; on, it is underlined in the film's
@@ -6835,6 +7519,42 @@ export default class TowerFilm extends Component<{
 
       .tf-spacer {
         flex: 1 1 auto;
+      }
+
+      /* a button with its name on it, set like the link beside it */
+      .tf-word {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.82);
+        font-family: var(--tf-ui);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 32px;
+        padding: 0 12px 0 8px;
+        border-radius: 16px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          background 120ms ease,
+          color 120ms ease;
+      }
+
+      .tf-word svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+      }
+
+      .tf-word:hover,
+      .tf-word:focus-visible {
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        outline: none;
       }
 
       .tf-link {
@@ -7018,6 +7738,29 @@ export default class TowerFilm extends Component<{
         font-weight: 800;
         letter-spacing: 0.5em;
         text-indent: 0.5em;
+      }
+
+      /* the claim under the subtitle: the display serif, italic, a step
+         back in the ink; and under it the four words, tiny and wide */
+      .tf-gate-live {
+        margin: 14px 0 0;
+        font-family: var(--tf-display);
+        font-style: italic;
+        font-size: clamp(15px, 1.25vw, 20px);
+        line-height: 1.4;
+        letter-spacing: 0.01em;
+        color: rgba(247, 240, 224, 0.78);
+        max-width: 40ch;
+        text-wrap: balance;
+      }
+
+      .tf-gate-live-k {
+        margin: 8px 0 22px;
+        font-family: var(--tf-ui);
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(247, 240, 224, 0.5);
       }
 
       .tf-gate-s {

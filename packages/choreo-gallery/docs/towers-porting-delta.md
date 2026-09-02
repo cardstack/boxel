@@ -141,3 +141,57 @@ or the mood keeps the still: a live A drawn under B's light is the old
 shot dressed wrong. That is the same rule as the still-join snap, from
 the other side — the still is A, the live is B, and each must be entirely
 itself.
+
+## Cut 12 — the bar learns to listen, and everything pauses
+
+The transport becomes a player: a hover bubble that names the shot under
+the hand (chapter and time, two lines), a ghost fill to the pointer, the
+hovered chapter standing up, a fader that folds out of the speaker and is
+the page's master gain (`__film.volume(v)`, remembered per viewer), the
+chapter name as the door into the list, bubbles on every button with the
+key that does the same thing, `K` / `F` / `1`–`5` / `0`, a tap on the
+picture to pause and two taps for full screen, a centre glyph on each
+play/pause, and a cursor that leaves with the controls.
+
+Pause means everything stops. The score's run holds (`run.pause()` via
+the region's context), the page's own clock holds (`__film.hold(v)`: the
+loop still draws, nothing advances — grass, weather, build, day, lens),
+the audio graph suspends, and resume shifts the beat clock by the length
+of the hold. The old pause tore the Sequence down and play re-ran the
+chapter.
+
+Two bugs the film had carried: the door never turned the score back on
+after a restart, so the second viewing stood at its first pose with a
+play button that could not help; and every cut applied its head beat
+twice — the cut itself and the run's first cue a pass later — so every
+join ran twice and a wipe's second snapshot was of a lens that had
+already moved. `primedLap` skips the cue's repeat. The wipe's sweep is now
+two compositor transforms (a masked sheet slides, the still inside slides
+back) instead of an animated mask-position that repainted a full frame
+per tick.
+
+Also: a muted begin now mutes the page's own switch (it started on);
+captions sit above the bar while it is up; the opening plate starts at
+poster size and settles as the push arrives; the title beat is four
+ticks; the leader line fades with its caption; the comparison cuts to
+clear weather (`wxCut`) and dries; wet ground lingers after rain
+otherwise; snow whitens the ground fully; the night has its own grade and
+a darker ground; the edict shot wears it; the ending settles a second
+before the first tile moves and runs its day out over the first 72% of
+the beat; the country beds crossfade over three seconds; the weather bed
+ducks under the voice; the demo page's well takes the film's own aspect.
+
+Later the same cut: the narrative goes on every face — the gallery card,
+the door, the tile, the deep dive's opening and a director's statement
+(`docs/towers-about.md`), the end card — _not a video: a live 3D composite
+with motion graphics, interactive chapters, its own mixer, rendered in the
+browser at any size; entirely generated with AI, directed by a human_. The
+bar's chapters glyph is gone (the chapter name beside the clock is the way
+in) and the loop arrow becomes a labelled **Title screen** button with a
+title-card glyph. The demo page's well takes the film's aspect and grows a
+corner grip: drag to resize within limits, the picture stays centred, a
+readout shows the size, double-click or the chip snaps back, and the size
+is remembered. A self-starting film (embed, deep link) begins with sound.
+The night has both halves of its grade at last — the stylesheet half was
+missing, so only the shader darkened — and the page's night lights are
+dimmed. The plate's rule mask no longer clips a leaned glyph's left edge.

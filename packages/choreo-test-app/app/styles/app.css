@@ -905,6 +905,17 @@ summary,
   min-height: min(84vh, 860px);
 }
 
+/* A FILM IS A WIDE FRAME. The Towers embed is composed for a picture
+   about sixteen by nine — the tower stands left of centre with its base
+   on the ground and the type owns the right third — and the default
+   well is a letterbox that crops the stone off the bottom. So its well
+   takes the film's own aspect, capped so it never outgrows the screen. */
+.stage-wrap:has(.tw-face) {
+  aspect-ratio: 16 / 9;
+  min-height: 0;
+  max-height: min(88vh, 1040px);
+}
+
 /* ...and on a narrow screen the well takes the COMPOSITE'S OWN ASPECT
    instead. The flat laptop is 1178x838 scaled by `min(w/1178, h/838)`, so
    on a phone it is width-bound — and a tall well then holds a very small
