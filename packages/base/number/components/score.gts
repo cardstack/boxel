@@ -57,10 +57,10 @@ export class ScoreAtom extends GlimmerComponent<ScoreSignature> {
 
   get iconColor() {
     const p = this.percentage;
-    if (p >= 75) return 'var(--success, #22c55e)';
-    if (p >= 50) return 'var(--accent, #eab308)';
-    if (p >= 25) return 'var(--warning, #f59e0b)';
-    return 'var(--destructive, #ef4444)';
+    if (p >= 75) return 'var(--success)';
+    if (p >= 50) return 'var(--accent)';
+    if (p >= 25) return 'var(--warning)';
+    return 'var(--destructive)';
   }
 
   get displayValue() {
@@ -142,10 +142,10 @@ export class ScoreEmbedded extends GlimmerComponent<ScoreSignature> {
 
   get scoreColor() {
     const p = this.percentage;
-    if (p >= 75) return 'var(--success, #22c55e)';
-    if (p >= 50) return 'var(--accent, #eab308)';
-    if (p >= 25) return 'var(--warning, #f59e0b)';
-    return 'var(--destructive, #ef4444)';
+    if (p >= 75) return 'var(--success)';
+    if (p >= 50) return 'var(--accent)';
+    if (p >= 25) return 'var(--warning)';
+    return 'var(--destructive)';
   }
 
   get tierLabel() {

@@ -158,8 +158,11 @@
   --boxel-button-disabled-background: initial;
   --boxel-button-disabled-border: initial;
   --boxel-button-disabled-foreground: initial;
-  --success: initial;
-  --warning: initial;
+  /* Status tokens sit outside the shadcn contract, so a theme may omit them.
+     Fall back to the fixed Boxel status palette rather than leaking the ambient
+     theme's value; a theme that sets them still wins on specificity. */
+  --success: var(--boxel-success);
+  --warning: var(--boxel-warning);
 }
 
 /* ── Dark mode ──────────────────────────────────────────────────────────────

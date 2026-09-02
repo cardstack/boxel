@@ -63,15 +63,15 @@ export class ProgressCircleAtom extends GlimmerComponent<ProgressCircleSignature
     }
     const p = this.percentage;
     if (p <= 25) {
-      return 'var(--destructive, #ef4444)';
+      return 'var(--destructive)';
     }
     if (p <= 50) {
-      return 'var(--warning, #f59e0b)';
+      return 'var(--warning)';
     }
     if (p <= 75) {
-      return 'var(--accent, #eab308)';
+      return 'var(--accent)';
     }
-    return 'var(--success, #22c55e)';
+    return 'var(--success)';
   }
 
   <template>
@@ -160,18 +160,18 @@ export class ProgressCircleEmbedded extends GlimmerComponent<ProgressCircleSigna
     // State-based colors based on progress percentage
     // 0-25%: Red (low progress)
     if (p <= 25) {
-      return 'var(--destructive, #ef4444)';
+      return 'var(--destructive)';
     }
     // 25-50%: Orange (moderate progress)
     if (p <= 50) {
-      return 'var(--warning, #f59e0b)';
+      return 'var(--warning)';
     }
     // 50-75%: Yellow (good progress)
     if (p <= 75) {
-      return 'var(--accent, #eab308)';
+      return 'var(--accent)';
     }
     // 75-100%: Green (excellent progress)
-    return 'var(--success, #22c55e)';
+    return 'var(--success)';
   }
 
   get displayValue() {

@@ -51,12 +51,12 @@ export class GaugeAtom extends GlimmerComponent<GaugeSignature> {
     const warningThreshold = this.options.warningThreshold;
 
     if (dangerThreshold !== undefined && numericValue >= dangerThreshold) {
-      return 'var(--destructive, #ef4444)';
+      return 'var(--destructive)';
     }
     if (warningThreshold !== undefined && numericValue >= warningThreshold) {
-      return 'var(--warning, #f59e0b)';
+      return 'var(--warning)';
     }
-    return 'var(--primary, #3b82f6)';
+    return 'var(--primary)';
   }
 
   get needleRotation() {
@@ -158,12 +158,12 @@ export class GaugeEmbedded extends GlimmerComponent<GaugeSignature> {
     const warningThreshold = this.options.warningThreshold;
 
     if (dangerThreshold !== undefined && numericValue >= dangerThreshold) {
-      return 'var(--destructive, #ef4444)';
+      return 'var(--destructive)';
     }
     if (warningThreshold !== undefined && numericValue >= warningThreshold) {
-      return 'var(--warning, #f59e0b)';
+      return 'var(--warning)';
     }
-    return 'var(--primary, #3b82f6)';
+    return 'var(--primary)';
   }
 
   get needleRotation() {
