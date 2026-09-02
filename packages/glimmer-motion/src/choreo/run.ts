@@ -101,7 +101,21 @@ function resolveThrough(
   return pts;
 }
 
-/** sample the spline at overall progress p ∈ [0, 1] (uniform segments) */
+/**
+ * Sample the spline at overall progress p ∈ [0, 1] (uniform segments).
+ *
+ * SPLICES (docs/choreo-splices.md): a waypoint marked `cut` starts a new
+ * SHOT. Each shot is a clamped spline of its own points — endpoint
+ * tangents one-sided, so no shot's velocity crosses a seam — and each
+ * shot's window runs from its first slot to the next seam, its points
+ * spread uniformly across it. The outgoing shot therefore plays through
+ * the seam instant (its motion stretches by one slot rather than
+ * parking), the incoming one begins exactly on it, and the sampled pose
+ * is a step function at the seam. Waypoints keep their uniform slots, so
+ * cues anchored to waypoint moments keep their clock. A cut on the first
+ * waypoint drops the pose-in-force seed: the score opens inside its
+ * first shot.
+ */
 function sampleThrough(
   from: Camera3DState,
   through: Camera3DWaypoint[],
@@ -112,9 +126,42 @@ function sampleThrough(
   const pts = resolveThrough(from, through);
   const segs = pts.length - 1;
   const s = Math.min(segs - 1e-9, Math.max(0, progress * segs));
-  const i = Math.floor(s);
-  const u = s - i;
-  const P = (j: number) => pts[Math.max(0, Math.min(pts.length - 1, j))]!;
+  /* the seams, in point indices (+1: the seed sits at 0) */
+  let seams: number[] | undefined;
+  for (const [n, w] of through.entries()) {
+    if (w.cut) {
+      (seams ??= []).push(n + 1);
+    }
+  }
+  /* the shot containing s: points [a, e), window [w0, w1) in slot units */
+  let a = 0;
+  let e = pts.length;
+  let w0 = 0;
+  let w1 = segs;
+  if (seams) {
+    if (seams[0] === 1) {
+      /* a leading cut: the seed never plays */
+      a = 1;
+      seams = seams.slice(1);
+    }
+    for (const seam of seams) {
+      if (s < seam) {
+        e = seam;
+        w1 = seam;
+        break;
+      }
+      a = seam;
+      w0 = seam;
+    }
+  }
+  const m = e - a;
+  const lam =
+    m === 1 ? 0 : Math.max(0, Math.min(1 - 1e-9, (s - w0) / (w1 - w0)));
+  const ss = lam * (m - 1);
+  const i = a + Math.floor(ss);
+  const u = m === 1 ? 0 : ss - Math.floor(ss);
+  /* clamped to the SHOT: the far side of a seam does not exist here */
+  const P = (j: number) => pts[Math.max(a, Math.min(e - 1, j))]!;
   const p0 = P(i - 1);
   const p1 = P(i);
   const p2 = P(i + 1);

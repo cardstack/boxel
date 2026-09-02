@@ -424,6 +424,17 @@ export interface Camera3DState {
  * way keyframe holds work everywhere else.
  */
 export interface Camera3DWaypoint {
+  /**
+   * A SPLICE. This waypoint is the first frame of a NEW SHOT: the path
+   * splits here, each side is sampled as its own clamped spline, and the
+   * pose is a step function at this waypoint's own instant — the outgoing
+   * shot plays through the seam, the incoming one begins exactly on it,
+   * and nothing interpolates across. Time is not redistributed, so cues
+   * anchored to waypoint moments keep their clock. A cut on the FIRST
+   * waypoint drops the pose-in-force seed: the score opens already inside
+   * its first shot. See docs/choreo-splices.md.
+   */
+  cut?: boolean;
   dolly?: number;
   look?: { x: number; y: number; z: number };
   pitch?: number;

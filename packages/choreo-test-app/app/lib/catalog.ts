@@ -60,9 +60,11 @@ import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
 import { SylvaNotes } from 'test-app/components/notes/sylva';
+import TowersNotes from 'test-app/components/notes/towers';
 import { TrailNotes } from 'test-app/components/notes/trail';
 import { WiresNotes } from 'test-app/components/notes/wires';
 import { SylvaStage } from 'test-app/components/sylva-stage';
+import { TowerStage } from 'test-app/components/tower-stage';
 
 export const groups = [
   'Animate',
@@ -525,6 +527,35 @@ shot = (pose) => {
 </c.Sequence>`,
     slowmo: false,
     title: 'Sylva',
+  },
+  {
+    Example: TowerStage,
+    apis: ['@through', 'cut: true', '@camera3dFrom', 'c.Perform'],
+    group: '3D',
+    id: 'towers',
+    lede: 'A four-minute museum film — shot, cut, graded and narrated by one score.',
+    notes: TowersNotes,
+    sample: `{{! THE WHOLE FILM IS ONE CAMERA STEP: every beat contributes
+    waypoints to one spline — a hold breathes, a cut waypoint SPLICES the
+    path into clamped shots — and every cue in the film is a delay into
+    the same clock. The score is the editor. }}
+<c.Sequence @name={{this.filmName}}>
+  <c.Camera3D @name='film' @through={{this.path}}
+    @duration={{this.filmSeconds}} @ease='linear' @tension={{0.34}} />
+
+  {{! one cue per beat: the narration, the type, the stage marks, the
+      traces, the grade and the weather all enter on these }}
+  {{#each this.cues as |cue|}}
+    <c.Perform @at={{at 'film'}} @delay={{cue.delay}}
+      @action='beat' @target={{cue.index}} />
+  {{/each}}
+
+  {{! the last cue does not loop — a film that laps past its own coda
+      never meant any of it. The run stops and the end card rises. }}
+  <c.Perform @action='lap' />
+</c.Sequence>`,
+    slowmo: false,
+    title: 'Towers',
   },
   {
     Example: Camera,

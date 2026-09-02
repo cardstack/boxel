@@ -186,9 +186,25 @@ function contextFor(region: Choreo): ChoreoContext {
 
 interface Signature {
   Args: {
+    /**
+     * WHERE THE SHOT STANDS BEFORE THE FIRST RUN. A `@through` spline
+     * prepends the pose in force, and with no prior run that pose is the
+     * default rig — dolly 1, yaw 0 — somewhere no film ever authored. A
+     * host that hard-opens on a known pose (it seated its own scene there
+     * before the score existed) declares it here, and the first segment
+     * starts from the shot instead of travelling to it. Read once, before
+     * the first run; after that the pose in force is the run's own.
+     */
+    camera3dFrom?: Camera3DState;
     /** outline the region and its participants; console.table each run */
     debug?: boolean;
     id?: string;
+    /**
+     * A `c.Camera3D` cue moved the shot. Called every frame it changes —
+     * scrubs included, since the pose is sampled from the score — with a
+     * pose the host applies to whatever it is drawing with.
+     */
+    onCamera3D?: (state: Camera3DState) => void;
     /**
      * The dispatcher for `<c.Perform>` commands (§C4). Called once per
      * command as the run's clock comes to include it — during forward
@@ -197,12 +213,6 @@ interface Signature {
      * Dispatches are deferred past the render pass, so a command may
      * mutate tracked state freely.
      */
-    /**
-     * A `c.Camera3D` cue moved the shot. Called every frame it changes —
-     * scrubs included, since the pose is sampled from the score — with a
-     * pose the host applies to whatever it is drawing with.
-     */
-    onCamera3D?: (state: Camera3DState) => void;
     onPerform?: (command: PerformCommand) => void;
     /**
      * The backward half of the fold: the clock moved to before a command
@@ -240,8 +250,8 @@ interface Signature {
 let debugStyle: HTMLStyleElement | undefined;
 
 /**
- * One rule every region shares: an orphaned skin flies with its
- * backdrop-filters OFF. A backdrop-filter can never be cached — it
+ * Two rules every region shares. An orphaned skin flies with its
+ * backdrop-filters OFF: a backdrop-filter can never be cached — it
  * re-samples and re-blurs whatever is behind it on every frame — and
  * inside a scaling, fading leaver that is paid at full price for the
  * whole flight (the camera demo's four glass panels, over its gradient
@@ -249,6 +259,15 @@ let debugStyle: HTMLStyleElement | undefined;
  * skin is a memory of the OLD scene, and its glass sampling the new
  * scene behind it shows the wrong world. The panels keep their own
  * translucent grounds, so they still read as glass in the crossfade.
+ *
+ * And an orphaned skin does not REPLAY ITS BIRTH: re-inserting a node
+ * restarts every CSS animation on it, so a leaver re-parented into the
+ * orphan layer re-ran its entrance choreography — rules drawing
+ * themselves, letters settling out of a blur — while it was supposed to
+ * be dying. A one-frame-old memory acting out its own arrival is the
+ * flash the Towers film chased for a night. The run's own exit motion
+ * is WAAPI and survives re-parenting untouched; only stylesheet
+ * animations restart, and on a memory they are all lies.
  */
 let orphanStyle: HTMLStyleElement | undefined;
 function ensureOrphanStyle() {
@@ -258,8 +277,12 @@ function ensureOrphanStyle() {
   orphanStyle = document.createElement('style');
   orphanStyle.setAttribute('data-choreo-style', '');
   orphanStyle.textContent =
-    '[data-choreo-orphans] *{backdrop-filter:none!important;' +
-    '-webkit-backdrop-filter:none!important;}';
+    '[data-choreo-orphans] *,' +
+    '[data-choreo-orphans] *::before,' +
+    '[data-choreo-orphans] *::after' +
+    '{backdrop-filter:none!important;' +
+    '-webkit-backdrop-filter:none!important;' +
+    'animation:none!important;}';
   document.head.appendChild(orphanStyle);
 }
 
@@ -328,14 +351,17 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
    * that read it would be invalidated by the very landing it causes, and
    * the region would render forever.
    */
-  /** where a c.Camera3D left the shot, carried between runs */
-  private resting3d: Camera3DState = {
-    dolly: 1,
-    pitch: 0,
-    x: 0,
-    y: 0,
-    yaw: 0,
-  };
+  /** where a c.Camera3D left the shot, carried between runs — seeded by
+   *  `@camera3dFrom` when the host knows its own opening pose */
+  private resting3d: Camera3DState = this.args.camera3dFrom
+    ? { ...this.args.camera3dFrom }
+    : {
+        dolly: 1,
+        pitch: 0,
+        x: 0,
+        y: 0,
+        yaw: 0,
+      };
   private restingCamera: CameraState = { x: 0, y: 0, zoom: 1 };
   private participants = new Set<ChoreoNode>();
   /** registered since the last pass */
@@ -776,12 +802,24 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
     }
     // dirty but the compiled score is the one already in flight (tween-only
     // measurement jitter): keep that run too.
+    //
+    // The TREE has to be the one in flight as well, not just the cues it
+    // compiled to. Identical cues are not proof of an identical timeline:
+    // a score that plays a slice of itself — a chapter skip that re-cuts
+    // to the head it is already inside — compiles to the same cue list at
+    // the same offsets, and keeping the run there hands the "new" film
+    // the old one's CLOCK. The score restarts on paper and carries on
+    // playing in fact: beats land early, some never land at all, and the
+    // picture runs ahead of the words that name it. An author who wants a
+    // re-execution says so by editing the tree (a fresh sequence name is
+    // the usual way, which is why the name is in the print).
     if (
       this.run &&
       !this.run.isDone() &&
       !inserted.length &&
       !pass.removed.length &&
       !compiled.gates.length &&
+      print === this.scorePrint &&
       sameScore(this.run.cues, cues)
     ) {
       for (const node of claimed) {
