@@ -21,26 +21,34 @@ let originalBin: string | undefined;
 //   --deaf           idles and swallows SIGTERM, like a command with its own
 //                    shutdown handler
 //   --leave-orphan   idles after spawning a child that inherits its stdio and
-//                    would outlive it, the way `boxel parse` leaves ember-tsc
-//                    and `boxel test` leaves chromium — the pipes stay open,
-//                    so `close` never arrives. Prints the child's pid so the
-//                    test can check it is reaped.
+//                    would outlive it, the way a command that shells out to a
+//                    long-running tool does. Its inherited write ends keep
+//                    `close` from arriving. Prints the child's pid so the test
+//                    can check it is reaped.
+//
+//   --deaf-orphan    the same, with a child that swallows SIGTERM: only the
+//                    SIGKILL sweep reaches it, so this is what pins that half
+//                    of the kill.
 //
 // Anything else prints on both streams and exits 0.
+const IDLE_FLAGS = ['--hang', '--deaf', '--leave-orphan', '--deaf-orphan'];
 const STUB_CLI = `
 const { spawn } = require('node:child_process');
 if (process.argv.includes('--deaf')) {
   process.on('SIGTERM', () => {});
 }
-if (process.argv.includes('--leave-orphan')) {
-  let orphan = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], {
-    stdio: 'inherit',
-  });
+let orphanFlag = process.argv.find(
+  (a) => a === '--leave-orphan' || a === '--deaf-orphan',
+);
+if (orphanFlag) {
+  let body =
+    orphanFlag === '--deaf-orphan'
+      ? "process.on('SIGTERM', () => {}); setTimeout(() => {}, 600000)"
+      : 'setTimeout(() => {}, 600000)';
+  let orphan = spawn(process.execPath, ['-e', body], { stdio: 'inherit' });
   process.stdout.write('orphan-pid=' + orphan.pid + '\\n');
 }
-if (
-  process.argv.some((a) => ['--hang', '--deaf', '--leave-orphan'].includes(a))
-) {
+if (process.argv.some((a) => ${JSON.stringify(IDLE_FLAGS)}.includes(a))) {
   process.stderr.write('working…\\n');
   setInterval(() => {}, 1 << 30);
 } else {
@@ -153,6 +161,17 @@ describe('runBoxel deadline', () => {
     // running on into the tests that follow it in this process. It would
     // otherwise be alive for ten minutes, so a bounded wait tells the two
     // apart without depending on how promptly the kill is scheduled.
+    await expect(waitUntilNotRunning(orphanPid)).resolves.toBeUndefined();
+  });
+
+  it('ends a child that swallows SIGTERM too', async () => {
+    // The group SIGTERM does not reach this one, so what ends it is the
+    // SIGKILL sweep `settle` runs before clearing the escalation timer.
+    let res = await runBoxel(['--deaf-orphan'], { timeout: 1_000 });
+    expect(res.timedOut).toBe(true);
+
+    let orphanPid = Number(/orphan-pid=(\d+)/.exec(res.stdout)?.[1]);
+    expect(Number.isInteger(orphanPid)).toBe(true);
     await expect(waitUntilNotRunning(orphanPid)).resolves.toBeUndefined();
   });
 

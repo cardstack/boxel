@@ -37,6 +37,6 @@ describe('deadline ladder', () => {
 
   it('gives a hook more time than a test', () => {
     // Hooks run commands too, and carry the fixture boot on top of them.
-    expect(budgets.hookTimeout).toBeGreaterThanOrEqual(budgets.testTimeout);
+    expect(budgets.hookTimeout).toBeGreaterThan(budgets.testTimeout);
   });
 });

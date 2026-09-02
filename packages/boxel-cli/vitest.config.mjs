@@ -10,9 +10,14 @@ import { resolve } from 'path';
 // leaving the command itself running against the realm server the rest of
 // the file is using.
 //
-// The ladder, innermost first: a `--timeout` the command was given on its own
-// argv < runBoxel's kill deadline < these budgets. `tests/lib/deadline-ladder`
+// The ladder, innermost first: a deadline the command was given for itself <
+// runBoxel's kill deadline < these budgets. `tests/lib/deadline-ladder`
 // asserts the config end of it.
+//
+// Only the outer two rungs are enforced. runBoxel reads a command's own
+// deadline off argv, and a command can hold one that never appears there —
+// `parse` gives ember-tsc 120s through `execFile` — so for those the call site
+// has to set the harness deadline itself, as `parse.test.ts` does.
 const RUN_BOXEL_DEADLINE_HEADROOM_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000 + RUN_BOXEL_DEADLINE_HEADROOM_MS;
 

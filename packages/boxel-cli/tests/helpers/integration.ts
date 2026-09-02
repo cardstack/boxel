@@ -113,10 +113,15 @@ function fixtureTotalMs(): number {
 }
 
 /**
- * Wait for the in-flight boot to publish its results (or fail) so teardown
- * sees everything it created. A boot that outlives this window is reported by
- * `startTestRealmServer`'s own pre-flight check in the next file rather than
- * hanging teardown here.
+ * How long teardown waits for an in-flight boot to publish its results (or
+ * fail), so that it sees everything the boot created.
+ *
+ * A cap rather than an unbounded wait, because a boot that never settles would
+ * otherwise hold teardown until the hook budget above it. Reaching the cap is
+ * the one case teardown cannot clean up: the boot has by definition not
+ * reached its `listen` yet, so there is nothing to close and nothing for the
+ * next file's pre-flight check to see either. Generous enough that a boot
+ * costing an order of magnitude over its usual second is still waited out.
  */
 const BOOT_SETTLE_TIMEOUT_MS = 60_000;
 
@@ -125,7 +130,7 @@ const BOOT_SETTLE_TIMEOUT_MS = 60_000;
  * leaked fixture server apart from a clean start, so the leak is reported at
  * the boot that trips over it.
  */
-function isPortListening(host: string, port: number): Promise<boolean> {
+export function isPortListening(host: string, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     let socket = new net.Socket();
     let settle = (listening: boolean) => {
@@ -153,7 +158,11 @@ async function settleBoot(): Promise<void> {
   // hook's own `Hook timed out` report cannot say.
   console.log(
     `[boxel-cli fixture] teardown is waiting on a boot that is still in ` +
-      `flight; phases so far: ${formatFixturePhases()}`,
+      `flight; ${
+        fixturePhases.length === 0
+          ? 'it had not finished its first phase (the database clone)'
+          : `phases so far: ${formatFixturePhases()}`
+      }`,
   );
   let timer: NodeJS.Timeout | undefined;
   try {

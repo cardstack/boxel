@@ -225,10 +225,14 @@ export function runBoxel(
       env,
       stdio: ['pipe', 'pipe', 'pipe'],
       // Leads its own process group, so the deadline can signal the command
-      // and everything it started. Several commands spawn long-lived children
-      // that inherit their stdio — `boxel parse` runs ember-tsc, `boxel test`
-      // launches chromium — and signalling only the command leaves those
-      // running, holding the pipes it was writing to, into the next test.
+      // and everything it started rather than the command alone. Commands here
+      // do spawn their own children — `boxel parse` runs ember-tsc, several
+      // shell out to git — and a child that outlives a killed parent runs on
+      // into the next test in this process, which the suite shares.
+      //
+      // It reaches an ordinary child, not every possible descendant: one that
+      // makes itself a group leader (as playwright does for the browser it
+      // launches) leaves this group and is unaffected.
       detached: true,
     });
 
@@ -335,13 +339,16 @@ export function runBoxel(
       reject(err);
     });
     // `close` is the normal end: it waits for the stdio pipes, so all output
-    // is captured.
+    // is captured before the result is built.
     child.on('close', (code) => settle(code));
-    // Those same pipes stay open while a grandchild that inherited them is
-    // alive — `boxel parse` runs ember-tsc, `boxel test` launches chromium —
-    // so on the deadline path the command's own exit is the answer, and
-    // waiting for `close` would hand the deadline back to whatever outlived
-    // it.
+    // On the deadline path the command's own exit is the answer instead.
+    // `close` waits for the pipes, and a descendant holding an inherited
+    // write end keeps them open after the command is gone — which would let
+    // whatever outlived the command decide when the deadline takes effect. No
+    // command in this suite is known to leave one (the group kill above
+    // reaches the ordinary case), so this is a backstop rather than a path
+    // anything here exercises; the cost of being wrong the other way is a
+    // deadline that never fires.
     child.on('exit', (code) => {
       if (timedOut) {
         settle(code);
