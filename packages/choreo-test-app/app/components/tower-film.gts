@@ -364,6 +364,171 @@ interface Beat {
  */
 const TICK = 2;
 
+interface FilmGrade {
+  bri: number;
+  con: number;
+  cool: [number, number, number];
+  gradeA: number;
+  hue: number;
+  rake?: number;
+  sat: number;
+  sep: number;
+  vigA: number;
+  warm: [number, number, number];
+}
+
+const hex = (h: string): [number, number, number] => [
+  parseInt(h.slice(1, 3), 16) / 255,
+  parseInt(h.slice(3, 5), 16) / 255,
+  parseInt(h.slice(5, 7), 16) / 255,
+];
+
+/**
+ * THE FIVE MOODS AND THE SIX PLATES, as numbers the glass can take.
+ *
+ * These were CSS: a filter() on the iframe, a soft-light gradient plane and a
+ * vignette plane per mood, crossfaded over 1500ms. The values are transcribed
+ * one for one — saturate/contrast/brightness/sepia/hue-rotate, the warm and
+ * cool ends of the split tone, its opacity, the vignette's — and the page
+ * eases between them at the same rate. What changed is WHERE: three
+ * full-screen surfaces the compositor re-filtered on every frame the picture
+ * moved are now a few lines in the post shader, paid once per frame.
+ */
+const GRADES: Record<string, FilmGrade> = {
+  amber: {
+    sat: 0.9,
+    con: 0.94,
+    bri: 1.2,
+    sep: 0,
+    hue: 0,
+    warm: hex('#ffd9a8'),
+    cool: hex('#b9c8e6'),
+    gradeA: 0.3,
+    vigA: 0.5,
+  },
+  iron: {
+    sat: 0.72,
+    con: 0.98,
+    bri: 1.12,
+    sep: 0.1,
+    hue: 0,
+    warm: hex('#e8d9c2'),
+    cool: hex('#9fb0c8'),
+    gradeA: 0.4,
+    vigA: 0.65,
+  },
+  chalk: {
+    sat: 0.88,
+    con: 0.96,
+    bri: 1.34,
+    sep: 0,
+    hue: 0,
+    warm: hex('#fffdf6'),
+    cool: hex('#cfdde8'),
+    gradeA: 0.2,
+    vigA: 0.22,
+  },
+  ink: {
+    sat: 0.98,
+    con: 1,
+    bri: 1.16,
+    sep: 0,
+    hue: 0,
+    warm: hex('#ffc9a1'),
+    cool: hex('#8fa0c9'),
+    gradeA: 0.32,
+    vigA: 0.68,
+  },
+  wet: {
+    sat: 0.72,
+    con: 0.92,
+    bri: 0.94,
+    sep: 0,
+    hue: -4 * (Math.PI / 180),
+    warm: hex('#cfd6dd'),
+    cool: hex('#7d8b9e'),
+    gradeA: 0.44,
+    vigA: 0.8,
+  },
+  plate: {
+    sat: 0.86,
+    con: 0.95,
+    bri: 1.2,
+    sep: 0,
+    hue: 0,
+    warm: hex('#f6e8d2'),
+    cool: hex('#c3c8bd'),
+    gradeA: 0.18,
+    vigA: 0.36,
+  },
+  'c-jp': {
+    sat: 0.84,
+    con: 0.95,
+    bri: 1.22,
+    sep: 0,
+    hue: 0,
+    warm: hex('#f6e8d2'),
+    cool: hex('#bcc6bb'),
+    gradeA: 0.2,
+    vigA: 0.36,
+  },
+  'c-cn': {
+    sat: 0.95,
+    con: 0.97,
+    bri: 1.16,
+    sep: 0.06,
+    hue: 0,
+    warm: hex('#ffd9a0'),
+    cool: hex('#c0a68e'),
+    gradeA: 0.28,
+    vigA: 0.44,
+  },
+  'c-vn': {
+    sat: 0.92,
+    con: 0.94,
+    bri: 1.18,
+    sep: 0,
+    hue: -6 * (Math.PI / 180),
+    warm: hex('#eef0cd'),
+    cool: hex('#a7bda8'),
+    gradeA: 0.26,
+    vigA: 0.4,
+  },
+  'c-th': {
+    sat: 1.02,
+    con: 0.93,
+    bri: 1.3,
+    sep: 0,
+    hue: 0,
+    warm: hex('#ffe9ad'),
+    cool: hex('#d3c6a0'),
+    gradeA: 0.24,
+    vigA: 0.3,
+  },
+  'c-kh': {
+    sat: 0.9,
+    con: 0.99,
+    bri: 1.14,
+    sep: 0.12,
+    hue: 0,
+    warm: hex('#f2cfa4'),
+    cool: hex('#b9a184'),
+    gradeA: 0.3,
+    vigA: 0.5,
+  },
+  'c-tr': {
+    sat: 0.8,
+    con: 0.96,
+    bri: 1.26,
+    sep: 0,
+    hue: 0,
+    warm: hex('#fdf3e2'),
+    cool: hex('#a9bacd'),
+    gradeA: 0.22,
+    vigA: 0.34,
+  },
+};
+
 /**
  * WHICH CUT OF THE FILM THIS IS.
  *
@@ -374,7 +539,7 @@ const TICK = 2;
  * boot and shown in the corner under `?debug`, so "is my page current?"
  * is a glance rather than a theory.
  */
-const BUILD = 'cut-7 · flown, graded, and the bar is back';
+const BUILD = 'cut-8 · the grade moved into the glass, the frame has a budget';
 
 /**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
@@ -1314,8 +1479,12 @@ interface FilmApi {
   duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
+  /** the mood — CSS filter() terms, the split tone and the vignette, in the glass */
+  grade(g: FilmGrade): void;
   haze(v: null | number): void;
   height(): number;
+  /** nothing on screen will change: stop drawing it */
+  idle(v: boolean): void;
   light(p: null | { az?: number; el?: number }): void;
   /** 1 is the building, 0 is gone — without moving the frame */
   modelFade(k: number | null): void;
@@ -1328,6 +1497,7 @@ interface FilmApi {
     rule: string;
     time: string;
   };
+  perf(): { cap: number; dpr: number; frameMs: number; pinned: null | number };
   ping(i: number): void;
   pose(p: {
     az?: number;
@@ -1343,6 +1513,8 @@ interface FilmApi {
     y: number,
     z: number
   ): { on: boolean; x: number; y: number; z: number };
+  /** pin the pixel ratio, or null to let the frame budget decide */
+  quality(k: null | number): void;
   /** scale the rain field the weather preset draws; null hands it back */
   rain(k: number | null): void;
   rewind(): void;
@@ -1413,6 +1585,11 @@ export default class TowerFilm extends Component<{
    * viewer makes, never something the clock does to them.
    */
   @tracked private ended = false;
+  /** the page has been told the picture is static — see the frame loop */
+  private idled = false;
+  private gradeSent = '';
+  private rakeSent = NaN;
+  private rakeDeg = 35;
   /** which tower the lineup's metronome is on; -1 between lineups */
   @tracked private cycleStep = -1;
 
@@ -2506,6 +2683,23 @@ export default class TowerFilm extends Component<{
     if (!film) {
       return;
     }
+    /* A HIDDEN TAB DOES NO WORK. And once the end card is up nothing under
+       it will change again: the page is told so and stops drawing the
+       finished building into a frame nobody composites. */
+    if (document.hidden) {
+      return;
+    }
+    if (this.ended) {
+      if (!this.idled) {
+        film.idle(true);
+        this.idled = true;
+      }
+      return;
+    }
+    if (this.idled) {
+      film.idle(false);
+      this.idled = false;
+    }
     const dt = Math.min(
       0.08,
       this.lastTick ? (stamp - this.lastTick) / 1000 : 0
@@ -2617,6 +2811,15 @@ export default class TowerFilm extends Component<{
     sent.zoom += (want.zoom - sent.zoom) * g;
     this.sent = sent;
     film.pose({ ...sent });
+    /* the mood and the sun's rake go to the glass only when they change:
+       the page eases between them itself, so this is a target, not a frame */
+    const mood = this.grade;
+    if (mood !== this.gradeSent || this.rakeDeg !== this.rakeSent) {
+      const spec = GRADES[mood] ?? GRADES['amber']!;
+      film.grade({ ...spec, rake: this.rakeDeg * RAD });
+      this.gradeSent = mood;
+      this.rakeSent = this.rakeDeg;
+    }
     /* walk the key light to the shot's own sun — the short way round,
        over about a second and a half */
     const goal = this.sunGoal;
@@ -2729,8 +2932,10 @@ export default class TowerFilm extends Component<{
       const cloud = Math.sin(Math.PI * w) ** 2;
       film.haze((this.hazeBase ?? 0) + 0.17 * cloud);
       this.pageEl?.style.setProperty('--tf-cloud', cloud.toFixed(3));
+      this.pageEl?.classList.toggle('is-cloudless', cloud < 0.02);
     } else {
       this.pageEl?.style.setProperty('--tf-cloud', '0');
+      this.pageEl?.classList.add('is-cloudless');
     }
 
     /* the lineup's metronome: the beat divides itself evenly among its
@@ -2847,10 +3052,8 @@ export default class TowerFilm extends Component<{
       el.style.setProperty('--tf-shx', `${this.shadow.x}px`);
       el.style.setProperty('--tf-shy', `${this.shadow.y}px`);
       /* the same diagonal, longer, for the graphic rules */
-      el.style.setProperty(
-        '--tf-rake',
-        `${q(Math.atan2(ny, nx) * 57.2958)}deg`
-      );
+      this.rakeDeg = q(Math.atan2(ny, nx) * 57.2958);
+      el.style.setProperty('--tf-rake', `${this.rakeDeg}deg`);
     }
   }
 
@@ -4125,7 +4328,6 @@ export default class TowerFilm extends Component<{
         ></div>
 
         {{! THE GRADE, over the picture and under everything else. }}
-        <div class="tf-grade" aria-hidden="true"></div>
 
         {{! THE WIPE. The outgoing frame itself, swept off along the
         sun's diagonal behind a feathered edge — a true editorial wipe,
@@ -4242,8 +4444,6 @@ export default class TowerFilm extends Component<{
         crossing the picture on a diagonal while the air thickens under
         it, so a four-minute afternoon is not one unbroken light. }}
         <div class="tf-cloud" aria-hidden="true"></div>
-
-        <div class="tf-vig" aria-hidden="true"></div>
 
         {{! THE DIM. A wash that comes in WITH the annotation and lifts
         with it, because a line drawn over a picture is only as readable
@@ -4952,8 +5152,6 @@ export default class TowerFilm extends Component<{
         border: 0;
         display: block;
         /* the primary: contrast, saturation and lift, per grade */
-        filter: var(--tf-lut);
-        transition: filter 1500ms ease;
       }
 
       /* ---- the grade ------------------------------------------------- *
@@ -4964,24 +5162,6 @@ export default class TowerFilm extends Component<{
          mid-tones and the whole point is to keep the moss and the plaster
          legible while moving the mood underneath them.
          ---------------------------------------------------------------- */
-      .tf-grade {
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        pointer-events: none;
-        mix-blend-mode: soft-light;
-        opacity: var(--tf-grade-a);
-        background: linear-gradient(
-          var(--tf-rake),
-          var(--tf-warm) 0%,
-          transparent 46%,
-          transparent 58%,
-          var(--tf-cool) 100%
-        );
-        transition:
-          background 1500ms ease,
-          opacity 1500ms ease;
-      }
 
       /* the five moods. CONTEXT opens warm and open; HISTORY is archival —
          desaturated, cool, contrastier, the look of a document rather than
@@ -5114,7 +5294,6 @@ export default class TowerFilm extends Component<{
         height: 100%;
         object-fit: cover;
         pointer-events: none;
-        filter: var(--tf-lut);
         mask-image: linear-gradient(
           calc(var(--tf-rake, 35deg) + 72deg),
           #000 44%,
@@ -5164,7 +5343,6 @@ export default class TowerFilm extends Component<{
         height: 100%;
         object-fit: cover;
         pointer-events: none;
-        filter: var(--tf-lut);
         animation: tf-melt 1900ms cubic-bezier(0.4, 0, 0.5, 1) forwards;
       }
 
@@ -5194,7 +5372,6 @@ export default class TowerFilm extends Component<{
            so the dissolve is between two graded pictures — and it is a
            PUSH dissolve: the old frame travels gently forward as it
            thins, so the transition has a direction, not just a mix */
-        filter: var(--tf-lut);
         animation: tf-blend 520ms ease-out forwards;
       }
 
@@ -5225,12 +5402,12 @@ export default class TowerFilm extends Component<{
       @keyframes tf-blurout {
         0% {
           opacity: 1;
-          filter: var(--tf-lut) blur(0);
+          filter: blur(0);
         }
 
         100% {
           opacity: 0;
-          filter: var(--tf-lut) blur(13px);
+          filter: blur(13px);
         }
       }
 
@@ -5243,7 +5420,6 @@ export default class TowerFilm extends Component<{
         height: 100%;
         object-fit: cover;
         pointer-events: none;
-        filter: var(--tf-lut);
         mix-blend-mode: lighten;
         animation: tf-blend 700ms ease-in forwards;
       }
@@ -5278,7 +5454,6 @@ export default class TowerFilm extends Component<{
         height: 100%;
         object-fit: cover;
         pointer-events: none;
-        filter: var(--tf-lut);
         clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
         animation: tf-iris 680ms cubic-bezier(0.45, 0, 0.3, 1) forwards;
       }
@@ -5312,7 +5487,6 @@ export default class TowerFilm extends Component<{
         width: 100%;
         height: 100%;
         object-fit: cover;
-        filter: var(--tf-lut);
         animation: tf-dip-frame 760ms linear forwards;
       }
 
@@ -5361,7 +5535,12 @@ export default class TowerFilm extends Component<{
          multiplied over the scene and travelling with the sun's rake. */
       .tf-cloud {
         position: absolute;
-        inset: -35% -45%;
+        /* -35%/-45% was a plate 1.7x the viewport each way, blurred at 26px
+           on every frame the sun moved. The gradients are soft already; the
+           blur added nothing you could see and a full-screen filter you could
+           feel. Smaller, unblurred, and hidden outright when there is no
+           cloud — an opacity of zero still costs a composited layer. */
+        inset: -12% -16%;
         z-index: 1;
         pointer-events: none;
         opacity: calc(var(--tf-cloud, 0) * 0.62);
@@ -5370,16 +5549,15 @@ export default class TowerFilm extends Component<{
             62% 40% at 32% 44%,
             rgba(72, 84, 108, 0.42) 0%,
             rgba(78, 92, 116, 0.26) 46%,
-            rgba(96, 108, 128, 0) 72%
+            rgba(96, 108, 128, 0) 84%
           ),
           radial-gradient(
             48% 32% at 68% 58%,
             rgba(66, 78, 102, 0.34) 0%,
             rgba(84, 96, 120, 0.18) 52%,
-            rgba(96, 108, 128, 0) 78%
+            rgba(96, 108, 128, 0) 90%
           );
         mix-blend-mode: multiply;
-        filter: blur(26px);
         transform: rotate(calc(var(--tf-rake, 35deg) * 0.4))
           translate3d(
             calc(var(--tf-cloud, 0) * -16%),
@@ -5388,22 +5566,8 @@ export default class TowerFilm extends Component<{
           );
       }
 
-      .tf-vig {
-        position: absolute;
-        inset: 0;
-        z-index: 1;
-        pointer-events: none;
-        /* the vignette is part of the grade: a bright chapter wants it
-           nearly off, a heavy one wants it leaning in */
-        opacity: var(--tf-vig-a, 1);
-        transition: opacity 1500ms ease;
-        background: radial-gradient(
-          82% 74% at 50% 46%,
-          transparent 0%,
-          transparent 52%,
-          rgba(48, 38, 18, 0.1) 78%,
-          rgba(40, 31, 14, 0.26) 100%
-        );
+      .is-cloudless .tf-cloud {
+        visibility: hidden;
       }
 
       /* ---- scrims: anchored to the caption, never banded across the
