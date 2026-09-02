@@ -2591,17 +2591,22 @@ export default class TowerFilm extends Component<{
       /* the lens leans into the cursor: a couple of degrees of orbit and
          a hand's width of height, which is enough for the hills to move
          against the building and nowhere near enough to fight the shot */
-      az: (this.now.yaw + this.lean.x * 0.8 + hand * wander(0.37, 0.93, 2.11)) *
+      /* MOSTLY TILT. A machine in the air holds its heading far better
+         than it holds its nose: yaw is what the operator is steering and
+         pitch is what the wind is doing to it. So the wander is nearly
+         all in the tilt, with a quarter of it in the orbit to keep the
+         two from looking mechanically separate. */
+      az: (this.now.yaw + this.lean.x * 0.8 + hand * 0.25 * wander(0.37, 0.93, 2.11)) *
         RAD,
       el:
         (this.now.pitch -
           this.lean.y * 0.5 +
           bob +
-          hand * 0.7 * wander(0.29, 1.07, 1.83)) *
+          hand * 1.2 * wander(0.29, 1.07, 1.83)) *
         RAD,
       lookY: lookY + this.lean.y * 0.3 + (this.beat.hold ? 0 : bob * 0.3),
       ox: ox - this.lean.x * 0.012,
-      zoom: this.now.dolly * (1 + 0.0018 * wander(0.23, 0.71, 1.51)),
+      zoom: this.now.dolly * (1 + 0.0011 * wander(0.23, 0.71, 1.51)),
     };
     const g = Math.min(1, dt * 16);
     const sent = this.sent ?? { ...want };
