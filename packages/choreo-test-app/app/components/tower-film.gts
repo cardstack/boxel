@@ -2522,8 +2522,19 @@ export default class TowerFilm extends Component<{
     const k = Math.min(1, dt * 1.8);
     this.lean.x += (this.leanTo.x - this.lean.x) * k;
     this.lean.y += (this.leanTo.y - this.lean.y) * k;
-    /* the air the shot is flown in (see Beat.bob) */
-    const air = this.beat.bob ?? 0;
+    /**
+     * EVERY SHOT IS FLOWN. The sway started as a comparison-chapter
+     * idea and belongs to the whole film: a camera that holds perfectly
+     * still is a render, and a degree of drift costs nothing and says
+     * "somebody is holding this" in every shot.
+     *
+     * It is divided by the lens, though. A degree of tilt at a 4x
+     * close-up throws the frame around; the same degree on a wide is a
+     * breath. So the amplitude is scaled down as the shot gets tighter
+     * and a beat can still ask for more of it (the drone chapter does).
+     */
+    const air =
+      (this.beat.bob ?? 0.5) / Math.max(0.8, Math.min(3, this.now.dolly));
     const flown = Math.min(
       1,
       Math.max(0, (stamp - this.beatAt) / (this.beat.ticks * TICK * 1000))
