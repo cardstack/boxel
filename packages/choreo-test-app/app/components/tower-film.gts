@@ -306,7 +306,7 @@ const TICK = 2;
  * boot and shown in the corner under `?debug`, so "is my page current?"
  * is a glance rather than a theory.
  */
-const BUILD = 'cut-4 · clamped tails · re-cut restarts the clock';
+const BUILD = 'cut-6 · no join outlives its own play';
 
 /**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
@@ -1805,6 +1805,39 @@ export default class TowerFilm extends Component<{
     };
   });
 
+  /**
+   * A JOIN OVERLAY LIVES EXACTLY AS LONG AS ITS ANIMATION.
+   *
+   * Every join paints the outgoing frame over the film and gets out of
+   * the way — and "gets out of the way" was left to each overlay's own
+   * last keyframe. The wipe's is a swept MASK, not an opacity, so when
+   * it finished the element stayed at opacity 1 with a mask that did
+   * not, in fact, hide it: a full-screen still of the previous shot sat
+   * on top of the picture for the rest of the chapter. The camera went
+   * on moving underneath, the captions went on changing, and the film
+   * looked frozen one section behind itself — which is exactly what it
+   * was. (It also explains a whole afternoon of "these shots barely
+   * move": some of those frames were photographs.)
+   *
+   * So the overlay retires itself the moment its animation ends, and
+   * the next cut builds a fresh one. No join can outlive its own play.
+   */
+  private retire = modifier((el: HTMLElement) => {
+    const done = () => {
+      el.style.display = 'none';
+    };
+    el.addEventListener('animationend', done);
+    el.addEventListener('animationcancel', done);
+    /* a still that never animates at all (reduced motion, a dropped
+       stylesheet) must not become a permanent lid either */
+    const failsafe = window.setTimeout(done, 1400);
+    return () => {
+      window.clearTimeout(failsafe);
+      el.removeEventListener('animationend', done);
+      el.removeEventListener('animationcancel', done);
+    };
+  });
+
   private plate = modifier((el: HTMLElement) => {
     this.plateEl = el;
     /* the rows, nearest plane last — the big glyph is the near one */
@@ -2377,8 +2410,26 @@ export default class TowerFilm extends Component<{
         }
       }
     }
-    if (beat.style !== undefined && film.styleIndex() !== beat.style) {
-      film.style(beat.style);
+    /**
+     * WHICH BUILDING THIS BEAT IS ABOUT — asserted, never inherited.
+     *
+     * This used to run only when a beat NAMED a style, so every beat
+     * that did not name one (all of chapters one to four) simply kept
+     * whatever tower was standing. Straight through from the top that is
+     * invisible, because the film opens on the keep and only the
+     * comparison names anything else. Come back the other way — the
+     * comparison or the lineup, then a chapter skip back into DETAIL —
+     * and the film narrates the Japanese keep over a Chinese pagoda: the
+     * shot called "at the foot" frames somebody else's balcony, and the
+     * traces, which are computed from the keep's own level table, point
+     * at empty air. That is the "off by one section" and the second
+     * building in the frame, and it is not a motion problem at all: it
+     * is a beat inheriting state it never asked for. The subject of this
+     * film is the keep, so a beat that says nothing means style zero.
+     */
+    const style = beat.style ?? 0;
+    if (film.styleIndex() !== style) {
+      film.style(style);
       /* a new tower is built at t=0; this film always wants it finished
          unless the beat is explicitly running the construction */
       film.time(
@@ -2924,7 +2975,13 @@ export default class TowerFilm extends Component<{
         {{#each (array this.cutStamp) key="@identity" as |c|}}
           {{#if c}}
             {{#if this.freeze}}
-              <img class="tf-swipe" src={{this.freeze}} alt="" aria-hidden="true" />
+              <img
+                class="tf-swipe"
+                src={{this.freeze}}
+                alt=""
+                aria-hidden="true"
+                {{this.retire}}
+              />
             {{/if}}
           {{/if}}
         {{/each}}
@@ -2940,6 +2997,7 @@ export default class TowerFilm extends Component<{
               src={{this.freeze}}
               alt=""
               aria-hidden="true"
+              {{this.retire}}
             />
           {{/if}}
         {{/each}}
@@ -2954,6 +3012,7 @@ export default class TowerFilm extends Component<{
               style={{this.irisAt}}
               alt=""
               aria-hidden="true"
+              {{this.retire}}
             />
           {{/if}}
         {{/each}}
@@ -2962,17 +3021,29 @@ export default class TowerFilm extends Component<{
         junction vocabulary's overlays }}
         {{#each (array this.blurStamp) key="@identity" as |bl|}}
           {{#if bl}}
-            <img class="tf-blurout" src={{this.freeze}} alt="" aria-hidden="true" />
+            <img
+              class="tf-blurout"
+              src={{this.freeze}}
+              alt=""
+              aria-hidden="true"
+              {{this.retire}}
+            />
           {{/if}}
         {{/each}}
         {{#each (array this.lumaStamp) key="@identity" as |lu|}}
           {{#if lu}}
-            <img class="tf-luma" src={{this.freeze}} alt="" aria-hidden="true" />
+            <img
+              class="tf-luma"
+              src={{this.freeze}}
+              alt=""
+              aria-hidden="true"
+              {{this.retire}}
+            />
           {{/if}}
         {{/each}}
         {{#each (array this.flashStamp) key="@identity" as |fl|}}
           {{#if fl}}
-            <i class="tf-flash" aria-hidden="true"></i>
+            <i class="tf-flash" aria-hidden="true" {{this.retire}}></i>
           {{/if}}
         {{/each}}
 
@@ -2981,7 +3052,7 @@ export default class TowerFilm extends Component<{
         and the veil lifts on the new shot. }}
         {{#each (array this.dipStamp) key="@identity" as |ds|}}
           {{#if ds}}
-            <span class="tf-dip" aria-hidden="true">
+            <span class="tf-dip" aria-hidden="true" {{this.retire}}>
               {{#if this.freeze}}
                 <img src={{this.freeze}} alt="" />
               {{/if}}
@@ -3718,15 +3789,25 @@ export default class TowerFilm extends Component<{
         animation: tf-swipe 620ms cubic-bezier(0.5, 0, 0.24, 1) forwards;
       }
 
+      /* the sweep is the mask; the last breath of opacity is a SEAL. A
+         mask that ends up not covering what you assumed leaves the
+         still on screen forever, and a wipe that fails should fail to
+         nothing rather than to a photograph of the last shot. */
       @keyframes tf-swipe {
         0% {
           mask-position: 0% 0%;
           -webkit-mask-position: 0% 0%;
+          opacity: 1;
+        }
+
+        88% {
+          opacity: 1;
         }
 
         100% {
           mask-position: 100% 100%;
           -webkit-mask-position: 100% 100%;
+          opacity: 0;
         }
       }
 
@@ -3834,10 +3915,16 @@ export default class TowerFilm extends Component<{
       @keyframes tf-iris {
         0% {
           clip-path: circle(150% at var(--ix, 50%) var(--iy, 50%));
+          opacity: 1;
+        }
+
+        92% {
+          opacity: 1;
         }
 
         100% {
           clip-path: circle(0% at var(--ix, 50%) var(--iy, 50%));
+          opacity: 0;
         }
       }
 
