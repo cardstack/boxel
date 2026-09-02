@@ -2326,8 +2326,13 @@ export default class TowerFilm extends Component<{
     for (const k of ['dolly', 'lookY', 'ox', 'pitch', 'yaw'] as const) {
       const a = k === 'ox' ? (c.ox ?? 0) : c[k];
       const b = launch ? (k === 'ox' ? (launch.ox ?? 0) : launch[k]) : a;
+      /* BOTH stages of the cascade get the shot's own speed. Handing it
+         only to the first one left the second accelerating from rest,
+         which reads as a short ease-in at every cut — and reads worst
+         where the new shot orbits the OTHER WAY, because the lens
+         appears to hesitate before changing its mind. */
       this.midV[k] = secs ? (b - a) / secs : 0;
-      this.nowV[k] = 0;
+      this.nowV[k] = this.midV[k];
     }
     this.film?.pose({
       az: c.yaw * RAD,
