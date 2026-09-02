@@ -14,6 +14,13 @@ import {
 } from './v8-prof.ts';
 
 const log = logger('prerenderer');
+
+function connectionPerPageEnabled(): boolean {
+  return /^(1|true|yes)$/i.test(
+    process.env.PRERENDER_BROWSER_CONNECTION_PER_PAGE ?? '',
+  );
+}
+
 const PUPPETEER_PROFILE_PREFIX = 'puppeteer_dev_chrome_profile-';
 const USER_DATA_MAX_AGE_MS = 60 * 60 * 1000;
 const execFileAsync = promisify(execFile);
@@ -26,12 +33,23 @@ export class BrowserManager {
   // directory to sweep, and closing must disconnect rather than shut the
   // remote engine down.
   #connectedRemotely = false;
+  // Remote mode with PRERENDER_BROWSER_CONNECTION_PER_PAGE: every
+  // getBrowser() call opens its own CDP connection, so each pooled page
+  // lives on a connection of its own. Some engines scope a JS isolate to a
+  // connection and lose track of which page an evaluate targets once a
+  // connection holds several pages; one page per connection sidesteps
+  // that. Each connection is dropped when the context created on it
+  // closes.
+  #perPageConnections = new Set<Browser>();
 
   async getBrowser(): Promise<Browser> {
+    let remoteEndpoint = process.env.PRERENDER_BROWSER_WS_ENDPOINT;
+    if (remoteEndpoint && connectionPerPageEnabled()) {
+      return this.#connectForOnePage(remoteEndpoint);
+    }
     if (this.#browser) {
       return this.#browser;
     }
-    let remoteEndpoint = process.env.PRERENDER_BROWSER_WS_ENDPOINT;
     if (remoteEndpoint) {
       log.info(
         'Connecting to remote CDP browser at %s instead of launching Chrome',
@@ -116,6 +134,35 @@ export class BrowserManager {
 
     this.#browserUserDataDir = this.#extractUserDataDir(this.#browser);
     return this.#browser;
+  }
+
+  async #connectForOnePage(remoteEndpoint: string): Promise<Browser> {
+    let browser = await puppeteer.connect({
+      browserWSEndpoint: remoteEndpoint,
+    });
+    this.#perPageConnections.add(browser);
+    this.#connectedRemotely = true;
+    let connections = this.#perPageConnections;
+    let createContext = browser.createBrowserContext.bind(browser);
+    browser.createBrowserContext = async (...args) => {
+      let context = await createContext(...args);
+      let closeContext = context.close.bind(context);
+      context.close = async () => {
+        try {
+          await closeContext();
+        } finally {
+          connections.delete(browser);
+          await browser.disconnect().catch(() => {});
+        }
+      };
+      return context;
+    };
+    log.debug(
+      'Opened per-page CDP connection to %s (%s open)',
+      remoteEndpoint,
+      connections.size,
+    );
+    return browser;
   }
 
   async restartBrowser(): Promise<void> {
@@ -409,6 +456,14 @@ export class BrowserManager {
   }
 
   async #closeBrowser(): Promise<void> {
+    for (let connection of this.#perPageConnections) {
+      try {
+        await connection.disconnect();
+      } catch (e) {
+        log.warn('Error disconnecting per-page remote browser:', e);
+      }
+    }
+    this.#perPageConnections.clear();
     if (!this.#browser) {
       return;
     }
