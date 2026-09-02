@@ -48,8 +48,8 @@ const noopPrerenderer: Prerenderer = {
 };
 
 export const TEST_REALM_SERVER_URL = 'http://127.0.0.1:4446';
-const TEST_REALM_SERVER_HOST = '127.0.0.1';
-const TEST_REALM_SERVER_PORT = 4446;
+const TEST_REALM_SERVER_HOST = new URL(TEST_REALM_SERVER_URL).hostname;
+const TEST_REALM_SERVER_PORT = Number(new URL(TEST_REALM_SERVER_URL).port);
 
 export const TEST_USERNAME = `cli-test-${Date.now()}`;
 export const TEST_PASSWORD = 'test-password-for-cli';
