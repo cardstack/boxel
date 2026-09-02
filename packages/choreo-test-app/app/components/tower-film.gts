@@ -2080,6 +2080,7 @@ export default class TowerFilm extends Component<{
     window.addEventListener('keydown', this.key);
     window.addEventListener('pointermove', this.aim);
     window.addEventListener('pointermove', this.wake);
+    window.addEventListener('wheel', this.wake, { passive: true });
     document.addEventListener('fullscreenchange', this.fullChange);
     /* NOT this.wake() — a modifier runs INSIDE the render pass, and
        `idle` is read by the template in that same computation; writing
@@ -2219,6 +2220,7 @@ export default class TowerFilm extends Component<{
       window.removeEventListener('unhandledrejection', this.trip);
       window.removeEventListener('pointermove', this.aim);
       window.removeEventListener('pointermove', this.wake);
+      window.removeEventListener('wheel', this.wake);
       document.removeEventListener('fullscreenchange', this.fullChange);
       window.clearTimeout(this.idleTimer);
       frame.removeEventListener('load', onLoad);
@@ -4478,10 +4480,7 @@ export default class TowerFilm extends Component<{
           {{/if}}
         </div>
 
-        <div
-          class="tf-controls {{if this.gate 'is-away'}}
-            {{if this.idle 'is-idle'}}"
-        >
+        <div class="tf-controls {{if this.gate 'is-away'}}">
           <button
             type="button"
             class="tf-btn tf-icon"
@@ -4639,7 +4638,13 @@ export default class TowerFilm extends Component<{
         inset: 0;
       }
 
+      /* THE SCENE DOES NOT TAKE THE POINTER. It is a picture: it has no
+         controls of its own in film mode, and while it swallowed events
+         the wheel went to the iframe's document instead of this page —
+         so the film filled the viewport and the wall plate underneath
+         could not be reached. */
       .tf-frame {
+        pointer-events: none;
         position: absolute;
         inset: 0;
         width: 100%;
@@ -5859,9 +5864,23 @@ export default class TowerFilm extends Component<{
         transition: opacity 340ms ease;
       }
 
+      /* IDLE HIDES THE CHROME, NOT THE FILM'S PLACE IN ITSELF. The
+         controls go; the playhead stays as a hairline, which is both
+         the progress and the thing you reach for to bring the rest
+         back. A player that vanishes completely reads as a player that
+         was never there. */
       .tf-player.is-idle {
+        background: none;
+      }
+
+      .tf-player.is-idle .tf-controls {
         opacity: 0;
         pointer-events: none;
+      }
+
+      .tf-player.is-idle .tf-scrub-track {
+        height: 3px;
+        opacity: 0.5;
       }
 
       .tf-scrub {
@@ -5961,10 +5980,7 @@ export default class TowerFilm extends Component<{
 
       /* nobody is touching it: the apparatus gets out of the way of the
          picture, the way every player made since 2010 does */
-      .tf-controls.is-idle {
-        opacity: 0;
-        pointer-events: none;
-      }
+
 
       .tf-controls {
         transition: opacity 340ms ease;
