@@ -525,15 +525,18 @@ pnpm build                     # packages/glimmer-motion → dist/ + declaration
 pnpm test                      # build, then test-app: vite build --mode=development --out-dir dist-tests && ember test --path dist-tests
 pnpm lint:types                # glint, both packages
 pnpm --filter test-app start   # examples at / ; tests at /tests
-pnpm realm:stage               # single-file realm bundle → packages/glimmer-motion/dist-realm/choreo.ts
+pnpm realm:stage               # hashed realm bundle + stable choreo.ts entrypoint
 ```
 
-`pnpm realm:stage` flattens the built addon plus the motion.dev engine into one
-importable `choreo.ts` for a [Boxel](https://github.com/cardstack/boxel) realm —
-only `@ember/*`, `@glimmer/*` and `ember-modifier` stay external, resolved by the
-host. `pnpm realm` additionally mirrors it into a workspace and runs
-`boxel sync` (configure `.choreo-realm-sync.json` at the repo root); see the
-header of `packages/glimmer-motion/scripts/build-realm-bundle.mjs`.
+`pnpm realm:stage` flattens the built addon plus the motion.dev engine into a
+content-hashed `builds/choreo-<hash>.ts` plus a one-line `choreo.ts` re-export
+for a [Boxel](https://github.com/cardstack/boxel) realm — only `@ember/*`,
+`@glimmer/*` and `ember-modifier` stay external, resolved by the host. `pnpm
+realm` mirrors both into the workspace in `.choreo-realm-sync.json` and
+publishes them with `boxel file write`. Old hashes stay on the realm; rolling
+back is changing the re-export. See
+`packages/glimmer-motion/scripts/build-realm-bundle.mjs` and the
+[realm publishing guide](docs/realm-publishing.md).
 
 `packages/glimmer-motion/VENDORED.md` lists every file copied verbatim from Motion and the upstream commit (`motion@bbabb00`); re-diff them when bumping `motion-dom`. The Cypress-port harness lives in `test-app/tests/helpers/layout-fixture.ts`.
 

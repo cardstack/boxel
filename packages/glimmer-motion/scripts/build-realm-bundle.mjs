@@ -1,56 +1,35 @@
 /**
- * Build glimmer-motion as a single-file realm module and (optionally)
- * sync it to a Boxel workspace. Pattern borrowed from @cardstack/bxl's
- * scripts/build-realm-bundle.mjs.
+ * Build glimmer-motion as hashed realm modules and publish them with
+ * boxel-cli. Pattern taken from @cardstack/bxl's realm bundle, plus a
+ * content-hash so a bad build is one import change from rolling back.
  *
- * The realm artifact is ONE file — `dist-realm/choreo.ts` — containing
- * the whole public surface (`<Choreo>`, the timeline steps, `{{motion}}`,
- * presence, layout, gestures, scroll…) with the motion.dev engine
- * (motion-dom + motion-utils) and every other npm dependency inlined.
- * A realm card imports it with a single relative import:
+ * Layout in the target realm:
  *
- *   import { Choreo, motion, spring } from '../choreo';
+ *   choreo.ts                      ← one-line re-export (the import cards use)
+ *   builds/choreo-<hash>.ts        ← immutable artifact; never overwritten
  *
- * What stays external — and why it works in a realm:
+ * Cards always import from '../choreo'. Switching versions is changing
+ * that one re-export. Old hashes stay on the realm until you delete them.
  *
- *   - `@ember/*`, `@glimmer/*`, `ember-modifier`: framework virtual
- *     modules the Boxel host resolves at load time, exactly as it does
- *     for card modules.
- *   - `@ember/template-compilation`: the bundle keeps the addon's
- *     `precompileTemplate(...)` calls intact. The realm server's babel
- *     pass (the same plugin that compiles `<template>` tags in .gts
- *     cards) compiles them when the module is served — which is why the
- *     output must be named `.ts`, so the realm treats it as source.
- *
- * Because the realm compiles the file, it is NOT minified by default:
- * `precompileTemplate` resolves template identifiers through scope-object
- * keys, and a readable bundle keeps that path easy to debug. Pass
- *  `--minify` if you want a smaller artifact (scope keys survive
- * minification — esbuild rewrites shorthand `{ Move }` to
- * `{ Move: Move2 }` — but readable is the default on purpose).
- *
- * Three-phase pipeline, so a stale realm can never inherit orphans:
- *
- *   1. Build local  — rollup output (`dist/`) is flattened by esbuild
- *                     into a clean `<pkg>/dist-realm/` stage.
- *   2. Mirror       — the workspace's `choreo.ts` is replaced with the
- *                     freshly staged file.
- *   3. Sync         — `boxel sync --prefer-local` pushes it to the realm.
+ * What stays external — host-provided at load time:
+ *   @ember/*, @glimmer/*, ember-modifier
+ * Output is `.ts` so the realm babel-compiles `precompileTemplate`.
  *
  * Usage (from packages/glimmer-motion, after `pnpm build`):
- *   node scripts/build-realm-bundle.mjs                  # build + mirror + sync
+ *   node scripts/build-realm-bundle.mjs                  # build + mirror + push
  *   node scripts/build-realm-bundle.mjs --no-sync        # build + mirror only
  *   node scripts/build-realm-bundle.mjs --no-mirror      # stage only
- *   node scripts/build-realm-bundle.mjs --workspace PATH # override target
- *   node scripts/build-realm-bundle.mjs --minify         # smaller artifact
+ *   node scripts/build-realm-bundle.mjs --workspace PATH
+ *   node scripts/build-realm-bundle.mjs --minify
  *
  * Config: .choreo-realm-sync.json (gitignored) at the monorepo root:
  *   {
- *     "workspace":   "/absolute/path/to/your/boxel/workspace",
- *     "boxelCliDir": "/absolute/path/to/boxel-cli"   // optional
+ *     "workspace": "/absolute/path/to/a/boxel/workspace",
+ *     "realmUrl":  "https://example.com/my-realm/"
  *   }
  */
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -66,16 +45,7 @@ import * as esbuild from 'esbuild';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = resolve(__dirname, '..');
 const repoRoot = resolve(pkgRoot, '../..');
-
-// Entry is the compiled addon, not src/: rollup + babel have already
-// turned .gts template tags into precompileTemplate calls and stripped
-// decorators, which esbuild alone could not do. dist/index.js is the
-// full public surface and reaches nothing from test-support/.
 const entry = join(pkgRoot, 'dist/index.js');
-
-// Framework modules the Boxel host provides. Everything NOT matching
-// these (motion-dom, motion-utils, decorator-transforms/runtime, …) is
-// inlined into the bundle.
 const EXTERNAL = [/^@ember\//, /^@glimmer\//, /^ember-modifier$/];
 
 const argv = process.argv.slice(2);
@@ -86,7 +56,7 @@ const workspace =
   wsFlag !== -1
     ? resolve(argv[wsFlag + 1])
     : args.has('--no-mirror')
-      ? null // stage only; workspace not required
+      ? null
       : loadConfig().workspace;
 
 if (!existsSync(entry)) {
@@ -95,14 +65,10 @@ if (!existsSync(entry)) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// PHASE 1 — Build into a clean local staging directory.
-// ─────────────────────────────────────────────────────────────────────
-
 const stagingRoot = join(pkgRoot, 'dist-realm');
 rmSync(stagingRoot, { recursive: true, force: true });
 mkdirSync(stagingRoot, { recursive: true });
-const outfile = join(stagingRoot, 'choreo.ts');
+const stagedPlain = join(stagingRoot, 'choreo.ts');
 
 await esbuild.build({
   entryPoints: [entry],
@@ -113,9 +79,11 @@ await esbuild.build({
   mainFields: ['module', 'main'],
   conditions: ['import', 'module', 'default'],
   minify,
-  keepNames: true,
+  // keepNames wraps `scope: () => ({…})` as `__name(() => ({…}), "scope")`,
+  // which the realm's precompileTemplate plugin rejects.
+  keepNames: false,
   sourcemap: false,
-  outfile,
+  outfile: stagedPlain,
   plugins: [
     {
       name: 'host-provided-externals',
@@ -131,21 +99,15 @@ await esbuild.build({
   ],
   banner: {
     js:
+      `/* eslint-disable */\n` +
       `// glimmer-motion — realm bundle (ESM, single file)\n` +
-      `// Built: ${new Date().toISOString()}\n` +
       `// Contains: glimmer-motion + motion-dom + motion-utils, inlined.\n` +
       `// External: @ember/*, @glimmer/*, ember-modifier (host-provided).\n` +
       `// Regenerate: pnpm realm (from the monorepo root)\n`,
   },
 });
 
-const code = readFileSync(outfile, 'utf8');
-
-// The realm serves this file as TypeScript source, so it must survive
-// the realm's own babel pass. Two things would break it silently later;
-// fail loudly here instead:
-//  1. an import we forgot to inline or externalize,
-//  2. a require() left behind by a CJS-only dependency.
+const code = readFileSync(stagedPlain, 'utf8');
 const foreignImports = [
   ...code.matchAll(/^import[^'"]*['"]([^'"]+)['"]/gm),
   ...code.matchAll(/^export[^'"]*from\s*['"]([^'"]+)['"]/gm),
@@ -166,22 +128,35 @@ if (foreignImports.length || /\brequire\(/.test(code)) {
   );
 }
 
+const hash = createHash('sha256').update(code).digest('hex').slice(0, 12);
+const artifactName = `choreo-${hash}.ts`;
+const artifactRel = `builds/${artifactName}`;
+const stagingBuildsDir = join(stagingRoot, 'builds');
+mkdirSync(stagingBuildsDir, { recursive: true });
+writeFileSync(join(stagingBuildsDir, artifactName), code);
+writeFileSync(join(stagingRoot, 'choreo.ts'), shimSource(hash));
+
 console.log(
-  `✓ staged ${outfile}  (${(code.length / 1024).toFixed(1)} KB, ` +
-    `${minify ? 'minified' : 'readable'})`,
+  `✓ staged ${artifactRel}  (${(code.length / 1024).toFixed(1)} KB, ` +
+    `hash ${hash}, ${minify ? 'minified' : 'readable'})`,
 );
 
 if (args.has('--no-mirror')) {
-  console.log('(skipping mirror + sync — --no-mirror)');
+  console.log('(skipping mirror + push — --no-mirror)');
 } else {
-  mirrorAndSync();
+  mirrorAndPush(hash, code);
 }
 
-function mirrorAndSync() {
-  // ─────────────────────────────────────────────────────────────────────
-  // PHASE 2 — Mirror staged artifact to the workspace.
-  // ─────────────────────────────────────────────────────────────────────
+function shimSource(contentHash) {
+  return (
+    `/* eslint-disable */\n` +
+    `// Choreo realm entry. Cards import from this file — never from a hashed build.\n` +
+    `// To roll back, point the export at an older builds/choreo-<hash>.ts.\n` +
+    `export * from './builds/choreo-${contentHash}';\n`
+  );
+}
 
+function mirrorAndPush(contentHash, bundle) {
   if (!workspace) {
     throw new Error(
       'Missing workspace path. Pass --workspace <path> or configure ' +
@@ -189,34 +164,89 @@ function mirrorAndSync() {
     );
   }
 
-  writeFileSync(join(workspace, 'choreo.ts'), code);
-  console.log(`✓ mirrored → ${join(workspace, 'choreo.ts')}`);
+  const config = loadConfigOrEmpty();
+  const buildsDir = join(workspace, 'builds');
+  mkdirSync(buildsDir, { recursive: true });
 
-  // ─────────────────────────────────────────────────────────────────────
-  // PHASE 3 — Sync workspace to remote realm.
-  // ─────────────────────────────────────────────────────────────────────
+  const artifactPath = join(buildsDir, `choreo-${contentHash}.ts`);
+  const shimPath = join(workspace, 'choreo.ts');
+  const artifactExisted = existsSync(artifactPath);
+  writeFileSync(artifactPath, bundle);
+  writeFileSync(shimPath, shimSource(contentHash));
+  console.log(
+    artifactExisted
+      ? `✓ hash ${contentHash} already in workspace (shim refreshed)`
+      : `✓ mirrored → ${artifactPath}`,
+  );
+  console.log(`✓ shim     → ${shimPath}`);
 
   if (args.has('--no-sync')) {
-    console.log('(skipping sync — --no-sync)');
+    console.log('(skipping push — --no-sync)');
     return;
   }
 
-  const boxelCliDir = loadConfigOrEmpty().boxelCliDir;
-  let sync;
-  if (boxelCliDir) {
-    sync = spawnSync(
-      'npm',
-      ['run', 'dev', '--silent', '--', 'sync', workspace, '--prefer-local'],
-      { cwd: boxelCliDir, stdio: 'inherit' },
+  const realmUrl = resolveRealmUrl(config, workspace);
+  console.log(`  realm    → ${realmUrl}`);
+  const boxel = boxelBin(config);
+  const uploads = [
+    [artifactRel, artifactPath],
+    ['choreo.ts', shimPath],
+  ];
+  for (const [rel, abs] of uploads) {
+    console.log(`→ boxel file write ${rel}`);
+    const result = spawnSync(
+      boxel.command,
+      [
+        ...boxel.prefix,
+        'file',
+        'write',
+        rel,
+        '--realm',
+        realmUrl,
+        '--file',
+        abs,
+      ],
+      { stdio: 'inherit' },
     );
-  } else {
-    sync = spawnSync('boxel', ['sync', workspace, '--prefer-local'], {
-      stdio: 'inherit',
-    });
+    if (result.error) {
+      throw new Error(
+        `Failed to run ${boxel.command}: ${result.error.message}`,
+      );
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `boxel file write ${rel} exited with status ${result.status ?? 'unknown'}`,
+      );
+    }
   }
-  if (sync.status) {
-    throw new Error(`boxel sync exited with status ${sync.status}`);
+  console.log(`✓ published hash ${contentHash} to ${realmUrl}`);
+}
+
+function resolveRealmUrl(config, workspaceDir) {
+  if (typeof config.realmUrl === 'string' && config.realmUrl) {
+    return config.realmUrl;
   }
+  const syncPath = join(workspaceDir, '.boxel-sync.json');
+  if (existsSync(syncPath)) {
+    const sync = JSON.parse(readFileSync(syncPath, 'utf8'));
+    if (typeof sync.realmUrl === 'string' && sync.realmUrl) {
+      return sync.realmUrl;
+    }
+  }
+  throw new Error(
+    'Missing realmUrl. Set it in .choreo-realm-sync.json or keep a ' +
+      '.boxel-sync.json in the workspace.',
+  );
+}
+
+function boxelBin(config) {
+  if (typeof config.boxelCliDir === 'string' && config.boxelCliDir) {
+    return {
+      command: 'npx',
+      prefix: ['--yes', '--prefix', config.boxelCliDir, 'boxel'],
+    };
+  }
+  return { command: 'boxel', prefix: [] };
 }
 
 function loadConfig() {
@@ -225,10 +255,9 @@ function loadConfig() {
     throw new Error(
       'Missing .choreo-realm-sync.json at the monorepo root. Create it with:\n\n' +
         '  {\n' +
-        '    "workspace":   "/absolute/path/to/your/boxel/workspace",\n' +
-        '    "boxelCliDir": "/absolute/path/to/boxel-cli"    // optional\n' +
-        '  }\n\n' +
-        'Or pass --workspace <path>. Use --no-mirror to stop after staging.',
+        '    "workspace": "/absolute/path/to/a/boxel/workspace",\n' +
+        '    "realmUrl":  "https://example.com/my-realm/"\n' +
+        '  }\n',
     );
   }
   return JSON.parse(readFileSync(configPath, 'utf8'));
