@@ -751,6 +751,12 @@ jobs:
     if: needs.change-check.outputs.realm-server == 'true' || github.ref == 'refs/heads/main' || needs.change-check.outputs.run_all == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # THROWAWAY EXPERIMENT: drive every prerender page pool in this job from an
+    # Obscura CDP server instead of a launched Chrome, so the whole suite acts
+    # as a census of what that engine breaks. Never merge this.
+    env:
+      PRERENDER_BROWSER_WS_ENDPOINT: ws://127.0.0.1:9222
+      PRERENDER_PAGE_INIT_SCRIPT_FILE: ${{ github.workspace }}/packages/realm-server/scripts/browser-probe-shims/obscura.js
     concurrency:
       group: realm-server-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -783,6 +789,32 @@ jobs:
       - name: Warm test Docker images from the GHCR mirror
         continue-on-error: true
         uses: ./.github/actions/warm-test-images
+      - name: Start Obscura as the prerender browser (throwaway experiment)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/obscura
+          curl -fsSL https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.1/obscura-x86_64-linux.tar.gz \
+            | tar xz -C /tmp/obscura
+          /tmp/obscura/obscura --version
+          # The realm server and host dist speak https with the mkcert leaf
+          # that the init action provisioned; rustls reads its trust roots
+          # from SSL_CERT_FILE.
+          export SSL_CERT_FILE="$(mkcert -CAROOT)/rootCA.pem"
+          OBSCURA_TIMEZONE=UTC \
+          OBSCURA_SCRIPT_DEADLINE_MS=120000 \
+          OBSCURA_MODULE_BUDGET_MS=60000 \
+          OBSCURA_NAV_TIMEOUT_MS=120000 \
+          OBSCURA_CDP_COMMAND_TIMEOUT_MS=180000 \
+          RUST_LOG=obscura=info \
+            nohup /tmp/obscura/obscura serve --port 9222 --allow-private-network \
+            > /tmp/obscura.log 2>&1 &
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9222/json/version >/dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:9222/json/version
       - name: Start test services (icons + host dist + realm servers)
         run: mise run test-services:realm-server | tee -a /tmp/server.log &
       - name: create realm users
@@ -875,6 +907,13 @@ jobs:
         with:
           name: realm-server-test-host-dist-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/host-dist.log
+          retention-days: 30
+      - name: Upload Obscura log
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ !cancelled() }}
+        with:
+          name: realm-server-test-obscura-log-${{steps.artifact_name.outputs.artifact_name}}
+          path: /tmp/obscura.log
           retention-days: 30
 
   realm-server-merge-reports:
