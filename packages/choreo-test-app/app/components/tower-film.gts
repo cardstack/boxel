@@ -1344,6 +1344,10 @@ export default class TowerFilm extends Component<{
   /** where the beat's sky word was planted, in world azimuth */
   private skyAz = 0;
 
+  /** the light in force, and the light the beat asked for */
+  private sunNow: { az: number; el: number } | null = null;
+  private sunGoal: { az: number; el: number } | null = null;
+
   /* ---- the player ------------------------------------------------- *
    * A film owes its viewer the controls every other film has: a
    * playhead you can put your hand on, chapters you can see coming, a
@@ -2379,6 +2383,22 @@ export default class TowerFilm extends Component<{
       ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
     });
+    /* walk the key light to the shot's own sun — the short way round,
+       over about a second and a half */
+    const goal = this.sunGoal;
+    if (goal && this.sunNow) {
+      const step = Math.min(1, dt * 1.5);
+      let d = goal.az - this.sunNow.az;
+      while (d > Math.PI) {
+        d -= Math.PI * 2;
+      }
+      while (d < -Math.PI) {
+        d += Math.PI * 2;
+      }
+      this.sunNow.az += d * step;
+      this.sunNow.el += (goal.el - this.sunNow.el) * step;
+      film.light(this.sunNow);
+    }
     this.pageEl?.style.setProperty('--tf-lx', this.lean.x.toFixed(3));
     this.pageEl?.style.setProperty('--tf-ly', this.lean.y.toFixed(3));
     /* THE PLAYHEAD, as a custom property rather than tracked state: it
@@ -2477,15 +2497,18 @@ export default class TowerFilm extends Component<{
              a diagram drawn on the sky. What the shot wants is a word
              the WEATHER is holding — twice the size, a hairline, and
              faint enough that the hill reads straight through it. */
-          color: '#f2ebd6',
+          color: 'rgba(255,251,243,0.42)',
+          fill: true,
           lines: beat.sky.lines,
-          size: beat.sky.size * 2.1,
+          shadow: 'rgba(255,248,236,0.5)',
+          shadowBlur: 0.16,
+          size: beat.sky.size * 3.4,
           /* LIGHT, not ink. Drawn in the same warm white the front door
              uses, at a hairline: over this film's grounds a pale
              outline reads as a word held in the air, where a dark one
              reads as a diagram printed on the sky. */
-          stroke: 'rgba(246,240,226,0.9)',
-          strokeW: 0.0095,
+          stroke: 'rgba(255,253,247,0.7)',
+          strokeW: 0.009,
           track: beat.sky.track ?? 0.16,
         },
         {
@@ -2749,22 +2772,29 @@ export default class TowerFilm extends Component<{
     film.sky(
       'mark',
       {
-        /* the same treatment the sky word wears — outlined and blended,
-           so a label standing at the height it names belongs to the
-           scene rather than being stuck on the front of it */
-        color: '#2a2110',
+        /* BIG, WHITE, SOFT, AND BEHIND. A dark label pasted over the
+           scaffolding is a sticker; a big pale word standing further out
+           than the structure — soft-edged, its own glow holding it
+           against the hills, the building crossing in FRONT of it — is
+           part of the place. */
+        color: 'rgba(255,251,243,0.5)',
+        fill: true,
         lines: m.lines,
-        size: m.size * 1.12,
-        stroke: 'rgba(38,30,14,0.9)',
-        strokeW: 0.022,
-        track: 0.1,
+        shadow: 'rgba(255,248,236,0.55)',
+        shadowBlur: 0.15,
+        size: m.size * 3.2,
+        stroke: 'rgba(255,253,247,0.72)',
+        strokeW: 0.012,
+        track: 0.12,
       },
       {
-        opacity: Math.min(1, raw * 2.2) * 0.72,
+        opacity: Math.min(1, raw * 2.2) * 0.86,
         ry: (this.markFace / RAD) % 360,
-        x: Math.sin(a) * m.r,
+        /* stood well beyond the building, so the structure crosses in
+           FRONT of the word instead of the word sitting on the glass */
+        x: Math.sin(a) * m.r * 2.2,
         y,
-        z: Math.cos(a) * m.r,
+        z: Math.cos(a) * m.r * 2.2,
       }
     );
     /* AND IT IS TETHERED. A label floating beside a building names
@@ -2999,11 +3029,23 @@ export default class TowerFilm extends Component<{
     if (beat.theme !== undefined) {
       film.theme(beat.theme, instant);
     }
-    /* both are shot properties, so both are released when a beat does not
-       ask — otherwise one raking close-up would light the rest of the film */
-    film.light(
-      beat.sun ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD } : null
-    );
+    /**
+     * THE SUN MOVES, it does not switch on. Both sun and haze are shot
+     * properties, released when a beat does not ask — otherwise one
+     * raking close-up lights the rest of the film. But a beat that DOES
+     * ask used to get its light in a single frame, which in the
+     * construction chapter (side light at twelve degrees, then sixty,
+     * then near-overhead) read as somebody flipping a switch. The goal
+     * is set here and the frame loop walks the light to it.
+     */
+    const want = beat.sun
+      ? { az: beat.sun.az * RAD, el: beat.sun.el * RAD }
+      : null;
+    this.sunGoal = want;
+    if (instant || !this.sunNow || !want) {
+      this.sunNow = want ? { ...want } : null;
+      film.light(this.sunNow);
+    }
     this.hazeBase = beat.haze ?? null;
     film.haze(this.hazeBase);
     if (beat.wx !== undefined) {
