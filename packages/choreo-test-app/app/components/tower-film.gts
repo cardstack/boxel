@@ -539,7 +539,14 @@ const GRADES: Record<string, FilmGrade> = {
  * boot and shown in the corner under `?debug`, so "is my page current?"
  * is a glance rather than a theory.
  */
-const BUILD = 'cut-8 · the grade moved into the glass, the frame has a budget';
+const BUILD = 'cut-9 · the dissolve moved into the glass, the voice is primed';
+
+/**
+ * `?awake` keeps the loops running in a document that reports itself
+ * hidden — an embedded preview pane, a headless runner — where the idle
+ * gate would otherwise (correctly) stop the film dead. Tooling only.
+ */
+const AWAKE = new URLSearchParams(window.location.search).has('awake');
 
 /**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
@@ -1476,6 +1483,12 @@ const smooth = (t: number) => {
 /** what the vendored page publishes — see the HOST FILM BRIDGE block there */
 interface FilmApi {
   clearTrace(id: string): void;
+  /**
+   * the freeze-blend done in the glass: hold the frame on screen and fade
+   * it over the next; false when the page cannot, so the caller falls
+   * back to `snapshot()` and a still in the DOM
+   */
+  dissolve(kind: 'blend' | 'melt', ms?: number): boolean;
   duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
@@ -1939,7 +1952,7 @@ export default class TowerFilm extends Component<{
   }
 
   get src(): string {
-    return `${config.rootURL}towers.html?host`;
+    return `${config.rootURL}towers.html?host${AWAKE ? '&awake' : ''}`;
   }
 
   get photoSrc(): string {
@@ -2686,7 +2699,7 @@ export default class TowerFilm extends Component<{
     /* A HIDDEN TAB DOES NO WORK. And once the end card is up nothing under
        it will change again: the page is told so and stops drawing the
        finished building into a frame nobody composites. */
-    if (document.hidden) {
+    if (document.hidden && !AWAKE) {
       return;
     }
     if (this.ended) {
@@ -3491,7 +3504,15 @@ export default class TowerFilm extends Component<{
          * covers the seam with a colour. A failed capture (zero-sized
          * surface) degrades to a clean cut — a dip still gets its veil.
          */
-        if (join !== 'cut') {
+        if (join === 'blend' || join === 'melt') {
+          /* the crossfade lives in the glass now; the still is the
+             fallback, and a stale one must never stand in for it */
+          this.freeze = '';
+          if (!film.dissolve(join)) {
+            const shot = film.snapshot();
+            this.freeze = shot.length > 64 ? shot : '';
+          }
+        } else if (join !== 'cut') {
           const shot = film.snapshot();
           this.freeze = shot.length > 64 ? shot : '';
         }
@@ -3879,6 +3900,28 @@ export default class TowerFilm extends Component<{
    * mixing that cannot wait for a mix.
    */
   private voice?: HTMLAudioElement;
+  /** the next line, already fetching, so it enters on its cue */
+  private prime?: HTMLAudioElement;
+
+  private static voSrc(beat: Beat) {
+    return `${config.rootURL}towers/vo/${beat.id}.mp3`;
+  }
+
+  /** ask the network for the line after this one, now, while nobody waits */
+  private primeNext(beat: Beat) {
+    const next = BEATS[BEATS.indexOf(beat) + 1];
+    if (!next?.vo) {
+      return;
+    }
+    const src = TowerFilm.voSrc(next);
+    if (this.prime?.getAttribute('src') === src) {
+      return;
+    }
+    const el = new Audio();
+    el.preload = 'auto';
+    el.src = src;
+    this.prime = el;
+  }
 
   /**
    * A BOUNDARY NEVER CLIPS THE VOICE — and every line has its own
@@ -3911,6 +3954,15 @@ export default class TowerFilm extends Component<{
         el.pause();
         window.clearInterval(timer);
         this.fades.delete(el);
+        /* a line that has been talked over is finished with: drop its
+           source so the decoder and its buffer go with it, rather than
+           twenty-three paused throats waiting on the collector. The one
+           still in `voice` keeps its file — a pause is not a barge-in,
+           and resume stands it back up (`revive`). */
+        if (el !== this.voice) {
+          el.removeAttribute('src');
+          el.load();
+        }
       } else {
         el.volume = v0 * (1 - f);
       }
@@ -3966,6 +4018,10 @@ export default class TowerFilm extends Component<{
   private previewJoin = (join: string) => {
     const film = this.film;
     if (!film || !this.booted) {
+      return;
+    }
+    if ((join === 'blend' || join === 'melt') && film.dissolve(join)) {
+      this.freeze = '';
       return;
     }
     if (join !== 'flash' && join !== 'sweep' && join !== 'whip') {
@@ -4048,10 +4104,20 @@ export default class TowerFilm extends Component<{
     /* barge-in: the outgoing line fades on its own element while the
        new one starts clean on a fresh throat */
     this.fadeEl(this.voice);
-    const el = new Audio();
+    const src = TowerFilm.voSrc(beat);
+    /* the line was asked for a beat ago (`primeNext`), so it starts on the
+       frame it is wanted rather than after a round trip to the server —
+       which on the first play of a beat was a late entrance every time */
+    const primed = this.prime;
+    const el =
+      primed && primed.getAttribute('src') === src ? primed : new Audio();
+    this.prime = undefined;
     this.voice = el;
-    el.src = `${config.rootURL}towers/vo/${beat.id}.mp3`;
+    if (el !== primed) {
+      el.src = src;
+    }
     el.volume = 1;
+    this.primeNext(beat);
     /**
      * THE MIX. Narration is the foreground and the scene's music is a
      * bed, so the bed goes properly out of the way rather than politely
