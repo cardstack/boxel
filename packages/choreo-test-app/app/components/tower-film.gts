@@ -153,6 +153,18 @@ interface Beat {
   bob?: number;
 
   /**
+   * KEEP THE AIM ON THE MIDDLE OF THE BUILDING. A crane changes the
+   * camera's height and its tilt at once, and if the aim point is a
+   * fixed height the subject slides out of the frame on the way up —
+   * the shot stops being about the tower and becomes about the sky
+   * above it. With this set the lens looks at the mass of what is
+   * actually standing (which grows while the film builds it), so a
+   * flown move can go anywhere and the building stays where it was
+   * composed.
+   */
+  hold?: boolean;
+
+  /**
    * THE BUILDING LEAVES BY FADING, not by sinking. Running the build
    * clock backwards moves the tower down out of its own frame, and
    * since the film builds it straight back afterwards, that movement is
@@ -1067,6 +1079,7 @@ const BEATS: Beat[] = [
     gloss: 'Japan · the keep',
     bob: 1.5,
     grade: 'c-jp',
+    hold: true,
     id: 'c-jp',
     toCam: { dolly: 1.58, lookY: 4.4, ox: -0.16, pitch: 15, yaw: 238 },
     join: 'blend',
@@ -1086,6 +1099,7 @@ const BEATS: Beat[] = [
     cut: true,
     bob: 1.5,
     grade: 'c-cn',
+    hold: true,
     id: 'c-cn',
     toCam: { dolly: 0.84, lookY: -2.8, ox: -0.22, pitch: 3, yaw: 214 },
     join: 'blend',
@@ -1105,6 +1119,7 @@ const BEATS: Beat[] = [
     cut: true,
     bob: 1.5,
     grade: 'c-vn',
+    hold: true,
     id: 'c-vn',
     toCam: { dolly: 0.82, lookY: -3.2, ox: -0.22, pitch: 2, yaw: 276 },
     join: 'blend',
@@ -1124,6 +1139,7 @@ const BEATS: Beat[] = [
     cut: true,
     bob: 1.5,
     grade: 'c-th',
+    hold: true,
     id: 'c-th',
     toCam: { dolly: 1.6, lookY: 3.6, ox: -0.15, pitch: 14, yaw: 300 },
     join: 'blend',
@@ -1143,6 +1159,7 @@ const BEATS: Beat[] = [
     cut: true,
     bob: 1.5,
     grade: 'c-kh',
+    hold: true,
     id: 'c-kh',
     toCam: { dolly: 1.48, lookY: 2.4, ox: 0.02, pitch: 11, yaw: 278 },
     join: 'blend',
@@ -1162,6 +1179,7 @@ const BEATS: Beat[] = [
     cut: true,
     bob: 1.5,
     grade: 'c-tr',
+    hold: true,
     id: 'c-tr',
     toCam: { dolly: 0.9, lookY: -4.6, ox: -0.22, pitch: 1, yaw: 306 },
     join: 'blend',
@@ -2510,6 +2528,11 @@ export default class TowerFilm extends Component<{
       Math.sin(flown * Math.PI * 1.6) *
       smooth(Math.min(1, flown / 0.18)) *
       smooth(Math.min(1, (1 - flown) / 0.18));
+    /* the aim, when the shot asks to stay on the subject (Beat.hold):
+       the MIDDLE of whatever is standing, in the rig's own coordinates
+       — half the built height, so a crane can go anywhere and the
+       building stays centred on the way */
+    const lookY = this.beat.hold ? film.height() * 0.5 - 7.065 : this.now.lookY;
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
     film.pose({
       /* the lens leans into the cursor: a couple of degrees of orbit and
@@ -2517,7 +2540,7 @@ export default class TowerFilm extends Component<{
          against the building and nowhere near enough to fight the shot */
       az: (this.now.yaw + this.lean.x * 1.1) * RAD,
       el: (this.now.pitch - this.lean.y * 0.75 + bob) * RAD,
-      lookY: this.now.lookY + this.lean.y * 0.35 + bob * 0.3,
+      lookY: lookY + this.lean.y * 0.35 + bob * 0.3,
       ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
     });
