@@ -14,7 +14,12 @@ const DEFAULT_ALLOWED_HOSTS = ['boxel-images.boxel.ai'];
 // src or a CSS `background-image` — rather than merely storing or asserting on.
 const IMAGE_URL_PROPERTIES = new Set(['iconURL', 'backgroundURL']);
 
-const ABSOLUTE_URL = /^https?:\/\//i;
+// A protocol-relative URL fetches from the same third party an absolute one
+// does — the browser just borrows the page's scheme — so `//host/path` counts
+// as remote here even though it opens like a path. The single-slash form is
+// the one that stays local, and it is the form this rule wants fixtures to
+// use, so the distinction between `//` and `/` is load-bearing.
+const REMOTE_URL = /^(?:https?:)?\/\//i;
 
 function propertyKeyName(node) {
   if (node.computed) {
@@ -45,8 +50,11 @@ function staticStringValue(node, scope) {
     let variable = findVariable(scope, node.name);
     // Only a single assignment can be reasoned about; a reassigned binding
     // could hold anything by the time it is used.
-    if (variable && variable.defs.length === 1 && variable.references
-        .filter((ref) => ref.isWrite()).length <= 1) {
+    if (
+      variable &&
+      variable.defs.length === 1 &&
+      variable.references.filter((ref) => ref.isWrite()).length <= 1
+    ) {
       let def = variable.defs[0];
       if (def.type === 'Variable' && def.node.init) {
         return staticStringValue(def.node.init, null);
@@ -112,13 +120,22 @@ module.exports = {
           ? sourceCode.getScope(node)
           : context.getScope();
         let value = staticStringValue(node.value, scope);
-        if (typeof value !== 'string' || !ABSOLUTE_URL.test(value)) {
+        if (typeof value !== 'string') {
+          return;
+        }
+        // Browsers strip leading and trailing whitespace from a URL before
+        // fetching it, so a stray space must not read as a local path here.
+        value = value.trim();
+        if (!REMOTE_URL.test(value)) {
           return;
         }
 
         let host;
         try {
-          host = new URL(value).host;
+          // `new URL` needs a scheme. Which one a protocol-relative value
+          // would borrow does not change its host, so any will do.
+          host = new URL(value.startsWith('//') ? `https:${value}` : value)
+            .host;
         } catch {
           return;
         }

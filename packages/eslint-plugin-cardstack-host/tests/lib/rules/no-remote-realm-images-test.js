@@ -59,6 +59,15 @@ ruleTester.run('no-remote-realm-images', rule, {
       code: `realmConfigCardJSON({ iconURL: 'https://example.test/icon.png' });`,
       options: [{ allowedHosts: ['example.test'] }],
     },
+    // The single-slash form is the local one and must stay valid — the
+    // protocol-relative case below turns on exactly this distinction.
+    {
+      code: `realmConfigCardJSON({ iconURL: '/test-fixtures/realm-images/letter-a.png' });`,
+    },
+    // An allow-listed host is allow-listed however the URL is spelled.
+    {
+      code: `realmConfigCardJSON({ iconURL: '//boxel-images.boxel.ai/icons/cardstack.png' });`,
+    },
   ],
   invalid: [
     {
@@ -89,6 +98,22 @@ ruleTester.run('no-remote-realm-images', rule, {
     {
       code: `realmConfigCardJSON({ iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png' });`,
       options: [{ allowedHosts: ['boxel-images.boxel.ai'] }],
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    // Protocol-relative: the browser borrows the page's scheme and makes the
+    // same third-party request, so the leading `//` is remote.
+    {
+      code: `realmConfigCardJSON({ iconURL: '//i.postimg.cc/L8yXRvws/icon.png' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    {
+      code: `realmConfigCardJSON({ backgroundURL: '//example.com/bg.jpg' });`,
+      errors: [{ messageId: 'remoteRealmImage' }],
+    },
+    // Whitespace is stripped before the fetch, so it cannot smuggle a remote
+    // URL past the check either.
+    {
+      code: `realmConfigCardJSON({ iconURL: '  https://i.postimg.cc/L8yXRvws/icon.png ' });`,
       errors: [{ messageId: 'remoteRealmImage' }],
     },
   ],

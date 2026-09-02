@@ -29,6 +29,12 @@ realmConfigCardJSON({
   iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
   backgroundURL: 'https://example.com/background.jpg',
 });
+
+// Protocol-relative counts as remote: the browser borrows the page's scheme
+// and makes the same third-party request. Only the single-slash form is local.
+realmConfigCardJSON({
+  iconURL: '//i.postimg.cc/L8yXRvws/icon.png',
+});
 ```
 
 Examples of **correct** code for this rule:
