@@ -209,6 +209,13 @@ interface Beat {
     at?: number;
     /** degrees round the orbit, fixed in the world */
     bearing: number;
+    /**
+     * HOW LONG IT STAYS, as a fraction of the beat. Not every word owes
+     * the same time: the first stage is one of five and can get out of
+     * the way, the last one is the building topping out and can hold
+     * while the roof lands.
+     */
+    hold?: number;
     lines: string[];
     /** distance from the tower's axis */
     r: number;
@@ -658,9 +665,11 @@ const BEATS: Beat[] = [
     kicker: 'STAGE ONE',
     vo: "Ishigaki. Dry stone, no mortar, stacked into a curve. A straight wall argues with an earthquake. This one passes it into the hill.",
     mark: {
-      /* the wall has to be out of the ground before it has a name */
+      /* the wall has to be out of the ground before it has a name —
+         and then it is one stage of five, so it gets out of the way */
       at: 0.42,
       bearing: 120,
+      hold: 0.2,
       lines: ['石垣'],
       r: 7,
       size: 1.5,
@@ -772,6 +781,9 @@ const BEATS: Beat[] = [
     vo: "Kawara. Fired clay, hung, never nailed. The heaviest thing in the building, and that weight is what holds it still. The roof is ballast.",
     mark: {
       bearing: 185,
+      /* the last one is the building topping out: let it stand while
+         the roof lands */
+      hold: 0.5,
       lines: ['瓦'],
       r: 7,
       size: 1.5,
@@ -1374,8 +1386,9 @@ export default class TowerFilm extends Component<{
   private markAz = 0;
   /** a sideways nudge in world units, for a word too short to centre */
   private markOff = 0;
-  /** the height the word rises FROM, taken from the stage it names */
+  /** the height the word rises FROM — set when it actually arrives */
   private markFrom = 2.6;
+  private markSeated = false;
 
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
@@ -2794,6 +2807,24 @@ export default class TowerFilm extends Component<{
   private stageMark(film: FilmApi, beat: Beat, local: number, dt: number) {
     const m = beat.mark;
     const tether = this.tetherEl;
+    /**
+     * IT COMES IN BEHIND THE BUILDING, EVERY TIME. The entry height is
+     * read off the structure at the moment the word arrives — a little
+     * under the top of whatever has been built so far — so the thing on
+     * screen always hides the word's first frames and hands it over as
+     * it climbs. Taken once per beat, because reading it every frame
+     * would make the word ride the build instead of rising past it.
+     */
+    if (!this.markSeated && local >= (m.at ?? 0.14)) {
+      this.markSeated = true;
+      this.markFrom = Math.max(0.4, film.height() - 3.4);
+    }
+    /* THE CLIMB BELONGS TO THE WORD, NOT TO THE BEAT. A word that waits
+       for its wall to be built must still ENTER low — otherwise it
+       arrives at whatever height a ramp running since the top of the
+       beat has carried it to, which for the stone base meant appearing
+       halfway up the sky it was supposed to rise into. The rise is
+       measured from the moment it shows up. */
     if (!m) {
       film.fade('mark', 0);
       if (tether) {
@@ -2861,7 +2892,13 @@ export default class TowerFilm extends Component<{
         smooth(Math.max(0, Math.min(1, (local - (m.at ?? 0.14)) / 0.16))) *
         (1 -
           smooth(
-            Math.max(0, Math.min(1, (local - ((m.at ?? 0.14) + 0.34)) / 0.2))
+            Math.max(
+              0,
+              Math.min(
+                1,
+                (local - ((m.at ?? 0.14) + (m.hold ?? 0.34))) / 0.2
+              )
+            )
           )),
         ry: (this.markFace / RAD) % 360,
         /**
@@ -2875,7 +2912,7 @@ export default class TowerFilm extends Component<{
          * if the orbit carries it out of frame (below).
          */
         x: Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
-        y: this.markFrom + local * 13,
+        y: this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 21,
         z: Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff,
       }
     );
@@ -2894,10 +2931,12 @@ export default class TowerFilm extends Component<{
      */
     const seen = film.project(
       Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
-      this.markFrom + local * 13,
+      this.markFrom + Math.max(0, local - (m.at ?? 0.14)) * 21,
       Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff
     );
-    const lit = local > (m.at ?? 0.14) - 0.02 && local < (m.at ?? 0.14) + 0.36;
+    const lit =
+      local > (m.at ?? 0.14) - 0.02 &&
+      local < (m.at ?? 0.14) + (m.hold ?? 0.34) + 0.02;
     const outside =
       lit && (!seen.on || seen.x < v.w * 0.12 || seen.x > v.w * 0.88);
     if (outside) {
@@ -3131,11 +3170,10 @@ export default class TowerFilm extends Component<{
           ).x;
         this.markOff = at(3.6) > at(-3.6) ? 3.6 : -3.6;
       }
-      /* AND IT STARTS WHERE ITS SUBJECT IS. The stone base word rises
-         from the ground because that is what the beat is about; the
-         later stages start higher, each from the height of the thing it
-         names. A word about foundations that begins at eaves height is
-         a word about nothing. */
+      /* the entry height is taken when the word ARRIVES, not here —
+         by then the building has grown and the word has to enter
+         behind whatever is standing (see stageMark) */
+      this.markSeated = false;
       this.markFrom = (beat.mark.to ?? 8) * 0.34 - 1.6;
     }
     this.applyAir(beat, instant);
