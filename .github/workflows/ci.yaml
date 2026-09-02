@@ -808,7 +808,7 @@ jobs:
           OBSCURA_MODULE_BUDGET_MS=60000 \
           OBSCURA_NAV_TIMEOUT_MS=120000 \
           OBSCURA_CDP_COMMAND_TIMEOUT_MS=180000 \
-          RUST_LOG=obscura=info \
+          RUST_LOG=obscura_cdp=debug,obscura_browser=debug,obscura=info \
             nohup /tmp/obscura/obscura serve --port 9222 --allow-private-network \
             > /tmp/obscura.log 2>&1 &
           for _ in $(seq 1 30); do
@@ -829,6 +829,9 @@ jobs:
         env:
           TEST_MODULES: ${{ steps.shard_modules.outputs.modules }}
           JUNIT_OUTPUT_FILE: ${{ github.workspace }}/junit/realm-server-${{ matrix.shardIndex }}.xml
+          # Trace every CDP event the test process receives, to catch the
+          # frame-detached the in-process pool sees during standby load.
+          DEBUG: "puppeteer:protocol:RECV*"
       - name: Upload junit report
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ !cancelled() }}

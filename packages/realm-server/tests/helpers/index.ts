@@ -644,6 +644,31 @@ export async function createTestPgAdapter(options?: {
   return await withPgDatabaseEnv(databaseName, async () => new PgAdapter());
 }
 
+// Wait for a freshly bound listener and surface a bind failure (EADDRINUSE
+// from a fixture whose port is still draining) as a rejected setup step.
+// Without a listener for the 'error' event, node re-throws it from the event
+// emitter and takes the whole test process down with it. The bind itself has
+// already been requested by RealmServer.listen(); its error, if any, arrives
+// on a later tick, so attaching here is not too late.
+export async function awaitListening(server: Server): Promise<Server> {
+  if (server.listening) {
+    return server;
+  }
+  await new Promise<void>((resolve, reject) => {
+    let onError = (error: Error) => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    let onListening = () => {
+      server.off('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+  });
+  return server;
+}
+
 export async function closeServer(server: Server) {
   if (!server) {
     return;
@@ -1510,7 +1535,9 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(parseInt(realmURL.port));
+  let testRealmHttpServer = await awaitListening(
+    testRealmServer.listen(parseInt(realmURL.port)),
+  );
   trackServer(testRealmHttpServer);
   try {
     await testRealmServer.start();
@@ -1660,7 +1687,9 @@ export async function runTestRealmServerWithRealms({
     definitionLookup,
     prerenderer,
   });
-  let testRealmHttpServer = testRealmServer.listen(parseInt(serverURL.port));
+  let testRealmHttpServer = await awaitListening(
+    testRealmServer.listen(parseInt(serverURL.port)),
+  );
   trackServer(testRealmHttpServer);
   await testRealmServer.start();
 
