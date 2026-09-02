@@ -46,14 +46,13 @@ interface TilePlacement {
   y: number;
 }
 
-// Cards without a persisted frame setting flow into a fixed grid.
-function defaultPlacement(index: number): TilePlacement {
+// Cards without a persisted position flow into a fixed grid, `slot` being
+// their ordinal among the board's placed tiles.
+function gridSlot(slot: number): Pick<TilePlacement, 'x' | 'y'> {
   return {
-    index,
-    x: GRID_PADDING + (index % GRID_COLUMNS) * (TILE_WIDTH + TILE_GAP),
+    x: GRID_PADDING + (slot % GRID_COLUMNS) * (TILE_WIDTH + TILE_GAP),
     y:
-      GRID_PADDING +
-      Math.floor(index / GRID_COLUMNS) * (TILE_HEIGHT + TILE_GAP),
+      GRID_PADDING + Math.floor(slot / GRID_COLUMNS) * (TILE_HEIGHT + TILE_GAP),
   };
 }
 
@@ -181,15 +180,25 @@ class Isolated extends Component<typeof PosterBoard> {
     });
   }
 
+  // A tile whose link was cleared renders nothing, so it holds no grid slot
+  // either: unpositioned tiles flow into the grid in linked order, and clearing
+  // a link reflows them the same way removing the tile does.
   get tilePlacements(): TilePlacement[] {
-    return this.tiles.map((tile, index) => {
+    let refs = this.linkedRefs;
+    let placements: TilePlacement[] = [];
+    this.tiles.forEach((tile, index) => {
+      if (refs[index] === undefined) {
+        return;
+      }
       let x = coordinate(tile.x);
       let y = coordinate(tile.y);
-      if (x !== undefined && y !== undefined) {
-        return { index, x, y };
-      }
-      return defaultPlacement(index);
+      placements.push(
+        x !== undefined && y !== undefined
+          ? { index, x, y }
+          : { index, ...gridSlot(placements.length) },
+      );
     });
+    return placements;
   }
 
   get hasCards() {

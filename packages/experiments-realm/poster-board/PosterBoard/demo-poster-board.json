@@ -48,6 +48,30 @@
         {
           "x": null,
           "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
+        },
+        {
+          "x": null,
+          "y": null
         }
       ]
     },
@@ -100,12 +124,42 @@
       },
       "tiles.8.card": {
         "links": {
-          "self": "../../Chess/c09f9bb3-df3f-4337-a6bd-cc4c96a5caa3"
+          "self": "@cardstack/base/Theme/boxel-brand-guide"
         }
       },
       "tiles.9.card": {
         "links": {
-          "self": "../../index"
+          "self": "@cardstack/catalog/4b6602-wine-cellar-card-definition/WineBottle/011f0239-9a66-405f-a874-32bb4146ee7b"
+        }
+      },
+      "tiles.10.card": {
+        "links": {
+          "self": "@cardstack/base/cards/brand-guide"
+        }
+      },
+      "tiles.11.card": {
+        "links": {
+          "self": "@cardstack/catalog/Theme/cardstack-brand-guide"
+        }
+      },
+      "tiles.12.card": {
+        "links": {
+          "self": "@cardstack/skills/index"
+        }
+      },
+      "tiles.13.card": {
+        "links": {
+          "self": "@cardstack/catalog/c7eda3-travel-itinerary-planner/TravelItinerary/7e50c44f-7124-4347-b48d-b2433896fb6e"
+        }
+      },
+      "tiles.14.card": {
+        "links": {
+          "self": "../../GardenItem/c73d38e9-bd83-4089-9667-0b29dbc37008"
+        }
+      },
+      "tiles.15.card": {
+        "links": {
+          "self": "@cardstack/catalog/4b6602-wine-cellar-card-definition/WineBottle/a227be75-3301-4f02-b99a-66e05fe87432"
         }
       }
     }

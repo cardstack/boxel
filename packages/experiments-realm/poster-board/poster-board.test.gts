@@ -275,6 +275,39 @@ export function runTests() {
         );
     });
 
+    test('poster-board skips a tile whose link was cleared without leaving a gap', async function (assert) {
+      let { note1, note2 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
+
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: null }),
+            new BoardTile({ card: note2 }),
+          ],
+        }),
+      );
+
+      assert
+        .dom('[data-test-poster-board-tile]')
+        .exists({ count: 2 }, 'the unlinked tile renders nothing');
+      assert
+        .dom('[data-test-poster-board-tile="1"]')
+        .doesNotExist('no element stands in for the unlinked tile');
+      assert
+        .dom('[data-test-poster-board-tile="2"]')
+        .hasStyle(
+          { left: '212px', top: '10px' },
+          'the tile after the cleared link takes the next grid slot',
+        );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="2"] [data-test-stub-entry="${note2.id}"]`,
+        )
+        .exists('the moved tile still shows its own card');
+    });
+
     test('poster-board keeps a persisted position with its tile when an earlier tile is removed', async function (assert) {
       let { note1, note2 } = await makeSavedNotes();
       stubEntries = [stubEntry(note1.id), stubEntry(note2.id)];
