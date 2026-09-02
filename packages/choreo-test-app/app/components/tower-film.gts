@@ -982,7 +982,6 @@ const BEATS: Beat[] = [
     /* the weather beat arrives through its own mist */
     cut: true,
     gloss: 'the eave',
-    haze: 0.55,
     id: 'noki',
     join: 'blend',
     says: [
