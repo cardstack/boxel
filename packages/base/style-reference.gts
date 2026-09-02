@@ -117,10 +117,12 @@ class Isolated extends Component<typeof StyleReference> {
           />
         {{else}}
           <header class='style-header'>
-            <h1><@fields.cardTitle /></h1>
-            <p class='style-header-description'>
-              <@fields.cardDescription />
-            </p>
+            <div class='style-header-content'>
+              <h1><@fields.cardTitle /></h1>
+              <p class='style-header-description'>
+                <@fields.cardDescription />
+              </p>
+            </div>
           </header>
         {{/if}}
       </:header>
@@ -284,8 +286,12 @@ class Isolated extends Component<typeof StyleReference> {
       section {
         scroll-margin-top: var(--boxel-sp-2xl);
       }
-      .style-reference {
-        max-width: 50rem;
+      /* the header band spans the card; its text keeps to the dashboard's
+         content measure, minus the band's own padding */
+      .style-header-content {
+        max-width: calc(
+          var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-2xl)
+        );
         margin: 0 auto;
       }
       .style-header {

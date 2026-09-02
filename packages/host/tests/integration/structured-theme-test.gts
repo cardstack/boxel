@@ -1,10 +1,12 @@
+import { settled, type RenderingTestContext } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import type { Loader } from '@cardstack/runtime-common';
 
 import { setupBaseRealm } from '../helpers/base-realm';
-
+import { renderCard } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 import type * as StructuredThemeModule from '@cardstack/base/structured-theme';
@@ -390,6 +392,55 @@ module('Integration | structured-theme', function (hooks) {
         `generated CSS declares ${declaration}`,
       );
     }
+  });
+
+  test('unset variables in the isolated preview show the value they inherit from the Boxel defaults', async function (this: RenderingTestContext, assert) {
+    let loader: Loader = getService('loader-service').loader;
+    let card = new StructuredTheme({
+      rootVariables: new ThemeVarField({ primary: '#d04f99' }),
+      darkModeVariables: new ThemeVarField({}),
+    });
+    await renderCard(loader, card, 'isolated');
+    await settled();
+
+    assert
+      .dom('[data-test-root-vars] [data-test-var-value="--primary"]')
+      .doesNotHaveAttribute(
+        'data-test-var-inherited',
+        'a value the theme sets is shown as its own',
+      );
+    assert
+      .dom(
+        '[data-test-root-vars] [data-test-var-value="--primary"] [data-test-swatch="#d04f99"]',
+      )
+      .exists();
+
+    let canvas = this.element.querySelector(
+      '[data-test-root-vars] [data-test-var-value="--canvas"]',
+    );
+    let inherited = canvas?.getAttribute('data-test-var-inherited') ?? '';
+    assert.ok(
+      inherited.length,
+      'an unset variable resolves to the theme.css default at the preview',
+    );
+    assert
+      .dom(canvas)
+      .containsText('inherited', 'the resolved value is tagged as inherited');
+    assert
+      .dom(`[data-test-root-vars] [data-test-swatch="${inherited}"]`)
+      .exists('the swatch paints the resolved default');
+
+    let primaryInk = this.element
+      .querySelector(
+        '[data-test-root-vars] [data-test-var-value="--primary-ink"]',
+      )
+      ?.getAttribute('data-test-var-inherited');
+    // Chrome serializes the mix in oklch; the point is that the formula is gone
+    assert.ok(primaryInk, 'the ink default resolves');
+    assert.false(
+      primaryInk?.startsWith('color-mix'),
+      `the color-mix ink formula collapses to a literal color (${primaryInk})`,
+    );
   });
 
   test('label and eyebrow typography slots emit theme variables, including letter-spacing', function (assert) {

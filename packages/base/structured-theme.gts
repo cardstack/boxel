@@ -333,6 +333,7 @@ class Edit extends Isolated {
 
 export default class StructuredTheme extends Theme {
   static displayName = 'Theme';
+  static prefersWideFormat = true;
 
   @field typography = contains(ThemeTypographyField, {
     description:

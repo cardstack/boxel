@@ -1056,12 +1056,16 @@ export class NavBar extends GlimmerComponent<{
           max-height: 50vh;
           overflow-y: auto;
         }
+        /* the bar spans the card; its items keep to the content measure */
         .nav-container {
           position: relative;
           flex-grow: 1;
           display: flex;
           gap: var(--boxel-sp-xs);
           overflow: hidden;
+          width: 100%;
+          max-width: var(--dsr-content-max-width);
+          margin: 0 auto;
           padding-inline: var(--boxel-sp-xl);
         }
 
@@ -1127,40 +1131,42 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
       class='theme-dashboard-header {{if @mode @mode "isolated"}}'
       ...attributes
     >
-      {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
-        <CardInfoTemplates.edit
-          @fields={{@fields}}
-          @model={{this.cardInfoModel}}
-          @hideThemeChooser={{true}}
-        />
-        <FieldContainer
-          class='theme-dashboard-version-edit-field'
-          @icon={{VersionIcon}}
-          @label='Version No'
-          @tag='label'
-        >
-          <@fields.version />
-        </FieldContainer>
-      {{else}}
-        {{#if (has-block 'meta')}}
-          {{yield to='meta'}}
+      <div class='theme-dashboard-header-content'>
+        {{#if (and (eq @mode 'edit') (bool @model) (bool @fields))}}
+          <CardInfoTemplates.edit
+            @fields={{@fields}}
+            @model={{this.cardInfoModel}}
+            @hideThemeChooser={{true}}
+          />
+          <FieldContainer
+            class='theme-dashboard-version-edit-field'
+            @icon={{VersionIcon}}
+            @label='Version No'
+            @tag='label'
+          >
+            <@fields.version />
+          </FieldContainer>
         {{else}}
-          <div class='theme-dashboard-header-meta'>
-            <span class='theme-dashboard-header-meta-label'>
-              {{if @metaLabel @metaLabel 'Style Guide'}}
-            </span>
-            <span class='theme-dashboard-header-meta-version'>
-              Version
-              {{if @version @version '1.0'}}
-            </span>
-          </div>
+          {{#if (has-block 'meta')}}
+            {{yield to='meta'}}
+          {{else}}
+            <div class='theme-dashboard-header-meta'>
+              <span class='theme-dashboard-header-meta-label'>
+                {{if @metaLabel @metaLabel 'Style Guide'}}
+              </span>
+              <span class='theme-dashboard-header-meta-version'>
+                Version
+                {{if @version @version '1.0'}}
+              </span>
+            </div>
+          {{/if}}
+          <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
+          {{#if @description}}
+            <p class='theme-dashboard-header-tagline'>{{@description}}</p>
+          {{/if}}
         {{/if}}
-        <h1 class='theme-dashboard-header-title'>{{@title}}</h1>
-        {{#if @description}}
-          <p class='theme-dashboard-header-tagline'>{{@description}}</p>
-        {{/if}}
-      {{/if}}
-      {{yield}}
+        {{yield}}
+      </div>
     </header>
     <style scoped>
       @layer baseComponent {
@@ -1175,6 +1181,16 @@ export class ThemeDashboardHeader extends GlimmerComponent<{
         }
         .edit {
           padding: var(--boxel-sp-xl);
+        }
+        /* the band spans the card; its content keeps to the dashboard's measure */
+        .theme-dashboard-header-content {
+          /* the band carries the horizontal padding that .dsr-content and the
+             nav include in their measure, so subtract it to keep text edges
+             aligned */
+          max-width: calc(
+            var(--dsr-content-max-width, 56rem) - 2 * var(--boxel-sp-xl)
+          );
+          margin: 0 auto;
         }
         .theme-dashboard-header-meta {
           display: flex;
@@ -1602,6 +1618,9 @@ export class ThemeDashboard extends GlimmerComponent<{
           height: 100%;
         }
         .detailed-style-reference {
+          /* one measure for the header, content, and footer columns; the
+             theme card opens in the wide stack format, so this is sized for it */
+          --dsr-content-max-width: 72rem;
           display: flex;
           flex-direction: column;
           height: 100%;
@@ -1627,7 +1646,7 @@ export class ThemeDashboard extends GlimmerComponent<{
           display: flex;
           flex-direction: column;
           width: 100%;
-          max-width: 56rem;
+          max-width: var(--dsr-content-max-width);
           margin: 0 auto;
           padding: var(--boxel-sp-3xl) var(--boxel-sp-xl);
           counter-reset: section;
@@ -1641,7 +1660,7 @@ export class ThemeDashboard extends GlimmerComponent<{
           color: var(--muted-foreground);
         }
         .footer-content {
-          max-width: 56rem;
+          max-width: var(--dsr-content-max-width);
           margin: 0 auto;
           text-align: center;
         }

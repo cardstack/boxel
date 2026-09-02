@@ -1,7 +1,12 @@
+import { schedule } from '@ember/runloop';
+import { tracked } from '@glimmer/tracking';
+import { modifier } from 'ember-modifier';
+
 import {
   CopyButton,
   FieldContainer,
   Swatch,
+  Tooltip,
 } from '@cardstack/boxel-ui/components';
 import {
   buildCssVariableName,
@@ -58,11 +63,48 @@ function describeColor(base: string) {
   return `${base} ${COLOR_VALUE_INPUT_HELP}`;
 }
 
-function getFieldGroup(fieldNames: string[], model?: Record<string, any>) {
+// `property` is what an unset variable is probed through to resolve its
+// inherited default (see resolveThemeVariable)
+function getFieldGroup(
+  fieldNames: string[],
+  model?: Record<string, any>,
+  property = 'background-color',
+) {
   return fieldNames?.map((fieldName: string) => ({
     name: buildCssVariableName(fieldName),
     value: model?.[fieldName],
+    property,
   }));
+}
+
+// what a probe computes to when the variable is undeclared or not valid for
+// the probed property
+const UNRESOLVED_PROBE_VALUES = new Set([
+  '',
+  'none',
+  'auto',
+  'rgba(0, 0, 0, 0)',
+]);
+
+// Resolves a contract token the theme leaves unset. The swatch grid renders
+// inside the dashboard's theme scope, where theme.css declares every token, so
+// reading it there yields the default the card actually renders with, in the
+// color mode the preview is showing. `expression` is the declared value with
+// var() substituted (a color-mix formula stays a formula); `resolved` applies
+// it to `property` on a probe so formulas collapse to a literal.
+function resolveThemeVariable(el: HTMLElement, name: string, property: string) {
+  let expression = getComputedStyle(el).getPropertyValue(name).trim();
+  let probe = document.createElement('span');
+  probe.style.cssText =
+    'position:absolute;visibility:hidden;pointer-events:none';
+  probe.style.setProperty(property, `var(${name})`);
+  el.appendChild(probe);
+  let resolved = getComputedStyle(probe).getPropertyValue(property).trim();
+  probe.remove();
+  if (UNRESOLVED_PROBE_VALUES.has(resolved)) {
+    resolved = expression;
+  }
+  return { expression, resolved };
 }
 
 export function calculateTypographyVariables(
@@ -251,6 +293,13 @@ export class ThemeTypographyField extends FieldDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <section class='theme-typography'>
+        <span class='theme-typography-eyebrow'>
+          {{#if @model.eyebrow.sampleText}}
+            {{@model.eyebrow.sampleText}}
+          {{else}}
+            Eyebrow
+          {{/if}}
+        </span>
         <h1>
           {{#if @model.heading.sampleText}}
             {{@model.heading.sampleText}}
@@ -291,13 +340,6 @@ export class ThemeTypographyField extends FieldDef {
             {{@model.label.sampleText}}
           {{else}}
             UI label
-          {{/if}}
-        </span>
-        <span class='theme-typography-eyebrow'>
-          {{#if @model.eyebrow.sampleText}}
-            {{@model.eyebrow.sampleText}}
-          {{else}}
-            Eyebrow
           {{/if}}
         </span>
       </section>
@@ -421,10 +463,128 @@ class Embedded extends Component<typeof ThemeVarField> {
   </template>
 }
 
+// A field the theme leaves blank, shown with the value it inherits from the
+// Boxel defaults so the preview reads as the card will render
+class InheritedSwatch extends GlimmerComponent<{
+  Args: {
+    name: string;
+    property: string;
+  };
+  Element: HTMLElement;
+}> {
+  @tracked private resolved?: string;
+  @tracked private expression?: string;
+
+  // The grid re-renders when the preview's color mode flips, so this re-runs
+  // per mode. Tracked state is written after render: the values are consumed
+  // by this template before the modifier installs.
+  private resolve = modifier(
+    (el: HTMLElement, [name, property]: [string, string]) => {
+      schedule('afterRender', () => {
+        if (!el.isConnected) {
+          return;
+        }
+        let { expression, resolved } = resolveThemeVariable(el, name, property);
+        this.expression = expression;
+        this.resolved = resolved;
+      });
+    },
+  );
+
+  <template>
+    {{! class names here must not repeat ThemeSwatch's: its scoped rules reach
+        this element through ...attributes }}
+    <div
+      class='inherited-swatch'
+      {{this.resolve @name @property}}
+      data-test-var-value={{@name}}
+      data-test-var-inherited={{this.resolved}}
+      ...attributes
+    >
+      <Tooltip class='inherited-swatch-tag' @placement='top'>
+        <:trigger>
+          <span class='inherited-tag'>inherited</span>
+        </:trigger>
+        <:content>
+          Not set on this theme. Resolves from the Boxel defaults as
+          <code>{{this.expression}}</code>
+        </:content>
+      </Tooltip>
+      <Swatch
+        class='inherited-swatch-preview'
+        @color={{this.resolved}}
+        @label={{@name}}
+      />
+    </div>
+    <style scoped>
+      @layer {
+        /* tag at the top of the cell and swatch at the bottom, so across a row
+           the tags line up with each other and the swatches with the set
+           swatches in neighbouring cells, which also bottom-align */
+        .inherited-swatch {
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: var(--boxel-sp-4xs);
+          width: 100%;
+          min-width: 0;
+        }
+        /* same swatch layout as ThemeSwatch */
+        .inherited-swatch-preview {
+          --swatch-width: 2.75rem;
+          --swatch-height: 2.75rem;
+          display: flex;
+          flex-direction: row-reverse;
+          justify-content: flex-end;
+          align-items: center;
+          align-self: stretch;
+          min-width: 0;
+        }
+        :deep(.boxel-swatch-preview) {
+          box-shadow: var(--swatch-background);
+          flex-shrink: 0;
+          aspect-ratio: 1;
+          border-style: dashed;
+        }
+        :deep(.boxel-swatch-label) {
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        :deep(.boxel-swatch-name) {
+          font-weight: 600;
+          font-size: var(--boxel-font-size-xs);
+          font-family: var(--font-mono, var(--boxel-monospace-font-family));
+          text-wrap: wrap;
+          overflow-wrap: anywhere;
+        }
+        :deep(.boxel-swatch-value) {
+          font-size: var(--boxel-font-size-xs);
+          text-transform: lowercase;
+        }
+        .inherited-tag {
+          padding: var(--boxel-sp-5xs) var(--boxel-sp-3xs);
+          border: 1px solid var(--border, var(--boxel-border-color));
+          border-radius: var(--boxel-border-radius-xs);
+          color: var(--muted-foreground, var(--boxel-450));
+          font-size: var(--boxel-font-size-2xs);
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-xs);
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+      }
+    </style>
+  </template>
+}
+
 class ThemeSwatch extends GlimmerComponent<{
   Args: {
     value: string;
-    label?: string;
+    label: string;
+    property?: string;
   };
   Element: HTMLElement;
 }> {
@@ -445,10 +605,11 @@ class ThemeSwatch extends GlimmerComponent<{
         />
       </div>
     {{else if @label.length}}
-      <div data-test-var-value={{@label}}>
-        <div class='empty-field-name'>{{@label}}</div>
-        <code class='empty-value'>/* not set */</code>
-      </div>
+      <InheritedSwatch
+        @name={{@label}}
+        @property={{if @property @property 'background-color'}}
+        ...attributes
+      />
     {{/if}}
     <style scoped>
       @layer {
@@ -476,7 +637,6 @@ class ThemeSwatch extends GlimmerComponent<{
           overflow: hidden;
           text-overflow: ellipsis;
         }
-        .empty-field-name,
         :deep(.boxel-swatch-name) {
           font-weight: 600;
           font-size: var(--boxel-font-size-xs);
@@ -488,11 +648,6 @@ class ThemeSwatch extends GlimmerComponent<{
           font-size: var(--boxel-font-size-xs);
           text-transform: lowercase;
         }
-        .empty-value {
-          padding: var(--boxel-sp-4xs);
-          font-style: italic;
-          font-size: var(--boxel-font-size-xs);
-        }
       }
     </style>
   </template>
@@ -500,14 +655,18 @@ class ThemeSwatch extends GlimmerComponent<{
 
 class FieldGrid extends GlimmerComponent<{
   Args: {
-    fields: { name: string; value: string }[];
+    fields: { name: string; value: string; property?: string }[];
   };
   Element: HTMLElement;
 }> {
   <template>
     <div class='field-grid' ...attributes>
       {{#each @fields as |field|}}
-        <ThemeSwatch @value={{field.value}} @label={{field.name}} />
+        <ThemeSwatch
+          @value={{field.value}}
+          @label={{field.name}}
+          @property={{field.property}}
+        />
       {{/each}}
     </div>
     <style scoped>
@@ -515,7 +674,7 @@ class FieldGrid extends GlimmerComponent<{
         display: grid;
         /* min() lets the column shrink instead of overflowing a narrow card */
         grid-template-columns: repeat(auto-fill, minmax(min(11rem, 100%), 1fr));
-        gap: var(--boxel-sp-xs) var(--boxel-sp-2xs);
+        gap: var(--boxel-sp-sm) var(--boxel-sp-2xs);
       }
     </style>
   </template>
@@ -1016,7 +1175,7 @@ export default class ThemeVarField extends FieldDef {
       },
       {
         title: 'Box Shadow',
-        fields: getFieldGroup(this.boxShadows, this),
+        fields: getFieldGroup(this.boxShadows, this, 'box-shadow'),
       },
     ];
   }
