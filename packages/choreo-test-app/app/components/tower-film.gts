@@ -2835,18 +2835,21 @@ export default class TowerFilm extends Component<{
          titles becomes furniture. */
       opacity:
         0.62 *
-        smooth(Math.max(0, Math.min(1, (local - 0.18) / 0.14))) *
-        (1 - smooth(Math.max(0, Math.min(1, (local - 0.46) / 0.14)))),
+        smooth(Math.max(0, Math.min(1, (local - 0.14) / 0.16))) *
+        (1 - smooth(Math.max(0, Math.min(1, (local - 0.48) / 0.2)))),
         ry: (this.markFace / RAD) % 360,
-        /* planted behind the subject, at ONE height for the whole
-           chapter, with a breath of upward drift — enough that it is
-           alive, not enough that it is going anywhere. It is also KEPT
-           IN FRAME: the camera moves past a planted word, and a word
-           that has left the picture is not doing its job, so the anchor
-           eases back toward the lens axis whenever the projection says
-           it is heading out (see below). */
+        /**
+         * IT RISES OUT FROM BEHIND THE BUILDING. The word starts low
+         * enough that the structure stands in front of it, fades up
+         * while it is still half hidden, climbs past the frame the
+         * carpenters are raising, and is gone before it reaches the top
+         * of the picture — so the BUILDING reveals it, rather than a
+         * caption appearing beside the building. Planted on one azimuth
+         * so the camera moves PAST it, and nudged back toward the lens
+         * if the orbit carries it out of frame (below).
+         */
         x: Math.sin(this.markAz) * 26,
-        y: 9.4 + local * 0.9,
+        y: 2.6 + local * 13,
         z: Math.cos(this.markAz) * 26,
       }
     );
@@ -2859,7 +2862,7 @@ export default class TowerFilm extends Component<{
      */
     const seen = film.project(
       Math.sin(this.markAz) * 26,
-      9.4,
+      2.6 + local * 13,
       Math.cos(this.markAz) * 26
     );
     const outside =
