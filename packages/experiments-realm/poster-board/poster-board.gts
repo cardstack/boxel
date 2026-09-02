@@ -229,9 +229,12 @@ class Isolated extends Component<typeof PosterBoard> {
   };
 
   get tilesQuery(): SearchEntryWireQuery | undefined {
-    let urls = this.linkedUrls.filter(
-      (url): url is string => url !== undefined,
-    );
+    // Two tiles may show the same card; the index holds one row for it.
+    let urls = [
+      ...new Set(
+        this.linkedUrls.filter((url): url is string => url !== undefined),
+      ),
+    ];
     if (urls.length === 0) {
       return undefined;
     }
@@ -608,15 +611,18 @@ class Isolated extends Component<typeof PosterBoard> {
 
       /* Tile content is display-only — the overlay layer owns hover/click.
          The overlay binds its listeners to the card's root element, so that
-         element must keep receiving pointer events; only its descendants opt
-         out, so links/buttons in the card never intercept a click and text
-         never starts a selection. `user-select` resolves through the parent,
-         so setting it once on the root covers the subtree. */
+         element must keep receiving pointer events; only the card's own
+         controls opt out, so a link or button never intercepts a click, and
+         text never starts a selection. Other descendants stay hit-testable so
+         a card's own scroller still receives wheel events (see handleWheel).
+         `user-select` resolves through the parent, so setting it once on the
+         root covers the subtree. */
       .poster-board-tile-card {
         user-select: none;
       }
 
-      .poster-board-tile-card :deep(*) {
+      .poster-board-tile-card
+        :deep(a, button, input, select, textarea, label, [role='button']) {
         pointer-events: none;
       }
 

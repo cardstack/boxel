@@ -55,8 +55,7 @@ let capturedQueries: (SearchEntryWireQuery | undefined)[] = [];
 function stubEntry(id: string): RenderableSearchEntryLike {
   // The board stamps its content class through `...attributes`, the same way
   // it lands on real prerendered HTML's root element.
-  // The scroller stands in for content that owns its own wheel gestures, like
-  // the broken-link error panel.
+  // The scroller stands in for card content that owns its own wheel gestures.
   let component: TOC<{ Element: Element }> = <template>
     {{! template-lint-disable no-inline-styles }}
     <div data-test-stub-entry={{id}} ...attributes>
@@ -429,6 +428,35 @@ export function runTests() {
         { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
         'the fitted rendering is bound through htmlQuery',
       );
+    });
+
+    test('poster-board renders a card linked from two tiles in both tiles', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id)];
+      await renderPosterBoard(
+        new PosterBoard({
+          tiles: [
+            new BoardTile({ card: note1 }),
+            new BoardTile({ card: note1 }),
+          ],
+        }),
+      );
+
+      assert.deepEqual(
+        capturedQueries.at(-1)?.cardUrls,
+        [`${note1.id}.json`],
+        'the query asks for the shared card once',
+      );
+      assert
+        .dom(
+          `[data-test-poster-board-tile="0"] [data-test-stub-entry="${note1.id}"]`,
+        )
+        .exists('the first tile renders the card');
+      assert
+        .dom(
+          `[data-test-poster-board-tile="1"] [data-test-stub-entry="${note1.id}"]`,
+        )
+        .exists('the second tile renders the same card');
     });
 
     test('poster-board leaves wheel gestures to scrollable tile content', async function (assert) {
