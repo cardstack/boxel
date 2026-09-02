@@ -1961,16 +1961,24 @@ export default class TowerFilm extends Component<{
       }
       for (let k = 0; k < b.ticks; k++) {
         /**
-         * EASED ACROSS THE SHOT, not stepped evenly through it. The
-         * waypoints used to be spaced linearly, which asks the spline
-         * to hold a constant speed from the first frame to the last —
-         * so a long drone move starts and stops abruptly and every
-         * waypoint is a small correction. Spacing them on a smoothstep
-         * puts the shot's speed in the middle, where a flown camera
-         * keeps it, and leaves the ends calm.
+         * ONE CURVE, NOT FIVE INTERPOLATIONS.
+         *
+         * A shot is a single move from one pose to another, and it is
+         * described here by exactly two poses: the beat's head and the
+         * tail computed above. The points between them are samples of
+         * that one line — collinear by construction, evenly spaced, one
+         * per tick because the cue clock counts ticks — so the spline
+         * has nothing to invent between them and no join to round off.
+         *
+         * They were briefly spaced on a smoothstep, to put the speed in
+         * the middle of the shot. That is the right INSTINCT and the
+         * wrong place for it: uneven spacing makes a Catmull-Rom
+         * overshoot at every sample, so a move that should read as one
+         * gesture reads as five corrections. The easing belongs to the
+         * chaser, which is a physical system and cannot overshoot into
+         * a corner, and to the shot's own head and tail.
          */
-        const t = b.ticks === 1 ? 0 : k / (b.ticks - 1);
-        const f = t * t * (3 - 2 * t);
+        const f = b.ticks === 1 ? 0 : k / (b.ticks - 1);
         pts.push({
           cut: splice && k === 0 ? true : undefined,
           dolly: lerp(b.cam.dolly, to.dolly, f),
