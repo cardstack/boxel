@@ -2681,6 +2681,22 @@ export default class TowerFilm extends Component<{
     if (Array.isArray(beat.build)) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
     }
+    /**
+     * The corner empties half a second before the beat changes — and
+     * "changes" means the next CUE, not the end of this beat's own
+     * ticks. A beat followed by a chapter flight is on screen for its
+     * own length PLUS that flight's lead, and measuring against the
+     * short number faded the type out early and then held it at zero
+     * for the rest of the shot.
+     */
+    const nextLead = BEATS[this.absoluteIndex + 1]?.lead ?? 0;
+    const span = (beat.ticks + nextLead) * TICK;
+    const left = Math.max(0, span - (stamp - this.beatAt) / 1000);
+    const last = !BEATS[this.absoluteIndex + 1];
+    this.pageEl?.style.setProperty(
+      '--tf-type-a',
+      (this.ended || last ? 1 : smooth(Math.min(1, left / 0.5))).toFixed(3)
+    );
     /* THE CHAPTER'S NUMERAL LEAVES WITH THE CHAPTER. It is furniture
        for the passage, not for the beat, so it holds across the shots
        inside a chapter and fades out over the tail of the last one —
@@ -3878,8 +3894,52 @@ export default class TowerFilm extends Component<{
     }
   };
 
+  /**
+   * FROM THE TOP means the front door, not the first beat.
+   *
+   * A film restarted straight into its opening shot skips the one piece
+   * of the picture that says what it is — and the poster is a
+   * composition in its own right, with the building turning in the last
+   * of the light. So this clears everything the run has done and puts
+   * the door back up, with the lens seated where it opens.
+   */
   private restart = () => {
-    this.cutTo(0);
+    const film = this.film;
+    this.freeze = '';
+    this.hushVoice(120);
+    this.playing = false;
+    this.ended = false;
+    this.menu = false;
+    this.from = 0;
+    this.beatIndex = 0;
+    this.markSeated = false;
+    this.skyOn = 0;
+    this.dimNow = 0;
+    this.sent = undefined;
+    if (film) {
+      film.modelFade(1);
+      film.rain(null);
+      film.rim(null);
+      film.fade('mark', 0);
+      film.fade('chapter', 0);
+      for (let i = 0; i < 4; i++) {
+        film.clearTrace(`t${i}`);
+      }
+      film.duck(1);
+      film.time(4.4);
+      film.style(0);
+      /* the door's own hour: late afternoon, long shadow */
+      film.theme(2, true);
+      film.light({ az: -105 * RAD, el: 21 * RAD });
+      this.snap(BEATS[0]!.cam);
+    }
+    /* the run only exists while the film is booted; taking that away
+       ends it, and the door decides when the next one starts */
+    this.booted = false;
+    this.rolling = false;
+    this.gate = true;
+    this.posterAt = 0;
+    this.posterRaf ??= requestAnimationFrame(this.poster);
   };
 
   /** a choice made at the door before the scene finished loading */
@@ -5461,10 +5521,17 @@ export default class TowerFilm extends Component<{
       }
 
       /* ---- the front layer ------------------------------------------ */
+      /* THE WALL TEXT LEAVES BEFORE THE SEAM. Its own exit animation
+         runs when the next beat replaces it, which means the outgoing
+         setting is still on screen at the instant of the cut — so the
+         edit lands on a frame with two things happening in it. Half a
+         second of fade ahead of the change empties the corner first,
+         and the cut is then only ever about the picture. */
       .tf-type {
         position: absolute;
         inset: 0;
         z-index: 3;
+        opacity: var(--tf-type-a, 1);
         pointer-events: none;
         color: var(--tf-ink);
         font-family: var(--tf-display);
