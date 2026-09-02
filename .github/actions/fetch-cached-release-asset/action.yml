@@ -59,15 +59,24 @@ runs:
           echo "cache-key=${RUNNER_OS}-${RUNNER_ARCH}-${ASSET_NAME}-${ASSET_SHA256}"
         } >> "$GITHUB_OUTPUT"
 
+    # Restore and save are the split form of `actions/cache` rather than the
+    # combined one, because the combined form saves from a post step, and a
+    # post step this far inside nested composite actions is not given its
+    # inputs: it warns "Input required and not supplied: path" and saves
+    # nothing, so the entry never appears and every job goes to the CDN
+    # forever. An explicit save is an ordinary step and runs with these values
+    # resolved.
+    #
     # No `restore-keys`: a near-miss would restore some other asset, which the
     # checksum below would then reject and re-download anyway.
-    - name: Setup the asset cache
-      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+    - name: Restore the asset from the cache
+      uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
       with:
         path: ${{ steps.plan.outputs.dir }}
         key: ${{ steps.plan.outputs.cache-key }}
 
     - name: Fetch and verify
+      id: fetch
       shell: bash
       env:
         ASSET_NAME: ${{ inputs.name }}
@@ -85,6 +94,7 @@ runs:
         if [ -f "$ASSET_PATH" ] &&
            printf '%s  %s\n' "$ASSET_SHA256" "$ASSET_PATH" | sha256sum -c --status -; then
           echo "${ASSET_NAME} restored from the cache"
+          echo "downloaded=false" >> "$GITHUB_OUTPUT"
           exit 0
         fi
 
@@ -121,4 +131,15 @@ runs:
 
         mkdir -p "$ASSET_DIR"
         mv "$download" "$ASSET_PATH"
+        echo "downloaded=true" >> "$GITHUB_OUTPUT"
         echo "${ASSET_NAME} downloaded and verified"
+
+    # Saving only what was just downloaded keeps this a no-op on a cache hit.
+    # It warns rather than fails if the key is taken — by a concurrent job, or
+    # by the unoverwritable entry the annotation above describes.
+    - name: Save the asset to the cache
+      if: steps.fetch.outputs.downloaded == 'true'
+      uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+      with:
+        path: ${{ steps.plan.outputs.dir }}
+        key: ${{ steps.plan.outputs.cache-key }}
