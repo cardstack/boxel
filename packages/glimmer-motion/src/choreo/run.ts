@@ -55,7 +55,7 @@ function crVal(
   p2: number,
   p3: number,
   u: number,
-  k: number
+  k: number,
 ) {
   const m1 = k * (p2 - p0);
   const m2 = k * (p3 - p1);
@@ -77,7 +77,7 @@ function crVal(
  */
 function resolveThrough(
   from: Camera3DState,
-  through: Camera3DWaypoint[]
+  through: Camera3DWaypoint[],
 ): Camera3DState[] {
   const aimed = !!from.look || through.some((w) => w.look);
   const seed: Camera3DState = {
@@ -120,7 +120,7 @@ function sampleThrough(
   from: Camera3DState,
   through: Camera3DWaypoint[],
   progress: number,
-  tension?: number
+  tension?: number,
 ): Camera3DState {
   const k = (1 - (tension ?? 0.5)) / 2;
   const pts = resolveThrough(from, through);
@@ -183,7 +183,7 @@ function sampleThrough(
         p2.look![a],
         (p3.look ?? p2.look)![a],
         u,
-        k
+        k,
       );
     out.look = { x: l('x'), y: l('y'), z: l('z') };
   }

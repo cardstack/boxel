@@ -8,12 +8,12 @@ lagged, a seam that parked, a truck that pushed the frame the wrong way —
 and each disagreement taught a rule. This document is the rules, with the
 curve mathematics that carries most of the weight.
 
-The short version, if you keep only one paragraph: *the score authors
+The short version, if you keep only one paragraph: _the score authors
 intent and stays a pure function of the clock; a spline gives the path its
 shape; a cascaded spring gives the lens its mass; and every pair of things
 that must agree — a hole and its card, a pin and its dot, a 2D entrance
 and a 3D frame — is driven by ONE writer from ONE set of numbers in ONE
-frame.* Smoothness is never asked of two systems at once. It is computed
+frame._ Smoothness is never asked of two systems at once. It is computed
 once and worn twice.
 
 ---
@@ -21,14 +21,14 @@ once and worn twice.
 ## 0. The world itself, for readers who don't know threeui
 
 The 3D half is not ours, and understanding this document does not require
-knowing where it came from — but it does require knowing *what it is*.
+knowing where it came from — but it does require knowing _what it is_.
 "Living Green" is a shader landing page by Meng To, published in
 [threeui](https://threeui.com/browse), his library of three.js interface
 work. Sylva vendors it whole (`app/lib/sylva/scene.ts`, on its own pinned
 three r149), and the scene works like this:
 
 - **The roots are swept, not modelled.** Each limb is a tube swept along a
-  centreline traced off the original *artwork's alpha channel* — the
+  centreline traced off the original _artwork's alpha channel_ — the
   composition is described in fractions of that artwork's box
   (`[0.25, 0.566, 0.34]` is the crest, `[0.5, 0.779, −0.28]` the valley),
   which is why Sylva's hotspots are authored in the same fractions: a
@@ -72,7 +72,7 @@ driven, never edited.
 ## 1. One projection, two renderers
 
 The foundation, inherited from the mockup spike (`app/lib/css3d.ts`): the
-DOM does not *approximate* the WebGL camera, it *shares* it. Each frame the
+DOM does not _approximate_ the WebGL camera, it _shares_ it. Each frame the
 host reads the three.js camera's projection and view-inverse matrices and
 re-expresses them as CSS — `perspective()` for the focal length,
 `cameraCss()` for the view, `objectCss()` for each card's model matrix.
@@ -83,7 +83,7 @@ drift.
 This is the precondition for everything else. Any scheme where the DOM
 layer has its own idea of perspective — its own vanishing point, its own
 focal length, "close enough" transforms — fails the moment the camera
-moves, because parallax error is a *velocity* artifact: still frames look
+moves, because parallax error is a _velocity_ artifact: still frames look
 fine, and the seams appear exactly when things are in motion, which is
 always.
 
@@ -92,7 +92,7 @@ always.
 A card is real DOM **under** the canvas, visible through a hole the scene
 cuts at the card's exact pose: a rounded-rect `NoBlending` mesh that
 writes its (zero) alpha straight into the framebuffer. Because the hole is
-ordinary depth-tested geometry, occlusion is free and *honest* — moss
+ordinary depth-tested geometry, occlusion is free and _honest_ — moss
 nearer the camera covers the card the same way it covers bark, to the
 pixel, per fragment. No mask layer, no clip-path mirroring, no second
 opinion about what is in front.
@@ -119,12 +119,12 @@ B over 3.8s`. Each leg is a from→to lerp under an ease. The problem is at
 the seams, and it is mathematical, not aesthetic:
 
 - Any ease whose bezier has `y₁ = 0` **starts** at zero slope; any with
-  `y₂ = 1` **ends** at zero slope. That is *every* ease that "settles" —
+  `y₂ = 1` **ends** at zero slope. That is _every_ ease that "settles" —
   easeInOut, easeOut, the lot. A tour assembled from them halts at every
   boundary. Fly, park, fly, park: a slideshow wearing a camera move.
 - The first fix — a curve with matched non-zero boundary slopes (Sylva's
   interim `CARRY`, `[0.33, 0.13, 0.67, 0.87]`, entering and leaving at
-  ~0.4 of mean speed) — removes the *stop* but not the *kink*. Matched
+  ~0.4 of mean speed) — removes the _stop_ but not the _kink_. Matched
   slope in normalized time is not matched velocity in pose space: when one
   leg travels 152° of yaw and the next travels 20°, equal normalized
   slopes are a 7-to-1 real-velocity step at the join. The camera does not
@@ -139,13 +139,13 @@ path has to be one primitive.
 `c.Camera3D @through` runs a single step through N waypoints, sampled
 along a cardinal spline in pose space:
 
-- **Hermite basis, tangents from neighbours.** Segment *i* interpolates
+- **Hermite basis, tangents from neighbours.** Segment _i_ interpolates
   p₁→p₂ with tangents `m₁ = k·(p₂−p₀)`, `m₂ = k·(p₃−p₁)`, where
-  `k = (1−tension)/2`. Position *and velocity* are continuous at every
-  waypoint by construction — the camera *crosses* each pose, it never
+  `k = (1−tension)/2`. Position _and velocity_ are continuous at every
+  waypoint by construction — the camera _crosses_ each pose, it never
   arrives at one.
 - **`@tension` is the operator's grip.** Tension 0 is classic Catmull-Rom:
-  maximal tangents, lively, and it *sways* — between waypoints that change
+  maximal tangents, lively, and it _sways_ — between waypoints that change
   direction it overshoots, which read on screen as a springy, loose hand.
   Tension 1 collapses the tangents to zero: piecewise-linear, C0 again.
   The default 0.5 halves the tangents — a steady hand that still curves.
@@ -157,7 +157,7 @@ along a cardinal spline in pose space:
   Sylva's laps hand velocity to each other, so linear it is.)
 - **Yaw is interpolated numerically and unwrapped by the author.** A
   spline knows nothing about circles: fern at 172° to wren at −168° is a
-  340° swing back around the *front* of the scene unless the author writes
+  340° swing back around the _front_ of the scene unless the author writes
   192°. The unwrap is ~six lines (`legs` in `sylva-stage.gts`): express
   each waypoint's yaw in the previous one's winding, keeping every turn
   under a half circle. This bug is what sank the first attempt at
@@ -168,7 +168,7 @@ along a cardinal spline in pose space:
 - **It stays a pure function of the clock.** `pose(t)` is arithmetic on
   waypoints. A scrub, a replay, a render walked frame by frame — all land
   on identical poses. This is the property no integrator can offer, and
-  the reason the spline is the *score-side* half of the answer rather
+  the reason the spline is the _score-side_ half of the answer rather
   than the whole answer.
 
 ### 3.3 The cascade: derivatives the score cannot see
@@ -186,10 +186,10 @@ instead of obeying it.
 
 - **One critically-damped spring is C1, not C2.** Integrating
   `v̇ = ω²(goal − x) − 2ωv` carries velocity as state, so velocity crosses
-  every seam — but the *acceleration* term reads the goal directly. A goal
+  every seam — but the _acceleration_ term reads the goal directly. A goal
   that jumps (a look cue naming a new card) or bends (any seam) lands
   straight in the second derivative. The frame no longer stops; it
-  *flinches*. This distinction was invisible in theory and obvious on
+  _flinches_. This distinction was invisible in theory and obvious on
   screen.
 - **Two stages in series bound the jerk.** Feed the first spring's output
   to a second spring. Stage two only ever sees a target that is already
@@ -199,14 +199,14 @@ instead of obeying it.
   late for a card; total lag well under the approach time) and the aim
   through ω = 7 → 4.5 (its goal is a step function — the worst case — and
   a re-aim should read as the shot's own slow pan).
-- **A hand snaps the cascade.** Drag and wheel write pose *and* both
-  stages *and* zero the velocities. A chaser between a finger and its
+- **A hand snaps the cascade.** Drag and wheel write pose _and_ both
+  stages _and_ zero the velocities. A chaser between a finger and its
   camera is lag, and lag on direct manipulation reads as broken. The
   cascade is for the film; the hand is immediate.
 - **The price is random access.** An integrator's state depends on
   history. Playback and a frame-ordered render agree exactly; a scrub does
   not. Sylva accepts this the way Drift does — and the spline underneath
-  means the *scored* pose stays seekable even where the displayed one
+  means the _scored_ pose stays seekable even where the displayed one
   trails it by a rounded half-second.
 
 The composition is the point: **spline for shape (seekable, authored),
@@ -217,7 +217,7 @@ Neither alone survived contact with the scene.
 
 A five-number orbit pose has an implied centre, and an implied centre is a
 2D assumption wearing 3D clothes. The moment a scene has more than one
-subject the centre must move, *on the same clock as everything else*:
+subject the centre must move, _on the same clock as everything else_:
 
 - As a **Perform side-channel** (the first build), the aim was invisible
   to the timeline — un-scrubbable, eased by a second clock, and the source
@@ -234,22 +234,22 @@ Two geometric corollaries that only surface once the camera is free:
   and physically unable to frame a card at the far end of the root from
   behind. `pose()` now orbits `look` directly.
 - **The truck rides the view's axes.** A world-X truck pushes the frame
-  *left* when the camera stands behind the scene. Framing nudges are
+  _left_ when the camera stands behind the scene. Framing nudges are
   meaningful only in the camera's own right/up basis; with that fixed, a
   spot's `x: 0.04` means "a touch right of frame" from every angle.
 
 ## 4. Presentation timing: nothing may park, nothing may cut
 
 The cards are 2D animation (Motion springs on DOM); the camera is 3D. They
-read as one gesture only because of *when* things fire:
+read as one gesture only because of _when_ things fire:
 
 - **Opens are clipped INTO the flight** (`@at` a named step + `@delay`),
   not placed between steps. An open at a seam blooms at the camera's
-  slowest instant — arrive, stop, *then* grow, a beat of dead air per
+  slowest instant — arrive, stop, _then_ grow, a beat of dead air per
   card. Clipped mid-approach, the card grows out of its dot while the
   frame still carries real speed, and the two motions superimpose into one.
 - **Hand-offs are cross-fades, not cuts.** There is no per-card close.
-  The next card's open *swaps*: the leaver's exit spring and the
+  The next card's open _swaps_: the leaver's exit spring and the
   arrival's entrance run simultaneously, mid-flight — which is,
   incidentally, the spike's "several cards at once" case exercised at
   every seam. One targetless close, clipped into the going-home leg, puts
@@ -270,7 +270,7 @@ The deepest rule, and the one that fixed the ugliest bug. The card's
 entrance was Motion's (a spring on the shell's transform) while the hole
 was slaved to a `getComputedStyle` read of it from the host's loop. Two
 rAF callbacks, no ordering guarantee: whenever the host's frame ran first,
-the hole wore *last* frame's pose — a dark notch chasing the card's
+the hole wore _last_ frame's pose — a dark notch chasing the card's
 leading corner at spring speed. Not a tuning problem. A **topology**
 problem: two consumers, two clocks, one truth.
 
@@ -288,17 +288,17 @@ and hand both consumers the same numbers in the same frame.
 - **2D plane ↔ 3D camera:** §1 — the matrices are literally shared.
 
 Where one writer is impossible (the DOM compositor versus the GL
-swap), the agreement is *structural* instead: both consumers are written
+swap), the agreement is _structural_ instead: both consumers are written
 in the same rAF callback, before either paints.
 
 ## 6. Input closes the loop
 
 Occlusion that only affects pixels is a picture; occlusion that affects
-*clicks* is a world. The DOM knows nothing about what the canvas drew over
+_clicks_ is a world. The DOM knows nothing about what the canvas drew over
 it, so a card behind a branch still receives pointer events. `swallow`
 raycasts the press against the wood first: if the root is nearer along
 that ray than the card, the press belongs to the moss. In the other
-direction, the cards' triggers reach back *into* the scene — the sway
+direction, the cards' triggers reach back _into_ the scene — the sway
 uniforms, the spray, the butterfly's state machine — so causality runs
 both ways through the same seam the rendering does.
 
