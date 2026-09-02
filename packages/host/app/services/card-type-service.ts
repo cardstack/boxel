@@ -128,18 +128,36 @@ export default class CardTypeService extends Service {
       return cached;
     }
     let moduleIdentifier = moduleFrom(ref);
-    let moduleURL = this.network.virtualNetwork.toURL(moduleIdentifier);
-    let moduleInfo = await this.moduleInfo(moduleURL);
+    let moduleInfo = await this.moduleInfo(moduleIdentifier, loader);
 
     let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let { id: _remove, ...fields } = api.getFields(card, {
       includeComputeds: true,
     });
     let superCard = getAncestor(card);
+    let childStack = [card, ...stack];
     let superType: Type | CodeRefType | undefined;
     if (superCard && card !== superCard) {
-      superType = await this.toType(superCard, loader, [card, ...stack]);
+      superType = await this.toType(superCard, loader, childStack);
     }
+
+    // Every field below resolves against the same stack, so one shared promise
+    // per distinct field type is what the several dozen color fields of a theme
+    // card need in order to traverse `ColorField` once between them instead of
+    // once each. Confined to this node's fan-out — which is what makes it safe
+    // where a service-wide in-flight cache is not. A promise here is only ever
+    // awaited by its siblings, and everything it awaits in turn sits deeper in
+    // `childStack`, so these await edges only point away from the sharers and
+    // can never close a cycle. See `typeCache` above for what does.
+    let inFlight = new Map<typeof BaseDef, Promise<Type | CodeRefType>>();
+    let resolveField = (fieldCard: typeof BaseDef) => {
+      let existing = inFlight.get(fieldCard);
+      if (!existing) {
+        existing = this.toType(fieldCard, loader, childStack);
+        inFlight.set(fieldCard, existing);
+      }
+      return existing;
+    };
 
     let fieldTypes: FieldOfType[] = await Promise.all(
       Object.entries(fields).map(
@@ -148,7 +166,7 @@ export default class CardTypeService extends Service {
           type: field.fieldType,
           isComputed: field.computeVia != undefined,
           isQueryField: field.queryDefinition != undefined,
-          card: await this.toType(field.card, loader, [card, ...stack]),
+          card: await resolveField(field.card),
         }),
       ),
     );
@@ -167,7 +185,28 @@ export default class CardTypeService extends Service {
     return type;
   }
 
-  private moduleInfo(url: URL): Promise<ModuleInfo> {
+  // The extension of the file a definition lives in. The loader records the
+  // resolved, extension-bearing URL of every module it imports, and a
+  // definition we hold a class for has necessarily been imported — so the
+  // answer is normally already in memory and costs nothing. Only a module
+  // whose recorded spelling carries no extension needs resolving over the
+  // network: a shim registered under a bare specifier is recorded under that
+  // specifier, and a loader replaced since the class was captured holds no
+  // record at all.
+  private async moduleInfo(
+    moduleIdentifier: string,
+    loader: Loader,
+  ): Promise<ModuleInfo> {
+    let extension = extensionOfURL(loader.canonicalURLFor(moduleIdentifier));
+    if (extension) {
+      return { extension };
+    }
+    return this.fetchedModuleInfo(
+      this.network.virtualNetwork.toURL(moduleIdentifier),
+    );
+  }
+
+  private fetchedModuleInfo(url: URL): Promise<ModuleInfo> {
     let pending = this.moduleInfoCache.get(url.href);
     if (!pending) {
       pending = this.fetchModuleInfo(url);
@@ -185,11 +224,11 @@ export default class CardTypeService extends Service {
     return pending;
   }
 
-  // A code ref names its module without an extension (`.../color`), and the
-  // realm resolves that to the file the module lives in (`.../color.gts`), so
-  // the response URL carries the extension. The loader records the same
-  // resolved URL when it imports a module, which is a cheaper source for a
-  // definition it has necessarily already loaded.
+  // The fallback for a module the loader cannot place. A code ref names its
+  // module without an extension (`.../color`) and the realm resolves that to
+  // the file the module lives in (`.../color.gts`), so the response URL
+  // carries the extension — at the cost of a redirect plus a download of
+  // source nothing here reads.
   private async fetchModuleInfo(url: URL): Promise<ModuleInfo> {
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
@@ -203,6 +242,20 @@ export default class CardTypeService extends Service {
       );
     }
     return { extension: extensionOf(new URL(response.url).pathname) };
+  }
+}
+
+// The extension of a module spelling that may not be a URL at all — a shim's
+// bare specifier, or nothing when the loader has no record. Anything that does
+// not parse as a URL has no extension to report.
+function extensionOfURL(href: string | undefined): string {
+  if (!href) {
+    return '';
+  }
+  try {
+    return extensionOf(new URL(href).pathname);
+  } catch {
+    return '';
   }
 }
 

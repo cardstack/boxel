@@ -716,6 +716,24 @@ export class Loader {
     return [...this.modules.keys()];
   }
 
+  // The URL this loader actually loaded a module from: the resolved spelling,
+  // extension included, which the extensionless and alias forms of the same
+  // identifier do not carry. A caller holding something this loader exported
+  // can ask where it came from without going back to the network. Undefined
+  // for a module this loader has not loaded, and for an identifier that does
+  // not resolve to a URL — a shim registered under a bare specifier is
+  // recorded under that specifier, so the answer is not always a URL.
+  canonicalURLFor(moduleIdentifier: string): string | undefined {
+    try {
+      return this.getCanonicalModuleURL(this.resolveImport(moduleIdentifier));
+    } catch (e) {
+      if (e instanceof TypeError) {
+        return undefined;
+      }
+      throw e;
+    }
+  }
+
   // Synchronous sibling of `getConsumedModules` limited to modules already
   // known to this loader. Output is in the same canonical identifier form:
   // realm-prefix (RRI) spelling where a prefix mapping is registered,

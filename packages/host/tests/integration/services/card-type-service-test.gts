@@ -2,7 +2,6 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
-import type { Loader } from '@cardstack/runtime-common/loader';
 
 import type { Type } from '@cardstack/host/services/card-type-service';
 
@@ -20,7 +19,6 @@ import type { BaseDef } from '@cardstack/base/card-api';
 const COLORISH_FIELD_COUNT = 8;
 
 module('Integration | services | card-type-service', function (hooks) {
-  let loader: Loader;
   let requestLog: string[] = [];
   // When set, the recorder answers the next request whose URL starts with this
   // prefix with a 500 instead of passing it through.
@@ -36,8 +34,6 @@ module('Integration | services | card-type-service', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    loader = getService('loader-service').loader;
-
     await setupIntegrationTestRealm({
       mockMatrixUtils,
       contents: {
@@ -60,6 +56,20 @@ module('Integration | services | card-type-service', function (hooks) {
             @field muted = contains(ColorishField);
             @field border = contains(ColorishField);
             @field ring = contains(ColorishField);
+          }
+        `,
+        // Two cards in one module that link to each other. The module inspector
+        // assembles every declaration in a module concurrently, so these two
+        // become concurrent roots whose traversals reference one another.
+        'linked.gts': `
+          import { field, linksTo, linksToMany, CardDef } from 'https://cardstack.com/base/card-api';
+          export class Post extends CardDef {
+            static displayName = 'Post';
+            @field author = linksTo(() => Author);
+          }
+          export class Author extends CardDef {
+            static displayName = 'Author';
+            @field posts = linksToMany(() => Post);
           }
         `,
       },
@@ -105,16 +115,45 @@ module('Integration | services | card-type-service', function (hooks) {
     return requestLog.filter((url) => url.startsWith(prefix));
   }
 
-  test('fields sharing a type fetch that shared module once between them', async function (assert) {
-    let { ThemeField } = (await loader.import(`${testRealmURL}theme`)) as {
+  // Always the loader the service will itself use, read at call time: the
+  // service resolves `loader-service.loader` on every assembly, and a loader
+  // captured earlier in setup can since have been replaced.
+  function currentLoader() {
+    return getService('loader-service').loader;
+  }
+
+  async function importTheme() {
+    let { ThemeField } = (await currentLoader().import(
+      `${testRealmURL}theme`,
+    )) as {
       ThemeField: typeof BaseDef;
     };
     let cardTypeService = getService('card-type-service');
     cardTypeService.invalidateAllCaches();
     requestLog.length = 0;
+    return { ThemeField, cardTypeService };
+  }
+
+  // Forces the module-info fallback by hiding what the loader knows about
+  // where its modules came from, so the tests below that are about the
+  // fallback exercise it rather than the in-memory path.
+  function hideLoaderModuleURLs() {
+    currentLoader().canonicalURLFor = () => undefined;
+  }
+
+  test('assembling a type reads the extension the loader already resolved, without asking the realm', async function (assert) {
+    let { ThemeField, cardTypeService } = await importTheme();
 
     let type: Type = await cardTypeService.assembleType(ThemeField);
 
+    // The witness for the absence assertions below: the extension and the
+    // whole field list were produced, so an empty request log means they were
+    // produced without asking the realm, not that nothing happened.
+    assert.strictEqual(
+      type.moduleInfo.extension,
+      '.gts',
+      'the extension was resolved',
+    );
     assert.strictEqual(
       type.fields.length,
       COLORISH_FIELD_COUNT,
@@ -126,36 +165,10 @@ module('Integration | services | card-type-service', function (hooks) {
       'the fields all resolved to the shared field type',
     );
 
-    let colorishRequests = requestsFor(`${testRealmURL}colorish`);
-    assert.strictEqual(
-      colorishRequests.length,
-      1,
-      `the shared field type's module was requested once, not once per field (got ${colorishRequests.length}: ${colorishRequests.join(', ')})`,
-    );
-  });
-
-  test('assembling a type asks for no realm info', async function (assert) {
-    let { ThemeField } = (await loader.import(`${testRealmURL}theme`)) as {
-      ThemeField: typeof BaseDef;
-    };
-    let cardTypeService = getService('card-type-service');
-    cardTypeService.invalidateAllCaches();
-    requestLog.length = 0;
-
-    let type = await cardTypeService.assembleType(ThemeField);
-    assert.strictEqual(
-      type.moduleInfo.extension,
-      '.gts',
-      'the module info that is assembled is the file extension',
-    );
-
-    // Positive control: an absence assertion over a recording is only worth
-    // anything once the recording is known to have caught the traffic it is
-    // being asked about.
-    assert.strictEqual(
-      requestsFor(`${testRealmURL}colorish`).length,
-      1,
-      'the recorder observed the assembly it is being asked about',
+    assert.deepEqual(
+      requestsFor(`${testRealmURL}colorish`),
+      [],
+      'the module the loader has already placed was not re-requested',
     );
     assert.deepEqual(
       requestLog.filter((url) => new URL(url).pathname.endsWith('/_info')),
@@ -164,13 +177,41 @@ module('Integration | services | card-type-service', function (hooks) {
     );
   });
 
-  test('a failed module-info fetch is not cached, so the next assembly retries', async function (assert) {
-    let { ThemeField } = (await loader.import(`${testRealmURL}theme`)) as {
-      ThemeField: typeof BaseDef;
-    };
-    let cardTypeService = getService('card-type-service');
-    cardTypeService.invalidateAllCaches();
-    requestLog.length = 0;
+  test('the fields sharing a type resolve to one traversal between them', async function (assert) {
+    let { ThemeField, cardTypeService } = await importTheme();
+
+    let type: Type = await cardTypeService.assembleType(ThemeField);
+    let resolved = type.fields.map((f) => f.card as Type);
+
+    assert.strictEqual(
+      new Set(resolved).size,
+      1,
+      `all ${COLORISH_FIELD_COUNT} fields share one assembled type, rather than each building its own (got ${new Set(resolved).size} distinct)`,
+    );
+  });
+
+  test('the fallback fetches a shared module once for all the fields that share it', async function (assert) {
+    let { ThemeField, cardTypeService } = await importTheme();
+    hideLoaderModuleURLs();
+
+    let type: Type = await cardTypeService.assembleType(ThemeField);
+    assert.strictEqual(
+      type.moduleInfo.extension,
+      '.gts',
+      'the fallback resolved the extension',
+    );
+
+    let colorishRequests = requestsFor(`${testRealmURL}colorish`);
+    assert.strictEqual(
+      colorishRequests.length,
+      1,
+      `the shared field type's module was requested once, not once per field (got ${colorishRequests.length}: ${colorishRequests.join(', ')})`,
+    );
+  });
+
+  test('a failed fallback fetch is not cached, so the next assembly retries', async function (assert) {
+    let { ThemeField, cardTypeService } = await importTheme();
+    hideLoaderModuleURLs();
 
     failNextRequestTo = `${testRealmURL}colorish`;
     await assert.rejects(
@@ -191,6 +232,42 @@ module('Integration | services | card-type-service', function (hooks) {
       [...new Set(type.fields.map((f) => (f.card as Type).displayName))],
       ['Colorish'],
       'the retry assembles the type it failed to assemble before',
+    );
+  });
+
+  test('mutually-referencing declarations in one module assemble concurrently', async function (assert) {
+    let { Post, Author } = (await currentLoader().import(
+      `${testRealmURL}linked`,
+    )) as {
+      Post: typeof BaseDef;
+      Author: typeof BaseDef;
+    };
+    let cardTypeService = getService('card-type-service');
+    cardTypeService.invalidateAllCaches();
+
+    // How the module inspector assembles a module: one root per declaration,
+    // all at once. `Post` references `Author` and `Author` references `Post`,
+    // so each root's traversal reaches the other. Sharing in-flight type
+    // promises across roots would leave these two awaiting each other and this
+    // would never settle.
+    let [postType, authorType] = (await Promise.all([
+      cardTypeService.assembleType(Post),
+      cardTypeService.assembleType(Author),
+    ])) as [Type, Type];
+
+    assert.strictEqual(postType.displayName, 'Post', 'the Post root settled');
+    assert.strictEqual(
+      authorType.displayName,
+      'Author',
+      'the Author root settled',
+    );
+    assert.ok(
+      postType.fields.some((f) => f.name === 'author'),
+      'the Post root resolved its link to Author',
+    );
+    assert.ok(
+      authorType.fields.some((f) => f.name === 'posts'),
+      'the Author root resolved its link to Post',
     );
   });
 });
