@@ -116,7 +116,13 @@ function commandOwnDeadlineMs(args: string[]): number | undefined {
   return undefined;
 }
 
-const DEFAULT_DEADLINE_MS = 60_000;
+/**
+ * How long a command gets before the harness kills it, absent anything more
+ * specific. Exported because `vitest.config.mjs` has to keep its own budgets
+ * above this one — see the ladder described there, and
+ * `tests/lib/deadline-ladder.test.ts`.
+ */
+export const RUN_BOXEL_DEFAULT_DEADLINE_MS = 60_000;
 /**
  * How far the harness's deadline must sit above the command's own. Only needs
  * to cover the command noticing its deadline, printing its diagnostic, and
@@ -137,11 +143,11 @@ function resolveDeadline(
 ): number {
   let ownDeadline = commandOwnDeadlineMs(args);
   if (ownDeadline === undefined) {
-    return requested ?? DEFAULT_DEADLINE_MS;
+    return requested ?? RUN_BOXEL_DEFAULT_DEADLINE_MS;
   }
   let floor = ownDeadline + DEADLINE_MARGIN_MS;
   if (requested === undefined) {
-    return Math.max(DEFAULT_DEADLINE_MS, floor);
+    return Math.max(RUN_BOXEL_DEFAULT_DEADLINE_MS, floor);
   }
   if (requested < floor) {
     throw new Error(

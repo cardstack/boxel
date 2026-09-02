@@ -97,7 +97,7 @@ beforeAll(async () => {
   home = testHome.home;
   cleanupProfile = testHome.cleanup;
   await setupTestProfile(testHome.profileManager);
-}, 60_000);
+});
 
 afterAll(async () => {
   cleanupProfile?.();
