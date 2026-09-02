@@ -25,6 +25,13 @@ BOXEL_PG_IMAGE=postgres:16.3
 # base one — and each process opens its own pg pool (up to PG_POOL_MAX=40).
 # That already clears half a dozen pools, and a burst that crosses the ceiling
 # fails callers with "sorry, too many clients already".
+#
+# Applied by boxel_pg_repair_max_connections, never as a `docker run -c` flag.
+# A flag lands on pg_settings.source = 'command line', which outranks
+# postgresql.auto.conf and so cannot be raised without discarding the
+# container — which is the exact trap this file exists to get out of. Going
+# through ALTER SYSTEM for new and inherited containers alike keeps every one
+# of them repairable the next time this number moves.
 BOXEL_PG_MAX_CONNECTIONS=400
 
 # Stamped on every connection this file opens, so the deferral check can tell
@@ -213,27 +220,28 @@ boxel_pg_repair_max_connections() {
   return "$_bpg_status"
 }
 
-# Create the container if it is missing, start it, and make sure an existing one
-# is running the settings above. Tolerates concurrent invocations — run-p and
-# mise infra:ensure-pg can both call this at once — so losing the creation race
-# is fine: `docker start` covers it.
+# Create the container if it is missing, start it, and bring its ceiling up to
+# BOXEL_PG_MAX_CONNECTIONS. Tolerates concurrent invocations — run-p and mise
+# infra:ensure-pg can both call this at once — so losing the creation race is
+# fine: `docker start` covers it.
 boxel_pg_ensure_running() {
-  _bpg_created=
   if [ -z "$(docker ps -f "name=$BOXEL_PG_CONTAINER" --all --format '{{.Names}}')" ]; then
     echo "Starting new $BOXEL_PG_CONTAINER container on port ${PGPORT:-5435}..."
     # Running postgres on 5435 so it doesn't collide with a native postgres
-    # that may already be running on the machine.
-    if docker run --name "$BOXEL_PG_CONTAINER" \
+    # that may already be running on the machine. The ceiling is deliberately
+    # not passed here — see BOXEL_PG_MAX_CONNECTIONS above.
+    docker run --name "$BOXEL_PG_CONTAINER" \
       -e POSTGRES_HOST_AUTH_METHOD=trust \
       -p "${PGPORT:-5435}":5432 \
-      -d "$BOXEL_PG_IMAGE" \
-      -c max_connections="$BOXEL_PG_MAX_CONNECTIONS" >/dev/null 2>&1; then
-      _bpg_created=yes
-    fi
+      -d "$BOXEL_PG_IMAGE" >/dev/null 2>&1 || true
   fi
-  docker start "$BOXEL_PG_CONTAINER" >/dev/null 2>&1 || true
 
-  # A container this call created already has the flag; only an inherited one
-  # can have drifted.
-  [ -n "$_bpg_created" ] || boxel_pg_repair_max_connections || true
+  # Only a container that is actually running can be repaired. Without this,
+  # a stopped Docker daemon sends the repair off to spend its whole readiness
+  # budget probing a container that isn't there, turning an immediate return
+  # into a silent minute.
+  if docker start "$BOXEL_PG_CONTAINER" >/dev/null 2>&1; then
+    boxel_pg_repair_max_connections || true
+  fi
+  return 0
 }
