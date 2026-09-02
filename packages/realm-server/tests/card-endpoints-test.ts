@@ -4893,6 +4893,11 @@ boxel:
                     page: { size: 1 },
                   },
                 });
+                @field partiallyFailingMatches = linksToMany(Person, {
+                  query: {
+                    realms: ['${providerRealmURL}', '${UNREACHABLE_REALM_URL}'],
+                  },
+                });
               }
             `,
             'favorite.json': {
@@ -5022,6 +5027,11 @@ boxel:
         matchesRelationship?.meta?.errors,
         'successful remote query does not include errors metadata',
       );
+      assert.strictEqual(
+        matchesRelationship?.meta?.total,
+        1,
+        'a query whose every realm answered reports its match count',
+      );
       assert.deepEqual(
         matchesRelationship?.data,
         [{ type: 'card', id: `${providerRealmURL}person-remote` }],
@@ -5079,6 +5089,34 @@ boxel:
           (error: any) => error.realm === UNREACHABLE_REALM_URL,
         ),
         'meta includes unreachable realm entry for failing query',
+      );
+      assert.strictEqual(
+        failingRelationship.meta.total,
+        undefined,
+        'a query whose realm failed reports no match count',
+      );
+
+      // One realm answered and one did not. The realm that failed reported no
+      // count, and how many instances it holds is exactly what the failure
+      // withheld — so the rows in hand look like the whole set and a rollup
+      // over them would read as final. The count is withheld rather than
+      // summed from the realms that happened to answer.
+      let partialRelationship = relationships.partiallyFailingMatches;
+      assert.deepEqual(
+        partialRelationship?.data,
+        [{ type: 'card', id: `${providerRealmURL}person-remote` }],
+        'the reachable realm still contributes its results',
+      );
+      assert.ok(
+        partialRelationship?.meta?.errors?.some(
+          (error: any) => error.realm === UNREACHABLE_REALM_URL,
+        ),
+        'and the unreachable realm is recorded as an error',
+      );
+      assert.strictEqual(
+        partialRelationship?.meta?.total,
+        undefined,
+        'no match count is claimed while one realm is unaccounted for',
       );
       let failingSearchLink = failingRelationship.links?.search;
       assert.ok(

@@ -1422,13 +1422,11 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a custom captureSpec bypasses the ledger and never persists', async function (assert) {
+    test('a custom captureSpec persists under its own capture identity and returns its served URL', async function (assert) {
       await seedInstanceRow();
       // A canonical (format-only) capture exists; the custom-spec request
-      // must not serve it — the ledger identity cannot represent viewport /
-      // scale / clip overrides, so a canonical entry is the wrong image for
-      // this request, and persisting the custom render under that identity
-      // would poison the canonical `_screenshot/` URL.
+      // must not serve it — the two specs are distinct capture identities,
+      // so a canonical entry is the wrong image for this request.
       await putMedia(dbAdapter, adapter, {
         realmURL: REALM_URL,
         sourceURL: CARD_ID,
@@ -1460,14 +1458,66 @@ module(basename(import.meta.filename), function () {
         captureSpec,
         'the custom spec reaches the job',
       );
-      assert.strictEqual(
+      assert.deepEqual(
         (published[0]?.args as any)?.persist,
-        null,
-        'the custom capture is never persisted',
+        {
+          realmURL: REALM_URL,
+          sourceURL: CARD_ID,
+          captureSpecHash: await captureSpecHash({
+            format: 'isolated',
+            ...captureSpec,
+          }),
+          sourceGeneration: 1,
+          lane: 'on-demand',
+        },
+        'the persist identity hashes the full spec, overrides included',
       );
-      assert.false(
-        'captures' in response.body.data.attributes,
-        'no served URL for a capture the ledger cannot key',
+      assert.strictEqual(
+        response.body.data.attributes.captures[0].url,
+        `${REALM_URL}_screenshot/Person/fadhlan?viewport=1280x800`,
+        'the served URL carries the spec so it round-trips through the GET DSL',
+      );
+    });
+
+    test('a custom captureSpec answers from its own ledger entry with zero render work', async function (assert) {
+      await seedInstanceRow();
+      let captureSpec = {
+        viewport: { width: 1280, height: 800 },
+        deviceScaleFactor: 2,
+      };
+      await putMedia(dbAdapter, adapter, {
+        realmURL: REALM_URL,
+        sourceURL: CARD_ID,
+        captureSpecHash: await captureSpecHash({
+          format: 'isolated',
+          ...captureSpec,
+        }),
+        sourceGeneration: 1,
+        bytes: PNG_BYTES,
+        contentType: 'image/png',
+        lane: 'on-demand',
+        width: 2560,
+        height: 1600,
+      });
+      let { queue, published } = makePersistQueue('ready');
+
+      let response = await post(persistApp(queue), {
+        realmURL: REALM_URL,
+        cardId: CARD_ID,
+        format: 'isolated',
+        captureSpec,
+      }).expect(201);
+
+      assert.deepEqual(published, [], 'no job was enqueued');
+      let capture = response.body.data.attributes.captures[0];
+      assert.strictEqual(
+        capture.url,
+        `${REALM_URL}_screenshot/Person/fadhlan?viewport=1280x800&dsf=2`,
+      );
+      assert.strictEqual(
+        capture.deviceScaleFactor,
+        2,
+        'the spec-declared scale factor is reported',
       );
     });
 
@@ -1744,32 +1794,49 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(decision, { type: 'join', jobId: 7 });
     });
 
-    test('an incoming job with captureSpec overrides always inserts', function (assert) {
-      // The persist identity cannot represent the overrides, so joining a
-      // canonical twin would hand this caller the wrong image.
+    function customSpecArgs(): Record<string, unknown> {
+      return {
+        ...canonicalArgs(),
+        captureSpec: { viewport: { width: 1280, height: 800 } },
+        // A producer hashes the full spec into the persist identity, so a
+        // custom-spec job's persist differs from the canonical one's.
+        persist: { ...PERSIST, captureSpecHash: 'custom456' },
+      };
+    }
+
+    test('same-spec custom captures join like canonical ones', function (assert) {
       let decision = chooseScreenshotCardCoalesceDecision({
-        incoming: jobSpec({
-          ...canonicalArgs(),
-          captureSpec: { viewport: { width: 1280, height: 800 } },
-        }),
-        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [{ ...jobSpec(customSpecArgs()), id: 7 }],
+        inFlightCandidates: [],
+      });
+      assert.deepEqual(decision, { type: 'join', jobId: 7 });
+    });
+
+    test('a captureSpec mismatch is never a twin, even under one persist identity', function (assert) {
+      // Belt-and-braces against a producer whose spec and hash disagree:
+      // joining hands the caller the twin's render verbatim, so the specs
+      // themselves must match, not just their claimed hash.
+      let decision = chooseScreenshotCardCoalesceDecision({
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [
+          {
+            ...jobSpec({
+              ...customSpecArgs(),
+              captureSpec: { viewport: { width: 640, height: 480 } },
+            }),
+            id: 7,
+          },
+        ],
         inFlightCandidates: [],
       });
       assert.deepEqual(decision, { type: 'insert' });
     });
 
-    test('a candidate with captureSpec overrides is never a twin', function (assert) {
+    test('a custom capture never joins a canonical twin', function (assert) {
       let decision = chooseScreenshotCardCoalesceDecision({
-        incoming: jobSpec(canonicalArgs()),
-        candidates: [
-          {
-            ...jobSpec({
-              ...canonicalArgs(),
-              captureSpec: { deviceScaleFactor: 2 },
-            }),
-            id: 7,
-          },
-        ],
+        incoming: jobSpec(customSpecArgs()),
+        candidates: [{ ...jobSpec(canonicalArgs()), id: 7 }],
         inFlightCandidates: [],
       });
       assert.deepEqual(decision, { type: 'insert' });

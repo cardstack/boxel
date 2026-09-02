@@ -120,6 +120,7 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
@@ -517,6 +518,15 @@ export interface StoreSearchResource<T extends CardDef | FileDef = CardDef> {
   readonly isLoading: boolean;
   readonly meta: QueryResultsMeta;
   readonly errors?: ErrorEntry[];
+  // How many rows the query matches, as against how many `instances` holds.
+  // `undefined` is unknown, never zero. Prefer this over reading
+  // `meta.page.total`: the raw meta carries a placeholder in states where no
+  // count is knowable, and this getter is what tells those apart.
+  readonly totalMatchCount: number | undefined;
+  // `instances` is a bounded prefix of what the query matches. Computed from
+  // the server's own result set rather than the reconciled one, so a locally
+  // edited or created card can't be mistaken for a short page.
+  readonly isPartial: boolean;
 }
 
 export type GetSearchResourceFuncOpts = {
@@ -538,6 +548,15 @@ export type GetSearchResourceFuncOpts = {
     // skipped query-backed expansion — the resource loads each ID by
     // URL instead of running a live re-query.
     cardURLs?: string[];
+    // The result meta the seed was resolved under, chiefly `page.total` —
+    // the query's match count, which exceeds `cards.length` when the page
+    // ceiling clamped the expansion. Absent it, the resource takes the
+    // record count for the total and a truncated seed reads as complete.
+    meta?: QueryResultsMeta;
+    // The seed's match count is not knowable and must not be inferred from its
+    // rows — the producer resolved the field but deliberately reported no
+    // total, as a query-backed field does when one of its realms failed.
+    totalUnknown?: boolean;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -3991,19 +4010,28 @@ function lazilyLoadLink(
     let isFileLink = isFileDef(field.card);
     try {
       let fieldValue: CardDef | FileDef;
-      // Inside an indexing render the store is job-scoped: the prerender tab is
-      // reset (`render` route `clearCache` -> `store.resetCache()`) on the first
-      // render of each indexing job, so every instance in it was deserialized
-      // during THIS job, from a realm source that is immutable for the job's
-      // life. So an instance already in the store is current — reuse it directly
+      // Inside an indexing render the store is scoped to the realm view being
+      // rendered: it drops every instance it holds when the render scope moves
+      // (the host store's `observeIndexingJob`, called before a render
+      // hydrates its card and from the load path — not a member of the
+      // `CardStore` interface in this file), so every instance in it was
+      // deserialized
+      // against THIS view of the realm's files. Note it is that drop which
+      // carries the guarantee, not the `clearCache` reset — that one is
+      // scheduled only when a pass invalidates an executable, and reaches only
+      // the single tab its visit lands on, so a pass that changed only
+      // instances schedules none at all.
+      // So an instance already in the store is current — reuse it directly
       // instead of re-fetching its card+source and re-running the full field
       // deserialization on every link edge that points at it. That per-edge
       // redundancy is what makes a densely cross-linked render quadratic (the
       // same target reached through many parents is rebuilt once per parent).
       // The per-consumer dependency is still recorded so invalidation tracks
-      // this edge. Gated on BOTH the render flag AND `__boxelJobId`: outside a
-      // render (the live app) a link may be stale after invalidation and must
-      // reload, and a render with no job id has no job-scoped-store guarantee.
+      // this edge. Gated on BOTH the render flag AND `__boxelJobId` — the same
+      // gate the store scopes itself on: outside a render (the live app) a link
+      // may be stale after invalidation and must reload, and a render carrying
+      // no job id is one whose store never scoped itself, so it offers no
+      // guarantee to reuse on.
       let inIndexingRender =
         typeof globalThis !== 'undefined' &&
         Boolean((globalThis as any).__boxelRenderContext) &&
@@ -4245,18 +4273,52 @@ registerRelationshipProbe((instance, field) => {
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
+    let queryTotalMatchCount: number | undefined;
+    let queryIsPartial = false;
+    // Recorded when the field's results were resolved, so it is available on
+    // the seeded path — which is where a partial realm failure otherwise reads
+    // as a complete set, the indexed document having baked in the rows that
+    // did arrive.
+    let queryHasUnreachableRealms = queryFieldHasUnreachableRealms(
+      instance,
+      field.name,
+    );
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
-      // directly), so this takes precedence.
+      // directly), so this takes precedence. A failed search matched nothing it
+      // could report, so the count stays unknown rather than reading a stale
+      // one off the resource.
       queryMembership = [relationshipStateForEntry(bucketEntry)];
     } else if (!isLoading && resource) {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
+      // Both come off the resource rather than being recomputed here. It is the
+      // only place that holds the server's match count and the server's own
+      // result set together; `instances` above is that set reconciled against
+      // local Store state, so measuring a shortfall against it would report one
+      // whenever a card was edited out of the filter locally.
+      queryTotalMatchCount = resource.totalMatchCount;
+      queryIsPartial = resource.isPartial;
+      // Unless the search lost a realm. The count then covers only the realms
+      // that answered — a floor rather than the match count — so it is withheld
+      // and the shortfall is reported without one, the same answer the
+      // indexer's own leg gives for the same situation.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+        queryTotalMatchCount = undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
-    return { isLoading, isQueryField: true, queryMembership };
+    return {
+      isLoading,
+      isQueryField: true,
+      queryMembership,
+      queryTotalMatchCount,
+      queryIsPartial,
+      queryHasUnreachableRealms,
+    };
   }
   return {
     isLoading: hasInflightLoadForField(instance, field.name),
@@ -5591,6 +5653,10 @@ class FallbackCardStore implements CardStore {
       isLoading: false,
       meta: { page: { total: 0 } },
       errors: undefined,
+      // No search ran, so there is no match count — `undefined`, not the zero
+      // in `meta` above, which is a placeholder for the rendering path.
+      totalMatchCount: undefined,
+      isPartial: false,
     } as StoreSearchResource<T>;
   }
 }

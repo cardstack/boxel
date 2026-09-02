@@ -276,41 +276,71 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
       assert.true(get.body.errors[0].message.includes('method must be QUERY'));
     });
 
-    test('the item-leg page size is capped server-side', async function (assert) {
-      // The server enforces a hard page ceiling on the live item leg for every
-      // caller (the card `@context` cap is a separate, lower client-side
-      // limit). Lower the ceiling for the test so the two-card realm exercises
-      // both branches.
-      setSearchBoundsForTests({ serverMaxPageSize: 1 });
+    test('the item-leg page size is bounded server-side', async function (assert) {
+      // The server bounds the live item leg for every caller, as a pair: a
+      // request naming no page takes the default, and one naming a size is
+      // honored up to the absolute maximum and clamped to it above. (The card
+      // `@context` cap is a separate, lower client-side limit that still
+      // rejects.) Lower both for the test so the two-card realm exercises every
+      // branch.
+      setSearchBoundsForTests({
+        serverMaxPageSize: 1,
+        serverAbsoluteMaxPageSize: 2,
+      });
       try {
-        // An explicit item-leg page over the ceiling is rejected.
-        let over = await postSearch({
+        // Naming no page takes the default; the true match count still rides
+        // meta.page.total so a caller can paginate.
+        let unpaged = await postSearch({
+          filter: personFilter(),
+          fields: { entry: ['item'] },
+        });
+        assert.strictEqual(unpaged.status, 200);
+        assert.strictEqual(
+          unpaged.body.data.length,
+          1,
+          'a request naming no page gets the default',
+        );
+        assert.strictEqual(
+          unpaged.body.meta.page.total,
+          2,
+          'the true match count is preserved',
+        );
+
+        // Naming a size above the default is the opt-in — honored, rather than
+        // clamped back to the default.
+        let optedIn = await postSearch({
           filter: personFilter(),
           fields: { entry: ['item'] },
           page: { size: 2 },
         });
+        assert.strictEqual(optedIn.status, 200);
         assert.strictEqual(
-          over.status,
-          400,
-          'an over-ceiling item-leg page is rejected',
+          optedIn.body.data.length,
+          2,
+          'a page above the default but within the maximum is honored',
         );
 
-        // An absent page is clamped to the ceiling; the true match count still
-        // rides meta.page.total so a caller can paginate.
-        let clamped = await postSearch({
+        // Above the absolute maximum it is clamped rather than rejected, so
+        // every leg applying this bound agrees on the page.
+        let over = await postSearch({
           filter: personFilter(),
           fields: { entry: ['item'] },
+          page: { size: 5 },
         });
-        assert.strictEqual(clamped.status, 200);
         assert.strictEqual(
-          clamped.body.data.length,
-          1,
-          'the returned page is clamped to the ceiling',
+          over.status,
+          200,
+          'an over-maximum item-leg page is clamped, not rejected',
         );
         assert.strictEqual(
-          clamped.body.meta.page.total,
+          over.body.data.length,
           2,
-          'the true match count is preserved',
+          'clamped to the maximum, not to the default',
+        );
+        assert.strictEqual(
+          over.body.meta.page.total,
+          2,
+          'and the true match count is still reported',
         );
       } finally {
         resetSearchBoundsForTests();
