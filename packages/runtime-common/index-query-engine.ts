@@ -263,6 +263,15 @@ export interface QueryResultsMeta {
   page: {
     total: number;
   };
+  // The result set omits rows nobody counted, so `page.total` covers less than
+  // the query asked about and is a floor rather than the match count. Two
+  // things leave a result set that way: a realm the query fanned out to did not
+  // answer, so the total sums only the realms that did; or the search failed as
+  // a unit, so nothing was counted and the total describes an empty result set
+  // rather than an empty match set. A consumer that reports a count must treat
+  // the total as unknown while this is set — publishing it claims a number over
+  // the very rows whose absence made it unknowable.
+  incomplete?: boolean;
 }
 
 // A mapper for fields that can be sorted on but are not an attribute of a card

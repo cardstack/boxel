@@ -914,7 +914,15 @@ export class SearchResource<
         }
         this.#log.error(`search task failed`, err);
         this._errors = [searchErrorEntry(err)];
-        this._meta = { page: { total: 0 } };
+        // Zero rows, and zero is not a count of anything. The search failed as
+        // a unit, so what the query matches was never computed — reporting the
+        // empty result set as `total: 0` unqualified would state a confident
+        // nought over an unknown match set, and a rollup reading it settles on
+        // the one number no failure can justify. Labelling it incomplete keeps
+        // the shape callers expect while saying the total is not a count, which
+        // is what makes a field over this leg withhold it and report the
+        // shortfall instead.
+        this._meta = { page: { total: 0 }, incomplete: true };
         if (this._instances.length > 0) {
           try {
             await this.updateInstances([], dependencyTrackingContext);

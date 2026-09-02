@@ -120,6 +120,7 @@ import {
   captureQueryFieldSeedData,
   ensureQueryFieldSearchResource,
   peekQueryFieldSearchResource,
+  queryFieldHasUnreachableRealms,
   resolveQueryFieldEagerly,
   validateRelationshipQuery,
 } from './query-field-support';
@@ -538,6 +539,11 @@ export type GetSearchResourceFuncOpts = {
     // skipped query-backed expansion — the resource loads each ID by
     // URL instead of running a live re-query.
     cardURLs?: string[];
+    // The result meta the seed was resolved under, chiefly `page.total` —
+    // the query's match count, which exceeds `cards.length` when the page
+    // ceiling clamped the expansion. Absent it, the resource takes the
+    // record count for the total and a truncated seed reads as complete.
+    meta?: QueryResultsMeta;
   };
 };
 export type GetSearchResourceFunc<T extends CardDef | FileDef = CardDef> = (
@@ -4254,18 +4260,48 @@ registerRelationshipProbe((instance, field) => {
     let isLoading = resource?.isLoading ?? false;
     let bucketEntry = getDataBucket(instance).get(field.name);
     let queryMembership: RelationshipState[] | undefined;
+    let queryTotalMatchCount: number | undefined;
+    // Recorded when the field's results were resolved, so it is available on
+    // the seeded path — which is where a partial realm failure otherwise reads
+    // as a complete set, the indexed document having baked in the rows that
+    // did arrive.
+    let queryHasUnreachableRealms = queryFieldHasUnreachableRealms(
+      instance,
+      field.name,
+    );
     if (isLinkError(bucketEntry) || isLinkNotFound(bucketEntry)) {
       // A search that failed as a unit surfaces one whole-field sentinel —
       // independent of whether a live resource exists (it may have been planted
-      // directly), so this takes precedence.
+      // directly), so this takes precedence. A failed search matched nothing it
+      // could report, so the count stays unknown rather than reading a stale
+      // one off the resource.
       queryMembership = [relationshipStateForEntry(bucketEntry)];
     } else if (!isLoading && resource) {
       queryMembership = (resource.instances ?? []).map((card) =>
         relationshipStateForEntry(card),
       );
+      // The page ceiling bounds `instances` but not this: it is what the query
+      // matched, so the two disagree exactly when the field holds a prefix.
+      //
+      // Unless the search lost a realm. Then the total covers only the realms
+      // that answered, which is a floor rather than the match count, so it is
+      // withheld — and the field is short by the amount that realm withheld
+      // along with it.
+      if (resource.meta?.incomplete) {
+        queryHasUnreachableRealms = true;
+      } else {
+        let total = resource.meta?.page?.total;
+        queryTotalMatchCount = typeof total === 'number' ? total : undefined;
+      }
     }
     // Otherwise membership stays undefined: in flight, or never queried.
-    return { isLoading, isQueryField: true, queryMembership };
+    return {
+      isLoading,
+      isQueryField: true,
+      queryMembership,
+      queryTotalMatchCount,
+      queryHasUnreachableRealms,
+    };
   }
   return {
     isLoading: hasInflightLoadForField(instance, field.name),

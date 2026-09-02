@@ -51,6 +51,11 @@ interface QueryFieldState {
   // batch of stable per-card GETs.
   seedCardURLs?: string[];
   seedRealms?: string[];
+  // The query's true match count, off `relationships.{field}.meta.total`. It
+  // exceeds the seeded record count once the page ceiling clamped the
+  // indexer's expansion, which is the only way this side can tell it was
+  // handed a prefix rather than the whole set.
+  seedTotal?: number;
   seedErrors?: Array<{
     realm: string;
     type: string;
@@ -206,6 +211,26 @@ export function ensureQueryFieldSearchResource(
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
+            // What the resource is allowed to believe about the match count.
+            // A count the indexer reported passes through as the count. Where
+            // it reported none but recorded a realm failure, the rows in hand
+            // are labelled a floor instead: absent any meta the resource infers
+            // the total from the record count, and a set short by a realm
+            // nobody could count would then read as the whole of it — a
+            // confident number over an incomplete set, which is the failure
+            // this field's status exists to report rather than reproduce.
+            // An ordinary seed carries neither, and the resource's own
+            // inference stands.
+            ...(fieldState?.seedTotal != null
+              ? { meta: { page: { total: fieldState.seedTotal } } }
+              : fieldState?.seedErrors?.length
+                ? {
+                    meta: {
+                      page: { total: seedRecords.length },
+                      incomplete: true,
+                    },
+                  }
+                : {}),
           }
         : undefined,
     },
@@ -286,6 +311,22 @@ export function peekQueryFieldSearchResource(
   fieldName: string,
 ): StoreSearchResource | undefined {
   return queryFieldStates.get(instance)?.get(fieldName)?.searchResource;
+}
+
+// Whether the realms this field targets all answered when its results were
+// resolved. A realm that failed contributes its error and no rows, so the
+// field holds a set that is short by an amount nobody can measure — the count
+// it would have contributed is exactly what the failure withheld.
+//
+// Read alongside the match count rather than instead of it: once a search
+// reports a count, that count describes what the field holds now and this
+// record of an earlier failure no longer bears on it.
+export function queryFieldHasUnreachableRealms(
+  instance: BaseDef,
+  fieldName: string,
+): boolean {
+  let errors = queryFieldStates.get(instance)?.get(fieldName)?.seedErrors;
+  return (errors?.length ?? 0) > 0;
 }
 
 // Mirror the SearchResource's resource-level error state onto the data bucket
@@ -631,6 +672,16 @@ export function captureQueryFieldSeedData(
     ? parseRealmsParam(new URL(fieldState.seedSearchURL))
     : [];
   fieldState.seedErrors = (relationship?.meta as any)?.errors ?? undefined;
+  // Only meaningful alongside a seed the indexer resolved. A raw source file's
+  // relationships carry no `meta.total`, and an unresolved seed is about to be
+  // replaced by a live query that reports its own total.
+  let seedTotal = (relationship?.meta as any)?.total;
+  fieldState.seedTotal =
+    fieldState.seedSearchURL != null &&
+    typeof seedTotal === 'number' &&
+    Number.isFinite(seedTotal)
+      ? seedTotal
+      : undefined;
 }
 
 function resolveQueryAndRealm(
@@ -680,6 +731,17 @@ function resolveQueryAndRealm(
     return undefined;
   }
 
+  // Deliberately the query as authored, with no page ceiling applied. The
+  // ceiling is the server's to enforce — `_search` clamps this query's page on
+  // arrival, and the indexer clamps the same query in its own expansion — and
+  // the number behind it is an ops-tunable env var this side cannot read. A
+  // client that guessed at it would produce a query differing from the one the
+  // seed URL advertises the moment an operator tuned it, and a seeded resource
+  // decides whether to skip its initial search by comparing exactly those two.
+  // Guessing wrong there costs a redundant `_federated-search` per query field
+  // per loaded card; leaving the page off costs nothing, because the server
+  // bounds the result set either way and reports the true match count alongside
+  // it.
   return {
     realmHrefs: normalized.realms,
     searchURL: buildQuerySearchURL(normalized.realms, normalized.query),
