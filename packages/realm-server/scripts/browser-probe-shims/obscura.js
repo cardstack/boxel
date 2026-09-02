@@ -1,3 +1,4 @@
+/* eslint-env browser, es2021 */
 // Page init script for standby-boot-probe.ts --shim: the two gaps that stop
 // the host booting and rendering on Obscura 0.2.1.
 if (typeof document.queryCommandSupported !== 'function') {
@@ -18,7 +19,9 @@ if (typeof document.queryCommandSupported !== 'function') {
         });
         return out;
       }
-    } catch (_e) {}
+    } catch (_e) {
+      // fall through to the array / plain-object paths
+    }
     if (Array.isArray(h)) {
       for (let [k, v] of h) out[k] = v;
       return out;

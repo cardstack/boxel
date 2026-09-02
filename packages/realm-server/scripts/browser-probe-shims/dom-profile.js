@@ -1,3 +1,4 @@
+/* eslint-env browser, es2021 */
 // Page init script for standby-boot-probe.ts --shim: wraps hot DOM entry
 // points with call counters and wall-time accumulators so a boot can be
 // attributed. Read the totals with --after "__domProfileTop(20)".
@@ -58,7 +59,7 @@ if (typeof document.queryCommandSupported !== 'function') {
       set: function (v) {
         let t = now();
         try {
-          return orig.call(this, v);
+          orig.call(this, v);
         } finally {
           let e = prof[key];
           e.calls++;
