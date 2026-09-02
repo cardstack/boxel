@@ -74,8 +74,9 @@ module('Unit | matrix | message-builder', function (hooks) {
     );
     assert.strictEqual(
       labelFromToolName('patchCardInstance'),
-      'PatchCardInstance',
+      'Patch card instance',
     );
+    assert.strictEqual(labelFromToolName('SyncCommand_ab12'), 'Sync command');
     assert.strictEqual(labelFromToolName(undefined), undefined);
     assert.strictEqual(labelFromToolName(''), undefined);
   });

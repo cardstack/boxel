@@ -24,8 +24,9 @@ import type { SerializedFile } from '@cardstack/base/file-api';
 
 type ToolCallStatus = 'applied' | 'ready' | 'applying' | 'invalid' | 'failed';
 
-// 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant'. Tool
-// names are a slug plus a short hash suffix (see
+// 'read-file-for-ai-assistant_a831' -> 'Read file for ai assistant',
+// 'patchCardInstance' -> 'Patch card instance'. Tool names are a kebab or
+// camelCase slug, usually with a short hash suffix (see
 // buildCommandFunctionNameFromResolvedRef).
 export function labelFromToolName(name: string | undefined) {
   if (!name) {
@@ -33,8 +34,10 @@ export function labelFromToolName(name: string | undefined) {
   }
   let words = name
     .replace(/_[0-9a-f]+$/i, '')
-    .split(/[-_]+/)
-    .filter(Boolean);
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
   if (words.length === 0) {
     return undefined;
   }
@@ -99,14 +102,18 @@ export default class MessageTool {
 
   get description() {
     // The model does not always send the `description` label (it is optional
-    // for validation). Fall back to attributes.description, then to a readable
-    // form of the tool name, so the pill never renders empty for a call that
-    // ran. No name yet means the request is still streaming in; the pill
-    // shows its own placeholder for that.
+    // for validation). Fall back to attributes.description, then, once the
+    // message has finished streaming, to a readable form of the tool name, so
+    // the pill never renders empty for a call that ran. While the message is
+    // still streaming a request arrives with its name first and its arguments
+    // later; returning undefined then keeps the pill's own "preparing"
+    // placeholder until the model's sentence lands.
     return (
       this.arguments?.description ||
       this.arguments?.attributes?.description ||
-      labelFromToolName(this.name)
+      (this.message.isStreamingFinished
+        ? labelFromToolName(this.name)
+        : undefined)
     );
   }
 

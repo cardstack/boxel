@@ -662,6 +662,10 @@ export const TOOL_CALL_DESCRIPTION_SCHEMA = {
     'One short sentence, for the user, saying what this call does and why.',
 } as const;
 
+// What the model is told a tool call must include. Deliberately stricter
+// than host validation, which requires only `attributes`.
+export const TOOL_CALL_REQUIRED_PROPERTIES = ['attributes', 'description'];
+
 export function getPatchTool(
   attachedOpenCardId: CardDef['id'],
   patchSpec: any,
@@ -691,7 +695,7 @@ export function getPatchTool(
             },
           },
         },
-        required: ['attributes', 'description'],
+        required: TOOL_CALL_REQUIRED_PROPERTIES,
       },
     },
   };

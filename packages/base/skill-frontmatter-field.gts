@@ -11,6 +11,7 @@ import {
 import {
   basicMappings,
   TOOL_CALL_DESCRIPTION_SCHEMA,
+  TOOL_CALL_REQUIRED_PROPERTIES,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import * as CardAPI from './card-api';
@@ -227,7 +228,7 @@ async function generateToolDefinitions(
                   description: TOOL_CALL_DESCRIPTION_SCHEMA,
                   ...(await tool.getInputJsonSchema(CardAPI, mappings)),
                 },
-                required: ['attributes', 'description'],
+                required: TOOL_CALL_REQUIRED_PROPERTIES,
               },
             },
           };

@@ -22,6 +22,7 @@ import { canonicalizeMatrixMediaKey } from '@cardstack/runtime-common/ai/matrix-
 import {
   basicMappings,
   TOOL_CALL_DESCRIPTION_SCHEMA,
+  TOOL_CALL_REQUIRED_PROPERTIES,
 } from '@cardstack/runtime-common/helpers/ai';
 
 import type CardService from '../services/card-service';
@@ -406,7 +407,7 @@ export default class FileDefManagerImpl
                   mappings,
                 )),
               },
-              required: ['attributes', 'description'],
+              required: TOOL_CALL_REQUIRED_PROPERTIES,
             },
           },
         },
