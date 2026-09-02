@@ -123,3 +123,21 @@ gain)` plays a decoded buffer with a 70 ms rise, ducks the bed and lifts
 - **Tooling trap, recorded:** a backtick anywhere inside a `.gts`
   `<template>` (a CSS comment counts) makes ember-eslint-parser fail with
   "Invalid count value" at 0:0.
+
+## Cut 11 — A/B in the glass
+
+A dissolve between two moving shots without a second renderer. At the cut
+the page clones camera A with the velocity it had (the last frame's delta
+in position and rotation) and, for the length of the dissolve, renders
+the scene for both cameras — A extrapolated, B live — each through the
+post pass, mixed by the same uniform the freeze uses. The first frame is
+still the graded freeze, so there is no gap; the cost is 2× for half a
+second. `__film.dissolve(kind, ms, live)` takes the flag,
+`__film.dissolving()` reports `{mix, live, running}`.
+
+The host asks for `live` only when nothing but the lens changes across
+the seam. A seam that changes the hour, the weather, the model, the snow
+or the mood keeps the still: a live A drawn under B's light is the old
+shot dressed wrong. That is the same rule as the still-join snap, from
+the other side — the still is A, the live is B, and each must be entirely
+itself.

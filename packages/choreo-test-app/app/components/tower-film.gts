@@ -1591,7 +1591,7 @@ interface FilmApi {
    * it over the next; false when the page cannot, so the caller falls
    * back to `snapshot()` and a still in the DOM
    */
-  dissolve(kind: 'blend' | 'melt', ms?: number): boolean;
+  dissolve(kind: 'blend' | 'melt', ms?: number, live?: boolean): boolean;
   duck(v: number): void;
   dur: number;
   fade(id: string, opacity: number): void;
@@ -3712,7 +3712,20 @@ export default class TowerFilm extends Component<{
           /* the crossfade lives in the glass now; the still is the
              fallback, and a stale one must never stand in for it */
           this.freeze = '';
-          if (!film.dissolve(join)) {
+          /* A/B IN THE GLASS: when nothing but the lens changes across
+             the seam, the outgoing shot keeps moving under the dissolve
+             (the page draws both cameras). A seam that changes the hour,
+             the weather, the model, the snow or the mood keeps the graded
+             still — a live A under B's light is the old shot dressed
+             wrong, which is worse than a frozen one. */
+          const live =
+            beat.theme === undefined &&
+            beat.wx === undefined &&
+            beat.style === undefined &&
+            beat.winter === undefined &&
+            beat.grade === undefined &&
+            !beat.hours;
+          if (!film.dissolve(join, undefined, live)) {
             const shot = film.snapshot();
             this.freeze = shot.length > 64 ? shot : '';
           }
