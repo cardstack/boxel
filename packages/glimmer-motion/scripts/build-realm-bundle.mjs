@@ -24,8 +24,8 @@
  *
  * Config: .choreo-realm-sync.json (gitignored) at the monorepo root:
  *   {
- *     "workspace": "/absolute/path/to/complex-macaw",
- *     "realmUrl":  "https://realms-staging.stack.cards/ctse/complex-macaw/"
+ *     "workspace": "/absolute/path/to/a/boxel/workspace",
+ *     "realmUrl":  "https://example.com/my-realm/"
  *   }
  */
 import { spawnSync } from 'node:child_process';
@@ -255,8 +255,8 @@ function loadConfig() {
     throw new Error(
       'Missing .choreo-realm-sync.json at the monorepo root. Create it with:\n\n' +
         '  {\n' +
-        '    "workspace": "/Users/chris/boxel-workspaces/stack.cards/ctse/complex-macaw",\n' +
-        '    "realmUrl":  "https://realms-staging.stack.cards/ctse/complex-macaw/"\n' +
+        '    "workspace": "/absolute/path/to/a/boxel/workspace",\n' +
+        '    "realmUrl":  "https://example.com/my-realm/"\n' +
         '  }\n',
     );
   }
