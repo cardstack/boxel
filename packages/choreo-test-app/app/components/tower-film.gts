@@ -168,6 +168,7 @@ interface Beat {
     | 'flash'
     | 'iris'
     | 'luma'
+    | 'melt'
     | 'sweep'
     | 'whip'
     | 'wipe';
@@ -512,11 +513,13 @@ const BEATS: Beat[] = [
   {
     cam: { dolly: 0.72, lookY: 1.0, ox: 0.16, pitch: 8, yaw: 2 },
     ch: 0,
-    /* the argument's first turn arrives on the push dissolve */
+    /* out of the worm's-eye and into the argument on the long, soft
+       one: two shots of the same thought, so the seam should be felt
+       and not seen (nearly two seconds, no push, no colour) */
     cut: true,
     gloss: 'keep · watchtower',
     id: 'what',
-    join: 'blend',
+    join: 'melt',
     says: ['A lookout.', 'A strongroom.', 'An argument.'],
     kanji: '天守閣',
     kicker: 'ONE BUILDING, THREE JOBS',
@@ -795,6 +798,9 @@ const BEATS: Beat[] = [
     gloss: 'four things worth naming',
     id: 'detail',
     lead: 2,
+    /* raking, not overhead: a profile is only visible when the light
+       crosses it, and this whole chapter is about profiles */
+    sun: { az: -88, el: 23 },
     says: ['One building.', 'One moment.', 'Only the lens moves.'],
     kanji: '細部',
     kicker: 'LOOK CLOSER',
@@ -1138,6 +1144,14 @@ const BEATS: Beat[] = [
     hush: true,
     id: 'unbuild',
     join: 'blend',
+    /* GOLDEN HOUR, and it is a decision rather than a mood: the film's
+       poster stands in the late light, so ending there closes the loop
+       — and a low raking sun is the only light that makes a building
+       coming apart read as silhouette rather than as parts. The middle
+       chapters stay bright and even because they are explaining; the
+       ending is allowed to be beautiful. */
+    sun: { az: -104, el: 15 },
+    theme: 2,
     kanji: '解体',
     kicker: 'AND BACK DOWN',
     mode: 'lower',
@@ -1160,6 +1174,9 @@ const BEATS: Beat[] = [
     cut: true,
     id: 'coda',
     join: 'blend',
+    /* the last of the same light the door stood in */
+    sun: { az: -100, el: 12 },
+    theme: 2,
     says: ['A roof', 'built tall enough', 'to be seen from the fields'],
     kanji: '天守',
     mode: 'title',
@@ -1285,6 +1302,8 @@ export default class TowerFilm extends Component<{
   /** the captured outgoing frame every freeze-based join plays with */
   @tracked private freeze = '';
   @tracked private blendStamp = 0;
+  /** the slow one: a pure crossfade, no push, no colour */
+  @tracked private meltStamp = 0;
   /** the 'dip' join's veil colour, and the key that replays the dip */
   @tracked private dipColor = '#0d0905';
   @tracked private dipStamp = 0;
@@ -2035,6 +2054,12 @@ export default class TowerFilm extends Component<{
            the lens flies out of the poster's circuit. Two things the
            viewer did not ask for, both answering the same click. */
         w.__film.theme(2, true);
+        /* LATE AFTERNOON, not dusk. Sunset light is beautiful and casts
+           almost nothing; a poster wants the building to throw a long
+           hard shadow across the empty half of the frame, which means
+           the sun stays up (about twenty degrees) and comes from the
+           side the type is not on. */
+        w.__film.light({ az: -105 * RAD, el: 21 * RAD });
         /* seat the lens where the film opens, so the first frame is the
            shot and not a swing towards it */
         this.snap(this.beats[0]!.cam);
@@ -2863,6 +2888,8 @@ export default class TowerFilm extends Component<{
             this.blurStamp += 1;
           } else if (join === 'luma') {
             this.lumaStamp += 1;
+          } else if (join === 'melt') {
+            this.meltStamp += 1;
           } else if (join === 'blend') {
             this.blendStamp += 1;
           } else if (join === 'iris') {
@@ -3542,6 +3569,21 @@ export default class TowerFilm extends Component<{
         faded over the live incoming shot — keyed per blend so each
         dissolve plays from its own first frame. It sits under the
         grade, so both frames wear the same colourist's pass. }}
+        {{! THE MELT. The long, soft one: the outgoing frame simply
+        leaves, over nearly two seconds, with no push and no colour —
+        for a seam between two shots that are the same THOUGHT. }}
+        {{#each (array this.meltStamp) key="@identity" as |ms|}}
+          {{#if ms}}
+            <img
+              class="tf-melt"
+              src={{this.freeze}}
+              alt=""
+              aria-hidden="true"
+              {{this.retire}}
+            />
+          {{/if}}
+        {{/each}}
+
         {{#each (array this.blendStamp) key="@identity" as |bs|}}
           {{#if bs}}
             <img
@@ -4463,6 +4505,32 @@ export default class TowerFilm extends Component<{
         100% {
           mask-position: 100% 100%;
           -webkit-mask-position: 100% 100%;
+          opacity: 0;
+        }
+      }
+
+      .tf-melt {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+        filter: var(--tf-lut);
+        animation: tf-melt 1900ms cubic-bezier(0.4, 0, 0.5, 1) forwards;
+      }
+
+      @keyframes tf-melt {
+        0% {
+          opacity: 1;
+        }
+
+        22% {
+          opacity: 0.92;
+        }
+
+        100% {
           opacity: 0;
         }
       }
