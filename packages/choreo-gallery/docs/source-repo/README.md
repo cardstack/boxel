@@ -49,7 +49,9 @@ A third piece, **`choreo-player`**, is a dependency-free headless transport for 
 
 > Naming: Motion (motion.dev) is the library formerly called framer-motion; its React package is still published as `framer-motion`, which is why upstream paths in this repo read `packages/framer-motion/…`. The repo is **Choreo**; the published package is still **`glimmer-motion`** — one npm name, unchanged, and every import in these docs is the real one.
 
-**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. The choreography design docs: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [demo-recording.md](docs/demo-recording.md) (external clocks), [dom-in-3d.md](docs/dom-in-3d.md) (a `<Choreo>` region as a plane in a three.js scene), [dialkit.md](docs/dialkit.md) (an evaluation: what a parameter-tuning panel would cost and what of it is worth taking), [drift.md](docs/drift.md) (the stage that answers it — a driving model deliberately written by hand, because the loop it needs is not a score), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
+**New here?** [docs/guide.md](docs/guide.md) teaches the binding from a Glimmer card rather than a React translation table. Then: [choreography.md](docs/choreography.md) (the model and its boxel-motion ancestry), [choreo-constructs.md](docs/choreo-constructs.md) (the full construct reference), [step-vocabulary.md](docs/step-vocabulary.md) (the open vocabulary: anchors, composite steps, derived values), [nested-choreo.md](docs/nested-choreo.md) (regions and far matching), [choreo-splices.md](docs/choreo-splices.md) (cuts as a first-class citizen of a score), [film.md](docs/film.md) (the `<Film>` construct, as built), [planes-and-cameras.md](docs/planes-and-cameras.md) and [dom-in-3d.md](docs/dom-in-3d.md) (a `<Choreo>` region as a plane in a three.js scene), [demo-recording.md](docs/demo-recording.md) (external clocks), [choreo-player.md](docs/choreo-player.md) (the headless transport), [realm-publishing.md](docs/realm-publishing.md), and [postmortem-follow.md](docs/postmortem-follow.md) — the engineering post-mortem that shaped the derived-value API, kept because the mistakes teach more than the result.
+
+`docs/` is the documentation. The workshop behind it — design records, handoffs, measurements, the films' scripts and wall text — is in [notes/](notes), which is drafts by definition: some of it describes things proposed and never built, or built and since changed.
 
 - [Why choreography?](#why-choreography)
 - [Install](#install)
@@ -329,7 +331,7 @@ The mapping from three.js to CSS is **85 lines** (`test-app/app/lib/css3d.ts`): 
 
 ## The film: `<Film>`
 
-Two films were cut by hand on the same engine before the construct was written — **Towers** (`/_towers`) and **Sagrada Família** (`/_sagrada`) — and 69% of the second was the first. `<Film>` is that 69%, lifted: a headless cutting room in which a 3D page takes the place of the video track, and everything else is a component reading one clock — the chased lens, the joins (wipe, dip, blend, iris, melt, blur, luma, flash, defocus), the lower third and the plate on Choreo, the timeline, the voice with its measured reads, the transport, the front door and the end card.
+Two films were cut by hand on the same engine before the construct was written — **Towers** (`/towers`) and **Sagrada Família** (`/sagrada`) — and 69% of the second was the first. `<Film>` is that 69%, lifted: a headless cutting room in which a 3D page takes the place of the video track, and everything else is a component reading one clock — the chased lens, the joins (wipe, dip, blend, iris, melt, blur, luma, flash, defocus), the lower third and the plate on Choreo, the timeline, the voice with its measured reads, the transport, the front door and the end card.
 
 ```gts
 import { Film } from 'glimmer-motion/film';
@@ -344,7 +346,9 @@ import { Film } from 'glimmer-motion/film';
 
 A film is its shot list (data an agent edits), its script with the reads measured by ffprobe, its chapters, the geometry sampled off its model, and an identity block. The one-task behaviours — walk up the street and only then put your head back, follow the part being built, no line on a thing still going up — are beat fields with their handles exposed. The picture is a port (`Picture`), so a third film can hand in something other than an iframe.
 
-[docs/film-construct.md](docs/film-construct.md) is the design record: the two reference films, the duplication measured, the fork between a seekable film and a chased one, and what was built.
+[docs/film.md](docs/film.md) is the **as-built reference**: every argument and block, the beat table, the clock and its one-tick cue offset, the two seek modes, the `Picture` port — and the section that matters most for the rest of the library, how `<Film>` composes with the other constructs rather than replacing them. It is an ordinary consumer of `<Choreo>`: one `c.Camera3D @through` for the entire picture, one `c.Perform` per beat anchored with `at('film')`, the lower third on its own region, and — in exact mode — two Choreo runs the film drives by writing `run.time` instead of playing them.
+
+[notes/film-construct.md](notes/film-construct.md) is the design record behind it: the two reference films, the duplication measured, the fork between a seekable film and a chased one, and what was built.
 
 ---
 

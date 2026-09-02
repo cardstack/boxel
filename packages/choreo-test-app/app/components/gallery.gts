@@ -1,4 +1,4 @@
-import { concat, fn } from '@ember/helper';
+import { array, concat, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
@@ -13,6 +13,11 @@ import {
 import { highlightSample } from 'test-app/lib/highlight';
 import { restWhenOff } from 'test-app/lib/onstage';
 import { isCrossing } from 'test-app/lib/tempo';
+
+/* LinkTo wants a models tuple; a route with no dynamic segment wants an
+   empty one, and a literal [] in the template would be a new array every
+   render */
+const EMPTY: string[] = [];
 
 const DEEP_DIVE = 'Deep Dive';
 const filters = ['All', ...groups, DEEP_DIVE] as const;
@@ -384,7 +389,13 @@ export class Gallery extends Component {
                 {{/let}}
               {{/if}}
             </div>
-            <LinkTo @route="demo" @model={{demo.id}} class="card-meta">
+            {{! a film owns its own name and is not served from
+                /:demo_id — see DemoEntry.route }}
+            <LinkTo
+              @route={{if demo.route demo.route "demo"}}
+              @models={{if demo.route EMPTY (array demo.id)}}
+              class="card-meta"
+            >
               <span
                 class="card-group"
                 {{motion id=(concat "group-" demo.id) role="type"}}

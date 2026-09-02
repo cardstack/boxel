@@ -73,7 +73,7 @@ export class FeatureReel extends Component {
   private ready = new Promise<void>((resolve) => (this.resolveReady = resolve));
 
   /**
-   * The composition host (docs/choreo-composition.md, Phase C1). Cues are
+   * The composition host (notes/choreo-composition.md, Phase C1). Cues are
    * idempotent semantic commands folded through the composition clock in
    * BOTH modes; parameter channels are capture-only reconstruction — in
    * preview the demos play their own engines.
@@ -334,7 +334,7 @@ export class FeatureReel extends Component {
 
   /**
    * Live preview: the runs PLAY — play() is GPU, renderAt(t) is a still
-   * (docs/choreo-composition.md, scope decisions). This clock only fires
+   * (notes/choreo-composition.md, scope decisions). This clock only fires
    * cues through the same fold capture uses, and retimes a newly compiled
    * replacement run to the composition clock ONCE; it never pauses or
    * seeks a run that is already playing.
@@ -553,7 +553,7 @@ export class FeatureReel extends Component {
         {{! the natural authoring contract: a move, then a wait. Every
             wait here once had to be a constant-easing camera duplicate so a
             random-access seek would land on the pose — the workaround
-            docs/external-clock-camera-seek-handoff.md records. The score
+            notes/external-clock-camera-seek-handoff.md records. The score
             staying Wait-based IS the proof the transport reconstructs. }}
         <c.Parallel>
           <c.Sequence>

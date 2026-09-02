@@ -1,7 +1,7 @@
 /**
  * `glimmer-motion/film` — the film construct: a headless cutting room in
  * which a 3D scene takes the place of the video track. See
- * docs/film-construct.md for the two reference films it was lifted from.
+ * notes/film-construct.md for the two reference films it was lifted from.
  */
 export { Clip } from './clip.gts';
 export {

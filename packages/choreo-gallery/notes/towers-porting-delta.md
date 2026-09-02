@@ -183,7 +183,7 @@ ducks under the voice; the demo page's well takes the film's own aspect.
 
 Later the same cut: the narrative goes on every face — the gallery card,
 the door, the tile, the deep dive's opening and a director's statement
-(`docs/towers-about.md`), the end card — _not a video: a live 3D composite
+(`notes/towers-about.md`), the end card — _not a video: a live 3D composite
 with motion graphics, interactive chapters, its own mixer, rendered in the
 browser at any size; entirely generated with AI, directed by a human_. The
 bar's chapters glyph is gone (the chapter name beside the clock is the way

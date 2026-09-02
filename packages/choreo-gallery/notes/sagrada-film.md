@@ -216,7 +216,7 @@ completion date, and the credits no longer claim someone else's work.
 ## Status: the second reference film
 
 This film is committed as the second creative reference for the Choreo
-film construct — see `docs/film-construct.md` for what the two films have
+film construct — see `notes/film-construct.md` for what the two films have
 in common, what a `<c.Film>` would absorb, and the traps found building
 them. `/_sagrada` serves the picture alone: no wall plate, no deep dive.
 The notes component is still in the repo for whoever writes the construct;

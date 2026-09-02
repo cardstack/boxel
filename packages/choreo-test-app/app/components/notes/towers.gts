@@ -236,7 +236,7 @@ const TowersNotes: TOC<{
           join possible. The full design note lives at
           <code>docs/choreo-splices.md</code>; the quality pass and its numbers
           in
-          <code>docs/towers-quality.md</code>.
+          <code>notes/towers-quality.md</code>.
         </p>
       </div>
     </section>

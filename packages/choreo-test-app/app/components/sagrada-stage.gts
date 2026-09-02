@@ -10,24 +10,27 @@ import { FilmTile } from 'test-app/components/film-tile';
 import config from 'test-app/config/environment';
 
 /**
- * The Towers film's catalog faces, on the Sylva pattern (sylva-stage.gts):
- * the demo page does not run the film in-process — a vendored three.js
- * world, a shader post pass and per-beat audio sharing a main thread with
- * the gallery's Magic Move is a pacing bug wearing a demo's clothes — so
- * the stage face mounts the theater route in an IFRAME (`?embed` strips
- * the gate, the transport and the dive, and begins muted), with the same
- * ⛶ Theater door Sylva's stage wears. The tile face is a POSTER — drawn,
- * not rendered: no WebGL in a gallery card, ever. See film-tile.
+ * The Sagrada Família film's catalog faces, on the Towers pattern
+ * (tower-stage.gts), which is Sylva's: the demo page does not run the
+ * film in-process — a vendored three.js basilica, a shader post pass and
+ * per-beat audio sharing a main thread with the gallery's Magic Move is a
+ * pacing bug wearing a demo's clothes — so the stage face mounts the
+ * theater route in an IFRAME (`?embed` strips the gate, the transport and
+ * the dive, and begins muted). The tile face is a POSTER — one frame of
+ * the film read back through the picture's own snapshot(): no WebGL in a
+ * gallery card, ever. See film-tile.
  */
-const EMBED = `${config.rootURL}towers?embed`;
+const EMBED = `${config.rootURL}sagrada?embed`;
 /* one frame of the film, read back through the picture's own snapshot()
    — see scripts/film-poster.mjs. The type over it is HTML, not baked in. */
-const POSTER = `${config.rootURL}towers-poster.webp`;
-/* the film's own inks: the keep's evening, its gold, its paper */
+const POSTER = `${config.rootURL}sagrada-poster.webp`;
+/* the film's own inks, on the centenary night the still is taken from:
+   the stone lit gold against a cold city, which is also the one frame
+   where the building is finished and nothing is cropped off the top */
 const PALETTE =
-  '--ft-key:#e0aa52;--ft-ink:rgba(255,247,232,0.97);' +
-  '--ft-sub:rgba(246,230,201,0.72);--ft-sky:#2a1e10;' +
-  '--ft-floor:rgba(28,19,8,0.86);--ft-ring:rgba(240,214,164,0.32)';
+  '--ft-key:#e2b360;--ft-ink:rgba(248,250,255,0.97);' +
+  '--ft-sub:rgba(216,226,240,0.74);--ft-sky:#131922;' +
+  '--ft-floor:rgba(9,13,20,0.88);--ft-ring:rgba(226,208,170,0.3)';
 const FRAME_FROM = { opacity: 0, scale: 0.97 } as const;
 const FRAME_TO = { opacity: 1, scale: 1 } as const;
 const FRAME_IN = { duration: 0.5, ease: [0.22, 1, 0.36, 1] } as const;
@@ -40,13 +43,13 @@ const FRAME_IN = { duration: 0.5, ease: [0.22, 1, 0.36, 1] } as const;
    does not move. The floor is a frame that still reads; the ceiling is
    the well. Double-click the grip, or the chip, to snap back. */
 const SIZE_MIN = { h: 216, w: 384 } as const;
-const SIZE_KEY = 'tw-size';
+const SIZE_KEY = 'sg-size';
 
-export class TowerStage extends Component {
+export class SagradaStage extends Component {
   /** which face to wear — decided by the box it wakes up in, like Sylva */
   @tracked private context: 'boot' | 'stage' | 'tile' = 'boot';
   /** a hand-set frame, else the well's own size */
-  @tracked private size: { h: number; w: number } | null = TowerStage.saved();
+  @tracked private size: { h: number; w: number } | null = SagradaStage.saved();
   /** a drag in progress: the iframe stands aside and a readout shows */
   @tracked private sizing = false;
   private grip?: { h0: number; w0: number; x0: number; y0: number };
@@ -73,7 +76,7 @@ export class TowerStage extends Component {
 
   get frameStyle(): string {
     const s = this.size;
-    return s ? `--tw-w:${s.w}px;--tw-h:${s.h}px` : '';
+    return s ? `--sg-w:${s.w}px;--sg-h:${s.h}px` : '';
   }
 
   get readout(): string {
@@ -173,39 +176,39 @@ export class TowerStage extends Component {
   };
 
   <template>
-    <div class="tw-face" {{this.place}}>
+    <div class="sg-face" {{this.place}}>
       {{#if this.isStage}}
         {{! the demo page's face: the film in a frame, muted, tweened in —
             the heavy world stays in its own context and unmounts whole }}
         <div
-          class="tw-embed
+          class="sg-embed
             {{if this.size 'is-sized'}}
             {{if this.sizing 'is-sizing'}}"
           style={{this.frameStyle}}
           {{this.well}}
         >
           <iframe
-            class="tw-frame"
-            title="Towers — the film"
+            class="sg-frame"
+            title="Sagrada Família — the film"
             src={{EMBED}}
             {{motion initial=FRAME_FROM animate=FRAME_TO transition=FRAME_IN}}
           ></iframe>
           <button
             type="button"
-            class="tw-theater-btn"
-            {{on "click" (fn this.cross "towers")}}
+            class="sg-theater-btn"
+            {{on "click" (fn this.cross "sagrada")}}
           >⛶ Theater</button>
           {{#if this.size}}
             <button
               type="button"
-              class="tw-theater-btn tw-reset-btn"
+              class="sg-theater-btn sg-reset-btn"
               {{on "click" this.reset}}
             >↺ Default size</button>
           {{/if}}
           {{! the corner grip: drag to resize the frame, double-click to snap back }}
           <button
             type="button"
-            class="tw-grip"
+            class="sg-grip"
             aria-label="Resize the frame"
             title="Drag to resize · double-click to reset"
             {{on "pointerdown" this.gripDown}}
@@ -215,19 +218,19 @@ export class TowerStage extends Component {
             {{on "dblclick" this.reset}}
           ></button>
           {{#if this.sizing}}
-            <span class="tw-size">{{this.readout}}</span>
+            <span class="sg-size">{{this.readout}}</span>
           {{/if}}
         </div>
       {{else}}
         {{! the gallery card's face: the poster outside the cinema — the
             film's own gate copy over a drawn plate of its own evening }}
         <FilmTile
-          @eyebrow="A construction study"
-          @label="Watch Towers"
-          @line="Not a video — a film cut by a score"
-          @name="Towers"
-          @open={{fn this.cross "towers"}}
-          @focus="32% 52%"
+          @eyebrow="A construction study · 1882—"
+          @label="Watch Sagrada Família"
+          @line="A hundred and forty-four years, in four minutes"
+          @name="Sagrada"
+          @open={{fn this.cross "sagrada"}}
+          @focus="38% 50%"
           @palette={{PALETTE}}
           @poster={{POSTER}}
         />
@@ -235,29 +238,29 @@ export class TowerStage extends Component {
     </div>
 
     <style>
-      .tw-face {
+      .sg-face {
         position: absolute;
         inset: 0;
       }
 
       /* the Sylva stage-face pattern, in this film's own palette — the
          sy-* rules live inside sylva-stage and do not travel */
-      .tw-embed {
+      .sg-embed {
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: #ecdcbc;
-        view-transition-name: tower-stage;
+        background: #e8dccb;
+        view-transition-name: sagrada-stage;
       }
 
       /* a hand-set frame: its own size, centred in the well, the well's
          recessed ground showing around it */
-      .tw-embed.is-sized {
+      .sg-embed.is-sized {
         inset: auto;
         left: 50%;
         top: 50%;
-        width: var(--tw-w);
-        height: var(--tw-h);
+        width: var(--sg-w);
+        height: var(--sg-h);
         transform: translate(-50%, -50%);
         border-radius: 14px;
         box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
@@ -265,11 +268,11 @@ export class TowerStage extends Component {
 
       /* while the hand is on the grip the iframe stands aside, so the
          pointer never falls into the film's own document mid-drag */
-      .tw-embed.is-sizing .tw-frame {
+      .sg-embed.is-sizing .sg-frame {
         pointer-events: none;
       }
 
-      .tw-grip {
+      .sg-grip {
         position: absolute;
         right: 0;
         bottom: 0;
@@ -280,11 +283,11 @@ export class TowerStage extends Component {
         background: linear-gradient(
             135deg,
             transparent 0 50%,
-            rgba(242, 233, 210, 0.85) 50% 56%,
+            rgba(244, 236, 222, 0.85) 50% 56%,
             transparent 56% 66%,
-            rgba(242, 233, 210, 0.85) 66% 72%,
+            rgba(244, 236, 222, 0.85) 66% 72%,
             transparent 72% 82%,
-            rgba(242, 233, 210, 0.85) 82% 88%,
+            rgba(244, 236, 222, 0.85) 82% 88%,
             transparent 88%
           )
           no-repeat;
@@ -294,25 +297,25 @@ export class TowerStage extends Component {
         touch-action: none;
       }
 
-      .tw-embed:hover .tw-grip,
-      .tw-embed.is-sizing .tw-grip,
-      .tw-grip:focus-visible {
+      .sg-embed:hover .sg-grip,
+      .sg-embed.is-sizing .sg-grip,
+      .sg-grip:focus-visible {
         opacity: 1;
       }
 
-      .tw-reset-btn {
+      .sg-reset-btn {
         right: auto;
         left: 14px;
       }
 
-      .tw-size {
+      .sg-size {
         position: absolute;
         right: 34px;
         bottom: 10px;
         padding: 5px 9px;
         border-radius: 6px;
-        background: rgba(36, 27, 12, 0.7);
-        color: #f2e9d2;
+        background: rgba(32, 24, 16, 0.7);
+        color: #f4ece0;
         font:
           11px/1 ui-monospace,
           monospace;
@@ -320,7 +323,7 @@ export class TowerStage extends Component {
         pointer-events: none;
       }
 
-      .tw-frame {
+      .sg-frame {
         display: block;
         width: 100%;
         height: 100%;
@@ -328,7 +331,7 @@ export class TowerStage extends Component {
         transform-origin: 50% 60%;
       }
 
-      .tw-theater-btn {
+      .sg-theater-btn {
         position: absolute;
         top: 14px;
         right: 14px;
@@ -338,7 +341,7 @@ export class TowerStage extends Component {
         background: rgba(36, 27, 12, 0.6);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
-        color: #f2e9d2;
+        color: #f4ece0;
         font:
           11px/1 ui-monospace,
           monospace;
@@ -347,11 +350,11 @@ export class TowerStage extends Component {
         cursor: pointer;
       }
 
-      .tw-theater-btn:hover {
+      .sg-theater-btn:hover {
         background: rgba(74, 52, 20, 0.85);
       }
     </style>
   </template>
 }
 
-export default TowerStage;
+export default SagradaStage;

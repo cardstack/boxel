@@ -40,7 +40,7 @@ import type {
  * is why a beat can be widened and the type, the voice, the transport
  * and the readout all re-time together. The picture is whatever the film
  * hands in through the `Picture` port; two reference films hand in a
- * WebGL page in an iframe (docs/film-construct.md).
+ * WebGL page in an iframe (notes/film-construct.md).
  *
  * THE CAMERA. The score authors the shot and the lens CHASES it: one
  * critically-damped stage here, the page's own chase as the second, so
@@ -168,6 +168,21 @@ export interface FilmSignature {
     worldType?: { family?: string; track?: number; weight?: number };
   };
   Blocks: {
+    /**
+     * THE MARK, over the frame. The film route hides the app's own
+     * chrome — it is a frame, not a page — which takes the brand off
+     * screen with it, and a film that carries no mark at all is an
+     * orphan the moment anybody links to it. So the construct draws one
+     * layer over the top-left of the picture and lets the film put its
+     * own mark and its own "how this is built" in it: the engine holds
+     * no app assets, and every film wearing the same block wears the
+     * same corner by construction rather than by copy.
+     *
+     * It stands down in an embed (a gallery card has the app's chrome
+     * around it already) and under the door (the gate is the title
+     * card, and a title card does not need a byline in its corner).
+     */
+    brand: [];
     /** under the stage, outside the picture: a wall plate, a cutting room */
     default: [FilmHandle];
     /** the back matter, inside the end card */
@@ -3987,7 +4002,7 @@ export class Film extends Component<FilmSignature> {
    * existing run would be the obvious alternative and it would be wrong:
    * the lens is an integrator whose pose depends on where it has been, so
    * a run dropped into the middle of itself arrives with the wrong
-   * velocity — the same reason `docs/sylva-one-world.md` calls the chaser
+   * velocity — the same reason `notes/sylva-one-world.md` calls the chaser
    * seek-unsafe and means it.
    */
   private goChapter = (delta: number) => {
@@ -4636,6 +4651,17 @@ export class Film extends Component<FilmSignature> {
             {{/if}}
           </Choreo>
         {{/if}}
+
+        {{! the mark. Not under the door and not over the end card —
+        both of those are title cards and own the frame whole — and not
+        in an embed, which has the app's chrome around it already. }}
+        {{#unless this.embed}}
+          {{#unless this.gate}}
+            {{#unless this.ended}}
+              <div class='cf-brand'>{{yield to='brand'}}</div>
+            {{/unless}}
+          {{/unless}}
+        {{/unless}}
 
         {{#if this.gate}}
           <Gate @film={{this.handle}} as |f|>
@@ -7295,6 +7321,75 @@ export class Film extends Component<FilmSignature> {
         color: rgba(247, 240, 224, 0.78);
         max-width: 40ch;
         text-wrap: balance;
+      }
+
+      /* ---- the mark ---------------------------------------------- *
+         A LAYER ON THE PICTURE, not a bar above it — the film route
+         hides the app's chrome, and a film nobody can trace back to
+         the engine that cut it is an orphan.
+
+         TOP RIGHT, and not the left: the left is where the rail sets
+         its chapter numeral and title on a film that wears one, and
+         where the plate's kicker rules start on a film that does not.
+         The right of that line is empty on both.
+
+         It stays up rather than riding the transport — a broadcast bug,
+         at the weight one wears: present, not competing. Full on hover,
+         so the link inside it can be aimed at. */
+      .cf-brand {
+        position: absolute;
+        right: clamp(14px, 2.2vw, 26px);
+        top: clamp(12px, 2vw, 22px);
+        z-index: 7;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        opacity: 0.62;
+        transition: opacity 260ms ease;
+        pointer-events: auto;
+      }
+
+      .cf-brand:hover {
+        opacity: 1;
+      }
+
+      .cf-brand svg {
+        display: block;
+        width: 22px;
+        height: 22px;
+      }
+
+      /* THE FRAME IS NOT ONE COLOUR. These films run from a chalk noon
+         to a night, so a mark in paper is invisible half the time and a
+         mark in ink the other half. It takes the film's OWN ink — the
+         token every grade already sets for the type standing on that
+         frame — and carries a soft halo of the paper behind it, which
+         is what keeps it legible over a building rather than over a
+         flat sky. */
+      .cf-brand a,
+      .cf-brand .cf-brand-link {
+        color: var(--cf-ink, #f4ece0);
+        text-decoration: none;
+        font-family: var(--cf-mono, ui-monospace, monospace);
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        text-shadow:
+          0 0 6px var(--cf-paper, rgba(0, 0, 0, 0.5)),
+          0 1px 2px var(--cf-paper, rgba(0, 0, 0, 0.5));
+      }
+
+      .cf-brand a:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      /* a phone frame has no room for a byline beside the type */
+      @media (max-width: 700px) {
+        .cf-brand-link {
+          display: none;
+        }
       }
 
       .cf-gate-live-k {

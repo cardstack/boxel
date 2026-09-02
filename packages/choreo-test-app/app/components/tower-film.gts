@@ -11,13 +11,14 @@ import {
   type Pt3,
   RAD,
 } from 'glimmer-motion/film';
+import { ChoreoMark } from 'test-app/components/choreo-mark';
 import TowersNotes from 'test-app/components/notes/towers';
 import config from 'test-app/config/environment';
 
 /**
- * TOWERS — a film, at `/_towers`.
+ * TOWERS — a film, at `/towers`.
  *
- * The first reference film for the film construct (docs/film-construct.md),
+ * The first reference film for the film construct (notes/film-construct.md),
  * now cut ON it: what is left here is the shot list, the script, the
  * chapters, the six climates, the traces sampled off the keep, and the
  * front and back matter in the film's own Japanese voice. The engine —
@@ -232,7 +233,7 @@ const VO_GAIN: Record<string, number> = {};
  * files in `public/towers/vo/`. The kinetic type is paced against the VOICE,
  * not against the beat: the last cue should land as the line is finishing,
  * whether the read is four seconds or thirteen. Estimating this went wrong
- * once already (see docs/towers-vo.md) — so it is measured, and a re-record
+ * once already (see notes/towers-vo.md) — so it is measured, and a re-record
  * means re-measuring. A beat missing from here paces against its own length.
  */
 const VO_SECS: Record<string, number> = {
@@ -1290,6 +1291,14 @@ export default class TowerFilm extends Component<{
             Chapters</button>
         </div>
       </:end>
+
+      {{! THE MARK — over the frame, because the film route hides the
+      app's chrome and takes the brand with it }}
+      <:brand>
+        <ChoreoMark />
+        <LinkTo @route="demo" @model="towers" class="cf-brand-link">How this is
+          built</LinkTo>
+      </:brand>
 
       {{! THE CUTTING ROOM — the wall plate under the exhibit, set in the
       house dive template like every other demo's deep dive. The film hands

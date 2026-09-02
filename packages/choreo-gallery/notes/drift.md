@@ -170,7 +170,7 @@ emits `type: 'transition'` for a `SpringConfig` (store `index.js:552`), whose
 value is the whole spring object plus a companion `path.__mode` switching
 between an easing curve, a two-number "simple" form and a five-number
 "advanced" one. Folders of ordinary sliders get the same nesting for none of
-that. See `docs/dialkit.md` for the full account of the second pass.
+that. See `notes/dialkit.md` for the full account of the second pass.
 
 **The skid marks are a canvas.** The note wanted them as `c.inserted` /
 `c.removed` over a list nobody clicked to build. A mark is laid every few world

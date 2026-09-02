@@ -1608,7 +1608,7 @@ export class ChoreoRun implements Run {
 
   /**
    * Rebuild the camera fold from the score prefix before a seek's still
-   * (docs/external-clock-camera-seek-handoff.md). Forward playback folds
+   * (notes/external-clock-camera-seek-handoff.md). Forward playback folds
    * each camera cue's landing into the run's cumulative camera as the
    * clock crosses it — but a random-access seek can jump clean over a
    * window, and a cue that never starts never folds: the clock reads `t`

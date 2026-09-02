@@ -37,7 +37,7 @@ And `test-app/public/towers/vo/kaitai.mp3` — the ending.
 
 **Its line is not the line in the requests doc.** It is cut by two
 connectives. The reason, the takes it was measured against, and the fallback
-if you want the full line back are in `docs/towers-vo-requests.md` § 1 —
+if you want the full line back are in `notes/towers-vo-requests.md` § 1 —
 read that before assuming the file is wrong.
 
 **Twenty-four re-levelled files.** Every read the film loads is now -29 dB
@@ -56,7 +56,7 @@ the pack.
 
 - **Re-recording `detail`, `shachi`, `timber`, `ishigaki` for level.** Done, by
   normalising rather than by a new take, which keeps reads you have already
-  approved. See `docs/towers-vo-requests.md` § 3.
+  approved. See `notes/towers-vo-requests.md` § 3.
 - **`muneage`.** Now recorded, line unchanged from the request.
   `muneage-short.mp3` beside it is the same line without "for the day", kept
   in case the full one reads as too full for a beat that is a breath.
@@ -66,7 +66,7 @@ the pack.
 
 ## Asking for the next one
 
-Put it in `docs/towers-vo-requests.md` — line, beat id, window, target read,
+Put it in `notes/towers-vo-requests.md` — line, beat id, window, target read,
 direction, and any term that needs saying. That file is the queue, and a
 session with the MCP will find it there. Two things make a request cheap to
 fill and expensive to get wrong:
@@ -82,6 +82,6 @@ The voice is **Calvin — Asian, Calm, British, Professional**, ElevenLabs
 `p9KVucfSoJI7y6G681mZ`, model `eleven_multilingual_v2`. Every file in the
 film is that voice; a new one must be too, or the film has two narrators.
 
-`docs/towers-vo-files.md` is what is on disk and what it measures.
-`docs/towers-vo-pronunciation.md` is how the foreign words are said.
-`docs/towers-vo.md` is the script, and is generated — change the beat, not it.
+`notes/towers-vo-files.md` is what is on disk and what it measures.
+`notes/towers-vo-pronunciation.md` is how the foreign words are said.
+`notes/towers-vo.md` is the script, and is generated — change the beat, not it.

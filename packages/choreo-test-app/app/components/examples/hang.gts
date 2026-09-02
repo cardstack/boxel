@@ -62,7 +62,7 @@ import { preventSelect } from 'test-app/lib/pointer';
  * COAST being derived from them, and there was no instrument for the job.
  *
  * `[value, min, max, step]` is dialkit's slider tuple. The panel is drawn by
- * `DialPanel`; the store→tracked bridge is `lib/dial.ts`, and docs/dialkit.md
+ * `DialPanel`; the store→tracked bridge is `lib/dial.ts`, and notes/dialkit.md
  * is the evaluation that led here.
  */
 const TUNING = {

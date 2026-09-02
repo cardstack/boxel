@@ -4,7 +4,7 @@
  *
  * Two hand-built films (Towers, Sagrada) share these one for one; the
  * types are lifted from them rather than designed, which is the only
- * honest way a construct gets its shape. See docs/film-construct.md.
+ * honest way a construct gets its shape. See notes/film-construct.md.
  */
 
 import type { FunctionBasedModifier } from 'ember-modifier';

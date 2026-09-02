@@ -19,7 +19,7 @@ in the read — the dry ones land harder delivered straight.
 Ten beats NAME their term aloud, once, as the first word, and never again
 in that beat: the screen is holding the kanji, and a narrator who repeats
 a word the audience is currently reading sounds like he does not trust
-them. `docs/towers-vo-pronunciation.md` is the authority on how each is
+them. `notes/towers-vo-pronunciation.md` is the authority on how each is
 said, and the takes were prompted with its respellings.
 
 Do not chase the pictures. The camera is always moving. The voice should

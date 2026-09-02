@@ -551,7 +551,7 @@ export class Camera3D extends StepComponent<
   }
 }
 
-/* ---- the direction vocabulary (docs/choreo-composition.md C5) ----
+/* ---- the direction vocabulary (notes/choreo-composition.md C5) ----
    Presets expand into the SAME seekable camera cue — sugar, never a new
    runtime primitive. Frame and Aim are absolute (computed from measured
    geometry at compile); Pan and SlowZoom are RELATIVE, resolved against

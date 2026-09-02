@@ -240,7 +240,7 @@ localStorage with no way home. They sit in one row because to a player they are
 one question — what am I driving — but only one of them can be deleted.
 
 **`type: 'spring'` is NOT cheap, and the plan that said it was got the name
-wrong.** `docs/drift.md` proposed one spring control per pair instead of two
+wrong.** `notes/drift.md` proposed one spring control per pair instead of two
 sliders, "cheap once folders exist". The store does not emit `'spring'` for a
 `SpringConfig` at all: it emits `type: 'transition'` (store `index.js:552`),
 whose value is the whole spring object plus a companion `path.__mode` that

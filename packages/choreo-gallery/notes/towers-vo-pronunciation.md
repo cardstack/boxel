@@ -1,6 +1,6 @@
 # TOWERS — pronunciation layer for the voiceover
 
-Companion to `docs/towers-vo.md`, which is generated from the beats and is the
+Companion to `notes/towers-vo.md`, which is generated from the beats and is the
 authority on WHAT is said and WHEN. This file is hand-authored and is the
 authority on HOW the foreign words are said. Nothing here changes a line's
 words or its window.
@@ -54,7 +54,7 @@ before the release. Final `-e` is always "eh", never silent.
 
 ## Canonical read
 
-The lines in `docs/towers-vo.md` are recorded verbatim. Only two carry a
+The lines in `notes/towers-vo.md` are recorded verbatim. Only two carry a
 foreign word, and both are respelled for the take:
 
 - **`azuchi`** — "Fifteen seventy-six. Seven gilded storeys over Lake bee-wah.
@@ -79,7 +79,7 @@ air in it.
 **ADOPTED, 2026-09-01.** All ten alternates were recorded and are now the
 canonical `<id>.mp3`; the takes that do not name the term are kept beside
 them as `<id>-plain.mp3`. Each beat's `vo` in the component was updated to
-match what is spoken, and `docs/towers-vo.md` regenerated from it.
+match what is spoken, and `notes/towers-vo.md` regenerated from it.
 
 One correction to the estimate above: the named takes did NOT all fit their
 existing windows. Four ran over — ishigaki by 1.5s, timber by 0.8s, shachi

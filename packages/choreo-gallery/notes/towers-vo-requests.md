@@ -1,7 +1,7 @@
 # Towers — voice-over requests
 
 Lines to record. Same voice, same read as the rest of the film (see
-`docs/towers-vo.md` › Voice): Calvin, `eleven_multilingual_v2`. Dry,
+`notes/towers-vo.md` › Voice): Calvin, `eleven_multilingual_v2`. Dry,
 unhurried, certain. Short declaratives, full stops, no lift at the end
 of a line, no smile in the read. The camera is always moving; the voice
 sounds like somebody standing still.
@@ -98,7 +98,7 @@ across the film is 0.1 dB. Where they were:
 | `hikaku.mp3` | −24.6   | loudest; trimmed to 0.60                            |
 
 `ishigaki` (-30.1) was in the same position and went with them. Measurements
-per file are in `docs/towers-vo-files.md`.
+per file are in `notes/towers-vo-files.md`.
 
 ## Not needed
 

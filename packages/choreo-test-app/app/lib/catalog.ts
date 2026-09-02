@@ -56,6 +56,7 @@ import { PlayheadNotes } from 'test-app/components/notes/playhead';
 import { PresenceNotes } from 'test-app/components/notes/presence';
 import { PresentationNotes } from 'test-app/components/notes/presentation';
 import { RackNotes } from 'test-app/components/notes/rack';
+import SagradaNotes from 'test-app/components/notes/sagrada';
 import { SequenceNotes } from 'test-app/components/notes/sequence';
 import { SheetNotes } from 'test-app/components/notes/sheet';
 import { SubdivisionNotes } from 'test-app/components/notes/subdivision';
@@ -63,6 +64,7 @@ import { SylvaNotes } from 'test-app/components/notes/sylva';
 import TowersNotes from 'test-app/components/notes/towers';
 import { TrailNotes } from 'test-app/components/notes/trail';
 import { WiresNotes } from 'test-app/components/notes/wires';
+import { SagradaStage } from 'test-app/components/sagrada-stage';
 import { SylvaStage } from 'test-app/components/sylva-stage';
 import { TowerStage } from 'test-app/components/tower-stage';
 
@@ -73,6 +75,11 @@ export const groups = [
   'Scroll',
   'Choreo',
   '3D',
+  /* FILM holds exactly two: the pictures built on `<Film>`. They are 3D
+     and they are Choreo and they are timeline work, and filing them
+     under any one of those buries them — a film is its own kind of
+     thing, and the two of them are the argument for the construct. */
+  'Film',
   'Timeline',
 ] as const;
 
@@ -92,6 +99,12 @@ export interface DemoEntry {
    * sample above says it.
    */
   notes?: any;
+  /**
+   * The demo's own URL, when it has one — a film owns its name and is
+   * not served from `/:demo_id`. The tile links here instead, and the
+   * pager steps to it by route rather than by id.
+   */
+  route?: string;
   sample: string;
   /**
    * Whether the stage honours `setMotionSpeed`, and so gets the speed control.
@@ -530,11 +543,12 @@ shot = (pose) => {
   },
   {
     Example: TowerStage,
-    apis: ['@through', 'cut: true', '@camera3dFrom', 'c.Perform'],
-    group: '3D',
+    apis: ['<Film>', '@through', 'cut: true', 'c.Perform'],
+    group: 'Film',
     id: 'towers',
     lede: 'Not a video. A four-minute museum film composited live in the browser — a 3D scene, motion graphics and a score, cut in real time at any size, with interactive chapters and its own audio mixer.',
     notes: TowersNotes,
+    route: 'towers',
     sample: `{{! THE WHOLE FILM IS ONE CAMERA STEP: every beat contributes
     waypoints to one spline — a hold breathes, a cut waypoint SPLICES the
     path into clamped shots — and every cue in the film is a delay into
@@ -1297,6 +1311,49 @@ const transition = { duration: 1.35, ease: 'easeInOut', repeat: Infinity };
   @duration={{legFor shot}} />`,
     slowmo: false,
     title: 'Long Take',
+  },
+  {
+    Example: SagradaStage,
+    apis: ['<Film>', "@seek='exact'", '@clock', 'c.Camera3D'],
+    group: 'Film',
+    id: 'sagrada',
+    lede: 'A hundred and forty-four years of a basilica, composited live in the browser and cut by a score — with a clock in years on the rail, and a picture that is a pure function of it.',
+    notes: SagradaNotes,
+    route: 'sagrada',
+    sample: `{{! THE FILM IS A CONSTRUCT. The shot list is data and <Film> is
+    the editor that plays it: one camera step for the whole picture, one
+    cue per beat, and the type, the grade, the seams, the narration and
+    the mix all hung off the same clock. What the film supplies is the
+    script and a picture to point at. }}
+<Film
+  @beats={{this.beats}} @chapters={{this.chapters}}
+  @src={{this.src}} @assets={{this.assets}}
+  @standing={{T_TODAY}} @clock={{this.clock}}
+  @seek='exact'
+>
+  <:gate as |f|>…the door, in the film's own type…</:gate>
+  <:end as |f|>…the back matter…</:end>
+</Film>
+
+// ONE BEAT IS ONE SHOT, and every field is a FACT about the shot rather
+// than a keyframe — which is what lets an agent direct the film by
+// editing a table, and a person direct it by dragging one number.
+{ id: 'gaudi', ch: 2, mode: 'plate', ticks: 8,
+  cam:   { dolly: 0.86, lookY: 14, pitch: 6, yaw: 214 },
+  toCam: { dolly: 0.92, lookY: 18, pitch: 9, yaw: 226 },
+  join: 'dip', grade: 'ash', lut: 'plate',
+  vo: 'On the seventh of June 1926, Gaudí is hit by a tram.' }
+
+// @seek='exact' takes the spring out of the lens and makes the whole
+// film a pure function of one number: scrub anywhere and the frame is
+// correct, because every beat asserts its complete state and inherits
+// nothing. A seek that lands inside a seam re-makes the outgoing frame
+// first, so the dissolve plays from its middle exactly as it would have
+// played into it.
+run.time = t;              // the score
+plate.time = t - beatStart(i);  // and the type, on the same clock`,
+    slowmo: false,
+    title: 'Sagrada Família',
   },
   {
     Example: Grip,

@@ -660,7 +660,7 @@ derives everything else from it:
 `Beat.clip` exists (2026-09-02, after seek). A beat is a shot of the
 picture; a clip is something laid over it for a while — a video, a still,
 or a freeze of the picture itself — and it is the compositor's `ClipSpec`
-arithmetic (`docs/choreo-composition.md`, Phase C3) lifted whole:
+arithmetic (`notes/choreo-composition.md`, Phase C3) lifted whole:
 
 ```
 source = in + (film − start) × rate

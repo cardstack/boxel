@@ -40,5 +40,5 @@ file.
 
 - The film: `/_towers` (front door, sound choice, player, cutting room)
 - The gallery face: `/towers` (the film in a frame, the deep dive below)
-- The mechanics: `docs/choreo-splices.md`, `docs/towers-quality.md`,
-  `docs/towers-porting-delta.md`
+- The mechanics: `docs/choreo-splices.md`, `notes/towers-quality.md`,
+  `notes/towers-porting-delta.md`

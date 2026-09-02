@@ -86,7 +86,7 @@ interface Firing {
 const COLD: Firing = { cone: false, damper: false, gas: 0, soak: false };
 
 /**
- * `<c.Perform>` — commands as part of the score (docs/choreo-composition.md §C4).
+ * `<c.Perform>` — commands as part of the score (notes/choreo-composition.md §C4).
  *
  * The law is one sentence: THE SET OF COMMANDS AT OR BEFORE THE CLOCK IS THE
  * COMMANDED STATE. Everything here exists to make that visible, because it is

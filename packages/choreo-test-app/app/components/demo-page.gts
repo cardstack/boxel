@@ -1,10 +1,13 @@
-import { concat } from '@ember/helper';
+import { array, concat } from '@ember/helper';
 import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import { pageTitle } from 'ember-page-title';
 import { motion } from 'glimmer-motion';
 import { SpeedPicker } from 'test-app/components/speed-picker';
 import { type DemoEntry, neighbors } from 'test-app/lib/catalog';
+
+/* an empty models tuple for a route with no dynamic segment */
+const EMPTY: string[] = [];
 import { highlightSample } from 'test-app/lib/highlight';
 
 export class DemoPage extends Component<{
@@ -34,8 +37,12 @@ export class DemoPage extends Component<{
           </LinkTo>
           {{#if this.near.next}}
             <LinkTo
-              @route="demo"
-              @model={{this.near.next.id}}
+              @route={{if this.near.next.route this.near.next.route "demo"}}
+              @models={{if
+                this.near.next.route
+                EMPTY
+                (array this.near.next.id)
+              }}
               class="back next-demo"
             >
               Next
@@ -114,7 +121,10 @@ export class DemoPage extends Component<{
       {{/if}}
       <nav class="pager" {{motion role="late"}}>
         {{#if this.near.prev}}
-          <LinkTo @route="demo" @model={{this.near.prev.id}}>
+          <LinkTo
+            @route={{if this.near.prev.route this.near.prev.route "demo"}}
+            @models={{if this.near.prev.route EMPTY (array this.near.prev.id)}}
+          >
             ←
             {{this.near.prev.title}}
           </LinkTo>
@@ -122,7 +132,10 @@ export class DemoPage extends Component<{
           <span></span>
         {{/if}}
         {{#if this.near.next}}
-          <LinkTo @route="demo" @model={{this.near.next.id}}>
+          <LinkTo
+            @route={{if this.near.next.route this.near.next.route "demo"}}
+            @models={{if this.near.next.route EMPTY (array this.near.next.id)}}
+          >
             {{this.near.next.title}}
             →
           </LinkTo>

@@ -1,7 +1,7 @@
 /**
  * A car, as arithmetic — and the part of Drift that is deliberately not Choreo.
  *
- * `docs/drift.md` says to write this first, against hardcoded numbers, because
+ * `notes/drift.md` says to write this first, against hardcoded numbers, because
  * it is the fastest way to find out whether the car is fun before any of the
  * tuning surface exists. It also says, at length, why it cannot be a score:
  *
@@ -388,7 +388,7 @@ export const slipAngleOf = (car: Car) =>
  * thing entirely — a target that moves every frame and a lens that never gets
  * there. Compiling a region sixty times a second to express that would be a
  * misuse of the score and a bad advertisement for it, so the shot lives here,
- * with the physics it is chasing. `docs/drift.md` names the split; this is it.
+ * with the physics it is chasing. `notes/drift.md` names the split; this is it.
  *
  * The lead is what makes it read as a camera operator rather than a leash: the
  * target is not the car, it is where the car will be in `LEAD` seconds, so the
@@ -841,7 +841,7 @@ export function autopilot(
 /* --------------------------------------------------------- personalities */
 
 /**
- * The four characters, from `docs/drift.md`.
+ * The four characters, from `notes/drift.md`.
  *
  * These are constants and not saved presets on purpose. A character is a thing
  * the stage ships and can always be got back to; a preset is a thing you made.

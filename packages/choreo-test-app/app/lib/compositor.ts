@@ -1,5 +1,5 @@
 /**
- * The C1 composition host (docs/choreo-composition.md, Phase C1) —
+ * The C1 composition host (notes/choreo-composition.md, Phase C1) —
  * application-side code on purpose. It owns the scene-level model a
  * directed composition needs and consumes only public surfaces:
  * `choreo-player` for the run transport, and actor "ports" the
@@ -66,7 +66,7 @@ export interface ActorPorts {
 
 /**
  * A clip: an activation and a source-time window over one actor
- * (docs/choreo-composition.md, Phase C3). Pure parent→source arithmetic:
+ * (notes/choreo-composition.md, Phase C3). Pure parent→source arithmetic:
  *
  *   source = sourceIn + (parent − at) × rate
  *   window = (sourceOut − sourceIn) / rate  seconds of parent time
@@ -208,7 +208,7 @@ export class Compositor {
    * Preview passes `parameters: false`: a parameter channel is capture
    * reconstruction — it stands a demo's own engine at a still, which
    * would fight the very playback the preview exists to show. play() is
-   * GPU; renderAt(t) is a still (docs/choreo-composition.md, scope
+   * GPU; renderAt(t) is a still (notes/choreo-composition.md, scope
    * decisions).
    */
   async foldTo(

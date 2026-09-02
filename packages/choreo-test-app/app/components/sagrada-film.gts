@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { LinkTo } from '@ember/routing';
 import Component from '@glimmer/component';
 import {
   type Beat,
@@ -12,12 +13,14 @@ import {
   type Pt3,
   RAD,
 } from 'glimmer-motion/film';
+import { ChoreoMark } from 'test-app/components/choreo-mark';
+import SagradaNotes from 'test-app/components/notes/sagrada';
 import config from 'test-app/config/environment';
 
 /**
- * SAGRADA — a film, at `/_sagrada`.
+ * SAGRADA — a film, at `/sagrada`.
  *
- * The second reference film for the film construct (docs/film-construct.md),
+ * The second reference film for the film construct (notes/film-construct.md),
  * and the first one cut ON it: everything here is the shot list, the
  * script, the chapters, the year clock, the traces sampled off the model,
  * and the front and back matter. The engine — the chased lens, the joins,
@@ -167,7 +170,7 @@ const VO_GAIN: Record<string, number> = {
  * files in `public/sagrada/vo/`. The kinetic type is paced against the VOICE,
  * not against the beat: the last cue should land as the line is finishing,
  * whether the read is four seconds or thirteen. Estimating this went wrong
- * once already (see docs/towers-vo.md) — so it is measured, and a re-record
+ * once already (see notes/towers-vo.md) — so it is measured, and a re-record
  * means re-measuring. A beat missing from here paces against its own length.
  */
 const VO_SECS: Record<string, number> = {
@@ -1007,7 +1010,9 @@ const BEATS: Beat[] = [
     ],
     sun: { az: -120, el: 22 },
     theme: 1,
-    stamp: { at: 0.03, y: 1954 },
+    /* NO STAMP HERE. The enormous 1954 stood exactly where the first
+       crane does, and this is the shot whose whole line is the crane —
+       the year was covering the thing it was dating. */
     ticks: 6,
     toCam: {
       dolly: 0.95,
@@ -1697,6 +1702,15 @@ export default class SagradaFilm extends Component<{
   clock = CLOCK;
   seat = seat;
 
+  /* the demo page mounts this route in an iframe with ?embed; the film
+     engine reads the query itself, but the wall plate below the picture
+     is this component's own and has to be told */
+  get embed(): boolean {
+    return (
+      (this.args.embed ?? false) || /[?&]embed\b/.test(window.location.search)
+    );
+  }
+
   get assets(): string {
     return `${config.rootURL}sagrada/`;
   }
@@ -1779,6 +1793,14 @@ export default class SagradaFilm extends Component<{
         </p>
       </:gate>
 
+      {{! THE MARK — over the frame, because the film route hides the
+      app's chrome and takes the brand with it }}
+      <:brand>
+        <ChoreoMark />
+        <LinkTo @route="demo" @model="sagrada" class="cf-brand-link">How this is
+          built</LinkTo>
+      </:brand>
+
       {{! BACK MATTER — the same package in reverse order of importance }}
       <:end as |f|>
         <i class="cf-mg-rule" aria-hidden="true"></i>
@@ -1800,16 +1822,95 @@ export default class SagradaFilm extends Component<{
             Chapters</button>
         </div>
       </:end>
+
+      {{! THE CUTTING ROOM — the wall plate under the exhibit, in the
+      house dive template like every other demo's deep dive, and set the
+      way Towers sets its own. The film hands it one thing: the live
+      junction trigger, which is the only part of this dive that cannot
+      be read on the demo page. }}
+      <:default as |f|>
+        {{#unless this.embed}}
+          <div id="cutting-room" class="cf-notes">
+            <p class="cf-notes-link"><LinkTo
+                @route="demo"
+                @model="sagrada"
+                class="cf-link"
+              >How This Is Built</LinkTo></p>
+            <SagradaNotes @preview={{f.preview}} />
+          </div>
+        {{/unless}}
+      </:default>
     </Film>
 
     {{! THE IDENTITY. The construct sets the film in the basilica's own
     2026 centenary voice by default — heavy grotesque capitals in flat
     colour on stone paper, one red — so all this film adds is the faces
-    themselves. NO WALL PLATE: this is the second reference film, not a
-    demo, and a film that arrives with its own commentary attached is
-    asking to be read rather than watched. }}
+    themselves. The wall plate BELOW the picture (and nothing above it):
+    a film that arrives with its commentary attached is asking to be read
+    rather than watched, so the dive waits under the frame where Towers
+    keeps its own, and the only thing over the picture is the mark. }}
     <style>
       @import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&display=swap");
+
+      /* ---- the cutting room ------------------------------------------ *
+         The dive itself is the app's own template (.dive/.dd, app.css);
+         this wrapper seats it on the app's page ground below the film,
+         set exactly as tower-film sets its own so the two films read as
+         one exhibit. The joins strip is the film-only element. */
+      .cf-notes {
+        background: var(--bg-page);
+        border-top: 1px solid var(--line);
+        padding: 10px clamp(20px, 5vw, 60px) 80px;
+      }
+
+      .cf-notes .dive {
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+
+      .cf-notes-link {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 14px 0 0;
+      }
+
+      .cf-link {
+        color: var(--ink);
+        text-decoration: none;
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .cf-link:hover {
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .dd-joins {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0 0;
+      }
+
+      .dd-joins button {
+        padding: 7px 13px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+      }
+
+      .dd-joins button:hover {
+        border-color: var(--ink);
+      }
     </style>
   </template>
 }

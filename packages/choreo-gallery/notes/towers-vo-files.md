@@ -7,8 +7,8 @@ does not load. Voice: **Calvin — Asian, Calm, British, Professional**
 - **In app:** `/towers/vo/<id>.mp3` · **Dev:** `http://localhost:4200/towers/vo/<id>.mp3`
 - **On disk:** `test-app/public/towers/vo/<id>.mp3`
 
-The lines are in `docs/towers-vo.md`, the timings in the beats themselves, and
-the pronunciations in `docs/towers-vo-pronunciation.md`. This file is about
+The lines are in `notes/towers-vo.md`, the timings in the beats themselves, and
+the pronunciations in `notes/towers-vo-pronunciation.md`. This file is about
 the audio as audio.
 
 ## Level

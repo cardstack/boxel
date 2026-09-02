@@ -13,9 +13,14 @@ Router.map(function () {
   this.route('crossing-stress');
   // A spike, not a demo: no catalog entry, no gallery card. See sylva-stage.
   this.route('sylva', { path: '/_sylva' });
-  // A film, not a demo: see tower-film.
-  this.route('towers', { path: '/_towers' });
-  // A second film on the same engine: see sagrada-film.
-  this.route('sagrada', { path: '/_sagrada' });
+  /* THE FILMS OWN THEIR OWN NAMES. Each was two URLs for a while — a
+     demo page that framed the picture in an iframe and wrote the wall
+     plate under it, and an underscored theater route that ran the
+     picture full width and wrote the SAME wall plate under it. They
+     were the same page twice. So the film takes the plain name, carries
+     its dive beneath itself, and there is one address to send anyone.
+     Declared before /:demo_id so the catalog cannot eat them. */
+  this.route('towers');
+  this.route('sagrada');
   this.route('demo', { path: '/:demo_id' });
 });

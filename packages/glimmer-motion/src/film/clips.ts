@@ -3,7 +3,7 @@
  *
  * A beat is a shot of the picture. A clip is something else laid over it
  * for a while: a video, a still, or a freeze of the picture itself. Its
- * arithmetic is the compositor's (docs/choreo-composition.md, Phase C3),
+ * arithmetic is the compositor's (notes/choreo-composition.md, Phase C3),
  * lifted whole because it was already right:
  *
  *   source = in + (film − start) × rate

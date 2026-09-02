@@ -997,7 +997,7 @@ fits first — and the pan that solves `x + P = centre`, all from the
 changeset's rest-layout boxes divided back by `measureZoom`. That is
 the measurement space FLIP already uses, so a dive begun mid-flight on
 a different tile is correct by construction
-(`docs/camera-api-wishlist.md` is the case study). And a cue with no
+(`notes/camera-api-wishlist.md` is the case study). And a cue with no
 origin of its own holds the aim point in force rather than recentring —
 backing out of a dive backs straight out of its tile, instead of
 sliding across the neighbouring one mid-flight.

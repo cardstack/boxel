@@ -12970,7 +12970,7 @@ html[data-gm-dragging] * {
    package's stylesheet.
 
    THE HANDLE IS THE EXCEPTION, and it is the one correction this spike makes
-   to the "the stylesheet is free" claim in docs/dialkit.md. dialkit's theme
+   to the "the stylesheet is free" claim in notes/dialkit.md. dialkit's theme
    gives `.dialkit-slider-handle` only `top: 50%`; the centring translate and
    the resting scale live in the React component's inline `style` and
    `animate` props (`y: '-50%'`, `scaleX: isActive ? 1 : 0.25`). A port that

@@ -51,7 +51,7 @@ import { preventSelect } from 'test-app/lib/pointer';
  *
  * ## What is Choreo here, and what is deliberately not
  *
- * The driving loop is not a score, and `docs/drift.md` is written mostly to say
+ * The driving loop is not a score, and `notes/drift.md` is written mostly to say
  * so before anyone builds this and discovers it halfway in. Motion's springs
  * are scalar interpolators toward a target; a drift is a velocity decomposition
  * with a friction coefficient on the sideways half. So `lib/drift.ts` is fifty
@@ -77,7 +77,7 @@ import { preventSelect } from 'test-app/lib/pointer';
  *
  * ## The skid marks are a canvas, and that is also on purpose
  *
- * `docs/drift.md` wanted them as `c.inserted` / `c.removed` over a list nobody
+ * `notes/drift.md` wanted them as `c.inserted` / `c.removed` over a list nobody
  * clicked to build. They are a canvas instead. A mark is laid every thirteen
  * world pixels of slide, which at speed is twenty a second, and a changeset
  * twenty times a second is not a changeset — it is a render loop wearing one.

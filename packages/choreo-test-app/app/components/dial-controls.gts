@@ -21,7 +21,7 @@ import type { AnyDial } from 'test-app/lib/dial';
  * want closed until the day you care about it. So this walks the tree, renders
  * a folder as a folder, and recurses.
  *
- * ## A correction to docs/drift.md
+ * ## A correction to notes/drift.md
  *
  * That note says a spring pair should be one `type: 'spring'` control rather
  * than two sliders, and calls it cheap once folders exist. It is not cheap. The

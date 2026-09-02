@@ -4,7 +4,7 @@
  * dialkit ships a framework-free core (`dialkit/store`, 29KB, importing
  * neither motion nor react) plus four independent UI ports. There is no Ember
  * port, and the point of this file is to find out what one would cost — see
- * docs/dialkit.md. Everything below is the bridge and nothing else; the panel
+ * notes/dialkit.md. Everything below is the bridge and nothing else; the panel
  * that draws it is `dial-panel.gts`.
  *
  * ## The whole question, in one class
