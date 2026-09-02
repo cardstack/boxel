@@ -553,7 +553,12 @@ module(basename(import.meta.filename), function () {
     });
 
     function jobInfo() {
-      return { jobId: jobCounter++, reservationId: 1, priority: 0 };
+      return {
+        jobId: jobCounter++,
+        reservationId: 1,
+        priority: 0,
+        queueWaitMs: null,
+      };
     }
 
     async function makeBatch(generation: number, info = jobInfo()) {

@@ -572,6 +572,12 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           response.text.includes('--scoped-css-marker: 1'),
           'scoped CSS is included in the HTML response',
         );
+        // Base-realm modules are recorded in deps as prefix-form RRIs rather
+        // than absolute URLs, so this exercises the prefix-form decode path.
+        assert.ok(
+          response.text.includes('.css-field-container'),
+          'scoped CSS from base-realm (prefix-form) deps is included in the HTML response',
+        );
       });
 
       test('serves scoped CSS from linked cards in index responses', async function (assert) {

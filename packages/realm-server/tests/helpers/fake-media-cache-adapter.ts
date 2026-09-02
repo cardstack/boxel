@@ -13,9 +13,11 @@ export class FakeMediaCacheAdapter implements MediaCacheAdapter {
   streamShape: 'readable' | 'iterable' = 'readable';
 
   async put(key: string, bytes: Uint8Array, _opts: { contentType: string }) {
-    if (!this.objects.has(key)) {
-      this.objects.set(key, bytes);
+    if (this.objects.has(key)) {
+      return { deduped: true };
     }
+    this.objects.set(key, bytes);
+    return { deduped: false };
   }
   async head(key: string) {
     let bytes = this.objects.get(key);

@@ -48,12 +48,15 @@ export interface MediaObjectStat {
 // `put` must leave the object durable before resolving, and may skip the
 // upload when the key is already stored — the key is a hash of the bytes, so
 // an existing object under the same key already holds them (dedupe-on-write).
+// The result reports which of the two happened (`deduped: true` = the bytes
+// were already stored and no upload ran) so capture telemetry can tell a
+// dedupe hit from a real upload.
 export interface MediaCacheAdapter {
   put(
     key: string,
     bytes: Uint8Array,
     opts: { contentType: string },
-  ): Promise<void>;
+  ): Promise<MediaPutResult>;
   head(key: string): Promise<MediaObjectStat | undefined>;
   getStream(key: string): Promise<AsyncIterable<Uint8Array> | undefined>;
   delete(key: string): Promise<void>;
@@ -80,6 +83,10 @@ export interface MediaCacheEntryKey {
   sourceGeneration: number;
 }
 
+export interface MediaPutResult {
+  deduped: boolean;
+}
+
 export interface MediaCacheEntry extends MediaCacheEntryKey {
   objectKey: string;
   sourceContentHash: string | null;
@@ -93,6 +100,11 @@ export interface MediaCacheEntry extends MediaCacheEntryKey {
   height: number | null;
   createdAt: number;
   lastAccessedAt: number;
+  // The row's `diagnostics` column (the capture's
+  // `ScreenshotCapturePerfEvent`-shaped stage breakdown, written by
+  // `updateMediaCacheDiagnostics`) is deliberately NOT part of this shape:
+  // `findMediaCacheEntry` answers every `<img>` serve, and no serving path
+  // reads the breakdown — read that column with its own query instead.
 }
 
 // The content address for a blob of output bytes. sha256 rather than the
@@ -145,9 +157,9 @@ export async function putMedia(
     width?: number | null;
     height?: number | null;
   },
-): Promise<{ objectKey: string; sizeBytes: number }> {
+): Promise<{ objectKey: string; sizeBytes: number; deduped: boolean }> {
   let objectKey = await computeMediaCacheKey(bytes);
-  await adapter.put(objectKey, bytes, { contentType });
+  let { deduped } = await adapter.put(objectKey, bytes, { contentType });
   let priorRows = (await query(dbAdapter, [
     `SELECT object_key FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
@@ -187,7 +199,36 @@ export async function putMedia(
   if (priorObjectKey && priorObjectKey !== objectKey) {
     await reclaimRepointedObject(dbAdapter, adapter, priorObjectKey);
   }
-  return { objectKey, sizeBytes: bytes.length };
+  return { objectKey, sizeBytes: bytes.length, deduped };
+}
+
+// Records a capture's stage-telemetry breakdown on its ledger row. A
+// separate write from `putMedia` because the breakdown includes the persist
+// leg's own duration and outcome, which exist only once the put has
+// returned. Callers treat it as best-effort: a missing breakdown never
+// affects serving, so this must never fail a capture.
+export async function updateMediaCacheDiagnostics(
+  dbAdapter: DBAdapter,
+  {
+    realmURL,
+    sourceURL,
+    captureSpecHash,
+    sourceGeneration,
+  }: MediaCacheEntryKey,
+  diagnostics: Record<string, unknown>,
+): Promise<void> {
+  await query(dbAdapter, [
+    `UPDATE media_cache_ledger SET diagnostics =`,
+    param(JSON.stringify(diagnostics)),
+    `WHERE realm_url =`,
+    param(realmURL),
+    `AND source_url =`,
+    param(sourceURL),
+    `AND capture_spec_hash =`,
+    param(captureSpecHash),
+    `AND source_generation =`,
+    param(sourceGeneration),
+  ] as Expression);
 }
 
 // Reclaims the object a repointing upsert stripped of its reference — unless
@@ -257,8 +298,15 @@ export async function findMediaCacheEntry(
     sourceGeneration?: number;
   },
 ): Promise<MediaCacheEntry | undefined> {
+  // Explicit columns — exactly `MediaCacheEntry`'s shape — rather than
+  // `SELECT *`: this read answers every ledger-served `<img>` request, and
+  // `*` would also drag the row's `diagnostics` breakdown (~30 keys nothing
+  // on the serve path reads) across the wire on each of them.
   let rows = (await query(dbAdapter, [
-    `SELECT * FROM media_cache_ledger WHERE realm_url =`,
+    `SELECT realm_url, source_url, capture_spec_hash, source_generation,
+            object_key, source_content_hash, lane, content_type, size_bytes,
+            width, height, created_at, last_accessed_at
+     FROM media_cache_ledger WHERE realm_url =`,
     param(realmURL),
     `AND source_url =`,
     param(sourceURL),

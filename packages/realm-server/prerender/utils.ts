@@ -1,5 +1,6 @@
 import {
   cleanCapturedHTML,
+  DEFAULT_CAPTURE_VIEWPORT,
   delay,
   logger,
   SCREENSHOT_MAX_PHYSICAL_EDGE_PX,
@@ -1206,6 +1207,22 @@ export interface ScreenshotCapture {
   // One item per requested capture; a single "default" entry for a singular
   // (non-batch) request. Always at least one item on success.
   captures: ScreenshotCaptureItem[];
+  // Per-step wall-clock across the shared render, for stage telemetry:
+  // navigation (route transition + path settle), the prerender settle wait
+  // (including any envelope-box wait), the image/font paint wait, and the
+  // capture stage (viewport switches + CDP screenshots). One record per
+  // render; a batch whose entries span several envelopes re-renders per
+  // envelope, and each stage sums across those re-renders. Together these
+  // account for nearly all of the render wall; the remainder is the terminal
+  // error probe and dimension reads.
+  stepTimings: ScreenshotStepTimings;
+}
+
+export interface ScreenshotStepTimings {
+  navMs: number;
+  settleMs: number;
+  imagePaintMs: number;
+  screenshotMs: number;
 }
 
 // Block in the browser context until images, CSS background-image URLs, and
@@ -1296,12 +1313,9 @@ async function waitForImagePaint(
 
 // Puppeteer's default launch viewport (no `defaultViewport` override). Used to
 // restore a pooled page when we can't read its prior viewport — the canonical
-// size the indexing HTML-capture path expects.
-const DEFAULT_SCREENSHOT_VIEWPORT = {
-  width: 800,
-  height: 600,
-  deviceScaleFactor: 1,
-};
+// size the indexing HTML-capture path expects. Shared with the capture-spec
+// canonicalizer, which elides a spec spelling out exactly these values.
+const DEFAULT_SCREENSHOT_VIEWPORT = DEFAULT_CAPTURE_VIEWPORT;
 
 interface ResolvedViewport {
   width: number;
@@ -1628,22 +1642,49 @@ export async function captureScreenshot(
   // Pooled pages are reused by the indexing HTML-capture path; a viewport left
   // at a caller-specified size (or 2× scale) would silently change subsequent
   // index prerenders. Snapshot the current viewport before overriding and
-  // restore it in `finally`. A viewport override is any explicit viewport /
-  // deviceScaleFactor OR an envelope (whose box is sized to the viewport).
-  let anyViewportOverride = entries.some(
-    (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
-  );
+  // restore it in `finally`.
+  //
+  // The base geometry is the engine default, never the page's current
+  // viewport: the ledger identity elides a default-valued viewport, so an
+  // entry that specifies none *asserts* the default — a capture taken at
+  // whatever geometry a pooled page was left in would persist and serve under
+  // a hash claiming DEFAULT_CAPTURE_VIEWPORT until the source generation
+  // bumps. A viewport override is therefore any explicit viewport /
+  // deviceScaleFactor, an envelope (whose box is sized to the viewport), OR a
+  // page not currently at the default — so every capture starts from the
+  // geometry its identity claims.
   let originalViewport = page.viewport();
-  let baseViewport: ResolvedViewport = {
-    width: originalViewport?.width ?? DEFAULT_SCREENSHOT_VIEWPORT.width,
-    height: originalViewport?.height ?? DEFAULT_SCREENSHOT_VIEWPORT.height,
-    deviceScaleFactor:
-      originalViewport?.deviceScaleFactor ??
-      DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
-  };
+  let baseViewport: ResolvedViewport = { ...DEFAULT_SCREENSHOT_VIEWPORT };
+  let pageAtBase =
+    originalViewport != null &&
+    sameViewport(
+      {
+        width: originalViewport.width,
+        height: originalViewport.height,
+        deviceScaleFactor:
+          originalViewport.deviceScaleFactor ??
+          DEFAULT_SCREENSHOT_VIEWPORT.deviceScaleFactor,
+      },
+      baseViewport,
+    );
+  let anyViewportOverride =
+    !pageAtBase ||
+    entries.some(
+      (entry) => entryOverridesViewport(entry) || entryHasEnvelope(entry),
+    );
   let viewportOverridden = false;
   let currentViewport = baseViewport;
   let currentEnvelope: { width: number; height: number } | undefined;
+
+  // Per-stage wall-clock accumulators for the capture's stepTimings.
+  // `renderFor` can run more than once per batch (once per distinct
+  // envelope), so the nav/settle/image stages sum across re-renders; the
+  // capture stage sums the viewport switches and CDP screenshots, keeping
+  // the stages disjoint.
+  let navMs = 0;
+  let settleMs = 0;
+  let imagePaintMs = 0;
+  let screenshotMs = 0;
 
   // Transition render.html for the given envelope (undefined =
   // viewport-filling format) and wait for the render to settle. Returns a
@@ -1664,12 +1705,15 @@ export async function captureScreenshot(
         },
       });
     }
+    let stepStart = Date.now();
     await transitionTo(page, 'render.html', ...htmlParams);
     await waitForRoutePathSuffix(
       page,
       `/html/${format}/${ancestorLevel}`,
       opts,
     );
+    navMs += Date.now() - stepStart;
+    stepStart = Date.now();
     await waitForPrerenderSettle(page);
     if (envelope) {
       // A query-param-only re-transition leaves the path (and the parent
@@ -1677,6 +1721,7 @@ export async function captureScreenshot(
       // signal that the model refresh flushed the new envelope to the DOM.
       await waitForEnvelopeBox(page, envelope, opts);
     }
+    settleMs += Date.now() - stepStart;
     let terminal = await detectTerminalPrerenderError(page);
     if (terminal) {
       return renderCaptureToError(
@@ -1694,7 +1739,9 @@ export async function captureScreenshot(
     // Bounded by an internal timeout so a slow / 401-looping image can't hang
     // the capture; an image-free render pays only the fast
     // no-pending-resources path.
+    stepStart = Date.now();
     await waitForImagePaint(page);
+    imagePaintMs += Date.now() - stepStart;
     return undefined;
   };
 
@@ -1721,7 +1768,8 @@ export async function captureScreenshot(
       if (!sameEnvelope(entryEnvelope, currentEnvelope)) {
         // Envelope changed: re-lay-out the same hydrated card in the new box
         // at the matching viewport, then re-settle (which also waits out any
-        // image loads the new box triggers).
+        // image loads the new box triggers). `renderFor` accounts its own
+        // time into the nav/settle/image stages.
         if (!sameViewport(entryViewport, currentViewport)) {
           await page.setViewport(entryViewport);
           currentViewport = entryViewport;
@@ -1741,16 +1789,20 @@ export async function captureScreenshot(
         // the initial wait: this runs once per switch, so a slow/hanging image
         // can't spend the full budget and multiply across entries. When
         // nothing new loads, the wait costs only the DOM walk plus a frame.
+        let switchStart = Date.now();
         await page.setViewport(entryViewport);
         await waitForReflow(page);
         await waitForImagePaint(page, VIEWPORT_SWITCH_PAINT_WAIT_MS);
         currentViewport = entryViewport;
+        screenshotMs += Date.now() - switchStart;
       }
+      let captureStart = Date.now();
       let item = await captureOneEntry(
         page,
         entry,
         currentViewport.deviceScaleFactor,
       );
+      screenshotMs += Date.now() - captureStart;
       if ('type' in item) {
         return item;
       }
@@ -1761,7 +1813,10 @@ export async function captureScreenshot(
         .map((c) => `${c.name}:${c.width}x${c.height}@${c.deviceScaleFactor}`)
         .join(',')}`,
     );
-    return { captures };
+    return {
+      captures,
+      stepTimings: { navMs, settleMs, imagePaintMs, screenshotMs },
+    };
   } finally {
     if (viewportOverridden) {
       // Restore so the next reuse of this pooled page (including the indexing

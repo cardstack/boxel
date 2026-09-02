@@ -171,6 +171,7 @@ import type { Readable } from 'stream';
 import { createResponse } from './create-response.ts';
 import {
   captureSpecHash,
+  captureSpecOverrides,
   parseCaptureSpecParams,
   type CaptureSpec,
 } from './capture-spec.ts';
@@ -191,6 +192,14 @@ import {
   estimateScreenshotQueueWait,
   SCREENSHOT_SYNC_WAIT_BUDGET_MS,
 } from './jobs/screenshot-card.ts';
+import {
+  emitScreenshotPerf,
+  type ScreenshotRequestPerfEvent,
+} from './screenshot-perf.ts';
+import {
+  sanitizeLoggingCorrelationId,
+  X_BOXEL_LOGGING_CORRELATION_ID_HEADER,
+} from './prerender-headers.ts';
 import { mergeRelationships } from './merge-relationships.ts';
 import { getCardDirectoryName } from './helpers/card-directory-name.ts';
 import {
@@ -4100,6 +4109,7 @@ export class Realm {
     if (!this.#mediaCacheAdapter) {
       return mediaCacheMissResponse({ requestContext });
     }
+    let requestStart = Date.now();
     let instanceURL = this.paths.fileURL(
       instanceLocalPath.replace(/\.json$/, ''),
     );
@@ -4107,8 +4117,10 @@ export class Realm {
     // generation: undefined means the instance is missing, deleted, or
     // errored — an uncaptured miss — and otherwise it pins the generation an
     // edit bumps, without hydrating the row.
+    let generationLookupStart = Date.now();
     let sourceGeneration =
       await this.#realmIndexQueryEngine.liveInstanceGeneration(instanceURL);
+    let generationLookupMs = Date.now() - generationLookupStart;
     if (sourceGeneration === undefined) {
       return mediaCacheMissResponse({ requestContext });
     }
@@ -4147,33 +4159,84 @@ export class Realm {
       captureSpecHash: await captureSpecHash(parsed.spec),
       sourceGeneration,
     };
+    let ledgerLookupStart = Date.now();
     let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
+    let perf: ScreenshotServePerf = {
+      requestStart,
+      correlationId: sanitizeLoggingCorrelationId(
+        request.headers.get(X_BOXEL_LOGGING_CORRELATION_ID_HEADER),
+      ),
+      generationLookupMs,
+      ledgerLookupMs: Date.now() - ledgerLookupStart,
+    };
     if (entry) {
       // A hit costs zero Chrome work, so hits serve regardless of the
       // realm's capture gate — however the capture came to be in the
       // ledger.
-      return await serveMediaCacheEntry({
+      let serveStart = Date.now();
+      let response = await serveMediaCacheEntry({
         request,
         requestContext,
         entry,
         mediaCacheAdapter: this.#mediaCacheAdapter,
         dbAdapter: this.#dbAdapter,
       });
+      this.emitScreenshotServePerf(entryKey, perf, 'hit', {
+        lane: entry.lane,
+        serveMs: Date.now() - serveStart,
+      });
+      return response;
     }
     return await this.captureScreenshotOnDemand(
       request,
       requestContext,
       entryKey,
       parsed.spec,
+      perf,
     );
   }
 
+  // The stage clocks `serveScreenshot` accumulates before the hit/miss
+  // fork, threaded into the miss path so its terminal emit covers the whole
+  // request.
+  private emitScreenshotServePerf(
+    entryKey: MediaCacheEntryKey,
+    perf: ScreenshotServePerf,
+    outcome: ScreenshotRequestPerfEvent['outcome'],
+    fields: Partial<ScreenshotRequestPerfEvent> = {},
+  ): void {
+    emitScreenshotPerf({
+      eventType: 'request',
+      surface: 'get-dsl',
+      outcome,
+      realmURL: this.url,
+      sourceURL: entryKey.sourceURL,
+      captureSpecHash: entryKey.captureSpecHash,
+      sourceGeneration: entryKey.sourceGeneration,
+      lane: 'on-demand',
+      correlationId: perf.correlationId,
+      jobId: null,
+      reservationId: null,
+      hasTwin: null,
+      generationLookupMs: perf.generationLookupMs,
+      ledgerLookupMs: perf.ledgerLookupMs,
+      totalMs: Date.now() - perf.requestStart,
+      ...fields,
+    });
+  }
+
   // The miss path: a capture no ledger entry satisfies. Full captureSpec
-  // power on an unauthenticated-reachable GET is an unbounded spec space, so
-  // new captures are per-realm opt-in (`allowArbitraryScreenshots` on the
-  // realm's config card — the gate blocks Chrome work, never serving), and
-  // an open realm's captures run through the same per-realm serialized
-  // screenshot queue as the POST endpoint, bounded by a sync-wait budget:
+  // power on an unauthenticated-reachable GET is an unbounded spec space —
+  // on an open realm every distinct viewport/dsf/fullPage/clip combination
+  // is its own render and its own ledger entry — so new captures are
+  // per-realm opt-in (`allowArbitraryScreenshots` on the realm's config
+  // card — the gate blocks Chrome work, never serving). That opt-in is the
+  // deliberate cost boundary: no per-instance spec-cardinality cap beyond
+  // it, since the parse bounds each capture's pixel cost, the serialized
+  // lane bounds concurrency, and the on-demand lane's idle TTL reclaims
+  // entries nothing requests. An open realm's captures run through the same
+  // per-realm serialized screenshot queue as the POST endpoint, bounded by
+  // a sync-wait budget:
   //   - lane already too deep for the budget → immediate 503 + Retry-After
   //     (fail fast instead of holding a doomed connection);
   //   - otherwise enqueue and wait up to the budget; the job persists its
@@ -4185,8 +4248,13 @@ export class Realm {
     requestContext: RequestContext,
     entryKey: MediaCacheEntryKey,
     spec: CaptureSpec,
+    perf: ScreenshotServePerf,
   ): Promise<ResponseWithNodeStream> {
-    if (!(await this.allowsArbitraryScreenshots())) {
+    let gateStart = Date.now();
+    let gateOpen = await this.allowsArbitraryScreenshots();
+    let gateMs = Date.now() - gateStart;
+    if (!gateOpen) {
+      this.emitScreenshotServePerf(entryKey, perf, 'gated', { gateMs });
       // 403 isn't heuristically cacheable, so with no explicit freshness a
       // browser re-requests on every `<img>` load — and absent-⇒-false means
       // every realm is gated by default. Carry the same short window the miss
@@ -4211,11 +4279,13 @@ export class Realm {
     let owner = await this.getRealmOwnerUserId();
 
     let concurrencyGroup = `screenshot:${this.url}`;
+    let precheckStart = Date.now();
     let estimate = await estimateScreenshotQueueWait(
       this.#dbAdapter,
       concurrencyGroup,
       { ...entryKey, runAs: owner },
     );
+    let precheckMs = Date.now() - precheckStart;
     // A request whose capture is already queued or rendering coalesces onto
     // that job (see `chooseScreenshotCardCoalesceDecision`) and costs no new
     // Chrome work, so the lane's depth is not its wait — only a genuinely new
@@ -4225,12 +4295,18 @@ export class Realm {
       !estimate.hasTwin &&
       estimate.estimatedWaitMs > this.#screenshotSyncWaitMs
     ) {
+      this.emitScreenshotServePerf(entryKey, perf, 'congested', {
+        gateMs,
+        precheckMs,
+        hasTwin: estimate.hasTwin,
+      });
       return this.screenshotRetryLater(
         requestContext,
         estimate.estimatedWaitMs,
       );
     }
 
+    let enqueueStart = Date.now();
     let job = await enqueueScreenshotCardJob(
       {
         realmURL: this.url,
@@ -4238,16 +4314,28 @@ export class Realm {
         runAs: owner,
         cardId: entryKey.sourceURL,
         format: spec.format,
-        // The GET DSL's spec is canonical by construction (viewport / scale /
-        // clip params are reserved), so there are never capture overrides on
-        // this lane.
-        captureSpec: null,
+        // The spec's geometry overrides (viewport / dsf / fullPage / clip)
+        // ride to the capture engine; the entry key's `captureSpecHash`
+        // already covers them, so the persisted capture serves only on this
+        // exact spec's URL.
+        captureSpec: captureSpecOverrides(spec),
         persist: { ...entryKey, lane: 'on-demand' },
+        surface: 'get-dsl',
+        loggingCorrelationId: perf.correlationId,
       },
       this.#queue,
       this.#dbAdapter,
       userInitiatedPriority,
     );
+    let enqueueMs = Date.now() - enqueueStart;
+    let jobWaitStart = Date.now();
+    let stagePerf: Partial<ScreenshotRequestPerfEvent> = {
+      gateMs,
+      precheckMs,
+      hasTwin: estimate.hasTwin,
+      enqueueMs,
+      jobId: job.id,
+    };
 
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     // `const` so the symbol gets a unique-symbol type and the race result
@@ -4265,6 +4353,10 @@ export class Realm {
         }),
       ]);
       if (outcome === timedOut) {
+        this.emitScreenshotServePerf(entryKey, perf, 'timeout', {
+          ...stagePerf,
+          jobWaitMs: Date.now() - jobWaitStart,
+        });
         // The job keeps running and persists its own capture; the retry
         // hint is one average capture, since this request is now at the
         // front of the lane.
@@ -4273,6 +4365,7 @@ export class Realm {
           Math.max(estimate.avgCaptureMs, 1000),
         );
       }
+      let jobWaitMs = Date.now() - jobWaitStart;
       // Prefer the ledger entry the job persisted; fall back to persisting
       // here from the response for a worker that has no store configured.
       let entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
@@ -4293,20 +4386,60 @@ export class Realm {
         entry = await findMediaCacheEntry(this.#dbAdapter, entryKey);
       }
       if (!entry) {
-        return systemError({
+        this.emitScreenshotServePerf(entryKey, perf, 'error', {
+          ...stagePerf,
+          jobWaitMs,
+        });
+        let response = systemError({
           requestContext,
           message: `screenshot capture failed for ${entryKey.sourceURL}`,
           additionalError: outcome.error
             ? new Error(String(outcome.error))
             : undefined,
         });
+        // A failed capture persists nothing, so no ledger entry will
+        // short-circuit the repeat: without explicit freshness every `<img>`
+        // load of this URL is a fresh Chrome render. Some failures are
+        // durable properties of the request — a fullPage capture whose
+        // document extent exceeds the physical-pixel cap fails every time,
+        // and only the capture engine can discover that. Carry the same
+        // short window the miss and gate responses use, so a capture that
+        // keeps failing costs one render per window rather than one per
+        // image load.
+        response.headers.set(
+          'cache-control',
+          `${mediaCacheVisibility(requestContext)}, max-age=${MEDIA_CACHE_MAX_AGE_SECONDS}`,
+        );
+        return response;
       }
-      return await serveMediaCacheEntry({
+      let serveStart = Date.now();
+      let response = await serveMediaCacheEntry({
         request,
         requestContext,
         entry,
         mediaCacheAdapter: this.#mediaCacheAdapter!,
         dbAdapter: this.#dbAdapter,
+      });
+      this.emitScreenshotServePerf(entryKey, perf, 'rendered', {
+        ...stagePerf,
+        jobWaitMs,
+        serveMs: Date.now() - serveStart,
+      });
+      return response;
+    } catch (e: any) {
+      // A job that throws (the queue rejected it: a prerender that exhausted
+      // its retries, a reservation-lease timeout) rejects `job.done` and
+      // lands here — without this emit, the pipeline's hard-failure class
+      // would read on the telemetry board as missing request volume instead
+      // of a rise in `error`.
+      this.emitScreenshotServePerf(entryKey, perf, 'error', {
+        ...stagePerf,
+        jobWaitMs: Date.now() - jobWaitStart,
+      });
+      return systemError({
+        requestContext,
+        message: `screenshot capture failed for ${entryKey.sourceURL}`,
+        additionalError: e instanceof Error ? e : new Error(String(e)),
       });
     } finally {
       if (timeoutHandle) {
@@ -8406,4 +8539,14 @@ function assertRealmPermissions(
       }
     }
   }
+}
+
+// Stage clocks the `_screenshot/` serving path accumulates ahead of the
+// hit/miss fork; the terminal emit folds them into the request's telemetry
+// record (see `screenshot-perf.ts`).
+interface ScreenshotServePerf {
+  requestStart: number;
+  correlationId: string | null;
+  generationLookupMs: number;
+  ledgerLookupMs: number;
 }

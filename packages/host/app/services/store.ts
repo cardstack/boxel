@@ -1995,10 +1995,29 @@ export default class StoreService extends Service implements StoreInterface {
       this.network.authedFetch,
       this.network.virtualNetwork,
       {
+        resolvesQueryFieldsEagerly: () => this.resolvesQueryFieldsEagerly(),
         getSearchResource: (parent, getQuery, getRealms, opts) =>
           this.getSearchResource(parent, getQuery, getRealms, opts),
       },
     );
+  }
+
+  // A query-backed relationship resolves when its owner deserializes here, so a
+  // card's membership — and every `computeVia` reducing over it — is current
+  // without a template having to read the field first.
+  //
+  // Two stores are excluded, because both must render as a pure function of the
+  // document they were handed: the render store, and every store inside the
+  // dedicated prerender app (where the deserializing store is the regular one,
+  // which an `isRenderStore` term alone would miss). `__boxelRenderContext` is
+  // deliberately not part of the test — card-prerender sets it around index
+  // renders that run alongside an interactive app, whose own query fields must
+  // keep resolving through those windows.
+  protected resolvesQueryFieldsEagerly(): boolean {
+    if ((globalThis as any).__boxelPrerenderApp) {
+      return false;
+    }
+    return !this.isRenderStore;
   }
 
   private handleInvalidations = (event: RealmEventContent) => {

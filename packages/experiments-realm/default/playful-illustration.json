@@ -3,7 +3,7 @@
     "meta": {
       "adoptsFrom": {
         "name": "default",
-        "module": "https://cardstack.com/base/style-reference"
+        "module": "@cardstack/base/style-reference"
       }
     },
     "type": "card",
@@ -12,25 +12,22 @@
       "cardInfo": {
         "notes": null,
         "name": "Playful Illustration",
-        "summary": "Flat doodles, chunky lines, pastel pops, witty copy, asym\u2011grid",
+        "summary": "Flat doodles, chunky lines, pastel pops, witty copy, asym‑grid",
         "cardThumbnailURL": null
       },
       "styleName": "Playful Illustration",
-      "visualDNA": "Flat doodles, chunky lines, pastel pops, witty copy, asym\u2011grid",
-      "cssImports": [
-        "https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
-      ],
+      "visualDNA": "Flat doodles, chunky lines, pastel pops, witty copy, asym‑grid",
       "typography": {
         "body": {
           "fontSize": "1.125rem",
-          "fontFamily": "'Crimson Text', serif",
+          "fontFamily": "'Nunito', sans-serif",
           "fontWeight": "400",
           "lineHeight": "1.6",
           "sampleText": "We believe software should bring joy to your day, not drain it. Every interaction is designed to make you smile."
         },
         "caption": {
           "fontSize": "0.875rem",
-          "fontFamily": "'Crimson Text', serif",
+          "fontFamily": "'Nunito', sans-serif",
           "fontWeight": "400",
           "lineHeight": "1.5",
           "sampleText": "The little details matter"
@@ -57,11 +54,7 @@
           "sampleText": "Features that delight"
         }
       },
-      "inspirations": [
-        "Mailchimp",
-        "Slack",
-        "Headspace"
-      ],
+      "inspirations": ["Mailchimp", "Slack", "Headspace"],
       "rootVariables": {
         "card": "#FFFFFF",
         "ring": "#FFE66D",
@@ -108,7 +101,10 @@
         "secondaryForeground": "#2D3748",
         "destructiveForeground": "#FFFFFF",
         "sidebarAccentForeground": "#FFFFFF",
-        "sidebarPrimaryForeground": "#2D3748"
+        "sidebarPrimaryForeground": "#2D3748",
+        "success": null,
+        "themeFontSize": null,
+        "themeScale": null
       },
       "wallpaperImages": [
         "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1920&h=1080&fit=crop&crop=focalpoint&q=80",
@@ -161,8 +157,12 @@
         "secondaryForeground": "#2A2438",
         "destructiveForeground": "#2A2438",
         "sidebarAccentForeground": "#2A2438",
-        "sidebarPrimaryForeground": "#2A2438"
-      }
+        "sidebarPrimaryForeground": "#2A2438",
+        "success": null,
+        "themeFontSize": null,
+        "themeScale": null
+      },
+      "customCssImports": []
     }
   }
 }

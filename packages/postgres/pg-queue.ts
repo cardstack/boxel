@@ -674,6 +674,7 @@ export class PgQueueRunner implements QueueRunner {
                 jobId: jobToRun.id,
                 reservationId: jobReservationId,
                 priority: jobToRun.priority,
+                queueWaitMs: Number.isFinite(queueWaitMs) ? queueWaitMs : null,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves. The deadline is the lease,

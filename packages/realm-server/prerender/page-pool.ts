@@ -426,6 +426,12 @@ export class PagePool {
   #renderSemaphore: RenderSemaphore | undefined;
   #disableStandbyRefill: boolean;
   #ensuringStandbys: Promise<void> | null = null;
+  // Bumped by every `closeAll`. The standby refill reads it on entry and gives
+  // up once it moves, which is how a close cancels a refill it would otherwise
+  // have to wait out. A counter rather than a flag because `Prerenderer`'s
+  // browser restart closes the pool and then keeps using it, so there is no
+  // single point at which a flag could be cleared.
+  #closeGeneration = 0;
   #creatingStandbys = 0;
   #consoleErrorsByPageId = new Map<string, Map<string, ConsoleErrorEntry>>();
   // Per-pageId map of CDP exceptionId -> bucket key, owned alongside
@@ -1338,6 +1344,14 @@ export class PagePool {
     // land below the zero this method resets the counter to, under-reporting
     // pool occupancy for the life of the process. Pinned by
     // `tests/page-pool-standby-refill-test.ts`.
+    //
+    // Bumping the close generation first is what keeps that wait bounded. The
+    // refill gives up when the generation moves, so this awaits the attempt
+    // already in flight and nothing beyond it. Waiting out the rest costs
+    // `STANDBY_CREATION_RETRIES` standby timeouts plus backoff — long enough
+    // for a caller closing the pool in order to shut down to blow its own
+    // shutdown budget, leaving the process it was tearing down alive.
+    this.#closeGeneration++;
     let ensuring = this.#ensuringStandbys;
     this.#ensuringStandbys = null;
     if (ensuring) {
@@ -1395,7 +1409,17 @@ export class PagePool {
   }
 
   async #ensureStandbyPoolInternal(): Promise<void> {
+    // One snapshot for the whole refill, threaded into the retry loop below.
+    // Every await in here is a window for a `closeAll` to bump the counter, so
+    // a second read anywhere downstream would be a read of the new value.
+    let generation = this.#closeGeneration;
     for (;;) {
+      // A `closeAll` that began after this refill did has already decided the
+      // pool's pages are going away, so anything created from here would be
+      // orphaned on the outgoing browser.
+      if (this.#closeGeneration !== generation) {
+        return;
+      }
       let desired = this.#desiredStandbyCount();
       let current = this.#currentStandbyCount();
       if (current >= desired) {
@@ -1405,7 +1429,7 @@ export class PagePool {
       if (!prepared) {
         return;
       }
-      let standby = await this.#createStandbyWithRetries();
+      let standby = await this.#createStandbyWithRetries(generation);
       if (!standby) {
         return;
       }
@@ -1464,10 +1488,23 @@ export class PagePool {
     await this.disposeAffinity(lruAffinity);
   }
 
-  async #createStandbyWithRetries(): Promise<StandbyEntry | undefined> {
+  // Takes the refill's generation rather than reading the counter itself. The
+  // caller yields at `#prepareSlotForStandby` between its own check and this
+  // call, so a `closeAll` landing in that window has already bumped the
+  // counter by the time this is entered: a fresh read here would compare the
+  // new value against itself, find no mismatch, and run every attempt — the
+  // exact wait the counter exists to cut short.
+  async #createStandbyWithRetries(
+    refillGeneration: number,
+  ): Promise<StandbyEntry | undefined> {
     let attempt = 0;
     let backoffMs = STANDBY_BACKOFF_MS;
     while (attempt < STANDBY_CREATION_RETRIES) {
+      // Checked before every attempt, so a close that lands during a backoff
+      // ends the retries rather than being made to wait for them.
+      if (this.#closeGeneration !== refillGeneration) {
+        return undefined;
+      }
       attempt++;
       try {
         return await this.#createStandby();

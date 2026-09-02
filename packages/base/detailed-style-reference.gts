@@ -1,7 +1,11 @@
 import { tracked } from '@glimmer/tracking';
 import { get } from '@ember/object';
 import StyleReference from './style-reference';
-import { GUIDE_SECTIONS } from './structured-theme';
+import {
+  GUIDE_SECTIONS,
+  orderEditSections,
+  withPreviewNavSection,
+} from './structured-theme';
 import { ThemeTypographyField } from './structured-theme-variables';
 import { contains, field, Component, type BaseDefComponent } from './card-api';
 import MarkdownField from './markdown';
@@ -114,14 +118,16 @@ class Isolated extends Component<typeof DetailedStyleReference> {
 
   private get sectionsWithContent() {
     let sections = this.args.model?.guideSections;
+    // the Card Container CSS reference is display-only, so it stays out of
+    // the editor; every other field is editable whether or not it has content
+    if (this.editMode) {
+      return orderEditSections(
+        sections?.filter((section) => section.id !== 'card-container-css') ??
+          [],
+        this.hasThemeCss,
+      );
+    }
     return sections?.filter((section) => {
-      // every field stays editable in edit mode, theme or content or not;
-      // the Card Container CSS reference is display-only and stays out of
-      // the editor
-      if (this.editMode) {
-        return section.id !== 'card-container-css';
-      }
-
       if (!this.hasThemeCss) {
         return false;
       }
@@ -172,12 +178,20 @@ class Isolated extends Component<typeof DetailedStyleReference> {
     );
   }
 
+  private get navSections() {
+    return withPreviewNavSection(
+      this.sectionsWithContent ?? [],
+      this.hasThemeCss,
+    );
+  }
+
   <template>
     <ThemeDashboard
       @themeCss={{@model.cssVariables}}
       @themeId={{@model.id}}
-      @sections={{this.sectionsWithContent}}
+      @sections={{this.navSections}}
       @isDarkMode={{this.isDarkMode}}
+      @toggleDarkMode={{unless this.showEmptyState this.toggleDarkMode}}
     >
       <:header>
         <ThemeDashboardHeader
@@ -197,8 +211,7 @@ class Isolated extends Component<typeof DetailedStyleReference> {
           <GridContainer class='dsr-grid'>
             {{#if this.showVisualizer}}
               <ThemeVisualizer
-                @toggleDarkMode={{this.toggleDarkMode}}
-                @isDarkMode={{this.isDarkMode}}
+                id='preview'
                 @fontStack={{@model.fontStacksFor this.isDarkMode}}
                 @cssImports={{@model.cssImports}}
                 @editMode={{this.editMode}}
@@ -372,7 +385,11 @@ class Isolated extends Component<typeof DetailedStyleReference> {
       /* Image Gallery */
       .dsr-image-gallery {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(17.5rem, 1fr));
+        /* min() lets the column shrink instead of overflowing a narrow card */
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(min(17.5rem, 100%), 1fr)
+        );
         gap: calc(var(--boxel-sp) * 1.5);
         margin-top: calc(var(--boxel-sp) * 1.5);
       }

@@ -191,6 +191,12 @@ export class Prerenderer {
   }
 
   async stop(): Promise<void> {
+    // Set before anything is torn down rather than after. The render entry
+    // points and `#runRestart`'s trailing re-warm all read this, and a stop
+    // that lands while a restart is in flight has to be visible to them
+    // before `closeAll()` starts — otherwise the re-warm relaunches the
+    // browser this method is on its way to closing.
+    this.#stopped = true;
     if (this.#cleanupInterval) {
       clearInterval(this.#cleanupInterval);
       this.#cleanupInterval = undefined;
@@ -202,7 +208,6 @@ export class Prerenderer {
     this.#affinitySnapshotSampler.shutdown();
     await this.#pagePool.closeAll();
     await this.#browserManager.stop();
-    this.#stopped = true;
   }
 
   async disposeAffinity({
@@ -670,6 +675,7 @@ export class Prerenderer {
         result.response,
         result.timings,
         Date.now() - screenshotStart,
+        { priority, tabReused: result.pool?.reused },
       );
       return result;
     } catch (e) {
@@ -935,6 +941,13 @@ export class Prerenderer {
     log.warn('Restarting prerender browser');
     this.#browserRestartCount++;
     await this.#pagePool.closeAll();
+    if (this.#stopped) {
+      // `stop()` arrived while this restart was in flight. Bringing a browser
+      // back up now would outlive the shutdown that is already underway, and
+      // re-warming into it would hold that shutdown open behind a pool the
+      // process no longer needs.
+      return;
+    }
     await this.#browserManager.restartBrowser();
     await this.#pagePool.warmStandbys().catch((e) => {
       log.error('Failed to warm standby pages after browser restart:', e);

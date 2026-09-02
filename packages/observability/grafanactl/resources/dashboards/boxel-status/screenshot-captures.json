@@ -1,0 +1,851 @@
+{
+  "apiVersion": "dashboard.grafana.app/v1beta1",
+  "kind": "Dashboard",
+  "metadata": {
+    "annotations": {
+      "grafana.app/folder": "defd2d156sav4d"
+    },
+    "name": "boxel-screenshot-perf"
+  },
+  "spec": {
+    "annotations": {
+      "list": [
+        {
+          "builtIn": 1,
+          "datasource": {
+            "type": "grafana",
+            "uid": "-- Grafana --"
+          },
+          "enable": true,
+          "hide": true,
+          "iconColor": "rgba(0, 211, 255, 1)",
+          "name": "Annotations & Alerts",
+          "type": "dashboard"
+        }
+      ]
+    },
+    "description": "Screenshot capture pipeline stage telemetry (channel boxel:screenshot-perf): request records from the serving surfaces (realm-server) and capture records from the screenshot-card worker task, joined by jobId/correlationId. The same capture breakdown is persisted on media_cache_ledger.diagnostics for SQL reads.",
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [],
+    "panels": [
+      {
+        "type": "row",
+        "title": "Overview",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 0
+        },
+        "panels": []
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "stat",
+        "title": "Capture-relevant requests (5m)",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 0,
+          "y": 1
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "none",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "description": "Requests on the two capture surfaces that touched capture work: hits, renders, 503s, 403s. Addressing 404s/400s never emit."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "stat",
+        "title": "Captures run (5m)",
+        "gridPos": {
+          "h": 4,
+          "w": 6,
+          "x": 6,
+          "y": 1
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short"
+          },
+          "overrides": []
+        },
+        "options": {
+          "colorMode": "none",
+          "graphMode": "area",
+          "reduceOptions": {
+            "calcs": [
+              "lastNotNull"
+            ],
+            "fields": "",
+            "values": false
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum(count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [5m])) or vector(0)",
+            "queryType": "range",
+            "refId": "A"
+          }
+        ],
+        "description": "screenshot-card jobs that finished (any status)."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Requests by outcome",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 12,
+          "y": 1
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (outcome) (count_over_time({service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [$__interval]))",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "{{outcome}}"
+          }
+        ],
+        "description": "hit = ledger hit with zero Chrome work; rendered = capture completed within the sync wait; timeout/congested = 503 + Retry-After; gated = 403."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Request wall-clock (totalMs)",
+        "gridPos": {
+          "h": 8,
+          "w": 12,
+          "x": 0,
+          "y": 5
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.50, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "p50"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "B",
+            "legendFormat": "p95"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.99, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "C",
+            "legendFormat": "p99"
+          }
+        ],
+        "description": "What callers experienced end-to-end on the serving surfaces, all outcomes."
+      },
+      {
+        "type": "row",
+        "title": "Capture stage breakdown",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 13
+        },
+        "panels": []
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Capture latency by stage (p95)",
+        "gridPos": {
+          "h": 9,
+          "w": 24,
+          "x": 0,
+          "y": 14
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap queueWaitMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "queueWaitMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap permissionsMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "B",
+            "legendFormat": "permissionsMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap launchMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "C",
+            "legendFormat": "launchMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap renderMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "D",
+            "legendFormat": "renderMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap navMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "E",
+            "legendFormat": "navMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap settleMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "F",
+            "legendFormat": "settleMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap imagePaintMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "G",
+            "legendFormat": "imagePaintMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap screenshotMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "H",
+            "legendFormat": "screenshotMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap decodeMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "I",
+            "legendFormat": "decodeMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap persistMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "J",
+            "legendFormat": "persistMs"
+          }
+        ],
+        "description": "Where a capture's wall-clock goes, p95 per stage. queueWaitMs is enqueue\u2192claim; launchMs is page acquire in the pool; renderMs is the server-observed render (nav/settle/imagePaint/screenshot are its components); persistMs is the MediaCache put."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Queue wait vs render (p95)",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 0,
+          "y": 23
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap queueWaitMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "queueWaitMs"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap prerenderMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "B",
+            "legendFormat": "prerenderMs (incl. transport)"
+          },
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap renderMs [$__interval]) by ()",
+            "queryType": "range",
+            "refId": "C",
+            "legendFormat": "renderMs (server-observed)"
+          }
+        ],
+        "description": "A deep serialized lane shows as queue wait; a slow render shows on the render side."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Page acquire by warm/cold tab (p95 launchMs)",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 8,
+          "y": 23
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap launchMs [$__interval]) by (tabReused)",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "tabReused={{tabReused}}"
+          }
+        ],
+        "description": "tabReused=false is the cold-start tax; true with a large launch is pool contention."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Persist outcome",
+        "gridPos": {
+          "h": 8,
+          "w": 8,
+          "x": 16,
+          "y": 23
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "short",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "sum by (persistOutcome) (count_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" [$__interval]))",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "{{persistOutcome}}"
+          }
+        ],
+        "description": "uploaded vs deduped (bytes already stored under the content key) vs skipped/failed."
+      },
+      {
+        "type": "row",
+        "title": "Slices",
+        "collapsed": false,
+        "gridPos": {
+          "h": 1,
+          "w": 24,
+          "x": 0,
+          "y": 31
+        },
+        "panels": []
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Capture wall-clock p95 by realm",
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 0,
+          "y": 32
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by (realmURL)",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "{{realmURL}}"
+          }
+        ]
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "timeseries",
+        "title": "Request wall-clock p95 by surface",
+        "gridPos": {
+          "h": 9,
+          "w": 12,
+          "x": 12,
+          "y": 32
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            },
+            "unit": "ms",
+            "custom": {
+              "drawStyle": "line",
+              "lineWidth": 1,
+              "fillOpacity": 8,
+              "showPoints": "never",
+              "spanNulls": true
+            }
+          },
+          "overrides": []
+        },
+        "options": {
+          "legend": {
+            "displayMode": "list",
+            "placement": "bottom",
+            "showLegend": true
+          },
+          "tooltip": {
+            "mode": "multi",
+            "sort": "desc"
+          }
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "quantile_over_time(0.95, {service=\"realm-server\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"request\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__interval]) by (surface)",
+            "queryType": "range",
+            "refId": "A",
+            "legendFormat": "{{surface}}"
+          }
+        ],
+        "description": "get-dsl is the GET _screenshot/ DSL route; post is POST /_screenshot-card."
+      },
+      {
+        "datasource": {
+          "type": "loki",
+          "uid": "loki"
+        },
+        "type": "table",
+        "title": "Slowest captures by card (range)",
+        "gridPos": {
+          "h": 10,
+          "w": 24,
+          "x": 0,
+          "y": 41
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          },
+          "overrides": []
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [
+            {
+              "desc": true,
+              "displayName": "Value"
+            }
+          ]
+        },
+        "targets": [
+          {
+            "datasource": {
+              "type": "loki",
+              "uid": "loki"
+            },
+            "expr": "topk(20, max by (sourceURL) (max_over_time({service=~\"realm-server|worker\", env=\"$env\"} |= \"boxel:screenshot-perf\" | json | line_format \"{{ if .log }}{{ .log }}{{ else }}{{ __line__ }}{{ end }}\" | json | channel=\"boxel:screenshot-perf\" | eventType=\"capture\" | realmURL=~\".*${realm}.*\" | surface=~\"$surface\" | unwrap totalMs [$__range])))",
+            "queryType": "instant",
+            "refId": "A",
+            "instant": true
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "preload": false,
+    "refresh": "1m",
+    "schemaVersion": 41,
+    "tags": [
+      "screenshot",
+      "captures",
+      "media-cache"
+    ],
+    "templating": {
+      "list": [
+        {
+          "hide": 2,
+          "name": "env",
+          "query": "__ENV__",
+          "skipUrlSync": true,
+          "type": "constant"
+        },
+        {
+          "current": {
+            "text": "",
+            "value": ""
+          },
+          "description": "Substring match on the capture's realm URL; empty = all realms.",
+          "hide": 0,
+          "name": "realm",
+          "options": [
+            {
+              "selected": true,
+              "text": "",
+              "value": ""
+            }
+          ],
+          "query": "",
+          "type": "textbox"
+        },
+        {
+          "current": {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          "description": "Which serving surface enqueued the work.",
+          "hide": 0,
+          "includeAll": true,
+          "allValue": ".*",
+          "multi": false,
+          "name": "surface",
+          "options": [
+            {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            {
+              "selected": false,
+              "text": "get-dsl",
+              "value": "get-dsl"
+            },
+            {
+              "selected": false,
+              "text": "post",
+              "value": "post"
+            }
+          ],
+          "query": "get-dsl,post",
+          "type": "custom"
+        }
+      ]
+    },
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "browser",
+    "title": "Screenshot Capture Performance"
+  }
+}
