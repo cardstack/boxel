@@ -49,6 +49,17 @@ export type {
 } from './dom/scroll/types.ts';
 export type { InViewOptions } from './dom/viewport.ts';
 export { inView } from './dom/viewport.ts';
+export { Film } from './film.ts';
+export type {
+  Beat as FilmBeat,
+  Cam as FilmCam,
+  Chapter as FilmChapter,
+  FilmClock,
+  FilmGrade,
+  FilmHandle,
+  Join as FilmJoin,
+  Picture as FilmPicture,
+} from './film/types.ts';
 export { createDragControls, DragControls } from './gestures/drag-controls.ts';
 export {
   correctParentTransform,

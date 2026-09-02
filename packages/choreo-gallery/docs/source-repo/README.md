@@ -327,6 +327,25 @@ The mapping from three.js to CSS is **85 lines** (`test-app/app/lib/css3d.ts`): 
 
 [docs/dom-in-3d.md](docs/dom-in-3d.md) is the write-up: what the two shipped cases cost, what floating cards, anchored pop-ups and effects over DOM would add, and the two things that stay hard regardless of line count.
 
+## The film: `<Film>`
+
+Two films were cut by hand on the same engine before the construct was written — **Towers** (`/_towers`) and **Sagrada Família** (`/_sagrada`) — and 69% of the second was the first. `<Film>` is that 69%, lifted: a headless cutting room in which a 3D page takes the place of the video track, and everything else is a component reading one clock — the chased lens, the joins (wipe, dip, blend, iris, melt, blur, luma, flash, defocus), the lower third and the plate on Choreo, the timeline, the voice with its measured reads, the transport, the front door and the end card.
+
+```gts
+import { Film } from 'glimmer-motion/film';
+
+<Film @name='sagrada' @src={{this.src}} @assets={{this.assets}}
+  @beats={{BEATS}} @chapters={{CHAPTERS}} @grades={{GRADES}}
+  @voSecs={{VO_SECS}} @clock={{CLOCK}} @standing={{T_TODAY}}>
+  <:gate as |f|>…the front matter, f.begin…</:gate>
+  <:end as |f|>…the back matter, f.restart…</:end>
+</Film>
+```
+
+A film is its shot list (data an agent edits), its script with the reads measured by ffprobe, its chapters, the geometry sampled off its model, and an identity block. The one-task behaviours — walk up the street and only then put your head back, follow the part being built, no line on a thing still going up — are beat fields with their handles exposed. The picture is a port (`Picture`), so a third film can hand in something other than an iframe.
+
+[docs/film-construct.md](docs/film-construct.md) is the design record: the two reference films, the duplication measured, the fork between a seekable film and a chased one, and what was built.
+
 ---
 
 ## The binding underneath
