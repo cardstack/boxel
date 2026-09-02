@@ -1263,6 +1263,92 @@ module(`Integration | search resource`, function (hooks) {
         );
       });
 
+      // What a seed is allowed to imply about the match count. With no meta the
+      // resource infers the total from the rows, which is right only when
+      // nothing was withheld. A producer that could not count — a query field
+      // whose search lost a realm — says so on the seed, and the inference must
+      // not overwrite it: inferring there turns "how many is unknown" into "you
+      // hold all of them", which is the confident-number failure the whole
+      // shortfall signal exists to prevent.
+      test(`a seed carrying no meta infers the total from its rows`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: { cards, searchURL, realms: [testRealmURL] },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.strictEqual(
+          search.meta?.page?.total,
+          cards.length,
+          'nothing was withheld, so the rows in hand are the match count',
+        );
+        assert.notOk(
+          search.meta?.incomplete,
+          'and the result set is not labelled short',
+        );
+      });
+
+      test(`a seed labelled incomplete keeps the label, so its count reads as a floor`, async function (assert) {
+        let { cards, searchURL } = await buildSeed();
+        fetchCalls = 0;
+        (
+          globalThis as unknown as { __boxelRenderContext?: boolean }
+        ).__boxelRenderContext = true;
+
+        let search = getSearchResourceForTest(loaderService, () => ({
+          named: {
+            query: bookQuery,
+            realms: [testRealmURL],
+            isLive: false,
+            isAutoSaved: false,
+            storeService,
+            seed: {
+              cards,
+              searchURL,
+              realms: [testRealmURL],
+              // The shape a query field seeds when its search reached a realm
+              // that never answered: the rows that arrived, and the count
+              // marked as covering only them.
+              meta: { page: { total: cards.length }, incomplete: true },
+              queryErrors: [
+                {
+                  realm: 'https://example.invalid/offline/',
+                  type: 'network',
+                  message: 'realm did not answer',
+                },
+              ],
+            },
+            owner: this.owner,
+          },
+        }));
+        await search.loaded;
+        await settled();
+
+        assert.true(
+          search.meta?.incomplete,
+          'the label survives seeding, so a consumer can tell the count is a floor',
+        );
+        assert.strictEqual(
+          search.instances.length,
+          cards.length,
+          'the realms that answered still contribute their rows',
+        );
+      });
+
       test(`live path with the same seed still fetches (live-SPA behavior is preserved)`, async function (assert) {
         let { cards, searchURL } = await buildSeed();
         fetchCalls = 0;

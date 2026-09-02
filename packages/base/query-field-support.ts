@@ -211,13 +211,26 @@ export function ensureQueryFieldSearchResource(
             realms: fieldState?.seedRealms,
             queryErrors: fieldState?.seedErrors,
             cardURLs: fieldState?.seedCardURLs,
-            // The indexer's match count, so a seeded field knows straight away
-            // whether it holds the whole set. Absent it, the resource infers a
-            // total from the record count and a truncated seed reads as
-            // complete until a live re-query corrects it.
+            // What the resource is allowed to believe about the match count.
+            // A count the indexer reported passes through as the count. Where
+            // it reported none but recorded a realm failure, the rows in hand
+            // are labelled a floor instead: absent any meta the resource infers
+            // the total from the record count, and a set short by a realm
+            // nobody could count would then read as the whole of it — a
+            // confident number over an incomplete set, which is the failure
+            // this field's status exists to report rather than reproduce.
+            // An ordinary seed carries neither, and the resource's own
+            // inference stands.
             ...(fieldState?.seedTotal != null
               ? { meta: { page: { total: fieldState.seedTotal } } }
-              : {}),
+              : fieldState?.seedErrors?.length
+                ? {
+                    meta: {
+                      page: { total: seedRecords.length },
+                      incomplete: true,
+                    },
+                  }
+                : {}),
           }
         : undefined,
     },
