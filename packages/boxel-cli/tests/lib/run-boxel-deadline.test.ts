@@ -21,9 +21,10 @@ let originalBin: string | undefined;
 //   --deaf           idles and swallows SIGTERM, like a command with its own
 //                    shutdown handler
 //   --leave-orphan   idles after spawning a child that inherits its stdio and
-//                    outlives it, the way `boxel parse` leaves ember-tsc and
-//                    `boxel test` leaves chromium — the pipes stay open, so
-//                    `close` never arrives
+//                    would outlive it, the way `boxel parse` leaves ember-tsc
+//                    and `boxel test` leaves chromium — the pipes stay open,
+//                    so `close` never arrives. Prints the child's pid so the
+//                    test can check it is reaped.
 //
 // Anything else prints on both streams and exits 0.
 const STUB_CLI = `
@@ -32,10 +33,10 @@ if (process.argv.includes('--deaf')) {
   process.on('SIGTERM', () => {});
 }
 if (process.argv.includes('--leave-orphan')) {
-  spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], {
+  let orphan = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], {
     stdio: 'inherit',
-    detached: true,
-  }).unref();
+  });
+  process.stdout.write('orphan-pid=' + orphan.pid + '\\n');
 }
 if (
   process.argv.some((a) => ['--hang', '--deaf', '--leave-orphan'].includes(a))
@@ -47,6 +48,33 @@ if (
   process.stderr.write('a note\\n');
 }
 `;
+
+/**
+ * True while `pid` names a process that is still executing.
+ *
+ * `process.kill(pid, 0)` is not that test: a killed process whose parent is
+ * gone stays in the process table as a zombie until whatever inherited it
+ * reaps it, and signalling a zombie succeeds. Read the state out of `/proc`
+ * where it is available, and fall back to the signal probe elsewhere.
+ */
+function isRunning(pid: number): boolean {
+  try {
+    let stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    // Fields after the parenthesised comm: state is the first of them.
+    let state = stat.slice(stat.lastIndexOf(') ') + 2).split(' ')[0];
+    return state !== 'Z';
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 beforeAll(() => {
   scriptDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-cli-deadline-'));
@@ -94,14 +122,20 @@ describe('runBoxel deadline', () => {
     expect(Date.now() - startedAt).toBeLessThan(20_000);
   });
 
-  it('ends a command whose orphan keeps the stdio pipes open', async () => {
+  it('ends a command whose child keeps the stdio pipes open, and that child', async () => {
     let startedAt = Date.now();
     let res = await runBoxel(['--leave-orphan'], { timeout: 1_000 });
     expect(res.timedOut).toBe(true);
     expect(res.stderr).toContain('working…');
-    // The orphan holds the pipes for a minute; resolving on the command's own
-    // exit means the deadline is not waiting on it.
+    // The child would hold the pipes for ten minutes, so `close` never
+    // arrives; settling on the command's own exit is what bounds this.
     expect(Date.now() - startedAt).toBeLessThan(20_000);
+
+    let orphanPid = Number(/orphan-pid=(\d+)/.exec(res.stdout)?.[1]);
+    expect(Number.isInteger(orphanPid)).toBe(true);
+    // Killing the group, not just the command, is what stops that child from
+    // running on into the tests that follow it in this process.
+    expect(isRunning(orphanPid)).toBe(false);
   });
 
   it('refuses a deadline that would pre-empt the command own deadline', async () => {
@@ -112,13 +146,23 @@ describe('runBoxel deadline', () => {
     );
   });
 
-  it('clears the command own deadline by a margin when none is requested', async () => {
-    // 90s of margin over the command's 60s means the kill cannot land first,
-    // so a wedged command still reports its own diagnostic. The stub exits
-    // immediately; what is under test is that no deadline error is raised and
-    // the run is not killed.
-    let res = await runBoxel(['realm', 'publish', '--timeout=60000']);
+  it('accepts a command own deadline that the default clears by a margin', async () => {
+    // 30s leaves the default 60s deadline a full margin above it, so a wedged
+    // command reports its own diagnostic and the harness never needs a budget
+    // the vitest config does not cover. The stub exits at once; what is under
+    // test is that no deadline error is raised and nothing is killed.
+    let res = await runBoxel(['realm', 'publish', '--timeout=30000']);
     expect(res.timedOut).toBe(false);
     expect(res.ok).toBe(true);
+  });
+
+  it('refuses to derive a deadline past what it takes on its own', async () => {
+    // Deriving it would put the harness deadline at or above the vitest
+    // budgets, and the budget that then fires first abandons the subprocess
+    // rather than ending it. The helper cannot see those budgets, so it makes
+    // the call site name both rungs.
+    await expect(
+      runBoxel(['realm', 'publish', '--timeout', '60000']),
+    ).rejects.toThrow(/Pass `timeout: 90000`/);
   });
 });

@@ -77,7 +77,14 @@ export class CheckpointManager {
    * watch` flush is the ordinary way to land in it.
    */
   private async hasCommits(): Promise<boolean> {
-    const head = await this.git('rev-parse', '--verify', '--quiet', 'HEAD');
+    // `rev-parse --verify --quiet` exits 1 with no output when the revision
+    // does not resolve, which is the unborn-HEAD answer. Only that code is
+    // tolerated: a repository git cannot read at all exits 128, and must
+    // surface rather than read as "no history".
+    const head = await this.spawnGit(
+      ['rev-parse', '--verify', '--quiet', 'HEAD'],
+      (code) => code === 1,
+    );
     return head.trim().length > 0;
   }
 
@@ -645,6 +652,24 @@ export class CheckpointManager {
   ];
 
   private git(...args: string[]): Promise<string> {
+    // `status` answers through its exit code rather than through failure — a
+    // dirty tree is non-zero — so nothing it returns is an error.
+    return this.spawnGit(
+      args,
+      args.includes('status') ? () => true : () => false,
+    );
+  }
+
+  /**
+   * @param isAnswer decides which non-zero exit codes are part of the
+   * command's answer rather than a failure. Everything else still rejects, so
+   * a fatal (git uses 128: no repository, dubious ownership, a corrupt object
+   * store) is never mistaken for a negative result.
+   */
+  private spawnGit(
+    args: string[],
+    isAnswer: (code: number | null) => boolean,
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
       const child = spawn(
         'git',
@@ -667,12 +692,7 @@ export class CheckpointManager {
       child.on('error', (err) => reject(err));
 
       child.on('close', (code) => {
-        // `status` and any `--quiet` probe report their answer through the
-        // exit code — a dirty tree, an unborn HEAD — so a non-zero exit
-        // from those is data rather than a failure.
-        const exitCodeIsTheAnswer =
-          args.includes('status') || args.includes('--quiet');
-        if (code !== 0 && !exitCodeIsTheAnswer) {
+        if (code !== 0 && !isAnswer(code)) {
           reject(
             new Error(
               `git ${args.join(' ')} failed: ${stderr.trim()}` +
