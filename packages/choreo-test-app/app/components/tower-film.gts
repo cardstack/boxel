@@ -297,6 +297,18 @@ interface Beat {
 const TICK = 2;
 
 /**
+ * WHICH CUT OF THE FILM THIS IS.
+ *
+ * A dev server serves the app from source but the motion library from
+ * its BUILT package, so an editor and a browser can disagree about what
+ * is running with nothing on screen to say so — an afternoon was spent
+ * arguing about a fix that was never loaded. The stamp is logged at
+ * boot and shown in the corner under `?debug`, so "is my page current?"
+ * is a glance rather than a theory.
+ */
+const BUILD = 'cut-4 · clamped tails · re-cut restarts the clock';
+
+/**
  * WHAT EACH READ ACTUALLY RUNS, seconds, measured with ffprobe against the
  * files in `public/towers/vo/`. The kinetic type is paced against the VOICE,
  * not against the beat: the last cue should land as the line is finishing,
@@ -1370,6 +1382,15 @@ export default class TowerFilm extends Component<{
     );
   }
 
+  /** `?debug` puts the build stamp in the corner — see BUILD */
+  get debug(): boolean {
+    return /[?&]debug\b/.test(window.location.search);
+  }
+
+  get build(): string {
+    return BUILD;
+  }
+
   get src(): string {
     return `${config.rootURL}towers.html?host`;
   }
@@ -1655,6 +1676,8 @@ export default class TowerFilm extends Component<{
   }
 
   private mount = modifier((el: HTMLElement) => {
+    /* which cut is actually in the browser, said out loud once */
+    console.info(`towers: ${BUILD}`);
     this.frameEl = el;
     this.pageEl = el.closest('.tf-page') as HTMLElement;
     window.addEventListener('keydown', this.key);
@@ -3490,6 +3513,9 @@ export default class TowerFilm extends Component<{
             by
             <a href="https://x.com/MengTo" target="_blank" rel="noopener">Meng
               To</a></span>
+          {{#if this.debug}}
+            <span class="tf-build">{{this.build}}</span>
+          {{/if}}
         </div>
 
         {{! THE CUTTING ROOM — the wall plate under the exhibit, set in
@@ -4638,6 +4664,16 @@ export default class TowerFilm extends Component<{
 
       .tf-credit a {
         color: #96551b;
+      }
+
+      /* only ever under ?debug: which cut of the film the browser has */
+      .tf-build {
+        margin-left: 14px;
+        color: #a8621f;
+        font:
+          10px/1 ui-monospace,
+          monospace;
+        letter-spacing: 0.06em;
       }
 
       /* embedded, the iframe wraps the film AND its transport directly;
