@@ -16,6 +16,7 @@
 //   --rss-pid <pid>   process tree to measure in --ws mode
 //   --dump            print every request URL and the page's script tags / globals after each boot
 //   --shim <file.js>  JavaScript to run in every new document before the page's own scripts
+//   --after <js>      expression to evaluate in the page after each boot; its JSON value is printed
 
 import puppeteer, {
   type Browser,
@@ -43,6 +44,7 @@ let dump = argv.includes('--dump');
 let shimSource = opt('--shim')
   ? readFileSync(opt('--shim')!, 'utf8')
   : undefined;
+let afterExpression = opt('--after');
 if ((!launch && !wsEndpoint) || !hostURL) {
   console.error('need (--launch | --ws <endpoint>) and --host-url <url>');
   process.exit(2);
@@ -98,6 +100,7 @@ type BootReport = {
   requestURLs: string[];
   diagnostics?: unknown;
   dumped?: unknown;
+  after?: unknown;
 };
 
 async function bootStandby(
@@ -199,6 +202,21 @@ async function bootStandby(
   } catch (e: any) {
     report.diagnostics = `ERR ${String(e?.message ?? e).slice(0, 200)}`;
   }
+  if (afterExpression) {
+    try {
+      report.after = await Promise.race([
+        page.evaluate(afterExpression),
+        new Promise((_, rej) =>
+          setTimeout(
+            () => rej(new Error('--after evaluate timed out')),
+            30_000,
+          ),
+        ),
+      ]);
+    } catch (e: any) {
+      report.after = `ERR ${String(e?.message ?? e).slice(0, 200)}`;
+    }
+  }
   if (dump) {
     try {
       report.dumped = await Promise.race([
@@ -247,6 +265,9 @@ function printReport(label: string, r: BootReport) {
     console.log(`    [requestfailed] ${m}`);
   for (let m of r.badResponses.slice(0, 15)) console.log(`    [response] ${m}`);
   console.log(`  diagnostics: ${JSON.stringify(r.diagnostics)}`);
+  if (afterExpression) {
+    console.log(`  after: ${JSON.stringify(r.after, null, 1)}`);
+  }
   if (dump) {
     console.log(`  dumped: ${JSON.stringify(r.dumped, null, 1)}`);
     console.log(`  requests (${r.requestURLs.length}):`);
