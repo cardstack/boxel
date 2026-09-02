@@ -400,11 +400,15 @@ const hex = (h: string): [number, number, number] => [
  * full-screen surfaces the compositor re-filtered on every frame the picture
  * moved are now a few lines in the post shader, paid once per frame.
  */
+/* BRIGHTNESS, RE-TUNED. These were set against a picture shown in linear
+   light (see the sRGB note in the post pass); with the pipeline honest the
+   same lifts crushed the whites, so every bri is pulled 65% of the way
+   back to 1. */
 const GRADES: Record<string, FilmGrade> = {
   amber: {
     sat: 0.9,
     con: 0.94,
-    bri: 1.2,
+    bri: 1.07,
     sep: 0,
     hue: 0,
     warm: hex('#ffd9a8'),
@@ -415,7 +419,7 @@ const GRADES: Record<string, FilmGrade> = {
   iron: {
     sat: 0.72,
     con: 0.98,
-    bri: 1.12,
+    bri: 1.04,
     sep: 0.1,
     hue: 0,
     warm: hex('#e8d9c2'),
@@ -426,7 +430,7 @@ const GRADES: Record<string, FilmGrade> = {
   chalk: {
     sat: 0.88,
     con: 0.96,
-    bri: 1.34,
+    bri: 1.12,
     sep: 0,
     hue: 0,
     warm: hex('#fffdf6'),
@@ -437,7 +441,7 @@ const GRADES: Record<string, FilmGrade> = {
   ink: {
     sat: 0.98,
     con: 1,
-    bri: 1.16,
+    bri: 1.06,
     sep: 0,
     hue: 0,
     warm: hex('#ffc9a1'),
@@ -448,7 +452,7 @@ const GRADES: Record<string, FilmGrade> = {
   wet: {
     sat: 0.72,
     con: 0.92,
-    bri: 0.94,
+    bri: 0.98,
     sep: 0,
     hue: -4 * (Math.PI / 180),
     warm: hex('#cfd6dd'),
@@ -459,7 +463,7 @@ const GRADES: Record<string, FilmGrade> = {
   plate: {
     sat: 0.86,
     con: 0.95,
-    bri: 1.2,
+    bri: 1.07,
     sep: 0,
     hue: 0,
     warm: hex('#f6e8d2'),
@@ -470,7 +474,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-jp': {
     sat: 0.84,
     con: 0.95,
-    bri: 1.22,
+    bri: 1.08,
     sep: 0,
     hue: 0,
     warm: hex('#f6e8d2'),
@@ -487,7 +491,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-cn': {
     sat: 0.62,
     con: 1.02,
-    bri: 1.18,
+    bri: 1.06,
     sep: 0,
     hue: 0,
     warm: hex('#e8e6e0'),
@@ -500,7 +504,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-vn': {
     sat: 1.0,
     con: 0.92,
-    bri: 1.14,
+    bri: 1.05,
     sep: 0,
     hue: -8 * (Math.PI / 180),
     warm: hex('#e6f0c8'),
@@ -513,7 +517,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-th': {
     sat: 1.12,
     con: 0.96,
-    bri: 1.28,
+    bri: 1.1,
     sep: 0.04,
     hue: 0,
     warm: hex('#ffd77a'),
@@ -526,7 +530,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-kh': {
     sat: 0.86,
     con: 1.02,
-    bri: 1.1,
+    bri: 1.04,
     sep: 0.2,
     hue: 0,
     warm: hex('#e9b98a'),
@@ -539,7 +543,7 @@ const GRADES: Record<string, FilmGrade> = {
   'c-tr': {
     sat: 0.8,
     con: 1.05,
-    bri: 1.3,
+    bri: 1.11,
     sep: 0,
     hue: 0,
     warm: hex('#fff6e8'),
