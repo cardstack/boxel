@@ -2,7 +2,6 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Service from '@ember/service';
 
-import type { RealmInfo } from '@cardstack/runtime-common';
 import {
   identifyCard,
   internalKeyFor,
@@ -14,8 +13,6 @@ import {
 } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { Loader } from '@cardstack/runtime-common/loader';
-
-import type CardService from '@cardstack/host/services/card-service';
 
 import type LoaderService from '../services/loader-service';
 import type NetworkService from '../services/network';
@@ -49,17 +46,29 @@ export interface Type {
 
 interface ModuleInfo {
   extension: string;
-  realmInfo: RealmInfo;
 }
 
 export default class CardTypeService extends Service {
-  @service declare private cardService: CardService;
   @service declare private network: NetworkService;
   @service declare private loaderService: LoaderService;
   @service declare private session: SessionService;
 
+  // Settled types only, deliberately: assembling a type is recursive, and the
+  // module inspector assembles every declaration in a module concurrently. Two
+  // of those roots can reference each other — cards that link both ways are
+  // ordinary — and each root breaks the cycle with its own traversal stack.
+  // Sharing in-flight type promises across roots would defeat those stacks,
+  // leaving each root awaiting the other's.
   private typeCache: Map<string, Type> = new Map();
-  private moduleInfoCache: Map<string, ModuleInfo> = new Map();
+
+  // The in-flight promise, not the settled value. A card's fields are assembled
+  // concurrently, so every field that shares a type asks for that type's module
+  // before the first of them has answered — keyed on the settled value, the
+  // several dozen color fields of a theme card would each fetch `color.gts` for
+  // themselves. Nothing reached from here recurses back into type assembly, so
+  // sharing the promise is safe, and it is what keeps the concurrent traversals
+  // above from repeating each other's fetches.
+  private moduleInfoCache: Map<string, Promise<ModuleInfo>> = new Map();
   private loader: object | undefined; //keeps track of the current used loader so cache is reset after a loader reset
 
   constructor(owner: Owner) {
@@ -114,9 +123,7 @@ export default class CardTypeService extends Service {
     }
     let moduleIdentifier = moduleFrom(ref);
     let moduleURL = this.network.virtualNetwork.toURL(moduleIdentifier);
-    let moduleInfo =
-      this.moduleInfoCache.get(moduleURL.href) ??
-      (await this.fetchModuleInfo(moduleURL));
+    let moduleInfo = await this.moduleInfo(moduleURL);
 
     let api = await loader.import<typeof CardAPI>('@cardstack/base/card-api');
     let { id: _remove, ...fields } = api.getFields(card, {
@@ -154,6 +161,27 @@ export default class CardTypeService extends Service {
     return type;
   }
 
+  private moduleInfo(url: URL): Promise<ModuleInfo> {
+    let pending = this.moduleInfoCache.get(url.href);
+    if (!pending) {
+      pending = this.fetchModuleInfo(url);
+      this.moduleInfoCache.set(url.href, pending);
+      // A rejection is dropped so the next caller retries: a failed fetch is a
+      // property of that attempt, not of the module. Scoped to the promise that
+      // failed, so a cache cleared and repopulated meanwhile keeps its newer
+      // entry.
+      pending.catch(() => {
+        if (this.moduleInfoCache.get(url.href) === pending) {
+          this.moduleInfoCache.delete(url.href);
+        }
+      });
+    }
+    return pending;
+  }
+
+  // The extension is only knowable from the response: a code ref names its
+  // module without one (`.../color`), and the realm redirects that to the file
+  // the module actually lives in (`.../color.gts`).
   private async fetchModuleInfo(url: URL): Promise<ModuleInfo> {
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
@@ -166,19 +194,9 @@ export default class CardTypeService extends Service {
         } - ${await response.text()}`,
       );
     }
-    let realmURL = response.headers.get('x-boxel-realm-url');
-    if (realmURL === null) {
-      throw new Error(`Could not get realm url for ${url.href}`);
-    }
-    let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-      new URL(realmURL),
-    );
-    let moduleInfo = {
-      realmInfo,
+    return {
       extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
     };
-    this.moduleInfoCache.set(url.href, moduleInfo);
-    return moduleInfo;
   }
 }
 
