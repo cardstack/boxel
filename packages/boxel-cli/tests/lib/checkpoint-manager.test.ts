@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -44,6 +45,20 @@ describe('CheckpointManager', () => {
       let secondCheckpoints = await cm.getCheckpoints();
 
       expect(secondCheckpoints.length).toBe(firstCheckpoints.length);
+    });
+
+    it('reads no checkpoints from a repo whose HEAD is unborn', async () => {
+      // `init()` runs `git init` and then several more git commands before
+      // its bootstrap commit, so a reader can find `.git` in place with no
+      // commit behind it — the state a concurrent `realm watch` flush passes
+      // through. Reconstruct it directly, since the window is too short to
+      // catch reliably.
+      let gitDir = path.join(workspaceDir, '.boxel-history');
+      fs.mkdirSync(gitDir, { recursive: true });
+      execFileSync('git', ['init'], { cwd: gitDir, stdio: 'ignore' });
+
+      expect(await cm.isInitialized()).toBe(true);
+      expect(await cm.getCheckpoints()).toEqual([]);
     });
   });
 

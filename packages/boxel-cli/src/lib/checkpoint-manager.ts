@@ -65,6 +65,22 @@ export class CheckpointManager {
     return pathExists(path.join(this.gitDir, '.git'));
   }
 
+  /**
+   * True once the history repo holds a commit to read.
+   *
+   * `.git` existing is not enough: `init()` runs `git init` and then three
+   * more git commands before its bootstrap commit lands, so a reader that
+   * arrives in that window finds an initialized repo with an unborn HEAD —
+   * a state `git log` refuses outright ("your current branch 'master' does
+   * not have any commits yet") rather than reporting an empty history. A
+   * workspace whose history is being initialized by a concurrent `realm
+   * watch` flush is the ordinary way to land in it.
+   */
+  private async hasCommits(): Promise<boolean> {
+    const head = await this.git('rev-parse', '--verify', '--quiet', 'HEAD');
+    return head.trim().length > 0;
+  }
+
   private async syncFilesToHistory(): Promise<void> {
     const files = await this.getWorkspaceFiles();
     const fileSet = new Set(files);
@@ -341,7 +357,7 @@ export class CheckpointManager {
   }
 
   async getCheckpoints(limit = 50): Promise<Checkpoint[]> {
-    if (!(await this.isInitialized())) {
+    if (!(await this.isInitialized()) || !(await this.hasCommits())) {
       return [];
     }
 
@@ -651,7 +667,12 @@ export class CheckpointManager {
       child.on('error', (err) => reject(err));
 
       child.on('close', (code) => {
-        if (code !== 0 && !args.includes('status')) {
+        // `status` and any `--quiet` probe report their answer through the
+        // exit code — a dirty tree, an unborn HEAD — so a non-zero exit
+        // from those is data rather than a failure.
+        const exitCodeIsTheAnswer =
+          args.includes('status') || args.includes('--quiet');
+        if (code !== 0 && !exitCodeIsTheAnswer) {
           reject(
             new Error(
               `git ${args.join(' ')} failed: ${stderr.trim()}` +
