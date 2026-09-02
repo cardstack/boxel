@@ -7,6 +7,7 @@ import {
   BrokenLinkTemplate,
   CopyButton,
   type BrokenLinkFormat,
+  type BrokenLinkItemType,
 } from '@cardstack/boxel-ui/components';
 import {
   markdownEscape,
@@ -104,6 +105,7 @@ import {
   type VirtualNetwork,
   isDirectIndexedFieldKey,
   cardTypeName,
+  fileNameFromUrl,
   isDeclaredScreenshotFormat,
   isValidScreenshotName,
   DECLARED_SCREENSHOT_FORMATS,
@@ -1747,7 +1749,11 @@ class LinksTo<CardT extends LinkableDefConstructor> implements Field<CardT> {
                   @errorDoc={{broken.errorDoc}}
                   @state={{broken.kind}}
                   @format={{brokenLinkFormat @format defaultFormats.cardDef}}
-                  @displayName={{cardTypeName broken.reference}}
+                  @itemType={{brokenLinkItemType linksToField}}
+                  @displayName={{brokenLinkDisplayName
+                    linksToField
+                    broken.reference
+                  }}
                   @viewCard={{cardCrudFunctions.viewCard}}
                   ...attributes
                 />
@@ -2403,6 +2409,29 @@ export function brokenLinkFormat(
     default:
       return 'embedded';
   }
+}
+
+// What the placeholder says is missing. A `linksTo(FileDef)` slot holds a file,
+// so its failure reads as a missing file rather than a missing card.
+export function brokenLinkItemType(
+  field: Field<LinkableDefConstructor>,
+): BrokenLinkItemType {
+  return isFileDef(field.card) ? 'file' : 'card';
+}
+
+// The label the placeholder shows next to the link-off icon. The two reference
+// shapes name themselves in different segments: a card instance url is
+// `<Type>/<id>`, whose readable name is the type; a file url is a path, whose
+// readable name is the file name. Reading a file url as a card reference names
+// the directory that happens to sit second-to-last — `images` for a missing
+// `images/photo.jpg` — which points a reader at nothing.
+export function brokenLinkDisplayName(
+  field: Field<LinkableDefConstructor>,
+  reference: string,
+): string {
+  return isFileDef(field.card)
+    ? fileNameFromUrl(reference)
+    : cardTypeName(reference);
 }
 
 function fieldComponent(

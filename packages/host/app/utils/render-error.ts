@@ -1,4 +1,5 @@
 import {
+  hasExtension,
   loadCardDef,
   type Loader,
   type LooseSingleCardDocument,
@@ -128,16 +129,21 @@ function applyAuthMessageOverrides(renderError: RenderError): RenderError {
   return renderError;
 }
 
+// Recover the reference a `missing file <ref>` message names, as the realm
+// file that reference stands for. A card instance id carries no extension —
+// `<realm>/Widget/w-1` is served out of the file `<realm>/Widget/w-1.json` —
+// so the `.json` form is the file to report and the dep to invalidate on.
+// A reference that already names a file (an uploaded image, a module, a
+// markdown doc) is that file: suffixing it would name a path the realm has
+// never held, which is worse than useless in an error a human reads and in a
+// dep the indexer watches.
 function extractMissingRefFromMessage(message: string): string | undefined {
   let match = /^missing file (.+?)(?: not found)?$/i.exec(message.trim());
-  if (match?.[1]) {
-    let ref = match[1].trim();
-    if (!ref.endsWith('.json')) {
-      ref = `${ref}.json`;
-    }
-    return ref;
+  if (!match?.[1]) {
+    return undefined;
   }
-  return undefined;
+  let ref = match[1].trim();
+  return hasExtension(ref) ? ref : `${ref}.json`;
 }
 
 function normalizeId(id: string, context?: RenderErrorContext): string {

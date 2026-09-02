@@ -14,6 +14,8 @@ import {
   type Field,
   type CardContext,
   type LinkableDefConstructor,
+  brokenLinkDisplayName,
+  brokenLinkItemType,
   CreateCardFn,
   isFileDef,
 } from './card-api';
@@ -28,7 +30,6 @@ import {
   Loader,
   type ResolvedCodeRef,
   isCardInstance,
-  cardTypeName,
 } from '@cardstack/runtime-common';
 import {
   BrokenLinkTemplate,
@@ -113,7 +114,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
               @errorDoc={{@brokenLink.errorDoc}}
               @state={{@brokenLink.kind}}
               @format='embedded'
-              @displayName={{cardTypeName @brokenLink.reference}}
+              @itemType={{brokenLinkItemType @field}}
+              @displayName={{brokenLinkDisplayName
+                @field
+                @brokenLink.reference
+              }}
               @viewCard={{crud.viewCard}}
             />
           </CardCrudFunctionsConsumer>
