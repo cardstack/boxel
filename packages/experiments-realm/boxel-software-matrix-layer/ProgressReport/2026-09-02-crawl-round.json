@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "roundDate": "2026-09-02T09:10:00.000Z",
+      "summary": "Crawl round, not a build round. It harvests what teammates shipped into the realm since the 26 Aug Quest Log round: **143 new files** (28 root modules, 16 commands, 10 components, 58 Specs, 30 instance folders) plus additive edits to Invoice, Payment, Survey and the SLA utilities.\n\n**36 concepts moved Missing -> Implemented (source: matrix-realm)** and **40 rows were stamped with Spec facts** (the 36 plus Employment Status, Invoice Status, Payment Method and Risk Rating, which were already coded). By kit: Legal 13 (Addendum, Amendment, Case, Confidentiality/Payment/Termination Clause, Legal Entity, Clause Navigator, Contract Workspace, Legal Home, Amend/Execute Contract, Request Signature), Vendor 5 (Vendor Profile, Vendor Workspace, Onboard Vendor, Score Vendor Risk, Vendor Onboarding App), People & HR 5 (Compensation card + field, Employment Status, Hire Candidate, OKR), Real Estate 3 (Property Listing, Property Gallery, Publish Listing), and the RFQ-to-Payment money layer (Currency Registry, Money Display, Payment Terms + editor, Resolve Currency, Invoice Number, Payment Method, RFQ-to-Payment App), plus Lifecycle Dates, Waiver, Publish Survey and Reject Request. Layer 05.5 is now 83 verified of 88 coded.\n\n**Every one of the 40 landed Adequate**, not Gold: each passes verified, example, readMe and lane, and fails consumed and reused because the crawl never stamps `consumers` (the known fifth crawl gap). Verified 285 -> 344; the +59 also folds in the 1 Sep source-classification round (POC realm retired, evidence attributed by tree on the new `source` field: 19 upgrades, 328 relabels, 63 downgrades) and the quote-to-cash Spec facts, neither of which had a report. Gold is flat at 63.\n\n**Findings, not fixes:** (1) 143 Specs in the realm match no concept row, up from 104. The new ones are the procurement vocabulary \u2014 RFQ, Vendor Quote, Purchase Requisition, Purchase Order, Goods Receipt, Procurement Budget, PO Number/Status, RFQ Status, Budget Utilization, RFQ Comparison Board, Three-Way Match Panel, Send/Award RFQ, Receive Goods, Resolve Variance, Approve PO, Approve Invoice for Payment \u2014 a sheet-level decision to add rows or accept as app-local. (2) `Invoice/acme-enterprise-renewal-inv` fails to index: its adoptsFrom module is the bare specifier `invoice` instead of `../invoice`. (3) The daily launchd crawl round had not completed since 28 Aug \u2014 staging timeouts 29 Aug to 1 Sep, then a missing wrapper on 2 Sep because the boxel-workspaces checkout was left detached; the branch is restored and the job runs tomorrow at 07:23.",
+      "metrics": "{\"concepts\": 590, \"blocks\": 567, \"outOfScope\": 23, \"coded\": 383, \"verified\": 344, \"consumed\": 127, \"reused\": 93, \"gold\": 63, \"solid\": 93, \"adequate\": 151, \"thin\": 37, \"none\": 223, \"perKind\": {\"field\": 147, \"card\": 125, \"command\": 144, \"component\": 116, \"filedef\": 35}, \"perLayerVerified\": {\"01\": 70, \"02\": 75, \"03\": 71, \"04\": 23, \"05\": 18, \"05.5\": 83, \"06\": 4}, \"perLayerCoded\": {\"01\": 74, \"02\": 75, \"03\": 89, \"04\": 29, \"05\": 22, \"05.5\": 88, \"06\": 6}}",
+      "deltas": "{\"verified\": 59, \"coded\": 36, \"adequate\": 57, \"thin\": 2, \"none\": -59, \"consumed\": 0, \"reused\": 0, \"gold\": 0, \"solid\": 0, \"note\": \"vs 2026-08-26; includes the 2026-09-01 source-classification round, which had no report. coded delta counts this round's 36 upgrades only.\"}",
+      "cardInfo": {
+        "name": "2026-09-02 Crawl round",
+        "summary": "36 concepts implemented + 40 Spec-stamped from teammate kits; 143 unmatched Specs; launchd round restored",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../progress-report",
+        "name": "ProgressReport"
+      }
+    }
+  }
+}
