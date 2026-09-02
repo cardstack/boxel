@@ -15,5 +15,7 @@ Router.map(function () {
   this.route('sylva', { path: '/_sylva' });
   // A film, not a demo: see tower-film.
   this.route('towers', { path: '/_towers' });
+  // A second film on the same engine: see sagrada-film.
+  this.route('sagrada', { path: '/_sagrada' });
   this.route('demo', { path: '/:demo_id' });
 });
