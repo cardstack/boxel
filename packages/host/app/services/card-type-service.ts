@@ -53,12 +53,18 @@ export default class CardTypeService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private session: SessionService;
 
-  // Settled types only, deliberately: assembling a type is recursive, and the
-  // module inspector assembles every declaration in a module concurrently. Two
-  // of those roots can reference each other — cards that link both ways are
-  // ordinary — and each root breaks the cycle with its own traversal stack.
-  // Sharing in-flight type promises across roots would defeat those stacks,
-  // leaving each root awaiting the other's.
+  // Settled types only. Assembling a type is recursive, and the module
+  // inspector assembles every declaration in a module concurrently — one root
+  // per declaration. Two of those roots can reference each other (cards that
+  // link both ways are ordinary), and each root breaks the cycle with its own
+  // traversal stack. Sharing in-flight promises across roots keyed on the type
+  // alone would close that cycle through the cache instead of the recursion,
+  // where no stack can see it, and the two roots would await each other
+  // forever. Sharing keyed on the traversal stack as well as the type would be
+  // safe — every recursive call extends the stack, so those await edges only
+  // ever point deeper — and would collapse the sibling fields that share a
+  // type into one traversal. The cache is settled-only because it does not
+  // make that distinction, not because no sharing is possible.
   private typeCache: Map<string, Type> = new Map();
 
   // The in-flight promise, not the settled value. A card's fields are assembled
@@ -179,9 +185,11 @@ export default class CardTypeService extends Service {
     return pending;
   }
 
-  // The extension is only knowable from the response: a code ref names its
-  // module without one (`.../color`), and the realm redirects that to the file
-  // the module actually lives in (`.../color.gts`).
+  // A code ref names its module without an extension (`.../color`), and the
+  // realm resolves that to the file the module lives in (`.../color.gts`), so
+  // the response URL carries the extension. The loader records the same
+  // resolved URL when it imports a module, which is a cheaper source for a
+  // definition it has necessarily already loaded.
   private async fetchModuleInfo(url: URL): Promise<ModuleInfo> {
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
@@ -194,10 +202,17 @@ export default class CardTypeService extends Service {
         } - ${await response.text()}`,
       );
     }
-    return {
-      extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
-    };
+    return { extension: extensionOf(new URL(response.url).pathname) };
   }
+}
+
+// The extension of the last path segment, dot included, or '' when that
+// segment has none. Confined to the last segment so a dotless filename under a
+// dotted directory reports no extension rather than borrowing the directory's.
+function extensionOf(pathname: string): string {
+  let filename = pathname.split('/').pop() ?? '';
+  let dot = filename.lastIndexOf('.');
+  return dot === -1 ? '' : filename.slice(dot);
 }
 
 function isCodeRefType(type: any): type is CodeRefType {
