@@ -956,10 +956,6 @@ const BEATS: Beat[] = [
     haze: 0.3,
     id: 'ishi2',
     join: 'blend',
-    /* the weather arrives while we are still on the stone, so the eave
-       beat opens INTO rain rather than waiting for it to mix in */
-    rain: 0.5,
-    wx: 1,
     says: [
       'Vertical at the top',
       'Flaring at the foot',
@@ -998,6 +994,11 @@ const BEATS: Beat[] = [
     kicker: 'AND THE REASON FOR ALL OF IT',
     vo: "Noki. A metre of overhang. Every line you have admired is a way of keeping rain off earth and wood. Wait for weather; the styling explains itself.",
     mode: 'lower',
+    /* an overcast grade for an overcast shot: the sky comes down, the
+       warmth goes out of it, and the vignette closes a little — rain
+       under a bright even sky is a particle effect, not weather */
+    grade: 'wet',
+    haze: 0.62,
     rain: 1.15,
     romaji: 'NOKI',
     ticks: 6,
@@ -4804,6 +4805,19 @@ export default class TowerFilm extends Component<{
         --tf-cool: #8fa0c9;
         --tf-grade-a: 0.32;
         --tf-vig-a: 0.68;
+      }
+
+      /* WET. Rain is not simply the clear grade with drops in it: the
+         light comes from a lid rather than a source, so the picture
+         loses its warmth and most of its contrast, and the corners
+         close in. */
+      .is-grade-wet {
+        --tf-lut: saturate(0.72) contrast(0.92) brightness(0.94)
+          hue-rotate(-4deg);
+        --tf-warm: #cfd6dd;
+        --tf-cool: #7d8b9e;
+        --tf-grade-a: 0.44;
+        --tf-vig-a: 0.8;
       }
 
       .is-grade-plate {
