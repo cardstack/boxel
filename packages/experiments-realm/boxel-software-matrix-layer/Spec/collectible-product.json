@@ -10,7 +10,10 @@
         "name": "CollectibleProduct"
       },
       "readMe": "## Collectible Product\n\nOne row per SKU, shared by everyone. `sku` is the definitive identifier, `colorway` distinguishes releases of the same silhouette, and `availableVariants` is the manufacturer's size run.\n\n### Named `CollectibleProduct`, not `Product`\n\n`experiments-realm/product.gts` already exports a `Product` — an e-commerce demo card with seller and lead-time fields. Two `Product`s at one realm root is a coin-flip for any importer, so this one carries the longer name. The matrix concept it fills is `l05-5-cm-product`.\n\n### The split against CollectionItem\n\nThis card is the **catalogue**; `CollectionItem` is the **owned copy**. `retailPrice` lives here because it is a fact about the product. What someone paid lives on their `CollectionItem` because it is a fact about their purchase. Getting this wrong collapses two different questions — \"what did this cost at launch\" and \"what did I pay\" — into one field that answers neither reliably.\n\n### No lowestPrice, no listingCount\n\nThe spec's computed-fields table asks for both. They are deliberately absent: each is an unbounded rollup over active listings, so a live realm query in a metrics component is the right home, not a cached field on the hot catalogue card. The app reads them via a reverse query on `Listing`.\n\n### Non-goals\n\nThis card does not model ownership, condition or acquisition — those are `CollectionItem`. It does not model a sale — that is `Listing`. It does not own the brand or silhouette vocabulary: those are `linksTo(Tag)` because the reuse pass established that Silhouette and Brand are sneaker taxonomy rather than their own matrix elements.\n\n### Open question\n\n`sku` is a plain `StringField`. The matrix has `l05-ft-record-identifier` for exactly this, but it is unimplemented, so there is nothing to consume yet — this is the field to repoint when it lands.",
-      "containedExamples": []
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Collectible Product"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

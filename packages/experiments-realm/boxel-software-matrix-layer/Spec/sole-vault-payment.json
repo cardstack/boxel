@@ -10,7 +10,10 @@
         "name": "Payment"
       },
       "readMe": "## Payment\n\n**Read this before extending it: this card does not move money and cannot.** A realm has no processor, no card vault and no balance. Everything here records what an external processor reported, and the commands that write it are simulations. That is a deliberate boundary, not an unfinished feature — the spec puts escrow behind Stripe Connect, which is server-side infrastructure this layer has no business impersonating. The sample instance sets `processor: \"simulated\"` for exactly that reason.\n\n### Why it is separate from Order\n\nAn order has one lifecycle; its money can have several movements — an authorization, a capture, a partial refund, a chargeback reversal. Folding them into `Order` forces one status field to describe two different things, and the moment a refund is partial the model breaks. One Order links to many Payment records; each is immutable history.\n\n### The state graph mirrors a processor, it does not invent one\n\n- `authorized` **is** the escrow state: funds reserved with the processor, not yet taken. This is what \"held in escrow\" actually means technically.\n- `captured → refunded` is the only edge out of a settled payment, and it is one-way. A refund is never un-refunded; that would be a new charge.\n- `failed` is **terminal**, because a retry is a NEW payment record. Reusing this one would erase the evidence that the first attempt was declined.\n\n### Direction, not a negative number\n\n`direction` says `charge` or `refund` and `amount` is always positive. A negative money amount renders as `-$175.00` in some formatters and `($175.00)` in others, and then every aggregate has to remember which convention it is summing. `signedAmount` is the one computed display string, so the atom, the row and any future ledger view cannot disagree about how a refund is written.\n\n### Denormalized for prerendered fitted\n\n`orderReference` and `productTitle` are computed, because prerendered fitted cannot resolve `linksTo`.",
-      "containedExamples": []
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Sole Vault Payment"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

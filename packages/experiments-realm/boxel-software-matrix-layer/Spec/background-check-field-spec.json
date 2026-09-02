@@ -13,7 +13,10 @@
       "containedExamples": [
         {},
         {}
-      ]
+      ],
+      "cardInfo": {
+        "name": "Background Check"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

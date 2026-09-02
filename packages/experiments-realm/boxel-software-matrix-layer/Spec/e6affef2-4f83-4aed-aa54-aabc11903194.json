@@ -14,7 +14,10 @@
         {},
         {},
         {}
-      ]
+      ],
+      "cardInfo": {
+        "name": "Interview Plan Round"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

@@ -13,7 +13,10 @@
       "containedExamples": [
         {},
         {}
-      ]
+      ],
+      "cardInfo": {
+        "name": "Work History Entry"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

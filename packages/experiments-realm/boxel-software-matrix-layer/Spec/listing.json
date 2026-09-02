@@ -10,7 +10,10 @@
         "name": "Listing"
       },
       "readMe": "## Listing\n\nOne seller, one owned copy, one asking price. Links to the `CollectionItem` being sold and — denormalized — to the `CollectibleProduct`, so \"every listing for this SKU\" is one query rather than a walk through the collection item.\n\nA new matrix element rather than a consume: the closest concept, `l05-5-cm-property-listing`, is property-specific.\n\n### Every field a tile needs is an attribute — this is the load-bearing decision\n\nA marketplace's entire UI is grids of listings. Grids are prerendered fitted. **Prerendered fitted cannot resolve `linksTo`.** So `productTitle`, `variantLabel`, `conditionCode` and `verified` are computed fields — resolved at index time and stored in the search document — rather than template reads through `collectionItem.*`.\n\nWithout that, every tile in the marketplace renders blank. It is the same denormalization rule as `CollectionItem.itemTitle`, and this is the most expensive place to get it wrong because it is the app's busiest surface.\n\n### Lifecycle as event facts\n\n`listedAt` / `soldAt` / `expiresAt` are dates; any boolean is derived from them. Same rule as `CollectionItem` — a stored flag drifts from the thing that caused it, and dates are attributes so they survive prerendering.\n\nNote the invariant this creates with `CollectionItem`: an active `Listing` and its item's `listedAt` must agree. The shipped example is consistent on purpose — `Listing/yeezy-350-zebra-11` and `CollectionItem/yeezy-350-zebra-11` carry the same date. The first-created example deliberately does **not** have a listing, because its item is marked kept.\n\n### One source for status colour\n\n`LISTING_STATUSES` is exported from the module that owns the enum, so blocks and app consume one map instead of each inventing a class list.\n\n### Non-goals\n\nThis card does not model the transaction. Buyer, payment, escrow state, shipping and refunds belong to `Order` and `Payment` — both **Done with Specs** in the matrix realm (`l05-5-cm-order`, `l05-5-cm-payment`), so they are a pull, not a rebuild. It does not model authentication either; that is `AuthenticationRecord`.",
-      "containedExamples": []
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Listing"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

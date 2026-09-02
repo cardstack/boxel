@@ -9,7 +9,10 @@
         "module": "../ticket-category",
         "name": "TicketCategory"
       },
-      "readMe": "## What it is\nA classification that is also a routing rule: it is where a new record's priority and queue come from. Both remain overridable.\n\n## Three usages\n1. **ServiceDesk** — 'Outage' means P1 into L3 Engineering, without anybody writing a rule.\n2. **A repair desk** — fault type sets the response class and the team.\n3. **An intake form** — request type sets the reviewing group.\n\n## The linked example\n`TicketCategory/outage` — defaults to P1 and routes to L3 Engineering, with `path` showing the breadcrumb a tile can read without walking `parent`.\n\n## Non-goals\nNot a tag. A tag is many-per-record and carries no behaviour; a category is one-per-record and decides where the record goes.\n\n**Open question.** Categories nest through `parent`. Nothing enforces depth or cycles yet — does the tree need a block of its own?\n\n## Overridable on purpose\nRouting an agent cannot argue with is routing they work around by filing things under the wrong category — and then the reports are wrong too.\n"
+      "readMe": "## What it is\nA classification that is also a routing rule: it is where a new record's priority and queue come from. Both remain overridable.\n\n## Three usages\n1. **ServiceDesk** — 'Outage' means P1 into L3 Engineering, without anybody writing a rule.\n2. **A repair desk** — fault type sets the response class and the team.\n3. **An intake form** — request type sets the reviewing group.\n\n## The linked example\n`TicketCategory/outage` — defaults to P1 and routes to L3 Engineering, with `path` showing the breadcrumb a tile can read without walking `parent`.\n\n## Non-goals\nNot a tag. A tag is many-per-record and carries no behaviour; a category is one-per-record and decides where the record goes.\n\n**Open question.** Categories nest through `parent`. Nothing enforces depth or cycles yet — does the tree need a block of its own?\n\n## Overridable on purpose\nRouting an agent cannot argue with is routing they work around by filing things under the wrong category — and then the reports are wrong too.\n",
+      "cardInfo": {
+        "name": "Ticket Category"
+      }
     },
     "meta": {
       "adoptsFrom": {

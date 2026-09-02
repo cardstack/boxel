@@ -11,7 +11,9 @@
       "isField": false,
       "isComponent": false,
       "readMe": "## Contract Request\n\nSelf-service intake: `whatFor`, `contractType`, `counterparty`, `requestedBy`,\n`estimatedValue`, `neededBy`, `background`, `involvesSensitiveData`, a `status` enum\n(draft → submitted → in triage → accepted / declined), `decisionNote`, and\n`resultingContract` once it produces one.\n\n```ts\nimport { ContractRequest, requestStateLabel, requestStateHue } from '../contract-request';\n@field request = linksTo(ContractRequest);\n```\n\n**Why a card rather than a form on the app.** A request has a life of its own: submitted,\ntriaged, accepted or declined, and eventually pointing at the contract it produced. A form\nwriting straight into a Contract would lose the decline case entirely — and \"what did we\nrefuse to paper, and why\" is a question legal teams get asked.\n\n**`involvesSensitiveData` is captured at intake, not later**, so the data-sensitivity\napproval rule can route correctly from the moment the request exists.\n\n### Non-goals\n\nDoes not approve anything (**ApprovalRule** + **ApprovalChainField** do). Does not create the\ncontract — a human accepts a request and links the result, because deciding *whether* to\npaper something is the judgement this card records rather than automates. Does not notify the\nrequester: no scheduler, no notification identity.",
-      "cardInfo": {}
+      "cardInfo": {
+        "name": "Contract Request"
+      }
     },
     "meta": {
       "adoptsFrom": {

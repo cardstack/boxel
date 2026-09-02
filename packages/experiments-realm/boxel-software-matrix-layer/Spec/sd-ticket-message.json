@@ -35,7 +35,10 @@
           "sentAt": "2026-08-12T09:45:00.000Z",
           "isSlaEvent": true
         }
-      ]
+      ],
+      "cardInfo": {
+        "name": "Conversation Entry"
+      }
     },
     "meta": {
       "adoptsFrom": {

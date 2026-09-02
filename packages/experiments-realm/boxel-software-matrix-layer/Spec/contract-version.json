@@ -11,7 +11,9 @@
       "isField": false,
       "isComponent": false,
       "readMe": "## Contract Version\n\nAn amendment record: `versionNumber`, `effectiveDate`, `summary`, `executedBy`, `documentUrl`,\nand the values **as at that version** — `valueAtVersion`, `endDateAtVersion` — with `contract`\nlinking back to its subject.\n\n```ts\nimport { ContractVersion } from '../contract-version';\nimport { VersionDiff } from '../components/version-diff';\n\n<VersionDiff @before={{olderVersion}} @after={{newerVersion}} />\n```\n\n**The changed values are stored, not derived, and that is the whole point.** Reading the\ncurrent contract tells you where things ended up; it cannot tell you what the value was\nbefore amendment 2, because the contract has since been edited. A version record that\nrecomputed from the live card would show today's numbers on every row and quietly claim\nnothing ever changed.\n\n**This is what `Contract.parentContract` does not give you.** That lineage answers \"what is\nthis an amendment TO\"; it does not answer \"what changed, when, and who signed it\" — the\nquestion an auditor and a renewal reviewer both actually ask.\n\n### Non-goals\n\nDoes not diff contract prose — word-level redlining is negotiation markup, which the spec puts\nout of scope; the paired **VersionDiff** component compares tracked fields instead. Does not\nown the lineage (`Contract.parentContract` does). Does not create versions automatically:\nsomething has to decide a change was material enough to record.",
-      "cardInfo": {}
+      "cardInfo": {
+        "name": "Contract Version"
+      }
     },
     "meta": {
       "adoptsFrom": {

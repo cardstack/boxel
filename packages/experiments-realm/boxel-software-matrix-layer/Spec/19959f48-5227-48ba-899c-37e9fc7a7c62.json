@@ -13,7 +13,10 @@
       "containedExamples": [
         {},
         {}
-      ]
+      ],
+      "cardInfo": {
+        "name": "Education Entry"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

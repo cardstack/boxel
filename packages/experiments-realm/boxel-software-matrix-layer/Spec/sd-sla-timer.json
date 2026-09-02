@@ -29,7 +29,10 @@
           "pausedSince": "2026-08-12T14:20:00.000Z",
           "breachedAt": null
         }
-      ]
+      ],
+      "cardInfo": {
+        "name": "SLA Timer"
+      }
     },
     "meta": {
       "adoptsFrom": {

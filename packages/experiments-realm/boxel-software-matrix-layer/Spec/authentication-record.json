@@ -10,7 +10,10 @@
         "name": "AuthenticationRecord"
       },
       "readMe": "## Authentication Record\n\nOne physical inspection of one owned item — the service, the verdict, the submitted photos, the authenticator's notes and the certificate id.\n\n### Checked against the near-misses before building\n\nThe matrix has three concepts that sound like this and are not: `l04-cm-certification-authority` is the *authority*, not the check; `l04-tc-verify-signature` is a cryptographic signature, not a physical inspection; `l03-ft-trust-metadata` is a field, not a record. None is an authentication event, so this is a genuine build.\n\n### Why the outcome is duplicated onto CollectionItem\n\nThis card holds the full record — everything a dispute needs. `CollectionItem` keeps only `verifiedOn` / `verifiedBy` / `verificationReference`.\n\nThat duplication is deliberate and has exactly one justification: a collection grid is prerendered fitted, which cannot resolve a link to this record, so a tile could not show a verified badge otherwise. It is denormalization for a **rendering constraint**, not to dodge a query — which is the only case where copying a linked card's values onto another card is the right call.\n\n### turnaroundDays is safe to compute; a verdict is not safe to infer\n\nBoth dates live on this card, so turnaround is bounded and cheap. Note it reads the dates as calendar days rather than instants. What the card deliberately does not do is infer an outcome from the dates — a completed date with no verdict means the check finished without one being recorded, and inventing `passed` there would be the worst possible default.\n\n### Non-goals\n\nThis card does not own the item (`CollectionItem`) or the transaction (`Order`, a matrix pull — which is why `order` is typed `linksTo(CardDef)` until that pull happens, and should be narrowed afterwards). It does not own the service vocabulary: a consumer that wants a select supplies enum options.",
-      "containedExamples": []
+      "containedExamples": [],
+      "cardInfo": {
+        "name": "Authentication Record"
+      }
     },
     "relationships": {
       "linkedExamples.0": {

@@ -9,7 +9,10 @@
         "module": "../support-agent",
         "name": "SupportAgent"
       },
-      "readMe": "## What it is\nA support team member: PersonBase plus a tier and a skill list. `skills` is the field auto-assignment matches on.\n\n## Three usages\n1. **ServiceDesk** — assignment and escalation targets.\n2. **A field service app** — the technician, where skills are certifications.\n3. **A staffing rota** — same shape: who can do what, at which level.\n\n## The linked example\n`SupportAgent/priya-raman` — L2 with SSO and identity skills, which is exactly why an SSO ticket routes to her rather than to whoever is least busy.\n\n## Non-goals\nNot an employee record and not an org chart node. No compensation, no reporting line, no employment status.\n\n**Open question.** Skills are free strings. A shared skill vocabulary would be a block — is anyone building one?\n\n## Why skills, not just tier\nRouting on tier alone sends every SSO question to whoever is free, which is how a ticket takes three days and two escalations to reach the person who could have answered it in five minutes.\n"
+      "readMe": "## What it is\nA support team member: PersonBase plus a tier and a skill list. `skills` is the field auto-assignment matches on.\n\n## Three usages\n1. **ServiceDesk** — assignment and escalation targets.\n2. **A field service app** — the technician, where skills are certifications.\n3. **A staffing rota** — same shape: who can do what, at which level.\n\n## The linked example\n`SupportAgent/priya-raman` — L2 with SSO and identity skills, which is exactly why an SSO ticket routes to her rather than to whoever is least busy.\n\n## Non-goals\nNot an employee record and not an org chart node. No compensation, no reporting line, no employment status.\n\n**Open question.** Skills are free strings. A shared skill vocabulary would be a block — is anyone building one?\n\n## Why skills, not just tier\nRouting on tier alone sends every SSO question to whoever is free, which is how a ticket takes three days and two escalations to reach the person who could have answered it in five minutes.\n",
+      "cardInfo": {
+        "name": "Support Agent"
+      }
     },
     "meta": {
       "adoptsFrom": {
