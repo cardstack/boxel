@@ -15,8 +15,12 @@ const testRealm = new URL('http://127.0.0.1:4445/test/');
 
 // A consumer whose isolated template renders a linked card. The persisted
 // prerendered_html row is the contract these tests pin: the linked card's
-// data must appear in the consumer's HTML, both on the first render and on
-// the re-render its invalidation fans out after the linked card is edited.
+// data must appear in the consumer's HTML. Three write paths are pinned
+// separately, because they exercise different indexing pipelines:
+//   1. fixture-declared instances (the preparation-hook realm, from-scratch
+//      indexed during setup);
+//   2. instances written at test time (incremental index → prerender-html);
+//   3. a re-render fanned out by editing the linked card.
 // Assertions quote the HTML on failure so a red run carries the evidence.
 function makeFileSystem() {
   return {
@@ -44,7 +48,34 @@ function makeFileSystem() {
         }
       }
     `,
+    // Fixture-declared pair: indexed by the preparation hook's from-scratch
+    // pass, no test-time writes involved.
+    'fixture-vendor.json': {
+      data: {
+        attributes: { name: 'Globex' },
+        meta: {
+          adoptsFrom: { module: rri('./cards'), name: 'Vendor' },
+        },
+      },
+    },
+    'fixture-listing.json': {
+      data: {
+        attributes: { name: 'Fixture listing' },
+        relationships: {
+          vendor: { links: { self: './fixture-vendor' } },
+        },
+        meta: {
+          adoptsFrom: { module: rri('./cards'), name: 'Listing' },
+        },
+      },
+    },
   };
+}
+
+// Failure evidence: the persisted HTML with whitespace runs collapsed, so
+// the quoted snippet spends its budget on markup rather than indentation.
+function compactHTML(html: string | null | undefined): string {
+  return (html ?? '(null)').replace(/\s+/g, ' ').slice(0, 3000);
 }
 
 module(basename(import.meta.filename), function (hooks) {
@@ -98,7 +129,21 @@ module(basename(import.meta.filename), function (hooks) {
     });
   }
 
-  test('the first render of a consumer contains its linked card’s data', async function (assert) {
+  test('a fixture-declared consumer’s row contains its linked card’s data', async function (assert) {
+    let row = await prerenderedHtmlRowFor(
+      testDbAdapter,
+      `${testRealm}fixture-listing.json`,
+    );
+    assert.ok(row, 'the fixture listing row exists');
+    assert.ok(
+      row!.isolated_html?.includes('Globex'),
+      `the linked vendor's name is in the consumer's HTML (html: ${compactHTML(
+        row!.isolated_html,
+      )})`,
+    );
+  });
+
+  test('an incrementally written consumer’s row contains its linked card’s data', async function (assert) {
     await writeAndSettle('vendor.json', vendorDoc('Initech'));
     await writeAndSettle('listing.json', listingDoc());
 
@@ -107,11 +152,20 @@ module(basename(import.meta.filename), function (hooks) {
       `${testRealm}listing.json`,
     );
     assert.ok(row, 'the listing row exists');
+    let deps = (row!.deps ?? []) as string[];
+    assert.ok(
+      deps.some(
+        (dep) =>
+          dep === `${testRealm}vendor` || dep === `${testRealm}vendor.json`,
+      ),
+      `the linked vendor is a dep of the consumer's row (deps: ${JSON.stringify(
+        deps,
+      )})`,
+    );
     assert.ok(
       row!.isolated_html?.includes('Initech'),
-      `the linked vendor's name is in the consumer's HTML (html: ${row!.isolated_html?.slice(
-        0,
-        2000,
+      `the linked vendor's name is in the consumer's HTML (html: ${compactHTML(
+        row!.isolated_html,
       )})`,
     );
   });
@@ -137,9 +191,8 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.ok(
       after!.isolated_html?.includes('Initrode'),
-      `the re-render shows the edited linked name (html: ${after!.isolated_html?.slice(
-        0,
-        2000,
+      `the re-render shows the edited linked name (html: ${compactHTML(
+        after!.isolated_html,
       )})`,
     );
   });
