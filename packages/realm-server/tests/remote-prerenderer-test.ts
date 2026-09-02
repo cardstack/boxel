@@ -260,6 +260,86 @@ module(basename(import.meta.filename), function (hooks) {
       }
     });
 
+    // `renderScope` decides which resident instances the tab may reuse, and
+    // it reaches the page only by surviving every hop: computed in
+    // `visit-file.ts`, carried here in the request body, read back out in
+    // `prerender-app.ts`, forwarded by the prerenderer, stamped on the page by
+    // the render runner. Each hop destructures it by name, so dropping it
+    // anywhere is silent — the render still succeeds, it just reuses instances
+    // from another job. This asserts the hop this file owns.
+    test('carries renderScope in the request body', async function (assert) {
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+          renderScope: 'https://example.com/@42',
+        });
+
+        assert.strictEqual(
+          receivedBody?.data?.attributes?.renderScope,
+          'https://example.com/@42',
+          'renderScope is sent in data.attributes',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
+    test('omits renderScope from the body when the visit has no scope', async function (assert) {
+      // Absent rather than null or empty: `prerender-app.ts` treats a
+      // non-string as no scope, and an interactive visit legitimately has
+      // none.
+      let receivedBody: any;
+      let server = createServer((req, res) => {
+        let body: Buffer[] = [];
+        req.on('data', (chunk) => body.push(chunk));
+        req.on('end', () => {
+          receivedBody = JSON.parse(Buffer.concat(body).toString('utf-8'));
+          res.statusCode = 201;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ data: { attributes: { ok: true } } }));
+        });
+      }).listen(0);
+
+      try {
+        let url = `http://127.0.0.1:${(server.address() as any).port}`;
+        let prerenderer = createRemotePrerenderer(url);
+
+        await prerenderer.prerenderVisit({
+          affinityType: 'realm',
+          affinityValue: 'realm-1',
+          realm: 'realm-1',
+          url: 'https://example.com/card.json',
+          auth: '{}',
+        });
+
+        assert.notOk(
+          'renderScope' in (receivedBody?.data?.attributes ?? {}),
+          'no renderScope key when the visit carries no scope',
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    });
+
     test('omits x-boxel-job-id header when jobId is not provided', async function (assert) {
       let receivedHeaders: any;
       let server = createServer((req, res) => {

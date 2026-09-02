@@ -41,6 +41,26 @@ import type { FileDef } from '@cardstack/base/file-api';
 export type ReferenceCount = Map<string, number>;
 
 const loadTrackingLogger = logger('store-load-tracking');
+// Every scope boundary a prerender tab crosses, and what it cost. A tab that
+// crosses more often than it renders is paying for reloads it doesn't need.
+//
+// Local only, and there is no level that changes that: host log levels are
+// baked at build time from `ENV.logLevels`, and a production build pins them
+// to `*=warn` outright (`host/config/environment.js`) — the prerender service
+// loads built host assets, and while it could inject `_logDefinitions` ahead
+// of the page (`setup-globals.ts` defers to an existing value, and
+// `page-pool.ts` already uses `evaluateOnNewDocument` for other globals),
+// nothing does. So nothing below `warn` from host code is readable in a
+// deployed environment today, whatever it is written at. Raising this to `warn` to buy visibility would
+// misreport an ordinary, expected event. To read it, run a host build with
+// `LOG_LEVELS=store-job-scope=debug`.
+//
+// The deployed signal for the same question is the per-row render diagnostic
+// `searchDocLinkLoads` (`runtime-common/index.ts`), which lands in
+// `boxel_index.diagnostics`: a rebuilt row that counts link targets while
+// loading none of them is a render that resolved from residency, which is the
+// symptom a missing scope crossing produces.
+const jobScopeLogger = logger('store-job-scope');
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
@@ -78,6 +98,31 @@ type StoreHooks = {
     },
   ): StoreSearchResource<T>;
 };
+
+// The realm view this render belongs to, or undefined when there isn't one —
+// the live app and any job-less render. Both halves of the gate matter: the
+// render flag alone is set by host-test renders that carry no job, and a job
+// id alone would let a stray global leak into the app's own store.
+//
+// The scope, not the job, is what state can be reused across. An index pass
+// and the prerender-html job it spawns are separate queue jobs reading one
+// immutable view of the realm, and they interleave on a shared tab — keying on
+// the job would drop everything on each alternation while the view never
+// moved. A driver that threads no scope falls back to the job id, which is the
+// narrower of the two and so never unsound.
+function currentRenderScope(): string | undefined {
+  let g = globalThis as unknown as {
+    __boxelRenderContext?: boolean;
+    __boxelJobId?: string;
+    __boxelRenderScope?: string;
+  };
+  if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+    return undefined;
+  }
+  return typeof g.__boxelRenderScope === 'string'
+    ? g.__boxelRenderScope
+    : g.__boxelJobId;
+}
 
 // we use this 2 way mapping between local ID and remote ID because if we end up
 // trying to search thru all the entries in a single direction Map to find the
@@ -140,6 +185,16 @@ class IDResolver {
     }
     this.#localIds = new Map();
     this.#remoteIds = new Map();
+  }
+
+  // Forget every pairing outright, rollover included. `reset` keeps the old
+  // local ids answerable across a loader refresh, which is right when the
+  // refresh is a one-off; a caller that runs on a repeating boundary needs
+  // this instead, or the rollover map grows for the life of the tab.
+  clear() {
+    this.#localIds = new Map();
+    this.#remoteIds = new Map();
+    this.#oldRemoteIds = new Map();
   }
 }
 
@@ -206,28 +261,34 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   #recentFileMetaLoads: Array<{ url: string; ms: number }> = [];
   static #MAX_DIAGNOSTIC_HISTORY = 20;
 
-  // ── Job-scoped wire-document cache ─────────────────────────────────────
+  // ── Scope-scoped wire-document cache ───────────────────────────────────
   // Successful card-source / file-meta documents fetched during an indexing
-  // render, keyed by URL and scoped to the indexing job identity
-  // (`__boxelJobId`), so a shared link target (one Policy referenced by
-  // hundreds of Claims) fetches once per job instead of once per
-  // referencing card. The identity map already short-circuits most repeat
+  // render, keyed by URL and scoped to the render scope (`renderScopeFor`,
+  // falling back to `__boxelJobId`), so a shared link target (one Policy
+  // referenced by hundreds of Claims) fetches once per scope instead of once
+  // per referencing card. The identity map already short-circuits most repeat
   // loads while a target instance stays resident; this cache covers the
   // window after the GC sweep evicts an unreferenced target, turning its
   // re-load into a local deserialize instead of a network round-trip.
   //
-  // Staleness contract — one consistent view of every target per job. For
-  // the indexed realm's own files this is exact: the job serializes with
-  // that realm's writes, and a mid-job write is picked up by the follow-up
-  // job its invalidation enqueues. A cross-realm target CAN change mid-job,
+  // Staleness contract — one consistent view of every target per scope. For
+  // the indexed realm's own files an index pass serializes with that realm's
+  // writes, and a mid-pass write is picked up by the follow-up pass its
+  // invalidation enqueues. One caveat the scope keying adds: a scope spans
+  // the index pass AND the `prerender_html` job it spawned, which are
+  // separate queue jobs, so a write landing between them is not excluded the
+  // way a write during a single pass is. That is bounded to HTML — in split
+  // mode the html job writes only `prerendered_html`, never a search doc —
+  // and the write's own pass regenerates it under a fresh scope. A
+  // cross-realm target CAN change mid-scope,
   // and the cache pins the version first observed — deliberately, matching
-  // the job-scoped instance reuse in the link getter's lazy-load path,
+  // the scope-scoped instance reuse in the link getter's lazy-load path,
   // which pins any target the moment its instance enters the store. The
-  // delta this cache adds is bounded to the job: only a post-GC-eviction
-  // re-load could have observed a newer cross-realm version mid-job, and
+  // delta this cache adds is bounded to the scope: only a post-GC-eviction
+  // re-load could have observed a newer cross-realm version mid-scope, and
   // one pinned version beats mixing pre- and post-write versions across a
-  // single job's rows. Across jobs nothing changes: entries die with the
-  // job, and cross-realm freshness between jobs is governed by what
+  // single scope's rows. Across scopes nothing changes: entries die with the
+  // scope, and cross-realm freshness between scopes is governed by what
   // re-indexes the consumer (dep-driven invalidation fans out within a
   // realm; a consumer of a peer realm's card is refreshed by its own
   // realm's next index of it). This is a looser gate than the resolved-doc
@@ -235,14 +296,14 @@ export default class CardStoreWithGarbageCollection implements CardStore {
   // narrower: a document fetched by URL, not a query result whose
   // membership can silently change under a peer realm's swap.
   //
-  // Gated to prerender + job id, cleared the first time a different job id
-  // is observed, never consulted by the live app.
+  // Gated to prerender + render scope, cleared the first time a different
+  // scope is observed, never consulted by the live app.
   #jobScopedDocCache = new Map<
     string,
     SingleCardDocument | SingleFileMetaDocument
   >();
-  #jobScopedDocCacheJobId: string | undefined;
-  // Bumped on every clear (the jobId-change clear and `reset()`). A load
+  #jobScopedStateJobId: string | undefined;
+  // Bumped on every clear (the scope-change clear and `reset()`). A load
   // captures this alongside its cache key and skips its populate when the
   // generation moved while the fetch was in flight — a document fetched
   // under one job must not seed the next job's cache, whose realm sources
@@ -268,19 +329,93 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     kind: 'card' | 'file',
     url: string,
   ): string | undefined {
-    let g = globalThis as unknown as {
-      __boxelRenderContext?: boolean;
-      __boxelJobId?: string;
-    };
-    if (g.__boxelRenderContext !== true || typeof g.__boxelJobId !== 'string') {
+    if (currentRenderScope() === undefined) {
       return undefined;
     }
-    if (g.__boxelJobId !== this.#jobScopedDocCacheJobId) {
-      this.#jobScopedDocCache.clear();
-      this.#jobScopedDocCacheJobId = g.__boxelJobId;
-      this.#jobScopedDocCacheGeneration++;
-    }
+    this.observeIndexingJob();
     return `${kind}:${url}`;
+  }
+
+  // Bind this store to the indexing job now in progress, dropping what it
+  // holds from a previous one. Called at both points a job's work can reach
+  // the store: a document load, and the render route's model build — which
+  // fetches the root card's source itself rather than through the store. The
+  // model build is the one that matters for correctness, because a render
+  // whose every link target is already resident performs no load at all: the
+  // boundary has to be observed before the root is hydrated, so that no owner
+  // in this job can be handed a target from the last one.
+  //
+  // Returns whether a boundary was actually crossed, so that a caller holding
+  // state of its own keyed to the same scope — `StoreService`'s in-flight maps
+  // — can drop it in step rather than on every visit.
+  observeIndexingJob(): boolean {
+    let scope = currentRenderScope();
+    if (scope === undefined) {
+      return false;
+    }
+    if (scope === this.#jobScopedStateJobId) {
+      return false;
+    }
+    let held = this.#jobScopedStateJobId;
+    let droppedInstances =
+      this.#cardInstances.size + this.#fileMetaInstances.size;
+    let droppedDocs = this.#jobScopedDocCache.size;
+    this.#jobScopedDocCache.clear();
+    // A fetch issued under the previous scope must not be adopted by this one.
+    // The in-flight map is consulted before a fetch is issued and hands back
+    // whatever promise it holds, so a load still pending across the boundary
+    // would answer a caller in the new scope with a document read from the
+    // realm before it — the same stale-target read this scoping exists to
+    // stop. Dropping the entries lets the new scope issue its own fetch; the
+    // pending one still settles, still counts toward `loaded()`, and its
+    // populate is already generation-checked.
+    this.#cardDocsInFlight.clear();
+    this.#fileMetaDocsInFlight.clear();
+    this.#cardDocStartedAt.clear();
+    this.#fileMetaStartedAt.clear();
+    this.#dropResidentInstancesForNewJob();
+    this.#jobScopedStateJobId = scope;
+    this.#jobScopedDocCacheGeneration++;
+    if (held !== undefined) {
+      jobScopeLogger.debug(
+        `render scope moved from ${held} to ${scope}; dropped ${droppedInstances} instance(s) and ${droppedDocs} cached document(s)`,
+      );
+    }
+    return true;
+  }
+
+  // Instance residency is job-scoped for the same reason the document cache
+  // is. A resident instance is handed to `linksTo` / `linksToMany`
+  // deserialization — and to the lazy link loader's reuse — with no freshness
+  // check, and a prerender tab is never told that a card it holds has since
+  // been rewritten: the write lands in the realm server, and the tab carries
+  // no realm-event subscription. A target rewritten between jobs would
+  // otherwise reduce into an owner's `computeVia` at its pre-write value, and
+  // that number is committed as though it were current — the write invalidated
+  // the owner, so its row is rebuilt from the stale copy and nothing later
+  // disagrees with it.
+  //
+  // Safe by construction at the points it runs from: the job's first touch of
+  // the store, before any of that job's own instances exist. Within a job
+  // residency is untouched, so a target shared by many owners still loads once.
+  // Errors are dropped alongside instances — an error row is a claim about a
+  // URL from the previous job's view of the realm, and the fix for it lands in
+  // exactly the same way a value change does.
+  #dropResidentInstancesForNewJob() {
+    this.#cardInstances.clear();
+    this.#cardInstanceErrors.clear();
+    this.#nonTrackedCardInstances.clear();
+    this.#nonTrackedCardInstanceErrors.clear();
+    this.#fileMetaInstances.clear();
+    this.#fileMetaInstanceErrors.clear();
+    this.#nonTrackedFileMetaInstances.clear();
+    this.#nonTrackedFileMetaInstanceErrors.clear();
+    this.#gcCandidates.clear();
+    // A hard clear, not `reset`: this runs once per job for the life of a
+    // prerender tab, and `reset`'s rollover map is never emptied, so it would
+    // accumulate every local id the tab ever saw. The pairings it drops belong
+    // to instances that are going with them.
+    this.#idResolver.clear();
   }
 
   #readJobScopedDoc(
@@ -329,6 +464,16 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     this.#fetch = fetch;
     this.#virtualNetwork = virtualNetwork;
     this.#storeHooks = storeHooks;
+    // A store built during an indexing render belongs to the scope running at
+    // the time — `resetCache` replaces the store mid-job, and a card can then
+    // become resident through `add` alone, which touches neither the load path
+    // nor the model build. Without this the held scope would read "none
+    // observed", which differs from the running one, so the next thing to
+    // observe the boundary would count the scope it is already in as a
+    // crossing and drop what that scope had just built. (Not a staleness hole
+    // in the other direction: an unrecorded scope differs from the next one
+    // too, so the cross-job drop happens either way.)
+    this.#jobScopedStateJobId = currentRenderScope();
   }
 
   resolveURL(reference: string, base?: string): URL | undefined {
@@ -414,8 +559,12 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return await promise;
     }
     promise = loadCardDocument(this.#fetch, url, this.#virtualNetwork);
+    // Held locally as well as in the map: a scope boundary clears the map
+    // mid-flight, so reading it back in the `finally` would time this load
+    // against a newer load's start — or find nothing and drop the entry.
+    let startedAt = Date.now();
     this.#cardDocsInFlight.set(url, promise);
-    this.#cardDocStartedAt.set(url, Date.now());
+    this.#cardDocStartedAt.set(url, startedAt);
     if (!opts?.untracked) {
       this.trackLoad(promise);
     }
@@ -440,17 +589,20 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return doc;
     } finally {
-      let startedAt = this.#cardDocStartedAt.get(url);
-      this.#cardDocsInFlight.delete(url);
-      this.#cardDocStartedAt.delete(url);
-      if (typeof startedAt === 'number') {
-        this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
-          url,
-          ms: Date.now() - startedAt,
-          outcome,
-          generation: this.#loadGeneration,
-        });
+      // Only retract this load's own entry. A scope boundary clears the map
+      // mid-flight and the next scope may already have issued its own fetch
+      // for the same URL, which an unguarded delete would evict — leaving its
+      // callers to redundantly refetch.
+      if (this.#cardDocsInFlight.get(url) === promise) {
+        this.#cardDocsInFlight.delete(url);
+        this.#cardDocStartedAt.delete(url);
       }
+      this.#recordDiagnosticHistory(this.#recentCardDocLoads, {
+        url,
+        ms: Date.now() - startedAt,
+        outcome,
+        generation: this.#loadGeneration,
+      });
     }
   }
 
@@ -481,8 +633,10 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       return await promise;
     }
     promise = loadFileMetaDocument(this.#fetch, url, this.#virtualNetwork);
+    // Held locally for the same reason as the card-document load above.
+    let startedAt = Date.now();
     this.#fileMetaDocsInFlight.set(url, promise);
-    this.#fileMetaStartedAt.set(url, Date.now());
+    this.#fileMetaStartedAt.set(url, startedAt);
     if (!opts?.untracked) {
       this.trackLoad(promise);
     }
@@ -497,15 +651,15 @@ export default class CardStoreWithGarbageCollection implements CardStore {
       }
       return doc;
     } finally {
-      let startedAt = this.#fileMetaStartedAt.get(url);
-      this.#fileMetaDocsInFlight.delete(url);
-      this.#fileMetaStartedAt.delete(url);
-      if (typeof startedAt === 'number') {
-        this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
-          url,
-          ms: Date.now() - startedAt,
-        });
+      // Guarded for the same reason as the card-document load above.
+      if (this.#fileMetaDocsInFlight.get(url) === promise) {
+        this.#fileMetaDocsInFlight.delete(url);
+        this.#fileMetaStartedAt.delete(url);
       }
+      this.#recordDiagnosticHistory(this.#recentFileMetaLoads, {
+        url,
+        ms: Date.now() - startedAt,
+      });
     }
   }
 
@@ -821,7 +975,7 @@ export default class CardStoreWithGarbageCollection implements CardStore {
     // the resetter deliberately discarded. The generation bump makes any
     // in-flight load skip its populate on resolve.
     this.#jobScopedDocCache.clear();
-    this.#jobScopedDocCacheJobId = undefined;
+    this.#jobScopedStateJobId = undefined;
     this.#jobScopedDocCacheGeneration++;
     this.#idResolver.reset();
   }
