@@ -58,16 +58,27 @@ turned round; land it flat, no swell.
 "Stone last" · "A hill with a shape in it" · "Enough to see from the
 fields".
 
-## 2. `muneage` — the ridge-raising (optional)
+## 2. `muneage` — the ridge-raising ✅ RECORDED
 
-Currently a designed silence (`hush`) at 1:56, four seconds, the frame
-clear of type. If a line is wanted:
+Was a designed silence (`hush`) at 1:56. Chris asked for it voiced, so the
+beat now carries a line and `hush` is gone from it — which leaves the field
+unused across the whole film, though the mechanism stays in the source.
+
+**Line as recorded** (`VO_SECS.muneage = 4.02`), unchanged from the request:
 
 > Muneage. The ridge goes on, and the carpenters stop for the day.
 
-**Target read:** under 3.5 s. Say "muneage" as mu-ne-a-ge (four even
-syllables, hard g). Only record if the silence is not working; the
-silence is the intended cut.
+**It fits, and the raw duration is misleading.** The file is 4.02s against a
+4s beat, but 0.4s of that is the tail silence every file carries: the speech
+ends at 3.58s, which is 0.42s clear of the seam. Nothing is clipped. The
+target of "under 3.5s" was measuring the file; what the beat actually needs
+is the speech to land, and it does.
+
+"Muneage" is said moo-neh-ah-geh — four even syllables, hard g.
+
+`muneage-short.mp3` is the same line without "for the day", 3.43s to speech
+end. Unreferenced. It is there because the beat is a BREATH, and if the full
+line ever reads as too full for one, the shorter take is a rename away.
 
 ## 3. Levels ✅ DONE — normalised, not re-recorded
 

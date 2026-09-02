@@ -638,6 +638,7 @@ const VO_SECS: Record<string, number> = {
   'c-tr': 7.47,
   'c-vn': 7.84,
   kaitai: 16.12,
+  muneage: 4.02,
   detail: 3.58,
   hafu: 10.21,
   hikaku: 6.5,
@@ -1081,12 +1082,12 @@ const BEATS: Beat[] = [
     ch: 2,
     /* the breath is entered on a dissolve, not a step */
     cut: true,
-    hush: true,
     id: 'muneage',
     join: 'blend',
     mode: 'clear',
     ticks: 2,
     toCam: { dolly: 0.5, lookY: 0.9, ox: 0, pitch: 13, yaw: 152 },
+    vo: 'Muneage. The ridge goes on, and the carpenters stop for the day.',
   },
 
   /* ---------------------------------------------------------------- *

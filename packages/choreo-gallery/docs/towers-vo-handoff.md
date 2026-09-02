@@ -8,7 +8,7 @@ so the audio arrives from the side. This is where it arrives.
 ## Take it from here
 
     branch  towers/vo-kaitai
-    commit  b8d42ff  "Towers: the ending has a voice, and the reads agree on a level"
+    commit  a475a81  "Towers: the ridge-raising speaks"
     base    towers/quality @ 3774d1b
 
     git merge towers/vo-kaitai
@@ -24,7 +24,13 @@ here are the levelled ones and anything else is the old pass.
 
 ## What is in it
 
-**One new recording.** `test-app/public/towers/vo/kaitai.mp3` — the ending.
+**Two new recordings.** `muneage.mp3` — the ridge-raising, which was a
+designed silence until Chris asked for it voiced. The beat carries a `vo`
+now and its `hush` is gone, which leaves that field unused film-wide; the
+mechanism stays in the source. 4.02s against a 4s beat, but the speech ends
+at 3.58s and the rest is the standard tail silence, so nothing is clipped.
+
+And `test-app/public/towers/vo/kaitai.mp3` — the ending.
 16.12s in its 20s window, 0.15s of head silence and 0.4s of tail, and
 `VO_SECS.kaitai` is set to match. Before this the ending was silent.
 
@@ -50,8 +56,9 @@ the pack.
 - **Re-recording `detail`, `shachi`, `timber`, `ishigaki` for level.** Done, by
   normalising rather than by a new take, which keeps reads you have already
   approved. See `docs/towers-vo-requests.md` § 3.
-- **`muneage`.** Not recorded, on purpose: the request says the silence is the
-  intended cut. The line is written and waiting there if that changes.
+- **`muneage`.** Now recorded, line unchanged from the request.
+  `muneage-short.mp3` beside it is the same line without "for the day", kept
+  in case the full one reads as too full for a beat that is a breath.
 - **`coda.mp3` and the ten `*-plain.mp3`.** Unreferenced, kept on disk on
   purpose. They are finished reads and deleting them only costs a generation
   to get back.

@@ -20,8 +20,16 @@ below it (`detail`, `shachi`, `timber`, `ishigaki`) are now at it rather than
 under it, which is what the trim could never do: an element's volume cannot go
 above 1. `VO_GAIN` is consequently empty.
 
-The spread across the whole film is now **0.1 dB**, down from 7.3. No peak is
-above -5.7 dBFS, so there is no clipping and no limiter anywhere in the chain.
+The spread across the whole film is now **0.1 dB**. No peak is above -5.7
+dBFS, so there is no clipping and no limiter anywhere in the chain.
+
+## Shape of a file
+
+0.15s of silence at the head, 0.4s at the tail, mono, 44.1 kHz, 192 kbps.
+**The tail is padding, not content** — the number that matters against a beat
+is where the speech ends, not how long the file is. `muneage` is the case that
+makes this concrete: 4.02s in a 4s beat, and nothing is clipped, because the
+speech is done at 3.58s.
 
 ## Files the film loads
 
@@ -38,22 +46,23 @@ above -5.7 dBFS, so there is no clipping and no limiter anywhere in the chain.
 | 09  | `plaster`  | 5.85s  | -29.2 dB | -8.6 dB  |
 | 10  | `boro`     | 7.00s  | -29.3 dB | -8.4 dB  |
 | 11  | `kawara`   | 9.27s  | -29.2 dB | -8.7 dB  |
-| 12  | `detail`   | 3.58s  | -29.2 dB | -10.8 dB |
-| 13  | `shachi`   | 10.63s | -29.3 dB | -7.0 dB  |
-| 14  | `hafu`     | 10.21s | -29.3 dB | -8.3 dB  |
-| 15  | `koran`    | 5.85s  | -29.3 dB | -8.6 dB  |
-| 16  | `ishi2`    | 7.11s  | -29.2 dB | -7.6 dB  |
-| 17  | `noki`     | 8.36s  | -29.3 dB | -9.7 dB  |
-| 18  | `hikaku`   | 6.50s  | -29.3 dB | -10.3 dB |
-| 19  | `c-jp`     | 4.31s  | -29.3 dB | -10.7 dB |
-| 20  | `c-cn`     | 7.76s  | -29.2 dB | -9.2 dB  |
-| 21  | `c-vn`     | 7.84s  | -29.2 dB | -9.6 dB  |
-| 22  | `c-th`     | 6.11s  | -29.3 dB | -9.4 dB  |
-| 23  | `c-kh`     | 8.59s  | -29.2 dB | -8.1 dB  |
-| 24  | `c-tr`     | 7.47s  | -29.3 dB | -9.3 dB  |
-| 25  | `kaitai`   | 16.12s | -29.3 dB | -8.0 dB  |
+| 12  | `muneage`  | 4.02s  | -29.3 dB | -12.0 dB |
+| 13  | `detail`   | 3.58s  | -29.2 dB | -10.8 dB |
+| 14  | `shachi`   | 10.63s | -29.3 dB | -7.0 dB  |
+| 15  | `hafu`     | 10.21s | -29.3 dB | -8.3 dB  |
+| 16  | `koran`    | 5.85s  | -29.3 dB | -8.6 dB  |
+| 17  | `ishi2`    | 7.11s  | -29.2 dB | -7.6 dB  |
+| 18  | `noki`     | 8.36s  | -29.3 dB | -9.7 dB  |
+| 19  | `hikaku`   | 6.50s  | -29.3 dB | -10.3 dB |
+| 20  | `c-jp`     | 4.31s  | -29.3 dB | -10.7 dB |
+| 21  | `c-cn`     | 7.76s  | -29.2 dB | -9.2 dB  |
+| 22  | `c-vn`     | 7.84s  | -29.2 dB | -9.6 dB  |
+| 23  | `c-th`     | 6.11s  | -29.3 dB | -9.4 dB  |
+| 24  | `c-kh`     | 8.59s  | -29.2 dB | -8.1 dB  |
+| 25  | `c-tr`     | 7.47s  | -29.3 dB | -9.3 dB  |
+| 26  | `kaitai`   | 16.12s | -29.3 dB | -8.0 dB  |
 
-**25 files, 200.9s of speech.** Every duration here is also in
+**26 files, 204.9s of speech.** Every duration here is also in
 `VO_SECS` in `tower-film.gts`, which paces the on-screen lines against the
 voice rather than against the beat — a re-record means re-measuring, and the
 two must agree.
@@ -61,9 +70,11 @@ two must agree.
 ## On disk, not loaded
 
 - `coda.mp3` — the old ending's line. `kaitai` replaces it.
+- `muneage-short.mp3` — the ridge-raising without "for the day".
 - `*-plain.mp3` (10 files) — the reads without the Japanese term named at the
   head. The film uses the named versions; these are the alternative take if a
   beat is ever wanted without its term spoken.
 
-They are left in place deliberately: both are finished reads, and re-recording
-one costs a generation. Neither is referenced from code.
+All of them are finished reads, kept because re-recording one costs a
+generation and none of them costs anything to keep. Nothing here is
+referenced from code.
