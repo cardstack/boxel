@@ -1077,7 +1077,7 @@ const BEATS: Beat[] = [
        seam here lets the plate shot ahead of it carry a real drift */
     cut: true,
     gloss: 'Japan · the keep',
-    bob: 1.5,
+    bob: 0.85,
     grade: 'c-jp',
     hold: true,
     id: 'c-jp',
@@ -1097,7 +1097,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
-    bob: 1.5,
+    bob: 0.85,
     grade: 'c-cn',
     hold: true,
     id: 'c-cn',
@@ -1117,7 +1117,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
-    bob: 1.5,
+    bob: 0.85,
     grade: 'c-vn',
     hold: true,
     id: 'c-vn',
@@ -1137,7 +1137,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
-    bob: 1.5,
+    bob: 0.85,
     grade: 'c-th',
     hold: true,
     id: 'c-th',
@@ -1163,7 +1163,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
-    bob: 0.8,
+    bob: 0.5,
     grade: 'c-kh',
     hold: true,
     id: 'c-kh',
@@ -1183,7 +1183,7 @@ const BEATS: Beat[] = [
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
-    bob: 1.5,
+    bob: 0.85,
     grade: 'c-tr',
     hold: true,
     id: 'c-tr',
@@ -1447,6 +1447,9 @@ export default class TowerFilm extends Component<{
   /** the height the word rises FROM — set when it actually arrives */
   private markFrom = 2.6;
   private markSeated = false;
+
+  /** the last pose actually pushed — the final smoothing stage */
+  private sent?: { az: number; el: number; lookY: number; ox: number; zoom: number };
 
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
@@ -2391,6 +2394,7 @@ export default class TowerFilm extends Component<{
       this.midV[k] = secs ? (b - a) / secs : 0;
       this.nowV[k] = this.midV[k];
     }
+    this.sent = undefined;
     this.film?.pose({
       az: c.yaw * RAD,
       el: c.pitch * RAD,
@@ -2540,16 +2544,39 @@ export default class TowerFilm extends Component<{
        building stays centred on the way */
     const lookY = this.beat.hold ? film.height() * 0.5 - 7.065 : this.now.lookY;
     const ox = Math.abs(this.now.ox ?? 0) < 1e-4 ? 0 : this.now.ox!;
-    film.pose({
+    /**
+     * ONE LAST FILTER BEFORE THE GLASS.
+     *
+     * Everything upstream is smooth on its own — a spline, a spring,
+     * the scene's own chase — but they are SUMMED here, along with the
+     * bob and the pointer's lean, and a sum of smooth things is only as
+     * smooth as its roughest term. A short one-pole on the pose that
+     * actually ships takes the last of it out.
+     *
+     * It must never soften a CUT, though: a filter that carries sixty
+     * milliseconds of the outgoing shot into the incoming one turns
+     * every edit into a tiny dissolve. The snap clears it, so the first
+     * frame of a new building is exactly the new building.
+     */
+    const want = {
       /* the lens leans into the cursor: a couple of degrees of orbit and
          a hand's width of height, which is enough for the hills to move
          against the building and nowhere near enough to fight the shot */
-      az: (this.now.yaw + this.lean.x * 1.1) * RAD,
-      el: (this.now.pitch - this.lean.y * 0.75 + bob) * RAD,
-      lookY: lookY + this.lean.y * 0.35 + bob * 0.3,
+      az: (this.now.yaw + this.lean.x * 0.8) * RAD,
+      el: (this.now.pitch - this.lean.y * 0.5 + bob) * RAD,
+      lookY: lookY + this.lean.y * 0.3 + (this.beat.hold ? 0 : bob * 0.3),
       ox: ox - this.lean.x * 0.012,
       zoom: this.now.dolly,
-    });
+    };
+    const g = Math.min(1, dt * 16);
+    const sent = this.sent ?? { ...want };
+    sent.az += (want.az - sent.az) * g;
+    sent.el += (want.el - sent.el) * g;
+    sent.lookY += (want.lookY - sent.lookY) * g;
+    sent.ox += (want.ox - sent.ox) * g;
+    sent.zoom += (want.zoom - sent.zoom) * g;
+    this.sent = sent;
+    film.pose({ ...sent });
     /* walk the key light to the shot's own sun — the short way round,
        over about a second and a half */
     const goal = this.sunGoal;
