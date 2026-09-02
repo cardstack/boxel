@@ -33,7 +33,7 @@ runs:
         # match what runs at test time and what the mirror publishes:
         # packages/matrix/support/synapse/index.ts, packages/matrix/docker/
         # smtp4dev.ts, packages/matrix/docker/mock-oauth2.ts,
-        # scripts/pg-container.sh, and
+        # scripts/pg-container.sh, .devcontainer/claude-web-setup.sh, and
         # .github/workflows/mirror-test-images.yml.
         warm() {
           canonical="$1"

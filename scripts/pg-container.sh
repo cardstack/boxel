@@ -14,9 +14,11 @@
 
 BOXEL_PG_CONTAINER=boxel-pg
 
-# If you bump postgres, also update the GHCR mirror so CI keeps caching it (it
-# must match the version pinned there): .github/workflows/mirror-test-images.yml
-# and .github/actions/warm-test-images/action.yml.
+# If you bump postgres, also update the GHCR mirror so CI keeps caching it and
+# the devcontainer's pre-pull, which all pin the version separately:
+# .github/workflows/mirror-test-images.yml,
+# .github/actions/warm-test-images/action.yml and
+# .devcontainer/claude-web-setup.sh.
 BOXEL_PG_IMAGE=postgres:16.3
 
 # max_connections is raised well above postgres's default of 100: a single

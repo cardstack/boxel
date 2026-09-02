@@ -123,8 +123,12 @@ function execAsync(
 async function waitForPostgres(): Promise<void> {
   const maxAttempts = 30;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Probe over TCP, not the unix socket: while the postgres image
+    // initializes a fresh data directory it runs a temporary server bound to
+    // the socket only, so a socket probe reports ready during init and the
+    // next command lands on "the database system is shutting down".
     const { err } = await execAsync(
-      'docker exec boxel-pg pg_isready -U postgres',
+      'docker exec boxel-pg pg_isready -h 127.0.0.1 -p 5432 -U postgres',
     );
     if (!err) return;
     process.stdout.write('.');
