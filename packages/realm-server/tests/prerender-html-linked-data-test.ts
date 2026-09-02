@@ -30,7 +30,13 @@ function makeFileSystem() {
 
       export class Vendor extends CardDef {
         @field name = contains(StringField);
-        static embedded = class Embedded extends Component<typeof this> {
+        // A linksTo field component renders its target in FITTED format, so
+        // the fitted template is the one whose output lands in the
+        // consumer's HTML. (Without it, the default fitted layout renders —
+        // card icon, cardTitle, display name — and never this card's own
+        // fields, so an assertion on "name" tests the fixture, not the
+        // pipeline.)
+        static fitted = class Fitted extends Component<typeof this> {
           <template>
             <span>Supplied by <@fields.name/></span>
           </template>
