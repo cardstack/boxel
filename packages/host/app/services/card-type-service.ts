@@ -60,11 +60,10 @@ export default class CardTypeService extends Service {
   // traversal stack. Sharing in-flight promises across roots keyed on the type
   // alone would close that cycle through the cache instead of the recursion,
   // where no stack can see it, and the two roots would await each other
-  // forever. Sharing keyed on the traversal stack as well as the type would be
-  // safe — every recursive call extends the stack, so those await edges only
-  // ever point deeper — and would collapse the sibling fields that share a
-  // type into one traversal. The cache is settled-only because it does not
-  // make that distinction, not because no sharing is possible.
+  // forever. The cache is settled-only because it cannot tell those roots
+  // apart, not because sharing is impossible: sharing that also accounts for
+  // the traversal stack is safe, and `toType` does exactly that for the fields
+  // of one card, where the stack is fixed.
   private typeCache: Map<string, Type> = new Map();
 
   // The in-flight promise, not the settled value. A card's fields are assembled
@@ -241,7 +240,11 @@ export default class CardTypeService extends Service {
         } - ${await response.text()}`,
       );
     }
-    return { extension: extensionOf(new URL(response.url).pathname) };
+    // A handler that answers from memory rather than the network leaves
+    // `response.url` empty, so fall back to what was asked for. That spelling
+    // has no extension to give, which is the honest answer for a module that
+    // was never resolved to a file.
+    return { extension: extensionOfURL(response.url || url.href) };
   }
 }
 

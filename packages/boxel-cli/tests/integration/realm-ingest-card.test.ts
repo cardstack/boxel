@@ -208,7 +208,11 @@ afterAll(async () => {
   // each test file a fresh registry — the OS-level server would outlive this
   // file and the next suite's getTestPrerenderer() would hit EADDRINUSE.
   await stopTestPrerenderServer();
-});
+  // Shutting down a realm server and a browser-backed prerender server is not
+  // a 10-second job on a loaded runner, and the default hook timeout is 10s.
+  // Timing out here aborts the teardown above, which is the very thing that
+  // keeps the next file off this port — so the budget matches the setup's.
+}, 600_000);
 
 describe('realm ingest-card (integration)', () => {
   it('ingests the entry card graph: modules across nested dirs, test, instance, and Spec', () => {

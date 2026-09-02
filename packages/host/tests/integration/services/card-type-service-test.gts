@@ -141,14 +141,30 @@ module('Integration | services | card-type-service', function (hooks) {
     currentLoader().canonicalURLFor = () => undefined;
   }
 
+  // Sends one request of known shape through the network the service uses and
+  // reports whether the recorder saw it. Lets a test that asserts no requests
+  // were made distinguish that from a recorder that stopped listening.
+  async function recorderIsLive() {
+    let sentinel = `${testRealmURL}__recorder-probe__`;
+    let before = requestLog.length;
+    await getService('network')
+      .virtualNetwork.fetch(sentinel)
+      .catch(() => undefined);
+    let saw = requestLog.slice(before).includes(sentinel);
+    requestLog.length = before;
+    return saw;
+  }
+
   test('assembling a type reads the extension the loader already resolved, without asking the realm', async function (assert) {
     let { ThemeField, cardTypeService } = await importTheme();
 
     let type: Type = await cardTypeService.assembleType(ThemeField);
 
-    // The witness for the absence assertions below: the extension and the
-    // whole field list were produced, so an empty request log means they were
-    // produced without asking the realm, not that nothing happened.
+    // Half the witness for the absence assertions below: the extension and the
+    // whole field list were produced, so nothing was skipped. The other half is
+    // `recorderIsLive` — these assertions read the assembled type rather than
+    // the request log, so on their own they would still hold if the recorder
+    // had been detached and the log were empty for that reason instead.
     assert.strictEqual(
       type.moduleInfo.extension,
       '.gts',
@@ -171,9 +187,17 @@ module('Integration | services | card-type-service', function (hooks) {
       'the module the loader has already placed was not re-requested',
     );
     assert.deepEqual(
-      requestLog.filter((url) => new URL(url).pathname.endsWith('/_info')),
+      requestLog.filter((url) => url.endsWith('/_info')),
       [],
       'nothing about an assembled type depends on realm info',
+    );
+    // The other half of the witness. `NetworkService.resetState()` swaps the
+    // whole VirtualNetwork, which would silently detach the recorder and leave
+    // both assertions above true for a reason that has nothing to do with the
+    // service. A request that is known to have happened has to show up.
+    assert.true(
+      await recorderIsLive(),
+      'the recorder was still attached to the network under test',
     );
   });
 
@@ -232,6 +256,35 @@ module('Integration | services | card-type-service', function (hooks) {
       [...new Set(type.fields.map((f) => (f.card as Type).displayName))],
       ['Colorish'],
       'the retry assembles the type it failed to assemble before',
+    );
+  });
+
+  test('concurrent roots in one module share a single fallback fetch for it', async function (assert) {
+    let { Post, Author } = (await currentLoader().import(
+      `${testRealmURL}linked`,
+    )) as {
+      Post: typeof BaseDef;
+      Author: typeof BaseDef;
+    };
+    let cardTypeService = getService('card-type-service');
+    cardTypeService.invalidateAllCaches();
+    requestLog.length = 0;
+    hideLoaderModuleURLs();
+
+    // Two roots over the same module is the one shape that reaches the
+    // module-info cache with a second caller while the first is still in
+    // flight: within a single root the per-node memo collapses the siblings
+    // before they ever get there.
+    await Promise.all([
+      cardTypeService.assembleType(Post),
+      cardTypeService.assembleType(Author),
+    ]);
+
+    let linkedRequests = requestsFor(`${testRealmURL}linked`);
+    assert.strictEqual(
+      linkedRequests.length,
+      1,
+      `both roots shared one fetch of their module (got ${linkedRequests.length}: ${linkedRequests.join(', ')})`,
     );
   });
 

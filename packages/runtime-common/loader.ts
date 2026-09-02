@@ -716,13 +716,14 @@ export class Loader {
     return [...this.modules.keys()];
   }
 
-  // The URL this loader actually loaded a module from: the resolved spelling,
-  // extension included, which the extensionless and alias forms of the same
-  // identifier do not carry. A caller holding something this loader exported
-  // can ask where it came from without going back to the network. Undefined
-  // for a module this loader has not loaded, and for an identifier that does
-  // not resolve to a URL — a shim registered under a bare specifier is
-  // recorded under that specifier, so the answer is not always a URL.
+  // Where this loader got a module from, in the spelling it recorded: for a
+  // fetched module the resolved URL, extension included, which the
+  // extensionless and alias forms of the same identifier do not carry. A
+  // caller holding something this loader exported can ask where it came from
+  // without going back to the network. Undefined for a module this loader has
+  // not loaded. Not always a URL — `shimModule` records a shim under the
+  // identifier it was registered with, so a bare specifier comes back as
+  // itself; callers that need a URL must parse defensively.
   canonicalURLFor(moduleIdentifier: string): string | undefined {
     try {
       return this.getCanonicalModuleURL(this.resolveImport(moduleIdentifier));
