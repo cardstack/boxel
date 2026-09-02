@@ -144,6 +144,15 @@ interface Beat {
   haze?: number;
 
   /**
+   * THE BUILDING LEAVES BY FADING, not by sinking. Running the build
+   * clock backwards moves the tower down out of its own frame, and
+   * since the film builds it straight back afterwards, that movement is
+   * a journey to nowhere. A dissolve says "gone" and leaves the shot
+   * composed exactly as it was.
+   */
+  dissolve?: boolean;
+
+  /**
    * A BACKLIGHT, standing opposite the lens. For the night beats: a
    * dark building against a dark sky is a rectangle of nothing, and
    * every night exterior ever shot cheats exactly this way.
@@ -1171,8 +1180,9 @@ const BEATS: Beat[] = [
      * argument (a building is a stack of answers, and every one of them
      * comes apart in the order it went up) without a word of summary.
      * ---------------------------------------------------------------- */
-    build: [4.4, 0],
+    build: 4.4,
     cam: { dolly: 1.05, lookY: 2.6, ox: -0.02, pitch: 9, yaw: 300 },
+    dissolve: true,
     ch: 4,
     cut: true,
     gloss: 'in the order it went up',
@@ -1309,6 +1319,9 @@ interface FilmApi {
     spec: { color?: string; glow?: string; pts: Pt3[]; r?: number }
   ): void;
   traceDraw(id: string, t: number): void;
+
+  /** fade a drawn line out where it stands */
+  traceFade(id: string, k: number): void;
   view(): {
     az: number;
     el: number;
@@ -1324,6 +1337,9 @@ interface FilmApi {
 
   /** the backlight: intensity, and whether it stands opposite the lens */
   rim(k: number | null, back?: boolean): void;
+
+  /** 1 is the building, 0 is gone — without moving the frame */
+  modelFade(k: number | null): void;
 }
 
 export default class TowerFilm extends Component<{
@@ -2452,7 +2468,21 @@ export default class TowerFilm extends Component<{
        over about a second and a half */
     const goal = this.sunGoal;
     if (goal && this.sunNow) {
-      const step = Math.min(1, dt * 1.5);
+      /**
+       * AT A RATE, not on a time constant. An eased approach takes the
+       * same second and a half whether the sun moves two degrees or
+       * fifty-five — and fifty-five degrees in a second and a half is
+       * the jarring relight between the construction chapter (near
+       * overhead) and the detail chapter (raking). Capping the angular
+       * speed makes a small change quick and a big one a proper move,
+       * which the chapter's own flight has time for.
+       */
+      const cap = 0.3 * dt;
+      const ease = Math.min(1, dt * 1.6);
+      const walk = (from: number, to: number) => {
+        const d = (to - from) * ease;
+        return from + (Math.abs(d) > cap ? Math.sign(d) * cap : d);
+      };
       let d = goal.az - this.sunNow.az;
       while (d > Math.PI) {
         d -= Math.PI * 2;
@@ -2460,8 +2490,8 @@ export default class TowerFilm extends Component<{
       while (d < -Math.PI) {
         d += Math.PI * 2;
       }
-      this.sunNow.az += d * step;
-      this.sunNow.el += (goal.el - this.sunNow.el) * step;
+      this.sunNow.az = walk(this.sunNow.az, this.sunNow.az + d);
+      this.sunNow.el = walk(this.sunNow.el, goal.el);
       film.light(this.sunNow);
     }
     this.pageEl?.style.setProperty('--tf-lx', this.lean.x.toFixed(3));
@@ -2497,6 +2527,10 @@ export default class TowerFilm extends Component<{
 
     if (Array.isArray(beat.build)) {
       film.time(lerp(beat.build[0], beat.build[1], smooth(local)));
+    }
+    if (beat.dissolve) {
+      /* the building goes, the frame stays */
+      film.modelFade(1 - smooth(Math.max(0, (local - 0.12) / 0.72)));
     }
 
     /**
@@ -2783,10 +2817,16 @@ export default class TowerFilm extends Component<{
   private traceShape(film: FilmApi, beat: Beat, local: number, dt: number) {
     const specs = beat.trace ?? [];
     let drew = 0;
+    /* AND THEY LEAVE. A hand that annotates a drawing also takes the
+       annotation away; a red line that survives to the cut reads as
+       something the film forgot. The whole set fades over the last
+       fifth of the beat, in the order it was drawn. */
+    const gone = Math.min(1, Math.max(0, (local - 0.78) / 0.16));
     for (const [i] of specs.entries()) {
       const draw = Math.min(1, Math.max(0, (local - 0.06 - i * 0.12) / 0.16));
-      drew = Math.max(drew, draw);
+      drew = Math.max(drew, draw * (1 - gone));
       film.traceDraw(`t${i}`, draw);
+      film.traceFade(`t${i}`, 1 - Math.min(1, gone * (1 + i * 0.25)));
     }
     /* the callout earns the dim too — a leader and a ring are annotation
        just as much as a traced eave is */
@@ -3128,6 +3168,10 @@ export default class TowerFilm extends Component<{
      * is a beat inheriting state it never asked for. The subject of this
      * film is the keep, so a beat that says nothing means style zero.
      */
+    /* whatever the last beat did to the model, this one starts whole */
+    if (!beat.dissolve) {
+      film.modelFade(1);
+    }
     const style = beat.style ?? 0;
     if (film.styleIndex() !== style) {
       film.style(style);
@@ -4071,8 +4115,16 @@ export default class TowerFilm extends Component<{
             that happened to share a corner. Randomness in type is
             almost never timing; it is a vocabulary nobody agreed on. }}
             <n.Parallel>
+              {{! ONE BLOCK AT A TIME. The old set leaves over about
+              half a second (lines, reading, glyph, kicker, in that
+              order); the new one waits for the corner to be empty
+              before it starts. Two settings dissolving through each
+              other is the one thing type must never do — it is
+              unreadable for the length of the overlap and it looks like
+              a mistake, because it is one. }}
               <n.Tween
                 @of={{n.inserted "kick"}}
+                @delay={{0.5}}
                 @opacity={{array 0 1}}
                 @y={{array 10 0}}
                 @duration={{0.55}}
@@ -4090,7 +4142,7 @@ export default class TowerFilm extends Component<{
                 @by="character"
                 @order="center"
                 @stagger={{0.07}}
-                @delay={{0.16}}
+                @delay={{0.62}}
                 @opacity={{array 0 1}}
                 @y={{array 16 0}}
                 @duration={{0.9}}
@@ -4098,7 +4150,7 @@ export default class TowerFilm extends Component<{
               />
               <n.Tween
                 @of={{n.inserted "read"}}
-                @delay={{0.46}}
+                @delay={{0.86}}
                 @opacity={{array 0 1}}
                 @y={{array 8 0}}
                 @duration={{0.62}}
