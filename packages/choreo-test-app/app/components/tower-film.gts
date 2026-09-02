@@ -1791,12 +1791,12 @@ export default class TowerFilm extends Component<{
     const secs = b.ticks * TICK;
     const sgn = (d: number) => (d < 0 ? -1 : 1);
     const stretch = (
-      key: 'dolly' | 'pitch' | 'yaw',
+      key: 'dolly' | 'ox' | 'pitch' | 'yaw',
       floor: number
     ): number => {
-      const head = b.cam[key];
-      const d = drift[key] - head;
-      const nose = next ? next.cam[key] - head : 0;
+      const head = b.cam[key] ?? 0;
+      const d = (drift[key] ?? 0) - head;
+      const nose = next ? (next.cam[key] ?? 0) - head : 0;
       /* the direction is the beat's own, or the next shot's if the
          beat asked for nothing at all */
       const way = d !== 0 ? sgn(d) : nose !== 0 ? sgn(nose) : 1;
@@ -1820,12 +1820,21 @@ export default class TowerFilm extends Component<{
       );
       return head + way * want;
     };
+    /**
+     * AND A PAN. Orbit, push and tilt all move the camera AROUND the
+     * subject; a lateral drift moves the subject across the frame,
+     * which is the one Ken Burns move the others cannot fake — it
+     * changes the composition rather than the view. A few hundredths of
+     * the frustum over a shot is enough to feel: the building leaves
+     * the middle, or arrives in it, while everything else is happening.
+     */
     const to = {
       ...drift,
       dolly: stretch(
         'dolly',
         b.cam.dolly * Math.min(0.22, 0.022 * secs)
       ),
+      ox: stretch('ox', Math.min(0.07, 0.008 * secs)),
       pitch: stretch('pitch', Math.min(6, 0.45 * secs)),
       yaw: stretch('yaw', Math.min(22, 2 * secs)),
     };
@@ -4465,6 +4474,17 @@ export default class TowerFilm extends Component<{
     </div>
 
     <style>
+      /* THE FLAG, as an accent system. Two colours and nothing else:
+         the red of the hinomaru for the one thing that is happening NOW
+         — the playhead, the current chapter, the seal, the point a line
+         is drawn to — and a full white for type that has to win over a
+         picture. Everything else stays in the scene's own inks, so the
+         red never becomes decoration; it only ever means "here". */
+      .tf-page {
+        --tf-red: #bc002d;
+        --tf-white: #fffdf8;
+      }
+
       .tf-page {
         /* the film's ink, replaced per chapter from the scene's own
            time-of-day palette by `wear` — these are the morning values,
@@ -4929,27 +4949,39 @@ export default class TowerFilm extends Component<{
       }
 
       /* ---- the lens ------------------------------------------------- */
-      /* the passing cloud: a cool, soft-edged shadow raked with the sun */
+      /* THE CLOUD IS A CAST SHADOW, not a filter over the lens. A band
+         swept across the whole frame reads as somebody dimming the
+         picture; what a cloud actually does is drop a soft, uneven
+         shape onto the land and the building, keep its edges out of
+         focus, and move. Two overlapping blobs on a wide plate,
+         multiplied over the scene and travelling with the sun's rake. */
       .tf-cloud {
         position: absolute;
-        inset: -20%;
+        inset: -35% -45%;
         z-index: 1;
         pointer-events: none;
-        opacity: calc(var(--tf-cloud, 0) * 0.5);
-        background: linear-gradient(
-          calc(var(--tf-rake, 35deg) + 108deg),
-          transparent 0%,
-          rgba(96, 108, 128, 0.16) 26%,
-          rgba(78, 92, 116, 0.3) 50%,
-          rgba(96, 108, 128, 0.16) 74%,
-          transparent 100%
-        );
+        opacity: calc(var(--tf-cloud, 0) * 0.62);
+        background:
+          radial-gradient(
+            62% 40% at 32% 44%,
+            rgba(72, 84, 108, 0.42) 0%,
+            rgba(78, 92, 116, 0.26) 46%,
+            rgba(96, 108, 128, 0) 72%
+          ),
+          radial-gradient(
+            48% 32% at 68% 58%,
+            rgba(66, 78, 102, 0.34) 0%,
+            rgba(84, 96, 120, 0.18) 52%,
+            rgba(96, 108, 128, 0) 78%
+          );
         mix-blend-mode: multiply;
-        transform: translate3d(
-          calc(var(--tf-cloud, 0) * -3%),
-          calc(var(--tf-cloud, 0) * 2%),
-          0
-        );
+        filter: blur(26px);
+        transform: rotate(calc(var(--tf-rake, 35deg) * 0.4))
+          translate3d(
+            calc(var(--tf-cloud, 0) * -16%),
+            calc(var(--tf-cloud, 0) * 7%),
+            0
+          );
       }
 
       .tf-vig {
@@ -5550,7 +5582,7 @@ export default class TowerFilm extends Component<{
       .tf-rail-n {
         font-size: 22px;
         letter-spacing: 0.08em;
-        color: var(--tf-accent);
+        color: var(--tf-red);
       }
 
       .tf-rail-segs {
@@ -5790,7 +5822,7 @@ export default class TowerFilm extends Component<{
         position: absolute;
         inset: 0 auto 0 0;
         display: block;
-        background: linear-gradient(90deg, #a8621f 0%, #bc002d 100%);
+        background: var(--tf-red);
         width: calc(
           clamp(0, (var(--tf-prog, 0) - var(--s0)) / var(--sl), 1) * 100%
         );
@@ -5804,8 +5836,8 @@ export default class TowerFilm extends Component<{
         height: 11px;
         margin: -5.5px 0 0 -5.5px;
         border-radius: 50%;
-        background: #bc002d;
-        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+        background: var(--tf-red);
+        box-shadow: 0 0 0 2px var(--tf-white);
         transform: scale(0);
         transition: transform 160ms ease;
       }
