@@ -59,6 +59,80 @@ boxel_pg_wait_ready() {
   return 0
 }
 
+# Where the repair serializes itself. run-p starts three callers at once —
+# start:pg, plus an infra:ensure-pg from each of start:development and
+# start:worker-development — and without a lock each would restart postgres out
+# from under the stack all three are booting.
+BOXEL_PG_REPAIR_LOCK="${TMPDIR:-/tmp}/boxel-pg-max-connections.lock"
+
+# The running ceiling, or empty if it can't be read.
+boxel_pg_current_max_connections() {
+  boxel_pg_psql -tAc 'show max_connections' 2>/dev/null | tr -d '[:space:]'
+}
+
+boxel_pg_max_connections_ok() {
+  _bpg_current=$(boxel_pg_current_max_connections)
+  case "$_bpg_current" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  [ "$_bpg_current" -ge "$BOXEL_PG_MAX_CONNECTIONS" ]
+}
+
+# True once ALTER SYSTEM has been written but the restart that would apply it
+# has not happened yet, so a second caller can tell "nobody has fixed this"
+# from "it is fixed and waiting for a quiet moment".
+boxel_pg_max_connections_pending() {
+  [ "$(boxel_pg_psql -tAc \
+    "select pending_restart from pg_settings where name = 'max_connections'" \
+    2>/dev/null | tr -d '[:space:]')" = t ]
+}
+
+# Client backends other than the one asking.
+boxel_pg_client_count() {
+  _bpg_clients=$(boxel_pg_psql -tAc \
+    "select count(*) from pg_stat_activity where pid <> pg_backend_pid() and backend_type = 'client backend'" \
+    2>/dev/null | tr -d '[:space:]')
+  case "$_bpg_clients" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  echo "$_bpg_clients"
+}
+
+# The repair proper. Only ever called with the lock held.
+_boxel_pg_apply_max_connections() {
+  # A caller that queued behind the winner arrives here with the work already
+  # done: its wait-loop check could not see the new ceiling because postgres
+  # was mid-restart and unreachable at the time.
+  boxel_pg_max_connections_ok && return 0
+
+  _bpg_altered=
+  if ! boxel_pg_max_connections_pending; then
+    echo "boxel-pg is running with max_connections=$(boxel_pg_current_max_connections); raising it to $BOXEL_PG_MAX_CONNECTIONS."
+    boxel_pg_psql -c "ALTER SYSTEM SET max_connections = $BOXEL_PG_MAX_CONNECTIONS" >/dev/null 2>&1 || return 1
+    # ALTER SYSTEM only writes the file. Reloading makes postgres read it and
+    # flag the setting as awaiting a restart, which is how a later call tells
+    # "nobody has fixed this" from "fixed, waiting for a quiet moment". The
+    # reload is a SIGHUP: it drops nothing and changes no running value.
+    boxel_pg_psql -c 'select pg_reload_conf()' >/dev/null 2>&1 || return 1
+    _bpg_altered=yes
+  fi
+
+  _bpg_clients=$(boxel_pg_client_count) || return 1
+  if [ "$_bpg_clients" -gt 0 ]; then
+    # The new ceiling needs a restart, which drops every open connection. Leave
+    # postgres alone while another stack is using it and let the setting apply
+    # the next time it comes up, rather than killing a colleague process
+    # mid-index over a ceiling it has not hit yet. Said once, when the drift is
+    # found — every stack start until then would repeat it unprompted.
+    [ -n "$_bpg_altered" ] && echo "boxel-pg has $_bpg_clients client connection(s) open, so it was left running; max_connections=$BOXEL_PG_MAX_CONNECTIONS applies once nothing is using it."
+    return 0
+  fi
+
+  docker restart "$BOXEL_PG_CONTAINER" >/dev/null 2>&1 || return 1
+  boxel_pg_wait_ready || return 1
+  echo "boxel-pg restarted with max_connections=$(boxel_pg_current_max_connections)."
+}
+
 # Bring max_connections up to BOXEL_PG_MAX_CONNECTIONS on a container that
 # already exists.
 #
@@ -80,33 +154,27 @@ boxel_pg_wait_ready() {
 boxel_pg_repair_max_connections() {
   boxel_pg_wait_ready || return 1
 
-  _bpg_current=$(boxel_pg_psql -tAc 'show max_connections' 2>/dev/null | tr -d '[:space:]')
-  case "$_bpg_current" in
-    '' | *[!0-9]*) return 1 ;;
-  esac
-  [ "$_bpg_current" -ge "$BOXEL_PG_MAX_CONNECTIONS" ] && return 0
+  # The check every already-correct machine pays, and nothing more.
+  boxel_pg_max_connections_ok && return 0
 
-  echo "boxel-pg is running with max_connections=$_bpg_current; raising it to $BOXEL_PG_MAX_CONNECTIONS."
-  boxel_pg_psql -c "ALTER SYSTEM SET max_connections = $BOXEL_PG_MAX_CONNECTIONS" >/dev/null 2>&1 || return 1
+  _bpg_waited=0
+  while ! mkdir "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null; do
+    # Another caller is repairing; leave as soon as its restart lands.
+    boxel_pg_max_connections_ok && return 0
+    _bpg_waited=$((_bpg_waited + 1))
+    if [ "$_bpg_waited" -ge 120 ]; then
+      # A killed holder leaves the directory behind. Clear it so the next stack
+      # start gets a turn instead of being blocked for good.
+      rm -rf "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+  done
 
-  # max_connections only takes effect on restart, which drops every open
-  # connection. Skip the restart while another stack is using this postgres and
-  # let the setting apply the next time it comes up — the alternative is killing
-  # a colleague process mid-index to fix a ceiling it has not hit yet.
-  _bpg_clients=$(boxel_pg_psql -tAc \
-    "select count(*) from pg_stat_activity where pid <> pg_backend_pid() and backend_type = 'client backend'" \
-    2>/dev/null | tr -d '[:space:]')
-  case "$_bpg_clients" in
-    '' | *[!0-9]*) _bpg_clients=1 ;;
-  esac
-  if [ "$_bpg_clients" -gt 0 ]; then
-    echo "boxel-pg has $_bpg_clients client connection(s) open, so it was left running; the new ceiling applies once it restarts."
-    return 0
-  fi
-
-  docker restart "$BOXEL_PG_CONTAINER" >/dev/null 2>&1 || return 1
-  boxel_pg_wait_ready || return 1
-  echo "boxel-pg restarted with max_connections=$(boxel_pg_psql -tAc 'show max_connections' 2>/dev/null | tr -d '[:space:]')."
+  _bpg_status=0
+  _boxel_pg_apply_max_connections || _bpg_status=1
+  rmdir "$BOXEL_PG_REPAIR_LOCK" 2>/dev/null || true
+  return "$_bpg_status"
 }
 
 # Create the container if it is missing, start it, and make sure an existing one
