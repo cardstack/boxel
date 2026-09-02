@@ -133,8 +133,8 @@ async function bootStandby(
     if (m.type() === 'error') report.consoleErrors.push(m.text().slice(0, 300));
     if (m.type() === 'warn') report.consoleWarnings++;
   });
-  page.on('pageerror', (e) =>
-    report.pageErrors.push(String(e?.message ?? e).slice(0, 300)),
+  page.on('pageerror', (e: unknown) =>
+    report.pageErrors.push(String((e as Error)?.message ?? e).slice(0, 300)),
   );
   page.on('request', (r) => {
     report.requests++;
@@ -167,7 +167,7 @@ async function bootStandby(
     report.readyMs = Math.round(t2 - t1);
     report.ready = true;
   } catch (e: any) {
-    report.error = String(e?.message ?? e)
+    report.error = String((e as Error)?.message ?? e)
       .split('\n')[0]
       .slice(0, 300);
   }
@@ -200,7 +200,7 @@ async function bootStandby(
       ),
     ]);
   } catch (e: any) {
-    report.diagnostics = `ERR ${String(e?.message ?? e).slice(0, 200)}`;
+    report.diagnostics = `ERR ${String((e as Error)?.message ?? e).slice(0, 200)}`;
   }
   if (afterExpression) {
     try {
@@ -214,7 +214,7 @@ async function bootStandby(
         ),
       ]);
     } catch (e: any) {
-      report.after = `ERR ${String(e?.message ?? e).slice(0, 200)}`;
+      report.after = `ERR ${String((e as Error)?.message ?? e).slice(0, 200)}`;
     }
   }
   if (dump) {
@@ -244,7 +244,7 @@ async function bootStandby(
         ),
       ]);
     } catch (e: any) {
-      report.dumped = `ERR ${String(e?.message ?? e).slice(0, 200)}`;
+      report.dumped = `ERR ${String((e as Error)?.message ?? e).slice(0, 200)}`;
     }
   }
   return { context, page, report };
