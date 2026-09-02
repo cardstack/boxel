@@ -1071,7 +1071,7 @@ const BEATS: Beat[] = [
     wx: 0,
   },
   {
-    cam: { dolly: 0.78, lookY: -3.6, ox: -0.2, pitch: 2, yaw: 210 },
+    cam: { dolly: 0.64, lookY: -3.6, ox: -0.2, pitch: 2, yaw: 210 },
     ch: 4,
     /* the first of the six enters the way the other five do — and a
        seam here lets the plate shot ahead of it carry a real drift */
@@ -1081,7 +1081,7 @@ const BEATS: Beat[] = [
     grade: 'c-jp',
     hold: true,
     id: 'c-jp',
-    toCam: { dolly: 1.58, lookY: 4.4, ox: -0.16, pitch: 15, yaw: 238 },
+    toCam: { dolly: 1.296, lookY: 4.4, ox: -0.16, pitch: 15, yaw: 238 },
     join: 'blend',
     says: ['Timber frame, stone skirt', 'Height by stacking roofs'],
     kanji: '天守',
@@ -1093,7 +1093,7 @@ const BEATS: Beat[] = [
     ticks: 4,
   },
   {
-    cam: { dolly: 1.62, lookY: 4.6, ox: -0.16, pitch: 16, yaw: 238 },
+    cam: { dolly: 1.328, lookY: 4.6, ox: -0.16, pitch: 16, yaw: 238 },
     ch: 4,
     gloss: 'China · the pagoda',
     cut: true,
@@ -1101,7 +1101,7 @@ const BEATS: Beat[] = [
     grade: 'c-cn',
     hold: true,
     id: 'c-cn',
-    toCam: { dolly: 0.84, lookY: -2.8, ox: -0.22, pitch: 3, yaw: 214 },
+    toCam: { dolly: 0.689, lookY: -2.8, ox: -0.22, pitch: 3, yaw: 214 },
     join: 'blend',
     says: ['斗栱 — bracket sets', 'Eaves far past the wall'],
     kanji: '寶塔',
@@ -1113,7 +1113,7 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 1.66, lookY: 5.2, ox: -0.16, pitch: 15, yaw: 250 },
+    cam: { dolly: 1.361, lookY: 5.2, ox: -0.16, pitch: 15, yaw: 250 },
     ch: 4,
     gloss: 'Vietnam · the tower',
     cut: true,
@@ -1121,7 +1121,7 @@ const BEATS: Beat[] = [
     grade: 'c-vn',
     hold: true,
     id: 'c-vn',
-    toCam: { dolly: 0.82, lookY: -3.2, ox: -0.22, pitch: 2, yaw: 276 },
+    toCam: { dolly: 0.672, lookY: -3.2, ox: -0.22, pitch: 2, yaw: 276 },
     join: 'blend',
     says: ['A masonry body', 'A reliquary, not a lookout'],
     kanji: '佛塔',
@@ -1133,7 +1133,7 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 0.92, lookY: -5.4, ox: -0.22, pitch: -6, yaw: 276 },
+    cam: { dolly: 0.754, lookY: -5.4, ox: -0.22, pitch: -6, yaw: 276 },
     ch: 4,
     gloss: 'Thailand · the prang',
     cut: true,
@@ -1141,7 +1141,7 @@ const BEATS: Beat[] = [
     grade: 'c-th',
     hold: true,
     id: 'c-th',
-    toCam: { dolly: 1.6, lookY: 3.6, ox: -0.15, pitch: 14, yaw: 300 },
+    toCam: { dolly: 1.312, lookY: 3.6, ox: -0.15, pitch: 14, yaw: 300 },
     join: 'blend',
     says: ['Tapering the whole way', 'The shape is a mountain'],
     kanji: 'ปรางค์',
@@ -1159,7 +1159,7 @@ const BEATS: Beat[] = [
        corner in front of it, and moves about a quarter as far as its
        neighbours. A comparison is only fair if every subject is shown
        at its best, and "its best" is not the same lens for all six. */
-    cam: { dolly: 0.82, lookY: -1.4, ox: -0.21, pitch: 6, yaw: 290 },
+    cam: { dolly: 0.672, lookY: -1.4, ox: -0.21, pitch: 6, yaw: 290 },
     ch: 4,
     gloss: 'Cambodia · the sanctuary',
     cut: true,
@@ -1167,7 +1167,7 @@ const BEATS: Beat[] = [
     grade: 'c-kh',
     hold: true,
     id: 'c-kh',
-    toCam: { dolly: 0.9, lookY: 0.7, ox: -0.17, pitch: 9, yaw: 296 },
+    toCam: { dolly: 0.738, lookY: 0.7, ox: -0.17, pitch: 9, yaw: 296 },
     join: 'blend',
     says: ['Corbelled, never arched', 'So it must narrow to close'],
     kanji: 'ប្រាសាទ',
@@ -1179,7 +1179,7 @@ const BEATS: Beat[] = [
     ticks: 5,
   },
   {
-    cam: { dolly: 1.42, lookY: 5.6, ox: -0.16, pitch: 17, yaw: 278 },
+    cam: { dolly: 1.164, lookY: 5.6, ox: -0.16, pitch: 17, yaw: 278 },
     ch: 4,
     gloss: 'Türkiye · the mosque',
     cut: true,
@@ -1187,7 +1187,7 @@ const BEATS: Beat[] = [
     grade: 'c-tr',
     hold: true,
     id: 'c-tr',
-    toCam: { dolly: 0.9, lookY: -4.6, ox: -0.22, pitch: 1, yaw: 306 },
+    toCam: { dolly: 0.738, lookY: -4.6, ox: -0.22, pitch: 1, yaw: 306 },
     join: 'blend',
     says: [
       'Mass in compression',
