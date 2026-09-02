@@ -78,3 +78,48 @@ build: [4.4, 0]`; the coda restores `build: 4.4`. The fade it replaces
 - **Storm on the Vietnam beat?** Monsoon would be honest; it is the one
   beat with a masonry body that would take the wet well. Left clear so
   the snow's exit reads.
+
+## Cut 10 — a player, a mixer, six climates, and the fork
+
+- **The colour was wrong at the root.** three r149 writes a render target
+  in linear light whatever `outputEncoding` says, and the post quad was
+  the last thing before the canvas — so the film had been shown in linear
+  (dark, saturated) and the grade, written for sRGB pixels like the CSS
+  filters it replaced, ran on the wrong numbers: soft-light warmth in
+  linear lifts the darks hard, which was the red. The pass converts to
+  display space right after the sample now. Proved with a 0.5 grey read
+  back as 128, not 188.
+- **Weather is a sentence.** Rain stays on the eaves (`noki`), snow on the
+  north (`c-cn`), the storm was tried on `hikaku` and pulled: the question
+  is asked in plain air. `wx: 2` + `lightning: <secs>` remain in the
+  vocabulary for a beat that earns them (`__film.lightning()` fires one
+  bolt on cue; the STORM preset throws its own).
+- **The mixer.** One `masterBus` under everything, so mute is one switch
+  for all of it; a `voiceBus` beside music, hits and weather; per-beat
+  trims (`Beat.mix`, `__film.mix`) — the comparison beats run with the
+  weather bed off. The narration moved onto the graph: `__film.voice(url,
+gain)` plays a decoded buffer with a 70 ms rise, ducks the bed and lifts
+  it on the line's end; `voicePrime` fetches the next line a beat early;
+  `voiceStop(ms)` fades it; `pause(v)` is the context's own suspend, so a
+  paused film holds line, bed and weather together. No library: this is
+  the Web Audio API the page already had, with two more GainNodes.
+- **The player.** One full-width bar with the chapters as segments, a knob
+  computed from the same fractions as the fill over the measured track
+  (the old knob used a second, linear formula and drifted inside every
+  chapter), SVG transport on the left, modes on the right, the time beside
+  the chapter's name, a dark scrim, and the whole thing off the picture
+  when idle.
+- **No beige start page.** The page's own header, columns, plaque and
+  footer painted in full before the 36k-line script reached the bridge
+  that hid them. A three-line script in `<head>` stamps
+  `html[data-hosted]` before the body parses and a rule hides them on the
+  first frame. The canvas, the wash behind it and the reconstruction tag
+  stay: they are the picture.
+- **The fork.** `public/towers.html` was "vendored, near-verbatim". It is
+  a fork now and says so in its header (upstream path and commit); three
+  r149 is split out to `public/towers/three-149.js`, so the page is 9k
+  lines instead of 36k and a diff against upstream is the page, not the
+  library.
+- **Tooling trap, recorded:** a backtick anywhere inside a `.gts`
+  `<template>` (a CSS comment counts) makes ember-eslint-parser fail with
+  "Invalid count value" at 0:0.
