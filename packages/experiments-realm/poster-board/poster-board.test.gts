@@ -10,6 +10,7 @@ import { module, test } from 'qunit';
 
 import {
   CardContextName,
+  type ErrorEntry,
   type Loader,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
@@ -48,6 +49,7 @@ function loaderService(): { loader: Loader } {
 // yields a test-controlled entry set, so tile mapping and the missing-entry
 // fallback are exercised deterministically without a live prerender index.
 let stubEntries: RenderableSearchEntryLike[] = [];
+let stubErrors: ErrorEntry[] | undefined;
 let capturedQueries: (SearchEntryWireQuery | undefined)[] = [];
 
 function stubEntry(id: string): RenderableSearchEntryLike {
@@ -79,7 +81,7 @@ class StubSearchResults extends GlimmerComponent<SearchResultsComponentSignature
       entries: stubEntries,
       isLoading: false,
       meta: { page: { total: stubEntries.length } },
-      errors: undefined,
+      errors: stubErrors,
     };
   }
 
@@ -111,6 +113,7 @@ export function runTests() {
 
     hooks.beforeEach(function () {
       stubEntries = [];
+      stubErrors = undefined;
       capturedQueries = [];
       // Partial by design: CardContextConsumer spreads defaults over what the
       // provider supplies, so only the member the board reads is stubbed.
@@ -323,6 +326,33 @@ export function runTests() {
       assert
         .dom('[data-test-stub-entry]')
         .doesNotExist('no card content renders for the missing entry');
+    });
+
+    test('poster-board reports a failed search as an error, not as missing cards', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubErrors = [
+        {
+          type: 'instance-error',
+          error: {
+            status: 500,
+            title: 'Search Error',
+            message: 'search request failed',
+            additionalErrors: null,
+          },
+        },
+      ];
+
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+
+      assert
+        .dom('[data-test-poster-board-broken-tile="0"]')
+        .hasAttribute(
+          'data-test-broken-link-state',
+          'error',
+          'a search failure surfaces as an error placeholder, never as a 404',
+        );
     });
 
     test("poster-board queries prerendered fitted html by the linked cards' URLs", async function (assert) {

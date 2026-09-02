@@ -16,6 +16,7 @@ import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import {
   searchEntryWireQueryFromQuery,
+  type ErrorEntry,
   type RenderableSearchEntryLike,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
@@ -212,6 +213,11 @@ class Isolated extends Component<typeof PosterBoard> {
     message: 'This card has no entry in the search index',
   };
 
+  // A failed search request (network, auth, server) settles with `errors`
+  // populated and no entries at all; that is a board-wide failure, not a
+  // per-card 404, so every tile reports the search error instead.
+  searchErrorDoc = (errors: ErrorEntry[] | undefined) => errors?.[0]?.error;
+
   tileStyle = (tile: TilePlacement) =>
     htmlSafe(`left: ${tile.x}px; top: ${tile.y}px;`);
 
@@ -390,13 +396,28 @@ class Isolated extends Component<typeof PosterBoard> {
                         {{#unless results.isLoading}}
                           {{#let (this.refAt tile.index) as |ref|}}
                             {{#if ref}}
-                              <BrokenLinkTemplate
-                                @brokenUrl={{ref}}
-                                @errorDoc={{this.missingEntryErrorDoc}}
-                                @state='not-found'
-                                @format='fitted'
-                                data-test-poster-board-broken-tile={{tile.index}}
-                              />
+                              {{#let
+                                (this.searchErrorDoc results.errors)
+                                as |searchError|
+                              }}
+                                {{#if searchError}}
+                                  <BrokenLinkTemplate
+                                    @brokenUrl={{ref}}
+                                    @errorDoc={{searchError}}
+                                    @state='error'
+                                    @format='fitted'
+                                    data-test-poster-board-broken-tile={{tile.index}}
+                                  />
+                                {{else}}
+                                  <BrokenLinkTemplate
+                                    @brokenUrl={{ref}}
+                                    @errorDoc={{this.missingEntryErrorDoc}}
+                                    @state='not-found'
+                                    @format='fitted'
+                                    data-test-poster-board-broken-tile={{tile.index}}
+                                  />
+                                {{/if}}
+                              {{/let}}
                             {{/if}}
                           {{/let}}
                         {{/unless}}
