@@ -1362,6 +1362,10 @@ export default class TowerFilm extends Component<{
 
   /** the azimuth the mark word is planted on, behind the building */
   private markAz = 0;
+  /** a sideways nudge in world units, for a word too short to centre */
+  private markOff = 0;
+  /** the height the word rises FROM, taken from the stage it names */
+  private markFrom = 2.6;
 
   /** the light in force, and the light the beat asked for */
   private sunNow: { az: number; el: number } | null = null;
@@ -2857,28 +2861,32 @@ export default class TowerFilm extends Component<{
          * so the camera moves PAST it, and nudged back toward the lens
          * if the orbit carries it out of frame (below).
          */
-        x: Math.sin(this.markAz) * 26,
-        y: 2.6 + local * 13,
-        z: Math.cos(this.markAz) * 26,
+        x: Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
+        y: this.markFrom + local * 13,
+        z: Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff,
       }
     );
     /**
-     * KEEP IT ON SCREEN. A planted word parallaxes, which is the point,
-     * but the shot can orbit far enough to carry it out of the picture.
-     * So the anchor is nudged back toward the lens whenever what it
-     * projects to is outside the safe area — slowly enough to read as
-     * the word drifting rather than the word chasing.
+     * KEEP IT ON SCREEN — WHILE IT IS ON SCREEN. A planted word
+     * parallaxes, which is the point, but the shot can orbit far enough
+     * to carry it out of the picture, so the anchor is nudged back
+     * toward the lens when what it projects to leaves the safe area.
+     *
+     * Two things this must NOT do. It must not correct a word that has
+     * already faded out — the first mark used to slide sideways as it
+     * left, because the correction was still hunting a glyph nobody
+     * could see. And it must not treat the TOP edge as a failure: this
+     * word is supposed to rise out of frame. Only the sides count, and
+     * only while it is visible.
      */
     const seen = film.project(
-      Math.sin(this.markAz) * 26,
-      2.6 + local * 13,
-      Math.cos(this.markAz) * 26
+      Math.sin(this.markAz) * 26 + Math.cos(this.markAz) * this.markOff,
+      this.markFrom + local * 13,
+      Math.cos(this.markAz) * 26 - Math.sin(this.markAz) * this.markOff
     );
+    const lit = local > 0.12 && local < 0.5;
     const outside =
-      !seen.on ||
-      seen.x < v.w * 0.12 ||
-      seen.x > v.w * 0.88 ||
-      seen.y < v.h * 0.04;
+      lit && (!seen.on || seen.x < v.w * 0.12 || seen.x > v.w * 0.88);
     if (outside) {
       let d = v.az + Math.PI - this.markAz;
       while (d > Math.PI) {
@@ -3090,6 +3098,32 @@ export default class TowerFilm extends Component<{
          behind the subject — the structure crosses it, the camera moves
          PAST it, and it never reads as a caption stuck on the glass. */
       this.markAz = (this.film?.view().az ?? 0) + Math.PI;
+      /**
+       * A ONE-CHARACTER WORD IS NOT A TWO-CHARACTER WORD. 瓦 centred on
+       * the same anchor as 石垣 reads as sitting too far left — an eye
+       * centres a line of type on its mass, not on its box. So a lone
+       * glyph is nudged toward the right of frame, and which way THAT
+       * is depends on where the lens is standing: both candidates are
+       * projected and the one further right wins.
+       */
+      const lone = (beat.mark.lines[0] ?? '').length <= 1;
+      this.markOff = 0;
+      if (lone && this.film) {
+        const a = this.markAz;
+        const at = (k: number) =>
+          this.film!.project(
+            Math.sin(a) * 26 + Math.cos(a) * k,
+            9,
+            Math.cos(a) * 26 - Math.sin(a) * k
+          ).x;
+        this.markOff = at(3.6) > at(-3.6) ? 3.6 : -3.6;
+      }
+      /* AND IT STARTS WHERE ITS SUBJECT IS. The stone base word rises
+         from the ground because that is what the beat is about; the
+         later stages start higher, each from the height of the thing it
+         names. A word about foundations that begins at eaves height is
+         a word about nothing. */
+      this.markFrom = (beat.mark.to ?? 8) * 0.34 - 1.6;
     }
     this.applyAir(beat, instant);
     /**
