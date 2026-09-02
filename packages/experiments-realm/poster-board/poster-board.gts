@@ -99,6 +99,44 @@ class OnInsert extends Modifier<OnInsertSignature> {
   }
 }
 
+// A wheel gesture over content that can still scroll in that direction (an
+// error panel, a card with its own scroller) belongs to that content, not to
+// the canvas. Walks from the event target up to the board root.
+function wheelTargetsScrollable(event: WheelEvent): boolean {
+  const root = event.currentTarget as Element | null;
+  // Synthetic wheel events may omit one delta; treat it as no movement.
+  const deltaX = event.deltaX || 0;
+  const deltaY = event.deltaY || 0;
+  const vertical = Math.abs(deltaY) >= Math.abs(deltaX);
+  let el = event.target instanceof Element ? event.target : null;
+  while (el && el !== root) {
+    if (vertical ? canScroll(el, 'y', deltaY) : canScroll(el, 'x', deltaX)) {
+      return true;
+    }
+    el = el.parentElement;
+  }
+  return false;
+}
+
+function canScroll(el: Element, axis: 'x' | 'y', delta: number): boolean {
+  const style = getComputedStyle(el);
+  const overflow = axis === 'y' ? style.overflowY : style.overflowX;
+  if (overflow !== 'auto' && overflow !== 'scroll') {
+    return false;
+  }
+  const size = axis === 'y' ? el.clientHeight : el.clientWidth;
+  const extent = axis === 'y' ? el.scrollHeight : el.scrollWidth;
+  const offset = axis === 'y' ? el.scrollTop : el.scrollLeft;
+  if (extent <= size) {
+    return false;
+  }
+  return delta > 0 ? offset + size < extent - 1 : offset > 0;
+}
+
+// Wheel events inside one trackpad gesture (inertia included) arrive every
+// frame; a gap this long means a new gesture began.
+const WHEEL_GESTURE_GAP_MS = 150;
+
 class Isolated extends Component<typeof PosterBoard> {
   rig = new RigState();
   surfaceRig = new SurfaceRig(this.rig);
@@ -107,6 +145,7 @@ class Isolated extends Component<typeof PosterBoard> {
   private panSession: PanSession | null = null;
   private activePointerId: number | null = null;
   private rootElement: HTMLElement | null = null;
+  private lastContentWheelTime = -Infinity;
 
   get zoomLabel() {
     return Math.round(this.rig.magnify * 100) + '%';
@@ -224,7 +263,23 @@ class Isolated extends Component<typeof PosterBoard> {
   // ── Wheel ──────────────────────────────────────────────
 
   handleWheel = (event: Event) => {
-    this.surfaceRig.handleWheel(event as WheelEvent);
+    const wheel = event as WheelEvent;
+    const now = performance.now();
+    // Ctrl/Cmd+wheel is a pinch, never a scroll, so it always zooms the board.
+    if (
+      !(wheel.ctrlKey || wheel.metaKey) &&
+      (now - this.lastContentWheelTime < WHEEL_GESTURE_GAP_MS ||
+        wheelTargetsScrollable(wheel))
+    ) {
+      // The gesture belongs to the content for as long as it lasts, as macOS
+      // latches a scroll to the scroller it started on. Any canvas momentum
+      // still running from earlier wheel events would drift under it.
+      this.lastContentWheelTime = now;
+      this.surfaceRig.stopAll();
+      return;
+    }
+    this.lastContentWheelTime = -Infinity;
+    this.surfaceRig.handleWheel(wheel);
   };
 
   // ── Pointer pan ────────────────────────────────────────
@@ -361,7 +416,11 @@ class Isolated extends Component<typeof PosterBoard> {
       tabindex='0'
       data-test-poster-board
     >
-      <div class='poster-board-plane' style={{this.planeStyle}}>
+      <div
+        class='poster-board-plane'
+        style={{this.planeStyle}}
+        data-test-poster-board-plane
+      >
         <div class='poster-board-grid' aria-hidden='true'></div>
         {{#let (component @context.searchResultsComponent) as |SearchResults|}}
           {{! Overlays default on: each tile registers with the operator-mode
@@ -493,6 +552,9 @@ class Isolated extends Component<typeof PosterBoard> {
         width: 100%;
         height: 100%;
         overflow: hidden;
+        /* Scroll a tile's own scroller can't absorb stops here instead of
+           chaining to whatever scrolls around the board. */
+        overscroll-behavior: contain;
         touch-action: none;
         min-width: 0;
       }

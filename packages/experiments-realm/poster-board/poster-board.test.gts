@@ -55,9 +55,15 @@ let capturedQueries: (SearchEntryWireQuery | undefined)[] = [];
 function stubEntry(id: string): RenderableSearchEntryLike {
   // The board stamps its content class through `...attributes`, the same way
   // it lands on real prerendered HTML's root element.
+  // The scroller stands in for content that owns its own wheel gestures, like
+  // the broken-link error panel.
   let component: TOC<{ Element: Element }> = <template>
+    {{! template-lint-disable no-inline-styles }}
     <div data-test-stub-entry={{id}} ...attributes>
       <button type='button' data-test-stub-entry-button>Stub button</button>
+      <div style='height: 40px; overflow-y: auto' data-test-stub-entry-scroller>
+        <div style='height: 400px'></div>
+      </div>
     </div>
   </template>;
   return {
@@ -345,7 +351,6 @@ export function runTests() {
       await renderPosterBoard(
         new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
       );
-
       assert
         .dom('[data-test-poster-board-broken-tile="0"]')
         .hasAttribute(
@@ -391,6 +396,57 @@ export function runTests() {
         { eq: { htmlQuery: { eq: { format: 'fitted' } } } },
         'the fitted rendering is bound through htmlQuery',
       );
+    });
+
+    test('poster-board leaves wheel gestures to scrollable tile content', async function (assert) {
+      let { note1 } = await makeSavedNotes();
+      stubEntries = [stubEntry(note1.id)];
+      await renderPosterBoard(
+        new PosterBoard({ tiles: [new BoardTile({ card: note1 })] }),
+      );
+      let plane = '[data-test-poster-board-plane]';
+      let scroller = '[data-test-stub-entry-scroller]';
+      let restingTransform = document
+        .querySelector(plane)!
+        .getAttribute('style');
+
+      await triggerEvent(scroller, 'wheel', { deltaY: 120 });
+      assert
+        .dom(plane)
+        .hasAttribute(
+          'style',
+          restingTransform!,
+          'scrolling down over content that can scroll leaves the camera alone',
+        );
+
+      await triggerEvent(scroller, 'wheel', { deltaY: -120 });
+      assert
+        .dom(plane)
+        .hasAttribute(
+          'style',
+          restingTransform!,
+          'within the same gesture, reaching the content edge stays with the content',
+        );
+
+      // A pause ends the gesture; the next one starts fresh
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await triggerEvent(scroller, 'wheel', { deltaY: -120 });
+      assert.notEqual(
+        document.querySelector(plane)!.getAttribute('style'),
+        restingTransform,
+        'a new gesture at the top of the content falls through to pan the board',
+      );
+
+      let panned = document.querySelector(plane)!.getAttribute('style');
+      await triggerEvent(scroller, 'wheel', { deltaY: -120, ctrlKey: true });
+      assert.notEqual(
+        document.querySelector(plane)!.getAttribute('style'),
+        panned,
+        'a pinch over scrollable content still zooms the board',
+      );
+      assert
+        .dom('[data-test-zoom-level]')
+        .doesNotIncludeText('100%', 'the pinch changed the zoom level');
     });
 
     test('poster-board zoom reset is not undone by pending pinch momentum', async function (assert) {
